@@ -2443,7 +2443,7 @@ class CouchbaseCluster:
     def wait_interval(self, timeout=1, message=""):
         self.sleep(timeout, message)
 
-    def verify_items_count(self, timeout=600):
+    def verify_items_count(self, timeout=900):
         """Wait for actual bucket items count reach to the count on bucket kv_store.
         """
         active_key_count_passed = True
@@ -2471,7 +2471,7 @@ class CouchbaseCluster:
                         self.__log.warning("Not Ready: vb_active_curr_items %s == "
                                 "%s expected on %s, %s bucket"
                                  % (active_keys, items, self.__name, bucket.name))
-                        time.sleep(5)
+                        time.sleep(10)
                         if time.time() > end_time:
                             self.__log.error(
                             "ERROR: Timed-out waiting for active item count to match")
@@ -2508,7 +2508,7 @@ class CouchbaseCluster:
                     self.__log.warning("Not Ready: vb_replica_curr_items %s == "
                             "%s expected on %s, %s bucket"
                              % (replica_keys, items, self.__name, bucket.name))
-                    time.sleep(3)
+                    time.sleep(10)
                     if time.time() > end_time:
                         self.__log.error(
                         "ERROR: Timed-out waiting for replica item count to match")
