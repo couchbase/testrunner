@@ -1,3 +1,4 @@
+import json
 from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase
 from membase.api.rest_client import RestConnection
 from lib.backup_service_client.configuration import Configuration
@@ -39,8 +40,10 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         self.preamble()
 
     def is_backup_service_running(self):
+        """ Returns true if the backup service is running.
+        """
         rest = RestConnection(self.master)
-        return b"Service backup not running on this node" == rest._http_request(rest.baseUrl + "_p/backup")[1]
+        return 'backupAPI' in json.loads(rest._http_request(rest.baseUrl + "pools/default/nodeServices")[1])['nodesExt'][0]['services'].keys()
 
     def delete_all_plans(self):
         """ Deletes all plans.
@@ -69,6 +72,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         2. Deletes all plans.
         """
         self.preamble()
-        self.delete_all_repositories()
-        self.delete_all_plans()
+        if self.is_backup_service_running():
+            self.delete_all_repositories()
+            self.delete_all_plans()
         super().tearDown()

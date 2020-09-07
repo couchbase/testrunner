@@ -39,7 +39,6 @@ class BackupServiceTest(BackupServiceBase):
         [
             Plan(name="my_plan!", description=None, services=None, tasks=None), # Special character in name
             Plan(name="a" * 51  , description=None, services=None, tasks=None), # Name exceeds 50 characters
-            Plan(name=""        , description=None, services=None, tasks=None), # Name is empty (Throws 404)
             Plan(name="my_plan" , description="a" * 141, services=None, tasks=None), # Description exceeds 140 characters
             Plan(name="my_plan" , description=None, services=['BadService'], tasks=None), # Non existant service
             Plan(name="my_plan" , description=None, services=1, tasks=None), # The service is a number
@@ -51,11 +50,10 @@ class BackupServiceTest(BackupServiceBase):
 
         # Add invalid Plans and expect them to fail
         for plan in invalid_plans:
-            try:
-                self.plan_api.plan_name_post(plan.name if isinstance(plan, Plan) else "my_plan", body=plan)
-                self.fail("Adding an invalid Plan succeeded.")
-            except ApiException as e:
-                self.log.info(f"Attempted to add an invalid plan which failed as expected. {e}")
+            self.assertEqual(self.plan_api.plan_name_post_with_http_info(plan.name if isinstance(plan, Plan) else "my_plan", body=plan)[1], 400)
+
+        # Testing an empty plan name throws a 404 as the endpoint does not exist
+        self.assertEqual(self.plan_api.plan_name_post_with_http_info("", body=Plan(name="", description=None, services=None, tasks=None))[1], 404)
 
         # Define a generic schedule for backups and merges
         generic_backup_schedule = TaskTemplateSchedule(job_type="BACKUP", frequency=1, period="HOURS", time="22:00", start_now=False)
@@ -76,12 +74,8 @@ class BackupServiceTest(BackupServiceBase):
 
         # Add invalid Tasks and expect them to fail
         for task in invalid_tasks:
-            try:
-                # Add plan with an invalid Task (Should fail)
-                self.plan_api.plan_name_post("my_plan", body=Plan(name="my_plan", tasks=[task]))
-                self.fail("Adding an invalid Plan succeeded.")
-            except ApiException as e:
-                self.log.info(f"Attempted to add an invalid plan which failed as expected. {e}")
+            # Add plan with an invalid Task (Should fail)
+            self.assertEqual(self.plan_api.plan_name_post_with_http_info("my_plan", body=Plan(name="my_plan", tasks=[task]))[1], 400)
 
         # Invalid Schedules for Backups
         invalid_backup_schedules = \
@@ -101,12 +95,8 @@ class BackupServiceTest(BackupServiceBase):
 
         # Add invalid Schedules and expect them to fails
         for schedule in invalid_backup_schedules:
-            try:
-                # Add plan with an invalid Task (Should fail)
-                self.plan_api.plan_name_post("my_plan", body=Plan(name="my_plan", tasks=[TaskTemplate(name="my_task", task_type="BACKUP", schedule=schedule)]))
-                self.fail(f"Adding an invalid Schedule succeeded. {schedule}")
-            except ApiException as e:
-                self.log.info(f"Attempted to add an invalid plan which failed as expected. {e}")
+            # Add plan with an invalid Task (Should fail)
+            self.assertEqual(self.plan_api.plan_name_post_with_http_info("my_plan", body=Plan(name="my_plan", tasks=[TaskTemplate(name="my_task", task_type="BACKUP", schedule=schedule)]))[1], 400)
 
     def test_valid_plan(self):
         """ Test a user can add a valid plan.
@@ -141,10 +131,8 @@ class BackupServiceTest(BackupServiceBase):
 
         # Add valid Plans and expect them to succeed
         for plan in valid_plans:
-            try:
-                self.plan_api.plan_name_post(plan.name, body=plan)
-            except ApiException as e:
-                self.fail(f"Adding an valid Plan failed {e}.")
+            # Add plan
+            self.assertEqual(self.plan_api.plan_name_post_with_http_info(plan.name, body=plan)[1], 200)
 
             self.plan_api.plan_name_delete(plan.name)
 
@@ -164,11 +152,8 @@ class BackupServiceTest(BackupServiceBase):
 
         # Add valid Tasks and expect them to succeed
         for task in valid_tasks:
-            try:
-                # Add plan with an valid Task (Should succeed)
-                self.plan_api.plan_name_post("my_plan", body=Plan(name="my_plan", tasks=[task]))
-            except ApiException as e:
-                self.fail(f"Adding an valid Plan failed {e}.")
+            # Add plan with an valid Task (Should succeed)
+            self.assertEqual(self.plan_api.plan_name_post_with_http_info("my_plan", body=Plan(name="my_plan", tasks=[task]))[1], 200)
 
             self.plan_api.plan_name_delete("my_plan")
 
@@ -188,14 +173,12 @@ class BackupServiceTest(BackupServiceBase):
         for period in periods:
             TaskTemplateSchedule(job_type="BACKUP", frequency=1, period=period, time="22:00", start_now=False)
 
-        # Add Valid Schedules and expect them to fails
+        # Add Valid Schedules and expect them to succeed
         for schedule in valid_backup_schedules:
-            try:
-                # Add plan with an invalid Task (Should fail)
-                self.plan_api.plan_name_post("my_plan", body=Plan(name="my_plan", tasks=[TaskTemplate(name="my_task", task_type="BACKUP", schedule=schedule)]))
-            except ApiException as e:
-                self.fail(f"Adding an valid Schedule Plan failed {schedule}.")
+            # Add plan with an valid Task (Should succeed)
+            self.assertEqual(self.plan_api.plan_name_post_with_http_info("my_plan", body=Plan(name="my_plan", tasks=[TaskTemplate(name="my_task", task_type="BACKUP", schedule=schedule)]))[1], 200)
 
+            # Delete plan
             self.plan_api.plan_name_delete("my_plan")
 
     def test_delete_plan(self):
@@ -238,11 +221,8 @@ class BackupServiceTest(BackupServiceBase):
         # Add repo and tie plan to repository
         self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=Body2(plan=plan_name, archive=self.backupset.directory, bucket_name=None))
 
-        try:
-            # Delete plan (Should fail)
-            self.plan_api.plan_name_delete(plan_name)
-        except ApiException:
-            self.log.info("Attempted to add delete plan tied to a repository which failed as expected.")
+        # Delete plan (Should fail)
+        self.assertEqual(self.plan_api.plan_name_delete_with_http_info(plan_name)[1], 400)
 
         # Check if plan has not been successfully deleted
         self.assertTrue(plan_name in [plan.name for plan in self.plan_api.plan_get()])
@@ -262,25 +242,22 @@ class BackupServiceTest(BackupServiceBase):
 
         # Add 0, 1 and 14 Tasks in a Plan and expect it to succeed.
         for no_of_tasks in [0, 1, 14]:
-            try:
-                # Add plan with an valid Task (Should succeed)
-                self.plan_api.plan_name_post("my_plan", body=Plan(name="my_plan", tasks=[get_task(i) for i in range(0, no_of_tasks)]))
-            except ApiException as e:
-                self.fail(f"Adding an valid Plan failed {e}.")
+            # Add plan with an valid Task (Should succeed)
+            self.assertEqual(self.plan_api.plan_name_post_with_http_info("my_plan", body=Plan(name="my_plan", tasks=[get_task(i) for i in range(0, no_of_tasks)]))[1], 200)
 
             self.plan_api.plan_name_delete("my_plan")
 
         # Add 15, 20 and 100 Tasks in a Plan and expect it to fail.
         for no_of_tasks in [15, 20, 100]:
-            try:
-                # Add plan with an valid Task (Should succeed)
-                self.plan_api.plan_name_post("my_plan", body=Plan(name="my_plan", tasks=[get_task(i) for i in range(0, no_of_tasks)]))
-                self.fail(f"Adding an valid Plan failed {e}.")
-            except ApiException as e:
-                self.log.info(f"Attempted to add an invalid plan with lots of Tasks which failed as expected. {e}")
+            # Add plan with an invalid Task (Should fail)
+            self.assertEqual(self.plan_api.plan_name_post_with_http_info("my_plan", body=Plan(name="my_plan", tasks=[get_task(i) for i in range(0, no_of_tasks)]))[1], 400)
 
     def test_attach_plan_to_repository(self):
         """ Tie a plan to n repositories and test the plan was attached successfully.
+
+        1. Add a Plan "my_plan".
+        2. Create n repositories with "my_plan".
+        3. Retrieve n repositories and confirm all repositories are using "my_plan".
         """
         plan_name, no_of_repositories = "my_plan", 20
 
@@ -301,7 +278,9 @@ class BackupServiceTest(BackupServiceBase):
         self.assertEqual(set(repo.plan_name for repo in repos), set([plan_name]))
 
     def test_large_number_of_plans(self):
-        """ Add a large number of plans with a large number of tasks
+        """ Add a large number of plans with the maximum number of Tasks.
+
+        Add 100 plans each with 14 Tasks.
         """
         generic_backup_schedule = TaskTemplateSchedule(job_type="BACKUP", frequency=1, period="HOURS", time="22:00", start_now=False)
 
@@ -315,12 +294,33 @@ class BackupServiceTest(BackupServiceBase):
 
         # Add no_of_plans plans with no_of_tasks tasks
         for i in range(0, no_of_plans):
-            try:
-                # Add plan with an valid Task (Should succeed)
-                self.plan_api.plan_name_post(f"my_plan{i}", body=Plan(name="my_plan", tasks=tasks))
-            except ApiException as e:
-                self.fail(f"Adding an valid Plan failed {e}.")
+            # Add plan with an valid Task (Should succeed)
+            self.assertEqual(self.plan_api.plan_name_post_with_http_info(f"my_plan{i}", body=Plan(name=f"my_plan{i}", tasks=tasks))[1], 200)
 
         # Delete plans
         for i in range(0, no_of_plans):
             self.plan_api.plan_name_delete(f"my_plan{i}")
+
+    def test_create_plans_with_same_name(self):
+        """ Add a plan, then add a plan with the same name and check if the operation fails.
+        """
+        # Create a plan
+        plan_name = "my_plan"
+        self.plan_api.plan_name_post(plan_name, body=Plan(name=plan_name, tasks=None))
+
+        # Add plan with the same the name and expect it fail.
+        self.assertEqual(self.plan_api.plan_name_post_with_http_info(plan_name, body=Plan(name=plan_name, tasks=None))[1], 400)
+
+    def test_deleted_plans_name_can_be_reused(self):
+        """ Add a plan, delete the plan and check if its name can be reused.
+        """
+        plan_name = "my_plan"
+
+        # Add plan
+        self.plan_api.plan_name_post(plan_name)
+
+        # Delete plan
+        self.plan_api.plan_name_delete(plan_name)
+
+        # Add plan with the same name and expect it to succeed.
+        self.plan_api.plan_name_post(plan_name)
