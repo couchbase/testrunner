@@ -2259,7 +2259,7 @@ class ValidateDataWithActiveAndReplicaTask(GenericLoadingTask):
 
 class BatchedValidateDataTask(GenericLoadingTask):
     def __init__(self, server, bucket, kv_store, max_verify=None, only_store_hash=True, batch_size=100,
-                 timeout_sec=5, compression=True, scope=None, collection=None):
+                 timeout_sec=30, compression=True, scope=None, collection=None):
         GenericLoadingTask.__init__(self, server, bucket, kv_store, compression=compression, scope=scope,
                                     collection=collection)
         self.collection = collection

@@ -1249,11 +1249,11 @@ class VBucketAwareMemcached(object):
             try:
 
                 import concurrent.futures
-                return self._getMulti_parallel(keys_lst, pause_sec, timeout_sec, collection=collection)
+                return self._getMulti_parallel(keys_lst, pause_sec, timeout_sec, scope=scope, collection=collection)
             except ImportError:
-                return self._getMulti_seq(keys_lst, pause_sec, timeout_sec, collection=collection)
+                return self._getMulti_seq(keys_lst, pause_sec, timeout_sec, scope=scope, collection=collection)
         else:
-            return self._getMulti_seq(keys_lst, pause_sec, timeout_sec, collection=collection)
+            return self._getMulti_seq(keys_lst, pause_sec, timeout_sec, scope=scope, collection=collection)
 
     def _getMulti_seq(self, keys_lst, pause_sec=1, timeout_sec=5, scope=None, collection=None):
         server_keys = self._get_server_keys_dic(
