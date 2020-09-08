@@ -9,10 +9,10 @@ from couchbase import FMT_AUTO
 from memcached.helper.old_kvstore import ClientKeyValueStore
 from couchbase.bucket import Bucket as CouchbaseBucket
 from couchbase.cluster import Cluster, ClassicAuthenticator, PasswordAuthenticator
-from couchbase.exceptions import CouchbaseError, BucketNotFoundError, AuthError
+from couchbase.exceptions import CouchbaseError, BucketNotFoundError, AuthError, TemporaryFailError
 from mc_bin_client import MemcachedError
 from couchbase.n1ql import N1QLQuery, N1QLRequest
-
+from TestInput import TestInputServer, TestInputSingleton
 import couchbase
 import json
 
@@ -21,13 +21,23 @@ class SDKClient(object):
     """Python SDK Client Implementation for testrunner - master branch Implementation"""
 
     def __init__(self, bucket, hosts=["localhost"], scheme="couchbase",
-                 ssl_path=None, uhm_options=None, password=None,
+                 ssl_path=None, uhm_options=None, username=None, password=None,
                  quiet=True, certpath=None, transcoder=None, ipv6=False, compression=True):
+        self.certpath = TestInputSingleton.input.param("certpath", certpath)
+        if not username:
+            self.username = TestInputSingleton.input.param("rest_username", "Administrator")
+        else:
+            self.username = username
+        if not password:
+            self.password = TestInputSingleton.input.param("rest_password", "password")
+        else:
+            self.password = password
+
         self.connection_string = \
             self._createString(scheme=scheme, bucket=bucket, hosts=hosts,
-                               certpath=certpath, uhm_options=uhm_options, ipv6=ipv6, compression=compression)
+                               certpath=self.certpath, uhm_options=uhm_options, ipv6=ipv6,
+                               compression=compression)
         self.bucket = bucket
-        self.password = password
         self.quiet = quiet
         self.transcoder = transcoder
         self.default_timeout = 1
@@ -58,16 +68,31 @@ class SDKClient(object):
                 connection_string = "{0}?compression=off".format(connection_string)
         if scheme == "couchbases":
             if "?" in connection_string:
-                connection_string = "{0},certpath={1}".format(connection_string, certpath)
+                if not certpath:
+                    connection_string = "{0}&ssl=no_verify".format(connection_string)
+                else:
+                    connection_string = "{0}&certpath={1}".format(connection_string, certpath)
             else:
-                connection_string = "{0}?certpath={1}".format(connection_string, certpath)
+                if not certpath:
+                    connection_string = "{0}?ssl=no_verify".format(connection_string)
+                else:
+                    connection_string = "{0}?certpath={1}".format(connection_string, certpath)
         return connection_string
 
     def _createConn(self):
         try:
+            print("-->connection_string:{}".format(self.connection_string))
             cluster = Cluster(self.connection_string, bucket_class=CouchbaseBucket)
-            cluster.authenticate(PasswordAuthenticator(self.bucket, 'password'))
+            #cluster = Cluster("couchbases://cb.5ff6f20a-1550-4d54-9174-8a01a32edd87.dp.cloud
+            # .couchbase.com?ssl"
+            #                  "=no_verify", bucket_class=CouchbaseBucket)
+            print("-->bucket={},username={},password={}".format(self.bucket,self.username,
+                                                            self.password))
+            cluster.authenticate(PasswordAuthenticator(self.username, self.password))
             self.cb = cluster.open_bucket(self.bucket)
+            print("-->cb={}".format(self.cb))
+            self.cb.upsert('testkey','testvalue')
+            print(self.cb.get('testkey'))
         except BucketNotFoundError:
             raise
         except AuthError:
@@ -75,9 +100,10 @@ class SDKClient(object):
             # cluster.
             try:
                 cluster = Cluster(self.connection_string, bucket_class=CouchbaseBucket)
-                cluster.authenticate(PasswordAuthenticator("cbadminbucket", 'password'))
+                cluster.authenticate(PasswordAuthenticator(self.username, TestInputSingleton.input.param("rest_password", "password")))
                 self.cb = cluster.open_bucket(self.bucket)
             except AuthError:
+                print("Auth Error!")
                 raise
 
     def reconnect(self):
@@ -278,10 +304,17 @@ class SDKClient(object):
 
     def upsert(self, key, value, cas=0, ttl=0, format=None, persist_to=0, replicate_to=0, collection=None):
         try:
-            return self.cb.upsert(key, value, cas, ttl, format, persist_to, replicate_to)
+            if type(value) == str:
+                value = json.loads(value)
+            return self.cb.upsert(key, value)
+            #return self.cb.upsert(key, value, cas, ttl, format, persist_to, replicate_to)
         except CouchbaseError as e:
             try:
-                time.sleep(10)
+                print("-->upsert e={},cb:{}".format(e,self.cb))
+                #time.sleep(10)
+                return self.cb.upsert(key, value, cas, ttl, format, persist_to, replicate_to)
+            except TemporaryFailError as tfe:
+                print("-->temp failure. retrying upsert e={},cb:{}".format(e, self.cb))
                 return self.cb.upsert(key, value, cas, ttl, format, persist_to, replicate_to)
             except CouchbaseError as e:
                 raise
@@ -581,6 +614,7 @@ class SDKClient(object):
 class SDKSmartClient(object):
     def __init__(self, rest, bucket, compression=True, info=None):
         self.rest = rest
+        self.is_secure = TestInputSingleton.input.param("is_secure", False)
         if hasattr(bucket, 'name'):
             self.bucket = bucket.name
         else:
@@ -591,13 +625,24 @@ class SDKSmartClient(object):
         else:
             bucket_info = rest.get_bucket(bucket)
             self.saslPassword = bucket_info.saslPassword
+        if not self.saslPassword:
+            self.saslPassword = TestInputSingleton.input.param("rest_password", "password")
 
         if rest.ip == "127.0.0.1":
             self.host = "{0}:{1}".format(rest.ip, rest.port)
-            self.scheme = "http"
+            if not self.is_secure:
+                self.scheme = "http"
+            else:
+                self.scheme = "https"
         else:
             self.host = rest.ip
-            self.scheme = "couchbase"
+            if not self.is_secure:
+                self.scheme = "couchbase"
+            else:
+                self.scheme = "couchbases"
+
+        print("-->SDKClient bucket={},host={},scheme={},saslpwd={},compression={}".format(
+            self.bucket, self.host, self.scheme, self.saslPassword, compression))
         self.client = SDKClient(self.bucket, hosts=[self.host], scheme=self.scheme, password=self.saslPassword,
                                 compression=compression)
 

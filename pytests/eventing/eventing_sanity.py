@@ -10,7 +10,7 @@ class EventingSanity(EventingBaseTest):
         super(EventingSanity, self).setUp()
         self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=900)
         if self.create_functions_buckets:
-            self.bucket_size = 200
+            self.input.param("bucket_size",200)
             log.info(self.bucket_size)
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                        replicas=0)
@@ -236,9 +236,12 @@ class EventingSanity(EventingBaseTest):
                   batch_size=self.batch_size)
         self.pause_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
-        self.sleep(60)
-        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
-                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+        # Commented as no host login allowed for checking processes on the host
+        if not self.input.param("skip_check_if_eventing_consumers_are_cleaned_up", False):
+            self.sleep(60)
+            self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                            msg="eventing-consumer processes are not cleaned up even after "
+                                "undeploying the function")
         self.gens_load = self.generate_docs(self.docs_per_day*2)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size*2)

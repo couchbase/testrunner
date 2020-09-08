@@ -562,8 +562,16 @@ class QueriesViewsTests(QuerySanityTests):
                                     "Index should be %s, but is: %s" % (index_name, plan))
             finally:
                 for index_name in created_indexes:
-                    self.query = "DROP INDEX %s ON %s USING %s" % (index_name, query_bucket, self.index_type)
-                    self.run_cbq_query()
+                    try:
+                        self.log.info("-->Trying with new (7.0) style")
+                        self.query = "DROP INDEX %s ON %s USING %s" % (index_name, query_bucket, self.index_type)
+                        self.run_cbq_query()
+                    except:
+                        self.log.info("-->Trying with old (6.5) style")
+                        self.query = "DROP INDEX %s.%s USING %s" % (
+                        query_bucket, index_name, self.index_type)
+                        self.run_cbq_query()
+
 
     def test_explain_non_index_attr(self):
         self.fail_if_no_buckets()

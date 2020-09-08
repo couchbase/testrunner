@@ -25,6 +25,12 @@ class CBASBucketOperations(CBASBaseTest):
     def tearDown(self):
         super(CBASBucketOperations, self).tearDown()
 
+    def suite_setUp(self):
+        pass
+
+    def suite_tearDown(self):
+        pass
+
     def setup_for_test(self, skip_data_loading=False):
         if not skip_data_loading:
             # Load Couchbase bucket first.

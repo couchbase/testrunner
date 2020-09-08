@@ -64,14 +64,15 @@ class ExpiryTests(unittest.TestCase):
         msg = 'create_bucket succeeded but bucket "default" does not exist'
         
         if (testconstants.TESTRUNNER_CLIENT in list(os.environ.keys())) and os.environ[testconstants.TESTRUNNER_CLIENT] == testconstants.PYTHON_SDK:
-            self.client = SDKSmartClient(serverInfo, self._bucket_name, compression=TestInputSingleton.input.param(
+            self.client = SDKSmartClient(rest, self._bucket_name,
+                                         compression=TestInputSingleton.input.param(
                 "sdk_compression", True))
+            self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(self._bucket_name, rest),
+                            msg=msg)
         else:
             self.client = MemcachedClientHelper.direct_client(serverInfo, self._bucket_name)
-            
-        self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(self._bucket_name, rest), msg=msg)
-        ready = BucketOperationHelper.wait_for_memcached(serverInfo, self._bucket_name)
-        self.assertTrue(ready, "wait_for_memcached failed")
+            ready = BucketOperationHelper.wait_for_memcached(serverInfo, self._bucket_name)
+            self.assertTrue(ready, "wait_for_memcached failed")
         self._log_start()
 
     def _log_start(self):

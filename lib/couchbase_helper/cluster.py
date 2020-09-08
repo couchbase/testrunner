@@ -167,6 +167,7 @@ class Cluster(object):
                             only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=5, proxy_client=None,
                             compression=True, scope=None, collection=None):
 
+        print("-->Cluster.async_load_gen_docs...")
         if isinstance(generator, list):
             _task = LoadDocumentsGeneratorsTask(server, bucket, generator, kv_store, op_type, exp, flag,
                                                 only_store_hash, batch_size, compression=compression,

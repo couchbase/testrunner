@@ -15,6 +15,7 @@ class SubdocNestedDataset(SubdocBaseTest):
     def setUp(self):
         super(SubdocNestedDataset, self).setUp()
         self.nesting_level = self.input.param("nesting_level", 0)
+        print("-->master: {}".format(self.master))
         self.client = self.direct_client(self.master, self.buckets[0])
         self.is_sdk_client = True if self.client.__class__.__name__ == 'SDKClient' else False
 
@@ -932,9 +933,15 @@ class SubdocNestedDataset(SubdocBaseTest):
         try:
             if self.is_sdk_client:
                 if xattr:
-                    data = self._fix_unicode(client.cb.lookup_in(key, SD.get(path, xattr=xattr))[path])
+                    #TBD: why this encode?
+                    # data = self._fix_unicode(client.cb.lookup_in(key,
+                    # SD.get(path,
+                    # xattr=xattr))[path])
+                    data = client.cb.lookup_in(key, SD.get(path, xattr=xattr))[path]
                 else:
-                    data = self._fix_unicode(client.cb.retrieve_in(key, new_path).get(0)[1])
+                    # TBD: why this encode?
+                    #data = self._fix_unicode(client.cb.retrieve_in(key, new_path).get(0)[1])
+                    data = client.cb.retrieve_in(key, new_path).get(0)[1]
             else:
                 opaque, cas, data = client.get_sd(key, new_path)
                 data = yaml.safe_load(data)
@@ -943,6 +950,7 @@ class SubdocNestedDataset(SubdocBaseTest):
             msg = "Unable to get key {0} for path {1} after {2} tries".format(key, path, 1)
             return False, msg
         return (str(data) == str(expected_value)), str(data).encode('utf-8')
+
 
     def _fix_unicode(self, data):
         if isinstance(data, str):

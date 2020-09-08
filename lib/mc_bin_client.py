@@ -650,6 +650,7 @@ class MemcachedClient(KeepRefs):
 
     def sasl_auth_plain(self, user, password, foruser=''):
         """Perform plain auth."""
+        print("-->sasl_auth_plain: user={},password={}".format(user, password))
         return self.sasl_auth_start('PLAIN', '\0'.join([foruser, user, password]))
 
     def sasl_auth_cram_md5(self, user, password):

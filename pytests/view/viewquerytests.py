@@ -47,6 +47,13 @@ class StoppableThread(Thread):
         return self._stopper.isSet()
 
 class ViewQueryTests(BaseTestCase):
+
+    def suite_setUp(self):
+        pass
+
+    def suite_tearDown(self):
+        pass
+
     def setUp(self):
         try:
             super(ViewQueryTests, self).setUp()
@@ -58,6 +65,7 @@ class ViewQueryTests(BaseTestCase):
             self.docs_per_day = self.input.param('docs-per-day', 200)
             self.retries = self.input.param('retries', 100)
             self.timeout = self.input.param('timeout', None)
+            self.default_bucket_name = self.input.param('default_bucket_name', "default")
             self.error = None
             self.master = self.servers[0]
             self.thread_crashed = Event()
@@ -868,7 +876,10 @@ class ViewQueryTests(BaseTestCase):
             self.load(data_set, gen_load)
             for server in self.servers:
                 self.log.info("-->RebalanceHelper.wait_for_persistence({},{}".format(server, data_set.bucket))
-                RebalanceHelper.wait_for_persistence(server, data_set.bucket)
+                # TBD on using SDK or REST instead of memcached direct
+                #RebalanceHelper.wait_for_persistence(server, data_set.bucket)
+                self.sleep(30, "30 seconds wait to load...")
+
             self.log.info("-->_query_all_views...")
             self._query_all_views(data_set.views, gen_load)
         else:
@@ -1968,6 +1979,7 @@ class ViewQueryTests(BaseTestCase):
         try:
             gens_load = []
             for generator_load in generators_load:
+                #print(*generator_load, sep=', ')
                 gens_load.append(copy.deepcopy(generator_load))
             task = None
             bucket = data_set.bucket
@@ -1987,7 +1999,9 @@ class ViewQueryTests(BaseTestCase):
                 isinstance(threading.currentThread(), StoppableThread):
                 threading.currentThread().tasks.append(task)
             task.result()
-            RebalanceHelper.wait_for_persistence(data_set.server, bucket.name)
+            # TBD on using SDK or REST instead of memcached direct
+            #RebalanceHelper.wait_for_persistence(data_set.server, bucket.name)
+            self.sleep(30, "30 seconds wait to load...")
             self.log.info("LOAD IS FINISHED")
             return gens_load
         except Exception as ex:
@@ -2191,11 +2205,17 @@ class QueryView:
                             threading.currentThread().tasks[0] = task
                         debug_info = task.result()
                         msg += "DEBUG INFO: %s" % debug_info["errors"]
-                    self.results.addFailure(tc, (Exception, msg, sys.exc_info()[2]))
+                    try:
+                        self.results.addFailure(tc, (Exception, msg, sys.exc_info()[2]))
+                    except AttributeError:
+                        self.results.addFailure(tc, (Exception, msg, None))
                     tc.thread_crashed.set()
         except Exception as ex:
             self.log.error("Error {0} appeared during query run".format(ex))
-            self.results.addError(tc, (Exception, str(ex), sys.exc_info()[2]))
+            try:
+                self.results.addFailure(tc, (Exception, msg, sys.exc_info()[2]))
+            except AttributeError:
+                self.results.addFailure(tc, (Exception, msg, None))
             tc.thread_crashed.set()
             if task:
                 if 'stop' in dir(threading.currentThread()) and\
@@ -2210,7 +2230,11 @@ class QueryView:
                 tc.thread_stopped.set()
 
 class EmployeeDataSet:
-    def __init__(self, server, cluster, docs_per_day=200, bucket="default", ddoc_options=None):
+    def __init__(self, server, cluster, docs_per_day=200, bucket='default',
+                 ddoc_options=None):
+        self.default_bucket_name = TestInputSingleton.input.param('default_bucket_name', "default")
+        if bucket == 'default' and self.default_bucket_name != "default":
+            bucket = self.default_bucket_name
         self.docs_per_day = docs_per_day
         self.years = 1
         self.months = 12
@@ -2522,12 +2546,14 @@ class EmployeeDataSet:
                 for month in join_mo:
                     for day in join_day:
                         prefix = str(uuid.uuid4())[:7]
-                        generators.append(DocumentGenerator(view.prefix + prefix,
+                        doc = DocumentGenerator(view.prefix + prefix,
                                                template,
                                                name, [year], [month], [day],
                                                email, [info["title"]],
                                                [info["type"]], [info["desc"]],
-                                               start=start, end=end))
+                                               start=start, end=end)
+                        generators.append(doc)
+
         return generators
 
 class SimpleDataSet:

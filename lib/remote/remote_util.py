@@ -255,7 +255,11 @@ class RemoteMachineShellConnection(KeepRefs):
         self.remote = (self.ip != "localhost" and self.ip != "127.0.0.1")
         self.port = serverInfo.port
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
+        self.is_ssh_allowed = False
+        if self.input.param("skip_host_login", False):
+            log.warning("-->Skipping host login and there by no RemoteMachineShellConnection!")
+            self.is_ssh_allowed=False
+            return
         self.ssh_connect_with_retries(serverInfo.ip, serverInfo.ssh_username, serverInfo.ssh_password,
                                       serverInfo.ssh_key, exit_on_failure)
 
@@ -288,6 +292,9 @@ class RemoteMachineShellConnection(KeepRefs):
     def ssh_connect_with_retries(self, ip, ssh_username, ssh_password, ssh_key,
                                  exit_on_failure = False, max_attempts_connect = 5,
                                  backoff_time = 10):
+        if self.input.param("skip_host_login", False):
+            log.info("-->Skipping host login")
+            return
         # Retries with exponential backoff delay
         attempt = 0
         is_ssh_ok = False
@@ -4097,7 +4104,7 @@ class RemoteMachineShellConnection(KeepRefs):
             backup_command = "{0}cbbackup".format(MAC_COUCHBASE_BIN_PATH)
 
         command_options_string = ""
-        if command_options is not '':
+        if command_options != '':
             if "-b" not in command_options:
                 command_options_string = ' '.join(command_options)
             else:
@@ -4994,6 +5001,7 @@ class RemoteMachineShellConnection(KeepRefs):
         if (not is_cluster_compatible):
             log.info("Enabling diag/eval on non-local hosts is available only post 5.5.2 or 6.0 releases")
             return None, "Enabling diag/eval on non-local hosts is available only post 5.5.2 or 6.0 releases"
+
         output, error = self.execute_command(command)
         log.info(output)
         try:

@@ -365,6 +365,8 @@ class EventingHelper:
                 return list
             else:
                 try:
+                    if len(list)==0:
+                        list.append(servers[0])
                     return list[0]
                 except IndexError as e:
                     log.info(self.services_map)

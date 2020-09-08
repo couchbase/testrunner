@@ -68,12 +68,17 @@ class BaseTestCase(unittest.TestCase):
         self.pre_warmup_stats = {}
         self.cleanup = False
         self.nonroot = False
-        shell = RemoteMachineShellConnection(self.master)
-        self.os_info = shell.extract_remote_info().type.lower()
-        if self.os_info != 'windows':
-            if self.master.ssh_username != "root":
-                self.nonroot = True
-        shell.disconnect()
+        self.skip_host_login = self.input.param("skip_host_login", False)
+        if not self.skip_host_login:
+            shell = RemoteMachineShellConnection(self.master,exit_on_failure=False)
+            self.os_info = shell.extract_remote_info().type.lower()
+            if self.os_info != 'windows':
+                if self.master.ssh_username != "root":
+                    self.nonroot = True
+            shell.disconnect()
+        else:
+            self.log.info("-->Skipping host login...")
+
         """ some tests need to bypass checking cb server at set up
             to run installation """
         self.skip_init_check_cbserver = \
@@ -96,6 +101,7 @@ class BaseTestCase(unittest.TestCase):
         if not self.cbas_node and len(self.cbas_servers) >= 1:
             self.cbas_node = self.cbas_servers[0]
 
+        self.log.info("--> Getting more input parameters...")
         try:
             self.skip_setup_cleanup = self.input.param("skip_setup_cleanup", False)
             self.vbuckets = self.input.param("vbuckets", 1024)
@@ -197,11 +203,13 @@ class BaseTestCase(unittest.TestCase):
             self.enable_secrets = self.input.param("enable_secrets", False)
             self.secret_password = self.input.param("secret_password", 'p@ssw0rd')
 
+            self.log.info("--> Check for skip_setup_cleanup...")
             if self.skip_setup_cleanup:
                 self.buckets = RestConnection(self.master).get_buckets()
                 return
+            self.log.info("--> Check for skip_init_check_cbserver...")
+            self.cb_version = None
             if not self.skip_init_check_cbserver:
-                self.cb_version = None
                 if RestHelper(RestConnection(self.master)).is_ns_server_running():
                     """ since every new couchbase version, there will be new features
                         that test code will not work on previous release.  So we need
@@ -404,8 +412,9 @@ class BaseTestCase(unittest.TestCase):
                 status, content, header = self._log_start(self)
                 if not status:
                     self.sleep(10)
-            self.print_cluster_stats()
-
+            self.log.info("-->printing cluster stats...")
+            if not self.skip_host_login:
+                self.print_cluster_stats()
             self.java_sdk_client = self.input.param("java_sdk_client", False)
             if self.java_sdk_client:
                 self.log.info("Building docker image with java sdk client")
@@ -717,9 +726,15 @@ class BaseTestCase(unittest.TestCase):
             task.result(self.wait_timeout)
 
     def _get_bucket_size(self, mem_quota, num_buckets):
+        print("---> _get_bucket_size ..")
         # min size is 100MB now
+        max_bucket_ram = self.input.param("max_bucket_ram", "")
         if num_buckets > 0:
-            return max(100, int(float(mem_quota) / float(num_buckets)))
+            bsize = max(100, int(float(mem_quota) / float(num_buckets)))
+            if max_bucket_ram:
+                return min(int(max_bucket_ram),bsize)
+            else:
+                return bsize
         else:
             return 100
 
@@ -2509,9 +2524,16 @@ class BaseTestCase(unittest.TestCase):
                                       .format(ip, hostname))
                         ip = hostname
                         shell.disconnect()
+                    self.log.info("-->service_type={}, server.ip={},server.port={} == ip={}, "
+                                  "port={}"
+                                  "".format(
+                        service_type, server.ip, server.port, ip, port))
                     if (port != 8091 and port == int(server.port)) or \
                             (port == 8091 and server.ip.lower() == ip.lower()):
                         list.append(server)
+
+            if len(list) == 0:
+                list.append(servers[0])
             self.log.info("list of {0} nodes in cluster: {1}".format(service_type, list))
             if get_all_nodes:
                 return list

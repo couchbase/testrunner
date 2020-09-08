@@ -99,11 +99,12 @@ class CCCP(BaseTestCase):
     def verify_config(self, config_json, bucket):
         expected_params = ["nodeLocator", "rev", "uuid", "bucketCapabilitiesVer",
                            "bucketCapabilities"]
+        print("-->config_json:{}".format(config_json))
         for param in expected_params:
             self.assertTrue(param in config_json, "No %s in config" % param)
         self.assertTrue("name" in config_json and config_json["name"] == bucket.name,
                         "No bucket name in config")
-        if self.cb_version[:5] in COUCHBASE_FROM_VERSION_4:
+        if self.cb_version and self.cb_version[:5] in COUCHBASE_FROM_VERSION_4:
             self.assertTrue(len(config_json["nodesExt"]) == self.nodes_init,
                         "Number of nodes expected %s, actual %s" % (
                                         self.nodes_init, len(config_json["nodesExt"])))
@@ -114,7 +115,7 @@ class CCCP(BaseTestCase):
         for node in config_json["nodes"]:
             self.assertTrue("couchApiBase" in node and "hostname" in node,
                             "No hostname name in config")
-            if self.cb_version[:5] in COUCHBASE_FROM_MAD_HATTER:
+            if self.cb_version and self.cb_version[:5] in COUCHBASE_FROM_MAD_HATTER:
                 """ moxi port is removed from Mad-Hatter 6.5.0 """
                 self.assertTrue(node["ports"]["direct"] == 11210,
                             "ports are incorrect: %s" % node)

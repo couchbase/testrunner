@@ -12,6 +12,7 @@ from testconstants import FTS_QUOTA, CBAS_QUOTA, INDEX_QUOTA, MIN_KV_QUOTA
 from threading import Thread
 import threading
 from security.rbac_base import RbacBase
+import server_ports
 
 
 class CBASBaseTest(BaseTestCase):
@@ -68,6 +69,10 @@ class CBASBaseTest(BaseTestCase):
         if self.index_fields:
             self.index_fields = self.index_fields.split("-")
         self.otpNodes = []
+        self.is_secure = self.input.param("is_secure", False)
+        if self.is_secure:
+            self.rest_port = server_ports.ssl_rest_port
+            self.master.port = self.rest_port
 
         self.rest = RestConnection(self.master)
         
@@ -102,8 +107,9 @@ class CBASBaseTest(BaseTestCase):
         node_info = self.rest.get_nodes_self()
         if node_info.memoryQuota and int(node_info.memoryQuota) > 0 :
             ram_available = node_info.memoryQuota
-            
-        self.bucket_size = ram_available - 1
+
+        #self.bucket_size = ram_available - 1
+        self.input.param("bucket_size", ram_available - 1)
         default_params=self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                          replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                          enable_replica_index=self.enable_replica_index,
@@ -124,7 +130,7 @@ class CBASBaseTest(BaseTestCase):
                     self.otpNodes.append(self.rest.add_node(user=server.rest_username,
                                                password=server.rest_password,
                                                remoteIp=server.ip,
-                                               port=8091,
+                                               port=self.rest_port,
                                                services=server.services.split(",")))
     
             self.rebalance()
@@ -154,7 +160,7 @@ class CBASBaseTest(BaseTestCase):
         otpnode = self.rest.add_node(user=node.rest_username,
                                password=node.rest_password,
                                remoteIp=node.ip,
-                               port=8091,
+                               port=self.rest_port,
                                services=services
                                )
         if rebalance:

@@ -42,6 +42,7 @@ from lib.mc_bin_client import MemcachedClient as MC_MemcachedClient
 from security.SecretsMasterBase import SecretsMasterBase
 from lib.collection.collections_cli_client import CollectionsCLI
 from scripts.java_sdk_setup import JavaSdkSetup
+import server_ports
 
 
 class RenameNodeException(FTSException):
@@ -1990,9 +1991,17 @@ class CouchbaseCluster:
             RestConnection(self.__master_node).set_fts_ram_quota(fts_quota)
 
     def get_node(self, ip, port):
+        if len(self.__nodes) == 1:
+            return self.__nodes[0]
+        
         for node in self.__nodes:
+            self.__log.info("ip={}==node.ip={},port={}==node.port={},".format(ip,node.ip,port,
+                                                                           node.port))
             if ip == node.ip and port == node.port:
+                self.__log.info("-->matched service: {}".format(node))
                 return node
+            else:
+                self.__log.info("-->un matched service: {}".format(node))
 
     def get_logger(self):
         return self.__log
@@ -2009,13 +2018,18 @@ class CouchbaseCluster:
         self.__n1ql_nodes = []
         self.__non_fts_nodes = []
         service_map = RestConnection(self.__master_node).get_nodes_services()
+        self.__log.info("-->service_map={}".format(service_map))
         for node_ip, services in list(service_map.items()):
             if self.is_cluster_run():
                 # if cluster-run and ip not 127.0.0.1
                 ip = "127.0.0.1"
             else:
                 ip = node_ip.rsplit(':', 1)[0]
-            node = self.get_node(ip, node_ip.rsplit(':', 1)[1])
+            if TestInputSingleton.input.param("is_secure", False):
+                node_port = server_ports.ssl_rest_port
+            else:
+                node_port = node_ip.rsplit(':', 1)[1]
+            node = self.get_node(ip, node_port)
             if node:
                 if "fts" in services:
                     self.__fts_nodes.append(node)
@@ -3443,13 +3457,15 @@ class FTSBaseTest(unittest.TestCase):
         self.field_alias = self._input.param("field_alias", None)
         self.enable_secrets = self._input.param("enable_secrets", False)
         self.secret_password = self._input.param("secret_password", 'p@ssw0rd')
-        self.container_type = TestInputSingleton.input.param("container_type", "bucket")
+	self.container_type = TestInputSingleton.input.param("container_type", "bucket")
         self.scope = TestInputSingleton.input.param("scope", "scope1")
         self.collection = str(TestInputSingleton.input.param("collection", "collection1"))
         if self.collection.startswith("["):
             self.collection = eval(self.collection)
         use_hostanames = self._input.param("use_hostnames", False)
         sdk_compression = self._input.param("sdk_compression", True)
+
+        self._bucket_size = self._input.param("bucket_size")
 
         self.master = self._input.servers[0]
         first_node = copy.deepcopy(self.master)
@@ -3616,6 +3632,8 @@ class FTSBaseTest(unittest.TestCase):
             rest.set_bleve_max_result_window(bmrw_value)
 
     def __setup_for_test(self):
+
+        self.log.info("-->Start: Setup for the test")
         use_hostanames = self._input.param("use_hostnames", False)
         no_buckets = self._input.param("no_buckets", False)
         sdk_compression = self._input.param("sdk_compression", True)
@@ -3626,20 +3644,31 @@ class FTSBaseTest(unittest.TestCase):
                                             self.log,
                                             use_hostanames,
                                             sdk_compression=sdk_compression)
-        self.__cleanup_previous()
+
+        self.log.info("-->cleanup_previous")
+        if self.__is_cleanup_not_needed():
+            self.log.warning("CLEANUP WAS SKIPPED")
+        else:
+            self.__cleanup_previous()
         if self.compare_es:
             self.setup_es()
-        self._cb_cluster.init_cluster(self._cluster_services,
-                                      self._input.servers[1:])
+        if not self._input.param("skip_init_cluster", False):
+            self.log.info("-->Initializing the cluster")
+            self._cb_cluster.init_cluster(self._cluster_services,
+                                          self._input.servers[1:])
 
+        self.log.info("-->Enabling the diagnostics")
         self._enable_diag_eval_on_non_local_hosts()
         # Add built-in user
+        self.log.info("--> Creating user cbadminbucket/cbadminbucket")
         testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', master)
 
         # Assign user to role
+        self.log.info("--> Add user role cbadminbucket/cbadminbucket")
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(master), 'builtin')
+        self.log.info("--> Done: Add user role cbadminbucket/cbadminbucket")
 
         self._set_bleve_max_result_window()
 
@@ -3662,11 +3691,12 @@ class FTSBaseTest(unittest.TestCase):
 
         # for format {ip1: {"panic": 2}}
         self.__error_count_dict = {}
-        if len(self.__report_error_list) > 0:
+        if len(self.__report_error_list) > 0 and not self._input.param("skip_host_login", False):
             self.__initialize_error_count_dict()
             
         if self.ntonencrypt == 'enable':
             self.setup_nton_encryption()
+        self.log.info("-->End: Setup for the test")
 
     def _create_collection(self, bucket=None, scope=None, collection=None):
         if scope != '_default':
@@ -3685,6 +3715,9 @@ class FTSBaseTest(unittest.TestCase):
         Enable diag/eval to be run on non-local hosts.
         :return: Nothing
         """
+        if self._input.param("skip_host_login", False):
+            self.log.warning("-->Skipping the host login and not setting the diag eval...")
+            return
         master = self._cb_cluster.get_master_node()
         remote = RemoteMachineShellConnection(master)
         output, error = remote.enable_diag_eval_on_non_local_hosts()
@@ -3885,10 +3918,12 @@ class FTSBaseTest(unittest.TestCase):
         num_buckets = self.__num_sasl_buckets + \
                       self.__num_stand_buckets + int(self._create_default_bucket)
 
-        total_quota = self._cb_cluster.get_mem_quota()
-        bucket_size = self.__calculate_bucket_size(
-            total_quota,
-            num_buckets)
+        if self._bucket_size:
+            bucket_size = self._bucket_size
+        else:
+            total_quota = self._cb_cluster.get_mem_quota()
+            bucket_size = self.__calculate_bucket_size( total_quota, num_buckets)
+
         bucket_type = TestInputSingleton.input.param("bucket_type", "membase")
         maxttl = TestInputSingleton.input.param("maxttl", None)
 
@@ -4185,6 +4220,9 @@ class FTSBaseTest(unittest.TestCase):
         fts_log = NodeHelper.get_log_dir(self._input.servers[0]) + '/fts.log*'
         for node in self._input.servers:
             shell = RemoteMachineShellConnection(node)
+            if not shell.is_ssh_allowed:
+                self.log.warning("No check for error count as ssh to the node is available!")
+                return
             for error in self.__report_error_list:
                 count, err = shell.execute_command(
                     "zgrep \"{0}\" {1} | wc -l".format(error, fts_log))
@@ -5069,8 +5107,11 @@ class FTSBaseTest(unittest.TestCase):
                 items = self._num_items // 2
             while True:
                 try:
-                    doc_count = self._cb_cluster.get_doc_count_in_bucket(
-                        self._cb_cluster.get_buckets()[0])
+                    buckets = self._cb_cluster.get_buckets()
+                    if len(buckets) == 0:
+                        self.log.error("No buckets found!")
+                        break
+                    doc_count = self._cb_cluster.get_doc_count_in_bucket(buckets[0])
                     break
                 except KeyError:
                     self.log.info("bucket stats not ready yet...")

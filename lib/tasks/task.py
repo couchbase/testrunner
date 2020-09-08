@@ -43,13 +43,19 @@ from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4
 from TestInput import TestInputServer, TestInputSingleton
 
 try:
+    is_secure = TestInputSingleton.input.param("is_secure", False)
     CHECK_FLAG = False
-    if (TestInputSingleton.input.param("testrunner_client", None) == testconstants.PYTHON_SDK) or \
-        ((testconstants.TESTRUNNER_CLIENT in list(os.environ.keys())) and os.environ[testconstants.TESTRUNNER_CLIENT] == testconstants.PYTHON_SDK):
+    print("------------>Checking testrunner client: {}".format(testconstants.TESTRUNNER_CLIENT))
+    if ((TestInputSingleton.input.param(testconstants.TESTRUNNER_CLIENT,
+                                        testconstants.TESTRUNNER_CLIENT) == testconstants.PYTHON_SDK)
+            or ((testconstants.TESTRUNNER_CLIENT in list(os.environ.keys())) and
+        os.environ[testconstants.TESTRUNNER_CLIENT] == testconstants.PYTHON_SDK)):
         try:
+            print("------------>Try to use Python SDK2")
             from sdk_client import SDKSmartClient as VBucketAwareMemcached
             from sdk_client import SDKBasedKVStoreAwareSmartClient as KVStoreAwareSmartClient
         except:
+            print("------------>Exception with Python SDK2 and Using Python SDK3")
             from sdk_client3 import SDKSmartClient as VBucketAwareMemcached
             from sdk_client3 import SDKBasedKVStoreAwareSmartClient as KVStoreAwareSmartClient
         if (TestInputSingleton.input.param("enable_sdk_logging", False)):
@@ -64,9 +70,11 @@ try:
 except Exception as e:
     CHECK_FLAG = False
     try:
+        print("------------>Using Python SDK2")
         from sdk_client import SDKSmartClient as VBucketAwareMemcached
         from sdk_client import SDKBasedKVStoreAwareSmartClient as KVStoreAwareSmartClient
     except:
+        print("------------>Exception with Python SDK2 and Using Python SDK3")
         from sdk_client3 import SDKSmartClient as VBucketAwareMemcached
         from sdk_client3 import SDKBasedKVStoreAwareSmartClient as KVStoreAwareSmartClient
 
@@ -235,9 +243,10 @@ class NodeInitializeTask(Task):
             rest.set_max_parallel_replica_indexers(self.maxParallelReplicaIndexers)
 
         rest.init_cluster(username, password, self.port)
-        remote_shell = RemoteMachineShellConnection(self.server)
-        remote_shell.enable_diag_eval_on_non_local_hosts()
-        remote_shell.disconnect()
+        if not TestInputSingleton.input.param("skip_host_login", False):
+            remote_shell = RemoteMachineShellConnection(self.server)
+            remote_shell.enable_diag_eval_on_non_local_hosts()
+            remote_shell.disconnect()
         if rest.is_cluster_compat_mode_greater_than(4.0):
             if self.gsi_type == "plasma":
                 if not rest.is_cluster_compat_mode_greater_than(5.0):
@@ -297,7 +306,7 @@ class BucketCreateTask(Task):
         else:
             self.compressionMode = 'passive'
         self.flush_enabled = bucket_params['flush_enabled']
-        if bucket_params['bucket_priority'] is None or bucket_params['bucket_priority'].lower() is 'low':
+        if not bucket_params['bucket_priority'] or bucket_params['bucket_priority'].lower()=='low':
             self.bucket_priority = 3
         else:
             self.bucket_priority = 8
@@ -317,7 +326,7 @@ class BucketCreateTask(Task):
 
         authType = 'none' if self.password is None else 'sasl'
 
-        if int(info.port) in range(9091, 9991):
+        if info and int(info.port) in range(9091, 9991):
             try:
                 self.port = info.port
                 rest.create_bucket(bucket=self.bucket)
@@ -377,7 +386,15 @@ class BucketCreateTask(Task):
                 self.set_result(True)
                 self.state = FINISHED
                 return
-            if BucketOperationHelper.wait_for_memcached(self.server, self.bucket, self.alt_addr):
+
+            try:
+                rest = RestConnection(self.server)
+            except Exception as error:
+                pass
+            if BucketOperationHelper.wait_for_bucket_creation(self.bucket,
+                                                              rest) \
+                    or BucketOperationHelper.wait_for_memcached(self.server, self.bucket, \
+                            self.alt_addr):
                 self.log.info("bucket '{0}' was created with per node RAM quota: {1}".format(self.bucket, self.size))
                 self.set_result(True)
                 self.state = FINISHED
@@ -957,7 +974,7 @@ class StatsWaitTask(Task):
     def _stringify_servers(self):
         return ''.join([repr(server.ip + ":" + str(server.port)) for server in self.servers])
 
-    def _get_connection(self, server, admin_user='cbadminbucket', admin_pass='password'):
+    def _get_connection(self, server, admin_user='Administrator',admin_pass='password'):
         if server not in self.conns:
             for i in range(3):
                 try:
@@ -1038,6 +1055,7 @@ class GenericLoadingTask(Thread, Task):
         if CHECK_FLAG:
             self.client = VBucketAwareMemcached(RestConnection(server), bucket)
         else:
+            self.log.info("-->server={}".format(server))
             self.client = VBucketAwareMemcached(RestConnection(server), bucket, compression=compression)
         self.process_concurrency = THROUGHPUT_CONCURRENCY
         # task queue's for synchronization
@@ -3472,9 +3490,15 @@ class MonitorViewQueryResultsTask(Task):
                     RestHelper(self.rest)._wait_for_indexer_ddoc(self.servers, self.design_doc_name)
                     if self.current_retry == 70:
                         self.query["stale"] = 'false'
+<<<<<<< HEAD
                     self.log.info(
                         "View result is still not expected (ddoc=%s, query=%s, server=%s). retry in 10 sec" % (
                             self.design_doc_name, self.query, self.servers[0].ip))
+=======
+                    self.log.info("[%s] View result is still not expected (ddoc=%s, query=%s, "
+                                  "server=%s). retry in 10 sec" % ( self.current_retry,
+                                    self.design_doc_name, self.query, self.servers[0].ip))
+>>>>>>> 8f90f324c5e804fb1c8f46f5618b672611d856b6
                     self.state = EXECUTING
                     task_manager.schedule(self, 10)
             elif len(self.expected_docs) < len(self.results.get('rows', [])):

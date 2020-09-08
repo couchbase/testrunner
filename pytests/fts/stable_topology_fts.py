@@ -22,6 +22,12 @@ from couchbase_helper.documentgenerator import SDKDataLoader
 
 class StableTopFTS(FTSBaseTest):
 
+    def suite_setUp(self):
+        pass
+
+    def suite_tearDown(self):
+        pass
+
     def setUp(self):
         super(StableTopFTS, self).setUp()
 
@@ -112,7 +118,7 @@ class StableTopFTS(FTSBaseTest):
                                                       expected_hits=expected_hits,
                                                       expected_no_of_results=expected_no_of_results)
             self.log.info("Hits: %s" % hits)
-            self.log.info("Matches: %s" % matches)
+            #self.log.info("Matches: %s" % matches)
 
     def test_query_type(self):
         """

@@ -44,11 +44,12 @@ class EventingBaseTest(QueryHelperTests):
         if self.restServer:
             self.rest = RestConnection(self.restServer)
             self.rest.set_indexer_storage_mode()
-            self.log.info(
-                "Setting the min possible memory quota so that adding mode nodes to the cluster wouldn't be a problem.")
-            self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=330)
-            self.rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=INDEX_QUOTA)
-            self.rest.set_service_memoryQuota(service='eventingMemoryQuota', memoryQuota=EVENTING_QUOTA)
+            if not self.input.param("skip_set_memoryquota", False):
+                self.log.info(
+                    "Setting the min possible memory quota so that adding mode nodes to the cluster wouldn't be a problem.")
+                self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=330)
+                self.rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=INDEX_QUOTA)
+                self.rest.set_service_memoryQuota(service='eventingMemoryQuota', memoryQuota=EVENTING_QUOTA)
         self.src_bucket_name = self.input.param('src_bucket_name', 'src_bucket')
         self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
         self.dst_bucket_name = self.input.param('dst_bucket_name', 'dst_bucket')
@@ -90,13 +91,14 @@ class EventingBaseTest(QueryHelperTests):
             self.hostname= "http://"+ip+":1080/"
             self.log.info("local ip address:{}".format(self.hostname))
             self.setup_curl()
-        self.skip_metabucket_check=False
+        self.skip_metabucket_check=self.input.param('skip_metabucket_check', False)
         self.cancel_timer=self.input.param('cancel_timer', False)
         self.is_expired=self.input.param('is_expired', False)
         self.print_app_log=self.input.param('print_app_log', False)
         self.print_go_routine=self.input.param('print_go_routine', False)
 
     def tearDown(self):
+        log.info("Starting tearDown")
         # catch panics and print it in the test log
         self.check_eventing_logs_for_panic()
         rest = RestConnection(self.master)
@@ -114,6 +116,7 @@ class EventingBaseTest(QueryHelperTests):
             if stats_meta["curr_items"] != 0:
                 raise Exception("metdata bucket is not empty at the end of test")
         super(EventingBaseTest, self).tearDown()
+        log.info("Completed tearDown")
 
     def create_save_function_body(self, appname, appcode, description="Sample Description",
                                   checkpoint_interval=20000, cleanup_timers=False,
@@ -419,6 +422,10 @@ class EventingBaseTest(QueryHelperTests):
         return len(eventing_nodes_list)
 
     def check_if_eventing_consumers_are_cleaned_up(self):
+        if self.input.param("skip_host_login",False):
+            log.warning("-->Skipping check_if_eventing_consumers_are_cleaned_up as "
+                        "skip_host_login is set!")
+            return
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         array_of_counts = []
         command = "ps -ef | grep eventing-consumer | grep -v grep | wc -l"
@@ -441,6 +448,9 @@ class EventingBaseTest(QueryHelperTests):
     """
 
     def check_eventing_logs_for_panic(self):
+        if self.input.param("skip_host_login", False):
+            log.warning("-->Skipping check_eventing_logs_for_panic due to skip_host_login!")
+            return
         self.generate_map_nodes_out_dist()
         panic_str = "panic"
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)

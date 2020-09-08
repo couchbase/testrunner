@@ -786,7 +786,7 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
 
     # terminate any non main thread - these were causing hangs
     for t in threading.enumerate():
-        if t.name != 'MainThread' and t.isAlive():
+        if t.name != 'MainThread' and t.is_alive():
             print(('Thread', t, 'was not properly terminated, will be terminated now.'))
             if hasattr(t, 'shutdown'):
                 print("Shutting down the thread...")

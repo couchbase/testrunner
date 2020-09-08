@@ -38,6 +38,7 @@ from pytests.fts.fts_base import FTSIndex
 from pytests.fts.random_query_generator.rand_query_gen import DATASET
 from pytests.fts.fts_base import CouchbaseCluster
 from collection.collections_n1ql_client import CollectionsN1QL
+import server_ports
 
 JOIN_INNER = "INNER"
 JOIN_LEFT = "LEFT"
@@ -67,10 +68,12 @@ class QueryTests(BaseTestCase):
         self.version = self.input.param("cbq_version", "sherlock")
         self.flat_json = self.input.param("flat_json", False)
         self.directory_flat_json = self.input.param("directory_flat_json", "/tmp/")
-        if self.input.tuq_client and "client" in self.input.tuq_client:
-            self.shell = RemoteMachineShellConnection(self.input.tuq_client["client"])
-        else:
-            self.shell = RemoteMachineShellConnection(self.master)
+        self.skip_host_login = self.input.param("skip_host_login", False)
+        if not self.skip_host_login:
+            if self.input.tuq_client and "client" in self.input.tuq_client:
+                self.shell = RemoteMachineShellConnection(self.input.tuq_client["client"])
+            else:
+                self.shell = RemoteMachineShellConnection(self.master)
         if self.input.param("start_cmd", True) and self.input.param("cbq_version", "sherlock") != 'sherlock':
             self._start_command_line_query(self.master, user=self.master.rest_username,
                                            password=self.master.rest_password)
@@ -89,7 +92,15 @@ class QueryTests(BaseTestCase):
         self.docs_per_day = self.input.param("doc-per-day", 49)
         self.item_flag = self.input.param("item_flag", 4042322160)
         self.ipv6 = self.input.param("ipv6", False)
-        self.n1ql_port = self.input.param("n1ql_port", 8093)
+        self.is_secure = self.input.param("is_secure", False)
+        if not self.is_secure:
+            self.n1ql_port = self.input.param("n1ql_port", server_ports.query_port)
+            self.http_protocol = self.input.param("http_protocol", "http")
+            self.cbas_http_port = self.input.param("cbas_http_port", server_ports.cbas_http_port)
+        else:
+            self.n1ql_port = self.input.param("n1ql_port", server_ports.ssl_query_port)
+            self.http_protocol = self.input.param("http_protocol", "https")
+            self.cbas_http_port = self.input.param("cbas_http_port", server_ports.cbas_ssl_port)
         self.analytics = self.input.param("analytics", False)
         self.query_context = self.input.param("query_context", None)
         self.dataset = getattr(self, 'dataset', self.input.param("dataset", "default"))
@@ -104,9 +115,11 @@ class QueryTests(BaseTestCase):
         self.named_prepare = self.input.param("named_prepare", None)
         self.encoded_prepare = self.input.param("encoded_prepare", False)
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
-        shell = RemoteMachineShellConnection(self.master)
-        type = shell.extract_remote_info().distribution_type
-        shell.disconnect()
+        type = "linux"
+        if not self.skip_host_login:
+            shell = RemoteMachineShellConnection(self.master)
+            type = shell.extract_remote_info().distribution_type
+            shell.disconnect()
         self.path = testconstants.LINUX_COUCHBASE_BIN_PATH
         self.array_indexing = self.input.param("array_indexing", False)
         self.load_sample = self.input.param("load_sample", False)
@@ -262,7 +275,8 @@ class QueryTests(BaseTestCase):
                 data += 'drop dataset {0} if exists;'.format(bucket.name + "_shadow")
                 data += 'drop bucket {0} if exists;'.format(bucket.name)
             self.write_file("file.txt", data)
-            url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
+            url = '{1}://{0}:{2}/analytics/service'.format(self.cbas_node.ip, self.http_protocol,
+                                                           self.cbas_http_port)
             cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url + " -u " + bucket_username + ":" + bucket_password
             os.system(cmd)
             # os.remove(filename)
@@ -333,7 +347,8 @@ class QueryTests(BaseTestCase):
                                                                                             bucket_username,
                                                                                             bucket_password)
         self.write_file("file.txt", data)
-        url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
+        url = '{1}://{0}:{2}/analytics/service'.format(self.cbas_node.ip, self.http_protocol,
+                                                       self.cbas_http_port)
         cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url + " -u " + bucket_username + ":" + bucket_password
         os.system(cmd)
         # os.remove(filename)
@@ -392,7 +407,7 @@ class QueryTests(BaseTestCase):
     def create_fts_index(self, name, source_type='couchbase',
                          source_name=None, index_type='fulltext-index',
                          index_params=None, plan_params=None,
-                         source_params=None, source_uuid=None, doc_count=1000, index_storage_type=None):
+                         source_params=None, source_uuid=None, doc_count=1000):
         """Create fts index/alias
         @param node: Node on which index is created
         @param name: name of the index/alias
@@ -450,8 +465,7 @@ class QueryTests(BaseTestCase):
             plan_params,
             source_params,
             source_uuid,
-            self.dataset,
-            index_storage_type
+            self.dataset
         )
         fts_index.create()
 
@@ -856,7 +870,7 @@ class QueryTests(BaseTestCase):
         for node in indexer_nodes:
             self.log.info("waiting for indexer on node: " + str(node.ip))
             node_rest = RestConnection(node)
-            indexer_url = "http://" + str(node.ip) + ":" + str(indexer_port) + "/"
+            indexer_url = self.http_protocol + "://" + str(node.ip) + ":" + str(indexer_port) + "/"
             node_ready = False
 
             while not node_ready:
@@ -1073,7 +1087,8 @@ class QueryTests(BaseTestCase):
     def gen_docs(self, docs_per_day=1, type='default', values_type=None, name='tuq', start=0, end=0):
         json_generator = JsonGenerator()
         generators = []
-        self.log.info('Generating %s:%s data...' % (type, self.dataset))
+        self.log.info('Generating %s:%s data...docs_per_day:%s' % (type, self.dataset,
+                                                                   docs_per_day))
         if type == 'default':
             if self.array_indexing:
                 generators = json_generator.generate_docs_employee_array(docs_per_day, start)
@@ -1176,7 +1191,8 @@ class QueryTests(BaseTestCase):
             jira_tickets = ['[{"Number": 1, "project": "cb", "description": "test"},' + \
                             '{"Number": 2, "project": "mb"}]', ]
             generators.append(DocumentGenerator(name, template, names, jira_tickets, start=index + index, end=end))
-        self.log.info('Completed Generating %s:%s data...' % (type, self.dataset))
+        self.log.info('Completed Generating %s:%s data...docs_per_day=%s' % (type, self.dataset,
+                                                                             docs_per_day))
         return generators
 
     def buckets_docs_ready(self, bucket_docs_map):
@@ -1318,6 +1334,8 @@ class QueryTests(BaseTestCase):
         # self.assertTrue(sorted(result_no_prepare) == sorted(result_with_prepare), msg)
 
     def run_cbq_query_curl(self, query=None, server=None):
+        if self.skip_host_login:
+           return None
         if query is None:
             query = self.query
         if server is None:
@@ -1325,7 +1343,9 @@ class QueryTests(BaseTestCase):
 
         shell = RemoteMachineShellConnection(server)
         cmd = (
-                self.curl_path + " -u " + self.master.rest_username + ":" + self.master.rest_password + " http://" + server.ip + ":" + server.n1ql_port + "/query/service -d " \
+                self.curl_path + " -u " + self.master.rest_username + ":" + self.master.rest_password
+                + self.http_protocol + " ://" + server.ip + ":" + server.n1ql_port +
+        "/query/service -d " \
                                                                                                                                                           "statement=" + query)
 
         output, error = shell.execute_command(cmd)
@@ -1334,8 +1354,9 @@ class QueryTests(BaseTestCase):
             json_output_str += s
         return json.loads(json_output_str)
 
-    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None, username=None, password=None, use_fts_query_param=None, debug_query=True, query_context=''):
-        if query is None:
+<<< def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None, username=None, password=None, use_fts_query_param=None, debug_query=True, query_context=''):
+===     self.log.info("-->run_cqe_query()...")
+>>>     if query is None:
             query = self.query
         if server is None:
             server = self.master
@@ -1347,6 +1368,9 @@ class QueryTests(BaseTestCase):
             username = rest.username
             password = rest.password
         cred_params['creds'].append({'user': username, 'pass': password})
+        self.log.info(
+            "-->user={},pwd={},is_prepared={},query={}".format(username, password, is_prepared,
+                                                               query))
         for bucket in self.buckets:
             if bucket.saslPassword:
                 cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
@@ -1356,6 +1380,7 @@ class QueryTests(BaseTestCase):
         if query_context != '':
             query_params['query_context'] = query_context
         if self.testrunner_client == 'python_sdk' and not is_prepared:
+            self.log.info("-->Using Python SDK")
             sdk_cluster = Cluster('couchbase://' + str(server.ip))
             authenticator = PasswordAuthenticator(username, password)
             sdk_cluster.authenticate(authenticator)
@@ -1387,6 +1412,7 @@ class QueryTests(BaseTestCase):
                 result = ast.literal_eval(str(e).split("value=")[1].split(", http_status")[0])
 
         elif self.use_rest:
+            self.log.info("-->Using REST")
             query_params.update({'scan_consistency': self.scan_consistency})
             if hasattr(self, 'query_params') and self.query_params:
                 query_params = self.query_params
@@ -1423,6 +1449,7 @@ class QueryTests(BaseTestCase):
                                          is_prepared=is_prepared, named_prepare=self.named_prepare,
                                          encoded_plan=encoded_plan, servers=self.servers)
         else:
+            self.log.info("-->Using CLI cbq")
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside(
                     "$GOPATH/src/github.com/couchbase/query/" + \
@@ -1982,29 +2009,35 @@ class QueryTests(BaseTestCase):
 
     def check_permissions_helper(self):
         for bucket in self.buckets:
-            cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
+            cmd = "%s -u %s:%s %s://%s:%s/query/service -d " \
                   "'statement=INSERT INTO %s (KEY, VALUE) VALUES(\"test\", { \"value1\": \"one1\" })'" % \
-                  (self.curl_path, 'john_insert', 'password', self.master.ip, bucket.name)
+                  (self.curl_path, 'john_insert', 'password', self.http_protocol, self.master.ip,
+                   self.n1ql_port,
+                   bucket.name)
             self.change_and_update_permission(None, None, 'johnInsert', bucket.name, cmd,
                                               "Unable to insert into {0} as user {1}")
 
             old_name = "employee-14"
             new_name = "employee-14-2"
-            cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
+            cmd = "{6} -u {0}:{1} {8}://{2}:{7}/query/service -d " \
                   "'statement=UPDATE {3} a set name = '{4}' where name = '{5}' limit 1'". \
-                format('john_update', 'password', self.master.ip, bucket.name, new_name, old_name, self.curl_path)
+                format('john_update', 'password', self.master.ip, bucket.name, new_name,
+                       old_name, self.curl_path, self.n1ql_port, self.http_protocol)
             self.change_and_update_permission(None, None, 'johnUpdate', bucket.name, cmd,
                                               "Unable to update into {0} as user {1}")
 
             del_name = "employee-14"
-            cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
+            cmd = "{5} -u {0}:{1} {7}://{2}:${6}/query/service -d " \
                   "'statement=DELETE FROM {3} a WHERE name = '{4}''". \
-                format('john_delete', 'password', self.master.ip, bucket.name, del_name, self.curl_path)
+                format('john_delete', 'password', self.master.ip, bucket.name, del_name,
+                       self.curl_path, self.n1ql_port, self.http_protocol)
             self.change_and_update_permission(None, None, 'john_delete', bucket.name, cmd,
                                               "Unable to delete from {0} as user {1}")
 
-            cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} LIMIT 10'". \
-                format('john_select2', 'password', self.master.ip, bucket.name, self.curl_path)
+            cmd = "{4} -u {0}:{1} {6}://{2}:{5}/query/service -d 'statement=SELECT * from {3} " \
+                  "LIMIT 10'". \
+                format('john_select2', 'password', self.master.ip, bucket.name, self.curl_path,
+                       self.n1ql_port, self.http_protocol)
             self.change_and_update_permission(None, None, 'john_select2', bucket.name, cmd,
                                               "Unable to select from {0} as user {1}")
 
@@ -2620,7 +2653,7 @@ class QueryTests(BaseTestCase):
         self.assertTrue(res['metrics']['resultCount'] == 1)
         res = self.curl_with_roles('select * from system:keyspaces')
 
-        if role in ["query_update(default)", "query_delete(default)", "query_insert(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name)]:
+        if role in ["query_update(default)", "query_delete(default)", "query_insert(default)"]:
             self.assertTrue(res['status'] == 'success')
         elif 'test)' in role:
             self.assertTrue(res['metrics']['resultCount'] == 2)
@@ -2632,25 +2665,25 @@ class QueryTests(BaseTestCase):
         else:
             self.assertTrue(res['metrics']['resultCount'] == 2)
 
-        self.query = 'create primary index on `{0}`'.format(self.buckets[0].name)
+        self.query = 'create primary index on {0}'.format(self.buckets[0].name)
         try:
             self.curl_with_roles(self.query)
         except Exception as ex:
             self.log.error(ex)
 
-        if role not in ["query_insert(default)", "query_update(default)", "query_delete(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name)]:
-            self.query = 'create primary index on `{0}`'.format(self.buckets[1].name)
+        if role not in ["query_insert(default)", "query_update(default)", "query_delete(default)"]:
+            self.query = 'create primary index on {0}'.format(self.buckets[1].name)
             try:
                 self.curl_with_roles(self.query)
             except Exception as ex:
                 self.log.error(ex)
 
-        if role not in ["views_admin(standard_bucket0)", "views_admin(default)", "query_insert(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name),
+        if role not in ["views_admin(standard_bucket0)", "views_admin(default)", "query_insert(default)",
                         "query_update(default)", "query_delete(default)"]:
-            self.query = 'create index idx1 on `{0}`(name)'.format(self.buckets[0].name)
+            self.query = 'create index idx1 on {0}(name)'.format(self.buckets[0].name)
             res = self.curl_with_roles(self.query)
             # self.sleep(10)
-            self.query = 'create index idx2 on `{0}`(name)'.format(self.buckets[1].name)
+            self.query = 'create index idx2 on {0}(name)'.format(self.buckets[1].name)
             self.curl_with_roles(self.query)
             # self.sleep(10)
             self.query = 'select * from system:indexes'
@@ -2681,7 +2714,7 @@ class QueryTests(BaseTestCase):
         elif role in ["select(default)", "query_select(default)", "select(standard_bucket0)",
                       "query_select(standard_bucket0)","select({0})".format(self.bucket_name), "query_select({0})".format(self.bucket_name),"select({0})".format(self.rbac_context), "query_select({0})".format(self.rbac_context)]:
             self.assertTrue(str(res).find("'code': 13014") != -1)
-        elif role in ["insert(default)", "query_insert(default)", "query_update(default)", "query_delete(default)","insert(({0})".format(self.bucket_name), "query_insert({0})".format(self.bucket_name), "query_update({0})".format(self.bucket_name), "query_delete({0})".format(self.bucket_name)]:
+        elif role in ["insert(default)", "query_insert(default)", "query_update(default)", "query_delete(default)"]:
             self.assertTrue(res['status'] == 'fatal')
         else:
             self.assertTrue(res['status'] == 'success')
@@ -2706,12 +2739,12 @@ class QueryTests(BaseTestCase):
         #     self.assertTrue(str(res).find("'code': 13014")!=-1)
         # else:
         #     self.assertTrue(res['metrics']['resultCount']> 0)
-        if role not in ["ro_admin", "replication_admin", "query_insert(default)", "query_delete(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name),
+        if role not in ["ro_admin", "replication_admin", "query_insert(default)", "query_delete(default)",
                         "query_update(default)", "bucket_full_access(default)", "query_system_catalog",
                         "views_admin(default)"]:
             self.query = "prepare `st1{0}` from select * from {0} union select * from {0} union select * from {0}".format(self.bucket_name)
             res = self.curl_with_roles(self.query)
-            self.query = 'execute `st1{0}`'.format(self.bucket_name)
+            self.query = 'execute st1'
             res = self.curl_with_roles(self.query)
             if role in ["bucket_admin(standard_bucket0)", "views_admin(standard_bucket0)", "replication_admin"]:
                 self.assertTrue(str(res).find("'code': 4040") != -1)
@@ -2732,7 +2765,7 @@ class QueryTests(BaseTestCase):
                 else:
                     self.assertTrue(res['metrics']['resultCount'] > 0)
 
-                self.query = 'execute `st2{0}`'
+                self.query = 'execute st2'
                 res = self.curl_with_roles(self.query)
                 if role in ["bucket_admin(standard_bucket0)", "views_admin(standard_bucket0)", "views_admin(default)",
                             "views_admin", "bucket_admin(default)", "replication_admin", "query_system_catalog",
@@ -2751,7 +2784,7 @@ class QueryTests(BaseTestCase):
                 else:
                     self.assertTrue(res['status'] == 'success')
 
-        if role not in ["query_insert(default)", "query_delete(default)", "query_update(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name),
+        if role not in ["query_insert(default)", "query_delete(default)", "query_update(default)",
                         "bucket_full_access(default)", "ro_admin"]:
             self.query = 'select * from system:prepareds'
             res = self.curl_with_roles(self.query)
@@ -2785,7 +2818,7 @@ class QueryTests(BaseTestCase):
         elif role in ["bucket_admin(standard_bucket0)", "bucket_admin(default)", "select(default)",
                       "query_select(default)", "query_select({0})".format(self.bucket_name), "query_select({0})".format(self.rbac_context),"select({0})".format(self.bucket_name)]:
             self.assertTrue(res['metrics']['resultCount'] == 1)
-        elif role in ["query_insert(default)", "query_delete(default)", "query_update(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name)]:
+        elif role in ["query_insert(default)", "query_delete(default)", "query_update(default)"]:
             self.assertTrue(res['metrics']['resultCount'] == 0)
             # elif (role == "ro_admin"):
             #     self.assertTrue(res['metrics']['resultCount']==2)
@@ -3123,18 +3156,22 @@ class QueryTests(BaseTestCase):
     #
     ##############################################################################################
     def curl_helper(self, statement):
-        cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement={3}'". \
-            format('Administrator', 'password', self.master.ip, statement, self.curl_path)
+        cmd = "{4} -u {0}:{1} {5}://{2}:8093/query/service -d 'statement={3}'". \
+            format('Administrator', 'password', self.master.ip, statement, self.curl_path, self.http_protocol)
         return self.run_helper_cmd(cmd)
 
     def prepare_helper(self, statement):
-        cmd = '{4} -u {0}:{1} http://{2}:8093/query/service -d \'prepared="{3}"&$type="Engineer"&$name="employee-4"\''. \
-            format('Administrator', 'password', self.master.ip, statement, self.curl_path)
+        cmd = '{4} -u {0}:{1} {5}://{2}:{6}/query/service -d \'prepared="{' \
+              '3}"&$type="Engineer"&$name="employee-4"\''. \
+            format('Administrator', 'password', self.master.ip, statement, self.curl_path,
+                   self.http_protocol, self.n1ql_port)
         return self.run_helper_cmd(cmd)
 
     def prepare_helper2(self, statement):
-        cmd = '{4} -u {0}:{1} http://{2}:8093/query/service -d \'prepared="{3}"&args=["Engineer","employee-4"]\''. \
-            format('Administrator', 'password', self.master.ip, statement, self.curl_path)
+        cmd = '{4} -u {0}:{1} {5}://{2}:{6}/query/service -d \'prepared="{3}"&args=["Engineer",' \
+              '"employee-4"]\''. \
+            format('Administrator', 'password', self.master.ip, statement, self.curl_path,
+                   self.http_protocol, self.n1ql_port)
         return self.run_helper_cmd(cmd)
 
     def run_helper_cmd(self, cmd):

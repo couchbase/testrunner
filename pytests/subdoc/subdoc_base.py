@@ -1,6 +1,7 @@
 from basetestcase import BaseTestCase
 from membase.api.rest_client import RestConnection, RestHelper
 from memcached.helper.data_helper import VBucketAwareMemcached
+from TestInput import TestInputServer, TestInputSingleton
 import copy
 
 
@@ -13,7 +14,8 @@ class SubdocBaseTest(BaseTestCase):
         for bucket in self.buckets:
             testuser = [{'id': bucket.name, 'name': bucket.name, 'password': 'password'}]
             rolelist = [{'id': bucket.name, 'name': bucket.name, 'roles': 'admin'}]
-            self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
+            if self.input.param("is_admin", True):
+                self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
 
     def tearDown(self):
         super(SubdocBaseTest, self).tearDown()
@@ -183,18 +185,31 @@ class SubdocBaseTest(BaseTestCase):
     def direct_client(self, server, bucket, timeout=30):
         # CREATE SDK CLIENT
         if self.use_sdk_client:
+            self.log.info("--> Using SDK client")
+            self.is_secure = TestInputSingleton.input.param("is_secure",False)
             try:
                 from sdk_client import SDKClient
-                scheme = "couchbase"
+                self.log.info("--> Try to use SDK2 client")
+                if not self.is_secure:
+                    scheme = "couchbase"
+                else:
+                    scheme = "couchbases"
                 host = self.master.ip
                 if self.master.ip == "127.0.0.1":
-                    scheme = "http"
+                    if not self.is_secure:
+                        scheme = "http"
+                    else:
+                        scheme = "https"
                     host="{0}:{1}".format(self.master.ip, self.master.port)
-                return SDKClient(scheme=scheme, hosts = [host], bucket = bucket.name)
+                return SDKClient(scheme=scheme, hosts = [host], bucket = bucket.name,
+                                 username=server.rest_username, password=server.rest_password)
             except ImportError:
+                self.log.info("--> Using SDK3 client")
                 from sdk_client3 import SDKClient
                 return SDKClient(RestConnection(self.master), bucket=bucket.name)
             except Exception as ex:
                 self.log.error("cannot load sdk client due to error {0}".format(str(ex)))
+
         # USE MC BIN CLIENT WHEN NOT USING SDK CLIENT
+        self.log.info("--> Using Direct Memcached client")
         return self.direct_mc_bin_client(server, bucket, timeout= timeout)

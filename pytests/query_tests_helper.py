@@ -21,7 +21,11 @@ class QueryHelperTests(BaseTestCase):
         self.use_gsi_for_secondary = self.input.param(
             "use_gsi_for_secondary", True)
         self.scan_consistency = self.input.param("scan_consistency", "request_plus")
-        self.shell = RemoteMachineShellConnection(self.master)
+        self.skip_host_login = self.input.param("skip_host_login", False)
+        if not self.skip_host_login:
+            self.shell = RemoteMachineShellConnection(self.master)
+        else:
+            self.shell = None
         if not self.skip_init_check_cbserver:  # for upgrade tests
             self.buckets = RestConnection(self.master).get_buckets()
         self.docs_per_day = self.input.param("doc-per-day", 49)

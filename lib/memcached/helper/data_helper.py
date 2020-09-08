@@ -21,6 +21,8 @@ from membase.api.rest_client import RestConnection, RestHelper, Bucket, vBucket
 from memcacheConstants import ERR_NOT_MY_VBUCKET, ERR_ETMPFAIL, ERR_EINVAL, ERR_2BIG
 from memcached.helper.old_kvstore import ClientKeyValueStore
 from perf_engines import mcsoda
+import memcacheConstants
+import server_ports
 
 from TestInput import TestInputServer
 from TestInput import TestInputSingleton
@@ -862,6 +864,19 @@ class VBucketAwareMemcached(object):
             nodes = rest.get_nodes()
             server = TestInputServer()
             server.ip = serverIp
+            self.log.info("add_memcached: server ={}:{}".format(serverIp, serverPort))
+            servers_map = TestInputSingleton.input.param("servers_map","");
+            if servers_map:
+                log.info("servers_map={}".format(servers_map))
+                servers_ip_host = servers_map.split(",")
+                for server_ip_host in servers_ip_host:
+                    ip_host = server_ip_host.split(":")
+                    mapped_ip = ip_host[0]
+                    mapped_host = ip_host[1]
+                    if mapped_ip in server.ip:
+                        log.info("--> replacing ip with hostname ")
+                        server.ip = mapped_host
+
             if TestInputSingleton.input.param("alt_addr", False):
                 server.ip = rest.get_ip_from_ini_file()
             server.port = rest.port
@@ -871,7 +886,12 @@ class VBucketAwareMemcached(object):
                 for node in nodes:
                     if node.ip == serverIp and node.memcached == serverPort:
                         if server_str not in memcacheds:
-                            server.port = node.port
+                            #server.port = node.port
+                            if TestInputSingleton.input.param("is_secure", False):
+                                server.port = server_ports.ssl_rest_port
+                            else:
+                                server.port = server.port = node.port
+
                             memcacheds[server_str] = \
                                 MemcachedClientHelper.direct_client(server, bucket, admin_user=admin_user,
                                                                     admin_pass=admin_pass)
@@ -1868,10 +1888,19 @@ class LoadWithMcsoda(object):
         if protocol_in.find('://') >= 0:
             protocol = \
                 '-'.join(((["membase"] + \
+<<<<<<< HEAD
                            protocol_in.split("://"))[-2] + "-binary").split('-')[0:2])
             host_port = ('@' + protocol_in.split("://")[-1]).split('@')[-1] + ":8091"
+=======
+                               protocol_in.split("://"))[-2] + "-binary").split('-')[0:2])
+            if TestInputSingleton.input.param("is_secure", False):
+                port = server_ports.ssl_rest_port
+            else:
+                port = server_ports.rest_port
+            host_port = ('@' + protocol_in.split("://")[-1]).split('@')[-1] + ":" + port
+>>>>>>> 8f90f324c5e804fb1c8f46f5618b672611d856b6
             user, pswd = (('@' + protocol_in.split("://")[-1]).split('@')[-2] + ":").split(':')[0:2]
-
+            log.info("-->data_helper:host_port={}".format(host_port))
         return protocol, host_port, user, pswd
 
     def get_cfg(self):

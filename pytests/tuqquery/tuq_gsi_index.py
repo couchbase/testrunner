@@ -24,7 +24,9 @@ class QueriesIndexTests(QueryTests):
             self.log.error("MAX NUMBER OF INDEXES IS 3. ALL TESTS WILL BE SKIPPED")
             self.fail('MAX NUMBER OF INDEXES IS 3. ALL TESTS WILL BE SKIPPED')
         self.rest = RestConnection(self.master)
-        self.shell = RemoteMachineShellConnection(self.master)
+        self.skip_host_login = self.input.param("skip_host_login", False)
+        if not self.skip_host_login:
+            self.shell = RemoteMachineShellConnection(self.master)
         self.delete_sample = self.input.param("delete_sample", False)
         self.log.info("==============  QueriesIndexTests setup has completed ==============")
         self.log_config_info()
@@ -1146,6 +1148,7 @@ class QueriesIndexTests(QueryTests):
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_simple_array_index(self):
+        self.log.info("-->test_simple_array_index()...")
         self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
@@ -1171,12 +1174,30 @@ class QueriesIndexTests(QueryTests):
                              "AND (ANY x IN {0}.VMs SATISFIES x.RAM between 1 and 5 END) ".format(query_bucket) + \
                              "AND  NOT (department = 'Manager') ORDER BY name limit 10"
                 self.run_cbq_query()
-                self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
+                rest = RestConnection(self.master)
+                versions = rest.get_nodes_versions()
+                is_cb_version_pre_7 = False
+                for version in versions:
+                    if "7" > version:
+                        is_cb_version_pre_7 = True
+                        break
+
+                if is_cb_version_pre_7:
+                    self.query = "DROP INDEX  {0}.{1} USING {2}".format(query_bucket, idx,
+                                                                        self.index_type)
+                else:
+                    self.query = "DROP INDEX {1} ON {0} USING {2}".format(
+                    query_bucket, idx, self.index_type)
+
                 drop_result = self.run_cbq_query()
                 self._verify_results(drop_result['results'], [])
                 self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
                 created_indexes.remove(idx)
-                self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx2, self.index_type)
+                if is_cb_version_pre_7:
+                    self.query = "DROP INDEX {0}.{1} USING {2}".format(query_bucket, idx2,
+                                                                          self.index_type)
+                else:
+                    self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx2, self.index_type)
                 drop_result = self.run_cbq_query()
                 self._verify_results(drop_result['results'], [])
                 self.assertFalse(self._is_index_in_list(bucket, idx2), "Index is in list")
@@ -1211,7 +1232,12 @@ class QueriesIndexTests(QueryTests):
                                 sorted(expected_result['results'], key=(lambda x: x['name'])))
             finally:
                 for idx in created_indexes:
-                    self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
+                    if is_cb_version_pre_7:
+                        self.query = "DROP INDEX {0}.{1} USING {2}".format(query_bucket, idx,
+                                                                               self.index_type)
+                    else:
+                        self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx,
+                                                                              self.index_type)
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
