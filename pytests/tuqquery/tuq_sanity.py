@@ -51,11 +51,38 @@ class QuerySanityTests(QueryTests):
         self.log.info("==============  QuerySanityTests suite_tearDown has started ==============")
         self.log.info("==============  QuerySanityTests suite_tearDown has completed ==============")
         super(QuerySanityTests, self).suite_tearDown()
-
     ##############################################################################################
     #
     #   SIMPLE CHECKS
     ##############################################################################################
+
+    def test_error_message_collections_full(self):
+        try:
+            self.run_cbq_query(query="SELECT * FROM default:default.test.tes")
+            self.fail("This query should error")
+        except Exception as e:
+            self.assertTrue("Keyspace not found in CB datastore: default:default.test.tes" in str(e), "The full path was not inside the error message! {0}".format(str(e)))
+        try:
+            self.run_cbq_query(query="SELECT * FROM default.test.tes")
+            self.fail("This query should error")
+        except Exception as e:
+            self.assertTrue("Keyspace not found in CB datastore: default:default.test.tes" in str(e), "The full path was not inside the error message! {0}".format(str(e)))
+
+    def test_error_message_collections_query_context(self):
+        try:
+            self.run_cbq_query(query="SELECT * FROM tes", query_context=self.query_context)
+            self.fail("This query should error")
+        except Exception as e:
+            self.assertTrue("Keyspace not found in CB datastore: default:default.test.tes" in str(e),
+                            "The full path was not inside the error message! {0}".format(str(e)))
+
+    def test_error_namespace(self):
+        try:
+            results = self.run_cbq_query(query='select * from default.test.tes where name = "new hotel"', query_context='default:')
+            self.fail("This query should error")
+        except Exception as e:
+            self.assertTrue("Keyspace not found in CB datastore: default:default.test.tes" in str(e), "The full path was not inside the error message! {0}".format(str(e)))
+
 
     def test_escaped_identifiers(self):
         self.fail_if_no_buckets()

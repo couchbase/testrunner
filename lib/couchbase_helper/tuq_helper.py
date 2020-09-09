@@ -240,7 +240,7 @@ class N1QLHelper():
             return False
 
     def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False,
-                      scan_consistency=None, scan_vector=None, verbose=True, timeout=None, rest_timeout=None):
+                      scan_consistency=None, scan_vector=None, verbose=True, timeout=None, rest_timeout=None, query_context=None):
         if query is None:
             query = self.query
         if server is None:
@@ -275,6 +275,8 @@ class N1QLHelper():
                 query_params['scan_vector']= str(scan_vector).replace("'", '"')
             if timeout:
                 query_params['timeout'] = timeout
+            if query_context:
+                query_params['query_context'] = query_context
             if verbose:
                 self.log.info('RUN QUERY %s' % query)
             result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params,
