@@ -39,17 +39,17 @@ class EventingRebalance(EventingBaseTest):
         self.expiry = 3
         handler_code = self.input.param('handler_code', 'bucket_op')
         if handler_code == 'bucket_op':
-            self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
+            self.handler_code = "handler_code/ABO/insert_rebalance.js"
         elif handler_code == 'bucket_op_with_timers':
             self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS
         elif handler_code == 'bucket_op_with_cron_timers':
-            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMERS
+            self.handler_code = "handler_code/ABO/insert_timer.js"
         elif handler_code == 'n1ql_op_with_timers':
             self.handler_code = HANDLER_CODE.N1QL_OPS_WITH_TIMERS
         elif handler_code == 'n1ql_op_without_timers':
             self.handler_code = HANDLER_CODE.N1QL_OPS_WITHOUT_TIMERS
         elif handler_code == 'source_bucket_mutation':
-            self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION
+            self.handler_code = "handler_code/ABO/insert_sbm.js"
         elif handler_code == 'source_bucket_mutation_with_timers':
             self.handler_code = HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS
         elif handler_code == 'source_bucket_mutation_delete':
@@ -65,7 +65,7 @@ class EventingRebalance(EventingBaseTest):
         elif handler_code == 'bucket_op_curl_delete':
             self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_DELETE
         elif handler_code == 'bucket_op_curl_jenkins':
-            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_JENKINS
+            self.handler_code = "handler_code/ABO/curl_get.js"
         elif handler_code == 'timer_op_curl_get':
             self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_GET
         elif handler_code == 'timer_op_curl_post':
@@ -81,7 +81,7 @@ class EventingRebalance(EventingBaseTest):
         elif handler_code == 'bucket_op_expired':
             self.handler_code = HANDLER_CODE.BUCKET_OP_EXPIRED
         else:
-            self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
+            self.handler_code = "handler_code/ABO/insert_rebalance.js"
         force_disable_new_orchestration = self.input.param('force_disable_new_orchestration', False)
         if force_disable_new_orchestration:
             self.rest.diag_eval("ns_config:set(force_disable_new_orchestration, true).")
@@ -730,7 +730,7 @@ class EventingRebalance(EventingBaseTest):
 
     def test_eventing_failover_and_recovery_and_rebalance(self):
         gen_load_del = copy.deepcopy(self.gens_load)
-        eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         if self.pause_resume:
@@ -739,13 +739,13 @@ class EventingRebalance(EventingBaseTest):
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                 self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         # fail over the kv node
-        fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server], graceful=False)
+        fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         fail_over_task.result()
         self.wait_for_failover()
         self.sleep(120)
         # do a recovery and rebalance
-        self.rest.set_recovery_type('ns_1@' + eventing_server.ip, "full")
-        self.rest.add_back_node('ns_1@' + eventing_server.ip)
+        self.rest.set_recovery_type('ns_1@' + eventing_server[1].ip, "full")
+        self.rest.add_back_node('ns_1@' + eventing_server[1].ip)
         task.result()
         rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
         if rebalance:

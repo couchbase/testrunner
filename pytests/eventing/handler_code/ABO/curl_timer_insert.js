@@ -1,6 +1,6 @@
 function OnUpdate(doc, meta) {
     var expiry = new Date();
-    expiry.setSeconds(expiry.getSeconds() + 30);
+    expiry.setSeconds(expiry.getSeconds() + 300);
 
     var context = {docID : meta.id, random_text : "e6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh07Aumoe6cZZGHuh07Aumoe6cZZGHuh07Aumoe6"};
     createTimer(timerCallback,  expiry, meta.id, context);
@@ -10,7 +10,7 @@ function OnUpdate(doc, meta) {
 
 function OnDelete(meta) {
     var expiry = new Date();
-    expiry.setSeconds(expiry.getSeconds() + 30);
+    expiry.setSeconds(expiry.getSeconds() + 300);
 
     var context = {docID : meta.id};
     createTimer(NDtimerCallback,  expiry, meta.id, context);
@@ -26,7 +26,9 @@ function NDtimerCallback(context) {
     	log('response headers received from server:', response.headers);
     	log('response status received from server:', response.status);
     	var res= new Uint8Array(response.body);
-    	delete dst_bucket[context.docID];
+        var meta={"id":context.docID};
+        var result = couchbase.delete(dst_bucket,meta);
+        log(result);
     }
     catch (e) {
     	log('error:', e);
@@ -42,11 +44,14 @@ function timerCallback(context) {
     	log('response headers received from server:', response.headers);
     	log('response status received from server:', response.status);
     	var res= new Uint8Array(response.body);
+    	var meta={"id":context.docID};
     	if(response.status == 200){
-    	    dst_bucket[context.docID]=response.body;
+    	    var result= couchbase.insert(dst_bucket,meta,response.body);
+    	    log(result);
     	}
     	else{
-    	    dst_bucket[meta.id] = response.status;
+    	    var result= couchbase.insert(dst_bucket,meta,response.status);
+    	    log(result);
     	}
     }
     catch (e) {
