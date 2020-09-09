@@ -91,6 +91,52 @@ class basic_ops(BaseTestCase):
         except MemcachedError as exp:
             self.fail("Exception with del_with meta - {0}".format(exp) )
 
+    def test_MB_32114(self):
+        try:
+            from sdk_client import SDKClient
+        except:
+            from sdk_client3 import SDKClient
+        import couchbase.subdocument as SD
+
+        rest = RestConnection(self.master)
+        client = VBucketAwareMemcached(rest, 'default')
+        if self.maxttl:
+            self._expiry_pager(self.master)
+        sdk_client = SDKClient(scheme='couchbase', hosts=[self.master.ip], bucket='default')
+        KEY_NAME = 'key1'
+
+        for i in range(1000):
+            mcd = client.memcached(KEY_NAME + str(i))
+            rc = mcd.set(KEY_NAME + str(i), 0, 0, json.dumps({'value': 'value2'}))
+            sdk_client.mutate_in(KEY_NAME + str(i), SD.upsert("subdoc_key", "subdoc_val",
+                                                              xattr=True,
+                                                              create_parents=True))
+            # wait for it to persist
+            persisted = 0
+            while persisted == 0:
+                opaque, rep_time, persist_time, persisted, cas = client.observe(KEY_NAME + str(i))
+
+        self._load_doc_data_all_buckets(batch_size=1000)
+
+        for i in range(1000):
+            try:
+                mcd = client.memcached(KEY_NAME + str(i))
+                _, flags, exp, seqno, cas = client.memcached(KEY_NAME + str(i)).getMeta(KEY_NAME + str(i))
+                rc = mcd.del_with_meta(KEY_NAME + str(i), 0, 0, 2, cas + 1)
+            except MemcachedError as exp:
+                self.fail("Exception with del_with meta - {0}".format(exp))
+        self.cluster.compact_bucket(self.master, "default")
+        if self.maxttl:
+            self.sleep(self.maxttl)
+        else:
+            self.sleep(60)
+        active_bucket_items = rest.get_active_key_count("default")
+        replica_bucket_items = rest.get_replica_key_count("default")
+        print('active_bucket_items ', active_bucket_items)
+        print('replica_bucket_items ', replica_bucket_items)
+        if active_bucket_items * self.num_replicas != replica_bucket_items:
+            self.fail("Mismatch in data !!!")
+
     # Reproduce test case for MB-28078
     def do_setWithMeta_twice(self):
 
