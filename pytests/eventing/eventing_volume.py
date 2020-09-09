@@ -94,13 +94,13 @@ class EventingVolume(EventingBaseTest):
     def deploy_all_the_functions(self):
         # deploy the first function - Bucket op
         body1 = self.create_save_function_body(self.function_name + "_bucket_op",
-                                               HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
+                                               "handler_code/ABO/bucket_op_insert_volume.js",
                                                worker_count=self.worker_count,
                                                cpp_worker_thread_count=self.cpp_worker_thread_count)
         self.deploy_function(body1, wait_for_bootstrap=False)
         # deploy the second function - Bucket op with cron timers
         body2 = self.create_save_function_body(self.function_name + "_bucket_op_with_cron_timers",
-                                               HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMERS,
+                                               "handler_code/ABO/insert_timer.js",
                                                worker_count=self.worker_count,
                                                cpp_worker_thread_count=self.cpp_worker_thread_count)
         # this is required to deploy multiple functions at the same time
