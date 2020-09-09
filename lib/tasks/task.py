@@ -3490,15 +3490,9 @@ class MonitorViewQueryResultsTask(Task):
                     RestHelper(self.rest)._wait_for_indexer_ddoc(self.servers, self.design_doc_name)
                     if self.current_retry == 70:
                         self.query["stale"] = 'false'
-<<<<<<< HEAD
                     self.log.info(
                         "View result is still not expected (ddoc=%s, query=%s, server=%s). retry in 10 sec" % (
                             self.design_doc_name, self.query, self.servers[0].ip))
-=======
-                    self.log.info("[%s] View result is still not expected (ddoc=%s, query=%s, "
-                                  "server=%s). retry in 10 sec" % ( self.current_retry,
-                                    self.design_doc_name, self.query, self.servers[0].ip))
->>>>>>> 8f90f324c5e804fb1c8f46f5618b672611d856b6
                     self.state = EXECUTING
                     task_manager.schedule(self, 10)
             elif len(self.expected_docs) < len(self.results.get('rows', [])):

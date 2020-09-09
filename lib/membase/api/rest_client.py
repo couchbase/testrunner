@@ -2826,7 +2826,7 @@ class RestConnection(object):
             if status:
                 break
             elif ( (int(header['status']) == 400 or int(header['status']) == 503 ) and
-                    '{"_":"Bucket with given name still exists"}'.encode('utf-8') in content):
+                    "Bucket with given name already exists" in content.decode('utf-8').rstrip('\n')):
                 log.info("The bucket still exists, sleep 1 sec and delete and retry")
                 time.sleep(1)
                 self.delete_bucket(bucket)

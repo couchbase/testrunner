@@ -1888,17 +1888,12 @@ class LoadWithMcsoda(object):
         if protocol_in.find('://') >= 0:
             protocol = \
                 '-'.join(((["membase"] + \
-<<<<<<< HEAD
-                           protocol_in.split("://"))[-2] + "-binary").split('-')[0:2])
-            host_port = ('@' + protocol_in.split("://")[-1]).split('@')[-1] + ":8091"
-=======
                                protocol_in.split("://"))[-2] + "-binary").split('-')[0:2])
             if TestInputSingleton.input.param("is_secure", False):
                 port = server_ports.ssl_rest_port
             else:
                 port = server_ports.rest_port
             host_port = ('@' + protocol_in.split("://")[-1]).split('@')[-1] + ":" + port
->>>>>>> 8f90f324c5e804fb1c8f46f5618b672611d856b6
             user, pswd = (('@' + protocol_in.split("://")[-1]).split('@')[-2] + ":").split(':')[0:2]
             log.info("-->data_helper:host_port={}".format(host_port))
         return protocol, host_port, user, pswd

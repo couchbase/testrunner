@@ -1354,9 +1354,9 @@ class QueryTests(BaseTestCase):
             json_output_str += s
         return json.loads(json_output_str)
 
-<<< def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None, username=None, password=None, use_fts_query_param=None, debug_query=True, query_context=''):
-===     self.log.info("-->run_cqe_query()...")
->>>     if query is None:
+    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None, username=None, password=None, use_fts_query_param=None, debug_query=True, query_context=''):
+        self.log.info("-->run_cqe_query()...")
+        if query is None:
             query = self.query
         if server is None:
             server = self.master
