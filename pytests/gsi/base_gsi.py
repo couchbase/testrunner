@@ -1128,7 +1128,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                              wait_if_warmup=True)
 
     def prepare_collection_for_indexing(self, num_scopes=1, num_collections=1, num_of_docs_per_collection=1000,
-                                        indexes_before_load=False, json_template="Person"):
+                                        indexes_before_load=False, json_template="Person", batch_size=10**4):
         self.namespaces = []
         pre_load_idx_pri = None
         pre_load_idx_gsi = None
@@ -1154,7 +1154,8 @@ class BaseSecondaryIndexingTests(QueryTests):
                     self.gen_create = SDKDataLoader(num_ops=num_of_docs_per_collection, percent_create=100,
                                                     percent_update=0, percent_delete=0, scope=s_item,
                                                     collection=c_item, json_template=json_template)
-                    tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create, batch_size=10 ** 5)
+                    tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
+                                                                    batch_size=batch_size)
                     for task in tasks:
                         task.result()
         return pre_load_idx_pri, pre_load_idx_gsi

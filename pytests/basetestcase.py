@@ -1032,15 +1032,16 @@ class BaseTestCase(unittest.TestCase):
         start_document = sdk_data_loader.get_start_seq_num()
         tot_num_items_in_collection = sdk_data_loader.get_num_ops()
         batches = []
-        for i in range(start_document, tot_num_items_in_collection, batch_size):
-            if i + batch_size > start_document + tot_num_items_in_collection:
-                num_ops = tot_num_items_in_collection - i
-            else:
-                num_ops = batch_size
+        for start in range(0, tot_num_items_in_collection, batch_size):
+            end = start + batch_size
+            if end >= tot_num_items_in_collection:
+                end = tot_num_items_in_collection
+            num_ops = end - start
+            start_seq = start + start_document
 
             loader_batch = copy.deepcopy(sdk_data_loader)
             loader_batch.set_num_ops(num_ops)
-            loader_batch.set_start_seq_num(i)
+            loader_batch.set_start_seq_num(start_seq)
             batches.append(loader_batch)
 
         self.log.info("Number of batches : {0}".format(len(batches)))
@@ -1052,12 +1053,9 @@ class BaseTestCase(unittest.TestCase):
                                                               timeout_secs=300))
 
         self.log.info("done")
-
         return tasks
 
-
     """Synchronously applys load generation to all bucekts in the cluster.
-
     Args:
         server - A server in the cluster. (TestInputServer)
         kv_gen - The generator to use to generate load. (DocumentGenerator)
@@ -1065,7 +1063,6 @@ class BaseTestCase(unittest.TestCase):
         exp - The expiration for the items if updated or created (int)
         kv_store - The index of the bucket's kv_store to use. (int)
     """
-
     def _load_all_buckets(self, server, kv_gen, op_type="create", exp=0, kv_store=1, flag=0,
                           only_store_hash=True, batch_size=1000, pause_secs=1,
                           timeout_secs=30, proxy_client=None, scope=None, collection=None):
