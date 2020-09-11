@@ -399,6 +399,24 @@ class RemoteMachineShellConnection(KeepRefs):
             output, error = self.execute_command(command.format(stop_time))
             self.log_command_output(output, error)
 
+    def cpu_stress(self, stop_time):
+        self.extract_remote_info()
+        os_type = self.info.type.lower()
+        if os_type == "unix" or os_type == "linux":
+            o, r = self.execute_command("stress --cpu 20 --timeout {}".format(stop_time))
+            self.log_command_output(o, r)
+        elif os_type == "windows":
+            log.info("to be implemented")
+
+    def ram_stress(self, stop_time):
+        self.extract_remote_info()
+        os_type = self.info.type.lower()
+        if os_type == "unix" or os_type == "linux":
+            o, r = self.execute_command("stress --vm 3 --vm-bytes 2.5G --timeout {}".format(stop_time))
+            self.log_command_output(o, r)
+        elif os_type == "windows":
+            log.info("to be implemented")
+
     def stop_network(self, stop_time):
         """
         Stop the network for given time period and then restart the network
@@ -531,6 +549,37 @@ class RemoteMachineShellConnection(KeepRefs):
             self.log_command_output(o, r)
         else:
             log.error("stop_server: don't know operating system " + os + " or product version")
+
+    def enable_packet_loss(self):
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            log.info("to be implemented")
+        if self.info.type.lower() == "linux":
+            o, r = self.execute_command("tc qdisc add dev eth0 root netem loss 25%")
+            self.log_command_output(o, r)
+        if self.info.distribution_type.lower() == "mac":
+            log.info("to be implemented")
+
+    def enable_network_delay(self):
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            log.info("to be implemented")
+        if self.info.type.lower() == "linux":
+            o, r = self.execute_command("tc qdisc add dev eth0 root netem delay 200ms")
+            self.log_command_output(o, r)
+        if self.info.distribution_type.lower() == "mac":
+            log.info("to be implemented")
+
+    def delete_network_rule(self):
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            log.info("to be implemented")
+        if self.info.type.lower() == "linux":
+            o, r = self.execute_command("tc qdisc del dev eth0 root")
+            self.log_command_output(o, r)
+        if self.info.distribution_type.lower() == "mac":
+            log.info("to be implemented")
+
 
     def restart_couchbase(self):
         """

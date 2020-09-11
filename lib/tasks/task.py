@@ -5388,7 +5388,15 @@ class NodesFailureTask(Task):
         self.current_failure_node = self.servers_to_fail[self.itr]
         self.start_time = time.time()
         self.log.info("before failure time: {}".format(time.ctime(time.time())))
-        if self.failure_type == "enable_firewall":
+        if self.failure_type == "stress_ram":
+            self._enable_stress_ram(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "stress_cpu":
+            self._enable_stress_cpu(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "network_delay":
+            self._enable_disable_network_delay(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "net_packet_loss":
+            self._enable_disable_packet_loss(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "enable_firewall":
             self._enable_disable_firewall(self.current_failure_node, self.failure_timeout)
         elif self.failure_type == "disable_firewall":
             self._disable_firewall(self.current_failure_node)
@@ -5428,6 +5436,34 @@ class NodesFailureTask(Task):
         time.sleep(recover_time)
         self._disable_firewall(node)
 
+    def _enable_disable_packet_loss(self, node, recover_time):
+        self.enable_packet_loss(node)
+        time.sleep(recover_time)
+        self.delete_network_rule(node)
+
+    def _enable_disable_network_delay(self, node, recover_time):
+        self.enable_network_delay(node)
+        time.sleep(recover_time)
+        self.delete_network_rule(node)
+
+    def enable_network_delay(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.enable_network_delay()
+        shell.disconnect()
+        self.log.info("Enabled network delay on {}".format(node))
+
+    def delete_network_rule(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.delete_network_rule()
+        shell.disconnect()
+        self.log.info("Disabled packet loss on {}".format(node))
+
+    def enable_packet_loss(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.enable_packet_loss()
+        shell.disconnect()
+        self.log.info("Enabled packet loss on {}".format(node))
+
     def _enable_firewall(self, node):
         RemoteUtilHelper.enable_firewall(node)
         self.log.info("Enabled firewall on {}".format(node))
@@ -5458,6 +5494,18 @@ class NodesFailureTask(Task):
         shell.start_couchbase()
         shell.disconnect()
         self.log.info("Started the couchbase server on {}".format(node))
+
+    def _enable_stress_cpu(self, node, stop_time):
+        shell = RemoteMachineShellConnection(node)
+        shell.cpu_stress(stop_time)
+        shell.disconnect()
+        self.log.info("cpu stressed for {0} sec on node {1}".format(stop_time, node))
+
+    def _enable_stress_ram(self, node, stop_time):
+        shell = RemoteMachineShellConnection(node)
+        shell.ram_stress(stop_time)
+        shell.disconnect()
+        self.log.info("ram stressed for {0} sec on node {1}".format(stop_time, node))
 
     def _stop_restart_network(self, node, stop_time):
         shell = RemoteMachineShellConnection(node)
