@@ -14,6 +14,7 @@
 from __future__ import absolute_import
 
 # import models into model package
+from backup_service_client.models.backup import Backup
 from backup_service_client.models.body import Body
 from backup_service_client.models.body1 import Body1
 from backup_service_client.models.body2 import Body2
@@ -21,8 +22,10 @@ from backup_service_client.models.body3 import Body3
 from backup_service_client.models.body4 import Body4
 from backup_service_client.models.body5 import Body5
 from backup_service_client.models.body6 import Body6
+from backup_service_client.models.bucket import Bucket
 from backup_service_client.models.cloud_credentials import CloudCredentials
 from backup_service_client.models.error import Error
+from backup_service_client.models.info import Info
 from backup_service_client.models.inline_response200 import InlineResponse200
 from backup_service_client.models.inline_response2001 import InlineResponse2001
 from backup_service_client.models.inline_response2002 import InlineResponse2002

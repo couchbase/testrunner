@@ -453,7 +453,7 @@ class RepositoryApi(object):
         :param str id: The repository ID. (required)
         :param int limit: maximum number of backups to return
         :param int offset: backups to skip
-        :return: Error
+        :return: Info
                  If the method is called asynchronously,
                  returns the request thread.
         """
@@ -477,7 +477,7 @@ class RepositoryApi(object):
         :param str id: The repository ID. (required)
         :param int limit: maximum number of backups to return
         :param int offset: backups to skip
-        :return: Error
+        :return: Info
                  If the method is called asynchronously,
                  returns the request thread.
         """
@@ -541,7 +541,7 @@ class RepositoryApi(object):
             body=body_params,
             post_params=form_params,
             files=local_var_files,
-            response_type='Error',  # noqa: E501
+            response_type='Info',  # noqa: E501
             auth_settings=auth_settings,
             async_req=params.get('async_req'),
             _return_http_data_only=params.get('_return_http_data_only'),
@@ -673,7 +673,7 @@ class RepositoryApi(object):
         :param int limit: maximum number of elements to return
         :param str task_name: Returns only results for entries with the matching task name
         :param int offset: Used together with limit to achieve pagination
-        :return: TaskRun
+        :return: list[TaskRun]
                  If the method is called asynchronously,
                  returns the request thread.
         """
@@ -699,7 +699,7 @@ class RepositoryApi(object):
         :param int limit: maximum number of elements to return
         :param str task_name: Returns only results for entries with the matching task name
         :param int offset: Used together with limit to achieve pagination
-        :return: TaskRun
+        :return: list[TaskRun]
                  If the method is called asynchronously,
                  returns the request thread.
         """
@@ -767,7 +767,7 @@ class RepositoryApi(object):
             body=body_params,
             post_params=form_params,
             files=local_var_files,
-            response_type='TaskRun',  # noqa: E501
+            response_type='list[TaskRun]',  # noqa: E501
             auth_settings=auth_settings,
             async_req=params.get('async_req'),
             _return_http_data_only=params.get('_return_http_data_only'),
