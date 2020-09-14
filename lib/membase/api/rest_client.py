@@ -2339,6 +2339,13 @@ class RestConnection(object):
 
         return status
 
+    def delete_all_buckets(self):
+        buckets = self.get_buckets()
+        for bucket in buckets:
+            if isinstance(bucket, Bucket):
+                api = '%s%s%s' % (self.baseUrl, 'pools/default/buckets/', bucket.name)
+                self._http_request(api, 'DELETE')
+
     '''Load any of the three sample buckets'''
     def load_sample(self,sample_name):
         api = '{0}{1}'.format(self.baseUrl, "sampleBuckets/install")
