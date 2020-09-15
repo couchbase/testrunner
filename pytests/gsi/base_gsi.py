@@ -29,6 +29,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.use_where_clause_in_index = self.input.param("use_where_clause_in_index", False)
         self.scan_consistency = self.input.param("scan_consistency", "request_plus")
         self.scan_vector_per_values = self.input.param("scan_vector_per_values", None)
+        self.alter_index_error = self.input.param("alter_index_error", None)
         self.timeout_for_index_online = self.input.param("timeout_for_index_online", 600)
         self.verify_query_result = self.input.param("verify_query_result", True)
         self.verify_explain_result = self.input.param("verify_explain_result", True)
@@ -260,6 +261,42 @@ class BaseSecondaryIndexingTests(QueryTests):
                     self.memory_drop_list.append(index_info)
                     drop_index_tasks.append(self.async_drop_index(bucket.name, query_definition))
         return drop_index_tasks
+
+    def alter_index_replicas(self, index_name, namespace="default", action='replica_count', num_replicas=1,
+                             set_error=False, nodes=None, replica_id=1, expect_failure=False):
+        error = []
+        if action == 'move':
+            alter_index_query = f'ALTER INDEX {index_name} on {namespace} ' \
+                                f' WITH {{"action": "move", "nodes":{nodes}}}'
+        elif action == 'replica_count':
+            alter_index_query = f'ALTER INDEX {index_name} on {namespace} ' \
+                                f' WITH {{"action":"replica_count","num_replica": {num_replicas}}}'
+        elif action == 'drop_replica':
+            alter_index_query = f'ALTER INDEX {index_name} ON {namespace} ' \
+                                f'WITH {{"action":"drop_replica","replicaId": {replica_id}}}'
+        else:
+            # Negative case consideration
+            alter_index_query = f'ALTER INDEX {index_name} on {namespace} ' \
+                                ' WITH {{"action":"replica_count"}}'
+
+        try:
+            self.n1ql_helper.run_cbq_query(query=alter_index_query, server=self.n1ql_node)
+        except Exception as ex:
+            error.append(str(ex))
+            self.log.error(str(ex))
+
+        if error:
+            if expect_failure:
+                self.log.info("alter index replica count failed as expected")
+                self.log.info("Error : %s", error)
+                if set_error:
+                    self.alter_index_error = error
+            else:
+                self.log.info("Error : %s", error)
+                self.fail("alter index failed to change the number of replicas")
+        else:
+            self.log.info("alter index started successfully")
+        return error
 
     def drop_index(self, bucket, query_definition, verify_drop=True):
         try:
