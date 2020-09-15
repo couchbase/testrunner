@@ -296,7 +296,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
             indexes_count_before = self.get_server_indexes_count(index_nodes)
             self.index_ops_obj.update_ignore_failure_flag(True)
             system_failure_task = NodesFailureTask(self.master, index_nodes, self.system_failure, 300, 0, False, 3,
-                                                   disk_location=disk_location, failure_timeout=failure_timeout)
+                                                   disk_location=disk_location, failure_timeout=self.failure_timeout)
             self.system_failure_task_manager.schedule(system_failure_task)
             try:
                 system_failure_task.result()
