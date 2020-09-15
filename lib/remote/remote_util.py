@@ -417,6 +417,24 @@ class RemoteMachineShellConnection(KeepRefs):
         elif os_type == "windows":
             log.info("to be implemented")
 
+    def enable_disk_readonly(self, disk_location):
+        self.extract_remote_info()
+        os_type = self.info.type.lower()
+        if os_type == "unix" or os_type == "linux":
+            o, r = self.execute_command("chmod -R 444 {}".format(disk_location))
+            self.log_command_output(o, r)
+        elif os_type == "windows":
+            log.info("to be implemented")
+
+    def disable_disk_readonly(self, disk_location):
+        self.extract_remote_info()
+        os_type = self.info.type.lower()
+        if os_type == "unix" or os_type == "linux":
+            o, r = self.execute_command("chmod -R 777 {}".format(disk_location))
+            self.log_command_output(o, r)
+        elif os_type == "windows":
+            log.info("to be implemented")
+
     def stop_network(self, stop_time):
         """
         Stop the network for given time period and then restart the network
@@ -566,6 +584,46 @@ class RemoteMachineShellConnection(KeepRefs):
             log.info("to be implemented")
         if self.info.type.lower() == "linux":
             o, r = self.execute_command("tc qdisc add dev eth0 root netem delay 200ms")
+            self.log_command_output(o, r)
+        if self.info.distribution_type.lower() == "mac":
+            log.info("to be implemented")
+
+    def enable_file_limit(self):
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            log.info("to be implemented")
+        if self.info.type.lower() == "linux":
+            o, r = self.execute_command("prlimit --nofile=100 --pid $(pgrep indexer)")
+            self.log_command_output(o, r)
+        if self.info.distribution_type.lower() == "mac":
+            log.info("to be implemented")
+
+    def enable_file_limit_desc(self):
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            log.info("to be implemented")
+        if self.info.type.lower() == "linux":
+            o, r = self.execute_command("sysctl -w fs.file-max=100;sysctl -p")
+            self.log_command_output(o, r)
+        if self.info.distribution_type.lower() == "mac":
+            log.info("to be implemented")
+
+    def disable_file_limit(self):
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            log.info("to be implemented")
+        if self.info.type.lower() == "linux":
+            o, r = self.execute_command("prlimit --nofile=200000 --pid $(pgrep indexer)")
+            self.log_command_output(o, r)
+        if self.info.distribution_type.lower() == "mac":
+            log.info("to be implemented")
+
+    def disable_file_limit_desc(self):
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            log.info("to be implemented")
+        if self.info.type.lower() == "linux":
+            o, r = self.execute_command("sysctl -w fs.file-max=1606494;sysctl -p")
             self.log_command_output(o, r)
         if self.info.distribution_type.lower() == "mac":
             log.info("to be implemented")

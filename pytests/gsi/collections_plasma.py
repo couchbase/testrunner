@@ -133,6 +133,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.all_collections = self.input.param("all_collections", False)
         self.dataset_template = self.input.param("dataset_template", "Employee")
         self.num_of_indexes = self.input.param("num_of_indexes", 1000)
+        self.failure_timeout = self.input.param("failure_timeout", 60)
         self.index_ops_obj = ConCurIndexOps()
         self.compact_sleep_duration = self.input.param("compact_sleep_duration", 300)
 
@@ -295,7 +296,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
             indexes_count_before = self.get_server_indexes_count(index_nodes)
             self.index_ops_obj.update_ignore_failure_flag(True)
             system_failure_task = NodesFailureTask(self.master, index_nodes, self.system_failure, 300, 0, False, 3,
-                                                   disk_location=disk_location)
+                                                   disk_location=disk_location, failure_timeout=failure_timeout)
             self.system_failure_task_manager.schedule(system_failure_task)
             try:
                 system_failure_task.result()

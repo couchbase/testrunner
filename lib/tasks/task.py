@@ -5388,7 +5388,13 @@ class NodesFailureTask(Task):
         self.current_failure_node = self.servers_to_fail[self.itr]
         self.start_time = time.time()
         self.log.info("before failure time: {}".format(time.ctime(time.time())))
-        if self.failure_type == "stress_ram":
+        if self.failure_type == "limit_file_limits_desc":
+            self._enable_disable_limit_file_limits_desc(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "limit_file_limits":
+            self._enable_disable_limit_file_limits(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "disk_readonly":
+            self._enable_disable_disk_readonly(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "stress_ram":
             self._enable_stress_ram(self.current_failure_node, self.failure_timeout)
         elif self.failure_type == "stress_cpu":
             self._enable_stress_cpu(self.current_failure_node, self.failure_timeout)
@@ -5440,6 +5446,40 @@ class NodesFailureTask(Task):
         self.enable_packet_loss(node)
         time.sleep(recover_time)
         self.delete_network_rule(node)
+
+    def _enable_disable_limit_file_limits(self, node, recover_time):
+        self.enable_file_limit(node)
+        time.sleep(recover_time)
+        self.disable_file_limit(node)
+
+    def enable_file_limit(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.enable_file_limit()
+        shell.disconnect()
+        self.log.info("Enabled file limit on {}".format(node))
+
+    def disable_file_limit(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.disable_file_limit()
+        shell.disconnect()
+        self.log.info("disabled file limit on {}".format(node))
+
+    def _enable_disable_limit_file_limits_desc(self, node, recover_time):
+        self.enable_file_limit_desc(node)
+        time.sleep(recover_time)
+        self.disable_file_limit_desc(node)
+
+    def enable_file_limit_desc(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.enable_file_limit_desc()
+        shell.disconnect()
+        self.log.info("Enabled file limit _desc on {}".format(node))
+
+    def disable_file_limit_desc(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.disable_file_limit_desc()
+        shell.disconnect()
+        self.log.info("disabled file limit _desc on {}".format(node))
 
     def _enable_disable_network_delay(self, node, recover_time):
         self.enable_network_delay(node)
@@ -5506,6 +5546,18 @@ class NodesFailureTask(Task):
         shell.ram_stress(stop_time)
         shell.disconnect()
         self.log.info("ram stressed for {0} sec on node {1}".format(stop_time, node))
+
+    def _enable_disk_readonly(self, node, stop_time):
+        shell = RemoteMachineShellConnection(node)
+        shell.enable_disk_readonly(self.disk_location)
+        shell.disconnect()
+        self.log.info("Dir {} made readonly on node {}".format(self.disk_location, node))
+
+    def _disable_disk_readonly(self, node, stop_time):
+        shell = RemoteMachineShellConnection(node)
+        shell.disable_disk_readonly(self.disk_location)
+        shell.disconnect()
+        self.log.info("Dir {} made read/write on node {}".format(self.disk_location, node))
 
     def _stop_restart_network(self, node, stop_time):
         shell = RemoteMachineShellConnection(node)
@@ -5578,6 +5630,11 @@ class NodesFailureTask(Task):
         self._disk_full_failure(node)
         time.sleep(recover_time)
         self._recover_disk_full_failure(node)
+
+    def _enable_disable_disk_readonly(self, node, recover_time):
+        self._enable_disk_readonly(node)
+        time.sleep(recover_time)
+        self._disable_disk_readonly(node)
 
     def _disk_full_failure(self, node):
         shell = RemoteMachineShellConnection(node)
