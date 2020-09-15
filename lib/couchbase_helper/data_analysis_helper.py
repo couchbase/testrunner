@@ -713,19 +713,18 @@ class DataCollector(object):
                     m["state"] = value
                     map_data[vb] = m
 
-    def translateDataFromCSVToMap(self,index,dataInCSV):
+    def translateDataFromCSVToMap(self, index, dataInCSV, revIdIndex=3):
         """ Helper method to translate cbtransfer per line data into key: value pairs"""
         bucketMap = {}
-        revIdIndex = 5
-        for value in dataInCSV:
-            values = value.split(",")
-            if values[index] in bucketMap.keys():
-                prev_revId =  int(bucketMap[values[index]][revIdIndex])
-                new_revId = int(values[revIdIndex])
-                if prev_revId < new_revId:
-                    bucketMap[values[index]] = value
+        for doc in dataInCSV:
+            key = doc.split(",")[index]
+            if key in bucketMap.keys():
+                prev_revId = int(bucketMap[key].split(",")[revIdIndex])
+                curr_revId = int(doc.split(",")[revIdIndex])
+                if prev_revId < curr_revId:
+                    bucketMap[key] = doc
             else:
-                bucketMap[values[index]] = value
+                bucketMap[key] = doc
         return bucketMap
 
     def get_local_data_map_using_cbtransfer(self, server, buckets, data_path=None,
