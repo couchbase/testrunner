@@ -90,7 +90,10 @@ class QueryTests(BaseTestCase):
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         self.log.info(self.n1ql_node)
         # self.n1ql_helper._start_command_line_query(self.n1ql_node)
-        # sleep to avoid race condition during bootstrap
+
+        # sleep to avoid race condition during bootstrap -- pretty evident in CE
+        self.sleep(30)
+
         if self.create_primary_index:
             try:
                 self.n1ql_helper.create_primary_index(using_gsi=self.use_gsi_for_primary,
