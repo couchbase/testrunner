@@ -637,27 +637,31 @@ class QueryCollectionsEnd2EndTests(QueryTests):
             bucket_name, scope_name, collection_name = self._extract_object_names(full_keyspace_name=keyspace)
 
             # alter secondary index. Expected result - success.
-            try:
-                query = "ALTER INDEX "+keyspace+".idx_val WITH {'action': 'replica_count', 'num_replica': 1}"
+            if self.rest.is_enterprise_edition():
+                try:
+                    query = "ALTER INDEX "+keyspace+".idx_val WITH {'action': 'replica_count', 'num_replica': 1}"
 
-                result = self.run_cbq_query(query)['status']
-                if result != 'success':
-                    errors.append({"reason": "alter_secondary_index", "message": "Alter of secondary index for collection is failed."})
-            except CBQError as e:
-                errors.append({"reason": "alter_secondary_index",
-                               "message": "Alter of secondary index for collection is failed."})
-                pass
+                    result = self.run_cbq_query(query)['status']
+                    if result != 'success':
+                        errors.append({"reason": "alter_secondary_index", "message": "Alter of secondary index for collection is failed."})
+                except CBQError as e:
+                    errors.append({"reason": "alter_secondary_index",
+                                   "message": "Alter of secondary index for collection is failed."})
+                    pass
 
-            # build secondary index. Expected result - success.
-            try:
-                query = "BUILD INDEX ON "+keyspace+"(idx_val)"
-                result = self.run_cbq_query(query)['status']
-                if result != 'success':
-                    errors.append({"reason": "build_secondary_index", "message": "Build of secondary index for collection is failed."})
-            except CBQError as e:
-                errors.append({"reason": "build_secondary_index",
-                               "message": "Build of secondary index for collection is failed."})
-                pass
+                # build secondary index. Expected result - success.
+                try:
+                    query = "BUILD INDEX ON "+keyspace+"(idx_val)"
+                    result = self.run_cbq_query(query)['status']
+                    if result != 'success':
+                        errors.append({"reason": "build_secondary_index", "message": "Build of secondary index for collection is failed."})
+                except CBQError as e:
+                    errors.append({"reason": "build_secondary_index",
+                                   "message": "Build of secondary index for collection is failed."})
+                    pass
+            else:
+                self.log.info("Skipping Alter index in Community Edition as it is an EE only feature.")
+
 
             # infer collection. Expected result - success.
             if not sanity_test:
@@ -670,15 +674,18 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                     errors.append({"reason": "infer", "message": "Infer of collection is failed."})
                     pass
 
-                # update statistics for collection. Expected result - success.
-                try:
-                    query = "UPDATE STATISTICS for "+keyspace+"(val)"
-                    result = self.run_cbq_query(query)['status']
-                    if result != 'success':
+                if self.rest.is_enterprise_edition():
+                    # update statistics for collection. Expected result - success.
+                    try:
+                        query = "UPDATE STATISTICS for "+keyspace+"(val)"
+                        result = self.run_cbq_query(query)['status']
+                        if result != 'success':
+                            errors.append({"reason": "update_statistics", "message": "Update statistics for collection is failed."})
+                    except CBQError as e:
                         errors.append({"reason": "update_statistics", "message": "Update statistics for collection is failed."})
-                except CBQError as e:
-                    errors.append({"reason": "update_statistics", "message": "Update statistics for collection is failed."})
-                    pass
+                        pass
+                else:
+                    self.log.info("Skipping Update Statistics in Community Edition as it is an EE only feature.")
 
             # drop secondary index for collection. Expected result - success.
             try:
