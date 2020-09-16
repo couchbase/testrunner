@@ -395,8 +395,8 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                             refer_index.append(key)
                             refer_index.append(query_definitions[x].index_name)
                             deploy_node_info = None
-                            if self.use_gsi_for_secondary:
-                                deploy_node_info = ["{0}:{1}".format(server.ip, server.port)]
+                            #if self.use_gsi_for_secondary:
+                            #    deploy_node_info = ["{0}:{1}".format(server.ip, server.port)]
                             build_index_map[bucket.name].append(query_definitions[x].index_name)
                             tasks.append(self.async_create_index(bucket.name, query_definitions[x],
                                                                  deploy_node_info=deploy_node_info))
