@@ -143,7 +143,12 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
-        self._cb_cluster.swap_rebalance(services=["fts"])
+        rest = RestConnection(self._cb_cluster.get_master_node())
+        if rest.is_enterprise_edition():
+            services = "fts"
+        else:
+            services = "fts,kv,index,n1ql"
+        self._cb_cluster.swap_rebalance(services=services)
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
@@ -442,8 +447,13 @@ class MovingTopFTS(FTSBaseTest):
         self.create_fts_indexes_all_buckets()
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
+        rest = RestConnection(self._cb_cluster.get_master_node())
+        if rest.is_enterprise_edition():
+            services = "kv,fts"
+        else:
+            services = "fts,kv,index,n1ql"
         self._cb_cluster.rebalance_in(num_nodes=self.num_rebalance,
-                                      services=["kv,fts"])
+                                      services=[services])
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
 
@@ -882,8 +892,12 @@ class MovingTopFTS(FTSBaseTest):
         index = self.create_index_generate_queries()
         services = []
         tasks = []
+        rest = RestConnection(self._cb_cluster.get_master_node())
         for _ in range(self.num_rebalance):
-            services.append("fts")
+            if rest.is_enterprise_edition():
+                services.append("fts")
+            else:
+                services.append("fts,kv,index,n1ql")
         reb_thread = Thread(
             target=self._cb_cluster.async_swap_rebalance,
             args=[self.num_rebalance, services])
