@@ -100,7 +100,7 @@ class CollectinfoTests(CliBaseTest):
                         cb_server_started = True
                     else:
                         self.fail("CB server failed to start")
-            self.verify_results(self, self.log_filename)
+            self.verify_results(self.log_filename)
         finally:
             if self.node_down and not cb_server_started:
                 if self.os == 'linux':

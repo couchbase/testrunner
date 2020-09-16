@@ -119,6 +119,12 @@ class CliBaseTest(BaseTestCase):
         self.create_existing_scope = self.input.param("create_existing_scope", False)
         self.create_existing_collection = self.input.param("create_existing_collection", False)
         self.block_char = self.input.param("block_char", "")
+        self.drop_default_scope = self.input.param("drop_default_scope", False)
+        self.drop_default_collection = self.input.param("drop_default_collection", False)
+        self.log_filename = self.input.param("filename", "loginfo_collecion")
+        self.node_down = self.input.param("node_down", False)
+
+
 
 
         self.scopes = None
@@ -1008,17 +1014,25 @@ class CliBaseTest(BaseTestCase):
         log.info("Waiting for item count to be %d timed out", count)
         return False
 
-    def create_scope(self, num_scope=2):
+    def create_scope(self, num_scope=2, rest=None, cli=None):
         bucket_name = self.buckets[0].name
+        if rest:
+            rest_client = rest
+        else:
+            rest_client = self.rest_col
+        if cli:
+            cli_client = cli
+        else:
+            cli_client = self.cli_col
         for x in range(num_scope):
             scope_name = "scope{0}".format(x)
             if self.non_ascii_name:
                 scope_name = self.non_ascii_name + str(x)
             if self.use_rest:
-                self.rest.create_scope(bucket=bucket_name, scope=scope_name,
+                rest_client.create_scope(bucket=bucket_name, scope=scope_name,
                                               params=None)
             else:
-                self.cli_col.create_scope(bucket=bucket_name, scope=scope_name)
+                cli_client.create_scope(bucket=bucket_name, scope=scope_name)
 
     def delete_scope(self, num_scope=2):
         bucket_name = self.buckets[0].name
@@ -1031,19 +1045,28 @@ class CliBaseTest(BaseTestCase):
             else:
                 self.cli_col.delete_scope(scope_name, bucket=bucket_name)
 
-    def create_collection(self, num_collection=1):
+    def create_collection(self, num_collection=1, rest=None, cli=None):
         bucket_name = self.buckets[0].name
-        scopes = self.get_bucket_scope()
+        if rest:
+            rest_client = rest
+        else:
+            rest_client = self.rest_col
+        if cli:
+            cli_client = cli
+        else:
+            cli_client = self.cli_col
+
+        scopes = self.get_bucket_scope(rest_client, cli_client)
         if scopes:
             for x in range(num_collection):
                 for scope in scopes:
                     if bucket_name in scope:
                         continue
                     if self.use_rest:
-                        self.rest_col.create_collection(bucket=bucket_name, scope=scope,
+                        rest_client.create_collection(bucket=bucket_name, scope=scope,
                                                    collection="mycollection_{0}_{1}".format(scope, x))
                     else:
-                        self.cli_col.create_collection(bucket=bucket_name, scope=scope,
+                        cli_client.create_collection(bucket=bucket_name, scope=scope,
                                                    collection="mycollection_{0}_{1}".format(scope, x))
         self.sleep(10, "time needs for stats up completely")
 
@@ -1070,12 +1093,20 @@ class CliBaseTest(BaseTestCase):
                 self.cli_col.create_scope_collection(bucket_name, scope_name,
                                                     "mycollection{0}".format(x))
 
-    def get_bucket_scope(self):
+    def get_bucket_scope(self, rest=None, cli=None):
         bucket_name = self.buckets[0].name
-        if self.use_rest:
-            scopes = self.rest_col.get_bucket_scopes(bucket_name)
+        if rest:
+            rest_client = rest
         else:
-            scopes = self.cli_col.get_bucket_scopes(bucket_name)[0]
+            rest_client = self.rest_col
+        if cli:
+            cli_client = cli
+        else:
+            cli_client = self.cli_col
+        if self.use_rest:
+            scopes = rest_client.get_bucket_scopes(bucket_name)
+        else:
+            scopes = cli_client.get_bucket_scopes(bucket_name)[0]
         return scopes
 
     def get_bucket_scope_ex(self):
@@ -1096,9 +1127,12 @@ class CliBaseTest(BaseTestCase):
             collections = self.cli_col.get_bucket_collections(bucket_name)
         return collections
 
-    def get_collection_stats(self):
+    def get_collection_stats(self, buckets=None):
         """ return output, error """
-        bucket = self.buckets[0]
+        if buckets:
+            bucket = buckets[0]
+        else:
+            bucket = self.buckets[0]
         return self.stat_col.get_collection_stats(bucket)
 
     def get_collection_names(self):
