@@ -145,9 +145,9 @@ class MovingTopFTS(FTSBaseTest):
                           %(index.name, index.get_indexed_doc_count()))
         rest = RestConnection(self._cb_cluster.get_master_node())
         if rest.is_enterprise_edition():
-            services = "fts"
+            services = ["fts"]
         else:
-            services = "fts,kv,index,n1ql"
+            services = ["fts,kv,index,n1ql"]
         self._cb_cluster.swap_rebalance(services=services)
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
