@@ -240,7 +240,7 @@ class NodeInitializeTask(Task):
         remote_shell.disconnect()
         if rest.is_cluster_compat_mode_greater_than(4.0):
             if self.gsi_type == "plasma":
-                if not rest.is_cluster_compat_mode_greater_than(5.0):
+                if (not rest.is_cluster_compat_mode_greater_than(5.0)) or (not rest.is_enterprise_edition()):
                     rest.set_indexer_storage_mode(username, password, "forestdb")
                 else:
                     rest.set_indexer_storage_mode(username, password, self.gsi_type)

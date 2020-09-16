@@ -28,6 +28,8 @@ class QueryTests(BaseTestCase):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         # Set indexer storage mode
         indexer_rest = RestConnection(indexer_node[0])
+        if not indexer_rest.is_enterprise_edition:
+            self.gsi_type = "forestdb"
         doc = {"indexer.settings.storage_mode": self.gsi_type}
         indexer_rest.set_index_settings_internal(doc)
         doc = {"indexer.api.enableTestServer": True}
