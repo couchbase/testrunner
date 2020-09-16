@@ -11,6 +11,7 @@ import subprocess
 from remote.remote_util import RemoteMachineShellConnection
 import socket
 import ssl
+from TestInput import TestInputSingleton
 
 class ntonencryptionBase:
     
@@ -34,6 +35,10 @@ class ntonencryptionBase:
         --disable - Disable node-to-node-encryption
         --get - Get settings for node-to-node-encryption
         """
+        if TestInputSingleton.input.param("skip_host_login", False):
+            log.warning("-->Skipping the host login and there by can't do"
+                        "ntonencryption_cli...")
+            return
         log.info('Changing node-to-node-encryption to {0}'.format(status))
         cli_command = 'node-to-node-encryption'
         options = ''
@@ -70,6 +75,11 @@ class ntonencryptionBase:
         Work on setting-security for changing clsuterEncryption Level
         Change on 1 node or entire cluster
         """
+        if TestInputSingleton.input.param("skip_host_login", False):
+            log.warning("-->Skipping the host login and there by can't do"
+                             "change_cluster_encryption_cli...")
+            return
+
         log.info ('Changing encryption Level - clusterEncryptionLevel = {0}'.format(clusterEncryptionLevel))
         options = ''
         cli_command = 'setting-security'

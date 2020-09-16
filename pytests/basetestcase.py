@@ -937,13 +937,17 @@ class BaseTestCase(unittest.TestCase):
             task.result()
 
     def _verify_stats_all_buckets(self, servers, master=None, timeout=60, scope=None, collection=None):
+        self.skip_stats_verify = self.input.param("skip_stats_verify", False)
+        if self.skip_stats_verify:
+            self.log.info("Skipping _verify_stats_all_buckets() ...")
+            return
+        self.log.info("-->_verify_stats_all_buckets() start...")
         stats_tasks = []
         if not master:
             master = self.master
         servers = self.get_kv_nodes(servers, master)
 
         for bucket in self.buckets:
-
             items = sum([len(kv_store) for kv_store in list(bucket.kvs.values())])
             if bucket.type == 'memcached':
                 items_actual = 0
@@ -981,6 +985,7 @@ class BaseTestCase(unittest.TestCase):
             for bucket in self.buckets:
                 RebalanceHelper.print_taps_from_all_nodes(rest, bucket)
             raise Exception("unable to get expected stats during {0} sec".format(timeout))
+        self.log.info("-->_verify_stats_all_buckets() end...")
 
     """Asynchronously applys load generation to all bucekts in the cluster.
  bucket.name, gen,
@@ -1084,7 +1089,7 @@ class BaseTestCase(unittest.TestCase):
     def _load_all_buckets(self, server, kv_gen, op_type="create", exp=0, kv_store=1, flag=0,
                           only_store_hash=True, batch_size=1000, pause_secs=1,
                           timeout_secs=30, proxy_client=None, scope=None, collection=None):
-
+        self.log.info("-->_load_all_buckets() start...")
         if self.enable_bloom_filter:
             for bucket in self.buckets:
                 ClusterOperationHelper.flushctl_set(self.master,
@@ -1260,6 +1265,7 @@ class BaseTestCase(unittest.TestCase):
 
     def _verify_all_buckets(self, server, kv_store=1, timeout=180, max_verify=None, only_store_hash=True,
                             batch_size=1000, replica_to_read=None, scope=None, collection_name=None):
+        self.log.info("-->_verify_all_buckets() start...")
         tasks = []
 
         if len(self.buckets) > 1:
@@ -2495,7 +2501,12 @@ class BaseTestCase(unittest.TestCase):
                     elif ip.endswith(".svc"):
                         from kubernetes import client as kubeClient, config as kubeConfig
                         currNamespace = ip.split('.')[2]
-                        kubeConfig.load_incluster_config()
+                        try:
+                            kubeConfig.load_incluster_config()
+                        except Exception as e:
+                            self.log.warning("Can't load kubeconfig.load_incluster_config()!")
+                            ip = server.ip
+                            break
                         v1 = kubeClient.CoreV1Api()
                         nodeList = v1.list_pod_for_all_namespaces(watch=False)
 

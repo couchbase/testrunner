@@ -32,7 +32,12 @@ class EventingSanity(EventingBaseTest):
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
 
     def tearDown(self):
+        if self.create_functions_buckets:
+            for bkt in [self.src_bucket_name, self.dst_bucket_name, self.metadata_bucket_name]:
+                self.cluster.bucket_delete(self.server, bkt)
         super(EventingSanity, self).tearDown()
+
+
 
     def test_create_mutation_for_dcp_stream_boundary_from_beginning(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,

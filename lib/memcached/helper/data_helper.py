@@ -309,6 +309,9 @@ class MemcachedClientHelper(object):
                 if n.ip == server.ip and n.port == server.port:
                     node = n
 
+        if TestInputSingleton.input.param("is_secure", False):
+            node.memcached = server_ports.memcached_ssl_port
+
         if isinstance(server, dict):
             log.info("dict:{0}".format(server))
             log.info("creating direct client {0}:{1} {2}".format(server["ip"], node.memcached, bucket))

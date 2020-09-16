@@ -981,8 +981,8 @@ class StatsWaitTask(Task):
                     self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket, admin_user=admin_user,
                                                                              admin_pass=admin_pass)
                     return self.conns[server]
-                except (EOFError, socket.error):
-                    self.log.error("failed to create direct client, retry in 1 sec")
+                except (EOFError, socket.error) as e:
+                    self.log.error("failed to create direct client, retry in 1 sec. " + str(e))
                     time.sleep(1)
             self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket, admin_user=admin_user,
                                                                      admin_pass=admin_pass)

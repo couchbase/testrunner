@@ -164,7 +164,7 @@ class QueryTests(BaseTestCase):
             # Adding sleep after flushing buckets (see CBQE-5838)
             self.sleep(210)
             self.gens_load = self.gen_docs(self.docs_per_day)
-            self.load(self.gens_load, batch_size=1000, flag=self.item_flag)
+            self.load(self.gens_load, batch_size=1000, flag=self.item_flag, verify_data=False)
             if self.analytics:
                 self.cluster.rebalance([self.master, self.cbas_node], [self.cbas_node], [], services=['cbas'])
         if not (hasattr(self, 'skip_generation') and self.skip_generation):

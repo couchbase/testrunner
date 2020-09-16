@@ -17,6 +17,7 @@ import struct
 import sys
 import time
 import zlib
+import ssl
 
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE, ALT_REQ_MAGIC_BYTE, ALT_RES_MAGIC_BYTE, ALT_RES_PKT_FMT
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET, REQ_PKT_SD_EXTRAS, SUBDOC_FLAGS_MKDIR_P
@@ -27,6 +28,8 @@ from memcacheConstants import COMPACT_DB_PKT_FMT
 import memcacheConstants
 import logger
 from cluster_run_manager import KeepRefs
+from TestInput import TestInputSingleton
+import server_ports
 
 
 def decodeCollectionID(key):
@@ -75,7 +78,24 @@ class MemcachedClient(KeepRefs):
         super(MemcachedClient, self).__init__()
         self.host = host
         self.port = port
+        self.certpath = TestInputSingleton.input.param("certpath", None)
+        self.is_secure = False
+        if TestInputSingleton.input.param("is_secure", False):
+            self.is_secure=True
+            self.port = server_ports.memcached_ssl_port
+        servers_map = TestInputSingleton.input.param("servers_map", "");
+        if servers_map:
+            print("servers_map={}".format(servers_map))
+            servers_ip_host = servers_map.split(",")
+            for server_ip_host in servers_ip_host:
+                ip_host = server_ip_host.split(":")
+                mapped_ip = ip_host[0]
+                mapped_host = ip_host[1]
+                if mapped_ip == self.host:
+                    print("--> replacing {} with  {}".format(self.host,mapped_host))
+                    self.host = mapped_host
         self.timeout = timeout
+        print("-->MemcachedClient: Connecting {}:{}".format(self.host, self.port))
         self._createConn()
         self.r = random.Random()
         self.vbucket_count = 1024
@@ -90,14 +110,30 @@ class MemcachedClient(KeepRefs):
     def _createConn(self):
         try:
             # IPv4
-            self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            if self.is_secure:
+                if self.certpath:
+                    context = ssl.create_default_context()
+                    context.load_verify_locations(self.certpath)
+                else:
+                    context = ssl._create_unverified_context(ssl.PROTOCOL_TLS_CLIENT)
+                self.s = context.wrap_socket(self.s, server_hostname=self.host)
+
             return self.s.connect_ex((self.host, self.port))
-        except:
+        except Exception as e:
+            print("exception:{}".format(str(e)))
             # IPv6
             self.host = self.host.replace('[', '').replace(']', '')
             self.s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
             self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            if self.is_secure:
+                if self.certpath:
+                    context = ssl.create_default_context()
+                    context.load_verify_locations(self.certpath)
+                else:
+                    context = ssl._create_unverified_context(ssl.PROTOCOL_TLS_CLIENT)
+                self.s = context.wrap_socket(self.s, server_hostname=self.host)
             return self.s.connect_ex((self.host, self.port, 0, 0))
 
     def reconnect(self):

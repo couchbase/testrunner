@@ -10,6 +10,8 @@ from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from mc_bin_client import MemcachedClient, MemcachedError
+from TestInput import TestInputSingleton
+import server_ports
 
 log = logger.Logger.get_logger()
 
@@ -313,6 +315,8 @@ class RebalanceHelper():
         nodes_for_stats = rest.get_nodes()
         for node_for_stat in nodes_for_stats:
             try:
+                if TestInputSingleton.input.param("is_secure", False):
+                    node_for_stat.memcached = server_ports.memcached_ssl_port
                 client = MemcachedClientHelper.direct_client(node_for_stat, bucket)
                 log.info("getting tap stats... for {0}".format(node_for_stat.ip))
                 tap_stats = client.stats('tap')

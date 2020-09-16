@@ -22,7 +22,8 @@ class SDKClient(object):
 
     def __init__(self, bucket, hosts=["localhost"], scheme="couchbase",
                  ssl_path=None, uhm_options=None, username=None, password=None,
-                 quiet=True, certpath=None, transcoder=None, ipv6=False, compression=True):
+                 quiet=True, certpath=None, transcoder=None, ipv6=False, compression=True,
+                 rest=None):
         self.certpath = TestInputSingleton.input.param("certpath", certpath)
         if not username:
             self.username = TestInputSingleton.input.param("rest_username", "Administrator")
@@ -41,6 +42,7 @@ class SDKClient(object):
         self.quiet = quiet
         self.transcoder = transcoder
         self.default_timeout = 1
+        self.rest = rest
         self._createConn()
         couchbase.set_json_converters(json.dumps, json.loads)
 
@@ -100,7 +102,14 @@ class SDKClient(object):
             # cluster.
             try:
                 cluster = Cluster(self.connection_string, bucket_class=CouchbaseBucket)
-                cluster.authenticate(PasswordAuthenticator(self.username, TestInputSingleton.input.param("rest_password", "password")))
+                if self.rest:
+                    cluster.authenticate(PasswordAuthenticator(self.username,self.rest.password))
+                else:
+                    if TestInputSingleton.input.servers:
+                        self.password = TestInputSingleton.input.servers[0].rest_password
+                    else:
+                        self.password = TestInputSingleton.input.param("rest_password", "password")
+                    cluster.authenticate(PasswordAuthenticator(self.username, self.password))
                 self.cb = cluster.open_bucket(self.bucket)
             except AuthError:
                 print("Auth Error!")
@@ -625,8 +634,13 @@ class SDKSmartClient(object):
         else:
             bucket_info = rest.get_bucket(bucket)
             self.saslPassword = bucket_info.saslPassword
+
+        self.rest_password = self.rest.password
         if not self.saslPassword:
-            self.saslPassword = TestInputSingleton.input.param("rest_password", "password")
+            if self.rest_password:
+                self.saslPassword = self.rest_password
+            else:
+                self.saslPassword = TestInputSingleton.input.param("rest_password", "password")
 
         if rest.ip == "127.0.0.1":
             self.host = "{0}:{1}".format(rest.ip, rest.port)
@@ -644,7 +658,7 @@ class SDKSmartClient(object):
         print("-->SDKClient bucket={},host={},scheme={},saslpwd={},compression={}".format(
             self.bucket, self.host, self.scheme, self.saslPassword, compression))
         self.client = SDKClient(self.bucket, hosts=[self.host], scheme=self.scheme, password=self.saslPassword,
-                                compression=compression)
+                                compression=compression, rest=self.rest)
 
     def reset(self, compression=True, rest=None):
         self.client = SDKClient(self.bucket, hosts=[self.host], scheme=self.scheme, password=self.saslPassword,

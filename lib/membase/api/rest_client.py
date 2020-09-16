@@ -1038,7 +1038,8 @@ class RestConnection(object):
                         mapped_ip = ip_host[0]
                         mapped_host = ip_host[1]
                         if "://"+mapped_ip in api:
-                            log.info("--> replacing ip with hostname ")
+                            log.info("--> replacing {} with {}".format(mapped_ip,
+                                                                                   mapped_host))
                             api = api.replace(mapped_ip, mapped_host)
                             if self.is_secure:
                                 if ":"+str(server_ports.rest_port) in api:
