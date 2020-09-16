@@ -232,31 +232,28 @@ class GO_XDCR_AUDIT_EVENT_ID:
     IND_SETT = 16392
 
 class BUCKET_COLLECTIONS_DENSITY:
-    low = {"num_scopes": 1, "num_collections_per_scope": 1, "num_docs_per_collection": 1000}
-    medium = {"num_scopes": 5, "num_collections_per_scope": 10, "num_docs_per_collection": 1000}
-    high = {"num_scopes": 10, "num_collections_per_scope": 20, "num_docs_per_collection": 1000}
-    random = {"num_scopes": random.randint(1, 100), "num_collections_per_scope": random.randint(1, 1000),
-              "num_docs_per_collection": random.randint(0, 10000)}
-
     def __init__(self, density):
-        self.density = None
-        if density == "low":
-            self.density = self.low
-        if density == "medium":
-            self.density = self.medium
-        if density == "high":
-            self.density = self.high
-        if density == "random":
-            self.density = self.random
-
-    def get_num_scopes(self):
-        return self.density["num_scopes"]
-
-    def get_num_collections(self):
-        return self.density["num_collections_per_scope"]
-
-    def get_num_docs(self):
-        return self.density["num_docs_per_collection"]
+        self.density_map = {
+            "low": {"num_scopes": 1, "num_collections_per_scope": 1, "num_docs_per_collection": 1000},
+            "medium": {"num_scopes": 5, "num_collections_per_scope": 10, "num_docs_per_collection": 1000},
+            "high": {"num_scopes": 10, "num_collections_per_scope": 20, "num_docs_per_collection": 1000}
+        }
+        self.density = density
+        self.num_scopes = 0
+        self.num_collections = 0
+        self.num_docs = 0
+        if self.density == "random":
+            self.num_scopes = random.randint(1, 99)
+            max_collections = int(1000 / self.num_scopes) - 1
+            self.num_collections = random.randint(1, max_collections)
+            while self.num_scopes*self.num_collections > 1000:
+                self.num_scopes //= 10
+                self.num_collections //= 10
+            self.num_docs = random.randint(1000, 10000)
+        else:
+            self.num_scopes = self.density_map[self.density]["num_scopes"]
+            self.num_collections = self.density_map[self.density]["num_collections_per_scope"]
+            self.num_docs = self.density_map[self.density]["num_docs_per_collection"]
 
 class NodeHelper:
     _log = logger.Logger.get_logger()
@@ -860,7 +857,7 @@ class XDCReplication:
                     self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression'].replace(
                         _, masked_input[_])
         if "mapping_rules" in self.__test_xdcr_params:
-            masked_input = {"comma": ',', "colon": ':', "quote": '"'}
+            masked_input = {"comma": ',', "colon": ':'}
             for _ in masked_input:
                 self.__test_xdcr_params['mapping_rules'] = self.__test_xdcr_params[
                     'mapping_rules'].replace(
@@ -1628,7 +1625,7 @@ class CouchbaseCluster:
         """
         if self.use_java_sdk:
             self.gen = SDKDataLoader(num_ops=num_items, percent_create=100, percent_update=0,
-                                    percent_delete=0, all_collections=True)
+                                    percent_delete=0, doc_expiry=exp, all_collections=True)
         else:
             seed = "%s-key-" % self.__name
             self.gen = self.__kv_gen[
@@ -1686,16 +1683,20 @@ class CouchbaseCluster:
         @param pause_secs: pause for next batch load.
         @param timeout_secs: timeout
         """
-        # TODO append generator values if op_type is already present
-        if ops not in self.__kv_gen:
-            self.__kv_gen[ops] = kv_gen
+        if not self.use_java_sdk:
+            # TODO append generator values if op_type is already present
+            if ops not in self.__kv_gen:
+                self.__kv_gen[ops] = kv_gen
+            self.gen = copy.deepcopy(self.__kv_gen[OPS.CREATE])
+        else:
+            self.gen = SDKDataLoader(num_ops=kv_gen.end, percent_create=100, percent_update=0,
+                                     percent_delete=0, doc_expiry=exp, all_collections=True)
 
         tasks = []
         for bucket in self.__buckets:
-            kv_gen = copy.deepcopy(self.__kv_gen[OPS.CREATE])
             tasks.append(
                 self.__clusterop.async_load_gen_docs(
-                    self.__master_node, bucket.name, kv_gen,
+                    self.__master_node, bucket.name, self.gen,
                     bucket.kvs[kv_store], ops, exp, flag,
                     only_store_hash, batch_size, pause_secs, timeout_secs,
                     compression=self.sdk_compression)
@@ -1718,16 +1719,20 @@ class CouchbaseCluster:
         @param pause_secs: pause for next batch load.
         @param timeout_secs: timeout
         """
-        # TODO append generator values if op_type is already present
-        if ops not in self.__kv_gen:
-            self.__kv_gen[ops] = kv_gen
+        if not self.use_java_sdk:
+            # TODO append generator values if op_type is already present
+            if ops not in self.__kv_gen:
+                self.__kv_gen[ops] = kv_gen
+            self.gen = copy.deepcopy(self.__kv_gen[OPS.CREATE])
+        else:
+            self.gen = SDKDataLoader(num_ops=kv_gen.end, percent_create=100, percent_update=0,
+                                     percent_delete=0, doc_expiry=exp, all_collections=True)
 
         tasks = []
         for bucket in self.__buckets:
-            kv_gen = copy.deepcopy(self.__kv_gen[OPS.CREATE])
             tasks.append(
                 self.__clusterop.async_load_gen_docs(
-                    self.__master_node, bucket.name, kv_gen,
+                    self.__master_node, bucket.name, self.gen,
                     bucket.kvs[kv_store], ops, exp, flag,
                     only_store_hash, batch_size, pause_secs, timeout_secs, compression=self.sdk_compression)
             )
@@ -1872,8 +1877,14 @@ class CouchbaseCluster:
             )
         else:
             for bucket in self.__buckets:
-                gen = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=30,
-                                    percent_delete=30, all_collections=True)
+                percent_update = 0
+                percent_delete = 0
+                if op_type == OPS.UPDATE:
+                    percent_update = perc
+                elif op_type == OPS.DELETE:
+                    percent_delete = perc
+                gen = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=percent_update,
+                                    percent_delete=percent_delete, doc_expiry=expiration, all_collections=True)
                 tasks.append(
                     self.__clusterop.async_load_gen_docs(
                         self.__master_node,
@@ -2644,8 +2655,7 @@ class CouchbaseCluster:
                 try:
                     mutations = int(rest.get_xdc_queue_size(bucket.name))
                 except KeyError:
-                    self.__log.error("Stat \"replication_changes_left\" not found")
-                    return False
+                    self.__log.warning("Stat \"replication_changes_left\" not found")
                 self.__log.info(
                     "Current Outbound mutations on cluster node: %s for bucket %s is %s" %
                     (self.__name, bucket.name, mutations))
@@ -2660,7 +2670,7 @@ class CouchbaseCluster:
             # to abort, as per this
             # bug, this particular stat i.e. replication_changes_left is buggy.
             self.__log.error(
-                "Timeout occurs while waiting for mutations to be replicated")
+                "Timeout occurred while waiting for mutations to be replicated")
             return False
         return True
 
@@ -2835,10 +2845,10 @@ class XDCRNewBaseTest(unittest.TestCase):
         sdk_compression = self._input.param("sdk_compression", True)
 
         collection_density = self._input.param("collection_density", "low")
-        scope_num = BUCKET_COLLECTIONS_DENSITY(collection_density).get_num_scopes()
-        collection_num = BUCKET_COLLECTIONS_DENSITY(collection_density).get_num_collections()
+        scope_num = BUCKET_COLLECTIONS_DENSITY(collection_density).num_scopes
+        collection_num = BUCKET_COLLECTIONS_DENSITY(collection_density).num_collections
         if scope_num or collection_num:
-            self._num_items = BUCKET_COLLECTIONS_DENSITY(collection_density).get_num_docs()
+            self._num_items = BUCKET_COLLECTIONS_DENSITY(collection_density).num_docs
         counter = 1
         for _, nodes in self._input.clusters.items():
             cluster_nodes = copy.deepcopy(nodes)
@@ -2851,6 +2861,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                     use_java_sdk=self._use_java_sdk, scope_num=scope_num,
                     collection_num=collection_num))
             counter += 1
+        #Temp workaround for sdk com.couchbase.client.core.error.AmbiguousTimeoutException
+        time.sleep(120)
 
         self.__cleanup_previous()
         self.__init_clusters()
@@ -3024,30 +3036,6 @@ class XDCRNewBaseTest(unittest.TestCase):
 
     def get_cluster_op(self):
         return self.__cluster_op
-
-    def add_built_in_server_user(self, testuser=None, rolelist=None, node=None):
-        """
-           From spock, couchbase server is built with some users that handles
-           some specific task such as:
-               cbadminbucket
-           Default added user is cbadminbucket with admin role
-        """
-        if testuser is None:
-            testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
-                                                'password': 'password'}]
-        if rolelist is None:
-            rolelist = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
-                                                      'roles': 'admin'}]
-        if node is None:
-            node = self.master
-
-        self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
-                                                                       node.ip))
-        RbacBase().create_user_source(testuser, 'builtin', node)
-
-        self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
-                                                                testuser[0]["name"]))
-        RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
 
     def get_cb_cluster_by_name(self, name):
         """Return couchbase cluster object for given name.
@@ -3891,11 +3879,10 @@ class XDCRNewBaseTest(unittest.TestCase):
         """
         skip_key_validation = self._input.param("skip_key_validation", False)
         skip_meta_validation = self._input.param("skip_meta_validation", True)
-        #skip_implicit_mapping_validation = True
         skip_collection_key_validation = True
         if self._use_java_sdk:
-            #skip_implicit_mapping_validation = self._input.param("skip_implicit_mapping_validation", False)
             skip_collection_key_validation = self._input.param("skip_collection_key_validation", False)
+            #TODO : add key validation against kv store for collections
             skip_key_validation = True
         src_dcp_queue_drained = False
         dest_dcp_queue_drained = False
@@ -3932,10 +3919,6 @@ class XDCRNewBaseTest(unittest.TestCase):
                 except Exception as e:
                     # just log any exception thrown, do not fail test
                     self.log.error(e)
-                #if not skip_implicit_mapping_validation :
-                #    self.verify_mapping(src_cluster.get_master_node(), dest_cluster.get_master_node())
-                if not skip_collection_key_validation:
-                    self.verify_collection_doc_count(remote_cluster_ref.get_replications())
                 if not skip_key_validation:
                     try:
                         if len(src_cluster.get_nodes()) > 1:
@@ -3977,6 +3960,9 @@ class XDCRNewBaseTest(unittest.TestCase):
                 if not skip_meta_validation:
                     src_cluster.verify_meta_data()
                     dest_cluster.verify_meta_data()
+
+                if not skip_collection_key_validation:
+                    self.verify_collection_doc_count(remote_cluster_ref.get_replications())
 
         self.check_replication_restarted()
         # treat errors in self.__report_error_list as failures

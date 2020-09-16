@@ -300,7 +300,7 @@ class Cluster(object):
             value - The value to compare to.
 
         Returns:
-            RebalanceTask - A task future that is a handle to the scheduled task"""
+            XdcrStatsWaitTask - A task future that is a handle to the scheduled task"""
         _task = XdcrStatsWaitTask(servers, bucket, param, stat, comparison, value, scope=scope, collection=collection)
         self.task_manager.schedule(_task)
         return _task

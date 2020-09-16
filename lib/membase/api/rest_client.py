@@ -622,26 +622,34 @@ class RestConnection(object):
             raise Exception("Create scope failed : status:{0},content:{1}".format(status, content))
         return status
 
-    def create_collection(self, bucket, scope, collection, params=None, num_retries=3):
+    def _create_single_collection(self, bucket, scope, collection, params=None):
         api = self.baseUrl + 'pools/default/buckets/%s/collections/%s' % (bucket, scope)
         body = {'name': collection}
         if params:
             body.update(params)
         params = urllib.parse.urlencode(body)
         headers = self._create_headers()
-        while num_retries > 0:
-            status, content, header = self._http_request(api, 'POST', params=params, headers=headers)
-            log.info("{0} with params: {1}".format(api, params))
-            if status:
-                json_parsed = json.loads(content)
-                log.info("Collection created {}->{}->{} manifest:{}".format(bucket, scope, collection, json_parsed))
-                break
+        status, content, header = self._http_request(api, 'POST', params=params, headers=headers)
+        log.info("{0} with params: {1}".format(api, params))
+        return status,content,header
+
+    def create_collection(self, bucket, scope, collection, params=None, num_retries=3):
+        if not isinstance(collection, list):
+            collection = [collection]
+        for c in collection:
+            while num_retries > 0:
+                status, content, header = self._create_single_collection(bucket, scope, c, params)
+                if status:
+                    json_parsed = json.loads(content)
+                    log.info("Collection created {}->{}->{} manifest:{}".format(bucket, scope, c, json_parsed))
+                    break
+                else:
+                    time.sleep(10)
+                    num_retries -= 1
             else:
-                time.sleep(10)
-                num_retries -= 1
-        else:
-            raise Exception("Create collection failed : status:{0},content:{1}".format(status, content))
+                raise Exception("Create collection failed : status:{0},content:{1}".format(status, content))
         return status
+
 
     def get_bucket_manifest(self, bucket):
         if isinstance(bucket, Bucket):

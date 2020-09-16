@@ -447,13 +447,13 @@ class CollectionCreateTask(Task):
 
     def execute(self, task_manager):
         try:
-            RestConnection(self.server)
+            rest = RestConnection(self.server)
         except ServerUnavailableException as error:
             self.state = FINISHED
             self.set_exception(error)
             return
         try:
-            CollectionsRest(self.server).create_collection(bucket=self.bucket_name, scope=self.scope_name,
+            rest.create_collection(bucket=self.bucket_name, scope=self.scope_name,
                                                            collection=self.collection_name,
                                                            params=self.collection_params)
             self.state = CHECKING
@@ -2513,33 +2513,63 @@ class VerifyCollectionDocCountTask(Task):
         self.mapping = mapping
         self.src_conn = CollectionsStats(src.get_master_node())
         self.dest_conn = CollectionsStats(dest.get_master_node())
+
         self.src_stats = self.src_conn.get_collection_stats(self.bucket)[0]
         self.dest_stats = self.dest_conn.get_collection_stats(self.bucket)[0]
 
     def execute(self, task_manager):
         try:
             for map_exp in self.mapping.items():
-                src_scope = map_exp[0].split(':')[0]
-                src_collection = map_exp[0].split(':')[1]
-                src_count = self.src_conn.get_collection_item_count(self.bucket, src_scope, src_collection,
-                                                               self.src.get_nodes(), self.src_stats)
-                dest_scope = map_exp[1].split(':')[0]
-                dest_collection = map_exp[1].split(':')[1]
-                dest_count = self.dest_conn.get_collection_item_count(self.bucket, dest_scope, dest_collection,
-                                                                 self.dest.get_nodes(), self.dest_stats)
+                if ':' in map_exp[0]:
+                    src_scope = map_exp[0].split(':')[0]
+                    src_collection = map_exp[0].split(':')[1]
+                    src_count = self.src_conn.get_collection_item_count(self.bucket,
+                                                                        src_scope, src_collection,
+                                                                        self.src.get_nodes(),
+                                                                        self.src_stats)
+                else:
+                    src_scope = map_exp[0]
+                    src_collection = "all"
+                    src_count = self.src_conn.get_scope_item_count(self.bucket, src_scope,
+                                                                   self.src.get_nodes(), self.src_stats)
+
+                if map_exp[1].lower() == "null":
+                    self.log.info("{} mapped to null, skipping doc count verification"
+                                  .format())
+                    dest_scope = "null"
+                    dest_collection = "null"
+
+                if ':' in map_exp[1]:
+                    dest_scope = map_exp[1].split(':')[0]
+                    dest_collection = map_exp[1].split(':')[1]
+                    dest_count = self.dest_conn.get_collection_item_count(self.bucket,
+                                                                          dest_scope, dest_collection,
+                                                                          self.dest.get_nodes(),
+                                                                          self.dest_stats)
+                else:
+                    dest_scope = map_exp[1]
+                    dest_collection = "all"
+                    dest_count = self.dest_conn.get_scope_item_count(self.bucket, dest_scope,
+                                                                     self.dest.get_nodes(), self.dest_stats)
+
+
                 self.log.info('-' * 100)
                 if src_count == dest_count:
-                    self.log.info("Collection item count on src {} = dest {} for "
-                                  "bucket {} \nsrc: scope {}-> collection {},"
+                    self.log.info("Item count on src:{} {} = {} on dest:{} for "
+                                  "bucket {} \nsrc : scope {}-> collection {},"
                                   "dest: scope {}-> collection {}"
-                                  .format(src_count, dest_count, self.bucket, src_scope,
-                                          src_collection, dest_scope, dest_collection))
+                                  .format(self.src.get_master_node().ip, src_count,
+                                          dest_count, self.dest.get_master_node().ip,
+                                          self.bucket, src_scope, src_collection,
+                                          dest_scope, dest_collection))
                 else:
-                    self.fail("Collection item count on src {} = dest {} for "
-                                  "bucket {} \nsrc: scope {}-> collection {},"
+                    self.set_exception(Exception("ERROR: Item count on src:{} {} != {} on dest:{} for "
+                                  "bucket {} \nsrc : scope {}-> collection {},"
                                   "dest: scope {}-> collection {}"
-                                  .format(src_count, dest_count, self.bucket, src_scope,
-                                          src_collection, dest_scope, dest_collection))
+                                  .format(self.src.get_master_node().ip, src_count,
+                                          dest_count, self.dest.get_master_node().ip,
+                                          self.bucket, src_scope, src_collection,
+                                          dest_scope, dest_collection)))
                 self.log.info('-' * 100)
         except Exception as e:
             self.state = FINISHED

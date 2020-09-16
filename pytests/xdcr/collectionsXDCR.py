@@ -37,11 +37,13 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
         mirroring_mode = self._input.param("mirroring_mode", None)
         new_scope = self._input.param("new_scope", None)
         new_collection = self._input.param("new_collection", None)
+        scope_name = self._input.param("scope_name", self.NEW_SCOPE)
+        collection_name = self._input.param("collection_name", self.NEW_COLLECTION)
         new_scope_collection = self._input.param("new_scope_collection", None)
         drop_recreate_scope = self._input.param("drop_recreate_scope", None)
         drop_recreate_collection = self._input.param("drop_recreate_collection", None)
+        initial_xdcr = self._input.param("initial_xdcr", random.choice([True, False]))
 
-        initial_xdcr = random.choice([True, False])
         if initial_xdcr:
             self.load_and_setup_xdcr()
         else:
@@ -64,7 +66,7 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
             for cluster in self.get_cluster_objects_for_input(new_scope):
                 for bucket in RestConnection(cluster.get_master_node()).get_buckets():
                     tasks.append(cluster.get_cluster().async_create_scope(cluster.get_master_node(),
-                                                                          bucket, self.NEW_SCOPE,
+                                                                          bucket, scope_name
                                                                           ))
 
         if new_collection:
@@ -72,40 +74,40 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                 for bucket in RestConnection(cluster.get_master_node()).get_buckets():
                     tasks.append(cluster.get_cluster().async_create_collection(cluster.get_master_node(),
                                                                                bucket, self.DEFAULT_SCOPE,
-                                                                               self.NEW_COLLECTION
+                                                                               collection_name
                                                                                ))
         if new_scope_collection:
             for cluster in self.get_cluster_objects_for_input(new_scope_collection):
                 for bucket in RestConnection(cluster.get_master_node()).get_buckets():
                     tasks.append(cluster.get_cluster().async_create_scope_collection(cluster.get_master_node(),
-                                                                                     bucket, self.NEW_SCOPE,
-                                                                                     self.NEW_COLLECTION
+                                                                                     bucket, scope_name,
+                                                                                     collection_name
                                                                                      ))
         if drop_recreate_scope:
             for cluster in self.get_cluster_objects_for_input(drop_recreate_scope):
                 for bucket in RestConnection(cluster.get_master_node()).get_buckets():
                     tasks.append(cluster.get_cluster().async_create_scope(cluster.get_master_node(),
-                                                                          bucket, self.NEW_SCOPE,
+                                                                          bucket, scope_name
                                                                           ))
                     tasks.append(cluster.get_cluster().async_delete_scope(cluster.get_master_node(),
-                                                                          bucket, self.NEW_SCOPE))
+                                                                          bucket, scope_name))
                     tasks.append(cluster.get_cluster().async_create_scope(cluster.get_master_node(),
-                                                                          bucket, self.NEW_SCOPE,
+                                                                          bucket, scope_name
                                                                           ))
 
         if drop_recreate_collection:
             for cluster in self.get_cluster_objects_for_input(drop_recreate_collection):
                 for bucket in RestConnection(cluster.get_master_node()).get_buckets():
                     tasks.append(cluster.get_cluster().async_create_scope_collection(cluster.get_master_node(),
-                                                                                     bucket, self.NEW_SCOPE,
-                                                                                     self.NEW_COLLECTION
+                                                                                     bucket, scope_name,
+                                                                                     collection_name
                                                                                      ))
                     tasks.append(cluster.get_cluster().async_delete_collection(cluster.get_master_node(),
-                                                                               bucket, self.NEW_SCOPE,
-                                                                               self.NEW_COLLECTION))
+                                                                               bucket, scope_name,
+                                                                               collection_name))
                     tasks.append(cluster.get_cluster().async_create_collection(cluster.get_master_node(),
-                                                                               bucket, self.NEW_SCOPE,
-                                                                               self.NEW_COLLECTION
+                                                                               bucket, scope_name,
+                                                                               collection_name
                                                                                ))
         if explicit_mapping:
             for cluster in self.get_cluster_objects_for_input(explicit_mapping):

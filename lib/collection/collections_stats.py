@@ -48,7 +48,7 @@ class CollectionsStats(object):
                     return stat.split(":name:")[0].split(":")[1]
         return None
 
-    def get_scope_item_count(self, bucket, scope, node=None):
+    def get_scope_item_count(self, bucket, scope, node=None, cbstats=None):
         count = 0
         if not node:
             nodes = [self.node]
@@ -57,7 +57,9 @@ class CollectionsStats(object):
         else:
             nodes = [node]
         for node in nodes:
-            cbstats, _ = RemoteMachineShellConnection(node).get_collection_stats(bucket)
+            if not cbstats:
+                cbstats, _ = RemoteMachineShellConnection(node).execute_cbstats(bucket, "collections",
+                                                                            cbadmin_user="Administrator")
             scope_id = self.get_scope_id(bucket, scope, cbstats)
             id_counts = {}
             for stat in cbstats:

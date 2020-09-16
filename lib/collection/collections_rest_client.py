@@ -6,8 +6,9 @@ import threading
 
 class CollectionsRest(object):
     def __init__(self, node):
+        self.node = node
         self.log = logger.Logger.get_logger()
-        self.rest = RestConnection(node)
+        self.rest = RestConnection(self.node)
 
     def create_collection(self, bucket="default", scope="scope0", collection="mycollection0", params=None):
         return self.rest.create_collection(bucket, scope, collection, params)
@@ -60,26 +61,28 @@ class CollectionsRest(object):
         return False
 
     class CollectionFactory(threading.Thread):
-        def __init__(self, bucket, scope, collection, rest):
+        def __init__(self, bucket, scope, collections, rest):
             threading.Thread.__init__(self)
             self.bucket_name = bucket
             self.scope_name = scope
-            self.collection_name = collection
+            self.collections = collections
             self.rest_handle = rest
 
         def run(self):
-            self.rest_handle.create_collection(self.bucket_name, self.scope_name, self.collection_name)
+            self.rest_handle.create_collection(self.bucket_name, self.scope_name, self.collections)
 
     # Multithreaded for bulk creation
     def async_create_scope_collection(self, scope_num, collection_num, bucket="default"):
         tasks = []
+        collections = []
+        for c in range(1, collection_num + 1):
+            collections.append("collection_" + str(c))
         for s in range(1, scope_num + 1):
             scope = "scope_" + str(s)
             self.create_scope(bucket, scope)
-            for c in range(1, collection_num + 1):
-                task = self.CollectionFactory(bucket, scope, "collection_" + str(c), self.rest)
-                task.start()
-                tasks.append(task)
+            task = self.CollectionFactory(bucket, scope, collections, self.rest)
+            task.start()
+            tasks.append(task)
 
         for task in tasks:
             task.join()
