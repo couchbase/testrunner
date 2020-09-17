@@ -2666,7 +2666,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             rest_rs.add_node(self.input.clusters[0][1].rest_username,
                              self.input.clusters[0][1].rest_password,
                              self.input.clusters[0][1].ip, services=bk_cluster_services[0])
-            rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
             rebalance.result()
             count = 0
             while count < 15:

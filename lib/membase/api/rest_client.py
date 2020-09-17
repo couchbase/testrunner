@@ -868,6 +868,7 @@ class RestConnection(object):
     def init_node(self, set_node_services=None):
         """ need a standalone method to initialize a node that could call
             anywhere with quota from testconstant """
+
         self.node_services = []
         if set_node_services is None:
             set_node_services = self.services_node_init
@@ -876,7 +877,10 @@ class RestConnection(object):
         elif set_node_services is None and self.services != "":
             self.node_services = self.services.split(",")
         elif set_node_services is not None:
-            self.node_services = set_node_services.split("-")
+            if "-" in set_node_services:
+                self.node_services = set_node_services.split("-")
+            if "," in set_node_services:
+                self.node_services = set_node_services.split(",")
         kv_quota = 0
         while kv_quota == 0:
             time.sleep(1)
@@ -902,18 +906,19 @@ class RestConnection(object):
                 self.set_service_memoryQuota(service = "cbasMemoryQuota", memoryQuota=CBAS_QUOTA)
             kv_quota -= 1
             if kv_quota < MIN_KV_QUOTA:
-                    raise Exception("KV RAM needs to be more than %s MB"
-                            " at node  %s"  % (MIN_KV_QUOTA, self.ip))
+                raise Exception("KV RAM needs to be more than %s MB"
+                                " at node  %s"  % (MIN_KV_QUOTA, self.ip))
 
         log.info("quota for kv: %s MB" % kv_quota)
         self.init_cluster_memoryQuota(self.username, self.password, kv_quota)
         if cb_version in COUCHBASE_FROM_VERSION_4:
             self.init_node_services(username=self.username, password=self.password,
-                                                       services=self.node_services)
+                                    services=self.node_services)
         self.init_cluster(username=self.username, password=self.password)
         return kv_quota
 
     def init_node_services(self, username='Administrator', password='password', hostname='127.0.0.1', port='8091', services=None):
+        log.info("--> init_node_services({},{},{},{},{})".format(username,password,hostname,port,services))
         api = self.baseUrl + '/node/controller/setupServices'
         if services == None:
             log.info(" services are marked as None, will not work")
@@ -925,15 +930,15 @@ class RestConnection(object):
 
         if hostname == "127.0.0.1":
             hostname = "{0}:{1}".format(hostname, port)
+        params = urllib.urlencode({ 'hostname': hostname,
+                                    'user': username,
+                                    'password': password,
+                                    'services': ",".join(services)})
+        log.info('/node/controller/setupServices params on {0}: {1}:{2}'.format(self.ip, self.port, params))
 
-        if hostname:
-            params_dict['hostname'] = hostname
-
-        params = urllib.urlencode(params_dict)
-        log.info('/node/controller/setupServices params on {0}:{1}:{2}'.format(self.ip, self.port, params))
         status, content, header = self._http_request(api, 'POST', params)
         error_message = "cannot change node services after cluster is provisioned"
-        if not status and error_message in content:
+        if not status and error_message in str(content):
             status = True
             log.info("This node is already provisioned with services, we do not consider this as failure for test case")
         return status
