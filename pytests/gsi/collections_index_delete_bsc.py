@@ -246,8 +246,8 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
         except Exception as err:
             if self.item_to_delete == 'scope' or self.item_to_delete == 'collection':
                 self.log.info(str(err))
-                err_msg = "Unknown scope or collection in operation"
-                self.assertTrue(err_msg in str(err), "Error msg not matching")
+                # err_msg = "Unknown scope or collection in operation"
+                # self.assertTrue(err_msg in str(err), "Error msg not matching")
             else:
                 self.fail(str(err))
             index_status = self.rest.get_index_status()
@@ -258,6 +258,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
         buckets_list = []
         collection_namespaces_list = []
         self.rest.delete_bucket(bucket=self.test_bucket)
+        self.sleep(10)
         for bucket_num in range(5):
             self.test_bucket = f'{bucket_prefix}_{bucket_num}'
             buckets_list.append(self.test_bucket)
@@ -309,7 +310,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
 
     def test_delete_bsc_with_flush_running(self):
         num_of_docs_per_collection = 10 ** 6
-        self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs_per_collection)
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs_per_collection, batch_size=5*10**4)
         collection_namespace = self.namespaces[0]
         index_gen = QueryDefinition(index_name='idx', index_fields=['age', 'city', 'country'])
         query = index_gen.generate_primary_index_create_query(namespace=collection_namespace, defer_build=False)
@@ -334,6 +335,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                 self.assertTrue(result, f"Failed to Delete {self.item_to_delete}")
                 flush_result = task1.result()
                 self.log.info(flush_result)
+                self.sleep(10)
                 index_status = self.rest.get_index_status()
                 self.assertFalse(index_status)
         except Exception as err:
@@ -390,6 +392,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
         if self.item_to_delete == 'bucket':
             self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
                                                 bucket_params=self.bucket_params)
+            self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs_per_collection)
         elif self.item_to_delete == 'scope':
             self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs_per_collection)
         elif self.item_to_delete == 'collection':
@@ -436,12 +439,13 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                         f'where age >= 0'
         select_query2 = f'select count(city) from default:{self.test_bucket}.{scopes[-1]}.test_collection_2 ' \
                         f'where city like "A%" '
+        self.sleep(10)
         result1 = self.run_cbq_query(query=select_query1)['results'][0]['$1']
         result2 = self.run_cbq_query(query=select_query2)['results'][0]['$1']
         self.assertTrue(result2 > 0)
         self.assertEqual(result1, num_of_docs_per_collection)
         index_status = self.rest.get_index_status()
-        self.assertEqual(len(index_status['test_bucket']) == 2)
+        self.assertEqual(len(index_status['test_bucket']), 2)
 
     def test_delete_deleted_bsc(self):
         num_of_docs_per_collection = 10 ** 5
@@ -470,6 +474,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                 self.assertTrue(result, f"Failed to Delete {self.item_to_delete}")
                 result = task2.result()
                 self.assertFalse(result, f"Got second success for delete operation")
+                self.sleep(10)
                 index_status = self.rest.get_index_status()
                 self.assertFalse(index_status)
         except Exception as err:
