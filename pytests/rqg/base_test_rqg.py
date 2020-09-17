@@ -47,6 +47,8 @@ class BaseRQGTests(BaseTestCase):
             self.number_of_buckets = self.input.param("number_of_buckets", 5)
             self.crud_type = self.input.param("crud_type", "update")
             self.populate_with_replay = self.input.param("populate_with_replay", False)
+            self.use_default_collection = self.input.param("use_default_collection", False)
+            self.use_query_context = self.input.param("use_query_context", False)
             self.crud_batch_size = self.input.param("crud_batch_size", 1)
             self.record_failure = self.input.param("record_failure", False)
             self.failure_record_path = self.input.param("failure_record_path", "/tmp")
@@ -333,15 +335,22 @@ class BaseRQGTests(BaseTestCase):
                 if count > 1000:
                     return
 
-    def n1ql_query_runner_wrapper(self, n1ql_query="", server=None, query_params={}, scan_consistency=None, verbose=True):
+    def n1ql_query_runner_wrapper(self, n1ql_query="", server=None, query_params={}, scan_consistency=None, verbose=True, query_context=None):
         if self.use_advisor:
             self.create_secondary_index(n1ql_query=n1ql_query)
-        result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=server, query_params=query_params, scan_consistency=scan_consistency, verbose=verbose)
+        if self.use_query_context:
+            result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=server, query_params=query_params,
+                                                    scan_consistency=scan_consistency, verbose=verbose,query_context=query_context)
+        else:
+            result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=server, query_params=query_params, scan_consistency=scan_consistency, verbose=verbose)
         return result
 
     def prepare_advise_query(self, n1ql_query=""):
         for bucket in self.advise_dict.keys():
             n1ql_query = n1ql_query.replace(bucket, self.advise_dict[bucket])
+            n1ql_query = n1ql_query.replace("._default._default", '')
+            if self.use_query_context:
+                n1ql_query = n1ql_query.replace("_default", self.advise_dict[bucket])
         return n1ql_query
 
     def translate_index_statement(self, n1ql_query=""):
@@ -805,10 +814,29 @@ class BaseRQGTests(BaseTestCase):
             return {"success": True, "result": "Pass"}
 
     def _run_queries_and_verify(self, aggregate=False, subquery=False, n1ql_query=None, sql_query=None, expected_result=None):
+        query_context = ""
+        skip = False
         if not self.create_primary_index:
             n1ql_query = n1ql_query.replace("USE INDEX(`#primary` USING GSI)", " ")
         if self.prepared:
             n1ql_query = "PREPARE " + n1ql_query
+        if self.use_default_collection:
+            n1ql_query = n1ql_query.replace("table_10", "table_010")
+            for bucket in self.advise_dict.keys():
+                n1ql_query = n1ql_query.replace(bucket, bucket+"._default._default")
+            n1ql_query = n1ql_query.replace("table_010", "table_10._default._default")
+        if self.use_query_context:
+            n1ql_query = n1ql_query.replace("table_10", "table_010")
+            # So that query context works for multiple buckets, replace the first matching bucket and leave the rest as full paths
+            for bucket in self.advise_dict.keys():
+                if bucket in n1ql_query and not skip:
+                    n1ql_query = n1ql_query.replace(bucket, "_default")
+                    query_context = "default:"+bucket+"._default"
+                    skip = True
+                else:
+                    n1ql_query = n1ql_query.replace(bucket, bucket + "._default._default")
+            n1ql_query = n1ql_query.replace("table_010", "table_10._default._default")
+
         fts_query = n1ql_query
         if self.use_fts:
             if not "JOIN" in n1ql_query:
@@ -850,18 +878,21 @@ class BaseRQGTests(BaseTestCase):
                 query_params={}
             if self.use_fts:
                 fts_result = self.n1ql_query_runner_wrapper(n1ql_query=fts_query, server=self.n1ql_server,
-                                                               query_params=query_params)
-                fts_explain = self.n1ql_helper.run_cbq_query(query="EXPLAIN " + fts_query, server=self.n1ql_server,
-                                                                query_params=query_params)
+                                                               query_params=query_params,query_context=query_context)
+                if self.use_query_context:
+                    fts_explain = self.n1ql_helper.run_cbq_query(query="EXPLAIN " + fts_query, server=self.n1ql_server,
+                                                                 query_params=query_params,query_context=query_context)
+                else:
+                    fts_explain = self.n1ql_helper.run_cbq_query(query="EXPLAIN " + fts_query, server=self.n1ql_server,query_params=query_params)
                 if not (fts_explain['results'][0]['plan']['~children'][0]['#operator'] == 'IndexFtsSearch' or fts_explain['results'][0]['plan']['~children'][0]['~children'][0]['#operator'] == 'IndexFtsSearch'):
                     return {"success": False, "result": str("Query does not use fts index {0}".format(fts_explain))}
 
-            actual_result = self.n1ql_query_runner_wrapper(n1ql_query=n1ql_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
+            actual_result = self.n1ql_query_runner_wrapper(n1ql_query=n1ql_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus",query_context=query_context)
             if self.prepared:
                 name = actual_result["results"][0]['name']
                 prepared_query = "EXECUTE '%s'" % name
                 self.log.info(" N1QL QUERY :: {0}".format(prepared_query))
-                actual_result = self.n1ql_query_runner_wrapper(n1ql_query=prepared_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
+                actual_result = self.n1ql_query_runner_wrapper(n1ql_query=prepared_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus",query_context=query_context)
             n1ql_result = actual_result["results"]
             if self.use_fts:
                 fts_result = fts_result["results"]
