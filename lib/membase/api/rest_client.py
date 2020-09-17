@@ -1,7 +1,7 @@
 import base64
 import json
 import urllib
-import httplib2
+from . import httplib2
 import logger
 import traceback
 import socket
@@ -2354,8 +2354,6 @@ class RestConnection(object):
         # Sleep to allow the sample bucket to be loaded
         time.sleep(15)
         return status
-
-    # figure out the proxy port
     def create_bucket(self, bucket='',
                       ramQuotaMB=1,
                       authType='none',
@@ -2369,7 +2367,8 @@ class RestConnection(object):
                       evictionPolicy='valueOnly',
                       lww=False,
                       maxTTL=None,
-                      compressionMode='passive'):
+                      compressionMode='passive',
+                      storageBackend='couchstore'):
 
 
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
@@ -2438,6 +2437,10 @@ class RestConnection(object):
         if bucketType == 'ephemeral':
             del init_params['replicaIndex']     # does not apply to ephemeral buckets, and is even rejected
 
+        # bucket storage is applicable only for membase bucket
+        if bucketType == "membase":
+            init_params['storageBackend'] = storageBackend
+
         pre_spock = not self.check_cluster_compatibility("5.0")
         if pre_spock:
             init_params['proxyPort'] = proxyPort
@@ -2453,7 +2456,7 @@ class RestConnection(object):
             if status:
                 break
             elif (int(header['status']) == 503 and
-                    '{"_":"Bucket with given name still exists"}' in content):
+                    '{"_":"Bucket with given name still exists"}'.encode('utf-8') in content):
                 log.info("The bucket still exists, sleep 1 sec and retry")
                 time.sleep(1)
             else:

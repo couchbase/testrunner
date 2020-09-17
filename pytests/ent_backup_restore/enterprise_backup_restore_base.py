@@ -684,7 +684,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             password_input = "-p "
 
         version = RestConnection(self.backupset.backup_host).get_nodes_version()
-        if "4.6" <= self.backupset.current_bkrs_client_version[:3]:
+        if "4.6" <= version:
             self.cluster_flag = "--cluster"
 
         args = "restore --archive {}{}".format(self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else '', self.backupset.directory)
@@ -727,13 +727,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             for key in filter_chars:
                 if key in self.backupset.filter_keys:
                     self.backupset.filter_keys = self.backupset.filter_keys.replace(key,
-                                                                      filter_chars[key])
+                                                                                    filter_chars[key])
             args += " --filter-keys '{0}'".format(self.backupset.filter_keys)
         if self.backupset.filter_values:
             for key in filter_chars:
                 if key in self.backupset.filter_values:
                     self.backupset.filter_values = self.backupset.filter_values.replace(key,
-                                                                          filter_chars[key])
+                                                                                        filter_chars[key])
             args += " --filter-values '{0}'".format(self.backupset.filter_values)
         if self.backupset.force_updates:
             args += " --force-updates"
@@ -745,7 +745,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if not self.skip_buckets:
             rest_conn = RestConnection(self.backupset.restore_cluster_host)
             restore_cluster_services = rest_conn.get_nodes_services()
-            restore_services = restore_cluster_services.values()[0]
+            restore_services = list(restore_cluster_services.values())[0]
             shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             shell.enable_diag_eval_on_non_local_hosts()
             shell.disconnect()
@@ -780,8 +780,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 if not rest_helper.bucket_exists(bucket_name):
                     if self.backupset.map_buckets is None:
                         self.log.info("Creating bucket {0} in restore host {1}"
-                                            .format(bucket_name,
-                                            self.backupset.restore_cluster_host.ip))
+                                      .format(bucket_name,
+                                              self.backupset.restore_cluster_host.ip))
                     elif self.backupset.map_buckets:
                         self.log.info("Create new bucket name to restore to this bucket")
                         bucket_maps = ""
@@ -796,7 +796,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                             if reset_cluster_count == 0:
                                 self._create_restore_cluster()
                                 reset_restore_cluster = True
-                                reset_cluster_count +=1
                         if not self.dgm_run and int(kv_quota) > 0:
                             bucket_size = kv_quota
                     if not reset_restore_cluster and reset_cluster_count == 0:
@@ -804,26 +803,29 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     self.log.info("replica in bucket {0} is {1}".format(bucket.name, replicas))
                     try:
                         rest_conn.create_bucket(bucket=bucket_name,
-                                    ramQuotaMB=int(bucket_size) - 1,
-                                    replicaNumber=replicas,
-                                    authType=bucket.authType if bucket.authType else 'none',
-                                    bucketType=self.bucket_type,
-                                    proxyPort=bucket.port,
-                                    evictionPolicy=self.eviction_policy,
-                                    lww=self.lww_new,
-                                    compressionMode=bucket_compression_mode)
+                                                ramQuotaMB=int(bucket_size) - 1,
+                                                replicaNumber=replicas,
+                                                authType=bucket.authType if bucket.authType else 'none',
+                                                bucketType=self.bucket_type,
+                                                proxyPort=bucket.port,
+                                                evictionPolicy=self.eviction_policy,
+                                                lww=self.lww_new,
+                                                compressionMode=bucket_compression_mode)
                     except Exception as e:
                         if "unable to create bucket" in str(e):
-                            self.sleep(15, "wait for cluster ready if it was reset")
-                            rest_conn.create_bucket(bucket=bucket_name,
-                                    ramQuotaMB=int(bucket_size) - 1,
-                                    replicaNumber=replicas,
-                                    authType=bucket.authType if bucket.authType else 'none',
-                                    bucketType=self.bucket_type,
-                                    proxyPort=bucket.port,
-                                    evictionPolicy=self.eviction_policy,
-                                    lww=self.lww_new,
-                                    compressionMode=bucket_compression_mode)
+                            ready = RestHelper(RestConnection(self.backupset.restore_cluster_host)).is_ns_server_running()
+                            if not ready:
+                                self.fail("Couchbase Server failed to start")
+                            else:
+                                rest_conn.create_bucket(bucket=bucket_name,
+                                                    ramQuotaMB=int(bucket_size) - 1,
+                                                    replicaNumber=replicas,
+                                                    authType=bucket.authType if bucket.authType else 'none',
+                                                    bucketType=self.bucket_type,
+                                                    proxyPort=bucket.port,
+                                                    evictionPolicy=self.eviction_policy,
+                                                    lww=self.lww_new,
+                                                    compressionMode=bucket_compression_mode)
                     bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
                     if not bucket_ready:
                         self.fail("Bucket {0} not created after 120 seconds.".format(bucket_name))
@@ -832,17 +834,17 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     bucket_name = bucket.name + "_" + str(count)
                     self.log.info("replica in bucket {0} is {1}".format(bucket_name, replicas))
                     if self.backupset.delete_old_bucket:
-                        BucketOperationHelper.delete_bucket_or_assert(\
-                                       self.backupset.restore_cluster_host, bucket.name, self)
+                        BucketOperationHelper.delete_bucket_or_assert( \
+                            self.backupset.restore_cluster_host, bucket.name, self)
                     rest_conn.create_bucket(bucket=bucket_name,
-                                    ramQuotaMB=int(bucket_size) - 1,
-                                    replicaNumber=replicas,
-                                    authType=bucket.authType if bucket.authType else 'none',
-                                    bucketType=self.bucket_type,
-                                    proxyPort=bucket.port,
-                                    evictionPolicy=self.eviction_policy,
-                                    lww=self.lww_new,
-                                    compressionMode=bucket_compression_mode)
+                                            ramQuotaMB=int(bucket_size) - 1,
+                                            replicaNumber=replicas,
+                                            authType=bucket.authType if bucket.authType else 'none',
+                                            bucketType=self.bucket_type,
+                                            proxyPort=bucket.port,
+                                            evictionPolicy=self.eviction_policy,
+                                            lww=self.lww_new,
+                                            compressionMode=bucket_compression_mode)
                     bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
                     if not bucket_ready:
                         self.fail("Bucket {0} not created after 120 seconds.".format(bucket_name))
@@ -853,12 +855,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     bucket_status = rest_conn.get_bucket_status(bucket_name)
                     count += 1
                     if count == 15:
-                        raise Exception ("Bucket does not ready after 30 seconds")
+                        raise Exception("Bucket does not ready after 30 seconds")
                 if has_index_node:
                     self.sleep(15, "wait for index service ready")
                 buckets.append("%s=%s" % (bucket.name, bucket_name))
-                count +=1
-                reset_cluster_count +=1
+                count += 1
+                reset_cluster_count += 1
             bucket_maps = ",".join(buckets)
         if self.backupset.map_buckets:
             args += " --map-buckets %s " % bucket_maps
@@ -886,27 +888,27 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 else:
                     if self.replace_ttl_with == 0:
                         self.ttl_value = "0"
-                        args += " --replace-ttl {0} --replace-ttl-with 0"\
-                                                 .format(self.replace_ttl)
+                        args += " --replace-ttl {0} --replace-ttl-with 0" \
+                            .format(self.replace_ttl)
                     else:
                         ttl_date, _ = shell.execute_command(self.rfc3339_date)
                         self.seconds_with_ttl, _ = shell.execute_command(self.seconds_with_ttl)
                         if self.seconds_with_ttl:
                             self.ttl_value = self.seconds_with_ttl[0]
                         if ttl_date and ttl_date[0]:
-                            args += " --replace-ttl {0} --replace-ttl-with {1}"\
-                                         .format(self.replace_ttl, ttl_date[0])
+                            args += " --replace-ttl {0} --replace-ttl-with {1}" \
+                                .format(self.replace_ttl, ttl_date[0])
                         elif isinstance(self.replace_ttl_with, str):
-                            args += " --replace-ttl {0} --replace-ttl-with {1}"\
-                                     .format(self.replace_ttl, self.replace_ttl_with)
+                            args += " --replace-ttl {0} --replace-ttl-with {1}" \
+                                .format(self.replace_ttl, self.replace_ttl_with)
             elif self.replace_ttl == "add-none":
-                args += " --replace-ttl none"
+                args += " "
             elif self.replace_ttl == "empty-flag":
                 args += " --replace-ttl-with {0}".format(self.replace_ttl_with)
             else:
                 args += " --replace-ttl {0}".format(self.replace_ttl)
         command = "{3} {2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
-                                                   password_env, user_env)
+                                                       password_env, user_env)
         output, error = shell.execute_command_raw(command)
         shell.log_command_output(output, error)
         if not self.enable_firewall:
@@ -915,12 +917,20 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         eventing_service_in = False
         errs_check = ["Unable to process value", "Error restoring cluster",
                       "Expected argument for option"]
+        disable_firewall = False
+        if self.enable_firewall:
+            rs_conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+            rs_conn.disable_firewall()
+            rs_conn.disconnect()
+            disable_firewall = True
         rest_rs = RestConnection(self.backupset.restore_cluster_host)
-        rs_cluster_services = rest_rs.get_nodes_services().values()
+        rs_cluster_services = list(rest_rs.get_nodes_services().values())
         for srv in rs_cluster_services:
             if "eventing" in srv:
                 eventing_service_in = True
                 errs_check.append("User needs one of the following permissions: cluster.eventing")
+        if disable_firewall:
+            RemoteUtilHelper.enable_firewall(self.backupset.restore_cluster_host)
         accepted_errs = False
         for err in errs_check:
             if self._check_output(err, output):
@@ -930,20 +940,21 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if accepted_errs:
             if not self.should_fail:
                 if not self.restore_should_fail and not eventing_service_in:
-                    self.fail("Failed to restore cluster")
+                    if not self.enable_firewall:
+                        self.fail("Failed to restore cluster")
             else:
                 self.log.info("This test is for negative test")
         res = output
         res.extend(error)
-        error_str = "Error restoring cluster: Transfer failed. "\
+        error_str = "Error restoring cluster: Transfer failed. " \
                     "Check the logs for more information."
         if error_str in res:
             bk_log_file_name = "backup.log"
             if "6.5" <= RestConnection(self.backupset.backup_host).get_nodes_version():
                 bk_log_file_name = "backup-*.log"
 
-                command = "cat {}".format(self.backupset.objstore_staging_directory + '/' if self.objstore_provider else '')
-                command += "{}/logs/{} | grep {} -A 10 -B 100".format(self.backupset.directory, bk_log_file_name, error_str)
+            command = "cat {}".format(self.backupset.objstore_staging_directory + '/' if self.objstore_provider else '')
+            command += "{}/logs/{} | grep {} -A 10 -B 100".format(self.backupset.directory, bk_log_file_name, error_str)
 
             output, error = shell.execute_command(command)
             shell.log_command_output(output, error)
@@ -1864,8 +1875,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             else:
                 self.log.error("invalid {0}".format(word_check))
         return found
-
-    def _reset_storage_mode(self, rest, storageMode):
+    
+    def _reset_storage_mode(self, rest, storageMode, reset_node=True):
+        if not storageMode:
+            storageMode = "memory_optimized"
         nodes_in_cluster = rest.get_nodes()
         for node in nodes_in_cluster:
             matched_server = None
@@ -1873,21 +1886,28 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 if node.hostname[:-5] == server.ip:
                     matched_server = server
                     break
-
-            RestConnection(node).force_eject_node()
-            ready = RestHelper(rest).is_ns_server_running()
-            if ready:
-                if server is not None:
-                    shell = RemoteMachineShellConnection(server)
-                    shell.enable_diag_eval_on_non_local_hosts()
-                    shell.disconnect()
-            else:
-                self.fail("NS server is not ready after reset node")
+            shell = RemoteMachineShellConnection(server)
+            shell.enable_diag_eval_on_non_local_hosts()
+            shell.disconnect()
+            if reset_node:
+                RestConnection(node).force_eject_node()
+                ready = RestHelper(rest).is_ns_server_running()
+                if ready:
+                    if server is not None:
+                        shell = RemoteMachineShellConnection(server)
+                        shell.enable_diag_eval_on_non_local_hosts()
+                        shell.disconnect()
+                else:
+                    self.fail("NS server is not ready after reset node")
         rest.set_indexer_storage_mode(username='Administrator',
-                                          password='password',
-                                          storageMode=storageMode)
+                                      password='password',
+                                      storageMode=storageMode)
         self.log.info("Done reset node")
-        kv_quota = rest.init_node()
+        sv_in_rs = self.backupset.restore_cluster_host.services
+        if self.backupset.restore_cluster_host.services and \
+            "," in self.backupset.restore_cluster_host.services[0]:
+            sv_in_rs = self.backupset.restore_cluster_host.services.split(",")
+        kv_quota = rest.init_node(sv_in_rs)
         return kv_quota
 
     def _reset_restore_cluster_with_bk_services(self, bk_services):
@@ -2604,11 +2624,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             BucketOperationHelper.delete_all_buckets_or_assert(self.backupset.restore_cluster, self)
         ClusterOperationHelper.cleanup_cluster(self.backupset.restore_cluster,
                                                master=self.backupset.restore_cluster_host)
+
         rest_bk = RestConnection(self.backupset.cluster_host)
-        bk_storage_mode = \
-                     rest_bk.get_index_settings()["indexer.settings.storage_mode"]
+        try:
+            bk_storage_mode = rest_bk.get_index_settings()["indexer.settings.storage_mode"]
+        except Exception as e:
+            if e:
+                print("Exception error: ", str(e))
+                raise("Need index service in node {0}".format(self.backupset.cluster_host.ip))
         eventing_service_in = False
-        bk_cluster_services = rest_bk.get_nodes_services().values()
+        bk_cluster_services = list(rest_bk.get_nodes_services().values())
         for srv in bk_cluster_services:
             if "eventing" in srv:
                 eventing_service_in = True
@@ -2628,20 +2653,34 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             shell.enable_diag_eval_on_non_local_hosts()
             shell.disconnect()
-        kv_quota = rest_rs.init_node(self.backupset.restore_cluster_host.services)
-        self._reset_storage_mode(rest_rs, bk_storage_mode)
+        sv_in_rs = self.backupset.restore_cluster_host.services
+        if self.backupset.restore_cluster_host.services and \
+            "," in self.backupset.restore_cluster_host.services[0]:
+            sv_in_rs = self.backupset.restore_cluster_host.services[0].split(",")
+        kv_quota = rest_rs.init_node(sv_in_rs)
         if len(bk_cluster_services) > 1:
             bk_cluster_services.remove(bk_services)
         if len(self.input.clusters[0]) > 1:
             if not bk_cluster_services:
                 bk_cluster_services = bk_cluster_services.append(self.input.clusters[0][1].services)
             rest_rs.add_node(self.input.clusters[0][1].rest_username,
-                                 self.input.clusters[0][1].rest_password,
-                                 self.input.clusters[0][1].ip, services=bk_cluster_services[0])
+                             self.input.clusters[0][1].rest_password,
+                             self.input.clusters[0][1].ip, services=bk_cluster_services[0])
             rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
             rebalance.result()
+            count = 0
+            while count < 15:
+                reb_st, _ = rest_rs._rebalance_status_and_progress()
+                if reb_st != "none":
+                    self.sleep(2, "wait rebalance to complete")
+                    count += 1
+                else:
+                    break
+                if count == 15:
+                    self.fail("Status still shows running after rebalance complete 30 seconds")
         else:
             self.log.info("No availabe node to create cluster.")
+        self._reset_storage_mode(rest_rs, bk_storage_mode, False)
 
     def _common_objstore_arguments(self):
         args = "{}".format(' --obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else '')
