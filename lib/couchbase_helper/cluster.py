@@ -135,7 +135,7 @@ class Cluster(object):
     def async_init_node(self, server, disabled_consistent_view=None,
                         rebalanceIndexWaitingDisabled=None, rebalanceIndexPausingDisabled=None,
                         maxParallelIndexers=None, maxParallelReplicaIndexers=None, port=None,
-                        quota_percent=None, services=None, index_quota_percent=None, gsi_type='forestdb'):
+                        quota_percent=None, services=None, index_quota_percent=None, gsi_type='plasma'):
         """Asynchronously initializes a node
 
         The task scheduled will initialize a nodes username and password and will establish
