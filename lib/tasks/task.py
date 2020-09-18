@@ -6415,3 +6415,32 @@ class DockerSDKLoadDocumentsTask(Task):
         self.set_result(True)
         self.state = FINISHED
         task_manager.schedule(self)
+
+#TODO:
+# input params to include,exclude keywords,
+# populate dictionary {node:matches} in setUp()
+# call LogScanTask in basetestcase tearDown() and diff dict
+# add sensitive data patterns
+# pretty print matches
+class LogScanTask(Task):
+    def __init__(self, server):
+        Task.__init__(self, "log_scan_task")
+        self.server = server
+        from lib.log_scanner import LogScanner
+        self.log_scanner = LogScanner(server=self.server)
+
+    def execute(self, task_manager):
+        try:
+            # Scan logs corresponding to node services
+            matches = self.log_scanner.scan()
+            self.state = CHECKING
+            task_manager.schedule(self)
+        # catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.set_unexpected_exception(e)
+
+    def check(self, task_manager):
+        self.set_result(True)
+        self.state = FINISHED
+        task_manager.schedule(self)

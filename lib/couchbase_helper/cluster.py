@@ -1403,3 +1403,11 @@ class Cluster(object):
         _task = CBASQueryExecuteTask(server, cbas_endpoint, statement, mode, pretty)
         self.task_manager.schedule(_task)
         return _task
+
+    def async_log_scan(self, servers):
+        _tasks = []
+        for server in servers:
+            _task = LogScanTask(server)
+            self.task_manager.schedule(_task)
+            _tasks.append(_task)
+        return _tasks

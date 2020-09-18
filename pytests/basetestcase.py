@@ -196,6 +196,7 @@ class BaseTestCase(unittest.TestCase):
             self.x509enable = self.input.param('x509enable', False)
             self.enable_secrets = self.input.param("enable_secrets", False)
             self.secret_password = self.input.param("secret_password", 'p@ssw0rd')
+            self.skip_log_scan = self.input.param("skip_log_scan", False)
 
             if self.skip_setup_cleanup:
                 self.buckets = RestConnection(self.master).get_buckets()
@@ -391,6 +392,7 @@ class BaseTestCase(unittest.TestCase):
                     str(self.__class__).find('newupgradetests') == -1 and \
                     not self.skip_bucket_setup:
                 self._bucket_creation()
+
             self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="
                           .format(self.case_number, self._testMethodName))
 
@@ -404,6 +406,10 @@ class BaseTestCase(unittest.TestCase):
                 status, content, header = self._log_start(self)
                 if not status:
                     self.sleep(10)
+                if not self.skip_log_scan:
+                    _tasks = self.cluster.async_log_scan(self.servers)
+                    for _task in _tasks:
+                        _task.result()
             self.print_cluster_stats()
 
             self.java_sdk_client = self.input.param("java_sdk_client", False)
