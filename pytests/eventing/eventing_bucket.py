@@ -36,9 +36,9 @@ class EventingBucket(EventingBaseTest):
         self.expiry = 3
         handler_code = self.input.param('handler_code', 'bucket_op')
         if handler_code == 'bucket_op':
-            self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
+            self.handler_code = "handler_code/ABO/insert.js"
         elif handler_code == 'bucket_op_with_timers':
-            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS
+            self.handler_code = "handler_code/ABO/insert_timer.js"
         elif handler_code == 'bucket_op_with_cron_timers':
             self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMERS
         elif handler_code == 'n1ql_op_with_timers':
@@ -48,7 +48,7 @@ class EventingBucket(EventingBaseTest):
         elif handler_code == 'source_bucket_mutation_timers':
             self.handler_code = HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS
         else:
-            self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
+            self.handler_code = "handler_code/ABO/insert.js"
         # index is required for delete operation through n1ql
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,

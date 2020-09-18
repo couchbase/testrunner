@@ -42,6 +42,7 @@ class AdvanceBucketOp(EventingBaseTest):
                  batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
+        self.rest.create_function(body['appname'], body)
         self.deploy_function(body)
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -57,6 +58,7 @@ class AdvanceBucketOp(EventingBaseTest):
         ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 3, bucket=self.src_bucket_name)
         body = self.create_save_function_body(self.function_name,self.handler_code)
         body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
+        self.rest.create_function(body['appname'], body)
         self.deploy_function(body)
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
@@ -67,6 +69,7 @@ class AdvanceBucketOp(EventingBaseTest):
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
+        self.rest.create_function(body['appname'], body)
         self.deploy_function(body)
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 + 1, skip_stats_validation=True)
         self.verify_counter(self.docs_per_day * 2016)
