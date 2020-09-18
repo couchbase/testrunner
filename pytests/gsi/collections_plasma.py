@@ -1,5 +1,6 @@
 import random
 import copy
+import time
 
 from tasks.task import NodesFailureTask
 
@@ -124,7 +125,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self._lock_queue = threading.Lock()
         self.run_tasks = False
         self.tasks = []
-        self.batch_size = self.input.param("batch_size", 10000)
+        self.batch_size = self.input.param("batch_size", 100000)
         self.start_doc = self.input.param("start_doc", 1)
         self.num_items_in_collection = self.input.param("num_items_in_collection", 100000)
         self.percent_create = self.input.param("percent_create", 100)
@@ -134,8 +135,26 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.dataset_template = self.input.param("dataset_template", "Employee")
         self.num_of_indexes = self.input.param("num_of_indexes", 1000)
         self.failure_timeout = self.input.param("failure_timeout", 60)
+        self.failure_recover_sleep = self.input.param("failure_recover_sleep", 600)
         self.index_ops_obj = ConCurIndexOps()
         self.compact_sleep_duration = self.input.param("compact_sleep_duration", 300)
+        self.moi_snapshot_interval = self.input.param("moi_snapshot_interval", 300000)
+        self.dgm_check_timeout = self.input.param("dgm_check_timeout", 900)
+        self.concur_drop_indexes = self.input.param("concur_drop_indexes", True)
+        self.concur_scan_indexes = self.input.param("concur_scan_indexes", True)
+        self.concur_create_indexes = self.input.param("concur_create_indexes", True)
+        self.concur_build_indexes = self.input.param("concur_build_indexes", True)
+        self.concur_system_failure = self.input.param("concur_system_failure", True)
+
+        self.log.info("Setting indexer memory quota to 256 MB and other settings...")
+        self.index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        self.n1ql_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=256)
+            rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": self.moi_snapshot_interval})
+            rest.set_index_settings({"indexer.settings.persisted_snapshot_init_build.moi.interval": self.moi_snapshot_interval})
+            rest.set_index_settings({"indexer.metadata.compaction.sleepDuration": self.compact_sleep_duration})
 
         self.log.info("==============  PlasmaCollectionsTests setup has completed ==============")
 
@@ -199,6 +218,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
 
     def create_indexes(self, num=0, defer_build=False, itr=0):
         query_definition_generator = SQLDefinitionGenerator()
+        index_create_tasks = []
         self.log.info(threading.currentThread().getName() + " Started")
         if len(self.keyspace) < num:
             num_indexes_collection = math.ceil(num / len(self.keyspace))
@@ -213,13 +233,16 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                                                                                scope_name + "_"
                                                                                + collection_name,
                                                              keyspace=collection_keyspace)
-                server = random.choice(self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True))
+                server = random.choice(self.n1ql_nodes)
                 index_create_task = ConcurrentIndexCreateTask(server, self.test_bucket, scope_name,
                                           collection_name, query_definitions,
                                           self.index_ops_obj, self.n1ql_helper, num_indexes_collection, defer_build, itr)
                 self.index_create_task_manager.schedule(index_create_task)
-                #index_create_task.result()
+                index_create_tasks.append(index_create_task)
         self.log.info(threading.currentThread().getName() + " Completed")
+
+        return index_create_tasks
+
 
     def build_indexes(self):
         self.sleep(5)
@@ -230,7 +253,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                 query_def = index_to_build["query_def"]
                 build_query = query_def.generate_build_query(namespace=query_def.keyspace)
                 try:
-                    server = random.choice(self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True))
+                    server = random.choice(self.n1ql_nodes)
                     self.run_cbq_query(query=build_query, server=server)
                     self.index_ops_obj.build_complete_add_to_create(index_to_build)
                 except Exception as err:
@@ -250,7 +273,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                 query_def = index_to_scan["query_def"]
                 query = query_def.generate_query(bucket=query_def.keyspace)
                 try:
-                    server = random.choice(self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True))
+                    server = random.choice(self.n1ql_nodes)
                     self.run_cbq_query(query=query, server=server)
                 except Exception as err:
                     if "No index available on keyspace" not in str(err):
@@ -268,7 +291,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                 query_def = index_to_delete["query_def"]
                 drop_query = query_def.generate_index_drop_query(namespace=query_def.keyspace)
                 try:
-                    server = random.choice(self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True))
+                    server = random.choice(self.n1ql_nodes)
                     self.run_cbq_query(query=drop_query, server=server)
                 except Exception as err:
                     error_map = {"query": drop_query, "error": str(err)}
@@ -291,11 +314,10 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.sleep(10)
         self.failure_iteration = 1
         while self.run_tasks:
-            index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-            disk_location = RestConnection(index_nodes[0]).get_index_path()
-            indexes_count_before = self.get_server_indexes_count(index_nodes)
+            disk_location = RestConnection(self.index_nodes[0]).get_index_path()
+            indexes_count_before = self.get_server_indexes_count(self.index_nodes)
             self.index_ops_obj.update_ignore_failure_flag(True)
-            system_failure_task = NodesFailureTask(self.master, index_nodes, self.system_failure, 300, 0, False, 3,
+            system_failure_task = NodesFailureTask(self.master, self.index_nodes, self.system_failure, 300, 0, False, 3,
                                                    disk_location=disk_location, failure_timeout=self.failure_timeout)
             self.system_failure_task_manager.schedule(system_failure_task)
             try:
@@ -303,11 +325,11 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
             except Exception as e:
                 self.log.info("Exception: {}".format(e))
 
-            self.sleep(300, "wait for 2.5 mins after system failure for service to recover")
+            self.sleep(300, "wait for 5 mins after system failure for service to recover")
             self.index_ops_obj.update_ignore_failure_flag(False)
-            self.sleep(150, "wait for 2.5 mins more before collecting index count")
+            self.sleep(self.failure_recover_sleep, "wait for {} secs more before collecting index count".format(self.failure_recover_sleep))
 
-            indexes_count_after = self.get_server_indexes_count(index_nodes)
+            indexes_count_after = self.get_server_indexes_count(self.index_nodes)
             self.compare_indexes_count(indexes_count_before, indexes_count_after)
             self.log.info(indexes_count_before)
             self.log.info(indexes_count_after)
@@ -347,67 +369,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
             if v < 1:
                 self.test_fail = True
 
-
         self.log.info(threading.currentThread().getName() + " Completed")
-
-    def test_sharding_create_drop_indexes(self):
-        self.test_fail = False
-        self.errors = []
-        self.index_create_task_manager = TaskManager(
-            "index_create_task_manager")
-        self.index_create_task_manager.start()
-        self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
-        sdk_data_loader = SDKDataLoader(start_seq_num=self.start_doc, num_ops=self.num_items_in_collection,
-                                        percent_create=self.percent_create,
-                                        percent_update=self.percent_update, percent_delete=self.percent_delete,
-                                        all_collections=self.all_collections, timeout=self.test_timeout,
-                                        json_template=self.dataset_template)
-
-        data_load_process = threading.Thread(name="data_load_process",
-                                             target=self.data_ops_javasdk_loader_in_batches,
-                                             args=(sdk_data_loader, self.batch_size))
-        self.tasks.append(data_load_process)
-
-        create_thread = threading.Thread(name="create_thread",
-                                         target=self.create_indexes,
-                                         args=(self.num_of_indexes, ""))
-        self.tasks.append(create_thread)
-
-        drop_thread = threading.Thread(name="drop_thread",
-                                       target=self.drop_indexes,
-                                       args=[self.drop_sleep])
-        self.tasks.append(drop_thread)
-
-        build_index_thread = threading.Thread(name="build_index_thread",
-                                              target=self.build_indexes)
-        self.tasks.append(build_index_thread)
-
-        scan_thread = threading.Thread(name="scan_thread",
-                                       target=self.scan_indexes)
-
-        self.tasks.append(scan_thread)
-
-        self.run_tasks = True
-
-        for task in self.tasks:
-            task.start()
-
-        self.sleep(self.test_timeout)
-
-        self.run_tasks = False
-
-        self.index_ops_obj.update_stop_create_index(True)
-        self.index_create_task_manager.shutdown(True)
-
-        for task in self.tasks:
-            task.join()
-
-        self.sleep(10, "sleep for 10 secs before validation as indexStatus API needs some time for update")
-
-        self.verify_index_ops_obj()
-
-        if self.index_ops_obj.get_errors():
-            self.fail(str(self.index_ops_obj.get_errors()))
 
     def test_system_failure_create_drop_indexes(self):
         self.test_fail = False
@@ -418,10 +380,13 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.system_failure_task_manager = TaskManager(
             "system_failure_detector_thread")
         self.system_failure_task_manager.start()
+
         self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
         self.run_tasks = True
 
-        self.create_indexes(num=30)
+        index_create_tasks = self.create_indexes(num=50)
+        for task in index_create_tasks:
+            task.result()
 
         sdk_data_loader = SDKDataLoader(start_seq_num=self.start_doc, num_ops=self.num_items_in_collection,
                                         percent_create=self.percent_create,
@@ -430,30 +395,37 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                                         json_template=self.dataset_template)
 
         self.data_ops_javasdk_loader_in_batches(sdk_data_loader, self.batch_size)
-        #self.schedule_system_failure()
 
-        create_thread = threading.Thread(name="create_thread",
-                                         target=self.create_indexes,
-                                         args=(self.num_of_indexes, "", 30))
-        self.tasks.append(create_thread)
+        if not self.check_if_indexes_in_dgm():
+            self.fail("indexes not in dgm even after {}".format(self.dgm_check_timeout))
 
-        drop_thread = threading.Thread(name="drop_thread",
-                                       target=self.drop_indexes,
-                                       args=[self.drop_sleep])
-        self.tasks.append(drop_thread)
+        if self.concur_create_indexes:
+            create_thread = threading.Thread(name="create_thread",
+                                             target=self.create_indexes,
+                                             args=(self.num_of_indexes, "", 30))
+            self.tasks.append(create_thread)
 
-        build_index_thread = threading.Thread(name="build_index_thread",
-                                              target=self.build_indexes)
-        self.tasks.append(build_index_thread)
+        if self.concur_drop_indexes:
+            drop_thread = threading.Thread(name="drop_thread",
+                                           target=self.drop_indexes,
+                                           args=[self.drop_sleep])
+            self.tasks.append(drop_thread)
 
-        scan_thread = threading.Thread(name="scan_thread",
-                                       target=self.scan_indexes)
+        if self.concur_build_indexes:
+            build_index_thread = threading.Thread(name="build_index_thread",
+                                                  target=self.build_indexes)
+            self.tasks.append(build_index_thread)
 
-        self.tasks.append(scan_thread)
+        if self.concur_scan_indexes:
+            scan_thread = threading.Thread(name="scan_thread",
+                                           target=self.scan_indexes)
 
-        system_failure_thread = threading.Thread(name="system_failure_thread",
-                                                 target=self.schedule_system_failure)
-        self.tasks.append(system_failure_thread)
+            self.tasks.append(scan_thread)
+
+        if self.concur_system_failure:
+            system_failure_thread = threading.Thread(name="system_failure_thread",
+                                                     target=self.schedule_system_failure)
+            self.tasks.append(system_failure_thread)
 
         for task in self.tasks:
             task.start()
@@ -484,10 +456,6 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.index_create_task_manager = TaskManager(
             "index_create_task_manager")
         self.index_create_task_manager.start()
-        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        for indexer_node in indexer_nodes:
-            rest = RestConnection(indexer_node)
-            rest.set_index_settings({"indexer.metadata.compaction.sleepDuration": self.compact_sleep_duration})
 
         self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
 

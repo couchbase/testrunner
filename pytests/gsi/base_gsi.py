@@ -970,6 +970,33 @@ class BaseSecondaryIndexingTests(QueryTests):
             check = False
         return check
 
+    def check_if_indexes_in_dgm(self):
+        def check_if_indexes_in_dgm_node(node):
+            indexer_rest = RestConnection(node)
+            node_in_dgm = False
+            content = indexer_rest.get_index_storage_stats()
+            tot_indexes = len(list(content.values())[0].values())
+            index_in_dgm = 0
+            for index in list(content.values()):
+                for key, stats in index.items():
+                    stats = dict(stats)
+                    rr = stats["MainStore"]["resident_ratio"]
+                    if rr != 0 and rr < 1.00:
+                        index_in_dgm += 1
+                        self.log.info("Index : {} , resident_ratio : {}".format(key, rr))
+            if index_in_dgm > (tot_indexes/2):
+                node_in_dgm = True
+            return node_in_dgm
+
+        all_nodes_in_dgm = False
+        endtime = time.time() + self.dgm_check_timeout
+        while not all_nodes_in_dgm and time.time() < endtime:
+            all_nodes_in_dgm = True
+            for node in self.index_nodes:
+                all_nodes_in_dgm = all_nodes_in_dgm and check_if_indexes_in_dgm_node(node)
+
+        return all_nodes_in_dgm
+
     def check_if_index_created(self, index, defer_build=False):
         index_created = False
         status = None
