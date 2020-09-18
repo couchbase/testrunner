@@ -360,7 +360,7 @@ class CommunityTests(CommunityBaseTest):
         if status:
             self.fail("This X509 certificate feature only available in EE")
         elif not status:
-            if "requires enterprise edition" in content:
+            if b'requires enterprise edition' in content:
                 self.log.info("X509 cert is enforced in CE")
 
     def check_roles_base_access(self):
@@ -396,7 +396,7 @@ class CommunityTests(CommunityBaseTest):
                 print(ex)
         if status:
             self.fail("CE should not see root certificate!")
-        elif "requires enterprise edition" in content:
+        elif b'requires enterprise edition' in content:
             self.log.info("root certificate is enforced in CE! ")
 
     def check_settings_audit(self):
@@ -412,7 +412,7 @@ class CommunityTests(CommunityBaseTest):
                 print(ex)
         if status:
             self.fail("CE should not allow to set audit !")
-        elif "requires enterprise edition" in content:
+        elif b'requires enterprise edition' in content:
             self.log.info("settings audit is enforced in CE! ")
 
     def check_infer(self):
@@ -440,6 +440,24 @@ class CommunityTests(CommunityBaseTest):
         elif json_parsed["status"] == "fatal":
             self.log.info("INFER is enforced in CE! ")
 
+    def check_query_monitoring(self):
+        self.rest.force_eject_node()
+        self.sleep(7, "wait for node reset done")
+        self.rest.init_node()
+        bucket = "default"
+        self.rest.create_bucket(bucket, ramQuotaMB=200)
+        api = self.rest.query_baseUrl + "admin/settings"
+        param = {'profile': 'phases'}
+        try:
+            status, content, header = self.rest._http_request(api, 'POST', json.dumps(param))
+        except Exception as ex:
+            if ex:
+                print(ex)
+        if status:
+            self.fail("CE should not be allowed to do query monitoring !")
+        elif b'Profiling is an EE only feature' in content:
+            self.log.info("Query monitoring is enforced in CE! ")
+
     def check_flex_index(self):
         """ from watson, ce should not see infer
             manual test:
@@ -464,6 +482,70 @@ class CommunityTests(CommunityBaseTest):
             self.fail("CE should not allow to run flex index !")
         elif json_parsed["status"] == "fatal":
             self.log.info("Flex index is enforced in CE! ")
+
+    def check_index_partitioning(self):
+        self.rest.force_eject_node()
+        self.sleep(7, "wait for node reset done")
+        self.rest.init_node()
+        bucket = "default"
+        self.rest.create_bucket(bucket, ramQuotaMB=200)
+        api = self.rest.query_baseUrl + "query/service"
+        param = urllib.parse.urlencode(
+            {"statement": "CREATE INDEX idx ON `%s`(id) PARTITION BY HASH(META().id)" % bucket})
+        try:
+            status, content, header = self.rest._http_request(api, 'POST', param)
+            json_parsed = json.loads(content)
+        except Exception as ex:
+            if ex:
+                print(ex)
+        if json_parsed["status"] == "success":
+            self.fail("CE should not be allowed to run index partitioning !")
+        elif json_parsed["status"] == "fatal":
+            self.log.info("Index partitioning is enforced in CE! ")
+
+    def check_query_cost_based_optimizer(self):
+        self.rest.force_eject_node()
+        self.sleep(7, "wait for node reset done")
+        self.rest.init_node()
+        bucket = "default"
+        self.rest.create_bucket(bucket, ramQuotaMB=200)
+        api = self.rest.query_baseUrl + "query/service"
+        param = urllib.parse.urlencode(
+            {"statement": "UPDATE STATISTICS for `hotel` (type, address, city, country, free_breakfast, id, phone);"})
+        try:
+            status, content, header = self.rest._http_request(api, 'POST', param)
+            json_parsed = json.loads(content)
+        except Exception as ex:
+            if ex:
+                print(ex)
+        if json_parsed["status"] == "success":
+            self.fail("CE should not be allowed to run CBO !")
+        elif json_parsed["status"] == "fatal":
+            self.log.info("CBO is enforced in CE! ")
+
+    def check_query_window_functions(self):
+        self.rest.force_eject_node()
+        self.sleep(7, "wait for node reset done")
+        self.rest.init_node()
+        bucket = "default"
+        self.rest.create_bucket(bucket, ramQuotaMB=200)
+        api = self.rest.query_baseUrl + "query/service"
+        param = urllib.parse.urlencode(
+            {"statement": "SELECT d.id, d.destinationairport, CUME_DIST() OVER (PARTITION BY d.destinationairport \
+                            ORDER BY d.distance NULLS LAST) AS `rank` \
+                            FROM `%s` AS d \
+                            WHERE d.type='route' \
+                            LIMIT 7;" % bucket})
+        try:
+            status, content, header = self.rest._http_request(api, 'POST', param)
+            json_parsed = json.loads(content)
+        except Exception as ex:
+            if ex:
+                print(ex)
+        if json_parsed["status"] == "success":
+            self.fail("CE should not be allowed to use window functions !")
+        elif json_parsed["status"] == "fatal":
+            self.log.info("Window functions is enforced in CE! ")
 
     def check_auto_complete(self):
         """ this feature has not complete to block in CE """
@@ -532,7 +614,7 @@ class CommunityTests(CommunityBaseTest):
         if self.cli_test:
             cmd = "{0}couchbase-cli setting-audit -c {1}:8091 -u Administrator \
                 -p password --audit-enabled 1 --audit-log-rotate-interval 604800 \
-                --audit-log-path /opt/couchbase/var/lib/couchbase/logs "\
+                --audit-log-path /opt/couchbase/var/lib/couchbase/logs --set"\
                 .format(self.bin_path, self.master.ip)
 
         conn = RemoteMachineShellConnection(self.master)
@@ -665,6 +747,89 @@ class CommunityTests(CommunityBaseTest):
             mesg = "ERROR: This http API endpoint requires enterprise edition"
         if output and mesg not in str(output[0]):
             self.fail("LDAP Groups should not be in CE")
+        conn.disconnect()
+
+    def test_ldap_cert(self):
+        """
+           LDAP Cert feature is not available in CE
+        """
+        if self.cb_version[:5] not in COUCHBASE_FROM_MAD_HATTER:
+            self.log.info("This test is only for MH and later")
+            return
+        cmd = 'curl -X POST -u Administrator:password http://{0}:8091/settings/ldap \
+                                 -d hosts={1} \
+                                 -d port=389 \
+                                 -d encryption=StartTLSExtension \
+                                 -d serverCertValidation=true \
+                                 --data-urlencode cacert@root.crt \
+                                 -d bindDN="cn=admin,dc=example,dc=com" \
+                                 -d bindPass=password \
+                                 -d authenticationEnabled=true \
+                                 -d authorizationEnabled=true \
+                                 --data-urlencode groupsQuery="ou=groups,dc=example,dc=com??one?(member=%D)"'\
+                                .format(self.master.ip, self.master.ip)
+        if self.cli_test:
+            cmd = '{0}couchbase-cli setting-ldap -c {1}:8091 --username Administrator \
+                --password password  \
+                --authentication-enabled 1 \
+                --authorization-enabled 1 \
+                --hosts {2} \
+                --encryption startTLS \
+                --client-cert root.crt \
+                --bind-dn "cn=admin,dc=example,dc=com" \
+                --bind-password password \
+                --group-query "ou=groups,dc=example,dc=com??one?(member=%D)"'.format(self.bin_path, self.master.ip, self.master.ip)
+        conn = RemoteMachineShellConnection(self.master)
+        output, error = conn.execute_command(cmd)
+        conn.log_command_output(output, error)
+        mesg = "This http API endpoint requires enterprise edition"
+        if self.cli_test:
+            mesg = "ERROR: Command only available in enterprise edition"
+        if output and mesg not in str(output[0]):
+            self.fail("LDAP Cert should not be in CE")
+        conn.disconnect()
+
+    def test_network_encryption(self):
+        """
+           Encrypted network access is not available in CE
+        """
+        if self.cb_version[:5] not in COUCHBASE_FROM_MAD_HATTER:
+            self.log.info("This test is only for MH and later")
+            return
+        cmd = 'curl  -u Administrator:password -v -X POST \
+                    http://{0}:8091/settings/security \
+                    -d disableUIOverHttp=true \
+                    -d clusterEncryptionLevel=control \
+                    -d tlsMinVersion=tlsv1.1 \
+                    -d "cipherSuites=["TLS_RSA_WITH_AES_128_CBC_SHA", "TLS_RSA_WITH_AES_256_CBC_SHA"]"'\
+                                .format(self.master.ip)
+        conn = RemoteMachineShellConnection(self.master)
+        output, error = conn.execute_command(cmd)
+        conn.log_command_output(output, error)
+        mesg = "not supported in community edition"
+        if output and mesg not in str(output[0]):
+            self.fail("Encrypted network access should not be in CE")
+        conn.disconnect()
+
+    def test_n2n_encryption(self):
+        """
+           Encrypted network access is not available in CE
+        """
+        if self.cb_version[:5] not in COUCHBASE_FROM_MAD_HATTER:
+            self.log.info("This test is only for MH and later")
+            return
+        cmd = '/opt/couchbase/bin/couchbase-cli node-to-node-encryption \
+                -c http://{0}:8091 \
+                -u Administrator \
+                -p password \
+                --enable'\
+                .format(self.master.ip)
+        conn = RemoteMachineShellConnection(self.master)
+        output, error = conn.execute_command(cmd)
+        conn.log_command_output(output, error)
+        mesg = "not supported in community edition"
+        if output and mesg not in str(output[0]):
+            self.fail("Encrypted network access should not be in CE")
         conn.disconnect()
 
     def test_log_redaction(self):
