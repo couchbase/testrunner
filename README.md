@@ -102,10 +102,11 @@ Example:
     rest_password:asdasd
 
 **[servers]** section lists port and ssh related information. ssh connection
-information is required for small subset of tests where test needs to perform
-installation,backup or restore. If ns_server instances are started using
-ns_server/cluster_run script then you only need to define ip and port for those
-nodes.
+information is required for a small subset of tests where the test needs to perform
+installation, backup or restore. If the ssh connection requires public key 
+authentication then an ssh_key attribute with the path to a private key can be added. 
+If ns_server instances are started using ns_server/cluster_run script then you only 
+need to define ip and port for those nodes.
 
 Example:
 
@@ -130,6 +131,7 @@ Example:
     [10.1.6.104_4]
     ip:10.1.6.104
     port:9003
+    ssh_key=~/vagrants/6.6.0/ubuntu16/.vagrant/machines/node1/virtualbox/private_key
 
 Test Execution and Reporting
 ----------------------------
