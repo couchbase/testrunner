@@ -722,8 +722,9 @@ def __get_build_binary_name(node):
 
     # couchbase-server-enterprise_6.5.0-4557-macos_x86_64.dmg
     elif node.get_os() in install_constants.MACOS_VERSIONS:
-        return "{0}_{1}-{2}_{3}.{4}".format(params["cb_edition"],
+        return "{0}_{1}-{2}_{3}-{4}.{5}".format(params["cb_edition"],
                                             params["version"],
                                             "macos",
                                             node.info.architecture_type,
+                                            "unnotarized",
                                             node.info.deliverable_type)
