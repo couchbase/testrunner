@@ -101,9 +101,9 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         super(PlasmaCollectionsTests, self).setUp()
         self.log.info("==============  PlasmaCollectionsTests setup has started ==============")
         self.rest.delete_all_buckets()
-        self.num_scopes = self.input.param("num_scopes", 1)
-        self.num_collections = self.input.param("num_collections", 1)
-        self.test_timeout = self.input.param("test_timeout", 1)
+        self.num_scopes = self.input.param("num_scopes", 5)
+        self.num_collections = self.input.param("num_collections", 10)
+        self.test_timeout = self.input.param("test_timeout", 60)
         self.test_bucket = self.input.param('test_bucket', 'test_bucket')
         self.system_failure = self.input.param('system_failure', 'disk_failure')
         self.bucket_size = self.input.param('bucket_size', 100)
@@ -139,12 +139,14 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.index_ops_obj = ConCurIndexOps()
         self.compact_sleep_duration = self.input.param("compact_sleep_duration", 300)
         self.moi_snapshot_interval = self.input.param("moi_snapshot_interval", 300000)
-        self.dgm_check_timeout = self.input.param("dgm_check_timeout", 900)
+        self.dgm_check_timeout = self.input.param("dgm_check_timeout", 1800)
         self.concur_drop_indexes = self.input.param("concur_drop_indexes", True)
         self.concur_scan_indexes = self.input.param("concur_scan_indexes", True)
         self.concur_create_indexes = self.input.param("concur_create_indexes", True)
         self.concur_build_indexes = self.input.param("concur_build_indexes", True)
         self.concur_system_failure = self.input.param("concur_system_failure", True)
+        self.num_pre_indexes = self.input.param("num_pre_indexes", 50)
+        self.num_failure_iteration = self.input.param("num_failure_iteration", None)
 
         self.log.info("Setting indexer memory quota to 256 MB and other settings...")
         self.index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -314,6 +316,10 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.sleep(10)
         self.failure_iteration = 1
         while self.run_tasks:
+            if self.num_failure_iteration and self.failure_iteration > self.num_failure_iteration:
+                self.log.info("Reached number of failure iterations")
+                self.run_tasks = False
+                break
             disk_location = RestConnection(self.index_nodes[0]).get_index_path()
             indexes_count_before = self.get_server_indexes_count(self.index_nodes)
             self.index_ops_obj.update_ignore_failure_flag(True)
@@ -380,11 +386,13 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.system_failure_task_manager = TaskManager(
             "system_failure_detector_thread")
         self.system_failure_task_manager.start()
+        if self.num_failure_iteration:
+            self.test_timeout = 60
 
         self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
         self.run_tasks = True
 
-        index_create_tasks = self.create_indexes(num=50)
+        index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
         for task in index_create_tasks:
             task.result()
 
@@ -395,6 +403,8 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                                         json_template=self.dataset_template)
 
         self.data_ops_javasdk_loader_in_batches(sdk_data_loader, self.batch_size)
+
+        self.sleep(20, "sleeping for 20 sec for index to start processing docs")
 
         if not self.check_if_indexes_in_dgm():
             self.fail("indexes not in dgm even after {}".format(self.dgm_check_timeout))

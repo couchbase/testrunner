@@ -1012,16 +1012,19 @@ class BaseSecondaryIndexingTests(QueryTests):
             indexer_rest = RestConnection(node)
             node_in_dgm = False
             content = indexer_rest.get_index_storage_stats()
-            tot_indexes = len(list(content.values())[0].values())
-            index_in_dgm = 0
-            for index in list(content.values()):
-                for key, stats in index.items():
-                    stats = dict(stats)
-                    rr = stats["MainStore"]["resident_ratio"]
-                    if rr != 0 and rr < 1.00:
-                        index_in_dgm += 1
-                        self.log.info("Index : {} , resident_ratio : {}".format(key, rr))
-            if index_in_dgm > (tot_indexes/2):
+            try:
+                tot_indexes = len(list(content.values())[0].values())
+                index_in_dgm = 0
+                for index in list(content.values()):
+                    for key, stats in index.items():
+                        stats = dict(stats)
+                        rr = stats["MainStore"]["resident_ratio"]
+                        if rr != 0 and rr < 1.00:
+                            index_in_dgm += 1
+                            self.log.info("Index : {} , resident_ratio : {}".format(key, rr))
+                if index_in_dgm > (tot_indexes/2):
+                    node_in_dgm = True
+            except IndexError as e:
                 node_in_dgm = True
             return node_in_dgm
 
