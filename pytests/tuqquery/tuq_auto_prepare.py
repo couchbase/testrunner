@@ -722,6 +722,7 @@ class QueryAutoPrepareTests(QueryTests):
         except Exception as e:
             self.log.error(str(e))
             self.fail()
+
     def test_prepared_default_full_path(self):
         results = self.run_cbq_query(query='PREPARE p1 as select * from default:default.test.test1 where name = "new hotel"')
         results = self.run_cbq_query(query="EXECUTE p1")
@@ -733,3 +734,31 @@ class QueryAutoPrepareTests(QueryTests):
             self.log.error(str(e))
             self.fail()
 
+    def test_prepared_collection_query_context_rebalance(self):
+        try:
+            self.run_cbq_query(query="PREPARE p1 AS SELECT * FROM test1 b WHERE b.name = 'old hotel'", query_context='default:default.test')
+            results = self.run_cbq_query(query="EXECUTE p1")
+            self.assertEqual(results['results'][0]['b'], {'name': 'old hotel', 'type': 'hotel'})
+        except Exception as e:
+            self.log.info("Prepared statement failed {0}".format(str(e)))
+
+        # Rebalance in an index node
+        rebalance = self.cluster.async_rebalance(self.servers, [self.servers[2]], [], services=["n1ql"])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+        # THe prepared statement should be auto propogated
+        results = self.run_cbq_query("SELECT * from system:prepareds")
+        self.assertEqual(results['metrics']['resultCount'], 3)
+
+    def test_system_prepareds(self):
+        try:
+            self.run_cbq_query(query="PREPARE p3 AS SELECT * FROM default")
+            self.run_cbq_query(
+                query='PREPARE p2 as select * from default:default.test.test1 t1 INNER JOIN default:default.test2.test2 t2 ON t1.name = t2.name where t1.name = "new hotel"')
+            self.run_cbq_query(query="PREPARE p1 AS SELECT * FROM test1 b WHERE b.name = 'old hotel'", query_context='default:default.test')
+        except Exception as e:
+            self.log.info("Prepared statement failed {0}".format(str(e)))
+        results = self.run_cbq_query("SELECT * from system:prepareds")
+        self.assertEqual(results['metrics']['resultCount'], 6)

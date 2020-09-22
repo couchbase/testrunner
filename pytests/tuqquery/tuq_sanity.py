@@ -83,6 +83,48 @@ class QuerySanityTests(QueryTests):
         except Exception as e:
             self.assertTrue("Keyspace not found in CB datastore: default:default.test.tes" in str(e), "The full path was not inside the error message! {0}".format(str(e)))
 
+    def test_stats_collections(self):
+        curl_output = self.shell.execute_command(
+            "curl http://{0}:{1}/admin/stats".format(self.master.ip, self.n1ql_port))
+        curl = json.loads(curl_output[0][0])
+        starting_deletes = curl['deletes.count']
+        starting_selects = curl['selects.count']
+        starting_inserts = curl['inserts.count']
+
+        try:
+            self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[0]))
+            self.run_cbq_query(query="SELECT * FROM default:default.test.test1 b WHERE b.name = 'new hotel'")
+            self.run_cbq_query(query="SELECT * FROM test1 b WHERE b.name = 'new hotel'",
+                               query_context='default:default.test')
+            self.run_cbq_query(
+                query=('INSERT INTO default:default.{0}.{1}'.format(self.scope, self.collections[
+                    0]) + '(KEY, VALUE) VALUES ("key6", { "type" : "hotel", "name" : "new hotel" })'))
+            self.run_cbq_query(
+                query='DELETE FROM default:default.test.test1 LIMIT 1')
+            curl_output = self.shell.execute_command(
+                "curl http://{0}:{1}/admin/stats".format(self.master.ip, self.n1ql_port))
+            curl = json.loads(curl_output[0][0])
+            import pdb;
+            pdb.set_trace()
+            self.assertEqual(curl['deletes.count'], starting_deletes + 1)
+            self.assertEqual(curl['selects.count'], starting_selects + 2)
+            self.assertEqual(curl['inserts.count'], starting_inserts + 1)
+
+        except Exception as e:
+            self.log.error("One of the queries failed or the stats were wrong: {0}".format(str(e)))
+            self.fail()
+
+    def test_stats_collections_prepareds(self):
+        try:
+            self.run_cbq_query(query="PREPARE p1 AS SELECT * FROM default:default.test.test1 b WHERE b.name = 'new hotel'")
+            self.run_cbq_query(query="PREPARE p2 AS SELECT * FROM test1 b WHERE b.name = 'new hotel'", query_context='default:default.test')
+            self.run_cbq_query(query="execute p2", query_context='default:default.test')
+            self.run_cbq_query(query="execute p1", query_context='default:default.test')
+            curl_output = self.shell.execute_command("curl http://{0}:{1}/admin/stats".format(self.master.ip, self.n1ql_port))
+            curl = json.loads(curl_output[0][0])
+            self.assertEqual(curl['prepared.count'], 2)
+        finally:
+            self.run_cbq_query(query="DELETE from system:prepareds")
 
     def test_escaped_identifiers(self):
         self.fail_if_no_buckets()
