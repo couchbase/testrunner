@@ -37,6 +37,7 @@ from testconstants import CB_VERSION_NAME
 from testconstants import COUCHBASE_FROM_VERSION_3
 from testconstants import COUCHBASE_MP_VERSION
 from testconstants import CE_EE_ON_SAME_FOLDER
+
 try:
     from lib.sdk_client import SDKClient
 except:
@@ -105,6 +106,53 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.view_num = self.input.param("view_per_ddoc", 2)
         self.is_dev_ddoc = self.input.param("is-dev-ddoc", False)
         self.offline_failover_upgrade = self.input.param("offline_failover_upgrade", False)
+
+        self.use_rest = self.input.param("use_rest", True)
+        self.use_cli = self.input.param("use_cli", False)
+        self.custom_scopes = self.input.param("custom_scopes", False)
+        self.custom_collections = self.input.param("custom_collections", False)
+        self.map_data_collection = self.input.param("map_data_collection", False)
+        self.col_per_scope = self.input.param("col_per_scope", 1)
+        self.load_to_collection = self.input.param("load_to_collection", False)
+        self.collection_string = self.input.param("collection_string", None)
+        self.non_ascii_name = self.input.param("non_ascii_name", None)
+        self.create_scopes = self.input.param("create_scopes", True)
+        self.num_scopes = self.input.param("num_scopes", 2)
+        self.create_collections = self.input.param("create_collections", True)
+        self.relative_path = self.input.param("relative_path", False)
+        self.buckets_only = self.input.param("buckets_only", False)
+        self.scopes_only = self.input.param("scopes_only", False)
+        self.collections_only = self.input.param("collections_only", False)
+        self.drop_scopes = self.input.param("drop_scopes", False)
+        self.drop_collections = self.input.param("drop_collections", False)
+        self.check_scopes = self.input.param("check_scopes", False)
+        self.check_scopes_details = self.input.param("check_scopes_details", False)
+        self.check_collections = self.input.param("check_collections", False)
+        self.check_collections_details = self.input.param("check_collections_details", False)
+        self.check_collection_enable = self.input.param("check_collection_enable", True)
+        self.json_output = self.input.param("json_output", False)
+        self.load_json_format = self.input.param("load_json_format", False)
+        self.load_to_scopes = self.input.param("load_to_scopes", False)
+        self.load_to_collections = self.input.param("load_to_collections", False)
+        self.load_to_default_scopes = self.input.param("load_to_scopes", False)
+        self.cbwg_no_value_in_col_flag = self.input.param("cbwg_no_value_in_col_flag", False)
+        self.cbwg_invalid_value_in_col_flag = self.input.param("cbwg_invalid_value_in_col_flag", False)
+        self.load_to_default_collections = self.input.param("load_to_collections", False)
+        self.create_existing_scope = self.input.param("create_existing_scope", False)
+        self.create_existing_collection = self.input.param("create_existing_collection", False)
+        self.block_char = self.input.param("block_char", "")
+        self.drop_default_scope = self.input.param("drop_default_scope", False)
+        self.drop_default_collection = self.input.param("drop_default_collection", False)
+        self.log_filename = self.input.param("filename", "loginfo_collecion")
+        self.node_down = self.input.param("node_down", False)
+
+        self.load_scope_id = ""
+        self.load_scope = ""
+        self.load_collection_id = ""
+        self.scopes = None
+        self.collections = None
+        self.upgrade_master_node = None
+
         self.during_ops = None
         if "during-ops" in self.input.test_params:
             self.during_ops = self.input.param("during-ops", None).split(",")
@@ -1353,3 +1401,195 @@ class NewUpgradeBaseTest(BaseTestCase):
             validate_error_msg=self.validate_error)
         if not result:
             self.fail("FAIL : Actual error msg does not match the expected")
+
+    def create_scope(self, num_scope=2, rest=None, cli=None):
+        bucket_name = self.buckets[0].name
+        if rest:
+            rest_client = rest
+        else:
+            rest_client = self.rest_col
+        if cli:
+            cli_client = cli
+        else:
+            cli_client = self.cli_col
+        for x in range(num_scope):
+            scope_name = "scope{0}".format(x)
+            if self.non_ascii_name:
+                scope_name = self.non_ascii_name + str(x)
+            if self.use_rest:
+                rest_client.create_scope(bucket=bucket_name, scope=scope_name,
+                                              params=None)
+            else:
+                cli_client.create_scope(bucket=bucket_name, scope=scope_name)
+
+    def delete_scope(self, num_scope=2):
+        bucket_name = self.buckets[0].name
+        for x in range(num_scope):
+            scope_name = "scope{0}".format(x)
+            if self.non_ascii_name:
+                scope_name = self.non_ascii_name + str(x)
+            if self.use_rest:
+                self.rest_col.delete_scope(bucket_name, scope_name)
+            else:
+                self.cli_col.delete_scope(scope_name, bucket=bucket_name)
+
+    def create_collection(self, num_collection=1, rest=None, cli=None):
+        bucket_name = self.buckets[0].name
+        if rest:
+            rest_client = rest
+        else:
+            rest_client = self.rest_col
+        if cli:
+            cli_client = cli
+        else:
+            cli_client = self.cli_col
+
+        scopes = self.get_bucket_scope(rest_client, cli_client)
+        if scopes:
+            for x in range(num_collection):
+                for scope in scopes:
+                    if bucket_name in scope:
+                        continue
+                    if self.use_rest:
+                        rest_client.create_collection(bucket=bucket_name, scope=scope,
+                                                   collection="mycollection_{0}_{1}".format(scope, x))
+                    else:
+                        cli_client.create_collection(bucket=bucket_name, scope=scope,
+                                                   collection="mycollection_{0}_{1}".format(scope, x))
+        self.sleep(10, "time needs for stats up completely")
+
+    def delete_collection(self, num_collection=1):
+        bucket_name = self.buckets[0].name
+        for x in range(num_collection):
+            if self.use_rest:
+                self.rest_col.delete_collection(bucket=bucket_name, scope="_{0}".format(bucket_name),
+                                                   collection="_{0}".format(bucket_name))
+            else:
+                self.cli_col.delete_collection(bucket=bucket_name, scope="_{0}".format(bucket_name),
+                                                  collection="_{0}".format(bucket_name))
+
+    def _create_scope_collection(self):
+        bucket_name = self.buckets[0].name
+        for x in range(self.num_scopes):
+            scope_name = "scope{0}".format(x)
+            if self.non_ascii_name:
+                scope_name = self.non_ascii_name + str(x)
+            if self.use_rest:
+                self.rest_col.create_scope_collection(bucket_name, scope_name,
+                                                     "mycollection_{0}".format(scope_name))
+            else:
+                self.cli_col.create_scope_collection(bucket_name, scope_name,
+                                                    "mycollection_{0}".format(scope_name))
+
+    def get_bucket_scope(self, rest=None, cli=None):
+        bucket_name = self.buckets[0].name
+        if rest:
+            rest_client = rest
+        else:
+            rest_client = self.rest_col
+        if cli:
+            cli_client = cli
+        else:
+            cli_client = self.cli_col
+        if self.use_rest:
+            scopes = rest_client.get_bucket_scopes(bucket_name)
+        else:
+            scopes = cli_client.get_bucket_scopes(bucket_name)[0]
+        return scopes
+
+    def get_bucket_collection(self,):
+        bucket_name = self.buckets[0].name
+        collections = None
+        if self.use_rest:
+            collections = self.rest_col.get_bucket_collections(bucket_name)
+        else:
+            collections = self.cli_col.get_bucket_collections(bucket_name)
+        return collections
+
+    def get_collection_stats(self, buckets=None):
+        """ return output, error """
+        if buckets:
+            bucket = buckets[0]
+        else:
+            bucket = self.buckets[0]
+        return self.stat_col.get_collection_stats(bucket)
+
+    def get_collection_names(self):
+        bucket = self.buckets[0]
+        output, error = self.shell.execute_cbstats(bucket, "collections",
+                                                   cbadmin_user="Administrator",
+                                                   options=" | grep ':name'")
+        collection_names = []
+        if output:
+            for x in output:
+                if "_default" in x:
+                    continue
+                collection_names.append(x.split(":name:")[1].strip())
+        return collection_names, error
+
+    def get_scopes_id(self, scope):
+        bucket = self.buckets[0]
+        return self.stat_col.get_scope_id(bucket, scope)
+
+    def get_collections_id(self, scope, collection):
+        bucket = self.buckets[0]
+        return self.stat_col.get_collection_id(bucket, scope, collection)
+
+    def get_collection_load_id(self):
+        scopes = self.get_bucket_scope()
+        scopes_id = []
+        scopes_names_ids = {}
+        for scope in scopes:
+            if scope == "_default":
+                scopes.remove(scope)
+                continue
+            self.log.info("get scope id of scope: {0}".format(scope))
+            scope_id = self.get_scopes_id(scope)
+            if scope_id is None:
+                self.sleep(5, "wait for stats is up completely")
+                scope_id = self.get_scopes_id(scope)
+            scopes_names_ids[scope] = scope_id
+            scopes_id.append(scope_id)
+        self.load_scope = scopes[0]
+        collections = self.get_bucket_collection()
+        collections_id = []
+        for collection in collections:
+            if collection == "_default":
+                collections.remove(collection)
+                continue
+            if self.load_scope not in collection:
+                continue
+            collection_id = self.get_collections_id(self.load_scope,collection)
+            collections_id.append(self.get_collections_id(self.load_scope,collection))
+
+        collections_id = list(filter(None, collections_id))
+        if collections_id:
+            self.load_scope_id = scopes_names_ids[self.load_scope]
+            return collections_id[0]
+        else:
+            return "0x0"
+
+    def load_collection_all_buckets(self, cluster=None, item_size=125, ratio=0.9, command_options=""):
+        cluster = self.master
+        shell = RemoteMachineShellConnection(self.master)
+        for bucket in self.buckets:
+            shell.execute_cbworkloadgen(cluster.rest_username,
+                                        cluster.rest_password,
+                                        self.num_items,
+                                        ratio,
+                                        bucket.name,
+                                        item_size,
+                                        command_options)
+
+    def _verify_collection_data(self):
+        items_match = False
+        self.sleep(10)
+        upgrade_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True,
+                                                           master=self.upgrade_master_node)
+        items = self.stat_col.get_scope_item_count(self.buckets[0], self.load_scope,
+                                                   node=upgrade_nodes)
+        if int(self.num_items) == int(items):
+            items_match = True
+            self.log.info("data loaded to collecion")
+        if not items_match:
+            self.log.error("Failed to load to collection")
