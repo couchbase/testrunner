@@ -3446,6 +3446,8 @@ class XDCRNewBaseTest(unittest.TestCase):
 
     def setup_xdcr(self):
         self.set_xdcr_topology()
+        # Adding for MB-41318
+        time.sleep(10)
         self.setup_all_replications()
         if self._checkpoint_interval != 1800:
             for cluster in self.__cb_clusters:
