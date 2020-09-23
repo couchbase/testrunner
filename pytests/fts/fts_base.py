@@ -3659,18 +3659,21 @@ class FTSBaseTest(unittest.TestCase):
 
         self.log.info("-->Enabling the diagnostics")
         self._enable_diag_eval_on_non_local_hosts()
-        # Add built-in user
-        self.log.info("--> Creating user cbadminbucket/cbadminbucket")
-        testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
-        RbacBase().create_user_source(testuser, 'builtin', master)
+        is_admin = self._input.param("is_admin", True)
+        if is_admin:
+            # Add built-in user
+            self.log.info("--> Creating user cbadminbucket/cbadminbucket")
+            testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
+            RbacBase().create_user_source(testuser, 'builtin', master)
 
-        # Assign user to role
-        self.log.info("--> Add user role cbadminbucket/cbadminbucket")
-        role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
-        RbacBase().add_user_role(role_list, RestConnection(master), 'builtin')
-        self.log.info("--> Done: Add user role cbadminbucket/cbadminbucket")
-
-        self._set_bleve_max_result_window()
+            # Assign user to role
+            self.log.info("--> Add user role cbadminbucket/cbadminbucket")
+            role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
+            RbacBase().add_user_role(role_list, RestConnection(master), 'builtin')
+            self.log.info("--> Done: Add user role cbadminbucket/cbadminbucket")
+            self._set_bleve_max_result_window()
+        else:
+            self.log.warning("No admin (dbaas) Can't create the internal user!")
 
         self.__set_free_servers()
         if not no_buckets:
@@ -5107,6 +5110,7 @@ class FTSBaseTest(unittest.TestCase):
             if not items:
                 items = self._num_items // 2
             while True:
+                buckets = []
                 try:
                     buckets = self._cb_cluster.get_buckets()
                     if len(buckets) == 0:
@@ -5116,6 +5120,12 @@ class FTSBaseTest(unittest.TestCase):
                     break
                 except KeyError:
                     self.log.info("bucket stats not ready yet...")
+                    self.log.warning("Non admin (dbaas) can't do the bucket flush")
+                    query = "SELECT COUNT(*) FROM `%s`" % (buckets[0])
+                    self.log.info('RUN QUERY: %s' % query)
+                    result = self.run_via_n1ql(query)
+                    if result:
+                        break
                     self.sleep(2)
             for bucket in self._cb_cluster.get_buckets():
                 while items > self._cb_cluster.get_doc_count_in_bucket(

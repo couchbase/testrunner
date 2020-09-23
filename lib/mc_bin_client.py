@@ -86,9 +86,11 @@ class MemcachedClient(KeepRefs):
         servers_map = TestInputSingleton.input.param("servers_map", "");
         if servers_map:
             print("servers_map={}".format(servers_map))
-            servers_ip_host = servers_map.split(",")
+            servers_ip_host = servers_map.split("--")
             for server_ip_host in servers_ip_host:
                 ip_host = server_ip_host.split(":")
+                if len(ip_host) < 2:
+                    continue
                 mapped_ip = ip_host[0]
                 mapped_host = ip_host[1]
                 if mapped_ip == self.host:

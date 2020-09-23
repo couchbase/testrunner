@@ -412,11 +412,11 @@ class RestConnection(object):
         # determine the real couchApiBase for cluster_run
         # couchApiBase appeared in version 2.*
         try:
-            if not http_res or http_res["version"][0:2] == "1.":
+            if not http_res or ("version" in http_res and http_res["version"][0:2] == "1."):
                 self.capiBaseUrl = self.baseUrl + "/couchBase"
             else:
                 for iteration in range(5):
-                    if "couchApiBase" not in list(http_res.keys()):
+                    if "couchApiBase" not in list(http_res.keys()) and not self.capiBaseUrl:
                         if self.is_cluster_mixed():
                             self.capiBaseUrl = self.baseUrl + "/couchBase"
                             return
@@ -1030,11 +1030,13 @@ class RestConnection(object):
                         log.info("--->Start calling httplib2.Http({}).request({},{},{},{})".format(timeout,api,headers,method,params))
                 except AttributeError:
                     pass
-                if self.servers_map:
+                if self.servers_map and self.servers_map!='':
                     log.info("servers_map={}".format(self.servers_map))
-                    servers_ip_host = self.servers_map.split(",")
+                    servers_ip_host = self.servers_map.split("--")
                     for server_ip_host in servers_ip_host:
                         ip_host = server_ip_host.split(":")
+                        if len(ip_host) < 2:
+                            continue
                         mapped_ip = ip_host[0]
                         mapped_host = ip_host[1]
                         if "://"+mapped_ip in api:
@@ -2366,6 +2368,8 @@ class RestConnection(object):
         api = self.baseUrl + 'pools/default/buckets/{0}/stats?zoom={1}'.format(bucket, zoom)
         log.info(api)
         status, content, header = self._http_request(api)
+        if not status:
+            log.error(content)
         return json.loads(content)
 
     def set_query_index_api_mode(self, index_api_mode=3):
@@ -3685,11 +3689,18 @@ class RestConnection(object):
             bucket_name = bucket.name
         else:
             bucket_name = bucket
-        api = self.baseUrl + "pools/default/buckets/%s/controller/doFlush" % (bucket_name)
-        status, content, header = self._http_request(api, 'POST')
-        if not status:
-            raise BucketFlushFailed(self.ip, bucket_name)
-        log.info("Flush for bucket '%s' was triggered" % bucket_name)
+        is_admin = self.input.param("is_admin", True)
+        if is_admin:
+            api = self.baseUrl + "pools/default/buckets/%s/controller/doFlush" % (bucket_name)
+            status, content, header = self._http_request(api, 'POST')
+            if not status:
+                raise BucketFlushFailed(self.ip, bucket_name)
+            log.info("Flush for bucket '%s' was triggered" % bucket_name)
+        else:
+            log.warning("Non admin (dbaas) can't do the bucket flush")
+            query = "DELETE FROM `%s`" % (bucket_name)
+            log.info('RUN QUERY: %s' % query)
+            result = self.query_tool(query)
 
     def update_notifications(self, enable):
         api = self.baseUrl + 'settings/stats'

@@ -103,11 +103,15 @@ class SDKClient(object):
             try:
                 cluster = Cluster(self.connection_string, bucket_class=CouchbaseBucket)
                 if self.rest:
-                    cluster.authenticate(PasswordAuthenticator(self.username,self.rest.password))
+                    cluster.authenticate(PasswordAuthenticator(self.rest.username,
+                                                               self.rest.password))
                 else:
                     if TestInputSingleton.input.servers:
+                        self.username = TestInputSingleton.input.servers[0].rest_username
                         self.password = TestInputSingleton.input.servers[0].rest_password
                     else:
+                        self.username = TestInputSingleton.input.param("rest_username",
+                                                                       "Administrator")
                         self.password = TestInputSingleton.input.param("rest_password", "password")
                     cluster.authenticate(PasswordAuthenticator(self.username, self.password))
                 self.cb = cluster.open_bucket(self.bucket)

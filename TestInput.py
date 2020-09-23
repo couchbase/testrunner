@@ -72,13 +72,16 @@ class TestInput(object):
     def _parse_param(value):
         try:
             return int(value)
-        except ValueError:
+        except (ValueError, TypeError):
             pass
 
         try:
             return float(value)
-        except ValueError:
+        except (ValueError, TypeError):
             pass
+
+        if type(value) == list:
+            value = str(value)
 
         if value.lower() == "false":
             return False
