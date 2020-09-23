@@ -27,9 +27,7 @@ class XDCRXattr(XDCRNewBaseTest):
 
         for _, cluster in enumerate(self.get_cb_clusters()):
             for bucket in cluster.get_buckets():
-                testuser = [{'id': bucket.name, 'name': bucket.name, 'password': 'password'}]
-                rolelist = [{'id': bucket.name, 'name': bucket.name, 'roles': 'admin'}]
-                self.add_built_in_server_user(testuser=testuser, rolelist=rolelist, node=cluster.get_master_node())
+                self.add_user(id=bucket.name, name=bucket.name, password="password", roles="admin")
         for cluster in self.get_cb_clusters():
             for node in cluster.get_nodes():
                 shell = RemoteMachineShellConnection(node)

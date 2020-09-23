@@ -2826,7 +2826,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                                 "log_level",
                                 None)))
 
-    def __add_user(self, id="cbadminbucket", name="cbadminbucket", password="password", roles="admin"):
+    def add_user(self, id="cbadminbucket", name="cbadminbucket", password="password", roles="admin"):
         for i in range(1, len(self.__cb_clusters) + 1):
             self.log.info("Adding user: {} with roles: {}".format(name, roles))
             # Add built-in user
@@ -2871,7 +2871,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.builtin_user_name = self._input.param("builtin_user_name", "cbadminbucket")
         self.builtin_user_password = self._input.param("builtin_user_password", "password")
         self.builtin_user_roles = self._input.param("builtin_user_roles", "admin")
-        self.__add_user(self.builtin_user_id, self.builtin_user_name,
+        self.add_user(self.builtin_user_id, self.builtin_user_name,
                         self.builtin_user_password, self.builtin_user_roles)
 
         self.__set_free_servers()
