@@ -1046,9 +1046,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             for k, v in index_info.items():
                 if k == index:
                     status = v["status"]
-                    if defer_build and status == "Created":
-                        index_created = True
-                    elif status == "Ready":
+                    if status == "Ready" or status == "Building" or (defer_build and status == "Created"):
                         index_created = True
 
         return index_created, status

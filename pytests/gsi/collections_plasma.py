@@ -400,7 +400,8 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                                         percent_create=self.percent_create,
                                         percent_update=self.percent_update, percent_delete=self.percent_delete,
                                         all_collections=self.all_collections, timeout=self.test_timeout,
-                                        json_template=self.dataset_template)
+                                        json_template=self.dataset_template,
+                                        key_prefix="bigkeybigkeybigkeybigkeybigkeybigkeybigkeybigkeyb_")
 
         self.data_ops_javasdk_loader_in_batches(sdk_data_loader, self.batch_size)
 
