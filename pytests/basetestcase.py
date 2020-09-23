@@ -195,6 +195,13 @@ class BaseTestCase(unittest.TestCase):
             # end of bucket parameters spot (this is ongoing)
             self.disable_diag_eval_on_non_local_host = self.input.param("disable_diag_eval_non_local", False)
 
+            # parameters to speed up the election of a new master. See MB-41562 for more details
+            self.heartbeat_interval = self.input.param("heartbeat_interval", None)
+            self.timeout_interval_count = self.input.param("timeout_interval_count", None)
+            # parameters to speed up the auto-failover initiation. See MB-41562 for more details
+            self.lease_time = self.input.param("lease_time", None)
+            self.lease_grace_time = self.input.param("lease_grace_time", None)
+            self.lease_renew_after = self.input.param("lease_renew_after", None)
             if self.skip_setup_cleanup:
                 self.buckets = RestConnection(self.master).get_buckets()
                 return
@@ -380,6 +387,16 @@ class BaseTestCase(unittest.TestCase):
                     str(self.__class__).find('newupgradetests') == -1 and \
                     not self.skip_bucket_setup:
                 self._bucket_creation()
+            if self.heartbeat_interval:
+                RestConnection(self.master).set_heartbeat_interval(self.heartbeat_interval)
+            if self.timeout_interval_count:
+                RestConnection(self.master).set_timeout_interval_count(self.timeout_interval_count)
+            if self.lease_time:
+                RestConnection(self.master).set_lease_time(self.lease_time)
+            if self.lease_grace_time:
+                RestConnection(self.master).set_lease_grace_time(self.lease_grace_time)
+            if self.lease_renew_after:
+                RestConnection(self.master).set_lease_renew_after(self.lease_renew_after)
             self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="
                           .format(self.case_number, self._testMethodName))
 
