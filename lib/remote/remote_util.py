@@ -598,6 +598,26 @@ class RemoteMachineShellConnection(KeepRefs):
         if self.info.distribution_type.lower() == "mac":
             log.info("to be implemented")
 
+    def enable_file_size_limit(self):
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            log.info("to be implemented")
+        if self.info.type.lower() == "linux":
+            o, r = self.execute_command("prlimit --fsize=20480 --pid $(pgrep indexer)")
+            self.log_command_output(o, r)
+        if self.info.distribution_type.lower() == "mac":
+            log.info("to be implemented")
+
+    def disable_file_size_limit(self):
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            log.info("to be implemented")
+        if self.info.type.lower() == "linux":
+            o, r = self.execute_command("prlimit --fsize=unlimited --pid $(pgrep indexer)")
+            self.log_command_output(o, r)
+        if self.info.distribution_type.lower() == "mac":
+            log.info("to be implemented")
+
     def enable_file_limit_desc(self):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':

@@ -5422,6 +5422,8 @@ class NodesFailureTask(Task):
             self._enable_disable_limit_file_limits_desc(self.current_failure_node, self.failure_timeout)
         elif self.failure_type == "limit_file_limits":
             self._enable_disable_limit_file_limits(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "limit_file_size_limit":
+            self._enable_disable_limit_file_size_limit(self.current_failure_node, self.failure_timeout)
         elif self.failure_type == "disk_readonly":
             self._enable_disable_disk_readonly(self.current_failure_node, self.failure_timeout)
         elif self.failure_type == "stress_ram":
@@ -5481,6 +5483,24 @@ class NodesFailureTask(Task):
         self.enable_file_limit(node)
         time.sleep(recover_time)
         self.disable_file_limit(node)
+
+    def _enable_disable_limit_file_size_limit(self, node, recover_time):
+        self.enable_file_size_limit(node)
+        time.sleep(recover_time)
+        self.disable_file_size_limit(node)
+
+    def enable_file_size_limit(self, node):
+        shell = RemoteMachineShellConnection(node)
+        self.log.info("Updating file size limit to 10MB on {}".format(node))
+        shell.enable_file_size_limit()
+        shell.disconnect()
+        self.log.info("Enabled file size limit on {}".format(node))
+
+    def disable_file_size_limit(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.disable_file_size_limit()
+        shell.disconnect()
+        self.log.info("disabled file size limit on {}".format(node))
 
     def enable_file_limit(self, node):
         shell = RemoteMachineShellConnection(node)
