@@ -39,7 +39,7 @@ class Repository(object):
         'health': 'RepositoryHealth',
         'scheduled': 'dict(str, RepositoryScheduled)',
         'running_tasks': 'dict(str, TaskRun)',
-        'running_one_offs': 'dict(str, TaskRun)',
+        'running_one_off': 'dict(str, TaskRun)',
         'creation_time': 'str',
         'update_time': 'str',
         'cloud_info': 'RepositoryCloudInfo'
@@ -56,13 +56,13 @@ class Repository(object):
         'health': 'health',
         'scheduled': 'scheduled',
         'running_tasks': 'running_tasks',
-        'running_one_offs': 'running_one_offs',
+        'running_one_off': 'running_one_off',
         'creation_time': 'creation_time',
         'update_time': 'update_time',
         'cloud_info': 'cloud_info'
     }
 
-    def __init__(self, id=None, plan_name=None, state=None, archive=None, repo=None, bucket=None, version=None, health=None, scheduled=None, running_tasks=None, running_one_offs=None, creation_time=None, update_time=None, cloud_info=None):  # noqa: E501
+    def __init__(self, id=None, plan_name=None, state=None, archive=None, repo=None, bucket=None, version=None, health=None, scheduled=None, running_tasks=None, running_one_off=None, creation_time=None, update_time=None, cloud_info=None):  # noqa: E501
         """Repository - a model defined in Swagger"""  # noqa: E501
         self._id = None
         self._plan_name = None
@@ -74,7 +74,7 @@ class Repository(object):
         self._health = None
         self._scheduled = None
         self._running_tasks = None
-        self._running_one_offs = None
+        self._running_one_off = None
         self._creation_time = None
         self._update_time = None
         self._cloud_info = None
@@ -99,8 +99,8 @@ class Repository(object):
             self.scheduled = scheduled
         if running_tasks is not None:
             self.running_tasks = running_tasks
-        if running_one_offs is not None:
-            self.running_one_offs = running_one_offs
+        if running_one_off is not None:
+            self.running_one_off = running_one_off
         if creation_time is not None:
             self.creation_time = creation_time
         if update_time is not None:
@@ -337,27 +337,27 @@ class Repository(object):
         self._running_tasks = running_tasks
 
     @property
-    def running_one_offs(self):
-        """Gets the running_one_offs of this Repository.  # noqa: E501
+    def running_one_off(self):
+        """Gets the running_one_off of this Repository.  # noqa: E501
 
         A map task name to one-off running task  # noqa: E501
 
-        :return: The running_one_offs of this Repository.  # noqa: E501
+        :return: The running_one_off of this Repository.  # noqa: E501
         :rtype: dict(str, TaskRun)
         """
-        return self._running_one_offs
+        return self._running_one_off
 
-    @running_one_offs.setter
-    def running_one_offs(self, running_one_offs):
-        """Sets the running_one_offs of this Repository.
+    @running_one_off.setter
+    def running_one_off(self, running_one_off):
+        """Sets the running_one_off of this Repository.
 
         A map task name to one-off running task  # noqa: E501
 
-        :param running_one_offs: The running_one_offs of this Repository.  # noqa: E501
+        :param running_one_off: The running_one_off of this Repository.  # noqa: E501
         :type: dict(str, TaskRun)
         """
 
-        self._running_one_offs = running_one_offs
+        self._running_one_off = running_one_off
 
     @property
     def creation_time(self):

@@ -166,7 +166,7 @@ class ApiClient(object):
         if _return_http_data_only:
             return (return_data)
         else:
-            return return_data, response_data.status, response_data.getheaders()
+            return return_data, response_data.status, response_data.getheaders(), response_data
 
     def sanitize_for_serialization(self, obj):
         """Builds a JSON POST object.

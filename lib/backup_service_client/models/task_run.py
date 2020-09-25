@@ -29,7 +29,7 @@ class TaskRun(object):
                             and the value is json key in definition.
     """
     swagger_types = {
-        'name': 'str',
+        'task_name': 'str',
         'status': 'str',
         'start': 'str',
         'end': 'str',
@@ -41,7 +41,7 @@ class TaskRun(object):
     }
 
     attribute_map = {
-        'name': 'name',
+        'task_name': 'task_name',
         'status': 'status',
         'start': 'start',
         'end': 'end',
@@ -52,9 +52,9 @@ class TaskRun(object):
         'target_cluster': 'target_cluster'
     }
 
-    def __init__(self, name=None, status=None, start=None, end=None, node_runs=None, error=None, error_code=None, type=None, target_cluster=None):  # noqa: E501
+    def __init__(self, task_name=None, status=None, start=None, end=None, node_runs=None, error=None, error_code=None, type=None, target_cluster=None):  # noqa: E501
         """TaskRun - a model defined in Swagger"""  # noqa: E501
-        self._name = None
+        self._task_name = None
         self._status = None
         self._start = None
         self._end = None
@@ -64,8 +64,8 @@ class TaskRun(object):
         self._type = None
         self._target_cluster = None
         self.discriminator = None
-        if name is not None:
-            self.name = name
+        if task_name is not None:
+            self.task_name = task_name
         if status is not None:
             self.status = status
         if start is not None:
@@ -84,25 +84,33 @@ class TaskRun(object):
             self.target_cluster = target_cluster
 
     @property
-    def name(self):
-        """Gets the name of this TaskRun.  # noqa: E501
+    def backup(self):
+        if self.node_runs:
+            for node_run in self.node_runs:
+                if node_run.backup:
+                    return node_run.backup
+        return None
+
+    @property
+    def task_name(self):
+        """Gets the task_name of this TaskRun.  # noqa: E501
 
 
-        :return: The name of this TaskRun.  # noqa: E501
+        :return: The task_name of this TaskRun.  # noqa: E501
         :rtype: str
         """
-        return self._name
+        return self._task_name
 
-    @name.setter
-    def name(self, name):
-        """Sets the name of this TaskRun.
+    @task_name.setter
+    def task_name(self, task_name):
+        """Sets the task_name of this TaskRun.
 
 
-        :param name: The name of this TaskRun.  # noqa: E501
+        :param task_name: The task_name of this TaskRun.  # noqa: E501
         :type: str
         """
 
-        self._name = name
+        self._task_name = task_name
 
     @property
     def status(self):

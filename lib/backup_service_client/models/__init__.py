@@ -38,8 +38,10 @@ from backup_service_client.models.repository_health import RepositoryHealth
 from backup_service_client.models.repository_scheduled import RepositoryScheduled
 from backup_service_client.models.service_configuration import ServiceConfiguration
 from backup_service_client.models.services import Services
+from backup_service_client.models.stats import Stats
 from backup_service_client.models.task_run import TaskRun
 from backup_service_client.models.task_run_node_runs import TaskRunNodeRuns
 from backup_service_client.models.task_template import TaskTemplate
 from backup_service_client.models.task_template_options import TaskTemplateOptions
 from backup_service_client.models.task_template_schedule import TaskTemplateSchedule
+from backup_service_client.models.transfer import Transfer

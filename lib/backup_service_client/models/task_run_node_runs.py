@@ -36,6 +36,7 @@ class TaskRunNodeRuns(object):
         'error': 'str',
         'error_code': 'int',
         'progress': 'float',
+        'stats': 'Stats',
         'out': 'str'
     }
 
@@ -47,10 +48,11 @@ class TaskRunNodeRuns(object):
         'error': 'error',
         'error_code': 'error_code',
         'progress': 'progress',
+        'stats': 'stats',
         'out': 'out'
     }
 
-    def __init__(self, node_id=None, status=None, start=None, end=None, error=None, error_code=None, progress=None, out=None):  # noqa: E501
+    def __init__(self, node_id=None, status=None, start=None, end=None, error=None, error_code=None, progress=None, stats=None, out=None):  # noqa: E501
         """TaskRunNodeRuns - a model defined in Swagger"""  # noqa: E501
         self._node_id = None
         self._status = None
@@ -59,6 +61,7 @@ class TaskRunNodeRuns(object):
         self._error = None
         self._error_code = None
         self._progress = None
+        self._stats = None
         self._out = None
         self.discriminator = None
         if node_id is not None:
@@ -75,8 +78,14 @@ class TaskRunNodeRuns(object):
             self.error_code = error_code
         if progress is not None:
             self.progress = progress
+        if stats is not None:
+            self.stats = stats
         if out is not None:
             self.out = out
+
+    @property
+    def backup(self):
+        return self.stats.backup if self.stats else None
 
     @property
     def node_id(self):
@@ -242,6 +251,27 @@ class TaskRunNodeRuns(object):
         """
 
         self._progress = progress
+
+    @property
+    def stats(self):
+        """Gets the stats of this TaskRunNodeRuns.  # noqa: E501
+
+
+        :return: The stats of this TaskRunNodeRuns.  # noqa: E501
+        :rtype: Stats
+        """
+        return self._stats
+
+    @stats.setter
+    def stats(self, stats):
+        """Sets the stats of this TaskRunNodeRuns.
+
+
+        :param stats: The stats of this TaskRunNodeRuns.  # noqa: E501
+        :type: Stats
+        """
+
+        self._stats = stats
 
     @property
     def out(self):

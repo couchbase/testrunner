@@ -36,6 +36,7 @@ class Body2(object):
         'cloud_staging_dir': 'str',
         'cloud_credentials_id': 'str',
         'cloud_credentials_key': 'str',
+        'cloud_credentials_region': 'str',
         'cloud_endpoint': 'str',
         'cloud_force_path_style': 'str'
     }
@@ -48,11 +49,12 @@ class Body2(object):
         'cloud_staging_dir': 'cloud_staging_dir',
         'cloud_credentials_id': 'cloud_credentials_id',
         'cloud_credentials_key': 'cloud_credentials_key',
+        'cloud_credentials_region': 'cloud_credentials_region',
         'cloud_endpoint': 'cloud_endpoint',
         'cloud_force_path_style': 'cloud_force_path_style'
     }
 
-    def __init__(self, plan=None, archive=None, bucket_name=None, cloud_credential_name=None, cloud_staging_dir=None, cloud_credentials_id=None, cloud_credentials_key=None, cloud_endpoint=None, cloud_force_path_style=None):  # noqa: E501
+    def __init__(self, plan=None, archive=None, bucket_name=None, cloud_credential_name=None, cloud_staging_dir=None, cloud_credentials_id=None, cloud_credentials_key=None, cloud_credentials_region=None, cloud_endpoint=None, cloud_force_path_style=None):  # noqa: E501
         """Body2 - a model defined in Swagger"""  # noqa: E501
         self._plan = None
         self._archive = None
@@ -61,6 +63,7 @@ class Body2(object):
         self._cloud_staging_dir = None
         self._cloud_credentials_id = None
         self._cloud_credentials_key = None
+        self._cloud_credentials_region = None
         self._cloud_endpoint = None
         self._cloud_force_path_style = None
         self.discriminator = None
@@ -76,6 +79,8 @@ class Body2(object):
             self.cloud_credentials_id = cloud_credentials_id
         if cloud_credentials_key is not None:
             self.cloud_credentials_key = cloud_credentials_key
+        if cloud_credentials_region is not None:
+            self.cloud_credentials_region = cloud_credentials_region
         if cloud_endpoint is not None:
             self.cloud_endpoint = cloud_endpoint
         if cloud_force_path_style is not None:
@@ -245,6 +250,29 @@ class Body2(object):
         """
 
         self._cloud_credentials_key = cloud_credentials_key
+
+    @property
+    def cloud_credentials_region(self):
+        """Gets the cloud_credentials_region of this Body2.  # noqa: E501
+
+        The region of the cloud bucket.  # noqa: E501
+
+        :return: The cloud_credentials_region of this Body2.  # noqa: E501
+        :rtype: str
+        """
+        return self._cloud_credentials_region
+
+    @cloud_credentials_region.setter
+    def cloud_credentials_region(self, cloud_credentials_region):
+        """Sets the cloud_credentials_region of this Body2.
+
+        The region of the cloud bucket.  # noqa: E501
+
+        :param cloud_credentials_region: The cloud_credentials_region of this Body2.  # noqa: E501
+        :type: str
+        """
+
+        self._cloud_credentials_region = cloud_credentials_region
 
     @property
     def cloud_endpoint(self):
