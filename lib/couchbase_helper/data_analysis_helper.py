@@ -783,7 +783,7 @@ class DataCollector(object):
         return headerInfo, bucketMap
 
     def get_kv_dump_from_backup_file(self, server, cli_command, cmd_ext, master_key, buckets, debug_logs=False,
-                                     objstore_provider=None, backupset=None):
+                                     objstore_provider=None, backupset=None, backup_name=None):
         """
             Extract key value from database file shard_0.sqlite.0
             Return: key, kv store name, status and value
@@ -807,13 +807,18 @@ class DataCollector(object):
                 f"{backupset.directory}/{backupset.name} | tail -1"
             )
 
-            backup_name, e = conn.execute_command(command)
-            if not backup_name or e:
-                return None, status
+            if not backup_name:
+                backup_name, e = conn.execute_command(command)
+                if not backup_name or e:
+                    return None, status
+            else:
+                backup_name = [backup_name]
+
+            repository = backupset.name if backupset else "backup"
 
             command = (
                 f"ls -tr --group-directories-first {backupset.objstore_staging_directory + '/' if objstore_provider else ''}"
-                f"{backupset.directory}/{backupset.name}/{backup_name[0]} | head -1"
+                f"{backupset.directory}/{repository}/{backup_name[0]} | head -1"
             )
 
             bucket_name, e = conn.execute_command(command)
@@ -821,8 +826,9 @@ class DataCollector(object):
                 return None, status
 
             if objstore_provider:
+                objstore_staging_directory = backupset.objstore_alternative_staging_directory if backupset.backup_service else backupset.objstore_staging_directory
                 object_store_command = (
-                    f"{' --obj-staging-dir ' + backupset.objstore_staging_directory}"
+                    f"{' --obj-staging-dir ' + objstore_staging_directory}"
                     f"{' --obj-access-key-id ' + backupset.objstore_access_key_id if backupset.objstore_access_key_id else ''}"
                     f"{' --obj-cacert ' + backupset.objstore_cacert if backupset.objstore_cacert else ''}"
                     f"{' --obj-endpoint ' + backupset.objstore_endpoint if backupset.objstore_endpoint else ''}"
@@ -835,22 +841,29 @@ class DataCollector(object):
             if cluster_version[:3] >= "7.0":
                 command = (
                     f"ls -tr --group-directories-first {backupset.objstore_staging_directory + '/' if objstore_provider else ''}"
-                    f"{backupset.directory}/{backupset.name}/{backup_name[0]}/{bucket_name[0]}/data | grep index"
+                    f"{backupset.directory}/{repository}/{backup_name[0]}/{bucket_name[0]}/data | grep index"
                 )
-                data_files, e = conn.execute_command(command)
-                data_files = [x.replace('index_', '') for x in data_files]
-                data_files = [x.split('.')[0] for x in data_files]
+
+                if backupset.backup_service and objstore_provider:
+                    data_files = range(0, 1024)
+                else:
+                    data_files, e = conn.execute_command(command)
+                    data_files = [x.replace('index_', '') for x in data_files]
+                    data_files = [x.split('.')[0] for x in data_files]
+
                 for i in data_files:
                     command = (
                         f"{cli_command}cbriftdump{cmd_ext} -j "
                         f" -f {objstore_provider.schema_prefix() + backupset.objstore_bucket + '/' if objstore_provider else ''}"
-                        f"{backupset.directory}/backup/{backup_name[0]}/{bucket_name[0]}/data/index_{i}.sqlite.0"
+                        f"{backupset.directory}/{repository}/{backup_name[0]}/{bucket_name[0]}/data/index_{i}.sqlite.0"
                     )
 
                     if objstore_provider:
                         command += object_store_command
                     output, error = conn.execute_command(command, debug=False)
                     if output:
+                        if len(output[0]) >= 11 and "Dump failed" in output[0][:11] and "does not exist" in output[0]:
+                            continue
                         key_status = []
                         key_ids = []
                         key_value = []
@@ -874,7 +887,7 @@ class DataCollector(object):
                     command = (
                         f"{cli_command}cbriftdump{cmd_ext}"
                         f" -f {objstore_provider.schema_prefix() + backupset.objstore_bucket + '/' if objstore_provider else ''}"
-                        f"{backupset.directory}/backup/{backup_name[0]}/{bucket_name[0]}/data/index_{i}.sqlite.0"
+                        f"{backupset.directory}/{repository}/{backup_name[0]}/{bucket_name[0]}/data/index_{i}.sqlite.0"
                     )
 
                     if objstore_provider:
@@ -902,7 +915,6 @@ class DataCollector(object):
                                {"KV store name":key_partition, "Status":key_status[idx],
                                 "Value":key_value[idx]}
                         status = True
-
             if not backup_data[bucket.name]:
                 print(("Data base of bucket {0} is empty".format(bucket.name)))
                 return  backup_data, status

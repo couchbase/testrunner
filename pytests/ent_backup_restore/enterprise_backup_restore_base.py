@@ -325,52 +325,60 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                           self.vbuckets,
                                                           self.objstore_provider)
 
+    def clean_up(self, server):
+        """ Clean up files and directories left by backup testing.
+
+        Params:
+            server (TestInputServer): The server to clean up.
+        """
+        remote_client = RemoteMachineShellConnection(server)
+        info = remote_client.extract_remote_info().type.lower()
+        self.tmp_path = "/tmp/"
+        if info == 'linux' or info == 'mac':
+            backup_directory = "/tmp/entbackup"
+        elif info == 'windows':
+            self.tmp_path = WIN_TMP_PATH
+            backup_directory = WIN_TMP_PATH_RAW + "entbackup"
+        else:
+            raise Exception("OS not supported.")
+        backup_directory += "_" + self.master.ip
+        validation_files_location = "%sbackuprestore" % self.tmp_path + self.master.ip
+        if info == 'linux':
+            command = "rm -rf {0}".format(backup_directory)
+            output, error = remote_client.execute_command(command)
+            remote_client.log_command_output(output, error)
+        elif info == 'windows':
+            remote_client.remove_directory_recursive(backup_directory)
+        if info == 'linux':
+            command = "rm -rf /cbqe3043/entbackup"
+            output, error = remote_client.execute_command(command)
+            remote_client.log_command_output(output, error)
+        if self.input.clusters:
+            for key in list(self.input.clusters.keys()):
+                servers = self.input.clusters[key]
+                try:
+                    self.backup_reset_clusters(servers)
+                except:
+                    self.log.error("was not able to cleanup cluster the first time")
+                    self.backup_reset_clusters(servers)
+        if os.path.exists(validation_files_location):
+            self.log.info("delete dir %s" % validation_files_location)
+            shutil.rmtree(validation_files_location)
+
+        # testrunner runs the teardown before running setup which means the 'objstore_provider' will be undefined
+        # we can continue in this case knowing that we haven't yet loaded any data into the cloud.
+        try:
+            if self.objstore_provider:
+                self.objstore_provider.teardown(info, remote_client)
+        except AttributeError:
+            pass
+
+        remote_client.disconnect()
+
     def tearDown(self):
         super(EnterpriseBackupRestoreBase, self).tearDown()
         if not self.input.param("skip_cleanup", False):
-            remote_client = RemoteMachineShellConnection(self.input.clusters[1][0])
-            info = remote_client.extract_remote_info().type.lower()
-            self.tmp_path = "/tmp/"
-            if info == 'linux' or info == 'mac':
-                backup_directory = "/tmp/entbackup"
-            elif info == 'windows':
-                self.tmp_path = WIN_TMP_PATH
-                backup_directory = WIN_TMP_PATH_RAW + "entbackup"
-            else:
-                raise Exception("OS not supported.")
-            backup_directory += "_" + self.master.ip
-            validation_files_location = "%sbackuprestore" % self.tmp_path + self.master.ip
-            if info == 'linux':
-                command = "rm -rf {0}".format(backup_directory)
-                output, error = remote_client.execute_command(command)
-                remote_client.log_command_output(output, error)
-            elif info == 'windows':
-                remote_client.remove_directory_recursive(backup_directory)
-            if info == 'linux':
-                command = "rm -rf /cbqe3043/entbackup"
-                output, error = remote_client.execute_command(command)
-                remote_client.log_command_output(output, error)
-            if self.input.clusters:
-                for key in list(self.input.clusters.keys()):
-                    servers = self.input.clusters[key]
-                    try:
-                        self.backup_reset_clusters(servers)
-                    except:
-                        self.log.error("was not able to cleanup cluster the first time")
-                        self.backup_reset_clusters(servers)
-            if os.path.exists(validation_files_location):
-                self.log.info("delete dir %s" % validation_files_location)
-                shutil.rmtree(validation_files_location)
-
-            # testrunner runs the teardown before running setup which means the 'objstore_provider' will be undefined
-            # we can continue in this case knowing that we haven't yet loaded any data into the cloud.
-            try:
-                if self.objstore_provider:
-                    self.objstore_provider.teardown(info, remote_client)
-            except AttributeError:
-                pass
-
-            remote_client.disconnect()
+            self.clean_up(self.input.clusters[1][0])
 
     @property
     def cluster_to_backup(self):
@@ -1587,16 +1595,26 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def validate_backup_data(self, server_host, server_bucket, master_key,
                              perNode, getReplica, mode, items, key_check,
                              validate_keys=False,
-                             regex_pattern=None):
-        """
-            Compare data in backup file with data in bucket
+                             regex_pattern=None, swap=False, backup_name=None, filter_keys=None):
+        """Compare data in cluster with data in backup file.
+
+           This function checks if key:value pairs in the cluster are present in the backup file i.e.
+           it checks if the documents in the backup are a subset of the documents on the cluster.
+
+           params:
+               server_host: The server holding cbbackupmgr backup files.
+               server_bucket (list): The cluster to retrieve documents from.
+               master_key (str): A key prefix e.g. "ent-backup".
+               perNode (bool): If set we oraganize collected data per node else we take a union. (Always set this to False)
+               mode (str): e.g. "memory"
+               backup_name (str): If None retrieves a backup from the filesystem (or cloud) otherwise uses the backup_name provided.
         """
         data_matched = True
         data_collector = DataCollector()
         bk_file_data, _ = data_collector.get_kv_dump_from_backup_file(server_host, self.cli_command_location,
                                                                       self.cmd_ext, master_key, self.buckets,
                                                                       objstore_provider=self.objstore_provider,
-                                                                      backupset=self.backupset)
+                                                                      backupset=self.backupset, backup_name=backup_name)
         restore_file_data = bk_file_data
         regex_backup_data = {}
         if regex_pattern is not None:
@@ -1681,6 +1699,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             count = 0
             key_count = 0
             version = RestConnection(self.backupset.backup_host).get_nodes_version()
+
+            if filter_keys:
+                buckets_data[bucket.name] = {key: buckets_data[bucket.name][key] for key in buckets_data[bucket.name].keys() if key in filter_keys}
+
             for key in buckets_data[bucket.name]:
                 if restore_file_data[bucket.name]:
                     try:
@@ -1721,8 +1743,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 print(("Total items to be restored with regex pattern '{0}' is {1} " \
                       .format(regex_pattern, key_count)))
             print(("Total items in bucket should be:   ", key_count))
-            rest = RestConnection(server_bucket[0])
-            actual_keys = rest.get_active_key_count(bucket.name)
+            if filter_keys:
+                actual_keys = len(buckets_data[bucket.name].keys())
+            else:
+                rest = RestConnection(server_bucket[0])
+                actual_keys = rest.get_active_key_count(bucket.name)
             print(("Total items actual in bucket:      ", actual_keys))
             if actual_keys != key_count:
                 self.fail("Total keys matched: %s != Total keys in bucket %s: %s" \
@@ -2943,6 +2968,9 @@ class Backupset:
         # S3 specific configuration
         self.s3_force_path_style = False
 
+        # Backup Service specific configuration
+        self.backup_service = False
+        self.objstore_alternative_staging_directory = ""
 
 class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
     def setUp(self):
