@@ -11,10 +11,12 @@ import uuid
 from copy import deepcopy
 from threading import Thread
 from TestInput import TestInputSingleton
+import TestInput
 from TestInput import TestInputServer
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, CBAS_QUOTA
 from testconstants import COUCHBASE_FROM_VERSION_4, IS_CONTAINER, CLUSTER_QUOTA_RATIO
 import server_ports
+import sys
 
 try:
     from couchbase_helper.document import DesignDocument, View
@@ -263,7 +265,7 @@ class RestConnection(object):
             port = serverInfo.port
         if not port:
             port = server_ports.rest_port
-        if TestInputSingleton.input.param("is_secure", False):
+        if TestInputSingleton.input and TestInputSingleton.input.param("is_secure", False):
             port = server_ports.ssl_rest_port
 
         #log.info("-->RestConnection {}, {}".format(port, serverInfo))
@@ -280,7 +282,11 @@ class RestConnection(object):
     def __init__(self, serverInfo):
         # serverInfo can be a json object/dictionary
         self.input = TestInputSingleton.input
-        self.is_secure = self.input.param("is_secure", False)
+        if not self.input:
+            self.input = TestInput.TestInputParser.get_test_input(sys.argv)
+        self.is_secure = False
+        if self.input:
+            self.is_secure = self.input.param("is_secure", False)
         self.http_protocol = "http"
         if not self.is_secure:
             self.http_protocol = "http"
@@ -388,7 +394,7 @@ class RestConnection(object):
                                                             self.cbas_port)
 
         # for Node is unknown to this cluster error
-        if self.input.param("is_admin", True):
+        if self.input and self.input.param("is_admin", True):
             api_path = "nodes/self"
         else:
             api_path = "pools/default"
@@ -424,7 +430,7 @@ class RestConnection(object):
                         print("-->Connecting to {}/{} ".format(self.baseUrl, api_path))
                         http_res, success = self.init_http_request(self.baseUrl + api_path)
                     else:
-                        if self.input.param("is_admin", True):
+                        if self.input and self.input.param("is_admin", True):
                             if self.is_secure:
                                 self.capiBaseUrl = http_res["couchApiBaseHTTPS"]
                             else:
@@ -1026,7 +1032,8 @@ class RestConnection(object):
         while True:
             try:
                 try:
-                    if TestInputSingleton.input.param("debug.api.calls", False):
+                    if TestInputSingleton.input and TestInputSingleton.input.param(\
+                            "debug.api.calls", False):
                         log.info("--->Start calling httplib2.Http({}).request({},{},{},{})".format(timeout,api,headers,method,params))
                 except AttributeError:
                     pass
@@ -1049,15 +1056,18 @@ class RestConnection(object):
                                                   ":"+str(server_ports.ssl_rest_port))
 
                 log.info("api:{}".format(api))
-                ssl_no_verify=TestInputSingleton.input.param("disable_ssl_certificate_validation",
-                                                          True)
+                ssl_no_verify=True
+                if TestInputSingleton.input:
+                    ssl_no_verify = TestInputSingleton.input.param(
+                    "disable_ssl_certificate_validation", True)
                 response, content = httplib2.Http(timeout=timeout,
                                                   disable_ssl_certificate_validation=ssl_no_verify
                                                   ).request(api, method, params, headers)
 
 
                 try:
-                    if TestInputSingleton.input.param("debug.api.calls", False):
+                    if TestInputSingleton.input and TestInputSingleton.input.param(\
+                            "debug.api.calls", False):
                         log.info(
                             "--->End calling httplib2.Http({}).request({},{},{},{})".format(timeout, api, headers,
                                                                                               method, params))

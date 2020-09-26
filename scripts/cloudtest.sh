@@ -5,22 +5,50 @@
 ########################################################
 command="$1"
 if [ "$command" = "" ]; then
-  echo "Usage $0: command"
+  echo "Usage $0: help|command"
   exit 1
 fi
 
 DATE_TIME="`date '+%m%d%y_%H%M%S'`"
-REPO="testrunner-dbaas"
+REPO="testrunner"
 CURDIR=`pwd`
 VIRTUAL_DIR=./virtualpy
 INI_FILE=cbruntime.ini
-BUCKET="cloudtest"
+BUCKET="default"
+CBTOOL="cbpowertool"
+CBTOOL_REPO="productivitynautomation"
 
 checkout()
 {
-  if [ ! -d ./testrunner-dbaas ]; then
+  if [ ! -d ./${REPO} ]; then
      echo "*** Cloud Tests runtime: checkout workspace ***"
-     git clone http://github.com/couchbaselabs/${REP}.git
+     if [ ! -z "${REPO_BRANCH}" ]; then
+        git clone -b ${REPO_BRANCH} http://github.com/couchbase/${REPO}.git
+     else
+        git clone -b cloud http://github.com/couchbase/${REPO}.git   
+     fi
+     cd ${REPO}
+     if [ ! -z "${GERRIT_PICK}" ]; then
+        IFS=';' read -ra PICKS <<< "${GERRIT_PICK}"
+        for CP in "${PICKS[@]}"
+        do
+          echo "Gerrit picking...${CP}"
+          ${CP}
+        done
+        git cherry-pick FETCH_HEAD
+        if [ ! "$?" = "0" ]; then
+          git checkout FETCH_HEAD
+        fi
+     fi
+     if [ ! -z "${CHERRY_PICK}" ]; then
+        IFS=';' read -ra PICKS <<< "${CHERRY_PICK}"
+        for CP in "${PICKS[@]}"
+        do
+          echo "Cherry picking...${CP}"
+          git cherry-pick ${CP}
+        done
+     fi
+     cd ${CURDIR}
   fi
 }
 
@@ -61,6 +89,7 @@ setuppython()
     pip3 install pyes
     pip3 install bs4
     pip3 install requests
+    pip3 install kubernetes
   else
     echo "Python virtual env exists"
     source $VIRTUAL_DIR/bin/activate
@@ -134,27 +163,64 @@ install()
   cd ${CURDIR}
 }
 
-preq()
+prereq()
 {
   echo "*** pre-requirements ***"
+  if [ ! -d ./${CBTOOL_REPO} ]; then
+     git clone http://github.com/couchbaselabs/${CBTOOL_REPO}.git
+  fi
+  if [ ! -f ${CURDIR}/${CBTOOL_REPO}/${CBTOOL}/target/${CBTOOL}-0.0.1-SNAPSHOT-jar-with-dependencies.jar ]; then
+     cd ${CBTOOL_REPO}/${CBTOOL}
+     mvn package
+     cd ${CURDIR}
+  fi
+  runtimeini cbruntime.ini $@
   HOST="`cat ${INI_FILE}|egrep ip|cut -f2 -d':'`"
   PORT="`cat ${INI_FILE}|egrep port|cut -f2 -d':'`"
   CB_USER="`cat ${INI_FILE}|egrep rest_username|cut -f2 -d':'`"
   CB_USERPWD="`cat ${INI_FILE}|egrep rest_password|cut -f2 -d':'`"
-  curl -v -X POST -u ${CB_USER}:${CB_USERPWD} http://${HOST}:${PORT}/pools/${BUCKET} -d memoryQuota=900 -d ftsMemoryQuota=256
-  java -Drun=connectClusterOnly,createBuckets -Dbucket=${BUCKET} -Durl=${HOST}  -jar ~/couchbaselabs/cbtest/target/cbtest-0.0.1-SNAPSHOT-jar-with-dependencies.jar
+  if [ "${PORT}" = "18091" ]; then
+     TLS="true"
+     PROTOCOL="https"
+  else
+     TLS="false"
+     PROTOCOL="http"
+  fi
+  IS_DBAAS=$6
+  echo curl -k -v -X PUT -u ${CB_USER}:${CB_USERPWD} ${PROTOCOL}://${HOST}:${PORT}/node/controller/setupAlternateAddresses/external -d hostname=${HOST}
+  curl -k -v -X PUT -u ${CB_USER}:${CB_USERPWD} ${PROTOCOL}://${HOST}:${PORT}/node/controller/setupAlternateAddresses/external -d hostname=${HOST}
+  echo curl -v -X POST -u ${CB_USER}:${CB_USERPWD} ${PROTOCOL}://${HOST}:${PORT}/pools/${BUCKET} -d memoryQuota=900 -d ftsMemoryQuota=256
+  curl -v -X POST -u ${CB_USER}:${CB_USERPWD} ${PROTOCOL}://${HOST}:${PORT}/pools/${BUCKET} -d memoryQuota=900 -d ftsMemoryQuota=256
+  echo java -Drun=connectClusterOnly,createBuckets -Dbucket=${BUCKET} -Durl=${HOST} -Dport=${PORT} -Duser=${CB_USER} -Dpassword=${CB_USERPWD} -Dtls=${TLS} -Ddbaas=${IS_DBAAS} -jar ${CURDIR}/${CBTOOL_REPO}/${CBTOOL}/target/${CBTOOL}-0.0.1-SNAPSHOT-jar-with-dependencies.jar
+  java -Drun=connectClusterOnly,createBuckets -Dbucket=${BUCKET} -Durl=${HOST} -Dport=${PORT} -Duser=${CB_USER} -Dpassword=${CB_USERPWD} -Dtls=${TLS} -Ddbaas=${IS_DBAAS} -jar ${CURDIR}/${CBTOOL_REPO}/${CBTOOL}/target/${CBTOOL}-0.0.1-SNAPSHOT-jar-with-dependencies.jar
 
 }
 reset()
 {
   echo "*** Reset ***"
   BUCKET="$1"
+  if [ ! -d ./${CBTOOL_REPO} ]; then
+     git clone http://github.com/couchbaselabs/${CBTOOL_REPO}.git
+  fi
+  if [ ! -f ${CURDIR}/${CBTOOL_REPO}/${CBTOOL}/target/${CBTOOL}-0.0.1-SNAPSHOT-jar-with-dependencies.jar ]; then
+     cd ${CBTOOL_REPO}/${CBTOOL}
+     mvn package
+     cd ${CURDIR}
+  fi
   HOST="`cat ${INI_FILE}|egrep ip|cut -f2 -d':'`"
   PORT="`cat ${INI_FILE}|egrep port|cut -f2 -d':'`"
   CB_USER="`cat ${INI_FILE}|egrep rest_username|cut -f2 -d':'`"
   CB_USERPWD="`cat ${INI_FILE}|egrep rest_password|cut -f2 -d':'`"
-  java -Drun=connectClusterOnly,createBuckets -Dbucket=${BUCKET},src_bucket,dst_bucket,metadata -Doperation=drop -Durl=${HOST} -jar ~/couchbaselabs/cbtest/target/cbtest-0.0.1-SNAPSHOT-jar-with-dependencies.jar
-  java -Drun=connectClusterOnly,createBuckets -Dbucket=${BUCKET} -Durl=${HOST}  -jar ~/couchbaselabs/cbtest/target/cbtest-0.0.1-SNAPSHOT-jar-with-dependencies.jar
+  if [ "${PORT}" = "18091" ]; then
+     TLS="true"
+  else
+     TLS="false"
+  fi
+  IS_DBAAS=$6
+  echo java -Drun=connectClusterOnly,createBuckets -Dbucket=${BUCKET},src_bucket,dst_bucket,metadata -Doperation=drop -Durl=${HOST} -Dport=${PORT} -Duser=${CB_USER} -Dpassword=${CB_USERPWD} -Dtls=${TLS} -Ddbaas=${IS_DBAAS} -jar ${CURDIR}/${CBTOOL_REPO}/${CBTOOL}/target/${CBTOOL}-0.0.1-SNAPSHOT-jar-with-dependencies.jar
+  java -Drun=connectClusterOnly,createBuckets -Dbucket=${BUCKET},src_bucket,dst_bucket,metadata -Doperation=drop -Durl=${HOST} -Dport=${PORT} -Duser=${CB_USER} -Dpassword=${CB_USERPWD} -Dtls=${TLS} -Ddbaas=${IS_DBAAS} -jar ${CURDIR}/${CBTOOL_REPO}/${CBTOOL}/target/${CBTOOL}-0.0.1-SNAPSHOT-jar-with-dependencies.jar
+  echo java -Drun=connectClusterOnly,createBuckets -Dbucket=${BUCKET} -Durl=${HOST} -Dport=${PORT} -Duser=${CB_USER} -Dpassword=${CB_USERPWD} -Dtls=${TLS} -Ddbaas=${IS_DBAAS} -jar ${CURDIR}/${CBTOOL_REPO}/${CBTOOL}/target/${CBTOOL}-0.0.1-SNAPSHOT-jar-with-dependencies.jar
+  java -Drun=connectClusterOnly,createBuckets -Dbucket=${BUCKET} -Durl=${HOST} -Dport=${PORT} -Duser=${CB_USER} -Dpassword=${CB_USERPWD} -Dtls=${TLS} -Ddbaas=${IS_DBAAS} -jar ${CURDIR}/${CBTOOL_REPO}/${CBTOOL}/target/${CBTOOL}-0.0.1-SNAPSHOT-jar-with-dependencies.jar
 }
 
 runtimeini()
@@ -197,12 +263,25 @@ EOL
 run()
 {
   echo "*** Running tests ***"
+  checkout
   runtimeini cbruntime.ini $@
   export testrunner_client="python_sdk"
   setuppython
+  #reset ${BUCKET}
   cd ${REPO}
-  echo time python3 testrunner.py -i ${INI_FILE} -c py-1node-sanity-cloud.conf -p skip_host_login=True,skip_init_check_cbserver=True,get-cbcollect-info=False,http_protocol=https,bucket_size=100,default_bucket_name=${BUCKET},use_sdk_client=True,skip_bucket_setup=True,skip_buckets_handle=True,is_secure=True,skip_setup_cleanup=True,servers_map=${2}
-  time python3 testrunner.py -i ${INI_FILE} -c py-1node-sanity-cloud.conf -p skip_host_login=True,skip_init_check_cbserver=True,get-cbcollect-info=False,http_protocol=https,bucket_size=100,default_bucket_name=${BUCKET},use_sdk_client=True,skip_bucket_setup=True,skip_buckets_handle=True,is_secure=True,skip_setup_cleanup=True,servers_map=${2}  |tee ${CURDIR}/run_${DATETIME}.txt
+  if [[ $1 == *":"* ]]; then
+    SERVERS_MAP="$1"
+  fi
+  if [ ! -z ${ADDL_PARAMS} ]; then
+    ADDL_PARAMS=",${ADDL_PARAMS}"
+  fi
+  if [ ! "${8}" = "" ]; then
+     ADDL_PARAMS="${ADDL_PARAMS},${8}"
+  fi
+  echo "ADDL_PARAMS=${ADDL_PARAMS}"
+  echo time python3 testrunner.py -i ${INI_FILE} -c py-1node-sanity-cloud.conf ${6} ${7} -p skip_host_login=True,skip_init_check_cbserver=True,get-cbcollect-info=False,http_protocol=https,bucket_size=100,default_bucket_name=${BUCKET},use_sdk_client=True,skip_bucket_setup=True,skip_buckets_handle=True,is_secure=True,skip_setup_cleanup=True,skip_stats_verify=True,servers_map=${SERVERS_MAP}${ADDL_PARAMS}
+  #read n
+  time python3 testrunner.py -i ${INI_FILE} -c py-1node-sanity-cloud.conf ${6} ${7} -p skip_host_login=True,skip_init_check_cbserver=True,get-cbcollect-info=False,http_protocol=https,bucket_size=100,default_bucket_name=${BUCKET},use_sdk_client=True,skip_bucket_setup=True,skip_buckets_handle=True,is_secure=True,skip_setup_cleanup=True,skip_stats_verify=True,servers_map=${SERVERS_MAP}${ADDL_PARAMS}  |tee ${CURDIR}/run_${DATE_TIME}.txt
   cd ${CURDIR}
 }
 
@@ -212,10 +291,16 @@ help()
   echo checkout : test workspace
   echo check : environment
   echo setuppython : setup python lib
-  echo preq : pre-requirements with min config
+  echo prereq : pre-requirements with min config
   echo reset : reset buckets
   echo install version host rootpwd cbpwd cbuser services : new cluster
   echo run host cbuser cbpwd services : tests
+  echo Examples:
+  echo "   cloudtest.sh run 172.23.96.189"
+  echo "   cloudtest.sh run 172.31.24.84:ec2-52-33-68-73.us-west-2.compute.amazonaws.com"
+  echo "   cloudtest.sh reset default"
+  echo "   cloudtest.sh run 172.23.96.189 Administrator password 'kv,index,n1ql,fts,cbas,eventing' 18091 '-d CBASBucketOperations'"
+  echo "   cloudtest.sh run 172.31.20.29:ec2-18-234-243-66.compute-1.amazonaws.com Administrator password 'kv,index,n1ql,fts,cbas,eventing' 18091 '-d viewquerytests'"
 }
 
 $@
