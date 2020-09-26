@@ -1139,9 +1139,6 @@ class RestConnection(object):
            From spock, we replace forestdb with plasma
         """
         api = self.baseUrl + 'settings/indexes'
-        # If community edition, set the storageMode to be ForestDB
-        if not self.is_enterprise_edition():
-            storageMode="forestdb"
         params = urllib.parse.urlencode({'storageMode': storageMode})
         error_message = "storageMode must be one of plasma, memory_optimized"
         log.info('settings/indexes params : {0}'.format(params))
