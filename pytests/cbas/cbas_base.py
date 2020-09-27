@@ -70,6 +70,7 @@ class CBASBaseTest(BaseTestCase):
             self.index_fields = self.index_fields.split("-")
         self.otpNodes = []
         self.is_secure = self.input.param("is_secure", False)
+        self.rest_port = server_ports.rest_port
         if self.is_secure:
             self.rest_port = server_ports.ssl_rest_port
             self.master.port = self.rest_port

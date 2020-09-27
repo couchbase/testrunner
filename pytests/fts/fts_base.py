@@ -3465,7 +3465,7 @@ class FTSBaseTest(unittest.TestCase):
         use_hostanames = self._input.param("use_hostnames", False)
         sdk_compression = self._input.param("sdk_compression", True)
 
-        self._bucket_size = self._input.param("bucket_size")
+        self._bucket_size = self._input.param("bucket_size", 100)
 
         self.master = self._input.servers[0]
         first_node = copy.deepcopy(self.master)
