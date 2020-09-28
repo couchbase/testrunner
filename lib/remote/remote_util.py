@@ -5187,6 +5187,37 @@ class RemoteMachineShellConnection(KeepRefs):
         output, error = self.execute_command(command)
         return output, error
 
+    def add_extra_files_index_log_dir(self, location):
+        command = "dd bs=1024 count=1048576 </dev/urandom > {0}/\@2i/shards/shard1/data/extrafile;" \
+                  "chmod -R 777 {0}/\@2i/shards/shard1/data/extrafile;" \
+                  "chown -R couchbase:couchbase {0}/\@2i/shards/shard1/data/extrafile".format(location)
+        output, error = self.execute_command(command)
+        return output, error
+
+    def remove_extra_files_index_log_dir(self, location):
+        command = "rm -rf {0}/\@2i/shards/shard1/data/extrafile".format(location)
+        output, error = self.execute_command(command)
+        return output, error
+
+    def add_dummy_file_index_log_dir(self, location):
+        command = "dd bs=1024 count=1048576 </dev/urandom > {0}/\@2i/shards/shard1/data/log.00000000000001.data;" \
+                  "chmod -R 777 {0}/\@2i/shards/shard1/data/log.00000000000001.data;" \
+                  "chown -R couchbase:couchbase {0}/\@2i/shards/shard1/data/log.00000000000001.data".format(location)
+        output, error = self.execute_command(command)
+        return output, error
+
+    def add_empty_file_index_log_dir(self, location):
+        command = "touch {0}/\@2i/shards/shard1/data/log.00000000000001.data;" \
+                  "chmod -R 777 {0}/\@2i/shards/shard1/data/log.00000000000001.data;" \
+                  "chown -R couchbase:couchbase {0}/\@2i/shards/shard1/data/log.00000000000001.data".format(location)
+        output, error = self.execute_command(command)
+        return output, error
+
+    def remove_dummy_file_index_log_dir(self, location):
+        command = "rm -rf {0}/\@2i/shards/shard1/data/log.00000000000001.data".format(location)
+        output, error = self.execute_command(command)
+        return output, error
+
     def unmount_partition(self, location):
         """
         Unmount the partition at the specified location.

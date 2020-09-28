@@ -245,7 +245,6 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
 
         return index_create_tasks
 
-
     def build_indexes(self):
         self.sleep(5)
         self.log.info(threading.currentThread().getName() + " Started")
@@ -296,8 +295,9 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                     server = random.choice(self.n1ql_nodes)
                     self.run_cbq_query(query=drop_query, server=server)
                 except Exception as err:
-                    error_map = {"query": drop_query, "error": str(err)}
-                    self.index_ops_obj.update_errors(error_map)
+                    if "the operation will automaticaly retry after cluster is back to normal" not in str(err):
+                        error_map = {"query": drop_query, "error": str(err)}
+                        self.index_ops_obj.update_errors(error_map)
             self.sleep(drop_sleep)
         self.log.info(threading.currentThread().getName() + " Completed")
 

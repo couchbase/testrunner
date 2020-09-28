@@ -5422,6 +5422,12 @@ class NodesFailureTask(Task):
             self._enable_disable_limit_file_limits_desc(self.current_failure_node, self.failure_timeout)
         elif self.failure_type == "limit_file_limits":
             self._enable_disable_limit_file_limits(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "extra_files_in_log_dir":
+            self._extra_files_in_log_dir(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "empty_files_in_log_dir":
+            self._empty_file_in_log_dir(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "dummy_file_in_log_dir":
+            self._dummy_file_in_log_dir(self.current_failure_node, self.failure_timeout)
         elif self.failure_type == "limit_file_size_limit":
             self._enable_disable_limit_file_size_limit(self.current_failure_node, self.failure_timeout)
         elif self.failure_type == "disk_readonly":
@@ -5680,6 +5686,51 @@ class NodesFailureTask(Task):
         self._disk_full_failure(node)
         time.sleep(recover_time)
         self._recover_disk_full_failure(node)
+
+    def _extra_files_in_log_dir(self, node, recover_time):
+        self.add_extra_files_in_log_dir(node)
+        time.sleep(recover_time)
+        self.remove_extra_files_in_log_dir(node)
+
+    def add_extra_files_in_log_dir(self, node):
+        shell = RemoteMachineShellConnection(node)
+        output, error = shell.add_extra_files_index_log_dir(self.disk_location, self.disk_size)
+        if error:
+            self.log.info(error)
+
+    def remove_extra_files_in_log_dir(self, node):
+        shell = RemoteMachineShellConnection(node)
+        output, error = shell.remove_extra_files_index_log_dir(self.disk_location, self.disk_size)
+        if error:
+            self.log.info(error)
+
+    def _dummy_file_in_log_dir(self, node, recover_time):
+        self.add_dummy_file_in_log_dir(node)
+        time.sleep(recover_time)
+        self.remove_dummy_file_in_log_dir(node)
+
+    def add_dummy_file_in_log_dir(self, node):
+        shell = RemoteMachineShellConnection(node)
+        output, error = shell.add_dummy_file_index_log_dir(self.disk_location, self.disk_size)
+        if error:
+            self.log.info(error)
+
+    def remove_dummy_file_in_log_dir(self, node):
+        shell = RemoteMachineShellConnection(node)
+        output, error = shell.remove_dummy_file_index_log_dir(self.disk_location, self.disk_size)
+        if error:
+            self.log.info(error)
+
+    def _empty_file_in_log_dir(self, node, recover_time):
+        self.add_empty_file_in_log_dir(node)
+        time.sleep(recover_time)
+        self.remove_dummy_file_in_log_dir(node)
+
+    def add_empty_file_in_log_dir(self, node):
+        shell = RemoteMachineShellConnection(node)
+        output, error = shell.add_empty_file_index_log_dir(self.disk_location, self.disk_size)
+        if error:
+            self.log.info(error)
 
     def _enable_disable_disk_readonly(self, node, recover_time):
         self._enable_disk_readonly(node)
