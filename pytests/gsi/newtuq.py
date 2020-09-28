@@ -28,11 +28,13 @@ class QueryTests(BaseTestCase):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         # Set indexer storage mode
         indexer_rest = RestConnection(indexer_node[0])
-        # gsi_type = self.gsi_type
-        # if not indexer_rest.is_enterprise_edition:
-        #    gsi_type = "forestdb"
-        # doc = {"indexer.settings.storage_mode": gsi_type}
-        # indexer_rest.set_index_settings_internal(doc)
+        gsi_type = self.gsi_type
+        if not indexer_rest.is_enterprise_edition:
+           gsi_type = "forestdb"
+        doc = {"indexer.settings.storage_mode": gsi_type}
+        indexer_rest.set_index_settings_internal(doc)
+        self.log.info("Allowing the indexer to complete restart after setting the internal settings")
+        self.sleep(5)
         doc = {"indexer.api.enableTestServer": True}
         indexer_rest.set_index_settings_internal(doc)
         self.indexer_scanTimeout = self.input.param("indexer_scanTimeout", None)
