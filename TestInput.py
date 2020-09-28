@@ -31,7 +31,7 @@ class TestInput(object):
         self.cbas = []
         self.cbbackupmgr = {}
         #servers , each server can have u,p,port,directory
-        self.bkrs_client = []
+        self.bkrs_client = None
 
     def param(self, name, *args):
         """Returns the paramater or a default value
