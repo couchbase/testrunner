@@ -309,7 +309,7 @@ class RestConnection(object):
 
         if isinstance(serverInfo, dict):
             self.ip = serverInfo["ip"]
-            log.info("-->self.ip={}".format(self.ip))
+            log.debug("-->self.ip={}".format(self.ip))
             self.username = serverInfo["username"]
             self.password = serverInfo["password"]
             self.port = serverInfo["port"]
@@ -443,13 +443,13 @@ class RestConnection(object):
                                 self.capiBaseUrl = http_res["nodes"][0]["couchApiBase"]
                         #TBD: Check why the reponse doesn't preserve the protocol and port
 
-                        log.info("--> baseUrl={}, capiBaseUrl={}".format(self.baseUrl,
+                        log.debug("--> baseUrl={}, capiBaseUrl={}".format(self.baseUrl,
                                                                            self.capiBaseUrl))
                         return
                 raise ServerUnavailableException("couchApiBase doesn't exist: %s " % http_res)
         except Exception as e:
             log.warning("server might not be running? {}".format(e))
-        log.info("--> baseUrl={}, capiBaseUrl={}".format(self.baseUrl, self.capiBaseUrl))
+        log.debug("--> baseUrl={}, capiBaseUrl={}".format(self.baseUrl, self.capiBaseUrl))
 
 
     def sasl_streaming_rq(self, bucket, timeout=120):
@@ -1038,7 +1038,7 @@ class RestConnection(object):
                 except AttributeError:
                     pass
                 if self.servers_map and self.servers_map!='':
-                    log.info("servers_map={}".format(self.servers_map))
+                    log.debug("servers_map={}".format(self.servers_map))
                     servers_ip_host = self.servers_map.split("--")
                     for server_ip_host in servers_ip_host:
                         ip_host = server_ip_host.split(":")
@@ -1047,7 +1047,7 @@ class RestConnection(object):
                         mapped_ip = ip_host[0]
                         mapped_host = ip_host[1]
                         if "://"+mapped_ip in api:
-                            log.info("--> replacing {} with {}".format(mapped_ip,
+                            log.debug("--> replacing {} with {}".format(mapped_ip,
                                                                                    mapped_host))
                             api = api.replace(mapped_ip, mapped_host)
                             if self.is_secure:

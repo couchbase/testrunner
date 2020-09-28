@@ -1998,10 +1998,10 @@ class CouchbaseCluster:
             self.__log.info("ip={}==node.ip={},port={}==node.port={},".format(ip,node.ip,port,
                                                                            node.port))
             if ip == node.ip and port == node.port:
-                self.__log.info("-->matched service: {}".format(node))
+                self.__log.debug("-->matched service: {}".format(node))
                 return node
             else:
-                self.__log.info("-->un matched service: {}".format(node))
+                self.__log.debug("-->un matched service: {}".format(node))
 
     def get_logger(self):
         return self.__log

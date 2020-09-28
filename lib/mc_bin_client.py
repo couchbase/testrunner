@@ -94,7 +94,7 @@ class MemcachedClient(KeepRefs):
                 mapped_ip = ip_host[0]
                 mapped_host = ip_host[1]
                 if mapped_ip == self.host:
-                    print("--> replacing {} with  {}".format(self.host,mapped_host))
+                    #print("--> replacing {} with  {}".format(self.host,mapped_host))
                     self.host = mapped_host
         self.timeout = timeout
         print("-->MemcachedClient: Connecting {}:{}".format(self.host, self.port))
@@ -688,7 +688,7 @@ class MemcachedClient(KeepRefs):
 
     def sasl_auth_plain(self, user, password, foruser=''):
         """Perform plain auth."""
-        print("-->sasl_auth_plain: user={},password={}".format(user, password))
+        #print("-->sasl_auth_plain: user={},password={}".format(user, password))
         return self.sasl_auth_start('PLAIN', '\0'.join([foruser, user, password]))
 
     def sasl_auth_cram_md5(self, user, password):

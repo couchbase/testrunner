@@ -2535,7 +2535,7 @@ class BaseTestCase(unittest.TestCase):
                                       .format(ip, hostname))
                         ip = hostname
                         shell.disconnect()
-                    self.log.info("-->service_type={}, server.ip={},server.port={} == ip={}, "
+                    self.log.debug("-->service_type={}, server.ip={},server.port={} == ip={}, "
                                   "port={}"
                                   "".format(
                         service_type, server.ip, server.port, ip, port))

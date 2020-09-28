@@ -10,7 +10,7 @@ class EventingSanity(EventingBaseTest):
         super(EventingSanity, self).setUp()
         self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=900)
         if self.create_functions_buckets:
-            self.input.param("bucket_size", 100)
+            self.bucket_size = self.input.param("bucket_size", 200)
             log.info(self.bucket_size)
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                        replicas=0)
@@ -316,4 +316,17 @@ class EventingSanity(EventingBaseTest):
         self.verify_eventing_results(self.function_name,self.docs_per_day * 2016, skip_stats_validation=True,bucket=self.dst_bucket_name1)
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.assertEqual(self.get_stats_value(self.function_name,"execution_stats.timer_cancel_counter"),self.docs_per_day * 2016)
+        self.undeploy_and_delete_function(body)
+
+    def test_advance_bucket_op(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                 batch_size=self.batch_size,exp=300)
+        # set expiry pager interval
+        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 3, bucket=self.src_bucket_name)
+        body = self.create_save_function_body(self.function_name, "handler_code/ABO/curl_timer_insert.js")
+        body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
+        self.rest.create_function(body['appname'], body)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
