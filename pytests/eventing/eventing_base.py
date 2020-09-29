@@ -36,19 +36,24 @@ class EventingBaseTest(QueryHelperTests):
         else:
             log.info("\n\nStarting Test: %s" % (self._testMethodName))
         self.input = TestInputSingleton.input
-        self.input.test_params.update({"default_bucket": False})
+        if not self.skip_init_check_cbserver:
+            self.input.test_params.update({"default_bucket": False})
         super(EventingBaseTest, self).setUp()
         self.master = self.servers[0]
         self.server = self.master
-        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
-        if self.restServer:
-            self.rest = RestConnection(self.restServer)
-            self.rest.set_indexer_storage_mode()
-            self.log.info(
-                "Setting the min possible memory quota so that adding mode nodes to the cluster wouldn't be a problem.")
-            self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=330)
-            self.rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=INDEX_QUOTA)
-            self.rest.set_service_memoryQuota(service='eventingMemoryQuota', memoryQuota=EVENTING_QUOTA)
+        if not self.skip_init_check_cbserver:
+            self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+            if self.restServer:
+                self.rest = RestConnection(self.restServer)
+                self.rest.set_indexer_storage_mode()
+                self.log.info(
+                    "Setting the min possible memory quota so that adding mode nodes to the \
+                     cluster wouldn't be a problem.")
+                self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=330)
+                self.rest.set_service_memoryQuota(service='indexMemoryQuota',
+                                                  memoryQuota=INDEX_QUOTA)
+                self.rest.set_service_memoryQuota(service='eventingMemoryQuota',
+                                                  memoryQuota=EVENTING_QUOTA)
         self.src_bucket_name = self.input.param('src_bucket_name', 'src_bucket')
         self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
         self.dst_bucket_name = self.input.param('dst_bucket_name', 'dst_bucket')
@@ -65,10 +70,13 @@ class EventingBaseTest(QueryHelperTests):
         self.timer_storage_chan_size = self.input.param('timer_storage_chan_size', 10000)
         self.dcp_gen_chan_size = self.input.param('dcp_gen_chan_size', 10000)
         self.is_sbm=self.input.param('source_bucket_mutation',False)
-        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
+        if not self.skip_init_check_cbserver:
+            self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+            self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify,
+                                      buckets=self.buckets,
                                       item_flag=self.item_flag, n1ql_port=self.n1ql_port,
-                                      full_docs_list=self.full_docs_list, log=self.log, input=self.input,
+                                      full_docs_list=self.full_docs_list, log=self.log,
+                                      input=self.input,
                                       master=self.master, use_rest=True)
         self.pause_resume = self.input.param('pause_resume', False)
         self.pause_resume_number = self.input.param('pause_resume_number', 1)
@@ -81,7 +89,7 @@ class EventingBaseTest(QueryHelperTests):
         self.url = self.input.param('path', None)
         self.cookies = self.input.param('cookies',False)
         self.bearer_key = self.input.param('bearer_key','')
-        if self.hostname=='local':
+        if self.hostname=='local' and not self.skip_init_check_cbserver:
             ##self.insall_dependencies()
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
