@@ -44,6 +44,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.bucket_name = self.input.param("bucket_name", "default")
         self.num_scopes = self.input.param("num_scopes", 1)
         self.num_collections = self.input.param("num_collections", 1)
+        self.item_to_delete = self.input.param('item_to_delete', None)
         self.test_bucket = self.input.param('test_bucket', 'test_bucket')
         self.enable_dgm = self.input.param('enable_dgm', False)
         self.rest = RestConnection(self.master)
@@ -1193,14 +1194,17 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                              wait_if_warmup=True)
 
     def prepare_collection_for_indexing(self, num_scopes=1, num_collections=1, num_of_docs_per_collection=1000,
-                                        indexes_before_load=False, json_template="Person", batch_size=10**4):
+                                        indexes_before_load=False, json_template="Person", batch_size=10**4,
+                                        bucket_name=None):
+        if not bucket_name:
+            bucket_name = self.test_bucket
         self.namespaces = []
         pre_load_idx_pri = None
         pre_load_idx_gsi = None
         self.collection_rest.create_scope_collection_count(scope_num=num_scopes, collection_num=num_collections,
                                                            scope_prefix=self.scope_prefix,
                                                            collection_prefix=self.collection_prefix,
-                                                           bucket=self.test_bucket)
+                                                           bucket=bucket_name)
         scopes = [f'{self.scope_prefix}_{scope_num + 1}' for scope_num in range(num_scopes)]
         self.sleep(10, "Allowing time after collection creation")
 
@@ -1208,7 +1212,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             for s_item in scopes:
                 collections = [f'{self.collection_prefix}_{coll_num + 1}' for coll_num in range(num_collections)]
                 for c_item in collections:
-                    self.namespaces.append(f'default:{self.test_bucket}.{s_item}.{c_item}')
+                    self.namespaces.append(f'default:{bucket_name}.{s_item}.{c_item}')
                     if indexes_before_load:
                         pre_load_idx_pri = QueryDefinition(index_name='pre_load_idx_pri')
                         pre_load_idx_gsi = QueryDefinition(index_name='pre_load_idx_gsi', index_fields=['firstName'])
@@ -1224,6 +1228,24 @@ class BaseSecondaryIndexingTests(QueryTests):
                     for task in tasks:
                         task.result()
         return pre_load_idx_pri, pre_load_idx_gsi
+
+    def delete_bucket_scope_collection(self, delete_item, server, bucket, scope='test_scope_1',
+                                       collection='test_collection_1', timeout=None):
+        if not server:
+            server = self.servers[0]
+        if not bucket:
+            bucket = self.test_bucket
+        if not delete_item:
+            delete_item = self.item_to_delete
+        if delete_item == 'bucket':
+            self.log.info(f"Deleting bucket: {bucket}")
+            return self.cluster.bucket_delete(server=server, bucket=bucket, timeout=timeout)
+        elif delete_item == 'scope':
+            self.log.info(f"Deleting Scope: {scope}")
+            return self.collection_rest.delete_scope(bucket=bucket, scope=scope)
+        elif delete_item == 'collection':
+            self.log.info(f"Deleting Collection: {collection}")
+            return self.collection_rest.delete_collection(bucket=bucket, scope=scope, collection=collection)
 
     def get_indexer_mem_quota(self, indexer_node=None):
         """

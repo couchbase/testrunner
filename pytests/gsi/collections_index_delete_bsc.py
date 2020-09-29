@@ -21,7 +21,6 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
     def setUp(self):
         super(CollectionsIndexDeleteBSC, self).setUp()
         self.log.info("==============  CollectionsIndexBasics setup has started ==============")
-        self.item_to_delete = self.input.param('item_to_delete', None)
         self.indexMemQuota = self.input.param("indexMemQuota", 256)
         if self.indexMemQuota > 256:
             self.log.info(f"Setting indexer memory quota to {self.indexMemQuota} MB...")
@@ -60,24 +59,6 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                 drop_query = f'Drop index {index} on {collection_namespace}'
                 drop_index_tasks.append(drop_task.submit(self.run_cbq_query, query=drop_query))
         return drop_index_tasks
-
-    def delete_bucket_scope_collection(self, delete_item, server, bucket, scope='test_scope_1',
-                                       collection='test_collection_1', timeout=None):
-        if not server:
-            server = self.servers[0]
-        if not bucket:
-            bucket = self.test_bucket
-        if not delete_item:
-            delete_item = self.item_to_delete
-        if delete_item == 'bucket':
-            self.log.info(f"Deleting bucket: {bucket}")
-            return self.cluster.bucket_delete(server=server, bucket=bucket, timeout=timeout)
-        elif delete_item == 'scope':
-            self.log.info(f"Deleting Scope: {scope}")
-            return self.collection_rest.delete_scope(bucket=bucket, scope=scope)
-        elif delete_item == 'collection':
-            self.log.info(f"Deleting Collection: {collection}")
-            return self.collection_rest.delete_collection(bucket=bucket, scope=scope, collection=collection)
 
     def test_index_creation_with_keyspace_delete(self):
         """

@@ -33,7 +33,7 @@ OR = "or"
 
 
 class QueryDefinition(object):
-    def __init__(self, name="default", index_name="Random", index_fields=None,
+    def __init__(self, index_name="Random", index_fields=None,
                  index_creation_template=INDEX_CREATION_TEMPLATE,
                  index_drop_template=INDEX_DROP_TEMPLATE,
                  query_template="", groups=None,
