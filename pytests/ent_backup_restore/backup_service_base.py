@@ -134,7 +134,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         return self.repository_api.cluster_self_repository_state_id_info_get(state, repo_name).backups
 
     def get_task_history(self, state, repo_name, task_name=None):
-        return self.repository_api.cluster_self_repository_state_id_task_history_get("active", "my_repo", task_name=task_name)
+        if task_name:
+            return self.repository_api.cluster_self_repository_state_id_task_history_get(state, repo_name, task_name=task_name)
+        return self.repository_api.cluster_self_repository_state_id_task_history_get(state, repo_name)
 
     def map_task_to_backup(self, state, repo_name, task_name):
         return self.get_task_history(state, repo_name, task_name=task_name)[0].backup
@@ -143,7 +145,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         """ Wait for the latest backup Task to complete.
         """
         for i in range(0, retries):
-            repository = self.repository_api.cluster_self_repository_state_id_get("active", repo_name)
+            repository = self.repository_api.cluster_self_repository_state_id_get(state, repo_name)
 
             if i == retries - 1:
                 return False

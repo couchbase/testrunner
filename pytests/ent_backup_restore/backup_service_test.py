@@ -5,6 +5,7 @@ from membase.api.rest_client import RestConnection
 from lib.backup_service_client.models.task_template import TaskTemplate
 from lib.backup_service_client.models.task_template_schedule import TaskTemplateSchedule
 from backup_service_client.rest import ApiException
+from lib.backup_service_client.models.body import Body
 from lib.backup_service_client.models.body1 import Body1
 from lib.backup_service_client.models.body2 import Body2
 from lib.backup_service_client.models.body3 import Body3
@@ -1060,11 +1061,17 @@ class BackupServiceTest(BackupServiceBase):
         # Fetch repository data
         repository = self.repository_api.cluster_self_repository_state_get('active')[0]
 
+        # Configure repository name and staging directory
+        if self.objstore_provider:
+            self.backupset.objstore_staging_directory = repository.cloud_info.staging_dir
+        self.backupset.name = repository.repo
+
         def get_blob_gen(i):
-            return BlobGenerator("ent-backup", "ent-backup-", self.value_size * i, start=self.num_items * i, end=self.num_items * (i + 1))
+            return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * (i + 1))), start=0, end=self.num_items)
+
+        backup_names = []
 
         for i in range(0, 2):
-
             # Load buckets with data
             self._load_all_buckets(self.master, get_blob_gen(i), "create", 0)
 
@@ -1077,19 +1084,47 @@ class BackupServiceTest(BackupServiceBase):
             # Wait until task has completed
             self.assertTrue(self.wait_for_backup_task("active", repo_name, 20, 20, task_name=task_name))
 
-            # Configure repository name and staging directory
-            if self.objstore_provider:
-                self.backupset.objstore_staging_directory = repository.cloud_info.staging_dir
-            self.backupset.name = repository.repo
-
-            backup_name = self.map_task_to_backup("active", repo_name, task_name)
+            backup_names.append(self.map_task_to_backup("active", repo_name, task_name))
 
         # Archive repository
         self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_archive_post_with_http_info(repo_name, body=Body3(id=repo_name))[1], 200)
 
-        task_history = get_task_history("archived", repo_name)
+        # Check if the task history can be fetched from an archived repo
+        task_history = self.get_task_history("archived", repo_name)
+        self.assertEqual(len(task_history), 2)
 
-        info = get_backups("archived", repo_name)
+        # Check if the info can be fetched from an archived repo
+        backups = self.get_backups("archived", repo_name)
+        self.assertEqual(len(backups), 2)
+
+        # Check user can examine an archived repo
+        _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("archived", repo_name, body=Body("test_docs-0", "default"))
+        self.assertEqual(status, 200)
+        data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
+        self.assertEqual(data[0]['value']['age'], 0)
+        self.assertEqual(data[1]['value']['age'], 100)
+
+        # Flush all buckets to empty cluster of all documents
+        rest_connection = RestConnection(self.master)
+        for bucket in self.buckets:
+            rest_connection.change_bucket_props(bucket, flushEnabled=1)
+            rest_connection.flush_bucket(bucket)
+
+        cluster_host = self.master
+        body = Body1(target=f"{cluster_host.ip}:{cluster_host.port}", user=cluster_host.rest_username, password=cluster_host.rest_password)
+
+        # Perform a restore
+        task_name = self.repository_api.cluster_self_repository_state_id_restore_post("archived", repo_name, body=body).task_name
+
+        # Wait until task has completed
+        self.assertTrue(self.wait_for_backup_task("archived", repo_name, 20, 5))
+
+        # Check the restore task succeeded
+        task = self.get_task_history("archived", repo_name, task_name)[0]
+        self.assertEqual(task.status, 'done')
+        self.assertIsNone(task.node_runs[0].error)
+        self.assertEqual(len(task.node_runs[0].stats.transfers), 2)
+        self.assertEqual(set(transfer.backup for transfer in task.node_runs[0].stats.transfers), set(backup_names))
 
     def test_manually_deleting_archive_location(self):
         """ Test manually deleting archive location gives adequate warning.

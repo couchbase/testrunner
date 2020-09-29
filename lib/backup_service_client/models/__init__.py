@@ -25,6 +25,8 @@ from backup_service_client.models.body6 import Body6
 from backup_service_client.models.bucket import Bucket
 from backup_service_client.models.cloud_credentials import CloudCredentials
 from backup_service_client.models.error import Error
+from backup_service_client.models.examine import Examine
+from backup_service_client.models.examine_metadata import ExamineMetadata
 from backup_service_client.models.info import Info
 from backup_service_client.models.inline_response200 import InlineResponse200
 from backup_service_client.models.inline_response2001 import InlineResponse2001
