@@ -36,6 +36,8 @@ class EventingBaseTest(QueryHelperTests):
         else:
             log.info("\n\nStarting Test: %s" % (self._testMethodName))
         self.input = TestInputSingleton.input
+        self.skip_init_check_cbserver = \
+            self.input.param("skip_init_check_cbserver", False)
         if not self.skip_init_check_cbserver:
             self.input.test_params.update({"default_bucket": False})
         super(EventingBaseTest, self).setUp()
