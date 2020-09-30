@@ -1,6 +1,8 @@
+import re
 import json
 import random
-from ent_backup_restore.backup_service_base import BackupServiceBase
+from ent_backup_restore.backup_service_base import BackupServiceBase, HistoryFile
+from lib.couchbase_helper.time_helper import TimeUtil
 from membase.api.rest_client import RestConnection
 from lib.backup_service_client.models.task_template import TaskTemplate
 from lib.backup_service_client.models.task_template_schedule import TaskTemplateSchedule
@@ -13,6 +15,7 @@ from lib.backup_service_client.models.body4 import Body4
 from lib.backup_service_client.models.body5 import Body5
 from lib.backup_service_client.models.body6 import Body6
 from lib.backup_service_client.models.plan import Plan
+from lib.backup_service_client.models.service_configuration import ServiceConfiguration
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 
@@ -1261,3 +1264,418 @@ class BackupServiceTest(BackupServiceBase):
             self.assertEqual(health_issue, repository_health.health_issue)
 
             self.delete_all_repositories()
+
+    # Examine / Info
+
+    def test_user_can_see_backups(self):
+        """ Test user can info repository
+        """
+        repo_name, task_name = "my_repo", "my_task"
+
+        body = Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory)
+
+        if self.objstore_provider:
+            body = self.set_cloud_credentials(body)
+
+        # Add repositories and tie plan to repository
+        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+        def get_blob_gen(i):
+            return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * (i + 1))), start=0, end=self.num_items)
+
+        self.take_n_one_off_backups("active", repo_name, get_blob_gen, 2)
+
+        self.assertEqual(len(self.get_backups("active", repo_name)), 2)
+
+    def test_user_can_delete_backups(self):
+        """ Test user can delete backups
+        """
+        repo_name, task_name = "my_repo", "my_task"
+
+        body = Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory)
+
+        if self.objstore_provider:
+            body = self.set_cloud_credentials(body)
+
+        # Add repositories and tie plan to repository
+        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+        def get_blob_gen(i):
+            return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * (i + 1))), start=0, end=self.num_items)
+
+        self.take_n_one_off_backups("active", repo_name, get_blob_gen, 2)
+
+        backups = self.get_backups("active", repo_name)
+        self.assertEqual(len(backups), 2)
+
+        backup_to_delete = random.choice(backups)._date
+        self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_backups_backup_name_delete_with_http_info(repo_name, backup_to_delete)[1], 200)
+
+        backups = self.get_backups("active", repo_name)
+        self.assertEqual(len(backups), 1)
+
+    def test_user_cannot_delete_backup_that_does_not_exist(self):
+        """ Test a user cannot delete a backup that does not exist
+        """
+        repo_name, task_name = "my_repo", "my_task"
+
+        body = Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory)
+
+        if self.objstore_provider:
+            body = self.set_cloud_credentials(body)
+
+        # Add repositories and tie plan to repository
+        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+        def get_blob_gen(i):
+            return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * (i + 1))), start=0, end=self.num_items)
+
+        self.take_n_one_off_backups("active", repo_name, get_blob_gen, 2)
+
+        backups = self.get_backups("active", repo_name)
+        self.assertEqual(len(backups), 2)
+
+        backup_to_delete = "Backup"
+        self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_backups_backup_name_delete_with_http_info(repo_name, backup_to_delete)[1], 500)
+
+        backups = self.get_backups("active", repo_name)
+        self.assertEqual(len(backups), 2)
+
+    def test_user_can_observe_document_changing(self):
+        """ Test user can observe a document changing between backups
+        """
+        repo_name, task_name = "my_repo", "my_task"
+
+        body = Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory)
+
+        if self.objstore_provider:
+            body = self.set_cloud_credentials(body)
+
+        # Add repositories and tie plan to repository
+        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+        def get_blob_gen(i):
+            return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * (i + 1))), start=0, end=self.num_items)
+
+        self.take_n_one_off_backups("active", repo_name, get_blob_gen, 2)
+
+        backups = self.get_backups("active", repo_name)
+        self.assertEqual(len(backups), 2)
+
+        # Check user can examine repo
+        _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("test_docs-0", "default"))
+        self.assertEqual(status, 200)
+        data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
+        self.assertEqual(data[0]['value']['age'], 0)
+        self.assertEqual(data[1]['value']['age'], 100)
+
+    def test_bucket_names_with_fullstops(self):
+        """ Test a user can examine a bucket name in the form 'a.b.c.d'
+        """
+        repo_name, task_name, bucket_name = "my_repo", "my_task", "a.b.c.d"
+
+        # Create `bucket_name`
+        self.replace_bucket(self.backupset.cluster_host, "default", bucket_name)
+
+        body = Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory)
+
+        if self.objstore_provider:
+            body = self.set_cloud_credentials(body)
+
+        # Add repositories and tie plan to repository
+        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+        def get_blob_gen(i):
+            return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * (i + 1))), start=0, end=10)
+
+        self.take_n_one_off_backups("active", repo_name, get_blob_gen, 2)
+
+        backups = self.get_backups("active", repo_name)
+        self.assertEqual(len(backups), 2)
+
+        # Check user can examine repo with a bucket name containing fullstops which have been escaped
+        _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("test_docs-0", "a\\.b\\.c\\.d"))
+        self.assertEqual(status, 200)
+        data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
+        self.assertEqual(data[0]['value']['age'], 0)
+        self.assertEqual(data[1]['value']['age'], 100)
+
+    def test_collection_unaware_backups(self):
+        """ Test collection unaware backups
+        """
+        repo_name, task_name, bucket_name, scope_name, collection_name, no_of_backups = "my_repo", "my_task", "bucket_name", "my_scope", "my_collection", 2
+
+        # Create bucket `bucket_name`
+        self.replace_bucket(self.backupset.cluster_host, "default", bucket_name)
+
+        body = Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory)
+
+        if self.objstore_provider:
+            body = self.set_cloud_credentials(body)
+
+        # Add repositories and tie plan to repository
+        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+        def get_blob_gen(i):
+            return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * (i + 1))), start=0, end=10)
+
+        self.take_n_one_off_backups("active", repo_name, get_blob_gen, no_of_backups, doc_load_sleep=3, sleep_time=5)
+
+        self.assertEqual(len(self.get_backups("active", repo_name)), no_of_backups)
+
+        # Check user can examine collection unaware backups using a data path consisting of a bucket name
+        _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("test_docs-0", bucket_name))
+        self.assertEqual(status, 200)
+        data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
+        for i in range(no_of_backups):
+            self.assertEqual(data[i]['value']['age'], i * 100)
+
+        # Check user cannot examine a collection unaware bucket using a data path consisting of bucket.collection.scope
+        _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("test_docs-0", f"{bucket_name}.{scope_name}.{collection_name}"))
+        self.assertEqual(status, 500)
+        data = json.loads(response_data.data)
+        self.assertEqual("failed to run examine command", data['msg'])
+        self.assertIn("examining a specific collection in a collection unaware backup is unsupported", data['extras'])
+
+    def test_collection_aware_backups(self):
+        """ Test collection aware backups
+        """
+        repo_name, task_name, bucket_name, scope_name, collection_name, no_of_backups = "my_repo", "my_task", "my_bucket", "my_scope", "my_collection", 2
+
+        # Create bucket `bucket_name`
+        self.replace_bucket(self.backupset.cluster_host, "default", bucket_name)
+
+        # Create scope, collection and obtain collection id
+        collection_id = self.create_scope_and_collection(self.backupset.cluster_host, bucket_name, scope_name, collection_name)
+
+        body = Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory)
+
+        remote_shell = RemoteMachineShellConnection(self.backupset.cluster_host)
+        if self.objstore_provider:
+            body = self.set_cloud_credentials(body)
+
+        # Add repositories and tie plan to repository
+        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+        # Load collection with data, increasing the body size by 1 each iteration
+        def provision_with_data(i):
+            """ Load collection with 10 documents, increasing the body size by 1 each iteration
+            """
+            remote_shell.execute_cbworkloadgen(self.backupset.cluster_host.rest_username, self.backupset.cluster_host.rest_password, 10, "1", bucket_name, 2 + i, f"-j -c {collection_id}")
+
+        self.take_n_one_off_backups("active", repo_name, None, no_of_backups, data_provisioning_function=provision_with_data, doc_load_sleep=3, sleep_time=5)
+
+        self.assertEqual(len(self.get_backups("active", repo_name)), no_of_backups)
+
+        # Check user can examine collection aware backups using a  data path consisting of bucket.collection.scope
+        _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("pymc0", f"{bucket_name}.{scope_name}.{collection_name}"))
+        self.assertEqual(status, 200)
+        data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
+        for i in range(no_of_backups):
+            self.assertEqual(data[i]['value']['body'], '0' * (i + 2))
+
+        # Check if user supplies only a bucket name to a collection aware bucket it fails
+        _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("pymc0", f"{bucket_name}"))
+        self.assertEqual(status, 500)
+        data = json.loads(response_data.data)
+        self.assertEqual("failed to run examine command", data["msg"])
+        self.assertIn("examining a collection aware backup at the bucket or scope level is unsupported", data["extras"])
+
+    # Monitor Tasks and Task History
+
+    def test_task_history(self):
+        """ Test a user can obtain their Task history.
+        """
+        repo_name, task_name = "my_repo", "my_task"
+
+        body = Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory)
+
+        if self.objstore_provider:
+            body = self.set_cloud_credentials(body)
+
+        # Add repositories and tie plan to repository
+        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+        def get_blob_gen(i):
+            return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * (i + 1))), start=0, end=self.num_items)
+
+        self.take_n_one_off_backups("active", repo_name, get_blob_gen, 2)
+
+        self.assertEqual(len(self.get_task_history("active", repo_name)), 2)
+
+    def test_large_task_history(self):
+        """ Test user can obtain the history of a large quantity of backups.
+        """
+        repo_name, task_name, no_of_backups = "my_repo", "my_task", 100
+
+        body = Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory)
+
+        if self.objstore_provider:
+            body = self.set_cloud_credentials(body)
+
+        # Add repositories and tie plan to repository
+        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+        self.take_n_one_off_backups("active", repo_name, None, no_of_backups, doc_load_sleep=0, retries=20, sleep_time=1)
+
+        self.assertEqual(len(self.get_task_history("active", repo_name)), no_of_backups)
+
+    # Not possible to trigger task history rotation, need somewhere between 1000 to 1,000,000
+    def test_large_task_history_rotation(self):
+        """ Test the task history is rotated
+        """
+        repo_name, task_name = "my_repo", "my_task"
+
+        body = Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory)
+
+        if self.objstore_provider:
+            body = self.set_cloud_credentials(body)
+
+        # Add repositories and tie plan to repository
+        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+        # Pause the repository to prevent scheduled tasks from executing
+        self.active_repository_api.cluster_self_repository_active_id_pause_post(repo_name)
+
+        no_of_backups = 5 # No of backups to take
+        rotation_size = 5 # The rotation size in Mib
+        size_in_bytes = rotation_size * (1024 ** 2) # The rotation size in bytes
+        size_in_bytes = size_in_bytes + 100000 # Overflow history file by 100000 bytes over rotation size
+        # Compute the entry size required such that if one more backup is added, the history rotates
+        size_of_entry, remainder = int(size_in_bytes / no_of_backups), size_in_bytes % no_of_backups
+        # Configure task history rotation
+        self.configuration_api.config_post(body=ServiceConfiguration(history_rotation_period=1, history_rotation_size=rotation_size))
+
+        # Create object to manipulate history file
+        history = HistoryFile(self.backupset, self.get_hidden_repo_name(repo_name))
+
+        def pad_last_entry(size_of_entry):
+            """ Pad the last entry in task history file to `size_of_entry` bytes
+            """
+            last_entry = history.history_file_get_last_entry() + '\n'
+            size_of_last_entry = len(last_entry)
+            last_entry = json.loads(last_entry)
+            last_entry['padding'] = 'a' * (size_of_entry - len(',"padding":""') - size_of_last_entry)
+            last_entry = json.dumps(last_entry, separators=(',', ':')) + '\n'
+            print(len(last_entry))
+            history.history_file_delete_last_entry()
+            history.history_file_append(last_entry)
+
+        # Take history file to tipping over point
+        for i in range(0, no_of_backups):
+            self.take_one_off_backup("active", repo_name, i < 1, 20, 1)
+
+            if i == no_of_backups - 1:
+                size_of_entry = size_of_entry + remainder
+
+            if i < 1:
+                pad_last_entry(size_of_entry - len(history.history_file_get_timestamp() + '\n'))
+            else:
+                pad_last_entry(size_of_entry)
+
+        # List of tasks that should exist after task rotation
+        remaining_tasks = []
+
+        # Additional backup to tip over the history file above the rotation size which should remain after rotation
+        for i in range(0, 10):
+            remaining_tasks.append(self.take_one_off_backup("active", repo_name, False, 20, 1))
+
+        # Advance 2 days and take a backup to trigger history rotation (New contents over threshold get appended to next history file)
+        self.time.change_system_time("+2 days")
+        remaining_tasks.append(self.take_one_off_backup("active", repo_name, False, 20, 1))
+
+        # Advance 2 days and take a backup to trigger old history file deletion (Old history file gets deleted)
+        self.time.change_system_time("+2 days")
+        remaining_tasks.append(self.take_one_off_backup("active", repo_name, False, 20, 1))
+
+        task_history = self.get_task_history("active", repo_name)
+
+        # Reverse list so newest task is first
+        remaining_tasks.reverse()
+
+        # Check the tasks we expected to remain exist
+        self.assertEqual(remaining_tasks, [task.task_name for task in task_history])
+
+    def test_task_history_offset_limit(self):
+        """ Test the offset and limit filters in the task history
+        """
+        repo_name, task_name, no_of_backups = "my_repo", "my_task", 30
+
+        offset_limit = \
+        [
+            (5, 5),
+            (15, 9),
+            (20, 20),
+        ]
+
+        body = Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory)
+
+        if self.objstore_provider:
+            body = self.set_cloud_credentials(body)
+
+        # Add repositories and tie plan to repository
+        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+        self.take_n_one_off_backups("active", repo_name, None, no_of_backups, doc_load_sleep=0, retries=20, sleep_time=1)
+
+        task_history = self.get_task_history("active", repo_name)
+        self.assertEqual(len(task_history), no_of_backups)
+
+        for offset, limit in offset_limit:
+            paginated_task_history = self.repository_api.cluster_self_repository_state_id_task_history_get("active", repo_name, offset=offset, limit=limit)
+            self.assertEqual(task_history[offset: offset + limit], paginated_task_history)
+            self.assertLessEqual(len(paginated_task_history), limit)
+
+        # Cases for 0 offsets and limits
+        self.assertEqual(len(self.repository_api.cluster_self_repository_state_id_task_history_get("active", repo_name, offset=0, limit=0)), no_of_backups)
+        self.assertEqual(len(self.repository_api.cluster_self_repository_state_id_task_history_get("active", repo_name, offset=10, limit=0)), no_of_backups - 10)
+        self.assertEqual(len(self.repository_api.cluster_self_repository_state_id_task_history_get("active", repo_name, offset=0, limit=10)), 10)
+
+    def test_task_history_start_time(self):
+        """ Test start time produces a list of tasks more recent than the start time and includes the start time
+        """
+        repo_name, task_name, no_of_backups = "my_repo", "my_task", 30
+
+        body = Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory)
+
+        if self.objstore_provider:
+            body = self.set_cloud_credentials(body)
+
+        # Add repositories and tie plan to repository
+        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+        self.take_n_one_off_backups("active", repo_name, None, no_of_backups, doc_load_sleep=0, retries=20, sleep_time=1)
+
+        start = random.choice(self.get_task_history("active", repo_name)).start
+
+        task_start_times = [TimeUtil.rfc3339nano_to_datetime(task.start) for task in self.repository_api.cluster_self_repository_state_id_task_history_get("active", repo_name, first=start)]
+
+        start = TimeUtil.rfc3339nano_to_datetime(start)
+
+        # Check start is in the list of task_start_times
+        self.assertIn(start, task_start_times)
+
+        # The only thing that should be present in the task_start_times should be more recent or equal compared to start
+        for time in task_start_times:
+            self.assertLessEqual(start, time)
+
+    def test_tasks_are_reverse_chronologically_ordered(self):
+        """ Test tasks are ordered with new tasks at the start of the task history.
+        """
+        repo_name, task_name, no_of_backups = "my_repo", "my_task", 10
+
+        body = Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory)
+
+        if self.objstore_provider:
+            body = self.set_cloud_credentials(body)
+
+        # Add repositories and tie plan to repository
+        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+        self.take_n_one_off_backups("active", repo_name, None, no_of_backups, doc_load_sleep=0, retries=20, sleep_time=1)
+
+        task_start_times = [TimeUtil.rfc3339nano_to_datetime(task.start) for task in self.get_task_history("active", repo_name)]
+
+        # Check the prev_time is more recent compared to the next_time
+        for prev_time, next_time in zip(task_start_times, task_start_times[1:]):
+            self.assertGreater(prev_time, next_time)

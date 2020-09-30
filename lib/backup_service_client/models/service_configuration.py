@@ -30,7 +30,7 @@ class ServiceConfiguration(object):
     """
     swagger_types = {
         'history_rotation_period': 'int',
-        'history_rotation_size': 'Integet'
+        'history_rotation_size': 'int'
     }
 
     attribute_map = {
@@ -78,7 +78,7 @@ class ServiceConfiguration(object):
         After how many MB to rotate the task history.  # noqa: E501
 
         :return: The history_rotation_size of this ServiceConfiguration.  # noqa: E501
-        :rtype: Integet
+        :rtype: int
         """
         return self._history_rotation_size
 
@@ -89,7 +89,7 @@ class ServiceConfiguration(object):
         After how many MB to rotate the task history.  # noqa: E501
 
         :param history_rotation_size: The history_rotation_size of this ServiceConfiguration.  # noqa: E501
-        :type: Integet
+        :type: int
         """
 
         self._history_rotation_size = history_rotation_size
