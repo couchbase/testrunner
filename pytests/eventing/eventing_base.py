@@ -118,7 +118,7 @@ class EventingBaseTest(QueryHelperTests):
         if self.hostname == 'local':
             self.teardown_curl()
         # check metadata bucke is empty
-        if len(buckets) > 0 and not self.skip_metabucket_check:
+        if len(buckets) > 0 and not self.skip_metabucket_check and not self.skip_init_check_cbserver:
             stats_meta = rest.get_bucket_stats("metadata")
             self.log.info("number of documents in metadata bucket {}".format(stats_meta["curr_items"]))
             if stats_meta["curr_items"] != 0:
