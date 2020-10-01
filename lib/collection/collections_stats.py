@@ -40,17 +40,9 @@ class CollectionsStats(object):
 
     def get_collection_id(self, bucket, scope, collection, cbstats=None):
         if not cbstats:
+            time.sleep(10)
             cbstats, _ = self.get_collection_stats(bucket)
         scope_id = self.get_scope_id(bucket, scope, cbstats)
-        num_try = 5
-        while scope_id is None and num_try > 0:
-            time.sleep(5)
-            scope_id = self.get_scope_id(bucket, scope, cbstats)
-            if scope_id:
-                break
-            num_try -= 1
-            if num_try == 0:
-                raise("Failed to get scope id from scope: {0}".format(scope))
         for stat in cbstats:
             stat = stat.replace(' ', '')
             if ":name:" + collection in str(stat):
