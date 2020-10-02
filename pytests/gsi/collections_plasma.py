@@ -450,10 +450,10 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.system_failure_task_manager.shutdown(True)
 
         for task in self.tasks:
-            task.join()
+            task.join(timeout=20)
 
+        self.wait_until_indexes_online()
         self.sleep(5, "sleep for 5 secs before validation")
-
         self.verify_index_ops_obj()
 
         self.n1ql_helper.drop_all_indexes_on_keyspace()
