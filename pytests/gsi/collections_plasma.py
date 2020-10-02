@@ -450,7 +450,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.system_failure_task_manager.shutdown(True)
 
         for task in self.tasks:
-            task.join(timeout=20)
+            task.join()
 
         self.wait_until_indexes_online()
         self.sleep(5, "sleep for 5 secs before validation")
