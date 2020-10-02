@@ -63,44 +63,45 @@ class QueryCurlTests(QueryTests):
     def suite_setUp(self):
         super(QueryCurlTests, self).suite_setUp()
         self.log.info("==============  QueryCurlTests suite_setup has started ==============")
-        if self.load_sample:
-            self.rest.load_sample("beer-sample")
-            index_definition = INDEX_DEFINITION
-            index_name = index_definition['name'] = "beers"
-            index_definition['sourceName'] = "beer-sample"
-            index_definition['sourceParams']['authUser'] = "beer-sample"
-            rest_src_fts = RestConnection(self.servers[0])
-            try:
-                status, _ = rest_src_fts.get_fts_index_definition(index_name)
-                if status != 400:
-                    rest_src_fts.delete_fts_index(index_name)
-                rest_src_fts.create_fts_index(index_name, index_definition)
-            except Exception as ex:
-                self.fail(ex)
+        self.rest.load_sample("beer-sample")
+        index_definition = INDEX_DEFINITION
+        index_name = index_definition['name'] = "beers"
+        index_definition['sourceName'] = "beer-sample"
+        index_definition['sourceParams']['authUser'] = "beer-sample"
+        rest_src_fts = RestConnection(self.servers[0])
+        try:
+            status, _ = rest_src_fts.get_fts_index_definition(index_name)
+            if status != 400:
+                rest_src_fts.delete_fts_index(index_name)
+            rest_src_fts.create_fts_index(index_name, index_definition)
+        except Exception as ex:
+            self.fail(ex)
         # Create the users necessary for the RBAC tests in curl
-        if self.create_users:
-            testuser = [{'id': 'no_curl', 'name': 'no_curl', 'password': 'password'},
-                        {'id': 'curl', 'name': 'curl', 'password': 'password'},
-                        {'id': 'curl_no_insert', 'name': 'curl_no_insert', 'password': 'password'}]
-            RbacBase().create_user_source(testuser, 'builtin', self.master)
+        self.log.info("==============  Creating Users ==============")
 
-            noncurl_permissions = 'bucket_full_access[*]:query_select[*]:query_update[*]:' \
-                                  'query_insert[*]:query_delete[*]:query_manage_index[*]:' \
-                                  'query_system_catalog'
-            curl_permissions = 'bucket_full_access[*]:query_select[*]:query_update[*]:' \
-                               'query_insert[*]:query_delete[*]:query_manage_index[*]:' \
-                               'query_system_catalog:query_external_access'
-            curl_noinsert_permissions = 'query_select[*]:query_manage_index[*]' \
-                                        ':query_system_catalog:query_external_access'
-            # Assign user to role
-            role_list = [
-                {'id': 'no_curl', 'name': 'no_curl', 'roles': '%s' % noncurl_permissions, 'password': 'password'},
-                {'id': 'curl', 'name': 'curl', 'roles': '%s' % curl_permissions, 'password': 'password'},
-                {'id': 'curl_no_insert', 'name': 'curl_no_insert',
-                 'roles': '%s' % curl_noinsert_permissions, 'password': 'password'}]
-            RbacBase().add_user_role(role_list, self.rest, 'builtin')
-            self.log.info("==============  QueryCurlTests suite_setup has completed ==============")
-            self.log_config_info()
+        testuser = [{'id': 'no_curl', 'name': 'no_curl', 'password': 'password'},
+                    {'id': 'curl', 'name': 'curl', 'password': 'password'},
+                    {'id': 'curl_no_insert', 'name': 'curl_no_insert', 'password': 'password'}]
+        RbacBase().create_user_source(testuser, 'builtin', self.master)
+
+        noncurl_permissions = 'bucket_full_access[*]:query_select[*]:query_update[*]:' \
+                              'query_insert[*]:query_delete[*]:query_manage_index[*]:' \
+                              'query_system_catalog'
+        curl_permissions = 'bucket_full_access[*]:query_select[*]:query_update[*]:' \
+                           'query_insert[*]:query_delete[*]:query_manage_index[*]:' \
+                           'query_system_catalog:query_external_access'
+        curl_noinsert_permissions = 'query_select[*]:query_manage_index[*]' \
+                                    ':query_system_catalog:query_external_access'
+        # Assign user to role
+        role_list = [
+            {'id': 'no_curl', 'name': 'no_curl', 'roles': '%s' % noncurl_permissions, 'password': 'password'},
+            {'id': 'curl', 'name': 'curl', 'roles': '%s' % curl_permissions, 'password': 'password'},
+            {'id': 'curl_no_insert', 'name': 'curl_no_insert',
+             'roles': '%s' % curl_noinsert_permissions, 'password': 'password'}]
+        RbacBase().add_user_role(role_list, self.rest, 'builtin')
+        self.log.info("==============  Users Created ==============")
+        self.log.info("==============  QueryCurlTests suite_setup has completed ==============")
+        self.log_config_info()
 
     def tearDown(self):
         self.log_config_info()
@@ -251,29 +252,28 @@ class QueryCurlTests(QueryTests):
 
     def test_insert_curl(self):
         n1ql_query = 'select * from ' + self.sample_bucket + ' limit 1'
-        insert_query = "insert into  " + self.query_bucket + " (key UUID(), value curl_result.results[0]." + self.sample_bucket + ") "
+        insert_query = "insert into  " + self.query_bucket + " (key UUID(), value curl_result.results[0]) "
         query = "select curl(" + self.query_service_url + ", "
         options = "{'data' : 'statement=%s','user': '%s:%s'}) curl_result " % (n1ql_query, self.username, self.password)
-        returning = "returning meta().id, * "
+        returning = "returning meta().id, *"
         curl = self.shell.execute_commands_inside(self.cbqpath, insert_query + query + options + returning, '', '', '',
                                                   '', '')
         json_curl = self.convert_to_json(curl)
         docid = json_curl['results'][0]['id']
-        result = self.run_cbq_query('select * from ' + self.query_bucket + ' d limit 1')
-        result2 = self.run_cbq_query('select * from ' + self.sample_bucket + ' b limit 1')
-        self.assertTrue(result['results'][0]['d'] == result2['results'][0]['b']
-                        and json_curl['metrics']['mutationCount'] == 1)
+        self.assertTrue(json_curl['metrics']['mutationCount'] == 1)
 
-        insert_query = "insert into ' + self.query_bucket + ' (key '" + docid + "', value curl_result.results[0]." + self.sample_bucket + ") "
+        insert_query = "insert into " + self.query_bucket + " (key '" + docid + "', value curl_result.results[0]) "
         curl = self.shell.execute_commands_inside(self.cbqpath, insert_query + query + options + returning, '', '', '',
                                                   '', '')
+        if "errorcode401" in curl or "errorcode400" in curl:
+            curl = curl.split("\x1b[")[0]
         json_curl = self.convert_to_json(curl)
         self.assertTrue(json_curl['status'] == 'errors' and 'cause:DuplicateKey' in json_curl['errors'][0]['msg'])
 
         curl_query = 'select meta().id from ' + self.query_bucket + ' limit 1'
         result = self.run_cbq_query(curl_query)
-        docid = result['results'][0]['id']
-        delete_query = "delete from ' + self.query_bucket + ' d use keys '" + docid + "'"
+        docid = json_curl['results'][0]['id']
+        delete_query = "delete from '" + self.query_bucket + "' d use keys '" + docid + "'"
         self.run_cbq_query(delete_query)
 
     '''Test that you can insert data from a select curl statement using upsert
@@ -282,7 +282,7 @@ class QueryCurlTests(QueryTests):
 
     def test_upsert_curl(self):
         n1ql_query = 'select * from ' + self.sample_bucket + ' limit 1'
-        insert_query = "upsert into ' + self.query_bucket + ' (key UUID(), value curl_result.results[0]." + self.sample_bucket + ") "
+        insert_query = "upsert into " + self.query_bucket + " (key UUID(), value curl_result.results[0]) "
         query = "select curl(" + self.query_service_url + ", "
         options = "{'data' : 'statement=%s','user': '%s:%s'}) curl_result " % (n1ql_query, self.username, self.password)
         returning = "returning meta().id, * "
@@ -291,18 +291,18 @@ class QueryCurlTests(QueryTests):
         json_curl = self.convert_to_json(curl)
         docid = json_curl['results'][0]['id']
         result = self.run_cbq_query('select * from ' + self.query_bucket + ' d limit 1')
-        result2 = self.run_cbq_query('select * from ' + self.sample_bucket + ' b limit 1')
-        self.assertEqual(result['results'][0]['d'], result2['results'][0]['b'])
+        result2 = self.run_cbq_query('select * from `beer-sample` b limit 1')
+        self.assertEqual(result['results'][0]['d']['beer-sample'], result2['results'][0]['b'])
 
         n1ql_query = 'select * from ' + self.sample_bucket + ' offset 1 limit 1'
-        insert_query = "upsert into  " + self.query_bucket + " (key '" + docid + "', value curl_result.results[0]." + self.sample_bucket + ") "
+        insert_query = "upsert into  " + self.query_bucket + " (key '" + docid + "', value curl_result.results[0]) "
         options = "{'data' : 'statement=%s','user': '%s:%s'}) curl_result " % (n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, insert_query + query + options + returning, '', '', '',
                                                   '', '')
         json_curl = self.convert_to_json(curl)
         result = self.run_cbq_query('select * from ' + self.query_bucket + ' d limit 1')
-        result2 = self.run_cbq_query('select * from ' + self.sample_bucket + 'b offset 1 limit 1')
-        self.assertEqual(result['results'][0]['d'], result2['results'][0]['b'])
+        result2 = self.run_cbq_query('select * from `beer-sample` b offset 1 limit 1')
+        self.assertEqual(result['results'][0]['d']['beer-sample'], result2['results'][0]['b'])
 
     '''See if you can update a bucket using n1ql curl'''
 
@@ -471,7 +471,7 @@ class QueryCurlTests(QueryTests):
         query = "select curl(" + url + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        diffs = DeepDiff(actual_curl['results'][0]['$1'], expected_curl, ignore_order=True)
+        diffs = DeepDiff(actual_curl['results'][0]['$1'], expected_curl, ignore_order=True, ignore_numeric_type_changes=True)
         if diffs:
             self.assertTrue(False, diffs)
 
@@ -487,14 +487,14 @@ class QueryCurlTests(QueryTests):
         query = "select * from curl(" + url + ") result"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        diffs = DeepDiff(actual_curl['results'][0]['result'], expected_curl, ignore_order=True)
+        diffs = DeepDiff(actual_curl['results'][0]['result'], expected_curl, ignore_order=True,ignore_numeric_type_changes=True)
         if diffs:
             self.assertTrue(False, diffs)
 
         query = "select * from curl(" + url + ",{'header':'Content-Type: application/json'}) result"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        diffs = DeepDiff(actual_curl['results'][0]['$1'], expected_curl, ignore_order=True)
+        diffs = DeepDiff(actual_curl['results'][0]['$1'], expected_curl, ignore_order=True,ignore_numeric_type_changes=True)
         if diffs:
             self.assertTrue(False, diffs)
 
@@ -897,28 +897,28 @@ class QueryCurlTests(QueryTests):
     '''Test if a protected bucket can be accessed without giving its password'''
 
     def test_protected_bucket_noauth(self):
-        bucket_tag = self.bucket0.replace('default:', '')
-        error_msg = "UserdoesnothavecredentialstorunSELECTqueriesonthe" + bucket_tag + "bucket." \
-                    "Addrolequery_selecton" + bucket_tag + "toallowthequerytorun."
+        error_msg = "UserdoesnothavecredentialstorunSELECTqueriesondefault:" + self.bucket0 + \
+                    ".Addrolequery_selectondefault:" + self.bucket0 + "toallowthequerytorun."
+        error_msg2 = "Unabletoauthorizeuser.-cause:Authenticationfailure"
         # The query that curl will send to couchbase
         n1ql_query = 'select * from ' + self.bucket0 + '  limit 5'
         # This is the query that the cbq-engine will execute
         query = "select curl(" + self.query_service_url + ", {'data' : 'statement=%s'})" % n1ql_query
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg)
+        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg or json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg2)
 
         query = "select curl(" + self.query_service_url + ", {'data' : 'statement=%s','user':'%s:'})" \
                 % (n1ql_query, self.username)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg)
+        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg or json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg2)
 
         query = "select curl(" + self.query_service_url + ", {'data' : 'statement=%s','user':':%s'})" \
                 % (n1ql_query, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg)
+        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg or json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg2)
 
     '''Test an unsupported method in n1ql curl
         -DELETE.'''
@@ -1072,8 +1072,8 @@ class QueryCurlTests(QueryTests):
        no insert privileges, and a combination of the two roles.'''
 
     def test_insert_no_role(self):
-        error_msg = "UserdoesnothavecredentialstorunINSERTqueriesonthedefaultbucket.Addrolequery_" \
-                    "insertondefaulttoallowthequerytorun."
+        error_msg = "UserdoesnothavecredentialstorunINSERTqueriesondefault:default.Addrolequery_" \
+                    "insertondefault:defaulttoallowthequerytorun."
 
         error_msg2 = "UserdoesnothavecredentialstorunqueriesusingtheCURL()function.Addrole" \
                      "query_external_accesstoallowthequerytorun."
@@ -1081,12 +1081,14 @@ class QueryCurlTests(QueryTests):
         cbqpath = '%scbq' % self.path + " -e %s:%s -u 'no_curl' -p 'password' -q " % (self.master.ip,
                                                                                       self.n1ql_port)
         n1ql_query = 'select * from ' + self.sample_bucket + ' limit 1'
-        insert_query = "insert into " + self.query_bucket + " (key UUID(), value curl_result.results[0]." + self.sample_bucket + ") "
+        insert_query = "insert into " + self.query_bucket + " (key UUID(), value curl_result.results[0]) "
         query = "select curl(" + self.query_service_url + ", "
         options = "{'data' : 'statement=%s','user':'no_curl:password'}) curl_result " % (n1ql_query)
-        returning = "returning meta().id, * "
+        returning = "returning meta().id, *"
         curl = self.shell.execute_commands_inside(cbqpath, insert_query + query + options + returning, '', '', '', '',
                                                   '')
+        if "errorcode401" in curl or "errorcode400" in curl:
+            curl = curl.split("\x1b[")[0]
         json_curl = self.convert_to_json(curl)
         self.assertTrue(json_curl['errors'][0]['msg'] == error_msg
                         or json_curl['errors'][0]['msg'] == error_msg2)
@@ -1095,22 +1097,26 @@ class QueryCurlTests(QueryTests):
                   (self.master.ip, self.n1ql_port)
         options = "{'data' : 'statement=%s','user':'curl_no_insert:password'}) curl_result " \
                   % (n1ql_query)
-        returning = "returning meta().id, * "
+        returning = "returning meta().id, *"
         curl = self.shell.execute_commands_inside(cbqpath, insert_query + query + options + returning, '', '', '', '',
                                                   '')
+        if "errorcode401" in curl or "errorcode400" in curl:
+            curl = curl.split("\x1b[")[0]
         json_curl = self.convert_to_json(curl)
         self.assertEqual(json_curl['errors'][0]['msg'], error_msg)
 
         cbqpath = '%scbq' % self.path + " -e %s:%s -q -u 'no_curl' -p 'password'" % \
                   (self.master.ip, self.n1ql_port)
         n1ql_query = 'select * from ' + self.sample_bucket + ' limit 1'
-        insert_query = "insert into " + self.query_bucket + " (key UUID(), value curl_result.results[0]." + self.sample_bucket + ") "
+        insert_query = "insert into " + self.query_bucket + " (key UUID(), value curl_result.results[0]) "
         query = "select curl(" + self.query_service_url + ", "
         options = "{'data' : 'statement=%s','user':'curl_no_insert:password'}) curl_result " \
                   % (n1ql_query)
-        returning = "returning meta().id, * "
+        returning = "returning meta().id, *"
         curl = self.shell.execute_commands_inside(cbqpath, insert_query + query + options + returning, '', '', '', '',
                                                   '')
+        if "errorcode401" in curl or "errorcode400" in curl:
+            curl = curl.split("\x1b[")[0]
         json_curl = self.convert_to_json(curl)
         self.assertTrue(json_curl['errors'][0]['msg'] == error_msg
                         or json_curl['errors'][0]['msg'] == error_msg2)
@@ -1118,8 +1124,8 @@ class QueryCurlTests(QueryTests):
     '''Test if curl privileges can be used to circumvent other privileges, (insert,update,delete)'''
 
     def test_circumvent_roles(self):
-        error_msg = "UserdoesnothavecredentialstorunINSERTqueriesonthedefaultbucket." \
-                    "Addrolequery_insertondefaulttoallowthequerytorun."
+        error_msg = "UserdoesnothavecredentialstorunINSERTqueriesondefault:default." \
+                    "Addrolequery_insertondefault:defaulttoallowthequerytorun."
         cbqpath = '%scbq' % self.path + " -e %s:%s -u 'curl_no_insert' -p 'password' -q " % \
                   (self.master.ip, self.n1ql_port)
         curl_query = "select curl(" + self.query_service_url + ", "
@@ -1130,8 +1136,8 @@ class QueryCurlTests(QueryTests):
         json_curl = self.convert_to_json(curl)
         self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg)
 
-        error_msg = "UserdoesnothavecredentialstorunUPDATEqueriesonthedefaultbucket." \
-                    "Addrolequery_updateondefaulttoallowthequerytorun."
+        error_msg = "UserdoesnothavecredentialstorunUPDATEqueriesondefault:default." \
+                    "Addrolequery_updateondefault:defaulttoallowthequerytorun."
         query = 'select meta().id from ' + self.query_bucket + ' limit 1'
         result = self.run_cbq_query(query)
         docid = result['results'][0]['id']
@@ -1142,8 +1148,8 @@ class QueryCurlTests(QueryTests):
         json_curl = self.convert_to_json(curl)
         self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg)
 
-        error_msg = "UserdoesnothavecredentialstorunDELETEqueriesonthedefaultbucket." \
-                    "Addrolequery_deleteondefaulttoallowthequerytorun."
+        error_msg = "UserdoesnothavecredentialstorunDELETEqueriesondefault:default." \
+                    "Addrolequery_deleteondefault:defaulttoallowthequerytorun."
         options = "{'data':'statement=delete from " + self.query_bucket + " use keys \\\"" + docid + "\\\"" \
                                                                                                      "returning meta().id, * '})"
         curl = self.shell.execute_commands_inside(cbqpath, curl_query + options, '', '', '', '', '')

@@ -1730,7 +1730,7 @@ class QueryTests(BaseTestCase):
         self.create_desired_indexes(desired_index_set, current_index_set, desired_indexes)
         self.log.info("--> end: ensure_primary_indexes_exist..")
 
-    def _wait_for_index_online(self, bucket, index_name, timeout=60):
+    def _wait_for_index_online(self, bucket, index_name, timeout=600):
         end_time = time.time() + timeout
         while time.time() < end_time:
             query = "SELECT * FROM system:indexes where name='%s'" % index_name
