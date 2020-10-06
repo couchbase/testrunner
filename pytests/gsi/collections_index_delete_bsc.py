@@ -134,7 +134,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
             self.assertFalse(index_status)
 
     def test_drop_index_with_delete_bsc(self):
-        num_of_docs_per_collection = 10 ** 6
+        num_of_docs_per_collection = 10 ** 4
         self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs_per_collection)
         collection_namespace = self.namespaces[0]
         index_gen = QueryDefinition(index_name='`#primary`')
@@ -392,10 +392,10 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
         age_query = f'select count(age) from {collection_namespace} where age >= 0'
         result = self.run_cbq_query(query=age_query)['results'][0]['$1']
         self.assertEqual(result, num_of_docs_per_collection)
-
+        self.sleep(10)
         index_status = self.rest.get_index_status()
 
-        self.assertEqual(list(index_status['test_bucket'].keys()), ['#primary', 'idx1', 'idx2', 'idx3'],
+        self.assertEqual(sorted(list(index_status['test_bucket'].keys())), sorted(['#primary', 'idx1', 'idx2', 'idx3']),
                          "Some Indexes are missing from index status")
 
     def test_delete_multiple_collections_with_indexes(self):
