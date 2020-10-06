@@ -1,6 +1,7 @@
 import random
 import time
 import uuid
+import math
 
 import mc_bin_client
 import memcacheConstants as constants
@@ -14,7 +15,6 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 from dcp_bin_client import DcpClient
-
 
 class EvictionKV(EvictionBase):
     def verify_all_nodes(self):
@@ -63,7 +63,7 @@ class EvictionKV(EvictionBase):
         compacted = self.cluster.compact_bucket(self.master, 'default')
 
         self.verify_all_nodes()
-
+    
     """
     add new keys at the same rate as keys are expiring
     Here is the algorithm:
@@ -87,10 +87,12 @@ class EvictionKV(EvictionBase):
         init_time_delay = self.input.param("init_time_delay", 30)
         initial_key_set_time = []
         # rampup - create a certain number of keys
-        float_creation_chunks = key_float / keys_expired_per_interval
+        float_creation_chunks = math.ceil(key_float / keys_expired_per_interval)
 
         for i in range(float_creation_chunks):
-            for j in range(keys_expired_per_interval):
+            leftover_keys = key_float - (keys_expired_per_interval * i)
+            keys_in_chunk = keys_expired_per_interval if leftover_keys > keys_expired_per_interval else leftover_keys
+            for j in range(keys_in_chunk):
                 key = str(uuid.uuid4()) + str(i) + str(j)
                 client.set(key, init_time_delay + expiry_time * (i + 1), 0, key)
             #pause before second chunk gets set 
@@ -100,8 +102,9 @@ class EvictionKV(EvictionBase):
                    "Waiting for first chunk to expire")
         for chunk in range(float_creation_chunks):
             key_set_time = int(time.time())
-
-            keys = ["key_%s_%d" % (uuid.uuid4(), i) for i in range(keys_expired_per_interval)]
+            leftover_keys = key_float - (keys_expired_per_interval * chunk)
+            keys_in_chunk = keys_expired_per_interval if leftover_keys > keys_expired_per_interval else leftover_keys
+            keys = ["key_%s_%d" % (uuid.uuid4(), i) for i in range(keys_in_chunk)]
             self.log.info("pushing keys with expiry set to {0}".format(expiry_time * float_creation_chunks))
             for key in keys:
                 try:
