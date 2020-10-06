@@ -3070,6 +3070,8 @@ class RestConnection(object):
             content = json.loads(content)
             return content['total_hits'], content['hits'], content['took'], \
                    content['status']
+        else:
+            return -1, content, -1, status
 
     def run_fts_query_with_facets(self, index_name, query_json):
         """Method run an FTS query through rest api"""
