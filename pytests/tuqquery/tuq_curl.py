@@ -270,10 +270,7 @@ class QueryCurlTests(QueryTests):
         json_curl = self.convert_to_json(curl)
         self.assertTrue(json_curl['status'] == 'errors' and 'cause:DuplicateKey' in json_curl['errors'][0]['msg'])
 
-        curl_query = 'select meta().id from ' + self.query_bucket + ' limit 1'
-        result = self.run_cbq_query(curl_query)
-        docid = json_curl['results'][0]['id']
-        delete_query = "delete from '" + self.query_bucket + "' d use keys '" + docid + "'"
+        delete_query = "delete from " + self.query_bucket + " d use keys '" + docid + "'"
         self.run_cbq_query(delete_query)
 
     '''Test that you can insert data from a select curl statement using upsert
