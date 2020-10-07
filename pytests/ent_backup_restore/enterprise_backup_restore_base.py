@@ -1281,6 +1281,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def bk_with_erlang_crash_and_restart(self):
         num_shards = ""
+        backup_failed = False
         backup_result = self.cluster.async_backup_cluster(
             backupset=self.backupset,
             objstore_provider=self.objstore_provider,
@@ -1294,6 +1295,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         conn.kill_erlang(delay=10)
         conn.start_couchbase()
         output = backup_result.result(timeout=700)
+        if self._check_output("Error backing up cluster", output):
+            backup_failed = True
+        if backup_failed:
+            backup_result = self.cluster.async_backup_cluster(
+                backupset=self.backupset,
+                objstore_provider=self.objstore_provider,
+                resume=True,
+                purge=self.backupset.purge,
+                no_progress_bar=self.no_progress_bar,
+                cli_command_location=self.cli_command_location,
+                cb_version=self.cb_version,
+                num_shards=num_shards)
+            output = backup_result.result(timeout=300)
         self.assertTrue(self._check_output("Backup successfully completed", output),
                         "Backup failed with erlang crash and restart within 180 seconds")
         self.log.info("Backup succeeded with erlang crash and restart within 180 seconds")
@@ -1324,6 +1338,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def bk_with_cb_server_stop_and_restart(self):
         num_shards = ""
+        backup_failed = False
         backup_result = self.cluster.async_backup_cluster(
             backupset=self.backupset,
             objstore_provider=self.objstore_provider,
@@ -1336,12 +1351,24 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.stop_couchbase()
         conn.start_couchbase()
-        output = backup_result.result(timeout=700)
-        self.assertTrue(self._check_output("Backup successfully completed", output),
-                        "Backup failed with couchbase stop and start within 180 seconds")
-        self.log.info("Backup succeeded with couchbase stop and start within 180 seconds")
-        self.sleep(30)
+        output = backup_result.result(timeout=500)
+        if self._check_output("Error backing up cluster", output):
+            backup_failed = True
         conn.disconnect()
+        if backup_failed:
+            backup_result = self.cluster.async_backup_cluster(
+                backupset=self.backupset,
+                objstore_provider=self.objstore_provider,
+                resume=True,
+                purge=self.backupset.purge,
+                no_progress_bar=self.no_progress_bar,
+                cli_command_location=self.cli_command_location,
+                cb_version=self.cb_version,
+                num_shards=num_shards)
+            output = backup_result.result(timeout=300)
+        self.assertTrue(self._check_output("Backup successfully completed", output),
+                       "Backup failed with couchbase stop and start within 180 seconds")
+
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
         command = (
             f"ls -tr {self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
