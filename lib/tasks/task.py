@@ -472,7 +472,7 @@ class CollectionCreateTask(Task):
 
 class ConcurrentIndexCreateTask(Task):
     def __init__(self, server, bucket, scope, collection, query_definitions=None, IndexTrackingObject=None,
-                 n1ql_helper=None, num_indexes=1, defer_build="", itr=0):
+                 n1ql_helper=None, num_indexes=1, defer_build="", itr=0, expected_failure=None):
         Task.__init__(self, "collection_create_task")
         self.server = server
         self.bucket_name = bucket
@@ -485,6 +485,9 @@ class ConcurrentIndexCreateTask(Task):
         self.num_indexes = num_indexes
         self.defer_build = defer_build
         self.itr = itr
+        self.expected_failure = expected_failure
+        if not self.expected_failure:
+            self.expected_failure = []
 
     def execute(self, task_manager):
         try:
@@ -499,7 +502,7 @@ class ConcurrentIndexCreateTask(Task):
                 for query_def in self.query_definitions:
                     if itr >= (self.num_indexes + self.itr):
                         break
-                    if "primary" not in query_def.groups:
+                    if "plasma_test" in query_def.groups:
                         query_def_copy = copy.deepcopy(query_def)
                         index_name = query_def_copy.get_index_name()
                         index_name = index_name + str(itr)
@@ -518,10 +521,12 @@ class ConcurrentIndexCreateTask(Task):
                             self.index_tracking_obj.all_indexes_metadata(index_meta=index_meta, operation="create",
                                                                           defer_build=defer_build)
                         except Exception as err:
-                            if "Build Already In Progress" not in str(err) and "Timeout 1ms exceeded" not in str(err):
+                            if not any(error in str(err) for error in self.expected_failure) \
+                                    and "Build Already In Progress" not in str(err) \
+                                    and "Timeout 1ms exceeded" not in str(err):
                                 error_map = {"query": query, "error": str(err)}
                                 self.index_tracking_obj.update_errors(error_map)
-                            else:
+                            elif not any(error in str(err) for error in self.expected_failure):
                                 self.index_tracking_obj.all_indexes_metadata(index_meta=index_meta, operation="create",
                                                                               defer_build=defer_build)
 
@@ -5442,6 +5447,8 @@ class NodesFailureTask(Task):
             self._enable_disable_packet_loss(self.current_failure_node, self.failure_timeout)
         elif self.failure_type == "enable_firewall":
             self._enable_disable_firewall(self.current_failure_node, self.failure_timeout)
+        if self.failure_type == "induce_enable_firewall":
+            self._enable_firewall(self.current_failure_node)
         elif self.failure_type == "disable_firewall":
             self._disable_firewall(self.current_failure_node)
         elif self.failure_type == "restart_couchbase":
@@ -5466,8 +5473,12 @@ class NodesFailureTask(Task):
             self.itr += 1
         elif self.failure_type == "disk_failure":
             self._fail_recover_disk_failure(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "induce_disk_failure":
+            self._fail_disk(self.current_failure_node)
         elif self.failure_type == "disk_full":
             self._disk_full_recover_failure(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "induce_disk_full":
+            self._disk_full_failure(self.current_failure_node)
         elif self.failure_type == "recover_disk_failure":
             self._recover_disk(self.current_failure_node)
         elif self.failure_type == "recover_disk_full_failure":
@@ -5739,7 +5750,7 @@ class NodesFailureTask(Task):
 
     def _disk_full_failure(self, node):
         shell = RemoteMachineShellConnection(node)
-        output, error = shell.fill_disk_space(self.disk_location, self.disk_size)
+        output, error = shell.fill_disk_space(self.disk_location)
         success = False
         if output:
             for line in output:

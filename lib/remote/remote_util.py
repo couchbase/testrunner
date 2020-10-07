@@ -5228,7 +5228,7 @@ class RemoteMachineShellConnection(KeepRefs):
         output, error = self.execute_command(command)
         return output, error
 
-    def fill_disk_space(self, location, size):
+    def fill_disk_space(self, location):
         """
         Fill up the disk fully at the location specified.
         This method creates a junk file of the specified size in the location specified
@@ -5236,8 +5236,7 @@ class RemoteMachineShellConnection(KeepRefs):
         :param size: Size of disk space to fill up, in MB
         :return: Output and error message from filling up the disk.
         """
-        count = (size * 1024 * 1024) // 512
-        command = "dd if=/dev/zero of={0}/disk-quota.ext3 count={1}; df -Th".format(location, count)
+        command = "dd if=/dev/zero of={0}/disk-quota.ext3 count={1}; df -Th".format(location, 1024000000)
         output, error = self.execute_command(command)
         return output, error
 

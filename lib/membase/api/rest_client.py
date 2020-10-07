@@ -1900,6 +1900,14 @@ class RestConnection(object):
             index_map = RestParser().parse_index_stats_response(json_parsed, index_map=index_map)
         return index_map
 
+    def get_index_stats_collections(self, timeout=120, index_map=None):
+        api = self.index_baseUrl + 'stats'
+        status, content, header = self._http_request(api, timeout=timeout)
+        if status:
+            json_parsed = json.loads(content)
+            index_map = RestParser().parse_index_stats_response_collections(json_parsed, index_map=index_map)
+        return index_map
+
     def get_index_official_stats(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'api/v1/stats'
         status, content, header = self._http_request(api, timeout=timeout)
@@ -5558,6 +5566,35 @@ class RestParser(object):
                 if index_name not in list(index_map[bucket].keys()):
                     index_map[bucket][index_name] = {}
                 index_map[bucket][index_name][stats_name] = val
+        return index_map
+
+    def parse_index_stats_response_collections(self, parsed, index_map=None):
+        if index_map == None:
+            index_map = {}
+        for key in list(parsed.keys()):
+            tokens = key.split(":")
+            val = parsed[key]
+            if len(tokens) == 3:
+                bucket = tokens[0]
+                index_name = tokens[1]
+                stats_name = tokens[2]
+                if bucket not in list(index_map.keys()):
+                    index_map[bucket] = {}
+                if index_name not in list(index_map[bucket].keys()):
+                    index_map[bucket][index_name] = {}
+                index_map[bucket][index_name][stats_name] = val
+            elif len(tokens) == 5:
+                bucket = tokens[0]
+                scope_name = tokens[1]
+                collection_name = tokens[2]
+                index_name = tokens[3]
+                stats_name = tokens[4]
+                keyspace = f'default:{bucket}.{scope_name}.{collection_name}'
+                if keyspace not in list(index_map.keys()):
+                    index_map[keyspace] = {}
+                if index_name not in list(index_map[keyspace].keys()):
+                    index_map[keyspace][index_name] = {}
+                index_map[keyspace][index_name][stats_name] = val
         return index_map
 
     def parse_get_nodes_response(self, parsed):

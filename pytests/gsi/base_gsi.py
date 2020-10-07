@@ -751,6 +751,23 @@ class BaseSecondaryIndexingTests(QueryTests):
                     return False
         return True
 
+    def _verify_items_count_collections(self, index_node):
+        """
+        Compares Items indexed count is sample
+        as items in the bucket.
+        """
+        index_rest = RestConnection(index_node)
+        index_map = index_rest.get_index_stats_collections()
+        for keyspace in list(index_map.keys()):
+            self.log.info("Keyspace: {0}".format(keyspace))
+            for index_name, index_val in index_map[keyspace].items():
+                self.log.info("Index: {0}".format(index_name))
+                self.log.info("number of docs pending: {0}".format(index_val["num_docs_pending"]))
+                self.log.info("number of docs queued: {0}".format(index_val["num_docs_queued"]))
+                if index_val["num_docs_pending"] and index_val["num_docs_queued"]:
+                    return False
+        return True
+
     def verify_type_fields(self, num_hotels=0, num_airports=0, num_airlines=0, expected_failure=False):
         retries = 3
         query = "select * from `{0}` where type = {1} order by meta().id"
@@ -817,6 +834,39 @@ class BaseSecondaryIndexingTests(QueryTests):
                                 "Bucket {0}, mismatch in item count for index :{1} : expected {2} != actual {3} ".format
                                 (bucket.name, query.index_name, bucket_count, index_count))
         self.log.info("Items Indexed Verified with bucket count...")
+
+    def wait_for_mutation_processing(self, index_nodes):
+        count = 0
+        all_nodes_mutation_processed = True
+        for index_node in index_nodes:
+            while not self._verify_items_count_collections(index_node) and count < 15:
+                self.log.info("All Items Yet to be Indexed...")
+                self.sleep(10)
+                count += 1
+            if not self._verify_items_count_collections(index_node):
+                self.log.error("All Items didn't get Indexed...")
+                mutation_processed = False
+            else:
+                self.log.info("All Items are indexed")
+                mutation_processed = True
+
+            all_nodes_mutation_processed = all_nodes_mutation_processed and mutation_processed
+        return all_nodes_mutation_processed
+
+    def _verify_collection_count_with_index_count(self, query_def):
+        recovered = False
+        index_name = query_def.index_name
+        keyspace = query_def.keyspace
+        collection_itemcount = self.n1ql_helper.get_collection_itemCount(keyspace)
+        index_count = self.n1ql_helper.get_index_count_using_index_collection(keyspace, index_name, self.n1ql_node)
+        if int(index_count) == int(collection_itemcount):
+            recovered = True
+            self.log.info(f'Collection item count : {collection_itemcount}, '
+                          f'item count for index {index_name}: {index_count}')
+        else:
+            self.log.error(f'Collection item count : {collection_itemcount}, '
+                          f'item count for index {index_name}: {index_count}')
+        return recovered, index_count, collection_itemcount
 
     def _check_all_bucket_items_indexed(self, query_definitions=None, buckets=None):
         """
@@ -1023,7 +1073,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                         if rr != 0 and rr < 1.00:
                             index_in_dgm += 1
                             self.log.info("Index : {} , resident_ratio : {}".format(key, rr))
-                if index_in_dgm > (tot_indexes/2):
+                if index_in_dgm > (tot_indexes/3):
                     node_in_dgm = True
             except IndexError as e:
                 node_in_dgm = True

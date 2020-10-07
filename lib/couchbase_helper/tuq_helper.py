@@ -904,6 +904,20 @@ class N1QLHelper():
         res = self.run_cbq_query(query=query, server=server)
         return int(res['results'][0]['$1'])
 
+    def get_index_count_using_index_collection(self, keyspace, index_name, server=None):
+        query = 'SELECT COUNT(*) FROM {0} USE INDEX ({1})'.format(keyspace, index_name)
+        if not server:
+            server = self.master
+        res = self.run_cbq_query(query=query, server=server)
+        return int(res['results'][0]['$1'])
+
+    def get_collection_itemCount(self, keyspace, server=None):
+        query = 'SELECT COUNT(*) FROM {0}'.format(keyspace)
+        if not server:
+            server = self.master
+        res = self.run_cbq_query(query=query, server=server)
+        return int(res['results'][0]['$1'])
+
     def _gen_dict(self, result):
         result_set = []
         if result is not None and len(result) > 0:
