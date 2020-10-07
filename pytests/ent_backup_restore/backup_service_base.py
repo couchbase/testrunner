@@ -3,6 +3,7 @@ import re
 import json
 import shlex
 import datetime
+from TestInput import TestInputSingleton
 from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase
 from membase.api.rest_client import RestConnection
 from lib.backup_service_client.configuration import Configuration
@@ -49,6 +50,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         1. Runs preamble.
         """
+        TestInputSingleton.input.test_params["backup_service_test"] = True
         super().setUp()
         self.preamble()
 
@@ -57,6 +59,11 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         # Run cbbackupmgr on the same node as the backup service being tested
         self.backupset.backup_host = self.backupset.cluster_host
+
+        # Share archive directory
+        self.directory_to_share = "/tmp/share"
+        self.nfs_connection = NfsConnection(self.input.clusters[0][0], self.input.clusters[0])
+        self.nfs_connection.share(self.directory_to_share, self.backupset.directory)
 
         if self.objstore_provider:
             self.create_staging_directory()
@@ -67,6 +74,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # List of temporary directories
         self.temporary_directories = []
         self.temporary_directories.append(self.backupset.objstore_alternative_staging_directory)
+        self.temporary_directories.append(self.directory_to_share)
 
     def mkdir(self, directory):
         """ Creates a directory
@@ -276,6 +284,11 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         except AttributeError:
             pass
 
+        try:
+            self.nfs_connection.clean(self.directory_to_share)
+        except AttributeError:
+            pass
+
         super().tearDown()
 
 class Time:
@@ -357,3 +370,56 @@ class HistoryFile:
         """ History file delete last entry
         """
         self.remote_shell.execute_command(f"sed -i '$ d' {self.history_file}")
+
+class NfsConnection:
+    def __init__(self, server, clients):
+        self.server, self.clients = NfsServer(server), [NfsClient(server, client) for client in clients]
+
+    def share(self, directory_to_share, directory_to_mount):
+        self.server.share(directory_to_share)
+
+        for client in self.clients:
+            client.mount(directory_to_share, directory_to_mount)
+
+    def clean(self, directory_to_mount):
+        self.server.clean()
+
+        for client in self.clients:
+            client.clean(directory_to_mount)
+
+class NfsServer:
+    exports_directory = "/etc/exports"
+
+    def __init__(self, server):
+        self.remote_shell = RemoteMachineShellConnection(server)
+        self.provision()
+
+    def provision(self):
+        self.remote_shell.execute_command("yum -y install nfs-utils")
+        self.remote_shell.execute_command("systemctl start nfs-server.service")
+
+    def share(self, directory_to_share):
+        self.remote_shell.execute_command(f"mkdir -p {directory_to_share}")
+        self.remote_shell.execute_command(f"chmod -R 777 {directory_to_share}")
+        self.remote_shell.execute_command(f"chown -R couchbase:couchbase {directory_to_share}")
+        self.remote_shell.execute_command(f"echo '{directory_to_share} *(rw,sync,no_root_squash)' > {NfsServer.exports_directory} && exportfs -a")
+
+    def clean(self):
+        self.remote_shell.execute_command(f"echo > {NfsServer.exports_directory} && exportfs -a")
+
+class NfsClient:
+    def __init__(self, server, client):
+        self.server, self.client, self.remote_shell = server, client, RemoteMachineShellConnection(client)
+        self.provision()
+
+    def provision(self):
+        self.remote_shell.execute_command("yum -y install nfs-utils")
+        self.remote_shell.execute_command("systemctl start nfs-server.service")
+
+    def mount(self, directory_to_share, directory_to_mount):
+        self.remote_shell.execute_command(f"mkdir -p {directory_to_mount}")
+        self.remote_shell.execute_command(f"umount -f -l {directory_to_mount}")
+        self.remote_shell.execute_command(f"mount {self.server.ip}:{directory_to_share} {directory_to_mount}")
+
+    def clean(self, directory_to_mount):
+        self.remote_shell.execute_command(f"umount -f -l {directory_to_mount}")

@@ -21,7 +21,7 @@ from couchbase_helper.stats_tools import StatsCommon
 from lib.couchbase_helper.documentgenerator import SDKDataLoader
 from lib.ep_mc_bin_client import MemcachedClient
 from lib.mc_bin_client import MemcachedClient as MC_MemcachedClient
-from membase.api.exception import ServerUnavailableException
+from membase.api.exception import ServerUnavailableException, ServerAlreadyJoinedException
 from membase.api.rest_client import Bucket, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -330,6 +330,18 @@ class BaseTestCase(unittest.TestCase):
                 self.change_port_info()
             if self.input.param("port", None):
                 self.port = str(self.input.param("port", None))
+
+            # Rebalance cluster[0] if this is a backup service test case.
+            if self.input.param("backup_service_test", False):
+                # Skip testrunner's rebalance procedure
+                self.input.test_params["skip_rebalance"] = True
+
+                # Provision node in cluster[0] into a cluster
+                try:
+                    Cluster().rebalance(self.input.clusters[0], self.input.clusters[0][1:], [], services=[server.services for server in self.servers])
+                except ServerAlreadyJoinedException:
+                    self.log.info("The cluster has already been rebalanced.")
+
             try:
                 if (str(self.__class__).find('rebalanceout.RebalanceOutTests') != -1) or \
                         (str(self.__class__).find('memorysanitytests.MemorySanity') != -1) or \
