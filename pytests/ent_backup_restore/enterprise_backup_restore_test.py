@@ -2797,7 +2797,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 output, error = remote_client.execute_command(f"{command} {sub_command} {argument}")
                 remote_client.log_command_output(output, error)
                 self.assertNotEqual(len(output), 0)
-                self.assertIn("cloud arguments provided without the cloud scheme prefix", output[0],
+                error_mesg = "cloud arguments provided without the cloud scheme prefix"
+                if "bucket" in sub_command:
+                    error_mesg = "Unknown flag: --bucket"
+                self.assertIn(error_mesg, output[0],
                                 "Expected an error about providing cloud arguments without the cloud schema prefix")
 
                 # Check all the S3 specific arguments
@@ -2806,7 +2809,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                         output, error = remote_client.execute_command(f"{command} {sub_command} {argument}")
                         remote_client.log_command_output(output, error)
                         self.assertNotEqual(len(output), 0)
-                        self.assertIn("s3 arguments provided without the archive 's3://' schema prefix", output[0],
+                        error_mesg_obj = "s3 arguments provided without the archive 's3://' schema prefix"
+                        if "bucket" in sub_command:
+                            error_mesg_obj = "Unknown flag: --bucket"
+                        self.assertIn(error_mesg_obj, output[0],
                                         "Expected an error about providing S3 specific arguments without the s3:// schema prefix")
 
             # Check all the common objstore flags that require arguments without providing arguments. This is testing
@@ -2824,7 +2830,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 )
                 remote_client.log_command_output(output, error)
                 self.assertNotEqual(len(output), 0)
-                self.assertIn(f"Expected argument for option: {argument}", output[0],
+                error_mesg = f"Expected argument for option: {argument}"
+                if "bucket" in sub_command:
+                    error_mesg = "Unknown flag: --bucket"
+                self.assertIn(error_mesg, output[0],
                                 "Expected an error about providing cloud arguments without a value")
 
             # Check all the S3 specific flags that require arguments without providing arguments. This is testing
@@ -2835,7 +2844,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 )
                 remote_client.log_command_output(output, error)
                 self.assertNotEqual(len(output), 0)
-                self.assertIn(f"Expected argument for option: {argument}", output[0],
+                error_mesg = f"Expected argument for option: {argument}"
+                if "bucket" in sub_command:
+                    error_mesg = "Unknown flag: --bucket"
+                self.assertIn(error_mesg, output[0],
                                 "Expected an error about providing cloud arguments without a value")
 
 
@@ -2845,7 +2857,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             )
             remote_client.log_command_output(output, error)
             self.assertNotEqual(len(output), 0)
-            self.assertIn("you must provide the '--obj-staging-dir' argument", output[0],
+            error_mesg = "you must provide the '--obj-staging-dir' argument"
+            if "bucket" in sub_command:
+                error_mesg = "Unknown flag: --bucket"
+            self.assertIn(error_mesg, output[0],
                             "Expected an error about not supplying the '--obj-staging-dir' argument")
 
     def test_backup_cluster_restore_negative_args(self):
@@ -4379,8 +4394,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.end = 1
         output, _ = self.backup_restore()
         self.assertEqual(len(output), 1)
-        self.assertIn("start point", output[0])
-        self.assertIn("is after end point", output[0])
+        self.assertIn("range start", output[0])
+        self.assertIn("cannot be before end", output[0])
 
     def test_restore_single_full_backup(self):
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
