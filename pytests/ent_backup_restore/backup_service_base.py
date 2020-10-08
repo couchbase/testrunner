@@ -285,7 +285,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             pass
 
         try:
-            self.nfs_connection.clean(self.directory_to_share)
+            self.nfs_connection.clean(self.backupset.directory)
         except AttributeError:
             pass
 
@@ -402,8 +402,7 @@ class NfsServer:
         self.remote_shell.execute_command(f"mkdir -p {directory_to_share}")
         self.remote_shell.execute_command(f"chmod -R 777 {directory_to_share}")
         self.remote_shell.execute_command(f"chown -R couchbase:couchbase {directory_to_share}")
-        self.remote_shell.execute_command(f"echo '{directory_to_share} *(rw,sync,no_root_squash)' > {NfsServer.exports_directory} && exportfs -a")
-
+        self.remote_shell.execute_command(f"echo '{directory_to_share} *(rw,sync,all_squash,anonuid=997,anongid=996)' > {NfsServer.exports_directory} && exportfs -a")
     def clean(self):
         self.remote_shell.execute_command(f"echo > {NfsServer.exports_directory} && exportfs -a")
 
