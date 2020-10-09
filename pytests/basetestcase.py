@@ -229,7 +229,7 @@ class BaseTestCase(unittest.TestCase):
 
             self.log.info("==============  basetestcase setup was started for test #{0} {1}==============" \
                           .format(self.case_number, self._testMethodName))
-            if not self.skip_buckets_handle and not self.skip_init_check_cbserver:
+            if not self.input.param("skip_cleanup", False) and not self.skip_buckets_handle and not self.skip_init_check_cbserver:
                 self._cluster_cleanup()
 
             if self.disable_ipv6_grub:
@@ -336,11 +336,13 @@ class BaseTestCase(unittest.TestCase):
                 # Skip testrunner's rebalance procedure
                 self.input.test_params["skip_rebalance"] = True
 
-                # Provision node in cluster[0] into a cluster
-                try:
-                    Cluster().rebalance(self.input.clusters[0], self.input.clusters[0][1:], [], services=[server.services for server in self.servers])
-                except ServerAlreadyJoinedException:
-                    self.log.info("The cluster has already been rebalanced.")
+                # If this is the first test then rebalance cluster[0]
+                if self.input.param("first_test", False):
+                    # Provision node in cluster[0] into a cluster
+                    try:
+                        Cluster().rebalance(self.input.clusters[0], self.input.clusters[0][1:], [], services=[server.services for server in self.servers])
+                    except ServerAlreadyJoinedException:
+                        self.log.info("The cluster has already been rebalanced.")
 
             try:
                 if (str(self.__class__).find('rebalanceout.RebalanceOutTests') != -1) or \

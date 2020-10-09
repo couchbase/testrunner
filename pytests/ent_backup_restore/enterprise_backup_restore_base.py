@@ -325,7 +325,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                           self.vbuckets,
                                                           self.objstore_provider)
 
-    def clean_up(self, server):
+    def clean_up(self, server, skip_eject_and_rebalance=False):
         """ Clean up files and directories left by backup testing.
 
         Params:
@@ -353,7 +353,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             command = "rm -rf /cbqe3043/entbackup"
             output, error = remote_client.execute_command(command)
             remote_client.log_command_output(output, error)
-        if self.input.clusters:
+        if not skip_eject_and_rebalance and self.input.clusters:
             for key in list(self.input.clusters.keys()):
                 servers = self.input.clusters[key]
                 try:

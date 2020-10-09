@@ -599,7 +599,8 @@ class BackupServiceTest(BackupServiceBase):
         for i in range(0, 3):
             self.backup_cluster()
 
-        self.chown(self.backupset.directory, user="root", group="root")
+        self.chown(self.directory_to_share, user="root", group="root")
+        self.chmod("660", self.directory_to_share)
 
         repo_name = "my_repo"
         body = Body6(id=repo_name, archive=self.backupset.directory, repo=self.backupset.name)
@@ -617,13 +618,12 @@ class BackupServiceTest(BackupServiceBase):
         for i in range(0, 3):
             self.backup_cluster()
 
-        self.chown(self.backupset.directory)
-        self.chmod(self.backupset.directory, 440)
+        self.chmod("444", self.directory_to_share)
 
         body = Body6(id="my_repo", archive=self.backupset.directory, repo=self.backupset.name)
 
         # Import repository
-        self.assertEqual(self.import_api.cluster_self_repository_import_post_with_http_info(body=body)[1], 200)
+        self.assertEqual(self.import_api.cluster_self_repository_import_post_with_http_info(body=body)[1], 400)
 
     def test_one_off_backup(self):
         """ Test one off backup

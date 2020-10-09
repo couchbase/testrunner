@@ -3,6 +3,7 @@ import re
 import json
 import shlex
 import datetime
+
 from TestInput import TestInputSingleton
 from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase
 from membase.api.rest_client import RestConnection
@@ -16,6 +17,7 @@ from lib.backup_service_client.api.active_repository_api import ActiveRepository
 from lib.backup_service_client.models.body3 import Body3
 from lib.backup_service_client.models.body4 import Body4
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
+from lib.membase.helper.bucket_helper import BucketOperationHelper
 
 class BackupServiceBase(EnterpriseBackupRestoreBase):
     def preamble(self):
@@ -50,7 +52,15 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         1. Runs preamble.
         """
+        # Indicate that this is a backup service test
         TestInputSingleton.input.test_params["backup_service_test"] = True
+
+        # Skip the more general clean up process that test runner does at
+        # the end of each which includes tearing down the cluster by
+        # ejecting nodes, rebalancing and using diag eval to 'reset'
+        # the cluster.
+        TestInputSingleton.input.test_params["skip_cleanup"] = True
+
         super().setUp()
         self.preamble()
 
@@ -75,6 +85,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         self.temporary_directories = []
         self.temporary_directories.append(self.backupset.objstore_alternative_staging_directory)
         self.temporary_directories.append(self.directory_to_share)
+        self.temporary_directories.append(self.backupset.directory)
 
     def mkdir(self, directory):
         """ Creates a directory
@@ -131,6 +142,10 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         for repo in self.repository_api.cluster_self_repository_state_get('imported'):
             self.repository_api.cluster_self_repository_state_id_delete_with_http_info('imported', repo.id)
+
+    def delete_task(self, state, repo_id, task_type, task_name):
+        rest = RestConnection(self.master)
+        status, content, header = self._http_request(rest.baseUrl + f"_p/backup/internal/api/v1/cluster/self/repository/{state}/{repo_id}/task/{task_type}/{task_name}", 'DELETE')
 
     def delete_temporary_directories(self):
         for directory in self.temporary_directories:
@@ -278,8 +293,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             self.delete_all_repositories()
             self.delete_all_plans()
             self.time.reset()
+
+        # The tearDown before the setUp which means certain attributes such as the backupset do not exist
         try:
-            self.clean_up(self.backupset.backup_host)
             self.delete_temporary_directories()
         except AttributeError:
             pass
@@ -289,7 +305,21 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         except AttributeError:
             pass
 
-        super().tearDown()
+        # We have to be careful about how we tear things down to speed up tests,
+        # all rebalances must be skipped until the last test is run to avoid
+        # running into MB-41898
+
+        # Delete buckets before rebalance
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+
+        # Call EnterpriseBackupRestoreBase's to delete archives/repositories and temporary directories
+        # skipping any node ejection and rebalances
+        self.clean_up(self.input.clusters[1][0], skip_eject_and_rebalance=True)
+
+        # If this is the last test, we want to tear down the cluster we provisioned on the first test
+        # Note a test must mark it is the last test by supplying setting `last_test` as a test param
+        if self.input.param("last_test", False):
+            super().tearDown()
 
 class Time:
     """ A class to manipulate time.
@@ -399,10 +429,12 @@ class NfsServer:
         self.remote_shell.execute_command("systemctl start nfs-server.service")
 
     def share(self, directory_to_share):
+        self.remote_shell.execute_command(f"exportfs -ua")
+        self.remote_shell.execute_command(f"rm -rf {directory_to_share}")
         self.remote_shell.execute_command(f"mkdir -p {directory_to_share}")
         self.remote_shell.execute_command(f"chmod -R 777 {directory_to_share}")
         self.remote_shell.execute_command(f"chown -R couchbase:couchbase {directory_to_share}")
-        self.remote_shell.execute_command(f"echo '{directory_to_share} *(rw,sync,all_squash,anonuid=997,anongid=996)' > {NfsServer.exports_directory} && exportfs -a")
+        self.remote_shell.execute_command(f"echo '{directory_to_share} *(rw,sync,all_squash,anonuid=997,anongid=996,fsid=1)' > {NfsServer.exports_directory} && exportfs -a")
     def clean(self):
         self.remote_shell.execute_command(f"echo > {NfsServer.exports_directory} && exportfs -a")
 
@@ -416,8 +448,9 @@ class NfsClient:
         self.remote_shell.execute_command("systemctl start nfs-server.service")
 
     def mount(self, directory_to_share, directory_to_mount):
-        self.remote_shell.execute_command(f"mkdir -p {directory_to_mount}")
         self.remote_shell.execute_command(f"umount -f -l {directory_to_mount}")
+        self.remote_shell.execute_command(f"rm -rf {directory_to_mount}")
+        self.remote_shell.execute_command(f"mkdir -p {directory_to_mount}")
         self.remote_shell.execute_command(f"mount {self.server.ip}:{directory_to_share} {directory_to_mount}")
 
     def clean(self, directory_to_mount):
