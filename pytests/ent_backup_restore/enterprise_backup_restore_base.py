@@ -2,6 +2,7 @@ import copy
 import os, shutil, ast, re, subprocess
 import json
 import urllib, datetime, time, random
+import uuid
 
 from boto3 import s3, resource
 from botocore.exceptions import ClientError
@@ -288,7 +289,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
         # Common configuration which are shared accross cloud providers
         self.backupset.objstore_access_key_id = self.input.cbbackupmgr_param('access_key_id', '')
-        self.backupset.objstore_bucket = self.input.cbbackupmgr_param('bucket', 'cbbackupmgr-testing')
+        self.backupset.objstore_bucket = self.input.cbbackupmgr_param('bucket', str(uuid.uuid1()))
         self.backupset.objstore_cacert = self.input.cbbackupmgr_param('cacert', '')
         self.backupset.objstore_endpoint = self.input.cbbackupmgr_param('endpoint', '')
         self.backupset.objstore_no_ssl_verify = self.input.cbbackupmgr_param('no_ssl_verify', False)
