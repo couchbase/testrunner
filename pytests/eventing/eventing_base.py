@@ -36,14 +36,18 @@ class EventingBaseTest(QueryHelperTests):
         else:
             log.info("\n\nStarting Test: %s" % (self._testMethodName))
         self.input = TestInputSingleton.input
-        self.skip_init_check_cbserver = \
-            self.input.param("skip_init_check_cbserver", False)
-        if not self.skip_init_check_cbserver:
+        self.is_upgrade_test = self.input.param("is_upgrade_test", False)
+        if str(self.__class__).find('newupgradetests') != -1 or \
+                    str(self.__class__).find('upgradeXDCR') != -1 or \
+                    str(self.__class__).find('Upgrade_EpTests') != -1 or \
+                    str(self.__class__).find('UpgradeTests')  != -1:
+            self.is_upgrade_test = True
+        if not self.is_upgrade_test:
             self.input.test_params.update({"default_bucket": False})
         super(EventingBaseTest, self).setUp()
         self.master = self.servers[0]
         self.server = self.master
-        if not self.skip_init_check_cbserver:
+        if not self.is_upgrade_test:
             self.restServer = self.get_nodes_from_services_map(service_type="eventing")
             if self.restServer:
                 self.rest = RestConnection(self.restServer)
@@ -72,7 +76,7 @@ class EventingBaseTest(QueryHelperTests):
         self.timer_storage_chan_size = self.input.param('timer_storage_chan_size', 10000)
         self.dcp_gen_chan_size = self.input.param('dcp_gen_chan_size', 10000)
         self.is_sbm=self.input.param('source_bucket_mutation',False)
-        if not self.skip_init_check_cbserver:
+        if not self.is_upgrade_test:
             self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
             self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify,
                                       buckets=self.buckets,
@@ -91,7 +95,7 @@ class EventingBaseTest(QueryHelperTests):
         self.url = self.input.param('path', None)
         self.cookies = self.input.param('cookies',False)
         self.bearer_key = self.input.param('bearer_key','')
-        if self.hostname=='local' and not self.skip_init_check_cbserver:
+        if self.hostname=='local' and not self.is_upgrade_test:
             ##self.insall_dependencies()
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
@@ -118,7 +122,7 @@ class EventingBaseTest(QueryHelperTests):
         if self.hostname == 'local':
             self.teardown_curl()
         # check metadata bucke is empty
-        if len(buckets) > 0 and not self.skip_metabucket_check and not self.skip_init_check_cbserver:
+        if len(buckets) > 0 and not self.skip_metabucket_check and not self.is_upgrade_test:
             stats_meta = rest.get_bucket_stats("metadata")
             self.log.info("number of documents in metadata bucket {}".format(stats_meta["curr_items"]))
             if stats_meta["curr_items"] != 0:
