@@ -1,7 +1,7 @@
 import re
 import json
 import random
-from ent_backup_restore.backup_service_base import BackupServiceBase, HistoryFile
+from ent_backup_restore.backup_service_base import BackupServiceBase, HistoryFile, MultipleRemoteShellConnections
 from lib.couchbase_helper.time_helper import TimeUtil
 from membase.api.rest_client import RestConnection
 from lib.backup_service_client.models.task_template import TaskTemplate
@@ -665,8 +665,10 @@ class BackupServiceTest(BackupServiceBase):
             self.backupset.objstore_staging_directory = repository.cloud_info.staging_dir
         self.backupset.name = repository.repo
 
+        backup_name = self.map_task_to_backup("active", repo_name, task_name)
+
         # Check backup content equals content of backup cluster
-        self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None)
+        self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name=backup_name)
 
     def test_one_off_incr_backup(self):
         """ Test one off backup full backup followed by one off incremental backup
@@ -850,6 +852,9 @@ class BackupServiceTest(BackupServiceBase):
         # Wait until task has completed
         self.assertTrue(self.wait_for_backup_task("active", repo_name, 20, 20, task_name=task_name))
 
+        # Get backup name
+        backup_name = self.map_task_to_backup("active", repo_name, task_name)
+
         # Flush all buckets to empty cluster of all documents
         rest_connection = RestConnection(self.master)
         for bucket in self.buckets:
@@ -872,7 +877,7 @@ class BackupServiceTest(BackupServiceBase):
         self.assertTrue(self.wait_for_backup_task("active", repo_name, 20, 5))
 
         # Check backup content equals content of cluster after restore
-        self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None)
+        self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name=backup_name)
 
     def test_invalid_tasks(self):
         """ Merging/Restoring backups that do not exist.
@@ -1679,3 +1684,133 @@ class BackupServiceTest(BackupServiceBase):
         # Check the prev_time is more recent compared to the next_time
         for prev_time, next_time in zip(task_start_times, task_start_times[1:]):
             self.assertGreater(prev_time, next_time)
+
+    # Shared directory
+
+    def test_shared_directory(self):
+        """ Test same archive path but the location is not shared
+
+        params:
+            lose_shared (str): If set unmounts 'some' or 'all' nodes lose shared access.
+            permissions (str): If set changes permissions to 'ro' or 'wo'.
+            leader_case (bool): If True, Non-leader nodes have read only access.
+        """
+        repo_name = "my_repo"
+        lose_shared = self.input.param("lose_shared", None)
+        permissions = self.input.param("permissions", None)
+        leader_case = self.input.param("leader_case", False)
+
+        self.create_repository_with_default_plan(repo_name)
+
+        # Load buckets with data
+        self._load_all_buckets(self.master, BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items), "create", 0)
+
+        # Sleep to ensure the bucket is populated with data
+        self.sleep(10)
+
+        # A list of clients that lose shared access in the `lose_share` and `some_nodes` case
+        clients_that_lost_shared_access = []
+
+        if lose_shared == 'some':
+            # Pick a 2 random clients and unmount the archive location
+            # Consequently, either the leader and the node lose shared access Or both non-leader nodes lose shared access.
+            for client in random.sample(self.nfs_connection.clients, 2):
+                client.clean(self.backupset.directory)
+                clients_that_lost_shared_access.append(client)
+
+        if lose_shared == 'all':
+            # Unshare shared directory and unmount archive location for all nodes
+            self.nfs_connection.clean(self.backupset.directory)
+
+        if permissions == 'wo':
+            # Make shared directory write only
+            self.chmod("222", self.directory_to_share)
+
+        if permissions == 'ro':
+            # Make shared directory read only
+            self.chmod("444", self.directory_to_share)
+
+        # Non-leader nodes have ro permissions
+        if leader_case:
+            leadernode = self.get_leader()
+            privileges = {server.ip: 'rw' if server == leadernode else 'ro' for server in self.input.clusters[0]}
+            self.nfs_connection.clean(self.backupset.directory)
+            self.nfs_connection.share(self.directory_to_share, self.backupset.directory, privileges)
+
+        # Perform a one off backup
+        _, status, _, response_data = self.active_repository_api.cluster_self_repository_active_id_backup_post_with_http_info(repo_name)
+
+        # If the status is 500, that means that backup was not able to proceed due to
+        # the detection of the unshared archive location in which case we can simply return.
+        if status == 500:
+            return
+
+        # Check the task was started
+        self.assertEqual(status, 200)
+
+        # Sleep to give time for the task to fail and be removed
+        self.sleep(10)
+
+        # Fetch repository information
+        repository = self.repository_api.cluster_self_repository_state_id_get('active', repo_name)
+        self.assertIsNone(repository.running_one_off)
+
+        # Fetch the task history
+        task_history, status, _, _ = self.repository_api.cluster_self_repository_state_id_task_history_get_with_http_info('active', repo_name)
+
+        # If the task history can be fetched, check the task didn't complete
+        if status == 200:
+            if len(task_history) == 0:
+                return
+
+            task = task_history[0]
+            self.assertEqual(task.status, "failed")
+            self.assertEqual(task.error_code, 2)
+
+    def test_privileges_revoked_later(self):
+        """ Test same archive path but the location is not shared or privileges are dropped.
+
+        params:
+            case: If ro, makes the shared directory read only. Otherwise, unmounts the shared directory.
+        """
+        repo_name, case = "my_repo", self.input.param("case", "ro")
+
+        self.assertIn(case, ["ro", "unmount"])
+
+        self.create_repository_with_default_plan(repo_name)
+
+        # Load buckets with data
+        self._load_all_buckets(self.master, BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items), "create", 0)
+
+        # Sleep to ensure the bucket is populated with data
+        self.sleep(10)
+
+        # Perform a one off backup
+        task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name).task_name
+        # Wait until the backup task has completed
+        self.assertTrue(self.wait_for_backup_task("active", repo_name, 20, 5, task_name=task_name))
+
+        if case == "ro":
+            # Make shared directory read only
+            self.chmod("444", self.directory_to_share)
+        else:
+            # Unmount shared directory
+            for client in self.nfs_connection.clients:
+                client.clean(self.backupset.directory)
+
+        # Perform a one off backup
+        self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name)
+
+        self.sleep(10)
+
+        if case == "ro":
+            # Make the shared directory accessible again
+            self.chmod("777", self.directory_to_share)
+        else:
+            # Remount shared directory
+            for client in self.nfs_connection.clients:
+                client.mount(self.directory_to_share, self.backupset.directory)
+
+        self.sleep(30)
+        # Check the 2nd backup does not exist
+        self.assertEqual(len(self.get_backups("active", repo_name)), 1)
