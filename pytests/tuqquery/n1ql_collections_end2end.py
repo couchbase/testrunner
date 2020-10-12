@@ -275,8 +275,9 @@ class QueryCollectionsEnd2EndTests(QueryTests):
             # initial insert. Expected result - success
             try:
                 query = "insert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id', {'val':1, 'name' : '"+keyspace+"_name' })"
-                result = self.run_cbq_query(query)['status']
-                if result != 'success':
+                result = self.run_cbq_query(query)
+                if result['status'] != 'success':
+                    self.log.info(result['errors'])
                     errors.append({"reason": "insert_no_index",
                                    "message": "Initial insert is failed, cannot continue tests, aborting test suite1."})
                     return False, errors
@@ -290,6 +291,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 self.run_cbq_query(query)
 
             except CBQError as e:
+                self.log.info(str(e))
                 errors.append({"reason": "insert_no_index",
                                "message": "Initial insert is failed, cannot continue tests, aborting test suite2."})
                 return False, errors
@@ -320,8 +322,9 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 # upsert as update upon not indexed collection. Expected result - success
                 try:
                     query = "upsert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id', {'val':1, 'name' : '"+keyspace+"_name_updated' })"
-                    result = self.run_cbq_query(query)['status']
-                    if result != 'success':
+                    result = self.run_cbq_query(query)
+                    if result['status'] != 'success':
+                        self.log.info(result['errors'])
                         errors.append({"reason": "upsert(update)_no_index", "message": "Upsert(update) upon unindexed collection was unsuccessful."})
                     query = "select * from "+keyspace+" use keys ['"+keyspace+"_id']"
                     result = self.run_cbq_query(query)
@@ -334,8 +337,9 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 # upsert as insert upon not indexed collection. Expected result - success - remove
                 try:
                     query = "upsert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id1', {'val':10, 'name' : '"+keyspace+"_name2' })"
-                    result = self.run_cbq_query(query)['status']
-                    if result != 'success':
+                    result = self.run_cbq_query(query)
+                    if result['status'] != 'success':
+                        self.log.info(result['errors'])
                         errors.append({"reason": "upsert(insert)_no_index", "message": "Upsert(insert) upon unindexed collection was unexpectedly successful."})
                     query = "select * from "+keyspace+" use keys ['"+keyspace+"_id1']"
                     result = self.run_cbq_query(query)
@@ -391,14 +395,16 @@ class QueryCollectionsEnd2EndTests(QueryTests):
             # Create primary index on collection. Expected result - success
             try:
                 query = "create primary index on "+keyspace
-                result = self.run_cbq_query(query)['status']
-                if result != 'success':
+                result = self.run_cbq_query(query)
+                if result['status'] != 'success':
+                    self.log.info(result['errors'])
                     errors.append({"reason": "create_primary_index", "message": "Creation of primary index is failed."})
                 query = "select count(*) from system:all_indexes where bucket_id='"+bucket_name+"' and scope_id='"+scope_name+"' and keyspace_id='"+collection_name+"'"
                 result = self.run_cbq_query(query)
                 if result['results'][0]['$1'] != 1:
                     errors.append({"reason": "create_primary_index", "message": "Primary index for collection is not presented in system:all_indexes."})
             except CBQError as e:
+                self.log.info(str(e))
                 errors.append({"reason": "create_primary_index", "message": "Creation of primary index is failed."})
                 pass
 
@@ -416,6 +422,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                     errors.append({"reason": "select_primary_index",
                                     "message": "Select upon primary indexed collection returned wrong result."})
             except CBQError as e:
+                self.log.info(str(e))
                 errors.append(
                     {"reason": "select_primary_index", "message": "Select upon primary indexed collection is failed."})
                 pass
@@ -423,8 +430,9 @@ class QueryCollectionsEnd2EndTests(QueryTests):
             # update upon collection with primary index. Expected result - success.
             try:
                 query = "update "+keyspace+" set name=name||'_updated' where val=2"
-                result = self.run_cbq_query(query)['status']
-                if result != 'success':
+                result = self.run_cbq_query(query)
+                if result['status'] != 'success':
+                    self.log.info(result['errors'])
                     errors.append({"reason": "update_primary_index", "message": "Update upon primary indexed collection is failed."})
                 query = "select name from "+keyspace+" where val=2"
                 result = self.run_cbq_query(query)
@@ -432,6 +440,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                     errors.append({"reason": "select_primary_index",
                                     "message": "Update upon primary indexed collection produced wrong result."})
             except CBQError as e:
+                self.log.info(str(e))
                 errors.append(
                     {"reason": "update_primary_index", "message": "Update upon primary indexed collection is failed."})
             pass
@@ -441,6 +450,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 query = "upsert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id', {'val':2, 'name' : '"+keyspace+"_name' })"
                 result = self.run_cbq_query(query)
                 if result['status'] != 'success':
+                    self.log.info(result['errors'])
                     errors.append({"reason": "upsert(update)_primary_index", "message": "Upsert(update) upon primary indexed collection is failed."})
                 query = "select * from " + keyspace + " where meta().id='"+keyspace+"_id'"
                 result = self.run_cbq_query(query)
@@ -448,6 +458,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                     errors.append({"reason": "upsert(update)_primary_index",
                                    "message": "Upsert(update) upon primary indexed collection produced wrong result."})
             except CBQError as e:
+                self.log.info(str(e))
                 errors.append({"reason": "upsert(update)_primary_index",
                                "message": "Upsert(update) upon primary indexed collection is failed."})
                 pass
@@ -457,6 +468,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 query = "upsert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id2', {'val':2, 'name' : '"+keyspace+"_name2' })"
                 result = self.run_cbq_query(query)
                 if result['status'] != 'success':
+                    self.log.info(result['errors'])
                     errors.append({"reason": "upsert(insert)_primary_index", "message": "Upsert(insert) upon primary indexed collection is failed."})
                 query = "select * from " + keyspace + " where meta().id='"+keyspace+"_id2'"
                 result = self.run_cbq_query(query)
@@ -464,6 +476,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                     errors.append({"reason": "upsert(insert)_primary_index",
                                    "message": "Upsert(insert) upon primary indexed collection produced wrong result."})
             except CBQError as e:
+                self.log.info(str(e))
                 errors.append({"reason": "upsert(insert)_primary_index",
                                "message": "Upsert(insert) upon primary indexed collection is failed."})
                 pass
@@ -475,14 +488,16 @@ class QueryCollectionsEnd2EndTests(QueryTests):
             # drop collection primary index. Expected result - success.
             try:
                 query = "drop primary index on "+keyspace
-                result = self.run_cbq_query(query)['status']
-                if result != 'success':
+                result = self.run_cbq_query(query)
+                if result['status'] != 'success':
+                    self.log.info(result['errors'])
                     errors.append({"reason": "drop_primary_index", "message": "Drop of primary index for collection is failed."})
                 query = "select count(*) from system:all_indexes where bucket_id='"+bucket_name+"' and scope_id='"+scope_name+"' and keyspace_id='"+collection_name+"'"
                 result = self.run_cbq_query(query)
                 if result['results'][0]['$1'] != 0:
                     errors.append({"reason": "drop_primary_index", "message": "Primary index for collection is presented in system:all_indexes after drop."})
             except CBQError as e:
+                self.log.info(str(e))
                 errors.append(
                     {"reason": "drop_primary_index", "message": "Drop of primary index for collection is failed."})
                 pass
@@ -494,8 +509,9 @@ class QueryCollectionsEnd2EndTests(QueryTests):
             # create collection secondary index. Expected result - success.
             try:
                 query = "create index idx_val on "+keyspace+"(val)"
-                result = self.run_cbq_query(query)['status']
-                if result != 'success':
+                result = self.run_cbq_query(query)
+                if result['status'] != 'success':
+                    self.log.info(result['errors'])
                     errors.append({"reason": "create_secondary_index", "message": "Create of secondary index for collection is failed."})
                 query = "select count(*) from system:all_indexes where bucket_id='"+bucket_name+"' and scope_id='"+scope_name+"' and keyspace_id='"+collection_name+"' and name='idx_val'"
                 result = self.run_cbq_query(query)
@@ -503,6 +519,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                     errors.append({"reason": "create_secondary_index",
                                    "message": "Secondary index for collection is created but not presented in system:indexes."})
             except CBQError as e:
+                self.log.info(str(e))
                 errors.append({"reason": "create_secondary_index",
                                "message": "Create of secondary index for collection is failed."})
                 pass
@@ -515,11 +532,13 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 query = "select name from "+keyspace+" where val=3"
                 result = self.run_cbq_query(query)
                 if result['status'] != 'success':
+                    self.log.info(result['errors'])
                     errors.append({"reason": "select_secondary_index", "message": "Select upon secondary indexed collection is failed."})
                 if result['results'][0]['name'] != keyspace+'_name':
                     errors.append({"reason": "select_primary_index",
                                    "message": "Select upon primary indexed collection returned wrong result."})
             except CBQError as e:
+                self.log.info(str(e))
                 errors.append({"reason": "select_secondary_index",
                                "message": "Select upon secondary indexed collection is failed."})
                 pass
@@ -527,8 +546,9 @@ class QueryCollectionsEnd2EndTests(QueryTests):
             # update upon collection with secondary index. Expected result - success.
             try:
                 query = "update "+keyspace+" set name=name||'_updated' where val=3"
-                result = self.run_cbq_query(query)['status']
-                if result != 'success':
+                result = self.run_cbq_query(query)
+                if result['status'] != 'success':
+                    self.log.info(result['errors'])
                     errors.append({"reason": "update_secondary_index", "message": "Update upon secondary indexed collection is failed."})
                 query = "select name from "+keyspace+" where val=3"
                 result = self.run_cbq_query(query)
@@ -536,6 +556,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                     errors.append({"reason": "update_secondary_index",
                                    "message": "Update upon secondary indexed collection produced wrong result."})
             except CBQError as e:
+                self.log.info(str(e))
                 errors.append({"reason": "update_secondary_index",
                                "message": "Update upon secondary indexed collection is failed."})
                 pass
@@ -543,8 +564,9 @@ class QueryCollectionsEnd2EndTests(QueryTests):
             # upsert as update upon collection with secondary index. Expected result - success.
             try:
                 query = "upsert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id', {'val':3, 'name' : '"+keyspace+"_name_updated_x3' })"
-                result = self.run_cbq_query(query)['status']
-                if result != 'success':
+                result = self.run_cbq_query(query)
+                if result['status'] != 'success':
+                    self.log.info(result['errors'])
                     errors.append({"reason": "upsert(update)_secondary_index", "message": "Upsert(update) upon secondary indexed collection is failed."})
                 query = "select name from " + keyspace + " where val=3"
                 result = self.run_cbq_query(query)
@@ -552,6 +574,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                     errors.append({"reason": "upsert(update)_secondary_index",
                                    "message": "Upsert(update) upon secondary indexed collection produced wrong result."})
             except CBQError as e:
+                self.log.info(str(e))
                 errors.append({"reason": "upsert(update)_secondary_index",
                                "message": "Upsert(update) upon secondary indexed collection is failed."})
                 pass
@@ -559,8 +582,9 @@ class QueryCollectionsEnd2EndTests(QueryTests):
             # upsert as insert upon collection with secondary index. Expected result - success.
             try:
                 query = "upsert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id3', {'val':33, 'name' : '"+keyspace+"_name3' })"
-                result = self.run_cbq_query(query)['status']
-                if result != 'success':
+                result = self.run_cbq_query(query)
+                if result['status'] != 'success':
+                    self.log.info(result['errors'])
                     errors.append({"reason": "upsert(insert)_secondary_index", "message": "Upsert(insert) upon secondary indexed collection is failed."})
                 query = "select name from " + keyspace + " where val=33"
                 result = self.run_cbq_query(query)
@@ -568,6 +592,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                     errors.append({"reason": "upsert(insert)_secondary_index",
                                    "message": "Upsert(insert) upon secondary indexed collection produced wrong result."})
             except CBQError as e:
+                self.log.info(str(e))
                 errors.append({"reason": "upsert(insert)_secondary_index",
                                "message": "Upsert(insert) upon secondary indexed collection is failed."})
                 pass
@@ -581,8 +606,9 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                                        "UPDATE SET target.name = source.name " \
                                        "WHEN NOT MATCHED THEN " \
                                        "INSERT (KEY UUID(), VALUE {'name': source.name, 'val': source.val})"
-                result = self.run_cbq_query(query)['status']
-                if result != 'success':
+                result = self.run_cbq_query(query)
+                if result['status'] != 'success':
+                    self.log.info(result['errors'])
                     errors.append({"reason": "merge(insert)_secondary_index", "message": "Merge(insert) upon secondary indexed collection is failed."})
                 query = "select name from " + keyspace + " where val=4"
                 result = self.run_cbq_query(query)
@@ -590,6 +616,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                     errors.append({"reason": "merge(insert)_secondary_index",
                                    "message": "Merge(insert) upon secondary indexed collection produced wrong result."})
             except CBQError as e:
+                self.log.info(str(e))
                 errors.append({"reason": "merge(insert)_secondary_index",
                                "message": "Merge(insert) upon secondary indexed collection is failed."})
                 pass
@@ -603,8 +630,9 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                                        "UPDATE SET target.name = source.name " \
                                        "WHEN NOT MATCHED THEN " \
                                        "INSERT (KEY UUID(), VALUE {'name': source.name, 'val': source.val})"
-                result = self.run_cbq_query(query)['status']
-                if result != 'success':
+                result = self.run_cbq_query(query)
+                if result['status'] != 'success':
+                    self.log.info(result['errors'])
                     errors.append({"reason": "merge(update)_secondary_index", "message": "Merge(update) upon secondary indexed collection is failed."})
                 query = "select name from " + keyspace + " where val=3"
                 result = self.run_cbq_query(query)
@@ -612,6 +640,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                     errors.append({"reason": "merge(update)_secondary_index",
                                    "message": "Merge(update) upon secondary indexed collection produced wrong result."})
             except CBQError as e:
+                self.log.info(str(e))
                 errors.append({"reason": "merge(update)_secondary_index",
                                "message": "Merge(update) upon secondary indexed collection is failed."})
                 pass
@@ -619,8 +648,9 @@ class QueryCollectionsEnd2EndTests(QueryTests):
             # delete upon collection with secondary index. Expected result - success.
             try:
                 query = "delete from "+keyspace+" where val=3"
-                result = self.run_cbq_query(query)['status']
-                if result != 'success':
+                result = self.run_cbq_query(query)
+                if result['status'] != 'success':
+                    self.log.info(result['errors'])
                     errors.append({"reason": "delete_secondary_index", "message": "Delete upon secondary indexed collection is failed."})
                 query = "select count(*) from " + keyspace + " where val=3"
                 result = self.run_cbq_query(query)
@@ -628,6 +658,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                     errors.append({"reason": "delete_secondary_index",
                                    "message": "Delete upon secondary indexed collection produced wrong result."})
             except CBQError as e:
+                self.log.info(str(e))
                 errors.append({"reason": "delete_secondary_index",
                                "message": "Delete upon secondary indexed collection is failed."})
                 pass
@@ -641,10 +672,12 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 try:
                     query = "ALTER INDEX "+keyspace+".idx_val WITH {'action': 'replica_count', 'num_replica': 1}"
 
-                    result = self.run_cbq_query(query)['status']
-                    if result != 'success':
+                    result = self.run_cbq_query(query)
+                    if result['status'] != 'success':
+                        self.log.info(result['errors'])
                         errors.append({"reason": "alter_secondary_index", "message": "Alter of secondary index for collection is failed."})
                 except CBQError as e:
+                    self.log.info(str(e))
                     errors.append({"reason": "alter_secondary_index",
                                    "message": "Alter of secondary index for collection is failed."})
                     pass
@@ -652,10 +685,12 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 # build secondary index. Expected result - success.
                 try:
                     query = "BUILD INDEX ON "+keyspace+"(idx_val)"
-                    result = self.run_cbq_query(query)['status']
-                    if result != 'success':
+                    result = self.run_cbq_query(query)
+                    if result['status'] != 'success':
+                        self.log.info(result['errors'])
                         errors.append({"reason": "build_secondary_index", "message": "Build of secondary index for collection is failed."})
                 except CBQError as e:
+                    self.log.info(str(e))
                     errors.append({"reason": "build_secondary_index",
                                    "message": "Build of secondary index for collection is failed."})
                     pass
@@ -667,10 +702,12 @@ class QueryCollectionsEnd2EndTests(QueryTests):
             if not sanity_test:
                 try:
                     query = "infer "+keyspace
-                    result = self.run_cbq_query(query)['status']
-                    if result != 'success':
+                    result = self.run_cbq_query(query)
+                    if result['status'] != 'success':
+                        self.log.info(result['errors'])
                         errors.append({"reason": "infer", "message": "Infer of collection is failed."})
                 except CBQError as e:
+                    self.log.info(str(e))
                     errors.append({"reason": "infer", "message": "Infer of collection is failed."})
                     pass
 
@@ -678,10 +715,12 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                     # update statistics for collection. Expected result - success.
                     try:
                         query = "UPDATE STATISTICS for "+keyspace+"(val)"
-                        result = self.run_cbq_query(query)['status']
-                        if result != 'success':
+                        result = self.run_cbq_query(query)
+                        if result['status'] != 'success':
+                            self.log.info(result['errors'])
                             errors.append({"reason": "update_statistics", "message": "Update statistics for collection is failed."})
                     except CBQError as e:
+                        self.log.info(str(e))
                         errors.append({"reason": "update_statistics", "message": "Update statistics for collection is failed."})
                         pass
                 else:
@@ -690,8 +729,9 @@ class QueryCollectionsEnd2EndTests(QueryTests):
             # drop secondary index for collection. Expected result - success.
             try:
                 query = "drop index idx_val on "+keyspace
-                result = self.run_cbq_query(query)['status']
-                if result != 'success':
+                result = self.run_cbq_query(query)
+                if result['status'] != 'success':
+                    self.log.info(result['errors'])
                     errors.append({"reason": "drop_secondary_index", "message": "Drop secondary index for collection is failed."})
                 query = "select count(*) from system:all_indexes where bucket_id='"+bucket_name+"' and scope_id='"+scope_name+"' and keyspace_id='"+collection_name+"' and name='idx_val'"
                 result = self.run_cbq_query(query)
@@ -699,6 +739,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                     errors.append(
                         {"reason": "drop_secondary_index", "message": "Secondary index for collection is presented in system:all_indexes after drop."})
             except CBQError as e:
+                self.log.info(str(e))
                 errors.append(
                     {"reason": "drop_secondary_index", "message": "Drop secondary index for collection is failed."})
                 pass
