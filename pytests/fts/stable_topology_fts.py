@@ -600,7 +600,7 @@ class StableTopFTS(FTSBaseTest):
         else:
             n1ql_executor = None
 
-        self.run_query_and_compare(index, n1ql_executor=n1ql_executor)
+        self.run_query_and_compare(index, n1ql_executor=n1ql_executor, use_collections=collection_index)
 
     def test_query_string_combinations(self):
         """
@@ -2559,6 +2559,21 @@ class StableTopFTS(FTSBaseTest):
             idx.delete()
 
         self.assertEqual(len(self._cb_cluster.get_indexes()), 0, "FTS index cannot be deleted.")
+
+    def test_create_index_multiple_scopes_negative(self):
+        collection_index, type = self.define_index_parameters_collection_related()
+
+        for bucket in self._cb_cluster.get_buckets():
+            try:
+                self.create_index(bucket, "fts_idx", index_params=None,
+                         plan_params=None, collection_index=collection_index, type=type, analyzer="standard")
+                self.assertTrue(False, "Successfully created FTS index for collections from different buckets!")
+            except Exception as ex:
+                self.assertTrue(str(ex).find("Error creating index")>=0 and
+                                str(ex).find("multiple scopes found")>=0 and
+                                str(ex).find("index can only span collections on a single scope")>=0,
+                                "Non-expected error message is found while trying to create FTS index for more than one scope.")
+                pass
 
     def test_create_index_missed_container_negative(self):
         missed_collection = 'missed_collection'

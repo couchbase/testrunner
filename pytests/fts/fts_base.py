@@ -755,7 +755,8 @@ class FTSIndex:
 
     def __init__(self, cluster, name, source_type='couchbase',
                  source_name=None, index_type='fulltext-index', index_params=None,
-                 plan_params=None, source_params=None, source_uuid=None, dataset=None, index_storage_type=None):
+                 plan_params=None, source_params=None, source_uuid=None, dataset=None, index_storage_type=None,
+                 type_mapping='emp', collection_index=False):
 
         """
          @param name : name of index/alias
@@ -824,7 +825,7 @@ class FTSIndex:
         self.multiple_filters = TestInputSingleton.input.param("multiple_filters", False)
         self.cm_id = TestInputSingleton.input.param("cm_id", 0)
         if self.custom_map:
-            self.generate_new_custom_map(seed=self.cm_id)
+            self.generate_new_custom_map(seed=self.cm_id, type_mapping=type_mapping, collection_index=collection_index)
 
         self.fts_queries = []
 
@@ -905,13 +906,14 @@ class FTSIndex:
             self.__log.error("No 'indexType' present in index definition")
             return None
 
-    def generate_new_custom_map(self, seed):
+    def generate_new_custom_map(self, seed, type_mapping=None, collection_index=False):
         from .custom_map_generator.map_generator import CustomMapGenerator
+        type_mapping_val = 'emp' if type_mapping is None else type_mapping
         cm_gen = CustomMapGenerator(seed=seed, dataset=self.dataset,
                                     num_custom_analyzers=self.num_custom_analyzers,
                                     multiple_filters=self.multiple_filters,
                                     custom_map_add_non_indexed_fields=self.custom_map_add_non_indexed_fields,
-                                    text_analyzer=self.text_analyzer)
+                                    text_analyzer=self.text_analyzer, type_mapping=type_mapping_val, collection_index=collection_index)
         fts_map, self.es_custom_map = cm_gen.get_map()
         self.smart_query_fields = cm_gen.get_smart_query_fields()
         print((self.smart_query_fields))
@@ -2449,14 +2451,17 @@ class CouchbaseCluster:
             index_params,
             plan_params,
             source_params,
-            source_uuid
+            source_uuid,
+            type_mapping=_type,
+            collection_index=collection_index
         )
         if collection_index:
-            if type(_type) is list:
-                for typ in _type:
-                    index.add_type_mapping_to_index_definition(type=typ, analyzer=analyzer)
-            else:
-                index.add_type_mapping_to_index_definition(type=_type, analyzer=analyzer)
+            if not index.custom_map:
+                if type(_type) is list:
+                    for typ in _type:
+                        index.add_type_mapping_to_index_definition(type=typ, analyzer=analyzer)
+                else:
+                    index.add_type_mapping_to_index_definition(type=_type, analyzer=analyzer)
 
             doc_config = {}
             doc_config['mode'] = 'scope.collection.type_field'
@@ -3445,7 +3450,7 @@ class FTSBaseTest(unittest.TestCase):
         self.secret_password = self._input.param("secret_password", 'p@ssw0rd')
         self.container_type = TestInputSingleton.input.param("container_type", "bucket")
         self.scope = TestInputSingleton.input.param("scope", "scope1")
-        self.collection = str(TestInputSingleton.input.param("collection", "collection1"))
+        self.collection = str(TestInputSingleton.input.param("collection", "scope1:collection1"))
         if self.collection.startswith("["):
             self.collection = eval(self.collection)
         use_hostanames = self._input.param("use_hostnames", False)
@@ -3650,9 +3655,9 @@ class FTSBaseTest(unittest.TestCase):
                 for bucket in self._cb_cluster.get_buckets():
                     if type(self.collection) is list:
                         for c in self.collection:
-                            self._create_collection(bucket=bucket.name, scope=self.scope, collection=c)
+                            self._create_collection(bucket=bucket.name, collection_dfn=c)
                     else:
-                        self._create_collection(bucket=bucket.name, scope=self.scope, collection=self.collection)
+                        self._create_collection(bucket=bucket.name, collection_dfn=self.collection)
         self._master = self._cb_cluster.get_master_node()
 
         # simply append to this list, any error from log we want to fail test on
@@ -3668,7 +3673,9 @@ class FTSBaseTest(unittest.TestCase):
         if self.ntonencrypt == 'enable':
             self.setup_nton_encryption()
 
-    def _create_collection(self, bucket=None, scope=None, collection=None):
+    def _create_collection(self, bucket=None, collection_dfn=None):
+        scope = collection_dfn.split(":")[0]
+        collection = collection_dfn.split(":")[1]
         if scope != '_default':
             stdout,_,_ = self.cli_client.get_bucket_scopes(bucket=bucket)
             if scope not in stdout:
@@ -4098,7 +4105,7 @@ class FTSBaseTest(unittest.TestCase):
             self.log.info("Updating keys @ {0} with expiry={1}".
                           format(self._cb_cluster.get_name(), self._expires))
             self.populate_update_gen(fields_to_update, expiration=self._expires)
-            if self.compare_es:
+            if self.compare_es and self.container_type == 'bucket':
                 gen = copy.deepcopy(self.update_gen)
                 if not self._expires:
                     if isinstance(gen, list):
@@ -4140,7 +4147,7 @@ class FTSBaseTest(unittest.TestCase):
         if self._delete:
             self.log.info("Deleting keys @ {0}".format(self._cb_cluster.get_name()))
             self.populate_delete_gen()
-            if self.compare_es:
+            if self.compare_es and self.container_type == 'bucket':
                 del_gen = copy.deepcopy(self.delete_gen)
                 if isinstance(del_gen, list):
                     for generator in del_gen:
@@ -4561,14 +4568,18 @@ class FTSBaseTest(unittest.TestCase):
     def define_index_parameters_collection_related(self):
         collection_index = self.container_type == 'collection'
         if self.container_type == 'bucket':
-            _type = None
+            _type = self.dataset
         else:
             if type(self.collection) is list:
                 _type = []
                 for c in self.collection:
-                    _type.append(f"{self.scope}.{c}")
+                    scope_name = c.split(":")[0]
+                    collection_name = c.split(":")[1]
+                    _type.append(f"{scope_name}.{collection_name}")
             else:
-                _type = f"{self.scope}.{self.collection}"
+                scope_name = self.collection.split(":")[0]
+                collection_name = self.collection.split(":")[1]
+                _type = f"{scope_name}.{collection_name}"
         return collection_index, _type
 
     def create_alias(self, target_indexes, name=None, alias_def=None):
@@ -4767,11 +4778,22 @@ class FTSBaseTest(unittest.TestCase):
                                             start=start,
                                             end=start + num_items)
         else:
+            elastic_ip = None
+            elastic_port = None
+            elastic_username = None
+            elastic_password = None
+            if self.compare_es:
+                elastic_ip = self.elastic_node.ip
+                elastic_port = self.elastic_node.port
+                elastic_username = self.elastic_node.es_username
+                elastic_password = self.elastic_node.es_password
             return SDKDataLoader(num_ops = self._num_items, percent_create = 100,
                                            percent_update=0, percent_delete=0, scope=self.scope,
                                            collection=self.collection,
                                            json_template=dataset,
-                                           start=start, end=start+num_items)
+                                           start=start, end=start+num_items,
+                                           es_compare=self.compare_es, es_host=elastic_ip, es_port=elastic_port,
+                                           es_login=elastic_username, es_password=elastic_password)
 
     def populate_create_gen(self):
         if self.dataset == "all":
@@ -4881,17 +4903,18 @@ class FTSBaseTest(unittest.TestCase):
         """
         load_tasks = []
         self.populate_create_gen()
-        if self.compare_es:
-            gen = copy.deepcopy(self.create_gen)
-            if isinstance(gen, list):
-                for generator in gen:
+        if self.compare_es and self.container_type != 'collection':
+            if self.container_type == 'bucket':
+                gen = copy.deepcopy(self.create_gen)
+                if isinstance(gen, list):
+                    for generator in gen:
+                        load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
+                                                                     gen=generator,
+                                                                     op_type='create'))
+                else:
                     load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
-                                                                 gen=generator,
+                                                                 gen=gen,
                                                                  op_type='create'))
-            else:
-                load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
-                                                             gen=gen,
-                                                             op_type='create'))
         load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(self.create_gen)
         return load_tasks
 
