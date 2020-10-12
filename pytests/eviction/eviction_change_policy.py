@@ -57,13 +57,16 @@ class EvictionChangePolicy(EvictionBase):
     def test_full_eviction_changed_to_value_eviction(self):
 
         KEY_NAME = 'key1'
-
-        gen_create = BlobGenerator('eviction', 'eviction-', self.value_size, end=self.num_items)
-        gen_create2 = BlobGenerator('eviction2', 'eviction2-', self.value_size, end=self.num_items)
+        gen_create = BlobGenerator('superlongnameofkey1234567890123456789012345678902', 'eviction-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen_create, "create", 0)
 
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
         self._verify_stats_all_buckets(self.servers[:self.nodes_init])
+
+        total_keys_full_eviction = 0
+        for bucket in self.buckets:
+            total_keys_full_eviction += len(bucket.kvs[1].key_set()[0])
+        
         remote = RemoteMachineShellConnection(self.master)
         for bucket in self.buckets:
             output, _ = remote.execute_couchbase_cli(cli_command='bucket-edit',
@@ -75,14 +78,18 @@ class EvictionChangePolicy(EvictionBase):
         ClusterOperationHelper.wait_for_ns_servers_or_assert(
             self.servers[:self.nodes_init], self,
             wait_time=self.wait_timeout, wait_if_warmup=True)
-        self.sleep(10, 'Wait some time before next load')
-        # self._load_all_buckets(self.master, gen_create2, "create", 0)
-
+        
+        total_keys_value_eviction = 0
+        for bucket in self.buckets:
+            total_keys_value_eviction += len(bucket.kvs[1].key_set()[0])
+        
+        self.assertTrue(total_keys_full_eviction == total_keys_value_eviction, msg="Keys before and after eviction policy change from fullEviction to valueOnly differ")
+        
         rest = RestConnection(self.master)
-        client = VBucketAwareMemcached(rest, 'default')
+        client = VBucketAwareMemcached(rest, "default")
         mcd = client.memcached(KEY_NAME)
         try:
             rc = mcd.set(KEY_NAME, 0, 0, json.dumps({'value': 'value2'}))
-            self.fail('Bucket is incorrectly functional')
+            self.fail(rc) # Bucket is incorrectly functioning
         except MemcachedError as e:
             pass  # this is the exception we are hoping for
