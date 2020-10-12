@@ -884,8 +884,6 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         url_format = ""
         secure_port = ""
         if self.backupset.secure_conn:
-            cacert = self.get_cluster_certificate_info(self.backupset.backup_host,
-                                                       self.backupset.restore_cluster_host)
             url_format = "s"
             secure_port = "1"
 
@@ -1134,6 +1132,9 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                 args += " --replace-ttl-with {0}".format(self.replace_ttl_with)
             else:
                 args += " --replace-ttl {0}".format(self.replace_ttl)
+        if self.backupset.secure_conn:
+            cacert = self.get_cluster_certificate_info(self.backupset.backup_host,
+                                                       self.backupset.restore_cluster_host)
         if self.backupset.map_data_collection and not self.buckets_only:
             args += " --map-data %s " % self.bucket_map_collection
         command = "{3} {2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
