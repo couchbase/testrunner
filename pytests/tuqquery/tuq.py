@@ -1355,6 +1355,8 @@ class QueryTests(BaseTestCase):
             query_params['use_fts'] = True
         if query_context != '':
             query_params['query_context'] = query_context
+        else:
+            query_params.pop('query_context', None)
         if self.testrunner_client == 'python_sdk' and not is_prepared:
             sdk_cluster = Cluster('couchbase://' + str(server.ip))
             authenticator = PasswordAuthenticator(username, password)

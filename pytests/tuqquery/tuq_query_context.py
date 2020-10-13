@@ -28,11 +28,6 @@ class QueryContextTests(QueryTests):
                                                       collection_name=self.collections[0])
             self.collections_helper.create_collection(bucket_name="default", scope_name="test2",
                                                       collection_name=self.collections[1])
-            #self.run_cbq_query(query="CREATE scope default:default.test2")
-            #self.run_cbq_query(
-            #    query="CREATE COLLECTION default:default.test2.{0}".format(self.collections[0]))
-            #self.run_cbq_query(
-            #    query="CREATE COLLECTION default:default.test2.{0}".format(self.collections[1]))
             self.run_cbq_query(
                 query="CREATE INDEX idx1 on default:default.test2.{0}(name)".format(self.collections[0]))
             self.run_cbq_query(
@@ -107,13 +102,14 @@ class QueryContextTests(QueryTests):
         time.sleep(10)
         self.run_cbq_query(
             query="CREATE PRIMARY INDEX ON default:default.test3.test3")
-        time.sleep(10)
+        time.sleep(5)
+        self.wait_for_all_indexes_online()
         results = self.run_cbq_query(query='select * from test3 where name = "new hotel"', query_context='default:default.test3')
         self.assertEqual(results['results'], [])
 
     def test_invalid_context(self):
         try:
-            results = self.run_cbq_query(query='select * from test1 where name = "new hotel"', query_context='default:default.test^')
+            results = self.run_cbq_query(query='select * from test1 where name = "new hotel"', query_context='default:default.`test^`')
             self.fail()
         except Exception as e:
             self.assertTrue('Scope not found in CB datastore default:default.test^' in str(e))
@@ -121,7 +117,7 @@ class QueryContextTests(QueryTests):
             results2 = self.run_cbq_query(query='select * from test1 where name = "new hotel"', query_context='fakevalue')
             self.fail()
         except Exception as e:
-            self.assertTrue('Keyspace not found in CB datastore: fakevalue:test1 - cause: No bucket named test1' in str(e))
+            self.assertTrue('Keyspace not found in CB datastore: fakevalue:test1 - cause: No bucket named test1' in str(e) or 'Invalid path specified: path has wrong number of parts' in str(e))
 
     def test_special_characters(self):
         try:
@@ -131,12 +127,13 @@ class QueryContextTests(QueryTests):
             results = self.run_cbq_query(query='CREATE COLLECTION default:`{0}`.`{1}`.`{2}`'.format(self.bucket_name, self.special_scope, self.special_collection))
             time.sleep(20)
 
-            self.run_cbq_query(query='CREATE PRIMARY INDEX ON default:`{0}`.`{1}`.`{2}`'.format(self.bucket_name, self.special_scope, self.special_collection), query_context='default:{0}.{1}'.format(self.bucket_name, self.special_scope))
-            time.sleep(20)
+            self.run_cbq_query(query='CREATE PRIMARY INDEX ON default:`{0}`.`{1}`.`{2}`'.format(self.bucket_name, self.special_scope, self.special_collection), query_context='default:`{0}`.`{1}`'.format(self.bucket_name, self.special_scope))
+            time.sleep(5)
+            self.wait_for_all_indexes_online()
             self.run_cbq_query(
                 query=('INSERT INTO default:`{0}`.`{1}`.`{2}`'.format(self.bucket_name,self.special_scope,self.special_collection) + '(KEY, VALUE) VALUES ("key1", { "type" : "hotel", "name" : "old hotel" })'))
             time.sleep(10)
-            results = self.run_cbq_query(query='select * from `{0}` where name = "old hotel"'.format(self.special_collection), query_context='default:{0}.{1}'.format(self.bucket_name, self.special_scope))
+            results = self.run_cbq_query(query='select * from `{0}` where name = "old hotel"'.format(self.special_collection), query_context='default:`{0}`.`{1}`'.format(self.bucket_name, self.special_scope))
             self.assertEquals(results['results'][0], {"{0}".format(self.special_collection): {"name": "old hotel","type": "hotel"}})
 
         except Exception as e:
