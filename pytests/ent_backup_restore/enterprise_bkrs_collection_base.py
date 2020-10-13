@@ -585,44 +585,71 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             scopes = self.cli_rs.get_bucket_scopes(bucket_name)
         return scopes
 
-    def get_bucket_collection_cluster_host(self,):
-        bucket_name = self.buckets[0].name
+    def get_bucket_collection_cluster_host(self, bucket_name=None, scope=None):
+        if bucket_name is None:
+            bucket_name = self.buckets[0].name
+        if scope is None:
+            raise("Need scope name to get collection")
         collections = None
         if self.use_rest:
-            collections = self.rest_bk.get_bucket_collections(bucket_name)
+            collections = self.rest_bk.get_scope_collections(bucket_name, scope)
         else:
-            collections = self.cli_bk.get_bucket_collections(bucket_name)
+            collections = self.cli_bk.get_scope_collections(bucket_name, scope)
         return collections
 
-    def get_bucket_collection_restore_cluster_host(self,):
-        bucket_name = self.buckets[0].name
+    def get_bucket_collection_restore_cluster_host(self, bucket_name=None, scope=None):
+        if bucket_name is None:
+            bucket_name = self.buckets[0].name
+        if scope is None:
+            raise("Need scope name to get collection")
         collections = None
         if self.use_rest:
-            collections = self.rest_rs.get_bucket_collections(bucket_name)
+            collections = self.rest_rs.get_scope_collections(bucket_name, scope)
         else:
-            collections = self.cli_rs.get_bucket_collections(bucket_name)
+            collections = self.cli_rs.get_scope_collections(bucket_name, scope)
         return collections
 
     def verify_scopes_in_restore_cluster_host(self):
         backup_scopes = self.get_bucket_scope_cluster_host()
         restore_scopes = self.get_bucket_scope_restore_cluster_host()
+        not_found_scopes = []
         for restore_scope in restore_scopes:
-            if restore_scope in backup_scopes:
-                self.log.info("Scope {0} restored".format(restore_scope))
+            if isinstance(restore_scope, list):
+                for ele in backup_scopes:
+                    if ele in restore_scope:
+                        self.log.info("Found '{0} in restore scopes {1}".format(ele, restore_scope))
+                    else:
+                        not_found_scopes.append(ele)
+                        self.fail("Scope {0} failed to restore".format(ele))
+                if not_found_scopes:
+                    self.fail("Scope {0} failed to restore".format(not_found_scopes))
+                else:
+                    break
             else:
-                self.fail("Scope {0} failed to restore".format(restore_scope))
+                if restore_scope in backup_scopes:
+                    self.log.info("Scope {0} restored".format(restore_scope))
+                else:
+                    self.fail("Scope {0} failed to restore".format(restore_scope))
 
     def verify_collections_in_restore_cluster_host(self):
         if self.buckets_only or self.scopes_only:
             return
-        backup_collections = self.get_bucket_collection_cluster_host()
-        restore_collections = self.get_bucket_collection_restore_cluster_host()
-        for backup_collection in backup_collections:
-            if backup_collection in restore_collections:
-                self.log.info("Collection {0} restored".format(backup_collection))
-            else:
-                if not self.drop_collections:
-                    self.fail("Collection {0} failed to restore".format(backup_collection))
+        bucket_name = self.buckets[0].name
+        scopes = self.get_bucket_scope_restore_cluster_host()
+        if isinstance(scopes, tuple):
+            scopes = scopes[0]
+        for scope in scopes:
+            if "_default" in scope:
+                scopes.remove(scope)
+        for scope in scopes:
+            backup_collections = self.get_bucket_collection_cluster_host(bucket_name, scope)
+            restore_collections = self.get_bucket_collection_restore_cluster_host(bucket_name, scope)
+            for backup_collection in backup_collections:
+                if backup_collection in restore_collections:
+                    self.log.info("Collection {0} restored".format(backup_collection))
+                else:
+                    if not self.drop_collections:
+                        self.fail("Collection {0} failed to restore".format(backup_collection))
 
     def get_collection_stats_cluster_host(self):
         bucket = self.buckets[0]

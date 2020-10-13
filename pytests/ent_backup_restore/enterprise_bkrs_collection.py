@@ -108,7 +108,6 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
         self.log.info("scope id in backup cluster: {0}".format(scopes_id))
         """ remove null and empty element """
         scopes_id = [i for i in scopes_id if i]
-        backup_collections = self.get_bucket_collection_cluster_host()
         col_stats = self.get_collection_stats_cluster_host()
         for backup_scope in backup_scopes:
             bk_scope_id = self.get_scopes_id_cluster_host(backup_scope)
@@ -200,21 +199,22 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
         if not self.drop_scopes:
             restore_scopes = self.get_bucket_scope_restore_cluster_host()
             if not self.drop_collections:
-                restore_collections = self.get_bucket_collection_restore_cluster_host()
                 self.verify_collections_in_restore_cluster_host()
             else:
                 try:
-                    restore_collections = self.get_bucket_collection_restore_cluster_host()
-                    if restore_collections:
-                        self.fail("Restore should not restore delete collection")
+                    for scope in restore_scopes:
+                        restore_collections = self.get_bucket_collection_restore_cluster_host(scope=scope)
+                        if restore_collections:
+                            self.fail("Restore should not restore delete collection")
                 except Exception as e:
                     if e:
                         print("Exception: ", str(e))
         else:
             try:
-                restore_scopes = self.get_bucket_scope_restore_cluster_host()
-                if restore_scopes:
-                    self.fail("Restore should not restore delete scopes")
+                for scope in backup_scopes:
+                    restore_scopes = self.get_bucket_scope_restore_cluster_host(scope=scope)
+                    if restore_scopes:
+                        self.fail("Restore should not restore delete scopes")
             except Exception as e:
                 if e:
                     print("Exception: ", str(e))

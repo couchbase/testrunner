@@ -690,4 +690,6 @@ class CouchbaseCLI:
             else:
                 if line.startswith("SUCCESS:"):
                     return True
+        if stdout:
+            return True
         return False
