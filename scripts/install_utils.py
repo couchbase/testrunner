@@ -154,15 +154,8 @@ class NodeHelper:
                     self.shell.execute_command(cmd, debug=self.params["debug_logs"])
                     self.wait_for_completion(duration, event)
 
-    def set_vm_swappiness_and_thp(self):
-        # set vm_swapiness to 0, and thp to never by default
-        if self.actions_dict[self.info.deliverable_type]["set_vm_swapiness_and_thp"]:
-            cmd = self.actions_dict[self.info.deliverable_type]["set_vm_swapiness_and_thp"]
-            o, e = self.shell.execute_command(cmd, debug=self.params["debug_logs"])
-
     def install_cb(self):
         self.pre_install_cb()
-        self.set_vm_swappiness_and_thp()
         if self.actions_dict[self.info.deliverable_type]["install"]:
             if "suse" in self.get_os():
                 cmd = self.actions_dict[self.info.deliverable_type]["suse_install"]
