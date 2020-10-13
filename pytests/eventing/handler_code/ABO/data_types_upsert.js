@@ -4,9 +4,6 @@ function OnUpdate(doc, meta) {
     var r1 = couchbase.upsert(dst_bucket,meta,["ad"]);
     log(r1);
     if(r1.success){
-        var r2 = couchbase.upsert(dst_bucket,meta,undefined);
-        log(r2);
-        if(r2.success){
             var r3 = couchbase.upsert(dst_bucket,meta,null);
             log(r3);
             if(r3.success){
@@ -22,7 +19,6 @@ function OnUpdate(doc, meta) {
                     }
                 }
             }
-        }
     }
     }catch(e){
         log(e);

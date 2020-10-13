@@ -4,10 +4,7 @@ function OnUpdate(doc, meta) {
     var r1 = couchbase.insert(dst_bucket,{"id":meta.id},["ad"]);
     log(r1);
     if(r1.success){
-        var r2 = couchbase.replace(dst_bucket,{"id":meta.id,"cas":r1.meta.cas},undefined);
-        log(r2);
-        if(r2.success){
-            var r3 = couchbase.replace(dst_bucket,{"id":meta.id,"cas":r2.meta.cas},null);
+            var r3 = couchbase.replace(dst_bucket,{"id":meta.id,"cas":r1.meta.cas},null);
             log(r3);
             if(r3.success){
                 var r4 = couchbase.replace(dst_bucket,{"id":meta.id,"cas":r3.meta.cas},true);
@@ -22,7 +19,6 @@ function OnUpdate(doc, meta) {
                     }
                 }
             }
-        }
     }
     }catch(e){
         log(e);

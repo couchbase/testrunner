@@ -4,7 +4,7 @@ function OnUpdate(doc, meta) {
     var r1 = couchbase.insert(dst_bucket,{"id":meta.id+"_arr"},["ad"]);
     log(r1);
     if(r1.success){
-        var r2 = couchbase.insert(dst_bucket,{"id":meta.id+"_un"},undefined);
+        var r2 = couchbase.insert(dst_bucket,{"id":meta.id+"_un"},"undefined");
         log(r2);
         if(r2.success){
             var r3 = couchbase.insert(dst_bucket,{"id":meta.id+"_null"},null);

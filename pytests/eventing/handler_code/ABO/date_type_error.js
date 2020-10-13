@@ -8,9 +8,10 @@ function OnUpdate(doc, meta) {
     log(result);
     }catch(e){
         log("error:",e);
-        if(e["message"]=="expiry should be a data object")
-            meta_data={"id": meta.id,"expiry_date": expiry };
+        if(e["message"]=="expiry should be a date object"){
+            var meta_data={"id": meta.id,"expiry_date": expiry };
             couchbase.insert(dst_bucket,meta_data,doc);
             couchbase.insert(dst_bucket1,meta_data,doc);
+        }
     }
 }
