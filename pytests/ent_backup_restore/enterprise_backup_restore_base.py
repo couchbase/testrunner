@@ -618,9 +618,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.log.error("Failed to backup bucket {0}".format(bucket.name))
                 return output, error
 
+        pattern = r"^\d{4}-\d{2}-\d{2}"
         command = (
             f"ls -tr {self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
-            f"{self.backupset.directory}/{self.backupset.name} | tail -1"
+            f"{self.backupset.directory}/{self.backupset.name}/ | grep -P '{pattern}' | tail -1"
         )
 
         o, e = remote_client.execute_command(command)
