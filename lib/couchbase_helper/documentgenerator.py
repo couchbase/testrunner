@@ -656,7 +656,8 @@ class SDKDataLoader(object):
                  load_pattern="uniform", start_seq_num=1, key_prefix="doc_", key_suffix="_",
                  scope="_default", collection="default", json_template="Person", doc_expiry=0,
                  doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
-                 start=0, end=0, op_type="create", all_collections=False):
+                 start=0, end=0, op_type="create", all_collections=False, es_compare=False, es_host=None, es_port=None,
+                 es_login=None, es_password=None):
         self.num_ops = num_ops
         self.percent_create = percent_create
         self.percent_update = percent_update
@@ -682,6 +683,11 @@ class SDKDataLoader(object):
         self.op_type = op_type
         self.all_collections = all_collections
         self.results = None
+        self.es_compare = es_compare
+        self.es_host = es_host
+        self.es_port = es_port
+        self.es_login = es_login
+        self.es_password = es_password
 
     def update(self, fields_to_update=None):
         self.start_seq_num = self.start + 1

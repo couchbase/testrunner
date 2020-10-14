@@ -6341,6 +6341,11 @@ class SDKLoadDocumentsTask(Task):
                   f"-dsn {self.sdk_docloader.start_seq_num} -dpx {self.sdk_docloader.key_prefix} -dt {self.sdk_docloader.json_template} " \
                   f"-de {self.sdk_docloader.doc_expiry} -ds {self.sdk_docloader.doc_size} -ac {self.sdk_docloader.all_collections} " \
                   f"-st {self.sdk_docloader.start} -en {self.sdk_docloader.end}"
+        if self.sdk_docloader.es_compare:
+            command = command + " -es true -es_host " + str(self.sdk_docloader.es_host) + " -es_port " + str(
+                self.sdk_docloader.es_port) + \
+                      " -es_login " + str(self.sdk_docloader.es_login) + " -es_password " + str(
+                self.sdk_docloader.es_password)
         self.log.info(command)
         if self.sdk_docloader.op_type == "update":
             arr_fields_to_update = eval(self.sdk_docloader.fields_to_update) if self.sdk_docloader.fields_to_update else ""
