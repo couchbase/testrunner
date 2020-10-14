@@ -1404,10 +1404,10 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_log_scan(self, servers):
+    def async_log_scan(self, servers, file_prefix):
         _tasks = []
         for server in servers:
-            _task = LogScanTask(server)
+            _task = LogScanTask(server, file_prefix)
             self.task_manager.schedule(_task)
             _tasks.append(_task)
         return _tasks

@@ -6421,16 +6421,21 @@ class DockerSDKLoadDocumentsTask(Task):
 # add sensitive data patterns
 # pretty print matches
 class LogScanTask(Task):
-    def __init__(self, server):
+    def __init__(self, server, file_prefix):
         Task.__init__(self, "log_scan_task")
         self.server = server
+        self.log_scan_file_name = f'{self.server.ip}_{file_prefix}'
         from lib.log_scanner import LogScanner
-        self.log_scanner = LogScanner(server=self.server)
+        exclude_keywords = TestInputSingleton.input.param("exclude_keywords", None)
+        self.log_scanner = LogScanner(server=self.server, exclude_keywords=exclude_keywords)
 
     def execute(self, task_manager):
         try:
             # Scan logs corresponding to node services
             matches = self.log_scanner.scan()
+            target = open(self.log_scan_file_name, 'w+')
+            target.write(str(matches))
+            target.close()
             self.state = CHECKING
             task_manager.schedule(self)
         # catch and set all unexpected exceptions

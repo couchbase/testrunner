@@ -3,8 +3,9 @@ from testconstants import WIN_COUCHBASE_LOGS_PATH, LINUX_COUCHBASE_LOGS_PATH
 
 
 class LogScanner(object):
-    def __init__(self, server):
+    def __init__(self, server, exclude_keywords=None):
         self.server = server
+        self.exclude_keywords = exclude_keywords
         self.service_log_keywords_map = {
             "all": {
                 "babysitter.log": ["exception occurred in runloop", "failover exited with reason"],
@@ -12,25 +13,25 @@ class LogScanner(object):
                 "all": []
             },
             "cbas": {
-                "analytics_error": ["fatal", "Analytics Service is temporarily unavailable",
-                                    "Failed during startup task", "HYR0", "ASX", "IllegalStateException"]
+                "analytics_error": ["Analytics Service is temporarily unavailable",
+                                    "Failed during startup task", "ASX", "IllegalStateException"]
             },
             "eventing": {
-                "eventing.log": ["panic", "fatal"]
+                "eventing.log": ["panic"]
             },
             "fts": {
-                "fts.log": ["panic", "fatal"]
+                "fts.log": ["panic"]
             },
             "index": {
-                "indexer.log": ["panic", "fatal", "Error parsing XATTR", "zero", "protobuf.Error",
+                "indexer.log": ["panic in", "panic:", "Error parsing XATTR",
                                 "Encounter planner error", "corruption"]
             },
             "kv": {
-                "projector.log": ["panic", "Error parsing XATTR", "fatal"],
-                "*xdcr*.log": ["panic", "fatal"],
+                "projector.log": ["panic", "Error parsing XATTR"],
+                "*xdcr*.log": ["panic"],
             },
             "n1ql": {
-                "query.log": ["panic", "fatal", "Encounter planner error"]
+                "query.log": ["panic", "Encounter planner error"]
             }
         }
 
@@ -59,6 +60,8 @@ class LogScanner(object):
                             cmd += "\"{0}\" {1}{2} -R".format(keyword, self.log_path, '*')
                         else:
                             cmd += "\"{0}\" {1}{2}".format(keyword, self.log_path, log + '*')
+                        if self.exclude_keywords:
+                            cmd = f'{cmd} | {self.cmd} -Ev \"{self.exclude_keywords}\"'
                         matches, err = self.shell.execute_command(cmd, debug=False)
                         if len(matches):
                             print("Number of matches : " + str(len(matches)) + "\nmatches : " + str(matches))

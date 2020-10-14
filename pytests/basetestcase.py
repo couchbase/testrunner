@@ -6,6 +6,7 @@ import string
 import subprocess
 import traceback
 import unittest
+import os, ast
 
 import logger
 import testconstants
@@ -196,7 +197,7 @@ class BaseTestCase(unittest.TestCase):
             self.x509enable = self.input.param('x509enable', False)
             self.enable_secrets = self.input.param("enable_secrets", False)
             self.secret_password = self.input.param("secret_password", 'p@ssw0rd')
-            self.skip_log_scan = self.input.param("skip_log_scan", False)
+            self.skip_log_scan = self.input.param("skip_log_scan", True)
 
             if self.skip_setup_cleanup:
                 self.buckets = RestConnection(self.master).get_buckets()
@@ -407,7 +408,8 @@ class BaseTestCase(unittest.TestCase):
                 if not status:
                     self.sleep(10)
                 if not self.skip_log_scan:
-                    _tasks = self.cluster.async_log_scan(self.servers)
+                    self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.case_number}'
+                    _tasks = self.cluster.async_log_scan(self.servers, self.log_scan_file_prefix+"_BEFORE")
                     for _task in _tasks:
                         _task.result()
             self.print_cluster_stats()
@@ -441,6 +443,32 @@ class BaseTestCase(unittest.TestCase):
         except Exception as e:
             self.log.error("IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}"
                            .format(server.ip, e))
+
+    def compare_logscan_keyword_count(self):
+        keyword_count_before_filename = self.log_scan_file_prefix+"_BEFORE"
+        keyword_count_after_filename = self.log_scan_file_prefix+"_AFTER"
+        keyword_count_diff = {}
+        for server in self.servers:
+            before_keyword_counts = {}
+            after_keyword_counts = {}
+            if os.path.exists(f'{server.ip}_{keyword_count_before_filename}'):
+                s = open(f'{server.ip}_{keyword_count_before_filename}', 'r').read()
+                before_keyword_counts = ast.literal_eval(s)
+            if os.path.exists(f'{server.ip}_{keyword_count_after_filename}'):
+                s = open(f'{server.ip}_{keyword_count_after_filename}', 'r').read()
+                after_keyword_counts = ast.literal_eval(s)
+
+            for log, keyword_count in after_keyword_counts.items():
+                if log in before_keyword_counts.keys():
+                    for keyword, count in keyword_count.items():
+                        if keyword in before_keyword_counts[log].keys():
+                            if count > before_keyword_counts[log][keyword]:
+                                keyword_count_diff[f'{server.ip}:{log}:{keyword}'] = int(count) - int(before_keyword_counts[log][keyword])
+                        else:
+                            keyword_count_diff[f'{server.ip}:{log}:{keyword}'] = count
+                else:
+                    keyword_count_diff[f'{server.ip}:{log}'] = keyword_count
+        return keyword_count_diff
 
     def tearDown(self):
         self.print_cluster_stats()
@@ -513,6 +541,16 @@ class BaseTestCase(unittest.TestCase):
             # increase case_number to retry tearDown in setup for the next test
             self.case_number += 1000
         finally:
+            self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.case_number}'
+            if not self.skip_log_scan and not test_failed:
+                _tasks = self.cluster.async_log_scan(self.servers, self.log_scan_file_prefix+"_AFTER")
+                for _task in _tasks:
+                    _task.result()
+
+                keyword_count_diff = self.compare_logscan_keyword_count()
+                if keyword_count_diff:
+                    self.fail(f'Log scan completed, detected new occurrences of error keywords : {keyword_count_diff}')
+
             self.log.info("closing all ssh connections")
             for ins in RemoteMachineShellConnection.get_instances():
                 # self.log.info(str(ins))
