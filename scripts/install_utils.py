@@ -154,8 +154,19 @@ class NodeHelper:
                     self.shell.execute_command(cmd, debug=self.params["debug_logs"])
                     self.wait_for_completion(duration, event)
 
+    def set_vm_swappiness_and_thp(self):
+        # set vm_swapiness to 0, and thp to never by default
+        # Check if this key is defined for this distribution/os
+        if "set_vm_swappiness_and_thp" in self.actions_dict[self.info.deliverable_type]:
+            try:
+                cmd = self.actions_dict[self.info.deliverable_type]["set_vm_swappiness_and_thp"]
+                o, e = self.shell.execute_command(cmd, debug=self.params["debug_logs"])
+            except Exception as e:
+                log.warning("Could not set vm swappiness/THP.Exception {0} occurred on {1} ".format(e, self.ip))
+
     def install_cb(self):
         self.pre_install_cb()
+        self.set_vm_swappiness_and_thp()
         if self.actions_dict[self.info.deliverable_type]["install"]:
             if "suse" in self.get_os():
                 cmd = self.actions_dict[self.info.deliverable_type]["suse_install"]
