@@ -913,6 +913,9 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         if self.backupset.secure_conn:
             url_format = "s"
             secure_port = "1"
+            cacert = self.root_path + "cert.pem"
+            if self.os_name == "windows":
+                cacert = WIN_TMP_PATH_RAW + "cert.pem"
 
         user_input = "--username %s " % self.backupset.restore_cluster_host_username
         password_input = "--password %s " % self.backupset.restore_cluster_host_password
@@ -1159,6 +1162,9 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                 args += " --replace-ttl-with {0}".format(self.replace_ttl_with)
             else:
                 args += " --replace-ttl {0}".format(self.replace_ttl)
+        """ rename restore node to ip """
+        RestConnection(self.backupset.restore_cluster_host).rename_node(
+                                            self.backupset.restore_cluster_host.ip)
         if self.backupset.secure_conn:
             cacert = self.get_cluster_certificate_info(self.backupset.backup_host,
                                                        self.backupset.restore_cluster_host)
@@ -1257,7 +1263,6 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         if self.debug_logs:
             remote_client.log_command_output(output, error)
         if not output:
-            self.sleep(20000)
             self.fail("Restoring backup failed.")
         command = "grep 'Transfer failed' " + bk_dir + \
                   "/logs/{0}".format(bk_log_file_name)
