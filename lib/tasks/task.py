@@ -6331,23 +6331,16 @@ class SDKLoadDocumentsTask(Task):
             self.bucket = bucket
         self.sdk_docloader = sdk_docloader
 
-    def execute_for_collection(self, collection_dfn):
+    def execute_for_collection(self, collection):
         import subprocess
-        scope = collection_dfn.split(":")[0]
-        collection = collection_dfn.split(":")[1]
         command = f"java -jar java_sdk_client/collections/target/javaclient/javaclient.jar " \
                   f"-i {self.server.ip} -u {self.sdk_docloader.username} -p {self.sdk_docloader.password} -b {self.bucket} " \
-                  f"-s {scope} -c {collection} " \
+                  f"-s {self.sdk_docloader.scope} -c {collection} " \
                   f"-n {self.sdk_docloader.num_ops} -pc {self.sdk_docloader.percent_create} -pu {self.sdk_docloader.percent_update} " \
                   f"-pd {self.sdk_docloader.percent_delete} -l {self.sdk_docloader.load_pattern} " \
                   f"-dsn {self.sdk_docloader.start_seq_num} -dpx {self.sdk_docloader.key_prefix} -dt {self.sdk_docloader.json_template} " \
                   f"-de {self.sdk_docloader.doc_expiry} -ds {self.sdk_docloader.doc_size} -ac {self.sdk_docloader.all_collections} " \
                   f"-st {self.sdk_docloader.start} -en {self.sdk_docloader.end}"
-        if self.sdk_docloader.es_compare:
-            command = command + " -es true -es_host " + str(self.sdk_docloader.es_host) + " -es_port " + str(
-                self.sdk_docloader.es_port) + \
-                      " -es_login " + str(self.sdk_docloader.es_login) + " -es_password " + str(
-                self.sdk_docloader.es_password)
         self.log.info(command)
         if self.sdk_docloader.op_type == "update":
             arr_fields_to_update = eval(self.sdk_docloader.fields_to_update) if self.sdk_docloader.fields_to_update else ""

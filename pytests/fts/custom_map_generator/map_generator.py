@@ -170,7 +170,7 @@ class CustomMapGenerator:
     # Generates an FTS and equivalent ES custom map for emp/wiki datasets
     """
     def __init__(self, seed=0, dataset="emp", num_custom_analyzers=0,multiple_filters=False,
-                 custom_map_add_non_indexed_fields=True, text_analyzer=None, type_mapping="emp", collection_index=False):
+                 custom_map_add_non_indexed_fields=True, text_analyzer=None):
         random.seed(seed)
         self.fts_map = {"types": {}}
         self.es_map = {}
@@ -191,7 +191,7 @@ class CustomMapGenerator:
             self.fields = EMP_FIELDS
             self.nested_fields = EMP_NESTED_FIELDS
             self.max_fields = TOTAL_EMP_FIELDS
-            self.fts_map['types'][type_mapping] = {
+            self.fts_map['types'][dataset] = {
                                         "dynamic": False,
                                         "enabled": True,
                                         "fields": [],
@@ -201,15 +201,12 @@ class CustomMapGenerator:
                         "dynamic": False,
                         "properties": {}
                     }
-            if collection_index:
-                self.build_custom_map(dataset, type_mapping=type_mapping)
-            else:
-                self.build_custom_map(dataset)
+            self.build_custom_map(dataset)
         elif dataset == "wiki":
             self.fields = WIKI_FIELDS
             self.nested_fields = WIKI_NESTED_FIELDS
             self.max_fields = TOTAL_WIKI_FIELDS
-            self.fts_map['types'][type_mapping] = {
+            self.fts_map['types'][dataset] = {
                                         "dynamic": False,
                                         "enabled": True,
                                         "fields": [],
@@ -219,16 +216,12 @@ class CustomMapGenerator:
                         "dynamic": False,
                         "properties": {}
                     }
-            if collection_index:
-                self.build_custom_map(dataset, type_mapping=type_mapping)
-            else:
-                self.build_custom_map(dataset)
+            self.build_custom_map(dataset)
         elif dataset == "all":
             self.fields = EMP_FIELDS
             self.nested_fields = EMP_NESTED_FIELDS
             self.max_fields = TOTAL_EMP_FIELDS
-            type_mapping_val = type_mapping if collection_index else 'emp'
-            self.fts_map['types'][type_mapping_val] = {
+            self.fts_map['types']['emp'] = {
                                         "dynamic": False,
                                         "enabled": True,
                                         "fields": [],
@@ -238,16 +231,12 @@ class CustomMapGenerator:
                         "dynamic": False,
                         "properties": {}
                     }
-            if collection_index:
-                self.build_custom_map('emp', type_mapping=type_mapping)
-            else:
-                self.build_custom_map('emp')
+            self.build_custom_map('emp')
             if int(TestInputSingleton.input.param("doc_maps", 1)) > 1:
                 self.fields = WIKI_FIELDS
                 self.nested_fields = WIKI_NESTED_FIELDS
                 self.max_fields = TOTAL_WIKI_FIELDS
-                type_mapping_val = type_mapping if collection_index else 'wiki'
-                self.fts_map['types'][type_mapping_val] = {
+                self.fts_map['types']['wiki'] = {
                                         "dynamic": False,
                                         "enabled": True,
                                         "fields": [],
@@ -257,10 +246,7 @@ class CustomMapGenerator:
                         "dynamic": False,
                         "properties": {}
                     }
-                if collection_index:
-                    self.build_custom_map('wiki', type_mapping=type_mapping)
-                else:
-                    self.build_custom_map('wiki')
+                self.build_custom_map('wiki')
             else:
                 if not TestInputSingleton.input.param("default_map", False):
                     # if doc_maps=1 and default map is disabled, force single
@@ -292,15 +278,14 @@ class CustomMapGenerator:
         if field not in self.queryable_fields[field_type]:
             self.queryable_fields[field_type].append(field)
 
-    def build_custom_map(self, dataset, type_mapping=None):
+    def build_custom_map(self, dataset):
         for x in range(0, self.num_field_maps):
             field, type = self.get_random_field_name_and_type(self.fields)
             if field not in iter(list(self.nested_fields.keys())):
                 fts_child, es_child = self.get_child_field(field, type)
             else:
-                fts_child, es_child = self.get_child_map(field, dataset, type_mapping)
-            type_mapping_val = dataset if type_mapping is None else type_mapping
-            self.fts_map['types'][type_mapping_val]['properties'][field] = fts_child
+                fts_child, es_child = self.get_child_map(field, dataset)
+            self.fts_map['types'][dataset]['properties'][field] = fts_child
             self.es_map[dataset]['properties'][field] = es_child
 
         if self.custom_map_add_non_indexed_fields:
@@ -333,15 +318,12 @@ class CustomMapGenerator:
                 print(("Unable to add a non-indexed field after %s retries" \
                       % self.max_fields))
 
-    def get_child_map(self, field, dataset, type_mapping):
+    def get_child_map(self, field, dataset):
         """
         Child maps are for nested json structures i.e, any higher level field
         having another nested structure as its value
         """
-        if type_mapping:
-            current_prop = self.fts_map['types'][type_mapping]['properties']
-        else:
-            current_prop = self.fts_map['types'][dataset]['properties']
+        current_prop = self.fts_map['types'][dataset]['properties']
         if field not in iter(current_prop.keys()):
             fts_child_map = {}
             fts_child_map['dynamic'] = False
@@ -355,10 +337,7 @@ class CustomMapGenerator:
             es_child_map['type'] = "object"
             es_child_map['properties'] = {}
         else:
-            if type_mapping:
-                fts_child_map = self.fts_map['types'][type_mapping]['properties'][field]
-            else:
-                fts_child_map = self.fts_map['types'][dataset]['properties'][field]
+            fts_child_map = self.fts_map['types'][dataset]['properties'][field]
             es_child_map = self.es_map[dataset]['properties'][field]
 
         field, type = self.get_nested_child_field(field)
