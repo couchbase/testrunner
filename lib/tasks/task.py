@@ -734,7 +734,7 @@ class RebalanceTask(Task):
         try:
             if len(self.to_add) and len(self.to_add) == len(self.to_remove):
                 node_version_check = self.rest.check_node_versions()
-                non_swap_servers = set(self.servers) - set(self.to_remove) - set(self.to_add)
+                non_swap_servers = (node for node in self.servers if node not in self.to_add and node not in self.to_remove)
                 self.old_vbuckets = RestHelper(self.rest)._get_vbuckets(non_swap_servers, None)
                 if self.old_vbuckets:
                     self.monitor_vbuckets_shuffling = True
