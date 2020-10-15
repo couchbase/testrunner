@@ -1,6 +1,8 @@
 import re
 import json
 import random
+import datetime
+
 from ent_backup_restore.backup_service_base import BackupServiceBase, HistoryFile, MultipleRemoteShellConnections
 from lib.couchbase_helper.time_helper import TimeUtil
 from membase.api.rest_client import RestConnection
@@ -1908,3 +1910,70 @@ class BackupServiceTest(BackupServiceBase):
 
         # Check backup content equals content of cluster after restore
         self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name = backup_name)
+
+    # Nsserver tests
+
+    def test_killing_the_backup_service(self):
+        """ Test if nsserver restarts the backup service
+
+        1. Set the time to 0800 Friday and create a repository using the _daily_backups plan.
+        2. Take a one off backup.
+        3. Kill the backup service and check if the Saturday task (the next task) is scheduled.
+        If `skiptask` is set then skip over the Saturday task during the downtime and check if the Sunday task was scheduled.
+
+        params:
+            skiptask (bool): If set, advances the time to 1 minute after the scheduled time during the downtime
+        """
+        repo_name, full_backup, skiptask = "my_repo", self.input.param("full_backup", False), self.input.param("skiptask", False)
+
+        self.time.change_system_time("next friday 0800")
+
+        body = Body2(plan="_daily_backups", archive=self.backupset.directory)
+
+        if self.objstore_provider:
+            body = self.set_cloud_credentials(body)
+
+        # Add repositories and tie default plan to repository
+        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+        # Load buckets with data
+        self._load_all_buckets(self.master, BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items), "create", 0)
+
+        # Sleep to ensure the bucket is populated with data
+        self.sleep(10)
+
+        # Take a one off backup using the backup service
+        task_name = self.take_one_off_backup("active", repo_name, full_backup, 20, 20)
+
+        if skiptask:
+            # Get the time of the next scheduled task
+            previous_task_time, _, previous_task_name = self.repository_api.cluster_self_repository_state_id_get('active', repo_name).next_scheduled
+            # This should be the Saturday task
+            self.assertEqual(previous_task_name, "backup_saturday")
+            # Kill the backup service
+            self.kill_process("backup")
+            # Change time to 1 minute after the task is scheduled to skip it
+            self.time.change_system_time(str(previous_task_time + datetime.timedelta(minutes=1)))
+        else:
+            # Kill the backup service
+            self.kill_process("backup")
+
+        if not self.wait_for_process_to_start("backup", 20, 5):
+            self.fail("Failed to restart the backup service")
+
+        # Give the service time to restart
+        self.sleep(20)
+
+        time, _, task_name = self.repository_api.cluster_self_repository_state_id_get('active', repo_name).next_scheduled
+
+        if skiptask:
+            self.assertEqual(task_name, "backup_sunday" if skiptask else "backup_saturday")
+
+        # Change time to 1 minute before the task is scheduled
+        self.time.change_system_time(str(time - datetime.timedelta(minutes=1)))
+
+        self.sleep(60)
+
+        # Wait for the scheduled task to complete
+        if not self.wait_for_backup_task("active", repo_name, 20, 20, task_name):
+            self.fail("The task was not completed or took too long to complete")

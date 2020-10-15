@@ -44,11 +44,14 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         self.configuration_api = ConfigurationApi(self.api_client)
         self.active_repository_api = ActiveRepositoryApi(self.api_client)
 
-        # Manipulate time
-        self.time = Time(RemoteMachineShellConnection(self.master))
-
         # Backup Service Constants
         self.default_plans = ["_hourly_backups", "_daily_backups"]
+
+        # A connection to every single machine in the cluster
+        self.multiple_remote_shell_connections = MultipleRemoteShellConnections(self.input.clusters[0])
+
+        # Manipulate time
+        self.time = Time(self.multiple_remote_shell_connections)
 
     def setUp(self):
         """ Sets up.
@@ -72,6 +75,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         # Run cbbackupmgr on the same node as the backup service being tested
         self.backupset.backup_host = self.backupset.cluster_host
+
+        # Stop the vboxadd-service again to prevent it from syncing the time with the host
+        self.multiple_remote_shell_connections.execute_command("sudo service vboxadd-service stop")
 
         # Share archive directory
         self.directory_to_share = "/tmp/share"
@@ -202,6 +208,29 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         for directory in self.temporary_directories:
             self.multiple_remote_shell_connections.execute_command(f"rm -rf {directory}")
 
+    def kill_process(self, process):
+        """ Kill a process across all nodes
+        """
+        # Kill the backup service on all nodes in cluster
+        self.multiple_remote_shell_connections.execute_command(f"kill -KILL `pgrep {process}`")
+
+    def wait_for_process_to_start(self, process, retries, sleep_time):
+        """ Wait for a process to start on all nodes
+
+        params:
+            process (str): The name of the process to kill and wait for.
+
+        return:
+            bool (true): If the process restarted on all nodes
+        """
+        for retries in range(0, retries):
+            if all([output for output, error in self.multiple_remote_shell_connections.execute_command(f"pgrep {process}")]):
+                return True
+
+            self.sleep(sleep_time)
+
+        return False
+
     def get_backups(self, state, repo_name):
         """ Returns the backups in a repository.
 
@@ -226,17 +255,19 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
     def wait_for_backup_task(self, state, repo_name, retries, sleep_time, task_name=None):
         """ Wait for the latest backup Task to complete.
         """
+        # Wait for any existing running tasks to finish running
         for i in range(0, retries):
             repository = self.repository_api.cluster_self_repository_state_id_get(state, repo_name)
 
             if i == retries - 1:
                 return False
 
-            if not repository.running_one_off:
+            if not repository.running_one_off and not repository.running_tasks:
                 break
 
             self.sleep(sleep_time)
 
+        # Check the task is present in the task history with the status 'done'
         if task_name:
             for i in range(0, retries):
                 task_history = self.get_task_history(state, repo_name, task_name)
@@ -249,6 +280,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
                 self.sleep(sleep_time)
 
+        # Check there is a complete task at the top in the list of backups
         for i in range(0, retries):
             backups = self.get_backups(state, repo_name)
             if len(backups) > 0 and backups[0].complete:
@@ -419,6 +451,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         # Kill asynchronous tasks which are still running
         self.cluster.shutdown(force=True)
+
+        # Start the vboxadd-service again
+        self.multiple_remote_shell_connections.execute_command("sudo service vboxadd-service start")
 
         # If this is the last test, we want to tear down the cluster we provisioned on the first test
         # Note a test must mark it is the last test by supplying setting `last_test` as a test param

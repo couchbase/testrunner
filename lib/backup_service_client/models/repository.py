@@ -12,8 +12,11 @@
 
 import pprint
 import re  # noqa: F401
+import datetime
 
 import six
+
+from lib.couchbase_helper.time_helper import TimeUtil
 
 
 class Repository(object):
@@ -289,6 +292,12 @@ class Repository(object):
         """
 
         self._health = health
+
+    @property
+    def next_scheduled(self):
+        """ Gets the next scheduled time
+        """
+        return next(iter(sorted((TimeUtil.rfc3339nano_to_datetime(schedule.next_run), schedule.next_run, task_name) for task_name, schedule in self.scheduled.items())), None)
 
     @property
     def scheduled(self):
