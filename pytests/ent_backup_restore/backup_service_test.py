@@ -1814,3 +1814,97 @@ class BackupServiceTest(BackupServiceBase):
         self.sleep(30)
         # Check the 2nd backup does not exist
         self.assertEqual(len(self.get_backups("active", repo_name)), 1)
+
+    # Cbbackupmgr Info / Restore
+
+    def test_cbbackupmgr_info(self):
+        """ Test the user can obtain the info of a repository via cbbackupmgr
+        """
+        repo_name, no_of_backups = "my_repo", 2
+
+        self.create_repository_with_default_plan(repo_name)
+
+        # Fetch repository information
+        repository = self.repository_api.cluster_self_repository_state_id_get('active', repo_name)
+
+        def get_blob_gen(i):
+            return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * (i + 1))), start=0, end=self.num_items)
+
+        # Take some backups
+        self.take_n_one_off_backups("active", repo_name, get_blob_gen, no_of_backups)
+
+        # Fetch repo info using cbbackupmgr (using alternate staging directory)
+        self.backupset.name, self.backupset.objstore_staging_directory = repository.repo, self.backupset.objstore_alternative_staging_directory
+        output, _ = self.backup_info()
+
+        if not output:
+            self.fail("Unable to obtain the output from `cbbackupmgr info`")
+
+        info = json.loads(output[0])
+
+        # Check repository name and the number of backups in cbbackupmgr info, backup service info and task history
+        self.assertEqual(info['name'], repository.repo)
+        self.assertEqual(len(info['backups']), no_of_backups)
+        self.assertEqual(len(self.get_task_history("active", repo_name)), no_of_backups)
+        self.assertEqual(len(self.get_backups("active", repo_name)), no_of_backups)
+
+        # Compare backup service info, backup service task history and cbbackupmgr info
+        # The task history has to be reversed as the newest task ends up at the top but the newest backup ends up at the end
+        # of their respective lists
+        for i, backup_service_backup, task, cbbackupmgr_backup in zip(range(0, no_of_backups), self.get_backups("active", repo_name), reversed(self.get_task_history("active", repo_name)), info['backups']):
+            # Check the backup name between cbbackupmgr and the backup service match
+            self.assertEqual(backup_service_backup._date, cbbackupmgr_backup['date'])
+            # Check the 'Backuping up to `backup-name`' in the description of the stats matches the `backup-name` in the backup service backup
+            self.assertEqual(self.map_task_to_backup("active", repo_name, task.task_name), backup_service_backup._date)
+
+            # Check the size of the backup between cbbackupmgr and the backup service are equal
+            self.assertEqual(backup_service_backup.size, cbbackupmgr_backup['size'])
+
+            # Check the items of the backup between cbbackupmgr and the backup service matches number of items we backed up
+            self.assertEqual(sum(bucket.items for bucket in backup_service_backup.buckets), self.num_items)
+            self.assertEqual(sum(bucket['items'] for bucket in cbbackupmgr_backup['buckets']), self.num_items)
+
+            # Check the first backup is full and any subsequent backups are incremental (as configured in take_n_one_off_backups)
+            self.assertEqual(cbbackupmgr_backup['type'], 'FULL' if i < 1 else 'INCR')
+
+    def test_cbbackupmgr_restore(self):
+        """ Test the user can restore a backup service backup using cbbackupmgr
+        """
+        repo_name, full_backup = "my_repo", self.input.param("full_backup", False)
+
+        self.create_repository_with_default_plan(repo_name)
+
+        # Fetch repository information
+        repository = self.repository_api.cluster_self_repository_state_id_get('active', repo_name)
+
+        # Load buckets with data
+        self._load_all_buckets(self.master, BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items), "create", 0)
+
+        # Sleep to ensure the bucket is populated with data
+        self.sleep(10)
+
+        # Take a one off backup using the backup service
+        task_name = self.take_one_off_backup("active", repo_name, full_backup, 20, 20)
+
+        # Get backup name
+        backup_name = self.map_task_to_backup("active", repo_name, task_name)
+        self.backups.append(backup_name)
+
+        # Flush all buckets to empty cluster of all documents
+        self.flush_all_buckets()
+
+        # Use cbbackupmgr to restore using (using alternate staging directory)
+        self.backupset.name = repository.repo
+        self.backupset.objstore_staging_directory, old_staging_dir = self.backupset.objstore_alternative_staging_directory, self.backupset.objstore_staging_directory
+        self.backup_restore()
+        self.backupset.objstore_staging_directory = old_staging_dir
+
+        # Delete the alt staging directory before cbriftdump
+        self.rmdir(self.backupset.objstore_alternative_staging_directory)
+
+        # Configure repository name and staging directory (validate_backup_data needs to grab the bucket-uuid's from this staging directory)
+        if self.objstore_provider:
+            self.backupset.objstore_staging_directory = repository.cloud_info.staging_dir
+
+        # Check backup content equals content of cluster after restore
+        self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name = backup_name)

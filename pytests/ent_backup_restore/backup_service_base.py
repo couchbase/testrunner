@@ -100,6 +100,13 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         remote_client.execute_command(f"mkdir {directory}")
         remote_client.disconnect()
 
+    def rmdir(self, directory):
+        """ Deletes a directory
+        """
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        remote_client.execute_command(f"rm -rf {directory}")
+        remote_client.disconnect()
+
     def chown(self, directory, user="couchbase", group="couchbase"):
         """ Recursively change file/folder ownership
         """
@@ -311,6 +318,14 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         # Add repositories and tie default plan to repository
         self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+    def flush_all_buckets(self):
+        """ Flush all buckets to empty cluster of documents
+        """
+        rest_connection = RestConnection(self.master)
+        for bucket in self.buckets:
+            rest_connection.change_bucket_props(bucket, flushEnabled=1)
+            rest_connection.flush_bucket(bucket)
 
     def replace_bucket(self, cluster_host, bucket_to_replace, new_bucket, ramQuotaMB=100):
         """ Replaces an existing bucket
