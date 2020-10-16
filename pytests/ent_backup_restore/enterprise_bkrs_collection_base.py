@@ -643,7 +643,11 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                 scopes.remove(scope)
         for scope in scopes:
             backup_collections = self.get_bucket_collection_cluster_host(bucket_name, scope)
+            if isinstance(backup_collections, tuple):
+                backup_collections = backup_collections[0]
             restore_collections = self.get_bucket_collection_restore_cluster_host(bucket_name, scope)
+            if isinstance(restore_collections, tuple):
+                restore_collections = restore_collections[0]
             for backup_collection in backup_collections:
                 if backup_collection in restore_collections:
                     self.log.info("Collection {0} restored".format(backup_collection))
