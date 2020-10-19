@@ -1977,3 +1977,59 @@ class BackupServiceTest(BackupServiceBase):
         # Wait for the scheduled task to complete
         if not self.wait_for_backup_task("active", repo_name, 20, 20, task_name):
             self.fail("The task was not completed or took too long to complete")
+
+    # RBAC
+
+    def test_rbac_create_repository(self):
+        """ A test non-admin user cannot use the backup service
+        """
+        # Change API credentials
+        self.configuration.username, self.configuration.password, rest_connection = "Mallory", "password", RestConnection(self.master)
+
+        roles = \
+        [
+            ('admin', True),
+            ('ro_admin', False),
+            ('security_admin', False),
+            ('cluster_admin', False),
+            ('', False),
+        ]
+
+        for role, operation_should_succeed in roles:
+            # Set Mallory's role to `role`
+            rest_connection.add_set_builtin_user("Mallory", f"name={self.configuration.username}&roles={role}&password={self.configuration.password}")
+            # Create a repository using the new credentials
+            _, status, _, response_data = self.active_repository_api.cluster_self_repository_active_id_post_with_http_info("my_repo", body=Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory, bucket_name=None))
+            # Check the status
+            self.assertIn(status, [200] if operation_should_succeed else [403, 400])
+            # Check the error message if the status is 400
+            if status == 400:
+                self.assertEqual(json.loads(response_data.data)['message'], 'Forbidden. User needs one of the following permissions')
+
+    def test_rbac_other_operations(self):
+        """ Test if non admin roles cannot trigger a one off backup, get the task history or the list of backups
+        """
+        repo_name = "my_repo"
+
+        self.create_repository_with_default_plan(repo_name)
+
+        # Change API credentials
+        self.configuration.username, self.configuration.password, rest_connection = "Mallory", "password", RestConnection(self.master)
+
+        roles = ['ro_admin', 'security_admin', 'cluster_admin', '']
+
+        actions = \
+        [
+            (self.active_repository_api.cluster_self_repository_active_id_backup_post_with_http_info, [repo_name]),
+            (self.repository_api.cluster_self_repository_state_id_task_history_get_with_http_info, ["active", repo_name]),
+            (self.repository_api.cluster_self_repository_state_id_info_get_with_http_info, ["active", repo_name])
+        ]
+
+        for role in roles:
+            # Set Mallory's role to `role`
+            rest_connection.add_set_builtin_user("Mallory", f"name={self.configuration.username}&roles={role}&password={self.configuration.password}")
+
+            # Call various backup service endpoints
+            for func, arg in actions:
+                status = func(*arg)[1]
+                self.assertIn(status, [403, 400])
