@@ -4906,10 +4906,10 @@ class FTSBaseTest(unittest.TestCase):
                         load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
                                                                      gen=g,
                                                                      op_type='create'))
-                    else:
-                        load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
-                                                                     gen=gen,
-                                                                     op_type='create'))
+                else:
+                    load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
+                                                                 gen=gen,
+                                                                 op_type='create'))
         load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(self.create_gen)
         return load_tasks
 
