@@ -59,7 +59,7 @@ class LogScanner(object):
                             cmd += "\"{0}\" {1}{2} -R".format(keyword, self.log_path, '*')
                         else:
                             cmd += "\"{0}\" {1}{2}".format(keyword, self.log_path, log + '*')
-                        matches, err = self.shell.execute_command(cmd)
+                        matches, err = self.shell.execute_command(cmd, debug=False)
                         if len(matches):
                             print("Number of matches : " + str(len(matches)) + "\nmatches : " + str(matches))
                             if log not in log_matches_map.keys():
