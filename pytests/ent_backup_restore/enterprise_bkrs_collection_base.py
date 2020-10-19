@@ -254,9 +254,9 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             self.backupset.cluster_host_username = self.cluster_new_user
             self.backupset.restore_cluster_host_username = self.cluster_new_user
         include_buckets = self.input.param("include-buckets", "")
-        include_buckets = include_buckets.split(",") if include_buckets else []
+        #include_buckets = include_buckets.split(",") if include_buckets else []
         exclude_buckets = self.input.param("exclude-buckets", "")
-        exclude_buckets = exclude_buckets.split(",") if exclude_buckets else []
+        #exclude_buckets = exclude_buckets.split(",") if exclude_buckets else []
         self.backupset.exclude_buckets = exclude_buckets
         self.backupset.include_buckets = include_buckets
         self.backupset.disable_bucket_config = self.input.param("disable-bucket-config", False)
@@ -643,9 +643,11 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                 scopes.remove(scope)
         for scope in scopes:
             backup_collections = self.get_bucket_collection_cluster_host(bucket_name, scope)
+            print("\nbackup collections: ", backup_collections)
             if isinstance(backup_collections, tuple):
                 backup_collections = backup_collections[0]
             restore_collections = self.get_bucket_collection_restore_cluster_host(bucket_name, scope)
+            print("\nrestore collections: ", restore_collections)
             if isinstance(restore_collections, tuple):
                 restore_collections = restore_collections[0]
             for backup_collection in backup_collections:
@@ -686,9 +688,9 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
     def backup_create(self, del_old_backup=True):
         args = "config --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
         if self.backupset.exclude_buckets:
-            args += " --exclude-data \"{0}\"".format(",".join(self.backupset.exclude_buckets))
+            args += " --exclude-data \"{0}\"".format(self.backupset.exclude_buckets)
         if self.backupset.include_buckets:
-            args += " --include-data \"{0}\"".format(",".join(self.backupset.include_buckets))
+            args += " --include-data \"{0}\"".format(self.backupset.include_buckets)
         if self.backupset.disable_bucket_config:
             args += " --disable-bucket-config"
         if self.backupset.disable_views:
@@ -2538,8 +2540,8 @@ class Backupset:
         self.restore_cluster_host_username = ''
         self.restore_cluster_host_password = ''
         self.threads = ''
-        self.exclude_buckets = []
-        self.include_buckets = []
+        self.exclude_buckets = ""
+        self.include_buckets = ""
         self.disable_bucket_config = False
         self.disable_views = False
         self.disable_gsi_indexes = False

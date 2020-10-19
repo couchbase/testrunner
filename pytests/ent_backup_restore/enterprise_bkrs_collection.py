@@ -339,8 +339,13 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
             self.log.info("*** start to validate backup cluster")
             self.backup_cluster_validate()
             scopes = self.get_bucket_scope_cluster_host()
-            collections = self.get_bucket_collection_cluster_host()
-            self.backup_info_validate(scopes, collections)
+            if isinstance(scopes, tuple):
+                scopes = scopes[0]
+            for scope in scopes:
+                collections = self.get_bucket_collection_cluster_host(scope=scope)
+                if isinstance(collections, tuple):
+                    collections = collections[0]
+                self.backup_info_validate(scope, collections)
 
     def test_restore_with_auto_create_buckets(self):
         """
@@ -363,7 +368,12 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
             scopes_id.append(self.get_scopes_id_cluster_host(scope))
         """ remove null and empty element """
         scopes_id = [i for i in scopes_id if i]
-        backup_collections = self.get_bucket_collection_cluster_host()
+        if isinstance(backup_scopes, tuple):
+            backup_scopes = backup_scopes[0]
+        for backup_scope in backup_scopes:
+            backup_collections = self.get_bucket_collection_cluster_host(scope=backup_scope)
+            if isinstance(backup_collections, tuple):
+                backup_collections = backup_collections[0]
         col_stats = self.get_collection_stats_cluster_host()
         for backup_scope in backup_scopes:
             bk_scope_id = self.get_scopes_id_cluster_host(backup_scope)
