@@ -2,6 +2,7 @@ import re
 import json
 import random
 import datetime
+import threading
 
 from ent_backup_restore.backup_service_base import BackupServiceBase, HistoryFile, MultipleRemoteShellConnections
 from lib.couchbase_helper.time_helper import TimeUtil
@@ -20,6 +21,8 @@ from lib.backup_service_client.models.plan import Plan
 from lib.backup_service_client.models.service_configuration import ServiceConfiguration
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
+from couchbase_helper.cluster import Cluster
+from membase.api.exception import ServerAlreadyJoinedException
 
 class BackupServiceTest(BackupServiceBase):
     def setUp(self):
@@ -2033,3 +2036,44 @@ class BackupServiceTest(BackupServiceBase):
             for func, arg in actions:
                 status = func(*arg)[1]
                 self.assertIn(status, [403, 400])
+
+    # Cluster Ops
+
+    def test_cluster_ops(self):
+        """ Test if tasks are not scheduled during a rebalance and subsequently rescheduled after
+        """
+        repo_name, cluster_op, allowed_ops = "my_repo", self.input.param("cluster_op", "rebalance"), ["rebalance"]
+
+        self.assertIn(cluster_op, allowed_ops, f"The input param `cluster_op` must be in {allowed_ops}")
+
+        self.time.change_system_time(f"next friday 0800")
+
+        body = Body2(plan="_daily_backups", archive=self.backupset.directory)
+        if self.objstore_provider:
+            body = self.set_cloud_credentials(body)
+        # Add repositories and tie plan to repository
+        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+        # Load buckets with data
+        self._load_all_buckets(self.master, BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items), "create", 0)
+        # Sleep to ensure the bucket is populated with data
+        self.sleep(10)
+
+        time, _, task_name = self.repository_api.cluster_self_repository_state_id_get('active', repo_name).next_scheduled
+        # Check the saturday task is scheduled
+        self.assertEqual(task_name, "backup_saturday")
+
+        # Change time to 1 minute before the task is scheduled
+        self.time.change_system_time(str(time - datetime.timedelta(minutes=1)))
+        # Wait until we are at the moment a few seconds before the task is scheduled
+        self.sleep(50)
+
+        cluster, rest_connection = Cluster(), RestConnection(self.master)
+
+        # Start a long cluster op
+        cluster.rebalance(self.input.clusters[0], [], self.input.clusters[0][1:], services=[server.services for server in self.servers])
+
+        time, _, task_name = self.repository_api.cluster_self_repository_state_id_get('active', repo_name).next_scheduled
+
+        # Check the saturday task was skipped
+        self.assertEqual(task_name, "backup_sunday")
