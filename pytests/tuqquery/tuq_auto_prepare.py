@@ -754,11 +754,16 @@ class QueryAutoPrepareTests(QueryTests):
 
     def test_system_prepareds(self):
         try:
-            self.run_cbq_query(query="PREPARE p3 AS SELECT * FROM default")
+            self.run_cbq_query(query="PREPARE p3 AS SELECT * FROM default where name = 'employee-9'")
+        except Exception as e:
+            self.log.error("Prepared statement failed {0}".format(str(e)))
+            self.fail()
+        try:
             self.run_cbq_query(
                 query='PREPARE p2 as select * from default:default.test.test1 t1 INNER JOIN default:default.test2.test2 t2 ON t1.name = t2.name where t1.name = "new hotel"')
             self.run_cbq_query(query="PREPARE p1 AS SELECT * FROM test1 b WHERE b.name = 'old hotel'", query_context='default:default.test')
         except Exception as e:
-            self.log.info("Prepared statement failed {0}".format(str(e)))
+            self.log.error("Prepared statement failed {0}".format(str(e)))
+            self.fail()
         results = self.run_cbq_query("SELECT * from system:prepareds")
         self.assertEqual(results['metrics']['resultCount'], 6)
