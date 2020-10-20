@@ -205,48 +205,82 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         if output and output[0]:
             if self.backupset.info_to_json:
                 bk_info = json.loads(output[0])
+                bk_name = bk_info["name"]
+                bk_scopes = bk_info["backups"][0]["buckets"][0]["scopes"]
             else:
                 """ remove empty element """
+                bk_info = {}
                 output = list(filter(None, output))
                 """ remove space in element """
                 output = [x.replace(' ', '') for x in output]
-            bk_name = bk_info["name"]
-            bk_scopes = bk_info["backups"][0]["buckets"][0]["scopes"]
+                bk_name = output[1].split("|")[0]
+                bk_info["backups"] = output[3:]
+                if self.backups[0] in bk_info["backups"][0]:
+                    backup_folder_timestamp = True
+                if str(self.num_items) in bk_info["backups"][2]:
+                    items_count = True
+                if self.buckets[0].name in bk_info["backups"][2]:
+                    bucket_name = True
+                if "FULL" in bk_info["backups"][0]:
+                    first_backup_full = True
+                if "INCR" in bk_info["backups"][0]:
+                    after_first_backup_incr = True
         else:
             return False, "No output content"
 
         if self.backupset.name in bk_name:
             backup_name = True
-        for idx, val in enumerate(bk_info["backups"]):
-            if self.backups[idx] in bk_info["backups"][idx]["date"]:
-                backup_folder_timestamp = True
-            if self.num_items == bk_info["backups"][idx]["buckets"][0]["items"]:
-                items_count = True
-            if idx == 0:
-                if bk_info["backups"][idx]["type"] == "FULL":
-                    first_backup_full = True
-            if idx > 0:
-                if bk_info["backups"][idx]["type"] == "INCR":
-                    after_first_backup_incr = True
-            if idx > len(self.buckets) - 1:
-                continue
-            elif str(self.buckets[idx].name) in bk_info["backups"][idx]["buckets"][0]["name"]:
-                bucket_name = True
+        if self.backupset.info_to_json:
+            for idx, val in enumerate(bk_info["backups"]):
+                if self.backups[idx] in bk_info["backups"][idx]["date"]:
+                    backup_folder_timestamp = True
+                if self.num_items == bk_info["backups"][idx]["buckets"][0]["items"]:
+                    items_count = True
+                if idx == 0:
+                    if bk_info["backups"][idx]["type"] == "FULL":
+                        first_backup_full = True
+                if idx > 0:
+                    if bk_info["backups"][idx]["type"] == "INCR":
+                        after_first_backup_incr = True
+                if idx > len(self.buckets) - 1:
+                    continue
+                elif str(self.buckets[idx].name) in bk_info["backups"][idx]["buckets"][0]["name"]:
+                    bucket_name = True
 
-        if scopes:
-            for scope_id in bk_scopes:
-                if bk_scopes[scope_id]["name"] not in scopes:
-                    return False, "scope {0} not in backup repo"\
-                                   .format(bk_scopes[scope_id]["name"])
-                if collections:
-                    for collection in list(bk_scopes[scope_id]["collections"].values()):
-                        if collection["name"] not in collections:
-                            raise("collection not in backup")
-                    if self.backupset.load_to_collection:
-                        if str(self.backupset.load_scope_id[2:]) in list(bk_scopes[scope_id]["collections"].keys()):
-                            self.log.info("check items in collection")
-                            if bk_scopes[scope_id]["collections"][str(self.backupset.load_scope_id[2:])]["mutations"] != self.num_items:
-                                raise("collection items not in backup")
+            if scopes:
+                found_scope = False
+                found_collections = []
+                scopes_collections = {}
+                for scope_id in bk_scopes:
+                    scopes_collections[scope_id] = []
+                    if isinstance(scopes, list):
+                        if bk_scopes[scope_id]["name"] not in scopes:
+                            return False, "scope {0} not in backup repo"\
+                                      .format(bk_scopes[scope_id]["name"])
+                    elif isinstance(scopes, str):
+                        if scopes in bk_scopes[scope_id]["name"]:
+                            found_scope = True
+                    if collections:
+                        repo_collections = []
+                        for collection in list(bk_scopes[scope_id]["collections"].values()):
+                            scopes_collections[scope_id].append(collection["name"])
+                        if isinstance(collections, list):
+                            if len(collections) == 1:
+                                if collections[0] in scopes_collections[scope_id]:
+                                    found_collections.append(collections[0])
+                            elif len(collections) > 1:
+                                for col in collections:
+                                    if col in scopes_collections[scope_id]:
+                                        found_collections.append(col)
+                        if self.backupset.load_to_collection:
+                            if str(self.backupset.load_scope_id[2:]) in list(bk_scopes[scope_id]["collections"].keys()):
+                                self.log.info("check items in collection")
+                                if bk_scopes[scope_id]["collections"][str(self.backupset.load_scope_id[2:])]["mutations"] != self.num_items:
+                                    raise("collection items not in backup")
+                if len(found_collections) != len(collections):
+                    raise("collection may not in backup repo")
+                if not found_scope and isinstance(scopes, str):
+                    return False, "scope {0} not in backup repo".format(scopes)
 
         if not backup_name:
             return False, "Expected Backup name not found in info command output"
@@ -258,10 +292,11 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
             return False, "Items count mismatch in info command output"
         if not first_backup_full:
             return False, "First backup is not a full backup"
-        if len(bk_info["backups"]) >= 2 and not after_first_backup_incr:
-            return False, "second backup is not a incr backup"
-        if not bk_info["backups"][0]["complete"]:
-            return False, "Backup type is not in info command output"
+        if self.backupset.info_to_json:
+            if len(bk_info["backups"]) >= 2 and not after_first_backup_incr:
+                return False, "second backup is not a incr backup"
+            if not bk_info["backups"][0]["complete"]:
+                return False, "Backup type is not in info command output"
         return True, "Info command validation success"
 
 
