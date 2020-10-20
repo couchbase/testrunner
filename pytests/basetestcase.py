@@ -542,7 +542,7 @@ class BaseTestCase(unittest.TestCase):
             self.case_number += 1000
         finally:
             self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.case_number}'
-            if not self.skip_log_scan and not test_failed:
+            if not self.skip_log_scan:
                 _tasks = self.cluster.async_log_scan(self.servers, self.log_scan_file_prefix+"_AFTER")
                 for _task in _tasks:
                     _task.result()
