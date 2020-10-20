@@ -34,7 +34,9 @@ function OnDelete(meta) {
     	log('response headers received from server:', response.headers);
     	log('response status received from server:', response.status);
     	var res= new Uint8Array(response.body);
-        var result = couchbase.delete(dst_bucket,meta);
+    	var doc_meta={"id":meta.id};
+        var result = couchbase.delete(dst_bucket,doc_meta);
+        log(result);
     }
     catch (e) {
     	log('error:', e);
