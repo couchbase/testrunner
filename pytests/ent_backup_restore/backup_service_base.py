@@ -639,3 +639,20 @@ class MultipleRemoteShellConnections:
         def wrap(*args, **kwargs):
             return [func(conn, *args, **kwargs) for conn in self.connections]
         return wrap
+
+class Prometheus:
+    """ A class to obtain stats from Prometheus
+    """
+
+    def __init__(self, server):
+        """ Constructor
+
+        params:
+            server TestInputServer: A server
+        """
+        self.rest_conn = RestConnection(server)
+
+    def stats_range(self, metric):
+        """ Gets `metric` from the range endpoint.
+        """
+        return json.loads(self.rest_conn._http_request(self.rest_conn.baseUrl + f"pools/default/stats/range/{metric}")[1])

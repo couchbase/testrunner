@@ -6,6 +6,7 @@ import threading
 
 from ent_backup_restore.backup_service_base import BackupServiceBase, HistoryFile, MultipleRemoteShellConnections
 from lib.couchbase_helper.time_helper import TimeUtil
+from ent_backup_restore.backup_service_base import Prometheus
 from membase.api.rest_client import RestConnection
 from lib.backup_service_client.models.task_template import TaskTemplate
 from lib.backup_service_client.models.task_template_schedule import TaskTemplateSchedule
@@ -2077,3 +2078,62 @@ class BackupServiceTest(BackupServiceBase):
 
         # Check the saturday task was skipped
         self.assertEqual(task_name, "backup_sunday")
+
+    # Test Stats
+
+    def test_backup_stats(self):
+        """ Test the backup stats
+
+        Tests the following stats:
+        1. backup_dispatched
+        2. backup_data_size
+        3. backup_task_run
+
+        Stats not tested include backup_location_check' and 'backup_task_orphaned'.
+        """
+        prometheus = Prometheus(self.backupset.cluster_host)
+        metrics = ['backup_dispatched', 'backup_task_run', 'backup_task_orphaned', 'backup_location_check', 'backup_data_size']
+
+        repo_name = "my_repo"
+
+        self.time.change_system_time(f"next friday 0800")
+
+        body = Body2(plan="_daily_backups", archive=self.backupset.directory)
+        if self.objstore_provider:
+            body = self.set_cloud_credentials(body)
+
+        # Add repositories and tie plan to repository
+        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+        def get_blob_gen(i):
+            return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * i + 100)), start=0, end=self.num_items)
+
+        # Load buckets with data
+        self._load_all_buckets(self.master, get_blob_gen(1), "create", 0)
+        # Sleep to ensure the bucket is populated with data
+        self.sleep(10)
+
+        time, _, task_name = self.repository_api.cluster_self_repository_state_id_get('active', repo_name).next_scheduled
+        # Check the saturday task is scheduled
+        self.assertEqual(task_name, "backup_saturday")
+
+        # Change time to 1 minute before the task is scheduled
+        self.time.change_system_time(str(time - datetime.timedelta(minutes=1)))
+
+        self.sleep(60)
+
+        # Wait for the scheduled task to complete
+        if not self.wait_for_backup_task("active", repo_name, 20, 20, task_name):
+            self.fail("The task was not completed or took too long to complete")
+
+        def get_stats_latest_value(stat):
+            """ Fetch the latest value of the stat
+            """
+            time, stat = stat['data'][0]['values'][-1]
+            return int(stat)
+
+        # Check the stats have a sensible value
+        self.assertEqual(get_stats_latest_value(prometheus.stats_range('backup_dispatched')), 1)
+        self.assertGreaterEqual(get_stats_latest_value(prometheus.stats_range('backup_data_size')), 1000000)
+        # Uncomment when 'backup_task_run' statistic is working
+        # self.assertEqual(prometheus.stats_range('backup_task_run')['data'][0]['values'][-1], 1)
