@@ -100,10 +100,16 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
             self.log.info("get scope id of scope: {0}".format(scope))
             scopes_id.append(self.get_scopes_id(scope))
         collections = self.get_bucket_collection()
+        if isinstance(collections, tuple):
+            collections = collections[0]
+            for col in collections:
+                if ":" in col:
+                    collections.remove(col)
+                col = col.replace("-", "")
         collections_id = []
         for collection in collections:
             if collection == "_default" and self.custom_collections:
-                scopes.remove(scope)
+                collections.remove(collection)
                 continue
             collections_id.append(self.get_collections_id(scope[0],collection))
 
