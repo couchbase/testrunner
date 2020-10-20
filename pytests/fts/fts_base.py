@@ -756,7 +756,7 @@ class FTSIndex:
     def __init__(self, cluster, name, source_type='couchbase',
                  source_name=None, index_type='fulltext-index', index_params=None,
                  plan_params=None, source_params=None, source_uuid=None, dataset=None, index_storage_type=None,
-                 type_mapping='emp', collection_index=False):
+                 type_mapping=None, collection_index=False):
 
         """
          @param name : name of index/alias
@@ -908,12 +908,11 @@ class FTSIndex:
 
     def generate_new_custom_map(self, seed, type_mapping=None, collection_index=False):
         from .custom_map_generator.map_generator import CustomMapGenerator
-        type_mapping_val = 'emp' if type_mapping is None else type_mapping
         cm_gen = CustomMapGenerator(seed=seed, dataset=self.dataset,
                                     num_custom_analyzers=self.num_custom_analyzers,
                                     multiple_filters=self.multiple_filters,
                                     custom_map_add_non_indexed_fields=self.custom_map_add_non_indexed_fields,
-                                    text_analyzer=self.text_analyzer, type_mapping=type_mapping_val, collection_index=collection_index)
+                                    text_analyzer=self.text_analyzer, type_mapping=type_mapping, collection_index=collection_index)
         fts_map, self.es_custom_map = cm_gen.get_map()
         self.smart_query_fields = cm_gen.get_smart_query_fields()
         print((self.smart_query_fields))
@@ -2386,7 +2385,8 @@ class CouchbaseCluster:
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
             bucket_priority=BUCKET_PRIORITY.HIGH,
             bucket_type=None, maxttl=None,
-            bucket_storage='couchstore'):
+            bucket_storage='couchstore',
+            bucket_name=None):
         """Create default bucket.
         @param bucket_size: size of the bucket.
         @param num_replicas: number of replicas (1-3).
@@ -2403,6 +2403,8 @@ class CouchbaseCluster:
             maxttl=maxttl,
             bucket_storage=bucket_storage
         )
+        if bucket_name:
+            bucket_params['bucket_name'] = bucket_name
         self.__clusterop.create_default_bucket(bucket_params)
         self.__buckets.append(
             Bucket(
@@ -2784,12 +2786,29 @@ class CouchbaseCluster:
             self.__buckets = RestConnection(self.__master_node).get_buckets()
         for bucket in self.__buckets:
             kv_gen = copy.deepcopy(self._kv_gen[ops])
-            tasks.append(
-                self.__clusterop.async_load_gen_docs(
-                    self.__master_node, bucket.name, kv_gen,
-                    bucket.kvs[kv_store], ops, exp, flag,
-                    only_store_hash, batch_size, pause_secs, timeout_secs, compression=self.sdk_compression)
-            )
+            if isinstance(kv_gen, list):
+                if kv_gen[0].isGenerator():
+                    tasks.append(
+                        self.__clusterop.async_load_gen_docs(
+                            self.__master_node, bucket.name, kv_gen,
+                            bucket.kvs[kv_store], ops, exp, flag,
+                            only_store_hash, batch_size, pause_secs, timeout_secs, compression=self.sdk_compression)
+                    )
+                else:
+                    for g in kv_gen:
+                        tasks.append(
+                            self.__clusterop.async_load_gen_docs(
+                                self.__master_node, bucket.name, g,
+                                bucket.kvs[kv_store], ops, exp, flag,
+                                only_store_hash, batch_size, pause_secs, timeout_secs, compression=self.sdk_compression)
+                        )
+            else:
+                tasks.append(
+                    self.__clusterop.async_load_gen_docs(
+                        self.__master_node, bucket.name, kv_gen,
+                        bucket.kvs[kv_store], ops, exp, flag,
+                        only_store_hash, batch_size, pause_secs, timeout_secs, compression=self.sdk_compression)
+                )
         return tasks
 
     def async_load_bucket_from_generator(self, bucket, kv_gen, ops=OPS.CREATE, exp=0,
@@ -4566,7 +4585,7 @@ class FTSBaseTest(unittest.TestCase):
     def define_index_parameters_collection_related(self):
         collection_index = self.container_type == 'collection'
         if self.container_type == 'bucket':
-            _type = None
+            _type = self.dataset
         else:
             if type(self.collection) is list:
                 _type = []
@@ -4788,7 +4807,8 @@ class FTSBaseTest(unittest.TestCase):
                                            json_template=dataset,
                                            start=start, end=start+num_items,
                                            es_compare=self.compare_es, es_host=elastic_ip, es_port=elastic_port,
-                                           es_login=elastic_username, es_password=elastic_password)
+                                           es_login=elastic_username, es_password=elastic_password, key_prefix=dataset
+                                 )
 
     def populate_create_gen(self):
         if self.dataset == "all":
@@ -4813,6 +4833,7 @@ class FTSBaseTest(unittest.TestCase):
         elif self.dataset == "wiki":
             self.update_gen = copy.deepcopy(self.create_gen)
             self.update_gen.start = 0
+            self.update_gen.doc_expiry = expiration
             self.update_gen.end = int(self.create_gen.end *
                                       (float)(self._perc_upd) / 100)
         elif self.dataset == "all":
@@ -4822,8 +4843,11 @@ class FTSBaseTest(unittest.TestCase):
                 self.update_gen[itr].start = 0
                 self.update_gen[itr].end = int(self.create_gen[itr].end *
                                                (float)(self._perc_upd) / 100)
-                if self.update_gen[itr].name == "emp":
+                if self.container_type == 'collection':
                     self.update_gen[itr].update(fields_to_update=fields_to_update)
+                else:
+                    if self.update_gen[itr].name == "emp":
+                        self.update_gen[itr].update(fields_to_update=fields_to_update)
                 self.update_gen[itr].doc_expiry = expiration
 
     def populate_delete_gen(self):

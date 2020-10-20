@@ -1389,7 +1389,10 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
         else:
             self.generators = []
             for i in generators:
-                self.generators.append(BatchedDocumentGenerator(i, batch_size))
+                if i.isGenerator():
+                    self.generators.append(BatchedDocumentGenerator(i, batch_size))
+                else:
+                    self.generators.append(i)
 
         # only run high throughput for batch-create workloads
         # also check number of input generators isn't greater than

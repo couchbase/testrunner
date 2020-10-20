@@ -173,6 +173,7 @@ class Cluster(object):
                                                 scope=scope, collection=collection)
         # Load using java sdk client
         elif not generator.isGenerator():
+            generator.doc_expiry = exp
             _task = SDKLoadDocumentsTask(server, bucket, generator)
         else:
             _task = LoadDocumentsGeneratorsTask(server, bucket, [generator], kv_store, op_type, exp, flag,

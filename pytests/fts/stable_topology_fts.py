@@ -334,12 +334,12 @@ class StableTopFTS(FTSBaseTest):
             self.es.create_empty_index("emp_es_index")
             self.es.create_empty_index("wiki_es_index")
             load_tasks.append(self.es.async_bulk_load_ES(index_name='emp_es_index',
-                                                        gen=emp_gen_copy,
-                                                        op_type='create'))
+                                                         gen=emp_gen_copy,
+                                                         op_type='create'))
 
             load_tasks.append(self.es.async_bulk_load_ES(index_name='wiki_es_index',
-                                                        gen=wiki_gen_copy,
-                                                        op_type='create'))
+                                                         gen=wiki_gen_copy,
+                                                         op_type='create'))
 
         for task in load_tasks:
             task.result()
@@ -599,8 +599,136 @@ class StableTopFTS(FTSBaseTest):
             n1ql_executor = self._cb_cluster
         else:
             n1ql_executor = None
-
         self.run_query_and_compare(index, n1ql_executor=n1ql_executor, use_collections=collection_index)
+
+    def test_collection_index_data_mutations(self):
+        collection_index, type = self.define_index_parameters_collection_related()
+        index = self.create_index(bucket=self._cb_cluster.get_bucket_by_name('default'),
+                          index_name="custom_index", collection_index=collection_index, type=type)
+        self.load_data()
+        self.wait_for_indexing_complete()
+        query = {"query": "mutated:0"}
+        hits,_,_,_ = index.execute_query(query)
+        self.assertEquals(hits, 1000, f"Expected hits does not match after insert. Expected - 1000, found {hits}")
+
+        self._update = True
+        self.async_perform_update_delete(self.upd_del_fields)
+        self.wait_for_indexing_complete()
+        query = {"query": "mutated:0"}
+        hits,_,_,_ = index.execute_query(query)
+        self.assertEquals(hits, 700, f"Expected hits does not match after update. Expected - 700, found {hits}")
+
+        self._update = False
+        self._delete = True
+        self.async_perform_update_delete(self.upd_del_fields)
+        self.wait_for_indexing_complete()
+        query = {"query": "type:emp"}
+        hits,_,_,_ = index.execute_query(query)
+        self.assertEquals(hits, 700, f"Expected hits does not match after delete. Expected - 700, found {hits}")
+
+        self._expires = 10
+        self._update = True
+        self._delete = False
+        self.async_perform_update_delete()
+        self.wait_for_indexing_complete()
+        self.sleep(30, "Wait for docs expiration")
+        query = {"query": "type:emp"}
+        hits,_,_,_ = index.execute_query(query)
+        self.assertEquals(hits, 400, f"Expected hits does not match after expiration. Expected - 400, found {hits}")
+
+    def test_collection_mutations_isolation(self):
+        #delete unnecessary bucket
+        self._cb_cluster.delete_bucket("default")
+        #create bucket
+        bucket_size = 200
+        bucket_priority = None
+        bucket_type = TestInputSingleton.input.param("bucket_type", "membase")
+        maxttl = TestInputSingleton.input.param("maxttl", None)
+        self._cb_cluster.create_default_bucket(
+            bucket_size,
+            self._num_replicas,
+            eviction_policy='valueOnly',
+            bucket_priority=bucket_priority,
+            bucket_type=bucket_type,
+            maxttl=maxttl,
+            bucket_storage='couchstore',
+            bucket_name='bucket1')
+        #create 2 scopes
+        self.cli_client.create_scope(bucket='bucket1', scope='scope1')
+        self.cli_client.create_scope(bucket='bucket1', scope='scope2')
+        #create collections with same name
+        self.cli_client.create_collection(bucket='bucket1', scope='scope1', collection='collection1')
+        self.cli_client.create_collection(bucket='bucket1', scope='scope2', collection='collection1')
+        # create 2 indexes
+        index1 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
+                                   "index_scope1", collection_index=True, type="scope1.collection1")
+        index2 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
+                                   "index_scope2", collection_index=True, type="scope2.collection1")
+
+        #load data into collections
+        bucket = self._cb_cluster.get_bucket_by_name('bucket1')
+        gen_create = SDKDataLoader(num_ops=1000, percent_create=100, percent_update=0, percent_delete=0,
+                 load_pattern="uniform", start_seq_num=1, key_prefix="doc_", key_suffix="_",
+                 scope="scope1", collection="collection1", json_template="emp", doc_expiry=0,
+                 doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
+                 start=0, end=0, op_type="create", all_collections=False, es_compare=False, es_host=None, es_port=None,
+                 es_login=None, es_password=None)
+
+        load_tasks = self._cb_cluster.async_load_bucket_from_generator(bucket, gen_create)
+        for task in load_tasks:
+            task.result()
+
+        gen_create1 = SDKDataLoader(num_ops=1000, percent_create=100, percent_update=0, percent_delete=0,
+                 load_pattern="uniform", start_seq_num=1, key_prefix="doc_", key_suffix="_",
+                 scope="scope2", collection="collection1", json_template="emp", doc_expiry=0,
+                 doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
+                 start=0, end=0, op_type="create", all_collections=False, es_compare=False, es_host=None, es_port=None,
+                 es_login=None, es_password=None)
+        load_tasks = self._cb_cluster.async_load_bucket_from_generator(bucket, gen_create1)
+        for task in load_tasks:
+            task.result()
+
+        # run all types of mutations on scope1, check that scope2 results remain the same
+        query = {"query": "dept:Marketing"}
+        untouched_hits,_,_,_ = index1.execute_query(query)
+        gen_update2 = SDKDataLoader(num_ops=100, percent_create=0, percent_update=100, percent_delete=0,
+                 load_pattern="uniform", start_seq_num=1, key_prefix="doc_", key_suffix="_",
+                 scope="scope2", collection="collection1", json_template="emp", doc_expiry=0,
+                 doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
+                 start=0, end=100, op_type="update", all_collections=False, es_compare=False, es_host=None, es_port=None,
+                 es_login=None, es_password=None)
+        load_tasks = self._cb_cluster.async_load_bucket_from_generator(bucket, gen_update2)
+        for task in load_tasks:
+            task.result()
+        query = {"query": "dept:Marketing"}
+        hits,_,_,_ = index1.execute_query(query)
+        self.assertEqual(hits, untouched_hits, "Update isolation test is failed")
+
+        gen_delete2 = SDKDataLoader(num_ops=100, percent_create=0, percent_update=0, percent_delete=100,
+                 load_pattern="uniform", start_seq_num=1, key_prefix="doc_", key_suffix="_",
+                 scope="scope2", collection="collection1", json_template="emp", doc_expiry=0,
+                 doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
+                 start=0, end=100, op_type="delete", all_collections=False, es_compare=False, es_host=None, es_port=None,
+                 es_login=None, es_password=None)
+        load_tasks = self._cb_cluster.async_load_bucket_from_generator(bucket, gen_delete2)
+        for task in load_tasks:
+            task.result()
+        query = {"query": "dept:Marketing"}
+        hits,_,_,_ = index1.execute_query(query)
+        self.assertEqual(hits, untouched_hits, "Delete isolation test is failed")
+
+        gen_exp2 = SDKDataLoader(num_ops=100, percent_create=0, percent_update=100, percent_delete=0,
+                 load_pattern="uniform", start_seq_num=500, key_prefix="doc_", key_suffix="_",
+                 scope="scope2", collection="collection1", json_template="emp", doc_expiry=10,
+                 doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
+                 start=500, end=600, op_type="update", all_collections=False, es_compare=False, es_host=None, es_port=None,
+                 es_login=None, es_password=None)
+        load_tasks = self._cb_cluster.async_load_bucket_from_generator(bucket, kv_gen=gen_exp2, exp=10)
+        for task in load_tasks:
+            task.result()
+        query = {"query": "dept:Marketing"}
+        hits,_,_,_ = index1.execute_query(query)
+        self.assertEqual(hits, untouched_hits, "Expiration isolation test is failed")
 
     def test_query_string_combinations(self):
         """
@@ -2546,6 +2674,130 @@ class StableTopFTS(FTSBaseTest):
             self.assertEqual(status, False, "FTS index was not dropped after kv container drop.")
             self._cb_cluster.get_indexes().remove(idx)
 
+    def test_drop_busy_index_container_building(self):
+        rest = RestConnection(self._cb_cluster.get_random_fts_node())
+
+        drop_container = self._input.param("drop_container")
+        drop_name = self._input.param("drop_name")
+        plan_params = self.construct_plan_params()
+
+        self.load_data(generator=None)
+        self.create_fts_indexes_all_buckets(plan_params=plan_params)
+
+        if drop_container == 'collection':
+            self.cli_client.delete_collection(scope=self.scope, collection=drop_name)
+        elif drop_container == 'scope':
+            self.cli_client.delete_scope(scope=drop_name)
+        else:
+            self._cb_cluster.delete_bucket("default")
+        self.sleep(20)
+
+        for idx in self._cb_cluster.get_indexes():
+            status,dfn = rest.get_fts_index_definition(idx.name)
+            self.assertEqual(status, False, "FTS index was not dropped during index build.")
+            self._cb_cluster.get_indexes().remove(idx)
+
+    def test_drop_busy_index_container_scan(self):
+        rest = RestConnection(self._cb_cluster.get_random_fts_node())
+
+        drop_container = self._input.param("drop_container")
+        drop_name = self._input.param("drop_name")
+        plan_params = self.construct_plan_params()
+
+        self.load_data(generator=None)
+        self.create_fts_indexes_all_buckets(plan_params=plan_params)
+        self.wait_for_indexing_complete()
+        index = self._cb_cluster.get_indexes()[0]
+        query = self._input.param("query")
+        import threading
+        query_thread = threading.Thread(target=self._index_query_wrapper, args=(index, query))
+        drop_thread = threading.Thread(target=self._drop_container_wrapper, args=(drop_container, drop_name))
+        query_thread.daemon = True
+        drop_thread.daemon = True
+        query_thread.start()
+        drop_thread.start()
+
+        query_thread.join()
+        drop_thread.join()
+
+        for idx in self._cb_cluster.get_indexes():
+            status,dfn = rest.get_fts_index_definition(idx.name)
+            self.assertEqual(status, False, "FTS index was not dropped during index scan.")
+            self._cb_cluster.get_indexes().remove(idx)
+
+    def test_drop_busy_index_container_mutations(self):
+        rest = RestConnection(self._cb_cluster.get_random_fts_node())
+
+        drop_container = self._input.param("drop_container")
+        drop_name = self._input.param("drop_name")
+        plan_params = self.construct_plan_params()
+
+        self.load_data(generator=None)
+        self.create_fts_indexes_all_buckets(plan_params=plan_params)
+        self.wait_for_indexing_complete()
+        self._cb_cluster.run_n1ql_query(query=f"create primary index on default:default.{self.scope}.{self.collection}")
+        index = self._cb_cluster.get_indexes()[0]
+        query = self._input.param(f"update default:default.{self.scope}.{self.collection} set email='mutated@gmail.com'")
+        import threading
+        query_thread = threading.Thread(target=self._n1ql_query_wrapper, args=(query))
+        drop_thread = threading.Thread(target=self._drop_container_wrapper, args=(drop_container, drop_name))
+        query_thread.daemon = True
+        drop_thread.daemon = True
+        query_thread.start()
+        drop_thread.start()
+
+        query_thread.join()
+        drop_thread.join()
+
+        for idx in self._cb_cluster.get_indexes():
+            status,dfn = rest.get_fts_index_definition(idx.name)
+            self.assertEqual(status, False, "FTS index was not dropped during index scan.")
+            self._cb_cluster.get_indexes().remove(idx)
+
+    def test_concurrent_drop_index_and_container(self):
+        rest = RestConnection(self._cb_cluster.get_random_fts_node())
+
+        drop_container = self._input.param("drop_container")
+        drop_name = self._input.param("drop_name")
+        plan_params = self.construct_plan_params()
+
+        self.load_data(generator=None)
+        self.create_fts_indexes_all_buckets(plan_params=plan_params)
+        self.wait_for_indexing_complete()
+        index = self._cb_cluster.get_indexes()[0]
+
+        import threading
+        query_thread = threading.Thread(target=self._drop_index_wrapper, args=(index))
+        drop_thread = threading.Thread(target=self._drop_container_wrapper, args=(drop_container, drop_name))
+        query_thread.daemon = True
+        drop_thread.daemon = True
+        query_thread.start()
+        drop_thread.start()
+
+        query_thread.join()
+        drop_thread.join()
+
+        for idx in self._cb_cluster.get_indexes():
+            status,dfn = rest.get_fts_index_definition(idx.name)
+            self.assertEqual(status, False, "FTS index was not dropped during index scan.")
+            self._cb_cluster.get_indexes().remove(idx)
+
+    def _drop_index_wrapper(self, index):
+        index.delete()
+
+    def _index_query_wrapper(self, index, query):
+        index.execute_query(query)
+
+    def _drop_container_wrapper(self, drop_container, drop_name):
+        if drop_container == 'collection':
+            self.cli_client.delete_collection(scope=self.scope, collection=drop_name)
+        elif drop_container == 'scope':
+            self.cli_client.delete_scope(scope=drop_name)
+        else:
+            self._cb_cluster.delete_bucket("default")
+
+    def _n1ql_query_wrapper(self, n1ql_query):
+        self._cb_cluster.run_n1ql_query(query=n1ql_query)
 
     def test_create_drop_index(self):
         self.load_data(generator=None)
@@ -2693,3 +2945,71 @@ class StableTopFTS(FTSBaseTest):
 
         if mem_high:
             self.fail("CPU utilization or memory usage found to be high")
+
+    def test_create_index_same_name_same_scope_negative(self):
+        scope_name = self._input.param("scope", "_default")
+        #delete unnecessary bucket
+        self._cb_cluster.delete_bucket("default")
+        #create bucket
+        bucket_size = 200
+        bucket_priority = None
+        bucket_type = TestInputSingleton.input.param("bucket_type", "membase")
+        maxttl = TestInputSingleton.input.param("maxttl", None)
+        self._cb_cluster.create_default_bucket(
+            bucket_size,
+            self._num_replicas,
+            eviction_policy='valueOnly',
+            bucket_priority=bucket_priority,
+            bucket_type=bucket_type,
+            maxttl=maxttl,
+            bucket_storage='couchstore',
+            bucket_name='bucket1')
+        #create scope
+        self.cli_client.create_scope(bucket='bucket1', scope=scope_name)
+        #create collections with same name
+        self.cli_client.create_collection(bucket='bucket1', scope=scope_name, collection='collection1')
+        self.cli_client.create_collection(bucket='bucket1', scope=scope_name, collection='collection2')
+        # create 2 indexes
+        index1 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
+                                   "index1", collection_index=True, type=f"{scope_name}.collection1")
+        try:
+            index2 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
+                                       "index1", collection_index=True, type=f"{scope_name}.collection2")
+        except Exception as e:
+            print("Exceptin caught ::"+str(e)+"::")
+            return
+        self.fail(f"Successfully created 2 indexes with same name in scope {scope_name}")
+
+    def test_create_index_same_name_diff_scope_negative(self):
+        #delete unnecessary bucket
+        self._cb_cluster.delete_bucket("default")
+        #create bucket
+        bucket_size = 200
+        bucket_priority = None
+        bucket_type = TestInputSingleton.input.param("bucket_type", "membase")
+        maxttl = TestInputSingleton.input.param("maxttl", None)
+        self._cb_cluster.create_default_bucket(
+            bucket_size,
+            self._num_replicas,
+            eviction_policy='valueOnly',
+            bucket_priority=bucket_priority,
+            bucket_type=bucket_type,
+            maxttl=maxttl,
+            bucket_storage='couchstore',
+            bucket_name='bucket1')
+        #create scopes
+        self.cli_client.create_scope(bucket='bucket1', scope="scope1")
+        self.cli_client.create_scope(bucket='bucket1', scope="scope2")
+        #create collections with same name
+        self.cli_client.create_collection(bucket='bucket1', scope="scope1", collection='collection1')
+        self.cli_client.create_collection(bucket='bucket1', scope="scope2", collection='collection1')
+        # create 2 indexes
+        index1 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
+                                   "index1", collection_index=True, type="scope1.collection1")
+        try:
+            index2 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
+                                       "index1", collection_index=True, type="scope2.collection1")
+        except Exception as e:
+            print("Exceptin caught ::" + str(e) + "::")
+            return
+        self.fail("Failed creating 2 indexes with same name in different scopes ")
