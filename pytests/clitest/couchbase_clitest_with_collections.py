@@ -5,7 +5,7 @@ from ep_mc_bin_client import MemcachedClient, MemcachedError
 from remote.remote_util import RemoteMachineShellConnection
 from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 from testconstants import LOG_FILE_NAMES
 from couchbase_helper.document import View
 from testconstants import COUCHBASE_FROM_SPOCK, COUCHBASE_FROM_4DOT6
@@ -68,6 +68,8 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
                 raise("No _default scope in cluster")
         else:
             custom_scopes = self.get_bucket_scope()
+            if isinstance(custom_scopes, tuple):
+                custom_scopes = custom_scopes[0]
             for scope in custom_scopes:
                 if not self._check_output(scope, output):
                     raise("No scope: {0} in cluster".format(scope))
@@ -76,6 +78,12 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
                 raise("No _default collection in cluster")
         else:
             custom_collections = self.get_bucket_collection()
+            if isinstance(custom_collections, tuple):
+                custom_collections = custom_collections[0]
+                """" only get collection name """
+                custom_collections = custom_collections[1::2]
+                custom_collections = [x.replace("-", "") for x in custom_collections]
+                custom_collections = [x.strip() for x in custom_collections]
             for collection in custom_collections:
                 if not self._check_output(collection, output):
                     raise("No collection: {0} in cluster".format(scope))
@@ -182,7 +190,7 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
                                                    collection="mycollection_{0}_0".format(scope_name))
             except Exception as e:
                 error_expected = False
-                errors = ["Collection with this name already exists",
+                errors = ["already exists",
                           "First character must not be"]
                 for error in errors:
                     if error in str(e):
