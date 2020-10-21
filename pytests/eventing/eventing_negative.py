@@ -63,12 +63,11 @@ class EventingNegative(EventingBaseTest):
                 self.fail("Function delete succeeded even when function was in deployed state")
 
     def test_deploy_function_where_source_metadata_and_destination_buckets_dont_exist(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
         # delete source, metadata and destination buckets
         for bucket in self.buckets:
             self.rest.delete_bucket(bucket.name)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
         try:
-            self.rest.save_function(body['appname'], body)
             self.rest.deploy_function(body['appname'], body)
         except Exception as ex:
             if "ERR_BUCKET_MISSING" not in str(ex):
@@ -101,10 +100,8 @@ class EventingNegative(EventingBaseTest):
         for task in tasks:
             task.result()
         self.sleep(10)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
         try:
-            self.rest.save_function(body['appname'], body)
-            self.rest.deploy_function(body['appname'], body)
+            body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
         except Exception as ex:
             if "ERR_SOURCE_BUCKET_MEMCACHED" not in str(ex):
                 self.fail("Eventing function allowed both source and metadata bucket to be memcached buckets")
@@ -242,9 +239,8 @@ class EventingNegative(EventingBaseTest):
             # Try undeploying the function when it is still bootstrapping
             self.undeploy_function(body)
         except Exception as ex:
-            if "not bootstrapped. Operation not permitted. Edit function instead" not in str(ex):
+            if "ERR_APP_NOT_DEPLOYED" not in str(ex):
                 self.fail("Function undeploy succeeded even when function was in bootstrapping state")
-        self.undeploy_and_delete_function(body)
 
     def test_function_where_handler_code_takes_more_time_to_execute_than_execution_timeout(self):
         # Note to Self : Never use SDK's unless you really have to. It is difficult to upgrade or maintain correct
@@ -284,7 +280,7 @@ class EventingNegative(EventingBaseTest):
         try:
             self.deploy_function(body, deployment_fail=True)
         except Exception as e:
-            if "Unexpected end of input" not in str(e):
+            if "ERR_HANDLER_COMPILATION" not in str(e):
                 self.fail("Deployment is expected to be failed but no message of failure")
 
     def test_read_binary_data_from_the_function(self):
@@ -311,20 +307,17 @@ class EventingNegative(EventingBaseTest):
     def test_deploy_function_name_with_more_than_100_chars(self):
         # create a string of more than 100 chars
         function_name = "a" * 101
-        body = self.create_save_function_body(function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
         try:
-            self.deploy_function(body, deployment_fail=True)
+            body = self.create_save_function_body(function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
         except Exception as e:
             if "Function name length must be less than 100" not in str(e):
                 self.fail("Deployment is expected to be failed but succeeded with function name more than 100 chars")
 
     def test_deploy_function_name_with_special_chars(self):
         # create a string with space and other special chars
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
-        body['appname'] = "a b c @ # $ % ^ & * ( ) + ="
-        err_msg='Function name can only start with characters in range A-Z, a-z, 0-9 and can only contain characters in range A-Z, a-z, 0-9, underscore and hyphen'
+        err_msg = 'Function name can only start with characters in range A-Z, a-z, 0-9 and can only contain characters in range A-Z, a-z, 0-9, underscore and hyphen'
         try:
-            content = self.rest.create_function("abc", body)
+            body = self.create_save_function_body("abc@#$%^&*() +", HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
         except Exception as e:
             if err_msg not in str(e):
                 self.fail("Deployment is expected to be failed when space is present in function name expected err message {}".format(err_msg))
@@ -334,7 +327,7 @@ class EventingNegative(EventingBaseTest):
         # Use an invalid alias
         body['depcfg']['buckets'].append({"alias": "908!@#$%%^&&**", "bucket_name": self.dst_bucket_name})
         try:
-            self.deploy_function(body, deployment_fail=True)
+            self.rest.create_function(body['appname'], body)
         except Exception as e:
             if "ERR_INVALID_CONFIG" not in str(e):
                 log.info(str(e))
@@ -345,7 +338,7 @@ class EventingNegative(EventingBaseTest):
         # Use an user_prefix greater than 16 chars
         body['settings']['user_prefix'] = "eventingeventingeventingeventingeventingeventingeventingeventingeventing"
         try:
-            self.deploy_function(body, deployment_fail=True)
+            self.rest.create_function(body['appname'], body)
         except Exception as e:
             if "ERR_INVALID_CONFIG" not in str(e):
                 log.info(str(e))

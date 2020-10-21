@@ -35,6 +35,12 @@ class EventingConcurrency(EventingBaseTest):
             self.buckets = RestConnection(self.master).get_buckets()
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.expiry = 3
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
+                                      item_flag=self.item_flag, n1ql_port=self.n1ql_port,
+                                      full_docs_list=self.full_docs_list, log=self.log, input=self.input,
+                                      master=self.master, use_rest=True)
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
 
     def tearDown(self):
         super(EventingConcurrency, self).tearDown()
@@ -95,6 +101,7 @@ class EventingConcurrency(EventingBaseTest):
         # this is required to deploy multiple functions at the same time
         del body1['depcfg']['buckets'][0]
         body1['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
+        self.rest.create_function(body1['appname'], body1)
         self.deploy_function(body1)
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True, timeout=1200)
@@ -112,6 +119,7 @@ class EventingConcurrency(EventingBaseTest):
                                               worker_count=3)
         # create an another alias for the same bucket
         body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name})
+        self.rest.create_function(body['appname'], body)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
@@ -125,18 +133,6 @@ class EventingConcurrency(EventingBaseTest):
     def test_xdcr_and_indexing_with_eventing(self):
         rest_src = RestConnection(self.servers[0])
         rest_dst = RestConnection(self.servers[2])
-        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        self.n1ql_helper = N1QLHelper(shell=self.shell,
-                                      max_verify=self.max_verify,
-                                      buckets=self.buckets,
-                                      item_flag=self.item_flag,
-                                      n1ql_port=self.n1ql_port,
-                                      full_docs_list=self.full_docs_list,
-                                      log=self.log, input=self.input,
-                                      master=self.master,
-                                      use_rest=True
-                                      )
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         try:
             rest_src.remove_all_replications()
             rest_src.remove_all_remote_clusters()
