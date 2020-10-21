@@ -6,6 +6,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from lib.mc_bin_client import MemcachedClient
 from memcached.helper.data_helper import MemcachedClientHelper
 from membase.api.rest_client import RestConnection
+from lib.couchbase_helper.time_helper import TimeUtil
 # constants used in this file only
 DELETED_ITEMS_FAILURE_ANALYSIS_FORMAT="\n1) Failure :: Deleted Items :: Expected {0}, Actual {1}"
 DELETED_ITEMS_SUCCESS_ANALYSIS_FORMAT="\n1) Success :: Deleted Items "
@@ -794,6 +795,24 @@ class DataCollector(object):
         status = False
         now = datetime.datetime.now()
         shards_with_data = {}
+        previous_staging_directory = None
+
+        def staging_save():
+            """ Save staging directory and replace it with a cbriftdump specific staging directory
+            """
+            if objstore_provider:
+                backupset.objstore_staging_directory, previous_staging_directory = backupset.objstore_staging_directory + "_cbriftdump", backupset.objstore_staging_directory
+                conn.execute_command(f"rm -rf {backupset.objstore_staging_directory}")
+
+        def staging_restore():
+            """ Restore the previously saved staging directory
+            """
+            if objstore_provider:
+                conn.execute_command(f"rm -rf {backupset.objstore_staging_directory}")
+                backupset.objstore_staging_directory = previous_staging_directory
+
+        staging_save() # Replace the staging staging directory with a cbriftdump specific staging directory
+
         for bucket in buckets:
             backup_data[bucket.name] = {}
             shards_with_data[bucket.name] = []
@@ -802,33 +821,28 @@ class DataCollector(object):
                 master_key = ".\{12\}$"
             dump_output = []
 
-            command = (
-                f"ls -tr {backupset.objstore_staging_directory + '/' if objstore_provider else ''}"
-                f"{backupset.directory}/{backupset.name} | tail -1"
-            )
-
-            if not backup_name:
-                backup_name, e = conn.execute_command(command)
-                if not backup_name or e:
-                    return None, status
-            else:
-                backup_name = [backup_name]
-
             repository = backupset.name if backupset else "backup"
 
-            command = (
-                f"ls -tr --group-directories-first {backupset.objstore_staging_directory + '/' if objstore_provider else ''}"
-                f"{backupset.directory}/{repository}/{backup_name[0]} | head -1"
-            )
-
-            bucket_name, e = conn.execute_command(command)
-            if not bucket_name or e:
-                return None, status
+            if backup_name:
+                backup_name = [backup_name]
+            else:
+                if objstore_provider:
+                    backup_name = [max(objstore_provider.list_backups(backupset.directory, repository), key=TimeUtil.rfc3339nano_to_datetime)]
+                else:
+                    backup_name, e = conn.execute_command(f"ls -tr {backupset.directory}/{repository} | tail -1")
+                    if not backup_name or e:
+                        return None, status
 
             if objstore_provider:
-                objstore_staging_directory = backupset.objstore_alternative_staging_directory if backupset.backup_service else backupset.objstore_staging_directory
+                bucket_name = objstore_provider.list_buckets(backupset.directory, repository, backup_name[0])
+            else:
+                bucket_name, e = conn.execute_command(f"ls -tr --group-directories-first {backupset.directory}/{repository}/{backup_name[0]} | head -1")
+                if not bucket_name or e:
+                    return None, status
+
+            if objstore_provider:
                 object_store_command = (
-                    f"{' --obj-staging-dir ' + objstore_staging_directory}"
+                    f"{' --obj-staging-dir ' + backupset.objstore_staging_directory}"
                     f"{' --obj-access-key-id ' + backupset.objstore_access_key_id if backupset.objstore_access_key_id else ''}"
                     f"{' --obj-cacert ' + backupset.objstore_cacert if backupset.objstore_cacert else ''}"
                     f"{' --obj-endpoint ' + backupset.objstore_endpoint if backupset.objstore_endpoint else ''}"
@@ -839,15 +853,11 @@ class DataCollector(object):
                     )
 
             if cluster_version[:3] >= "7.0":
-                command = (
-                    f"ls -tr --group-directories-first {backupset.objstore_staging_directory + '/' if objstore_provider else ''}"
-                    f"{backupset.directory}/{repository}/{backup_name[0]}/{bucket_name[0]}/data | grep index"
-                )
-
-                if backupset.backup_service and objstore_provider:
-                    data_files = range(0, 1024)
+                if objstore_provider:
+                    rift_index = set(objstore_provider.list_rift_indexes(backupset.directory, repository, backup_name[0], bucket_name[0]))
+                    data_files = [i for i in range(1024) if f"index_{i}.sqlite.0" in set(rift_index)]
                 else:
-                    data_files, e = conn.execute_command(command)
+                    data_files, e = conn.execute_command(f"ls -tr --group-directories-first {backupset.directory}/{repository}/{backup_name[0]}/{bucket_name[0]}/data | grep index")
                     data_files = [x.replace('index_', '') for x in data_files]
                     data_files = [x.split('.')[0] for x in data_files]
 
@@ -862,8 +872,6 @@ class DataCollector(object):
                         command += object_store_command
                     output, error = conn.execute_command(command, debug=False)
                     if output:
-                        if len(output[0]) >= 11 and "Dump failed" in output[0][:11] and "does not exist" in output[0]:
-                            continue
                         key_status = []
                         key_ids = []
                         key_value = []
@@ -915,8 +923,10 @@ class DataCollector(object):
                                {"KV store name":key_partition, "Status":key_status[idx],
                                 "Value":key_value[idx]}
                         status = True
+
             if not backup_data[bucket.name]:
                 print(("Data base of bucket {0} is empty".format(bucket.name)))
+                staging_restore() # Restore staging directory
                 return  backup_data, status
             print(("---- Done extract data from backup files in backup repo of bucket {0}"\
                                                                    .format(bucket.name)))
@@ -926,6 +936,7 @@ class DataCollector(object):
             for bucket in buckets:
                 print(("---- total files with data in bucket {0} are {1}"\
                            .format(bucket.name, len(shards_with_data[bucket.name]))))
+        staging_restore() # Restore staging directory
         return backup_data, status
 
     def get_views_definition_from_backup_file(self, server, backup_dir, buckets):

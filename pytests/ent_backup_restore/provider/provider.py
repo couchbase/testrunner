@@ -66,6 +66,16 @@ class Provider(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def list_backups(self, archive, repo, backup):
+        """List all the buckets that currently exist in the remote given archive/repo/backup."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def list_rift_indexes(self, archive, repo, backup, bucket):
+        """List all the rift indexes that exist in the remote given archive/repo/backup/bucket."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def num_multipart_uploads(self):
         """Returns the number of in-progress multipart uploads (the setup/teardown) logic should abort any multipart
         uploads in the event that cbbackupmgr crashes and doesn't do it itself. This will allow testing to continue

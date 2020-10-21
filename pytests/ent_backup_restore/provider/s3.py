@@ -134,6 +134,36 @@ class S3(provider.Provider):
 
         return backups
 
+    def list_buckets(self, archive, repo, backup):
+        """ See super class
+        """
+        backup_re, bucket_re = re.escape(backup) + "/", r".*\-[0-9a-z]{32}"
+        backup_pattern, backup_bucket_pattern = re.compile(backup_re), re.compile(backup_re + bucket_re)
+
+        buckets = []
+        for obj in self.resource.Bucket(self.bucket).objects.filter(Prefix=f"{archive}/{repo}/{backup}"):
+            res = backup_bucket_pattern.search(obj.key)
+
+            if res:
+                bucket = backup_pattern.sub('', res.group())
+                if bucket not in buckets:
+                    buckets.append(bucket)
+
+        return buckets
+
+    def list_rift_indexes(self, archive, repo, backup, bucket):
+        """ See super class
+        """
+        pattern = re.compile(r"index_\d+.sqlite.\d+")
+
+        rift_indexes = set()
+        for obj in self.resource.Bucket(self.bucket).objects.filter(Prefix=f"{archive}/{repo}/{backup}/{bucket}/data/"):
+            res = pattern.search(obj.key)
+
+            if res and res.group() not in rift_indexes:
+                rift_indexes.add(res.group())
+
+        return list(rift_indexes)
 
     def num_multipart_uploads(self):
         return sum(1 for _ in self.resource.Bucket(self.bucket).multipart_uploads.all())
