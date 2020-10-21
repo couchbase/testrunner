@@ -789,6 +789,22 @@ class DataCollector(object):
         status = False
         now = datetime.datetime.now()
         shards_with_data = {}
+        previous_staging_directory = None
+
+        def staging_save():
+            """ Save staging directory and replace it with a cbriftdump specific staging directory
+            """
+            if objstore_provider:
+                backupset.objstore_staging_directory, previous_staging_directory = backupset.objstore_staging_directory + "_cbriftdump", backupset.objstore_staging_directory
+                conn.execute_command("rm -rf {}".format(backupset.objstore_staging_directory))
+
+        def staging_restore():
+            """ Restore the previously saved staging directory
+            """
+            if objstore_provider:
+                conn.execute_command("rm -rf {}".format(backupset.objstore_staging_directory))
+                backupset.objstore_staging_directory = previous_staging_directory
+
         for bucket in buckets:
             backup_data[bucket.name] = {}
             shards_with_data[bucket.name] = []
@@ -810,6 +826,8 @@ class DataCollector(object):
             bucket_name, e = conn.execute_command(command)
             if not bucket_name or e:
                 return None, status
+
+            staging_save() # Replace the staging staging directory with a cbriftdump specific staging directory
 
             if objstore_provider:
                 object_store_command = "{}".format(' --obj-staging-dir ' + backupset.objstore_staging_directory)
@@ -882,6 +900,8 @@ class DataCollector(object):
                                {"KV store name":key_partition, "Status":key_status[idx],
                                 "Value":key_value[idx]}
                         status = True
+
+            staging_restore() # Restore the staging directory
 
             if not backup_data[bucket.name]:
                 print "Data base of bucket {0} is empty".format(bucket.name)
