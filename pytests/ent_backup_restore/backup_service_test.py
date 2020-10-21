@@ -6,7 +6,7 @@ import threading
 
 from ent_backup_restore.backup_service_base import BackupServiceBase, HistoryFile, MultipleRemoteShellConnections
 from lib.couchbase_helper.time_helper import TimeUtil
-from ent_backup_restore.backup_service_base import Prometheus
+from ent_backup_restore.backup_service_base import Prometheus, FailoverServer
 from membase.api.rest_client import RestConnection
 from lib.backup_service_client.models.task_template import TaskTemplate
 from lib.backup_service_client.models.task_template_schedule import TaskTemplateSchedule
@@ -2043,7 +2043,7 @@ class BackupServiceTest(BackupServiceBase):
     def test_cluster_ops(self):
         """ Test if tasks are not scheduled during a rebalance and subsequently rescheduled after
         """
-        repo_name, cluster_op, allowed_ops = "my_repo", self.input.param("cluster_op", "rebalance"), ["rebalance"]
+        repo_name, cluster_op, allowed_ops = "my_repo", self.input.param("cluster_op", "rebalance"), ["rebalance", "failover"]
 
         self.assertIn(cluster_op, allowed_ops, f"The input param `cluster_op` must be in {allowed_ops}")
 
@@ -2069,10 +2069,16 @@ class BackupServiceTest(BackupServiceBase):
         # Wait until we are at the moment a few seconds before the task is scheduled
         self.sleep(50)
 
-        cluster, rest_connection = Cluster(), RestConnection(self.master)
+        cluster, rest_connection, failover_server = Cluster(), RestConnection(self.master), FailoverServer(self.input.clusters[0], self.input.clusters[0][0])
 
-        # Start a long cluster op
-        cluster.rebalance(self.input.clusters[0], [], self.input.clusters[0][1:], services=[server.services for server in self.servers])
+        if cluster_op == "rebalance":
+            # Start a long cluster op
+            cluster.rebalance(self.input.clusters[0], [], self.input.clusters[0][1:], services=[server.services for server in self.servers])
+
+        if cluster_op == "failover":
+            failover_server.failover()
+            self.sleep(60) # The failover method does not block
+            failover_server.recover_from_failover()
 
         time, _, task_name = self.repository_api.cluster_self_repository_state_id_get('active', repo_name).next_scheduled
 

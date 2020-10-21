@@ -21,6 +21,7 @@ from lib.backup_service_client.models.body3 import Body3
 from lib.backup_service_client.models.body4 import Body4
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from lib.membase.helper.bucket_helper import BucketOperationHelper
+from couchbase_helper.cluster import Cluster
 
 class BackupServiceBase(EnterpriseBackupRestoreBase):
     def preamble(self):
@@ -656,3 +657,39 @@ class Prometheus:
         """ Gets `metric` from the range endpoint.
         """
         return json.loads(self.rest_conn._http_request(self.rest_conn.baseUrl + f"pools/default/stats/range/{metric}")[1])
+
+class FailoverServer:
+
+    def __init__(self, servers, server):
+        """ Constructor
+
+        params:
+            servers list(TestInputServer): A list of servers in a cluster
+            server TestInputServer: The server to failover and recover
+        """
+        self.servers, self.server, self.cluster, self.rest_conn = servers, server, Cluster(), RestConnection(servers[0])
+
+    def failover(self, graceful=True):
+        """ Starts the failover process
+
+        Does not currently block while the failover is in progress.
+
+        params:
+            recovery_type (str): 'full' or 'delta'
+        """
+        self.rest_conn.fail_over(self.node_id, graceful=graceful)
+
+    def recover_from_failover(self, recovery_type='full'):
+        """ Recovers from a failover.
+
+        params:
+            recovery_type (str): 'full' or 'delta'
+        """
+        # Check the node health status to check if it's still failing over
+        self.rest_conn.set_recovery_type(self.node_id, recovery_type)
+        self.rest_conn.add_back_node(self.node_id)
+        self.cluster.rebalance(self.servers, [], [])
+
+    @property
+    def node_id(self):
+        return next((node.id for node in self.rest_conn.node_statuses() if node.ip == self.server.ip), None)
