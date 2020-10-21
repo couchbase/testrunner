@@ -214,7 +214,7 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
         collection_name = collections[0]
         if self.drop_sc_default:
             scope_name = collection_name = "_default"
-        if self.drop_collection:
+        if self.drop_collections:
             try:
                 if self.use_rest:
                     self.rest_col.delete_collection(bucket=bucket_name, scope="_{0}".format(bucket_name),
@@ -225,7 +225,7 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
             except Exception as e:
                 if error in str(e):
                     raise("Failed to drop collection with error: {0}".format(str(e)))
-        if self.drop_scope:
+        if self.drop_scopes:
             try:
                 if self.use_rest:
                     self.rest_col.delete_scope(bucket_name, scope_name)
@@ -239,7 +239,7 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
         bucket_name = self.buckets[0].name
         scope_name = "scope123"
         collection_name = "collections123"
-        if self.drop_collection:
+        if self.drop_collections:
             try:
                 if self.use_rest:
                     self.rest_col.delete_collection(bucket=bucket_name, scope="_{0}".format(bucket_name),
@@ -250,7 +250,7 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
             except Exception as e:
                 if error in str(e):
                     self.log.info("Test failed as expected.")
-        if self.drop_scope:
+        if self.drop_scopes:
             try:
                 if self.use_rest:
                     self.rest_col.delete_scope(bucket_name, scope_name)
@@ -732,6 +732,12 @@ class XdcrCLITest(CliBaseTest):
             if scopes_id:
                 load_scope_id_src = scopes_id[0]
             collections = self.get_bucket_collection()
+            if isinstance(collections, tuple):
+                collections = collections[0]
+                """" only get collection name """
+                collections = collections[1::2]
+                collections = [x.replace("-", "") for x in collections]
+                collections = [x.strip() for x in collections]
             collections_id = []
             for collection in collections:
                 if collection == "_default" and self.custom_collections:

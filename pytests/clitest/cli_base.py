@@ -102,6 +102,7 @@ class CliBaseTest(BaseTestCase):
         self.scopes_only = self.input.param("scopes_only", False)
         self.collections_only = self.input.param("collections_only", False)
         self.drop_scopes = self.input.param("drop_scopes", False)
+        self.drop_sc_default = self.input.param("drop_sc_default", False)
         self.drop_collections = self.input.param("drop_collections", False)
         self.check_scopes = self.input.param("check_scopes", False)
         self.check_scopes_details = self.input.param("check_scopes_details", False)
