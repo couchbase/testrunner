@@ -234,6 +234,7 @@ class StableTopFTS(FTSBaseTest):
         query = {"match_all": {}}
         self.create_simple_default_index()
         zero_results_ok = True
+        self.sleep(10)
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query,
                                                 zero_results_ok=zero_results_ok,
