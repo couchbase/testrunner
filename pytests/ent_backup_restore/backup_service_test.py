@@ -20,6 +20,7 @@ from lib.backup_service_client.models.body5 import Body5
 from lib.backup_service_client.models.body6 import Body6
 from lib.backup_service_client.models.plan import Plan
 from lib.backup_service_client.models.service_configuration import ServiceConfiguration
+from lib.backup_service_client.api_client import ApiClient
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from couchbase_helper.cluster import Cluster
@@ -2143,3 +2144,65 @@ class BackupServiceTest(BackupServiceBase):
         self.assertGreaterEqual(get_stats_latest_value(prometheus.stats_range('backup_data_size')), 1000000)
         # Uncomment when 'backup_task_run' statistic is working
         # self.assertEqual(prometheus.stats_range('backup_task_run')['data'][0]['values'][-1], 1)
+
+    def test_orphan_detection(self):
+        """ Test if the backup service cleans up an orphaned task correctly
+
+        1. Start a task on a non-leader node and failover all non-leader nodes.
+        2. If an orphaned task is produced, manually trigger orphan detection and check if it's cleaned up correctly.
+        """
+        base_repo_name, repositories = "my_repo", 5
+
+        for i in range(repositories):
+            self.create_repository_with_default_plan(f"{base_repo_name}{i}")
+
+        leader = self.get_leader()
+
+        # We're going to rebalancing things out, preferably it should not be the first node as to not break testrunner's setUp and tearDown
+        self.assertEqual(leader, self.input.clusters[0][0])
+
+        # Load buckets with a lot of data so the subequent backup takes a long time
+        self._load_all_buckets(self.master, BlobGenerator("ent-backup", "ent-backup-", 5000, end=100), "create", 0)
+
+        for i in range(repositories):
+            repo_name = f"{base_repo_name}{i}"
+            # Perform a one off backup
+            task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, body=Body4(full_backup=True)).task_name
+            # Fetch repository information
+            repository = self.repository_api.cluster_self_repository_state_id_get('active', repo_name)
+
+            # Fetch task from running_one_off
+            self.assertIsNotNone(repository.running_one_off, "Expected a task to be currently running")
+            task = next(iter(repository.running_one_off.values()))
+
+            # Obtain the server that the task was scheduled on
+            server_task_scheduled_on = self.uuid_to_server(task.node_runs[0].node_id)
+
+            # If the task is a non-leader node, we attempt to create an orphan
+            if leader != server_task_scheduled_on:
+                failover_servers = [FailoverServer(self.input.clusters[0], server) for server in self.input.clusters[0][1:]]
+
+                # Failover non-leader nodes so only the leader node is left
+                for failover_server in failover_servers:
+                    failover_server.failover(graceful=False)
+
+                task_history_names = [task.task_name for task in self.get_task_history("active", repo_name)]
+                repository = self.repository_api.cluster_self_repository_state_id_get("active", repo_name)
+
+                # If we're unable to create the test conditions, then simply pass
+                if task_name in task_history_names or not repository.running_one_off:
+                    self.log.info("Unable to produce an orphaned task")
+                    return
+
+                # Check the orphan detection moves the orphan task into the task history
+                self.assertNotIn(task_name, task_history_names)
+                self.run_orphan_detection(leader)
+                self.sleep(5)
+                self.assertIn(task_name, [task.task_name for task in self.get_task_history("active", repo_name)])
+
+                # Return as the conditions of the test have been met
+                return
+
+        # If we're unable to have a task scheduled on a non-leader node, then simply pass
+        self.log.info("Unable to schedule a task on a non-leader node")
+

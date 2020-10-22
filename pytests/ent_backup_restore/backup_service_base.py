@@ -186,6 +186,18 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         for repo in self.repository_api.cluster_self_repository_state_get('imported'):
             self.repository_api.cluster_self_repository_state_id_delete_with_http_info('imported', repo.id)
 
+    def run_orphan_detection(self, server):
+        """ Runs orphan detection on the server
+
+        Runs the internal api's manual orphan detection which is only supported on the leader node.
+
+        params:
+            server (TestInputServer): The server to run the manual orphan detection on
+        """
+        self.assertEqual(server,self.get_leader())
+        rest = RestConnection(server)
+        status, content, header = rest._http_request(rest.baseUrl + f"_p/backup/internal/v1/orphanDetection", 'POST')
+
     def delete_task(self, state, repo_id, task_category, task_name):
         """ Delete a task
         """
