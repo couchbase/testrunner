@@ -336,13 +336,26 @@ class BaseTestCase(unittest.TestCase):
                 # Skip testrunner's rebalance procedure
                 self.input.test_params["skip_rebalance"] = True
 
-                # If this is the first test then rebalance cluster[0]
-                if self.input.param("first_test", False):
+                rebalance_required, rest_conn = False, RestConnection(self.input.clusters[0][0])
+
+                # Fetch all the nodes
+                nodes = rest_conn.get_nodes(get_all_nodes=True)
+                # If any node has been failed-over, add back the node and rebalance
+                for node in nodes:
+                    if node.has_failed_over:
+                        rest_conn.set_recovery_type(node.id, 'full')
+                        rest_conn.add_back_node(node.id)
+
+                if any(node.has_failed_over for node in nodes):
+                    Cluster().rebalance(self.input.clusters[0], [], [], services=[server.services for server in self.servers])
+
+                nodes_ips_and_ports = set((node.ip, node.port) for node in nodes)
+                # If this is the first test or nodes are missing from cluster[0] then add missing nodes and rebalance cluster[0]
+                if len(nodes) < len(self.input.clusters[0]):
+                    # Nodes which are currently not added
+                    servers_to_add = [server for server in self.input.clusters[0][1:] if (server.ip, server.port) not in nodes_ips_and_ports]
                     # Provision node in cluster[0] into a cluster
-                    try:
-                        Cluster().rebalance(self.input.clusters[0], self.input.clusters[0][1:], [], services=[server.services for server in self.servers])
-                    except ServerAlreadyJoinedException:
-                        self.log.info("The cluster has already been rebalanced.")
+                    Cluster().rebalance(self.input.clusters[0], servers_to_add, [], services=[server.services for server in self.servers])
 
             try:
                 if (str(self.__class__).find('rebalanceout.RebalanceOutTests') != -1) or \

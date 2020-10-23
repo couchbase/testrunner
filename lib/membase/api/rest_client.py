@@ -2317,7 +2317,7 @@ class RestConnection(object):
         bucket_stats = self.fetch_bucket_stats(bucket)
         return bucket_stats['op']['samples']['vb_replica_curr_items'][-1]
 
-    def get_nodes(self):
+    def get_nodes(self, get_all_nodes=False):
         nodes = []
         api = self.baseUrl + 'pools/default'
         status, content, header = self._http_request(api)
@@ -2339,7 +2339,7 @@ class RestConnection(object):
                     if node.ip == "127.0.0.1":
                         node.ip = self.ip
                     # Only add nodes which are active on cluster
-                    if node.clusterMembership == 'active':
+                    if get_all_nodes or node.clusterMembership == 'active':
                         nodes.append(node)
                     else:
                         log.info("Node {0} not part of cluster {1}".format(node.ip, node.clusterMembership))
@@ -5522,6 +5522,7 @@ class Node(object):
         self.hostname = ""
         self.clusterCompatibility = ""
         self.clusterMembership = ""
+        self.recoveryType = ""
         self.version = ""
         self.os = ""
         self.ports = []
@@ -5538,6 +5539,23 @@ class Node(object):
         self.services = []
         self.storageTotalRam = 0
 
+    @property
+    def failed_over_state_a(self):
+        """ The state in which a node is failed-over and is requesting a recovery type from the user
+        """
+        return self.clusterMembership == "inactiveFailed"
+
+    @property
+    def failed_over_state_b(self):
+        """ The state in which a node is failed-over and the user has selected a recovery type
+        """
+        return self.clusterMembership == "inactiveAdded" and self.recoveryType
+
+    @property
+    def has_failed_over(self):
+        """ Returns tree if a node is in the failed-over state
+        """
+        return self.failed_over_state_a or self.failed_over_state_b
 
 class AutoFailoverSettings(object):
     def __init__(self):
@@ -5655,6 +5673,8 @@ class RestParser(object):
         node.hostname = parsed['hostname']
         node.clusterCompatibility = parsed['clusterCompatibility']
         node.clusterMembership = parsed['clusterMembership']
+        if 'recoveryType' in parsed:
+            node.recoveryType = parsed['recoveryType']
         node.version = parsed['version']
         node.curr_items = 0
         if 'interestingStats' in parsed and 'curr_items' in parsed['interestingStats']:
