@@ -472,6 +472,17 @@ class RestConnection(object):
             return ""
         return json_parsed
 
+    def get_rebalance_report(self, uri):
+        api = 'http://{0}:{1}{2}'.format(self.ip, self.port, uri)
+        try:
+            status, content, header = self._http_request(api, 'GET',
+                                                         headers=self._create_capi_headers())
+            json_parsed = json.loads(content)
+        except ValueError as e:
+            print(e)
+            return ""
+        return json_parsed
+
     def ns_server_tasks(self):
         api = self.baseUrl + 'pools/default/tasks'
         try:
@@ -1765,6 +1776,14 @@ class RestConnection(object):
         if status:
             json_parsed = json.loads(content)
             index_map = RestParser().parse_index_stats_response(json_parsed, index_map=index_map)
+        return index_map
+
+    def get_partition_item_count(self, timeout=120, index_map=None):
+        api = self.index_baseUrl + 'stats?partition=true'
+        status, content, header = self._http_request(api, timeout=timeout)
+        if status:
+            json_parsed = json.loads(content)
+            index_map = RestParser().parse_index_stats_response_for_item_count(json_parsed, index_map=index_map)
         return index_map
 
     def get_index_official_stats(self, timeout=120, index_map=None):
@@ -5166,6 +5185,24 @@ class RestParser(object):
                 if index_name not in index_map[bucket].keys():
                     index_map[bucket][index_name] = {}
                 index_map[bucket][index_name][stats_name] = val
+        return index_map
+
+    def parse_index_stats_response_for_item_count(self, parsed, index_map=None):
+        if index_map == None:
+            index_map = {}
+        for key in parsed.keys():
+            tokens = key.split(":")
+            val = parsed[key]
+            if len(tokens) == 3:
+                bucket = tokens[0]
+                index_name = tokens[1]
+                stats_name = tokens[2]
+                if bucket not in index_map.keys():
+                    index_map[bucket] = {}
+                if index_name not in index_map[bucket].keys():
+                    index_map[bucket][index_name] = {}
+                if stats_name == "items_count":
+                    index_map[bucket][index_name][stats_name] = val
         return index_map
 
     def parse_get_nodes_response(self, parsed):

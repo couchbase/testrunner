@@ -340,7 +340,7 @@ class QueryTests(BaseTestCase):
         """
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         self.keyword_analyzer_at_type_mapping = self.input.param("keyword_analyzer_at_type_mapping", False)
-        if not self.custom_map:
+        if not self.custom_map and not index_params:
             if self.keyword_analyzer_at_type_mapping:
                 index_params = {
                     "default_analyzer": "standard",
@@ -386,13 +386,14 @@ class QueryTests(BaseTestCase):
 
         return fts_index
 
-    def wait_for_fts_indexing_complete(self, fts_index, doc_count):
+    def wait_for_fts_indexing_complete(self, fts_index, doc_count, max_retry_count=30):
         indexed_doc_count = 0
-        retry_count = 10
+        retry_count = max_retry_count
         while indexed_doc_count < doc_count and retry_count > 0:
             try:
                 self.sleep(10)
                 indexed_doc_count = fts_index.get_indexed_doc_count()
+                self.log.info("Index count of index : {0} is {1}".format(fts_index.name, indexed_doc_count))
             except KeyError as k:
                 continue
             retry_count -= 1

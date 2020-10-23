@@ -16,6 +16,7 @@ from couchbase_helper.documentgenerator import JsonDocGenerator
 from couchbase_helper.cluster import Cluster
 from gsi_replica_indexes import GSIReplicaIndexesTests
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
+from tuqquery.flex_index_phase1 import FlexIndexTests
 
 
 class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
@@ -32,6 +33,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         self.num_queries = self.input.param("num_queries", 100)
         self.num_index_partitions = self.input.param("num_index_partitions", 8)
+        self.num_iterations = self.input.param("num_iterations", 1)
         self.recover_failed_node = self.input.param("recover_failed_node",
                                                     False)
         self.op_type = self.input.param("op_type", "create")
@@ -40,6 +42,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.use_replica_index = self.input.param("use_replica_index", False)
         self.failover_index = self.input.param("failover_index", False)
         self.index_partitioned = self.input.param('index_partitioned', False)
+        self.index_ram = self.input.param('index_ram', 512)
 
     def tearDown(self):
         super(GSIIndexPartitioningTests, self).tearDown()
@@ -470,6 +473,428 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 failed_index_creation))
         self.assertTrue(failed_index_creation == 0,
                         "Some create index statements failed validations. Pls see the test log above for details.")
+
+    def test_partitioned_indexes_clusterops(self):
+        self.ft_object = FlexIndexTests()
+        self.ft_object.init_flex_object(self)
+        self._load_emp_dataset(end=self.num_items)
+        self.errors = []
+        iteration = 0
+        cluster_servers = self.servers[:self.nodes_init]
+        extra_servers = self.servers[self.nodes_init:]
+        all_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for index_node in all_index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=self.index_ram)
+            rest.set_index_settings({"indexer.rebalance.transferBatchSize": 0})
+        self.create_gsi_indexes()
+        fts_indexes = self.create_fts_indexes()
+        while iteration < self.num_iterations:
+
+            # rebalance in a node
+            test = "Test to rebalance in and out, one node with index,fts, then kill services"
+            self.log.info(test)
+            services_in = ["index,fts"]
+            server_in = extra_servers[0]
+            rebalance = self.cluster.async_rebalance(cluster_servers, [server_in], [],
+                                                     services=services_in)
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+
+            # rebalance out a node
+            rebalance = self.cluster.async_rebalance(cluster_servers, [], [server_in])
+
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+
+            all_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            for index_node in all_index_nodes:
+                check_thread = threading.Thread(name="check_mut_thread",
+                                                target=self.check_for_mutation,
+                                                args=(index_node, 120, test))
+                check_thread.start()
+                self._kill_all_processes_index(index_node)
+                check_thread.join()
+                self._kill_all_processes_fts(index_node)
+                for index in fts_indexes:
+                    self.ft_object.wait_for_fts_indexing_complete(index, self.num_items)
+
+            test = "Test to failover/adback each node"
+            self.log.info(test)
+
+            all_kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+
+            for kv_node in all_kv_nodes:
+                self.failover_addback_node(kv_node)
+
+            for index_node in all_index_nodes:
+                check_thread = threading.Thread(name="check_mut_thread",
+                                               target=self.check_for_mutation,
+                                               args=(index_node, 300, test))
+                check_thread.start()
+                self.failover_addback_node(index_node)
+                check_thread.join()
+                self.verify_search_rebalance_timetaken()
+                for index in fts_indexes:
+                    self.ft_object.wait_for_fts_indexing_complete(index, self.num_items)
+
+            test = "Test to rebalance in and out, 2 nodes with index,fts, then kill services"
+            self.log.info(test)
+            services_in = ["index,fts", "index,fts"]
+            rebalance = self.cluster.async_rebalance(cluster_servers, extra_servers[:2], [],
+                                                     services=services_in)
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+            self.sleep(10)
+
+            # rebalance out 2 node
+            rebalance = self.cluster.async_rebalance(cluster_servers, [], extra_servers[:2])
+
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+            self.sleep(10)
+
+            all_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            for index_node in all_index_nodes:
+                check_thread = threading.Thread(name="check_mut_thread",
+                                                target=self.check_for_mutation,
+                                                args=(index_node, 120, test))
+                check_thread.start()
+                self._kill_all_processes_index(index_node)
+                check_thread.join()
+                self._kill_all_processes_fts(index_node)
+                for index in fts_indexes:
+                    self.ft_object.wait_for_fts_indexing_complete(index, self.num_items)
+
+            test = "Test to rolling swap rebalance of nodes with index,fts with kill services"
+            self.log.info(test)
+
+            all_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            cur_cluster_servers = cluster_servers
+            swap_node = extra_servers[0]
+            extra_servers = list(filter(lambda n: n != swap_node, extra_servers))
+            for node in all_index_nodes:
+                serv_in = swap_node
+                rebalance = self.cluster.async_rebalance(cur_cluster_servers, [serv_in], [node], services=["index,fts"])
+
+                reached = RestHelper(self.rest).rebalance_reached()
+                self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+                rebalance.result()
+                self.sleep(10)
+
+                cur_all_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                for index_node in cur_all_index_nodes:
+                    check_thread = threading.Thread(name="check_mut_thread",
+                                                    target=self.check_for_mutation,
+                                                    args=(index_node, 120, test))
+                    check_thread.start()
+                    self._kill_all_processes_index(index_node)
+                    check_thread.join()
+                    self._kill_all_processes_fts(index_node)
+                    for index in fts_indexes:
+                        self.ft_object.wait_for_fts_indexing_complete(index, self.num_items)
+                swap_node = node
+                cur_cluster_servers = list(filter(lambda n: n != node, cur_cluster_servers))
+                cur_cluster_servers.append(serv_in)
+            extra_servers.append(swap_node)
+            cluster_servers = copy.deepcopy(cur_cluster_servers)
+            iteration += 1
+
+        if self.errors:
+            self.fail(str(self.errors))
+
+    def test_partitioned_indexes_clusterops_with_mutations(self):
+        self.ft_object = FlexIndexTests()
+        self.ft_object.init_flex_object(self)
+        self._load_emp_dataset(end=self.num_items)
+        self.errors = []
+        iteration = 0
+        cluster_servers = self.servers[:self.nodes_init]
+        load_start = self.num_items
+        load_end = load_start + self.num_items / 2
+        extra_servers = self.servers[self.nodes_init:]
+        all_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for index_node in all_index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=self.index_ram)
+            rest.set_index_settings({"indexer.rebalance.transferBatchSize": 0})
+        self.create_gsi_indexes()
+        index_count_before = {}
+        for index_node in all_index_nodes:
+            index_count_before[index_node.ip] = RestConnection(index_node).get_partition_item_count()
+        fts_indexes = self.create_fts_indexes()
+
+        while iteration < self.num_iterations:
+
+            # rebalance in a node
+            test = "Test to rebalance in and out, one node with index,fts, then kill services"
+            self.log.info(test)
+            services_in = ["index,fts"]
+            server_in = extra_servers[0]
+            rebalance = self.cluster.async_rebalance(cluster_servers, [server_in], [],
+                                                     services=services_in)
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+
+            # rebalance out a node
+            rebalance = self.cluster.async_rebalance(cluster_servers, [], [server_in])
+
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+
+            all_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            for index_node in all_index_nodes:
+                mut_thread = threading.Thread(name="mut_thread",
+                                              target=self.load_doc_thread_once,
+                                              args=(load_start, load_end))
+                mut_thread.start()
+                self.sleep(5)
+                check_thread = threading.Thread(name="check_partition_count_thread",
+                                                target=self.check_for_partition_count,
+                                                args=(index_count_before[index_node.ip], index_node, 120, test))
+                check_thread.start()
+                self._kill_all_processes_index(index_node)
+                check_thread.join()
+                mut_thread.join()
+                load_start = load_end
+                load_end = load_start + self.num_items/2
+
+            test = "Test to failover/adback each node"
+            self.log.info(test)
+
+            all_kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+
+            for kv_node in all_kv_nodes:
+                self.failover_addback_node(kv_node)
+
+            for index_node in all_index_nodes:
+                mut_thread = threading.Thread(name="mut_thread",
+                                              target=self.load_doc_thread_once,
+                                              args=(load_start, load_end))
+                mut_thread.start()
+                self.sleep(5)
+                check_thread = threading.Thread(name="check_partition_count_thread",
+                                                target=self.check_for_partition_count,
+                                                args=(index_count_before[index_node.ip], index_node, 300, test))
+                check_thread.start()
+                self.failover_addback_node(index_node)
+                check_thread.join()
+                #self.verify_search_rebalance_timetaken()
+                mut_thread.join()
+                load_start = load_end
+                load_end = load_start + self.num_items/2
+
+            test = "Test to rebalance in and out, 2 nodes with index,fts, then kill services"
+            self.log.info(test)
+            services_in = ["index,fts", "index,fts"]
+            rebalance = self.cluster.async_rebalance(cluster_servers, extra_servers[:2], [],
+                                                     services=services_in)
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+            self.sleep(10)
+
+            # rebalance out 2 node
+            rebalance = self.cluster.async_rebalance(cluster_servers, [], extra_servers[:2])
+
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+            self.sleep(10)
+
+            all_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            for index_node in all_index_nodes:
+                mut_thread = threading.Thread(name="mut_thread",
+                                              target=self.load_doc_thread_once,
+                                              args=(load_start, load_end))
+                mut_thread.start()
+                self.sleep(5)
+                check_thread = threading.Thread(name="check_partition_count_thread",
+                                                target=self.check_for_partition_count,
+                                                args=(index_count_before[index_node.ip], index_node, 120, test))
+                check_thread.start()
+                self._kill_all_processes_index(index_node)
+                check_thread.join()
+                mut_thread.join()
+                load_start = load_end
+                load_end = load_start + self.num_items/2
+
+            test = "Test to rolling swap rebalance of nodes with index,fts with kill services"
+            self.log.info(test)
+
+            all_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            cur_cluster_servers = cluster_servers
+            swap_node = extra_servers[0]
+            extra_servers = list(filter(lambda n: n != swap_node, extra_servers))
+            for node in all_index_nodes:
+                serv_in = swap_node
+                rebalance = self.cluster.async_rebalance(cur_cluster_servers, [serv_in], [node], services=["index,fts"])
+
+                reached = RestHelper(self.rest).rebalance_reached()
+                self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+                rebalance.result()
+                self.sleep(10)
+
+                cur_all_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                for index_node in cur_all_index_nodes:
+                    if index_node.ip in index_count_before.keys():
+                        mut_thread = threading.Thread(name="mut_thread",
+                                                      target=self.load_doc_thread_once,
+                                                      args=(load_start, load_end))
+                        mut_thread.start()
+                        self.sleep(5)
+                        check_thread = threading.Thread(name="check_partition_count_thread",
+                                                        target=self.check_for_partition_count,
+                                                        args=(index_count_before[index_node.ip], index_node, 120, test))
+                        check_thread.start()
+                        self._kill_all_processes_index(index_node)
+                        check_thread.join()
+                        mut_thread.join()
+                        load_start = load_end
+                        load_end = load_start + self.num_items/2
+                swap_node = node
+                cur_cluster_servers = list(filter(lambda n: n != node, cur_cluster_servers))
+                cur_cluster_servers.append(serv_in)
+            extra_servers.append(swap_node)
+            cluster_servers = copy.deepcopy(cur_cluster_servers)
+            iteration += 1
+
+        if self.errors:
+            self.fail(str(self.errors))
+
+    def load_doc_thread_once(self, start=None, end=None):
+        self.log.info(threading.currentThread().getName() + " Started")
+        self._load_emp_dataset(start=start, end=end, flush=False)
+        self.log.info(threading.currentThread().getName() + " Completed")
+
+    def load_doc(self):
+        self.log.info(threading.currentThread().getName() + " Started")
+        start = self.num_items
+        for i in range(1, 10):
+            end = start + self.num_items
+            self._load_emp_dataset(start=start, end=end, flush=False)
+            start = end
+        self.log.info(threading.currentThread().getName() + " Completed")
+
+    def verify_search_rebalance_timetaken(self):
+        active_tasks = self.rest.active_tasks()
+        for task in active_tasks:
+            if task["type"] == "rebalance":
+                rebalance_URI = task["lastReportURI"]
+
+        rebalace_report = self.rest.get_rebalance_report(rebalance_URI)
+        search_rebalanace_time_taken = rebalace_report["stageInfo"]["search"]["timeTaken"]
+        self.log.info("Search rebalance time taken : {0}".format(search_rebalanace_time_taken))
+        if search_rebalanace_time_taken > 120000:
+            self.log.info("ERROR: FAILED: rebalance for search taken more time than expected")
+            self.errors.append("rebalance for search taken more time than expected")
+
+    def check_for_mutation(self, index_node, max_time, test):
+        self.log.info(threading.currentThread().getName() + " Started")
+        if not self.check_if_num_mutations_zero_for_given_time(index_node=index_node, max_time=max_time):
+            self.log.info("ERROR: FAILED: {0} : {1}".format(test, index_node))
+            self.errors.append("FAILED: {0} : {1}".format(test, index_node))
+        self.log.info(threading.currentThread().getName() + " Completed")
+
+    def check_for_partition_count(self, index_count_before, index_node, max_time, test):
+        self.log.info(threading.currentThread().getName() + " Started")
+        if not self.check_if_partition_count_after_greater_than_before(index_count_before, index_node=index_node, max_time=max_time):
+            self.log.info("ERROR: FAILED: {0} : {1}".format(test, index_node))
+            self.errors.append("FAILED: {0} : {1}".format(test, index_node))
+        self.log.info(threading.currentThread().getName() + " Completed")
+
+    def create_gsi_indexes(self):
+        create_index_queries = ["CREATE INDEX idx6379441 on default(emp_id) partition by hash(meta().id) with "
+                                "{'num_replica':1, 'num_partition':15}",
+                                "CREATE INDEX idx4951342 on default(emp_id) "
+                                "partition by hash(name) with {'num_partition':15,'num_replica':1}",
+                                "CREATE INDEX idx4951343 on default(emp_id) "
+                                "partition by hash(name) with {'num_partition':15,'num_replica':1}",
+                                "CREATE INDEX idx4951344 on default(emp_id) "
+                                "partition by hash(meta().id) with {'num_partition':15,'num_replica':1}",
+                                "CREATE INDEX idx4951345 on default(emp_id) "
+                                "partition by hash(name) with {'num_partition':15,'num_replica':1}",
+                                "CREATE INDEX idx4951346 on default(emp_id) "
+                                "partition by hash(meta().id) with {'num_partition':15,'num_replica':1}",
+                                "CREATE INDEX idx4951347 on default(emp_id) "
+                                "partition by hash(meta().id) with {'num_partition':15,'num_replica':1}",
+                                "CREATE INDEX idx4951348 on default(emp_id) "
+                                "partition by hash(meta().id) with {'num_partition':15,'num_replica':1}",
+                                "CREATE INDEX idx4951349 on default(emp_id) "
+                                "partition by hash(name) with {'num_partition':15,'num_replica':1}"]
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        for create_index_query in create_index_queries:
+
+            try:
+                self.n1ql_helper.run_cbq_query(
+                    query=create_index_query,
+                    server=self.n1ql_node)
+            except Exception, ex:
+                self.log.info(str(ex))
+
+    def create_fts_indexes(self):
+        fts_indexes = []
+        index_params = {
+            "default_analyzer": "keyword",
+            "default_datetime_parser": "dateTimeOptional",
+            "default_field": "_all",
+            "default_mapping": {
+                "default_analyzer": "keyword",
+                "dynamic": True,
+                "enabled": True,
+                "properties": {
+                    "name": {
+                        "enabled": True,
+                        "dynamic": False,
+                        "fields": [
+                            {
+                                "index": True,
+                                "name": "name",
+                                "type": "text"
+                            }
+                        ]
+                    }
+                }
+            },
+            "default_type": "_default",
+            "docvalues_dynamic": True,
+            "index_dynamic": True,
+            "store_dynamic": False,
+            "type_field": "type"
+        }
+        plan_params = {"indexPartitions": 17, "numReplicas": 1}
+        fts_index1 = self.ft_object.create_fts_index(
+            name="fts_index_1", source_name=self.bucket_name, doc_count=self.num_items,
+            index_params=index_params, plan_params=plan_params)
+        fts_indexes.append(fts_index1)
+        fts_index2 = self.ft_object.create_fts_index(
+            name="fts_index_2", source_name=self.bucket_name, doc_count=self.num_items,
+            index_params=index_params, plan_params=plan_params)
+        fts_indexes.append(fts_index2)
+        fts_index3 = self.ft_object.create_fts_index(
+            name="fts_index_3", source_name=self.bucket_name, doc_count=self.num_items,
+            index_params=index_params, plan_params=plan_params)
+        fts_indexes.append(fts_index3)
+
+        return fts_indexes
+
+    def failover_addback_node(self, node):
+        failover_task = self.cluster.async_failover([self.master], failover_nodes=[node], graceful=False)
+        failover_task.result()
+        self.sleep(10)
+        # do a full recovery and rebalance
+        add_back_ip = node.ip
+        self.rest.set_recovery_type('ns_1@' + add_back_ip, "full")
+        self.rest.add_back_node('ns_1@' + add_back_ip)
+        self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        result = self.rest.monitorRebalance()
+        self.log.info("successfully rebalanced cluster {0}".format(result))
 
     def test_partition_index_with_excluded_nodes(self):
         self._load_emp_dataset(end=self.num_items)
@@ -5043,9 +5468,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         return span_pushdown, limit_pushdown, offset_pushdown, projection_pushdown, sorting_pushdown
 
     def _load_emp_dataset(self, op_type="create", expiration=0, start=0,
-                          end=1000):
+                          end=1000, flush=True):
         # Load Emp Dataset
-        self.cluster.bucket_flush(self.master)
+        if flush:
+            self.cluster.bucket_flush(self.master)
 
         if end > 0:
             self._kv_gen = JsonDocGenerator("emp_",

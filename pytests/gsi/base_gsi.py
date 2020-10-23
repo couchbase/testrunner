@@ -614,10 +614,10 @@ class BaseSecondaryIndexingTests(QueryTests):
             for index_name in index_bucket_map[bucket_name].keys():
                 msg1 ="index_name {0} not found in {1}".format(index_name, index_map[bucket_name].keys())
                 self.assertTrue(index_name in index_map[bucket_name].keys(), msg1+" :: "+ msg)
-    def _verify_primary_index_count(self):
+    def _verify_primary_index_count(self, max_count=15):
         bucket_map = self.get_buckets_itemCount()
         count = 0
-        while not self._verify_items_count() and count < 15:
+        while not self._verify_items_count() and count < max_count:
             self.log.info("All Items Yet to be Indexed...")
             self.sleep(5)
             count += 1
@@ -633,6 +633,35 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.assertTrue(str(actual_item_count) == str(expected_item_count),
                 "Bucket {0}, mismatch in item count for index :{1} : expected {2} != actual {3} ".format
                     (bucket_name, "primary", expected_item_count, actual_item_count))
+
+    def check_if_num_mutations_zero_for_given_time(self, index_node=None, max_time=20):
+        stat_time = time.time()
+        end_time = stat_time + max_time
+        is_num_mut_zero = True
+        while time.time() < end_time:
+            try:
+                if not self._verify_num_docs_pending(index_node):
+                    self.log.info("Num of mutations doesn't found to be zero")
+                    is_num_mut_zero = False
+                    break
+            except Exception, ex:
+                self.log.info(ex)
+        return is_num_mut_zero
+
+    def check_if_partition_count_after_greater_than_before(self, index_count_before, index_node=None, max_time=20):
+        stat_time = time.time()
+        end_time = stat_time + max_time
+        is_less = True
+        while time.time() < end_time:
+            try:
+                if not self._verify_part_count_greater_than_before(index_node, index_count_before):
+                    self.log.info("Index count after found to be less than before")
+                    is_less = False
+                    break
+            except Exception, ex:
+                self.log.info(ex)
+        return is_less
+
     def _verify_items_count(self):
         """
         Compares Items indexed count is sample
@@ -648,6 +677,36 @@ class BaseSecondaryIndexingTests(QueryTests):
                 if index_val["num_docs_pending"] and index_val["num_docs_queued"]:
                     return False
         return True
+
+    def _verify_num_docs_pending(self, index_node):
+        """
+        Compares Items indexed count is sample
+        as items in the bucket.
+        """
+        index_map = RestConnection(index_node).get_index_stats()
+        for bucket_name in index_map.keys():
+            for index_name, index_val in index_map[bucket_name].iteritems():
+                if index_val["num_docs_pending"]:
+                    self.log.info("Bucket: {0}".format(bucket_name))
+                    self.log.info("Index: {0}".format(index_name))
+                    self.log.info("number of docs pending: {0}".format(index_val["num_docs_pending"]))
+                    return False
+        return True
+
+    def _verify_part_count_greater_than_before(self, index_node, index_part_count_before):
+        index_map = RestConnection(index_node).get_partition_item_count()
+        for bucket_name in index_map.keys():
+            for index_name, index_val in index_map[bucket_name].iteritems():
+                if index_name in index_part_count_before[bucket_name].keys() \
+                        and (len(index_name.split()) == 4 or len(index_name.split()) == 2) \
+                        and index_val["items_count"] \
+                        and index_val["items_count"] < index_part_count_before[bucket_name][index_name]["items_count"]:
+                    self.log.info("items_count after for index {0} : {1}".format(index_name, index_val["items_count"]))
+                    self.log.info("items_count before for index {0} : {1}".format(index_name, index_part_count_before[bucket_name][index_name]["items_count"]))
+                    return False
+        return True
+
+
     def _verify_bucket_count_with_index_count(self, query_definitions=None, buckets=None):
         """
         :param bucket:

@@ -24,11 +24,22 @@ class FlexIndexTests(QueryTests):
         self.testrunner_client = test_object.testrunner_client
         self.use_rest = test_object.use_rest
         self.scan_consistency = test_object.scan_consistency
-        self.hint_index = test_object.hint_index
+        if hasattr(test_object, 'hint_index'):
+            self.hint_index = test_object.hint_index
         self.n1ql_port = test_object.n1ql_port
         self.analytics = test_object.analytics
-        self.named_prepare = test_object.named_prepare
+        if hasattr(test_object, 'named_prepare'):
+            self.named_prepare = test_object.named_prepare
         self.servers = test_object.servers
+        if hasattr(test_object, 'custom_map'):
+            self.custom_map = test_object.custom_map
+        else:
+            self.custom_map = False
+        if hasattr(test_object, 'dataset'):
+            self.dataset = test_object.dataset
+        else:
+            self.dataset = "emp"
+
 
     def setUp(self):
         super(FlexIndexTests, self).setUp()
