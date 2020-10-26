@@ -885,6 +885,9 @@ class FTSIndex:
                 self.index_definition['params']['store'] = {}
             self.index_definition['params']['store']['kvStoreMossAllow'] = False
 
+    def get_cluster(self):
+        return self.__cluster
+
     def is_scorch(self):
         return self.get_index_type() == "scorch"
 
