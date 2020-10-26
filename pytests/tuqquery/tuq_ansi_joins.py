@@ -327,7 +327,7 @@ class QueryANSIJOINSTests(QueryTests):
         explain_plan = self.run_cbq_query(explain_query)
         plan = self.ExplainPlanHelper(explain_plan)
         self.assertTrue("HashJoin" in str(plan))
-        self.assertTrue('d2' in plan['~children'][2]['build_aliases'])
+        self.assertTrue('d2' in plan['~children'][2]['build_aliases'], "d2 not in build_aliases: {0}".format(hashjoin_operator))
         queries_to_run.append((query_2, 432))
 
         self.run_common_body(queries_to_run=queries_to_run)
@@ -368,7 +368,8 @@ class QueryANSIJOINSTests(QueryTests):
             explain_plan = self.run_cbq_query(explain_query_2)
             plan = self.ExplainPlanHelper(explain_plan)
             self.assertTrue("HashJoin" in str(plan))
-            self.assertTrue('d2' in plan['~children'][0]['~children'][2]['build_aliases'])
+            hashjoin_operator = next((op for op in plan['~children'][0]['~children'] if op["#operator"] == "HashJoin"), None)
+            self.assertTrue('d2' in hashjoin_operator['build_aliases'])
 
         finally:
             self.run_cbq_query("drop index name ON {0}".format(self.default_query_bucket))
