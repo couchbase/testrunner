@@ -201,6 +201,15 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         first_backup_full = False
         after_first_backup_incr = False
         bk_type = ["FULL"]
+        if collections is not None:
+            col_dict = False
+            for col in collections:
+                if ":" in col:
+                    col_dict = True
+            if col_dict:
+                collections = collections[1::2]
+                collections = [x.replace("-", "") for x in collections]
+                collections = [x.strip() for x in collections]
         items = 0
         if output and output[0]:
             if self.backupset.info_to_json:
@@ -275,10 +284,12 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                         if self.backupset.load_to_collection:
                             if str(self.backupset.load_scope_id[2:]) in list(bk_scopes[scope_id]["collections"].keys()):
                                 self.log.info("check items in collection")
+                                print("\nitems number: ", bk_scopes[scope_id]["collections"][str(self.backupset.load_scope_id[2:])]["mutations"])
                                 if bk_scopes[scope_id]["collections"][str(self.backupset.load_scope_id[2:])]["mutations"] != self.num_items:
                                     raise("collection items not in backup")
                 if len(found_collections) != len(collections):
-                    raise("collection may not in backup repo")
+                    raise("collection may not in backup repo.  Found cols: {0} != check cols: {1}"\
+                                                           .format(found_collections, collections))
                 if not found_scope and isinstance(scopes, str):
                     return False, "scope {0} not in backup repo".format(scopes)
 

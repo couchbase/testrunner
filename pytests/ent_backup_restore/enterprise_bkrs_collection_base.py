@@ -2523,6 +2523,16 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         else:
             self.log.info("No availabe node to create cluster.")
 
+    def _extract_collection_names(self, collections):
+        if collections and collections[0]:
+            collections = collections[0]
+            collections = collections[1::2]
+            collections = [x.replace("-", "") for x in collections]
+            collections = [x.strip() for x in collections]
+            return collections
+        else:
+            self.fail("Need to pass collection list")
+
 
 class Backupset:
     def __init__(self):

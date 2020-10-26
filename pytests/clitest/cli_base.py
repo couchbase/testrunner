@@ -1193,3 +1193,13 @@ class CliBaseTest(BaseTestCase):
             else:
                 self.log.error("invalid {0}".format(word_check))
         return found
+
+    def _extract_collection_names(self, collections):
+        if collections and collections[0]:
+            collections = collections[0]
+            collections = collections[1::2]
+            collections = [x.replace("-", "") for x in collections]
+            collections = [x.strip() for x in collections]
+            return collections
+        else:
+            self.fail("Need to pass collection list")

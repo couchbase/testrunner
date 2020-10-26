@@ -314,6 +314,7 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
         """
         self.create_scope_cluster_host()
         self.create_collection_cluster_host(self.backupset.col_per_scope)
+        self.sleep(5)
         scopes = self.get_bucket_scope_cluster_host()
         scopes_id = []
         for scope in scopes:
@@ -322,6 +323,9 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
             scopes_id.append(self.get_scopes_id_cluster_host(scope))
         """ remove null and empty element """
         scopes_id = [i for i in scopes_id if i]
+        print("\nscope ids: ", scopes_id)
+        if not scopes_id:
+            self.fail("Could not get scope id from scopes: {0}".format(scopes))
         self.backup_create()
         col_cmd = ""
         if self.backupset.load_to_collection:
@@ -344,7 +348,8 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
             for scope in scopes:
                 collections = self.get_bucket_collection_cluster_host(scope=scope)
                 if isinstance(collections, tuple):
-                    collections = collections[0]
+                    collections = self._extract_collection_names(collections)
+                    collections = [x.strip() for x in collections]
                 self.backup_info_validate(scope, collections)
 
     def test_restore_with_auto_create_buckets(self):

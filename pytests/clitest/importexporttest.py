@@ -840,7 +840,7 @@ class ImportExportTests(CliBaseTest):
                                      self.imex_type, url_format, self.master.ip, secure_port,
                                      "default", self.format_type, secure_conn, export_file)
         if self.custom_scopes:
-            ex_cmd_str += " --scope-field {0}".format(self.load_scope_name)
+            ex_cmd_str += " --scope-field {0}".format(scopes[0])
         output, error = shell.execute_command(ex_cmd_str)
         if not self._check_output("successfully", output):
             if self.should_fail:

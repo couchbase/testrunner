@@ -79,11 +79,7 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
         else:
             custom_collections = self.get_bucket_collection()
             if isinstance(custom_collections, tuple):
-                custom_collections = custom_collections[0]
-                """" only get collection name """
-                custom_collections = custom_collections[1::2]
-                custom_collections = [x.replace("-", "") for x in custom_collections]
-                custom_collections = [x.strip() for x in custom_collections]
+                custom_collections = self._extract_collection_names(custom_collections)
             for collection in custom_collections:
                 if not self._check_output(collection, output):
                     raise("No collection: {0} in cluster".format(scope))
@@ -733,11 +729,7 @@ class XdcrCLITest(CliBaseTest):
                 load_scope_id_src = scopes_id[0]
             collections = self.get_bucket_collection()
             if isinstance(collections, tuple):
-                collections = collections[0]
-                """" only get collection name """
-                collections = collections[1::2]
-                collections = [x.replace("-", "") for x in collections]
-                collections = [x.strip() for x in collections]
+                collections = self._extract_collection_names(collections)
             collections_id = []
             for collection in collections:
                 if collection == "_default" and self.custom_collections:
