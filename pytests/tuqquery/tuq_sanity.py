@@ -4,12 +4,14 @@ import math
 import random
 import re
 import time
+import threading
 from datetime import date
 
 from deepdiff import DeepDiff
 from membase.api.exception import CBQError
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
+from collection.collections_n1ql_client import CollectionsN1QL
 
 from .tuq import QueryTests
 
@@ -27,6 +29,9 @@ class QuerySanityTests(QueryTests):
         self.log.info("==============  QuerySanityTests setup has completed ==============")
         self.log_config_info()
         self.query_buckets = self.get_query_buckets(check_all_buckets=True)
+        self.collection_names = []
+        self.creation_failure = []
+        self.deletion_failure = []
 
     def suite_setUp(self):
         super(QuerySanityTests, self).suite_setUp()
@@ -262,6 +267,104 @@ class QuerySanityTests(QueryTests):
         self.assertEqual(results['results'], [{'expiration': 0}, {'expiration': 0}, {'expiration': 0}, {'expiration': 0}])
         results = self.run_cbq_query(query='select meta(default:default.test.test1).expiration from default:default.test.test1')
         self.assertEqual(results['results'], [{'expiration': 0}, {'expiration': 0}, {'expiration': 0}, {'expiration': 0}])
+
+    def test_create_drop_collections(self):
+        self.collections_helper = CollectionsN1QL(self.master)
+
+        self.collections_helper.create_scope(bucket_name="default", scope_name="scope1")
+        self.collections_helper.create_scope(bucket_name="default", scope_name="scope2")
+
+        for i in range(0, 100):
+            thread_name = threading.Thread(name='run_collection', target=self.run_create_collection,args=("scope1", "collection1" + str(i)))
+            thread2_name = threading.Thread(name='run_collection', target=self.run_create_collection,args=("scope2", "collection2" + str(i)))
+            thread_name.start()
+            thread2_name.start()
+
+            self.sleep(1)
+            if len(self.creation_failure) > 0:
+                for collection in self.creation_failure:
+                    self.log.error("Creation failed for collection: {0}".format(str(collection)))
+                self.fail("Some collections failed to create! Check logs for more details")
+
+            if len(self.collection_names) > 0:
+                for collection in self.collection_names:
+                    delete_thread = threading.Thread(name='drop_collection', target=self.run_drop_collection,
+                                                   args=(collection[0], collection[1]))
+
+
+                    delete_thread.start()
+                    delete_thread.join()
+                if len(self.deletion_failure) > 0:
+                    for collection in self.deletion_failure:
+                        self.log.error("Deletion failed for collection: {0}".format(str(collection)))
+                    self.fail("Some collections failed to drop! Check logs for more details")
+
+        retry_count = 100
+        while retry_count > 0:
+            if len(self.collection_names) > 0:
+                for collection in self.collection_names:
+                    delete_thread = threading.Thread(name='drop_collection', target=self.run_drop_collection,
+                                                   args=(collection[0], collection[1]))
+
+
+                    delete_thread.start()
+                if len(self.deletion_failure) > 0:
+                    for collection in self.deletion_failure:
+                        self.log.error("Deletion failed for collection: {0}".format(str(collection)))
+                    self.fail("Some collections failed to drop! Check logs for more details")
+            self.sleep(.5)
+            retry_count -= 1
+
+        if len(self.creation_failure) > 0:
+            for collection in self.creation_failure:
+                self.log.error("Creation failed for collection: {0}".format(str(collection)))
+            self.fail("Some collections failed to create! Check logs for more details")
+
+        if len(self.deletion_failure) > 0:
+            for collection in self.deletion_failure:
+                self.log.error("Deletion failed for collection: {0}".format(str(collection)))
+            self.fail("Some collections failed to drop! Check logs for more details")
+
+    def run_create_collection(self, scope_name='',collection_name=''):
+        retry_count = 5
+        created = self.collections_helper.create_collection(bucket_name="default", scope_name=scope_name, collection_name=collection_name)
+        while retry_count > 0:
+            try:
+                results = self.run_cbq_query('select * from system:keyspaces where name = "{0}"'.format(collection_name))
+                if results['metrics']['resultCount'] == 1:
+                    break
+            except Exception as e:
+                self.log.info(str(e))
+                continue
+            self.sleep(1)
+            retry_count -= 1
+        if not retry_count > 0:
+            if collection_name not in self.creation_failure:
+                self.creation_failure.append((scope_name, collection_name, "Entry not found in system:keyspaces"))
+        if collection_name not in self.creation_failure:
+            self.collection_names.append((scope_name, collection_name))
+        return
+
+    def run_drop_collection(self, scope_name='', collection_name=''):
+        retry_count = 5
+        deleted = self.collections_helper.delete_collection(bucket_name="default", scope_name=scope_name, collection_name=collection_name)
+        while retry_count > 0:
+            try:
+                results = self.run_cbq_query('select * from system:keyspaces where name = "{0}"'.format(collection_name))
+                if results['metrics']['resultCount'] == 0:
+                    break
+            except Exception as e:
+                if 'Keyspace not found in CB datastore' in str(e):
+                    break
+                continue
+            self.sleep(1)
+            retry_count -= 1
+        if not retry_count > 0:
+            if collection_name not in self.deletion_failure:
+                self.deletion_failure.append((scope_name, collection_name, "Entry not deleted from system:keyspaces"))
+        self.collection_names.remove((scope_name, collection_name))
+        return
+
 
     ##############################################################################################
     #
