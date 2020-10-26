@@ -44,10 +44,13 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
         drop_recreate_collection = self._input.param("drop_recreate_collection", None)
         initial_xdcr = self._input.param("initial_xdcr", random.choice([True, False]))
 
-        if initial_xdcr:
-            self.load_and_setup_xdcr()
-        else:
-            self.setup_xdcr_and_load()
+        try:
+            if initial_xdcr:
+                self.load_and_setup_xdcr()
+            else:
+                self.setup_xdcr_and_load()
+        except Exception as e:
+            self.fail(str(e))
 
         if drop_default_scope:
             for cluster in self.get_cluster_objects_for_input(drop_default_scope):

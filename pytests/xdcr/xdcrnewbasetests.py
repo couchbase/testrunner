@@ -22,14 +22,12 @@ from TestInput import TestInputSingleton
 from scripts.collect_server_info import cbcollectRunner
 from scripts import collect_data_files
 from scripts.java_sdk_setup import JavaSdkSetup
-from tasks.future import TimeoutError
 
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator, SDKDataLoader
 from lib.membase.api.exception import XDCRException
 from security.auditmain import audit
 from security.rbac_base import RbacBase
 from collection.collections_rest_client import CollectionsRest
-from collection.collections_stats import CollectionsStats
 
 class RenameNodeException(XDCRException):
 
@@ -2861,8 +2859,6 @@ class XDCRNewBaseTest(unittest.TestCase):
                     use_java_sdk=self._use_java_sdk, scope_num=scope_num,
                     collection_num=collection_num))
             counter += 1
-        #Temp workaround for sdk com.couchbase.client.core.error.AmbiguousTimeoutException
-        time.sleep(120)
 
         self.__cleanup_previous()
         self.__init_clusters()
