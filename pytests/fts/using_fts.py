@@ -63,7 +63,7 @@ class USINGFTS(FTSBaseTest):
                 server=self.master)
             self.assertTrue('IndexFtsSearch' in str(explain_results))
             primary_results = self.n1ql_helper.run_cbq_query(
-                query="select * from default:default.test.collection2 USE INDEX where dept = 'Sales'",
+                query="select * from default:default.test.collection2 USE INDEX (`#primary`) where dept = 'Sales'",
                 server=self.master)
             results = self.n1ql_helper.run_cbq_query(
                 query=query,
