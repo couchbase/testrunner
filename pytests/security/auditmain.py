@@ -18,6 +18,7 @@ import subprocess
 import logger
 import traceback
 log = logger.Logger.get_logger()
+import socket
 
 class audit:
     AUDITLOGFILENAME = 'audit.log'
@@ -44,6 +45,7 @@ class audit:
         self.method = method
         self.host = host
         self.nonroot = False
+        self.slaveAddress = None
         shell = RemoteMachineShellConnection(self.host)
         self.info = shell.extract_remote_info()
         if self.info.distribution_type.lower() in LINUX_DISTRIBUTION_NAME and \
@@ -56,6 +58,30 @@ class audit:
         if (eventID is not None):
             self.eventID = eventID
             self.eventDef = self.returnEventsDef()
+        try:
+            if "ip6" in self.host.ip or self.host.ip.startswith("["):
+                self.slaveAddress = self.getLocalIPV6Address()
+            else:
+                self.slaveAddress = self.getLocalIPAddress()
+        except Exception as ex:
+            log.info ('Exception while generating ip address {0}'.format(ex))
+            self.slaveAddress = '127.0.0.1'
+    
+    
+    def getLocalIPAddress(self):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('couchbase.com', 0))
+        return s.getsockname()[0]
+        '''
+        status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
+        if '1' not in ipAddress:
+            status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
+        return ipAddress
+        '''
+
+    def getLocalIPV6Address(self):
+        result = socket.getaddrinfo(socket.gethostname(), 0, socket.AF_INET6)
+        return result[0][4][0]
 
     def getAuditConfigPathInitial(self):
         shell = RemoteMachineShellConnection(self.host)
@@ -438,7 +464,13 @@ class audit:
                             else:
                                 ignore = True
                                 tempValue = data[items][seclevel]
-                        if (seclevel == 'port' and data[items][seclevel] >= 30000 and data[items][seclevel] <= 65535):
+                        if  (tempLevel == 'local:ip' and data[items][seclevel] == self.host.ip and ('ip' in expectedResult.keys())):
+                            log.info ('Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(self.host.ip, data[items][seclevel], tempLevel))
+                        elif tempLevel == 'local:port' and data[items][seclevel] == 8091 and ('port' in expectedResult.keys()):
+                            log.info ('Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format('8091', data[items][seclevel], tempLevel))
+                        elif tempLevel == 'remote:ip' and data[items][seclevel] == self.slaveAddress and ('ip' in expectedResult.keys()):
+                            log.info ('Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(self.slaveAddress, data[items][seclevel], tempLevel))
+                        elif (seclevel == 'port' and data[items][seclevel] >= 30000 and data[items][seclevel] <= 65535):
                             log.info ("Matching port is an ephemeral port -- actual port is {0}".format(data[items][seclevel]))
                         else:
                             if not ignore:
@@ -451,6 +483,8 @@ class audit:
                 else:
                     if (items == 'port' and data[items] >= 30000 and data[items] <= 65535):
                         log.info ("Matching port is an ephemeral port -- actual port is {0}".format(data[items]))
+                    elif (('ip' in expectedResult.keys()) or ('port' in expectedResult.keys())):
+                        pass
                     else:
                         if items == "requestId" or items == 'clientContextId':
                             expectedResult[items] = data[items]

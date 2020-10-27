@@ -31,12 +31,16 @@ class auditTest(BaseTestCase):
 
     def setUp(self):
         super(auditTest, self).setUp()
-        try:
-            self.ipAddress = self.getLocalIPAddress()
-        except Exception as ex:
-            self.ipAddress = '127.0.0.1'
-        self.eventID = self.input.param('id', None)
         auditTemp = audit(host=self.master)
+        try:
+            if "ip6" in self.master.ip or self.master.ip.startswith("["):
+                self.ipAddress = auditTemp.getLocalIPV6Address()
+            else:
+                self.ipAddress = auditTemp.getLocalIPAddress()
+        except Exception as ex:
+            log.info ('Exception while generating ip address {0}'.format(ex))
+            self.ipAddress = '127.0.0.1'
+        self.eventID = self.input.param('id', None)       
         currentState = auditTemp.getAuditStatus()
         self.log.info("Current status of audit on ip - {0} is {1}".format(self.master.ip, currentState))
         if not currentState:
@@ -49,20 +53,7 @@ class auditTest(BaseTestCase):
     def tearDown(self):
         super(auditTest, self).tearDown()
 
-    def getLocalIPAddress(self):
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(('couchbase.com', 0))
-        return s.getsockname()[0]
-        '''
-        status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
-        if '1' not in ipAddress:
-            status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
-        return ipAddress
-        '''
-
-    def getLocalIPV6Address(self):
-        result = socket.getaddrinfo(socket.gethostname(), 0, socket.AF_INET6)
-        return result[0][4][0]
+    
 
     def setupLDAPSettings (self, rest):
         api = rest.baseUrl + 'settings/saslauthdAuth'
@@ -94,9 +85,6 @@ class auditTest(BaseTestCase):
         user = self.master.rest_username
         source = 'ns_server'
         rest = RestConnection(self.master)
-
-        if "ip6" in self.master.ip or self.master.ip.startswith("["):
-            self.ipAddress = self.getLocalIPV6Address()
 
         if (ops in ['create']):
             expectedResults = {'bucket_name':'TestBucket', 'ram_quota':104857600, 'num_replicas':1,
