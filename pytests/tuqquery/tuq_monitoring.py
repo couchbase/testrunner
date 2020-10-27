@@ -124,8 +124,11 @@ class QueryMonitoringTests(QueryTests):
         e.set()
         results = self.run_cbq_query(query="SELECT * from system:active_requests")
         try:
-            if results['results'][0]['active_requests']['statement'] == 'CREATE PRIMARY INDEX on test2' or results['results'][1]['active_requests']['statement'] == 'CREATE PRIMARY INDEX on test2':
-                if results['results'][0]['active_requests']['queryContext'] == 'default:default.test' or results['results'][1]['active_requests']['queryContext'] == 'default:default.test':
+            if results['results'][0]['active_requests']['statement'] == 'CREATE PRIMARY INDEX on test2':
+                if results['results'][0]['active_requests']['queryContext'] == 'default:default.test':
+                    self.assertTrue(True)
+            elif results['results'][1]['active_requests']['statement'] == 'CREATE PRIMARY INDEX on test2':
+                if results['results'][1]['active_requests']['queryContext'] == 'default:default.test':
                     self.assertTrue(True)
             else:
                 self.fail("Could not find the correct statement {0}".format(results))

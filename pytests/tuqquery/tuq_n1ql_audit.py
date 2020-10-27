@@ -410,15 +410,24 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
         query_type = self.input.param("ops", None)
         user = self.master.rest_username
         source = 'ns_server'
-        self.run_cbq_query(query="CREATE SCOPE default:default.test")
-        self.sleep(10)
-        self.run_cbq_query(query="CREATE COLLECTION default:default.test.test1")
-        self.run_cbq_query(query="CREATE COLLECTION default:default.test.test2")
-        self.sleep(10)
+        try:
+            self.run_cbq_query(query="CREATE SCOPE default:default.test")
+            self.sleep(10)
+        except Exception as e:
+            self.log.info("scope already exists")
+        try:
+            self.run_cbq_query(query="CREATE COLLECTION default:default.test.test1")
+        except Exception as e:
+            self.log.info("collection already exists")
+        try:
+            self.run_cbq_query(query="CREATE COLLECTION default:default.test.test2")
+        except Exception as e:
+            self.log.info("collection already exists")
+            self.sleep(10)
         self.run_cbq_query(query="CREATE INDEX idx1 on default:default.test.test1(name)")
         self.sleep(10)
         self.run_cbq_query(
-            query='INSERT INTO default:default.test.test1 (KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "old hotel" })')
+                query='INSERT INTO default:default.test.test1 (KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "old hotel" })')
         self.sleep(10)
         self.run_cbq_query(query="select name from test1 where name = 'old hotel'", query_context='default:default.test')
         expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
