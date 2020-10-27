@@ -6,8 +6,9 @@ import os, sys
 import socket
 
 from TestInput import TestInputSingleton
+from collection.collections_rest_client import CollectionsRest
 from couchbase_helper.tuq_helper import N1QLHelper
-from lib.couchbase_helper.documentgenerator import BlobGenerator
+from lib.couchbase_helper.documentgenerator import BlobGenerator, SDKDataLoader
 from lib.couchbase_helper.stats_tools import StatsCommon
 from lib.couchbase_helper.tuq_generators import JsonGenerator
 from lib.membase.api.rest_client import RestConnection
@@ -109,6 +110,9 @@ class EventingBaseTest(QueryHelperTests):
         self.is_expired=self.input.param('is_expired', False)
         self.print_app_log=self.input.param('print_app_log', False)
         self.print_go_routine=self.input.param('print_go_routine', False)
+        self.collection_rest = CollectionsRest(self.master)
+        self.non_default_collection=self.input.param('non_default_collection',False)
+        self.num_docs=2016
 
     def tearDown(self):
         # catch panics and print it in the test log
@@ -148,17 +152,45 @@ class EventingBaseTest(QueryHelperTests):
         fh.close()
         body['depcfg'] = {}
         body['depcfg']['buckets'] = []
-        if src_binding:
-            body['depcfg']['buckets'].append(
-                {"alias": "dst_bucket", "bucket_name": self.dst_bucket_name, "access": "rw"})
-            body['depcfg']['buckets'].append(
-                {"alias": "src_bucket", "bucket_name": self.src_bucket_name, "access": "r"})
+        if self.non_default_collection:
+            if src_binding:
+                body['depcfg']['buckets'].append(
+                    {"alias": "dst_bucket", "bucket_name": self.dst_bucket_name,"scope_name":self.dst_bucket_name,
+                     "collection_name":self.dst_bucket_name,"access": "rw"})
+                body['depcfg']['buckets'].append(
+                    {"alias": "src_bucket", "bucket_name": self.src_bucket_name,"scope_name":self.src_bucket_name,
+                     "collection_name":self.src_bucket_name, "access": "r"})
+            else:
+                body['depcfg']['buckets'].append(
+                    {"alias": "dst_bucket", "bucket_name": self.dst_bucket_name, "scope_name": self.dst_bucket_name,
+                     "collection_name": self.dst_bucket_name, "access": "rw"})
+            body['depcfg']['metadata_bucket'] = self.metadata_bucket_name
+            body['depcfg']['metadata_scope'] = self.metadata_bucket_name
+            body['depcfg']['metadata_collection'] = self.metadata_bucket_name
+            body['depcfg']['source_bucket'] = self.src_bucket_name
+            body['depcfg']['source_scope'] = self.src_bucket_name
+            body['depcfg']['source_collection'] = self.src_bucket_name
+            if self.is_sbm:
+                del body['depcfg']['buckets'][0]
+                body['depcfg']['buckets'].append(
+                    {"alias": "src_bucket", "bucket_name": self.src_bucket_name, "scope_name": self.src_bucket_name,
+                     "collection_name": self.src_bucket_name, "access": "rw"})
         else:
-            body['depcfg']['buckets'].append({"alias": "dst_bucket", "bucket_name": self.dst_bucket_name,"access": "rw"})
+            if src_binding:
+                body['depcfg']['buckets'].append(
+                    {"alias": "dst_bucket", "bucket_name": self.dst_bucket_name, "access": "rw"})
+                body['depcfg']['buckets'].append(
+                    {"alias": "src_bucket", "bucket_name": self.src_bucket_name, "access": "r"})
+            else:
+                body['depcfg']['buckets'].append({"alias": "dst_bucket", "bucket_name": self.dst_bucket_name,"access": "rw"})
+            body['depcfg']['metadata_bucket'] = self.metadata_bucket_name
+            body['depcfg']['source_bucket'] = self.src_bucket_name
+            if self.is_sbm:
+                del body['depcfg']['buckets'][0]
+                body['depcfg']['buckets'].append(
+                    {"alias": "src_bucket", "bucket_name": self.src_bucket_name, "access": "rw"})
         if multi_dst_bucket:
             body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
-        body['depcfg']['metadata_bucket'] = self.metadata_bucket_name
-        body['depcfg']['source_bucket'] = self.src_bucket_name
         body['settings'] = {}
         body['settings']['checkpoint_interval'] = checkpoint_interval
         body['settings']['cleanup_timers'] = cleanup_timers
@@ -166,10 +198,7 @@ class EventingBaseTest(QueryHelperTests):
         body['settings']['deployment_status'] = deployment_status
         body['settings']['description'] = description
         body['settings']['log_level'] = self.eventing_log_level
-        # See MB-26756, reason for commenting out these lines
-        # body['settings']['rbacpass'] = rbacpass
-        # body['settings']['rbacrole'] = rbacrole
-        # body['settings']['rbacuser'] = rbacuser
+
         body['settings']['skip_timer_threshold'] = skip_timer_threshold
         body['settings']['sock_batch_size'] = sock_batch_size
         body['settings']['tick_duration'] = tick_duration
@@ -189,9 +218,6 @@ class EventingBaseTest(QueryHelperTests):
         body['settings']['deadline_timeout'] = deadline_timeout
         body['settings']['timer_storage_chan_size'] = self.timer_storage_chan_size
         body['settings']['dcp_gen_chan_size'] = self.dcp_gen_chan_size
-        if self.is_sbm:
-            del body['depcfg']['buckets'][0]
-            body['depcfg']['buckets'].append({"alias": "src_bucket", "bucket_name": self.src_bucket_name,"access": "rw"})
         body['depcfg']['curl'] = []
         if self.is_curl:
             if hostpath != None:
@@ -621,8 +647,11 @@ class EventingBaseTest(QueryHelperTests):
     def verify_source_bucket_mutation(self,doc_count,deletes=False,timeout=600,bucket=None):
         if bucket == None:
             bucket=self.src_bucket_name
-        # query = "create primary index on {}".format(self.src_bucket_name)
-        # self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        try:
+            query = "create primary index on {}".format(bucket)
+            self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        except Exception as ex:
+            log.info("Exception while creating index {}".format(ex))
         num_nodes = self.refresh_rest_server()
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         count=0
@@ -896,5 +925,96 @@ class EventingBaseTest(QueryHelperTests):
         self.log.info(self.rest.get_eventing_config())
 
 
+    def create_scope_collection(self,bucket,scope,collection):
+        self.collection_rest.create_scope_collection(bucket=bucket, scope=scope, collection=collection)
 
+    '''
+        Method to check number of docs in a bucket after the 
+    '''
+    def verify_doc_count_collections(self,namespace,expected_count,timeout=600,expected_duplicate=False):
+        eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        if namespace==None:
+            namespace="dst_bucket.dst_bucket.dst_bucket"
+        count=0
+        actual_count=self.get_count(namespace)
+        while actual_count != expected_count and count < 20:
+            message = "Waiting for handler code {2} to complete bucket operations... Current : {0} Expected : {1}".\
+                      format(actual_count, expected_count, namespace)
+            self.sleep(timeout//20, message=message)
+            curr_items=actual_count
+            actual_count = self.get_count(namespace)
+            ### compact buckets when mutation count not progressing. Helpful for expiry events
+            if count==10:
+                self.bucket_compaction()
+            actual_count = self.get_count(namespace)
+            if curr_items == actual_count:
+                count += 1
+            else:
+                count=0
+            if expected_duplicate and actual_count > expected_count:
+                break
+        if actual_count != expected_count:
+            total_dcp_backlog = 0
+            timers_in_past = 0
+            lcb = {}
+            # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
+            for eventing_node in eventing_nodes:
+                rest_conn = RestConnection(eventing_node)
+                out = rest_conn.get_all_eventing_stats()
+                total_dcp_backlog += out[0]["events_remaining"]["dcp_backlog"]
+                if "TIMERS_IN_PAST" in out[0]["event_processing_stats"]:
+                    timers_in_past += out[0]["event_processing_stats"]["TIMERS_IN_PAST"]
+                total_lcb_exceptions= out[0]["lcb_exception_stats"]
+                host=eventing_node.ip
+                lcb[host]=total_lcb_exceptions
+                full_out = rest_conn.get_all_eventing_stats(seqs_processed=True)
+                log.info("Stats for Node {0} is \n{1} ".format(eventing_node.ip, json.dumps(out, sort_keys=True,
+                                                                                          indent=4)))
+                log.debug("Full Stats for Node {0} is \n{1} ".format(eventing_node.ip, json.dumps(full_out,
+                                                                                                sort_keys=True,
+                                                                                                indent=4)))
+            if not expected_duplicate:
+                self.print_timer_alarm_context()
+            if actual_count < expected_count:
+                self.skip_metabucket_check = True
+                raise Exception("missing data in destination bucket. Current : {0} "
+                                "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(
+                    actual_count, expected_count, total_dcp_backlog, timers_in_past, lcb))
+            elif actual_count > expected_count and not expected_duplicate:
+                self.skip_metabucket_check = True
+                raise Exception("duplicated data in destination bucket which is not expected. Current : {0} "
+                                "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(
+                    actual_count, expected_count, total_dcp_backlog, timers_in_past, lcb))
+            elif actual_count > expected_count and expected_duplicate:
+                self.log.info("duplicated data in destination bucket which is expected. Current : {0} "
+                              "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(
+                    actual_count, expected_count, total_dcp_backlog, timers_in_past, lcb))
+        log.info("Final docs count... Current : {0} Expected : {1}".format(actual_count, expected_count))
+        self.print_eventing_stats_from_all_eventing_nodes()
+
+
+    def get_count(self,bucket):
+        query="select RAW(count(*)) from "+bucket
+        result_set=self.n1ql_helper.run_cbq_query(query,server=self.n1ql_node)
+        count=result_set['results']
+        return count[0]
+
+
+    def load_data_to_collection(self,num_items,namespace,is_create=True,is_delete=False,is_update=False,wait_for_loading=True):
+        if is_delete:
+            is_create=False
+        collection_list=namespace.split(".")
+        if is_create:
+            self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=100, percent_update=0,
+                                        percent_delete=0, scope=collection_list[1], collection=collection_list[2])
+        elif is_delete:
+            self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=0, percent_delete=100,
+                                            scope=collection_list[1], collection=collection_list[2])
+        elif is_update:
+            self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=100, percent_delete=0,
+                                            scope=collection_list[1], collection=collection_list[2])
+        task=self.cluster.async_load_gen_docs(self.master, collection_list[0], self.gen_create, pause_secs=1,
+                                         timeout_secs=300)
+        if wait_for_loading:
+            task.result()
 

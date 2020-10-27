@@ -104,6 +104,8 @@ class EventingSettings(EventingBaseTest):
         # load data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
+        body['settings']['deployment_status']=True
+        body['settings']['processing_status']=True
         # dynamically change the log level
         # currently this is the only setting that can be dynamically modified when a function is deployed
         for i in range(5):
