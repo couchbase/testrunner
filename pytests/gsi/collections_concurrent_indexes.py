@@ -226,13 +226,13 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                 tasks.append(task)
                 if count % 10 == 0:
                     self.sleep(5, "Running create index in batch of 10")
-
+            
             # Verifying schedule indexes are reported in system:indexes
             self.sleep(5)
             result = self.run_cbq_query(query=self.system_query)['results']
             index_state = {item['indexes']['name']: item['indexes']['state'] for item in result}
             self.assertTrue('scheduled for creation' in index_state.values(), index_state)
-
+            
             count_err_1, count_err_2 = 0, 0
             for task in tasks:
                 try:
@@ -250,7 +250,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                     else:
                         self.fail(err)
             self.log.info(f"No of concurrent indexes issued: {count_err_1}/{count_err_1 + count_err_2}")
-
+        
         # verifying schedule indexes is reported in REST call
         count = 0
         index_info = False
@@ -558,8 +558,9 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
     
     def test_retries_for_failed_schedule_indexes(self):
         # Will use this num to configure no. of retries
-        num_retries_for_failed_index = self.input.param("num_retries_for_failed_index", 10)
-        # todo: add configurable param for retries. Not available now.
+        num_retries_for_failed_index = self.input.param("num_retries_for_failed_index", 1)
+        doc = {"indexer.scheduleCreateRetries": num_retries_for_failed_index}
+        self.rest.set_index_settings(doc)
         num_of_docs = 10 ** 5
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if len(index_nodes) < 2:
@@ -622,10 +623,8 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         self.assertEqual(len(index_info), len(index_gen_list), "No. of indexes not matching expected count")
     
     def test_drop_failed_scheduled_indexes(self):
-        # Will use this num to configure no. of retries
-        num_retries_for_failed_index = self.input.param("num_retries_for_failed_index", 10)
-        # todo: add configurable param for retries. Not available now.
-        num_of_docs = 10 ** 5
+        num_retries_for_failed_index = self.input.param("num_retries_for_failed_index", 0)
+        num_of_docs = 10 ** 4
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if len(index_nodes) < 2:
             self.fail("Need at least 3 nodes")
@@ -633,6 +632,8 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         
         node_b_rest = RestConnection(node_b)
         self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs)
+        doc = {"indexer.scheduleCreateRetries": num_retries_for_failed_index}
+        self.rest.set_index_settings(doc)
         collection_namespace = self.namespaces[0]
         idx_prefix = 'idx'
         index_gen_list = []
@@ -659,7 +660,8 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                 self.log.info("Blocking Indexer nodes communication to Data node")
                 self.block_incoming_network_from_node(self.master, node_b)
                 self.sleep(5 * num_retries_for_failed_index + 1)
-                failed_index_count = 0
+                self.log.info("Resuming Indexer nodes communication to Data node")
+                self.resume_blocked_incoming_network_from_node(self.master, node_b)
                 for task in tasks:
                     try:
                         task.result()
@@ -669,21 +671,36 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                             index_name = out.groups()[0]
                             schedule_indexes.append(index_name)
                         elif self.err_msg2 in str(err):
-                            continue
-                        else:
-                            failed_index_count += 1
                             self.log.info(err)
+                        else:
+                            self.fail(err)
             except Exception as err:
                 self.fail(err)
-            finally:
-                for index_name in index_fields_list:
+            self.sleep(20)
+            index_info = node_b_rest.get_indexer_metadata()['status']
+            system_index_results = self.run_cbq_query(query=self.system_query)['results']
+            for index in index_info:
+                if index['status'] == 'Error':
+                    index_name = index['name']
                     drop_query = f'drop index {index_name} on {collection_namespace}'
-                    self.run_cbq_query(query=drop_query)
-                self.resume_blocked_incoming_network_from_node(self.master, node_b)
-        index_info = node_b_rest.get_indexer_metadata()['status']
-        # self.assertEqual(len(index_info), len(index_gen_list), "No. of indexes not matching expected count")
+                    self.run_cbq_query(query=drop_query)['results']
+                    index_fields_list.pop(index_name)
+            for system_index in system_index_results:
+                if system_index['name'] not in index_fields_list:
+                    self.assertEqual(system_index['state'], "offline",
+                                     "Index state not matching to expected value in system indexes")
+            self.sleep(5)
+            index_info = node_b_rest.get_indexer_metadata()['status']
+            self.assertEqual(len(index_info), len(index_fields_list),
+                             "No. of indexes not matching expected count after dropping failed indexes")
     
     def test_index_creation_with_rebalanced_out_assigned_index_node(self):
+        """
+        https://issues.couchbase.com/browse/MB-41897
+        """
+        num_retries_for_failed_index = self.input.param("num_retries_for_failed_index", 1)
+        doc = {"indexer.scheduleCreateRetries": num_retries_for_failed_index}
+        self.rest.set_index_settings(doc)
         num_of_docs = 10 ** 5
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if len(index_nodes) < 2:
@@ -724,11 +741,12 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                 tasks.append(task)
             
             try:
-                self.sleep(2)
-                self.log.info("Blocking Indexer nodes communication to Data node")
-                self.log.info("Blocking node B so that schedule indexes move other node in cluster")
+                self.sleep(5)
                 rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [node_b])
                 rebalance.result()
+                rebalance_err_msg = ' Fail to create index due to rebalancing, another concurrent request,' \
+                                    ' network partition, or node failed. The operation may have succeed.' \
+                                    '  If not, please retry the operation at later time.'
                 for task in tasks:
                     try:
                         task.result()
@@ -737,20 +755,167 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                             out = re.search(regex_pattern, str(err))
                             index_name = out.groups()[0]
                             schedule_indexes.append(index_name)
-                        elif self.err_msg2 in str(err):
-                            continue
+                        elif rebalance_err_msg in str(err):
+                            self.log.info("Index creation failed due to rebalanced out of node")
                         else:
-                            self.log.info(err)
+                            self.log.error(err)
             except Exception as err:
-                self.log.info(err)
+                self.log.error(err)
             finally:
-                self.wait_until_indexes_online()
-                self.resume_blocked_incoming_network_from_node(self.master, node_b)
+                self.wait_until_indexes_online(defer_build=self.defer_build)
         index_info = self.rest.get_indexer_metadata()['status']
-        pass
+        for index in index_info:
+            self.assertFalse(f'{node_b.ip}.{node_b.port}' not in index['hosts'])
+
+    def test_schedule_indexes_during_rebalance(self):
+        num_of_docs = 10 ** 5
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        if len(index_nodes) < 2:
+            self.fail("Need at least 3 nodes")
+        node_a, node_b = None, None
+        for node in index_nodes:
+            if node.ip != self.master.ip:
+                if node_a:
+                    node_b = node
+                    break
+                node_a = node
+            else:
+                continue
+    
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs)
+        collection_namespace = self.namespaces[0]
+        idx_prefix = 'idx'
+        index_gen_list = []
+        index_gen_query_list = []
+        index_fields_list = {}
+        for index_fields, idx_num in zip(self.index_field_list, range(self.num_of_indexes)):
+            index_name = f'{idx_prefix}_{idx_num}'
+            index_gen = QueryDefinition(index_name=index_name, index_fields=index_fields)
+            index_gen_list.append(index_gen)
+            query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build)
+            index_gen_query_list.append(query)
+            index_fields_list[index_name] = index_fields
+    
+        tasks = []
+        regex_pattern = re.compile('.*?Index creation for index (.*?),.*')
+        schedule_indexes = []
+        with ThreadPoolExecutor() as executor:
+            for query in index_gen_query_list:
+                task = executor.submit(self.run_cbq_query, query=query)
+                tasks.append(task)
+            try:
+                for task in tasks:
+                    task.results()
+            except Exception as err:
+                if self.err_msg1 in str(err):
+                    out = re.search(regex_pattern, str(err))
+                    index_name = out.groups()[0]
+                    schedule_indexes.append(index_name)
+                else:
+                    self.log.info(err)
+        
+        self.wait_until_indexes_online()
+        self.sleep(20)
+        new_index_query_list = []
+        for index_fields, idx_num in zip(self.index_field_list, range(self.num_of_indexes)):
+            index_name = f'{idx_prefix}_{idx_num}_1'
+            index_gen = QueryDefinition(index_name=index_name, index_fields=index_fields)
+            index_gen_list.append(index_gen)
+            query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build)
+            new_index_query_list.append(query)
+            index_fields_list[index_name] = index_fields
+
+        self.log.info("Initiating Rebalance out")
+        tasks = []
+        task = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [node_b])
+        tasks.append(task)
+        self.sleep(2)
+        err_msg = ' Create index or Alter replica cannot proceed due to rebalance in progress..' \
+                  ' The index will be created in the background after the ongoing rebalance.'
+        indexes_during_rebalance = 0
+        with ThreadPoolExecutor() as executor:
+            for query in new_index_query_list:
+                task = executor.submit(self.run_cbq_query, query=query)
+                tasks.append(task)
+            for task in tasks:
+                try:
+                    task.result()
+                except Exception as err:
+                    if err_msg in str(err):
+                        indexes_during_rebalance += 1
+                    else:
+                        self.log.info(err)
+        self.wait_until_indexes_online()
+        self.assertTrue(indexes_during_rebalance > 0, "None of the indexes scheduled during rebalance")
+        index_info = self.rest.get_indexer_metadata()['status']
+        for index in index_info:
+            self.assertEqual(index['status'], 'Ready')
+            self.assertTrue(f'{node_b.ip}:{node_b.port}' not in index['hosts'])
+        
+    def test_insufficient_nodes_during_schedule_indexes(self):
+        num_of_docs = 10 ** 5
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        if len(index_nodes) != 2:
+            self.fail("Need 2 or more index nodes")
+        node_a, node_b = index_nodes
+
+        num_retries_for_failed_index = self.input.param("num_retries_for_failed_index", 1)
+        doc = {"indexer.scheduleCreateRetries": num_retries_for_failed_index}
+        self.rest.set_index_settings(doc)
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs)
+        collection_namespace = self.namespaces[0]
+        idx_prefix = 'idx'
+        index_gen_list = []
+        index_gen_query_list = []
+        index_fields_list = {}
+        for index_fields, idx_num in zip(self.index_field_list, range(self.num_of_indexes)):
+            index_name = f'{idx_prefix}_{idx_num}'
+            index_gen = QueryDefinition(index_name=index_name, index_fields=index_fields)
+            index_gen_list.append(index_gen)
+            query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
+                                                          num_replica=1)
+            index_gen_query_list.append(query)
+            index_fields_list[index_name] = index_fields
+
+        tasks = []
+        regex_pattern = re.compile('.*?Index creation for index (.*?),.*')
+        schedule_indexes = []
+        with ThreadPoolExecutor() as executor:
+            for query in index_gen_query_list:
+                task = executor.submit(self.run_cbq_query, query=query)
+                tasks.append(task)
+    
+            try:
+                self.sleep(2)
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [node_b])
+                rebalance.result()
+                rebalance_err_msg = ' Fail to create index due to rebalancing, another concurrent request,' \
+                                    ' network partition, or node failed. The operation may have succeed.' \
+                                    '  If not, please retry the operation at later time.'
+                for task in tasks:
+                    try:
+                        task.result()
+                    except Exception as err:
+                        if self.err_msg1 in str(err):
+                            out = re.search(regex_pattern, str(err))
+                            index_name = out.groups()[0]
+                            schedule_indexes.append(index_name)
+                        elif rebalance_err_msg in str(err):
+                            self.log.info("Index creation failed due to rebalanced out of node")
+                        else:
+                            self.log.error(err)
+            except Exception as err:
+                self.log.error(err)
+        self.sleep(10*(num_retries_for_failed_index+1))
+        index_info = self.rest.get_indexer_metadata()['status']
+        failed_schedule_indexes = [index['name'] for index in index_info if index['status'] == 'Error']
+        self.assertTrue(len(failed_schedule_indexes) > 0)
     
     def test_index_creation_with_failover_of_assigned_index_node(self):
         num_of_docs = 10 ** 5
+        num_retries_for_failed_index = self.input.param("num_retries_for_failed_index", 1)
+        doc = {"indexer.scheduleCreateRetries": num_retries_for_failed_index}
+        self.rest.set_index_settings(doc)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if len(index_nodes) < 2:
             self.fail("Need at least 3 nodes")
@@ -810,6 +975,11 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                 self.wait_until_indexes_online()
                 self.resume_blocked_incoming_network_from_node(self.master, node_b)
         index_info = self.rest.get_indexer_metadata()['status']
+        failed_schedule_indexes = [index['name'] for index in index_info if index['status'] == 'Error']
+        self.assertTrue(len(failed_schedule_indexes) > 0)
+        for index in index_info:
+            if index['name'] not in failed_schedule_indexes:
+                self.assertEqual(index['status'], 'Ready')
     
     # Negative test
     def test_build_schedule_indexes_during_schedule_state(self):
@@ -864,7 +1034,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                         self.log.info(err)
             else:
                 self.fail("Expected error for building indexes during schedule state didn't occur.")
-
+    
     def test_recovery_of_schedule_index_from_crashes(self):
         num_of_docs = 10 ** 4
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -893,7 +1063,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             build_query_list.append(build_query)
             index_gen_query_list.append(query)
             index_fields_list[index_name] = index_fields
-    
+        
         tasks = []
         regex_pattern = re.compile('.*?Index creation for index (.*?),.*')
         with ThreadPoolExecutor() as executor:
@@ -911,9 +1081,15 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             self.stop_server(node_b)
             self.sleep(60 * 3, f"Sleeping for some time before bringing index node {node_b} up")
             self.start_server(node_b)
+        elif self.indexer_crash_trigger == 'projector_kill':
+            kv_shell = RemoteMachineShellConnection(self.master)
+            out = kv_shell.get_running_processes()
+            kv_shell.terminate_process(process_name='projector', force=True)
+            self.sleep(30, "Waiting for projector to start again")
+            kv_shell.disconnect()
         else:
             self.fail("Incorrect value for indexer_crash_trigger")
-    
+        
         for task in tasks:
             try:
                 task.result()
@@ -924,7 +1100,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                     self.log.info(f"Index {index_name} is schedule for background creation")
                 else:
                     self.log.info(err)
-        self.wait_until_indexes_online(timeout=2*60*self.num_of_indexes, defer_build=self.defer_build)
+        self.wait_until_indexes_online(timeout=2 * 60 * self.num_of_indexes, defer_build=self.defer_build)
         if self.defer_build:
             for build_query in build_query_list:
                 self.run_cbq_query(query=build_query)
@@ -934,7 +1110,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         for index in index_info:
             self.assertEqual(index['status'], 'Ready')
             self.assertEqual(index['completion'], 100)
-
+    
     # Negative Test
     def test_build_schedule_indexes_before_create(self):
         num_of_docs = 10 ** 4
@@ -952,7 +1128,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             index_gen_query_list.append(query)
             index_fields_list[index_name] = index_fields
         build_query = f'BUILD INDEX ON {collection_namespace}({", ".join(index_fields_list.keys())}) USING GSI'
-
+        
         tasks = []
         pattern = re.compile("code': 5000, 'msg': 'GSI index idx_.*? not found.")
         with ThreadPoolExecutor() as executor:
@@ -962,7 +1138,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             self.sleep(2)
             task = executor.submit(self.run_cbq_query, query=build_query)
             tasks.append(task)
-
+        
         for task in tasks:
             try:
                 result = task.result()
@@ -979,13 +1155,13 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                     self.log.info(err)
         else:
             self.fail("Expected error for building indexes during schedule state didn't occur.")
-
+    
     # Negative Test
     def test_negative_case_on_schedule_indexes_with_alter_index(self):
         num_of_docs = 10 ** 4
         self.alter_call = self.input.param("alter_call", None)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        if len(index_nodes) <2:
+        if len(index_nodes) < 2:
             self.fail("Expecting at least 2 index nodes")
         node_a, node_b = None, None
         for node in index_nodes:
@@ -998,7 +1174,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         collection_namespace = self.namespaces[0]
         if self.alter_call == 'replica_count_change':
             alter_index_query = f'ALTER INDEX schedule_index on {collection_namespace}' \
-                                 f' WITH {{"action": "replica_count", "num_replica": 1}}'
+                                f' WITH {{"action": "replica_count", "num_replica": 1}}'
         elif self.alter_call == 'move_node':
             alter_index_query = f'ALTER INDEX schedule_index on {collection_namespace}' \
                                 f' WITH {{"action": "move", "nodes": ["{node_b.ip}:8091"]}}'
@@ -1017,7 +1193,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                                                           deploy_node_info=deploy_node_info)
             index_gen_query_list.append(query)
             index_fields_list[index_name] = index_fields
-
+        
         tasks = []
         regex_pattern = re.compile('.*?Index creation for index (.*?),.*')
         with ThreadPoolExecutor() as executor:
@@ -1025,7 +1201,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                 task = executor.submit(self.run_cbq_query, query=query)
                 tasks.append(task)
             self.sleep(2)
-    
+        
         for task in tasks:
             try:
                 result = task.result()
@@ -1045,7 +1221,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                     self.log.info(err)
         else:
             self.fail("Expected error for building indexes during schedule state didn't occur.")
-
+    
     # Negative Test
     def test_errored_schedule_index_query_with_duplicate_name(self):
         """
@@ -1057,7 +1233,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         index_gen_list = []
         index_gen_query_list = []
         index_fields_list = {}
-    
+        
         # Checking for duplicate named index
         index_name = 'idx'
         for index_fields, idx_num in zip(self.index_field_list, range(self.num_of_indexes)):
@@ -1066,14 +1242,14 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build)
             index_gen_query_list.append(query)
             index_fields_list[index_name] = index_fields
-
+        
         tasks = []
         err_msg = f'The index {index_name} already exist'
         with ThreadPoolExecutor() as executor:
             for query in index_gen_query_list:
                 task = executor.submit(self.run_cbq_query, query=query)
                 tasks.append(task)
-
+        
         for task in tasks:
             try:
                 result = task.result()
@@ -1081,7 +1257,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             except Exception as err:
                 self.log.info(err)
                 self.assertTrue(err_msg in str(err))
-
+    
     # Negative test
     def test_errored_schedule_index_query_with_non_existent_node_info(self):
         """
@@ -1098,7 +1274,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         index_gen2 = QueryDefinition(index_name='idx_2', index_fields=['city'])
         index_gen3 = QueryDefinition(index_name='idx_3', index_fields=['country'])
         index_gen4 = QueryDefinition(index_name='idx_4', index_fields=['firstName'])
-
+        
         query = index_gen1.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
                                                        deploy_node_info=deploy_node1)
         index_gen_query_list.append(query)
@@ -1111,13 +1287,13 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         query = index_gen4.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
                                                        deploy_node_info=deploy_node2)
         index_gen_query_list.append(query)
-
+        
         tasks = []
         with ThreadPoolExecutor() as executor:
             for query in index_gen_query_list:
                 task = executor.submit(self.run_cbq_query, query=query)
                 tasks.append(task)
-
+        
         err_msg = 'cause: Indexer node (10.112.205.102:8091) not found. The node may be failed or under' \
                   ' rebalance or network partitioned from query process.'
         for task in tasks:
@@ -1127,7 +1303,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             except Exception as err:
                 self.log.info(err)
                 self.assertTrue(err_msg in str(err))
-
+    
     # Negative test
     def test_errored_schedule_index_with_incorrect_num_replica(self):
         num_of_docs = 10 ** 2
@@ -1139,7 +1315,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         index_gen2 = QueryDefinition(index_name='idx_2', index_fields=['city'])
         index_gen3 = QueryDefinition(index_name='idx_3', index_fields=['country'])
         index_gen4 = QueryDefinition(index_name='idx_4', index_fields=['firstName'])
-
+        
         query = index_gen1.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build)
         index_gen_query_list.append(query)
         query = index_gen2.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
@@ -1151,13 +1327,13 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         query = index_gen4.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
                                                        num_replica=1)
         index_gen_query_list.append(query)
-
+        
         tasks = []
         with ThreadPoolExecutor() as executor:
             for query in index_gen_query_list:
                 task = executor.submit(self.run_cbq_query, query=query)
                 tasks.append(task)
-
+        
         err_msg = 'Fails to create index.  There are not enough indexer nodes to create index with replica ' \
                   'count of 1. Some indexer nodes may be marked as excluded'
         for task in tasks:
@@ -1167,7 +1343,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             except Exception as err:
                 self.log.info(err)
                 self.assertTrue(err_msg in str(err))
-
+    
     # Negative test
     def test_errored_schedule_index_with_invalid_namespace(self):
         num_of_docs = 10 ** 2
@@ -1182,22 +1358,23 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         index_gen2 = QueryDefinition(index_name='idx_2', index_fields=['city'])
         index_gen3 = QueryDefinition(index_name='idx_3', index_fields=['country'])
         index_gen4 = QueryDefinition(index_name='idx_4', index_fields=['firstName'])
-
+        
         query = index_gen1.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build)
         index_gen_query_list.append(query)
-        query = index_gen2.generate_index_create_query(namespace=invalid_collection_namespace, defer_build=self.defer_build)
+        query = index_gen2.generate_index_create_query(namespace=invalid_collection_namespace,
+                                                       defer_build=self.defer_build)
         index_gen_query_list.append(query)
         query = index_gen3.generate_index_create_query(namespace=invalid_bucket_namespace, defer_build=self.defer_build)
         index_gen_query_list.append(query)
         query = index_gen4.generate_index_create_query(namespace=invalid_scope_namespace, defer_build=self.defer_build)
         index_gen_query_list.append(query)
-
+        
         tasks = []
         with ThreadPoolExecutor() as executor:
             for query in index_gen_query_list:
                 task = executor.submit(self.run_cbq_query, query=query)
                 tasks.append(task)
-
+        
         err_msg1 = 'Scope not found in CB datastore'
         err_msg2 = 'Keyspace not found in CB datastore:'
         for task in tasks:
@@ -1207,7 +1384,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             except Exception as err:
                 self.log.info(err)
                 self.assertTrue(err_msg1 in str(err) or err_msg2 in str(err))
-
+    
     # Negative test
     def test_errored_schedule_index_with_delete_bsc(self):
         """
@@ -1229,13 +1406,13 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build)
             index_gen_query_list.append(query)
             index_fields_list[index_name] = index_fields
-
+        
         tasks = []
         with ThreadPoolExecutor() as executor:
             for query in index_gen_query_list:
                 task = executor.submit(self.run_cbq_query, query=query)
                 tasks.append(task)
-
+        
         for task in tasks:
             try:
                 result = task.result()
@@ -1244,10 +1421,9 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                 if self.err_msg1 in str(err):
                     self.log.info(f"Deleting {self.item_to_delete} for schedule indexes")
                     self.delete_bucket_scope_collection(server=self.servers[0], delete_item=self.item_to_delete,
-                                                         bucket=bucket, scope=scope)
+                                                        bucket=bucket, scope=scope)
                     break
                 else:
                     self.fail(err)
         result = self.run_cbq_query(query=self.system_query)['results']
         self.assertFalse(result)
-
