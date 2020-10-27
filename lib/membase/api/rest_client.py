@@ -3030,7 +3030,18 @@ class RestConnection(object):
         if not status:
             raise XDCRException("Unable to set replication setting {0}={1} on bucket {2} on node {3}".
                             format(param, value, src_bucket_name, self.ip))
-        log.info("Updated {0}={1} on bucket'{2}' on {3}".format(param, value, src_bucket_name, self.ip))
+        log.info("Updated {0}={1} on bucket '{2}' on {3}".format(param, value, src_bucket_name, self.ip))
+
+    def set_xdcr_params(self, src_bucket_name,
+                                         dest_bucket_name, param_value_map):
+        replication = self.get_replication_for_buckets(src_bucket_name, dest_bucket_name)
+        api = self.baseUrl[:-1] + replication['settingsURI']
+        params = urllib.parse.urlencode(param_value_map)
+        status, _, _ = self._http_request(api, "POST", params)
+        if not status:
+            raise XDCRException("Unable to set replication settings {0} on bucket {1} on node {2}".
+                            format(param_value_map, src_bucket_name, self.ip))
+        log.info("Updated {0} on bucket '{1}' on {2}".format(param_value_map, src_bucket_name, self.ip))
 
     def set_global_xdcr_param(self, param, value):
         api = self.baseUrl[:-1] + "/settings/replications"
