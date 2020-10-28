@@ -71,12 +71,11 @@ class AscDescTests(QueryTests):
         # assert defs
         assert_1 = lambda x: self.assertEqual(x['post_q_res'][0]['~children'][0]['~children'][0]['index'], 'idx')
         assert_2 = lambda x: self.compare("do_not_test_against_hardcode", query_2, static_res_2)
-        assert_4 = lambda x: self.compare("test_asc_desc_composite_index", query_4, static_res_4)
-        assert_6 = lambda x: self.compare("test_asc_desc_composite_index", query_6, static_res_6)
-        assert_7 = lambda x: self.assertEqual(x['post_q_res'][0]['~children'][0]['~children'][0]['scans'][0]['index'],
-                                              'idx')
-        assert_8 = lambda x: self.compare("test_asc_desc_composite_index", query_8, static_res_6)
-        assert_9 = lambda x: self.compare("test_asc_desc_composite_index", query_9, static_res_4)
+        assert_4 = lambda x: self.compare("test_asc_desc_composite_index", query_4, static_res_4, alias="default")
+        assert_6 = lambda x: self.compare("test_asc_desc_composite_index", query_6, static_res_6, alias="default")
+        assert_7 = lambda x: self.assertEqual(x['post_q_res'][0]['~children'][0]['~children'][0]['scans'][0]['index'],'idx',"plan is: {0}".format(x['post_q_res'][0]['~children'][0]['~children'][0]['scans']))
+        assert_8 = lambda x: self.compare("test_asc_desc_composite_index", query_8, static_res_6, alias="default")
+        assert_9 = lambda x: self.compare("test_asc_desc_composite_index", query_9, static_res_4, alias="default")
 
         # cleanup defs
 
@@ -332,25 +331,21 @@ class AscDescTests(QueryTests):
                              ' is not null and hobbies.hobby is not missing order by meta().id asc' % query_bucket
                 res = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(res)
-                self.assertTrue(
-                    plan['~children'][0]['~children'][0]['scans'][1]['index'] == idx2 or plan['~children'][0]['~children'][0]['scans'][0][
-                        'index'] == idx)
+                self.assertTrue(plan['~children'][0]['~children'][0]['index'] == idx or plan['~children'][0]['~children'][0]['index'] == idx2, "Plan is {0}".format(plan['~children'][0]['~children'][0]))
                 self.query = 'explain select * from %s where meta().id ="query-testemployee10317.9004497-0" and _id' \
                              ' is not missing and tasks is not null and hobbies.hobby is not missing order by' \
                              ' meta().id desc' % query_bucket
                 res = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(res)
-                self.assertTrue(
-                    plan['~children'][0]['~children'][0]['scans'][1]['index'] == idx2 or plan['~children'][0]['~children'][0]['scans'][0][
-                        'index'] == idx)
+                self.assertTrue(plan['~children'][0]['~children'][0]['index'] == idx or plan['~children'][0]['~children'][0]['index'] == idx2, "Plan is {0}".format(plan['~children'][0]['~children'][0]))
 
-                self.query = 'select * from %s as d where meta().id ="query-testemployee10317.900449741801-0" and _id is' \
-                             ' not null and hobbies.hobby is not missing order by meta().id asc' % query_bucket
+                self.query = 'select * from %s as d where meta().id ="query-testemployee10317.900449741801-0" and \'_id\' is' \
+                             ' not null order by meta().id asc' % query_bucket
                 actual_result = self.run_cbq_query()
                 self.assertEqual(actual_result['results'][0]['d']['_id'], "query-testemployee10317.900449741801-0")
 
-                self.query = 'select * from %s as d where meta().id ="query-testemployee10317.900449741801-0" and tasks' \
-                             ' is not null and hobbies.hobby is not missing order by meta().id desc' % query_bucket
+                self.query = 'select * from %s as d where meta().id ="query-testemployee10317.900449741801-0"' \
+                             ' and hobbies.hobby is not missing order by meta().id desc' % query_bucket
                 actual_result = self.run_cbq_query()
                 self.assertEqual(actual_result['results'][0]['d']['_id'], "query-testemployee10317.900449741801-0")
 
@@ -814,7 +809,7 @@ class AscDescTests(QueryTests):
         for bucket, query_bucket in zip(self.buckets, self.query_buckets):
             created_indexes = []
             try:
-                self.query = 'create index ix1 on {0}(ALL ARRAY a.y FOR a IN arr END)'
+                self.query = 'create index ix1 on {0}(ALL ARRAY a.y FOR a IN arr END)'.format(query_bucket)
                 self.run_cbq_query()
                 created_indexes.append("ix1")
                 self.query = 'INSERT INTO %s VALUES ("k001", {"arr":[{"y":1},{"y":1}, {"y":2},{"y":2},' \
