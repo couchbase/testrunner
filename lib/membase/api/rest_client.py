@@ -3293,13 +3293,23 @@ class RestConnection(object):
             json.dumps(query_json, ensure_ascii=False).encode('utf8'),
             headers,
             timeout=timeout)
-
         if status:
             content = json.loads(content)
             return content['total_hits'], content['hits'], content['took'], \
                    content['status']
-        else:
-            return -1, content, -1, status
+
+    def run_fts_query_generalized(self, index_name, query_json, timeout=70):
+        """Method run an FTS query through rest api"""
+        api = self.fts_baseUrl + "api/index/{0}/query".format(index_name)
+        headers = self._create_capi_headers()
+        status, content, header = self._http_request(
+            api,
+            "POST",
+            json.dumps(query_json, ensure_ascii=False).encode('utf8'),
+            headers,
+            timeout=timeout)
+        content = json.loads(content)
+        return content
 
     def run_fts_query_with_facets(self, index_name, query_json):
         """Method run an FTS query through rest api"""

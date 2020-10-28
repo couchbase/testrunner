@@ -3243,8 +3243,11 @@ class StableTopFTS(FTSBaseTest):
         cluster = index.get_cluster()
         search_before_fts_query = {"explain": False, "fields": ["*"], "highlight": {}, "query": {"query": "filler:filler"},"size": 2, "search_before": ["doc_2"], "search_after": ["doc_4"], "sort": ["_id"]}
 
-        _, hit_list, _, _ = cluster.run_fts_query(index.name, search_before_fts_query)
-        self.assertTrue(str(hit_list).index(expected_error) > 0, "Cannot find expected error message.")
+        response = cluster.run_fts_query_generalized(index.name, search_before_fts_query)
+        if 'error' in response.keys():
+            self.assertTrue(str(response['error']).index(expected_error) > 0, "Cannot find expected error message.")
+        else:
+            self.fail("Incorrect query was executed successfully.")
 
     query_result = None
 

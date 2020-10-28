@@ -2527,6 +2527,22 @@ class CouchbaseCluster:
             RestConnection(node).run_fts_query(index_name, query_dict, timeout=timeout)
         return total_hits, hit_list, time_taken, status
 
+    def run_fts_query_generalized(self, index_name, query_dict, node=None, timeout=70):
+        """ Runs a query defined in query_json against an index/alias and
+        a specific node
+
+        @return total_hits : total hits for the query,
+        @return hit_list : list of docs that match the query
+
+        """
+        if not node:
+            node = self.get_random_fts_node()
+        self.__log.info("Running query %s on node: %s:%s"
+                        % (json.dumps(query_dict, ensure_ascii=False),
+                           node.ip, node.fts_port))
+        content = RestConnection(node).run_fts_query_generalized(index_name, query_dict, timeout=timeout)
+        return content
+
     def run_n1ql_query(self, query="", node=None, timeout=70):
         """ Runs a query defined in query_json against an index/alias and
         a specific node
