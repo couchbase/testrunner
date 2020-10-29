@@ -69,6 +69,8 @@ DEFAULT_NONROOT_CLI_PATH = \
 
 WGET_CMD = "cd {0}; wget -Nq {1}"
 CURL_CMD = "curl {0} -o {1} -z {1} -s -m 30"
+REMOTE_BUILD_SIZE_CMD = "curl -I {} 2>&1 | grep Content-Length"
+LOCAL_BUILD_SIZE_CMD = "cd {} && wc -c {}"
 CB_ENTERPRISE = "couchbase-server-enterprise"
 CB_COMMUNITY = "couchbase-server-community"
 CB_EDITIONS = [CB_COMMUNITY, CB_ENTERPRISE]

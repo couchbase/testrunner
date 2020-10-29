@@ -583,7 +583,8 @@ def _execute_local(command, timeout):
     # process = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).wait(timeout)
     # process.communicate()[0].strip()
     # -- python 2
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).wait()
+    returncode = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).wait()
+    return returncode
 
 
 def __copy_thread(src_path, dest_path, node):
@@ -634,6 +635,9 @@ def _download_build():
     if params["all_nodes_same_os"] and not params["skip_local_download"]:
         check_and_retry_download_binary_local(NodeHelpers[0])
         _copy_to_nodes(NodeHelpers[0].build.path, NodeHelpers[0].build.path)
+        for node in NodeHelpers:
+            if not check_file_exists(node, node.build.path) or not check_file_size(node):
+                print_result_and_exit("Unable to copy build to {}, exiting".format(node.build.path))
     else:
         for node in NodeHelpers:
             build_url = node.build.url
@@ -658,8 +662,8 @@ def check_and_retry_download_binary_local(node):
     start_time = time.time()
     while time.time() < start_time + timeout:
         try:
-            _execute_local(cmd, timeout)
-            if os.path.exists(node.build.path):
+            exit_code = _execute_local(cmd, timeout)
+            if exit_code == 0 and os.path.exists(node.build.path):
                 break
             time.sleep(duration)
         except Exception as e:
@@ -677,13 +681,34 @@ def check_file_exists(node, filepath):
     return False
 
 
+def get_remote_build_size(node):
+    output, _ = node.shell.execute_command(install_constants.REMOTE_BUILD_SIZE_CMD.format(node.build.url))
+    remote_build_size = int(output[0].strip().split(" ")[1])
+    return remote_build_size
+
+
+def get_local_build_size(node):
+    output, _ = node.shell.execute_command(install_constants.LOCAL_BUILD_SIZE_CMD.format(__get_download_dir(node), __get_build_binary_name(node)))
+    local_build_size = int(output[0].strip().split(" ")[0])
+    return local_build_size
+
+
+def check_file_size(node):
+    try:
+        expected_size = get_remote_build_size(node)
+        actual_size = get_local_build_size(node)
+        return expected_size == actual_size
+    except Exception:
+        return False
+
+
 def check_and_retry_download_binary(cmd, node):
     duration, event, timeout = install_constants.WAIT_TIMES[node.info.deliverable_type]["download_binary"]
     start_time = time.time()
     while time.time() < start_time + timeout:
         try:
-            node.shell.execute_command(cmd, debug=params["debug_logs"])
-            if check_file_exists(node, node.build.path):
+            _, _, download_exit_code = node.shell.execute_command(cmd, debug=params["debug_logs"], get_exit_code=True)
+            if download_exit_code == 0 and check_file_size(node) and check_file_exists(node, node.build.path):
                 break
             time.sleep(duration)
         except Exception as e:
