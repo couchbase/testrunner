@@ -33,6 +33,10 @@ class EventingNegative(EventingBaseTest):
             self.buckets = RestConnection(self.master).get_buckets()
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.expiry = 3
+        if self.non_default_collection:
+            self.create_scope_collection(bucket=self.src_bucket_name,scope=self.src_bucket_name,collection=self.src_bucket_name)
+            self.create_scope_collection(bucket=self.metadata_bucket_name,scope=self.metadata_bucket_name,collection=self.metadata_bucket_name)
+            self.create_scope_collection(bucket=self.dst_bucket_name,scope=self.dst_bucket_name,collection=self.dst_bucket_name)
 
     def tearDown(self):
         super(EventingNegative, self).tearDown()
@@ -556,3 +560,77 @@ class EventingNegative(EventingBaseTest):
         self.log.info("execution_stats.on_update_success: {}".format(dcp_mutation_msg_counter))
         if not (count == on_update_success == dcp_mutation_msg_counter):
             raise Exception("Kv error don't match with stats")
+
+
+    def test_src_collection_delete_when_eventing_is_processing_mutations(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
+        self.deploy_function(body)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        if self.pause_resume:
+            self.pause_function(body)
+        # delete source collection
+        self.collection_rest.delete_collection(bucket="src_bucket",scope="src_bucket",collection="src_bucket")
+        # Wait for function to get undeployed automatically
+        self.wait_for_handler_state(body['appname'], "undeployed")
+        # Delete the function
+        self.delete_function(body)
+        self.sleep(60)
+        # check if all the eventing-consumers are cleaned up
+        # Validation of any issues like panic will be taken care by teardown method
+        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+    def test_src_scope_delete_when_eventing_is_processing_mutations(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
+        self.deploy_function(body)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        if self.pause_resume:
+            self.pause_function(body)
+        # delete source collection
+        self.collection_rest.delete_scope(bucket="src_bucket",scope="src_bucket")
+        # Wait for function to get undeployed automatically
+        self.wait_for_handler_state(body['appname'], "undeployed")
+        # Delete the function
+        self.delete_function(body)
+        self.sleep(60)
+        # check if all the eventing-consumers are cleaned up
+        # Validation of any issues like panic will be taken care by teardown method
+        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+
+    def test_metadata_collection_delete_when_eventing_is_processing_mutations(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
+        self.deploy_function(body)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        if self.pause_resume:
+            self.pause_function(body)
+        # delete source collection
+        self.collection_rest.delete_collection(bucket="metadata",scope="metadata",collection="metadata")
+        # Wait for function to get undeployed automatically
+        self.wait_for_handler_state(body['appname'], "undeployed")
+        # Delete the function
+        self.delete_function(body)
+        self.sleep(60)
+        # check if all the eventing-consumers are cleaned up
+        # Validation of any issues like panic will be taken care by teardown method
+        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+    def test_metadata_scope_delete_when_eventing_is_processing_mutations(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
+        self.deploy_function(body)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        if self.pause_resume:
+            self.pause_function(body)
+        # delete source collection
+        self.collection_rest.delete_scope(bucket="metadata",scope="metadata")
+        # Wait for function to get undeployed automatically
+        self.wait_for_handler_state(body['appname'], "undeployed")
+        # Delete the function
+        self.delete_function(body)
+        self.sleep(60)
+        # check if all the eventing-consumers are cleaned up
+        # Validation of any issues like panic will be taken care by teardown method
+        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")

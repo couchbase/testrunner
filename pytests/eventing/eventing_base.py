@@ -929,7 +929,7 @@ class EventingBaseTest(QueryHelperTests):
         self.collection_rest.create_scope_collection(bucket=bucket, scope=scope, collection=collection)
 
     '''
-        Method to check number of docs in a bucket after the 
+        Method to check number of docs in a collection
     '''
     def verify_doc_count_collections(self,namespace,expected_count,timeout=600,expected_duplicate=False):
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
@@ -1000,19 +1000,21 @@ class EventingBaseTest(QueryHelperTests):
         return count[0]
 
 
-    def load_data_to_collection(self,num_items,namespace,is_create=True,is_delete=False,is_update=False,wait_for_loading=True):
-        if is_delete:
+    def load_data_to_collection(self,num_items,namespace,is_create=True,is_delete=False,is_update=False,
+                                expiry=0,wait_for_loading=True):
+        if is_delete or is_update:
             is_create=False
         collection_list=namespace.split(".")
         if is_create:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=100, percent_update=0,
-                                        percent_delete=0, scope=collection_list[1], collection=collection_list[2])
+                                        percent_delete=0, scope=collection_list[1], collection=collection_list[2],
+                                            doc_expiry=expiry)
         elif is_delete:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=0, percent_delete=100,
                                             scope=collection_list[1], collection=collection_list[2])
         elif is_update:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=100, percent_delete=0,
-                                            scope=collection_list[1], collection=collection_list[2])
+                                            scope=collection_list[1], collection=collection_list[2],doc_expiry=expiry)
         task=self.cluster.async_load_gen_docs(self.master, collection_list[0], self.gen_create, pause_secs=1,
                                          timeout_secs=300)
         if wait_for_loading:

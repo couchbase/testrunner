@@ -26,6 +26,11 @@ class EventingExpired(EventingBaseTest):
         self.expiry = 3
         query = "create primary index on {}".format(self.src_bucket_name)
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        if self.non_default_collection:
+            self.collection_rest.create_scope_collection(bucket=self.src_bucket_name,scope=self.src_bucket_name,
+                                                         collection=self.src_bucket_name,params={"maxTTL":20})
+            self.collection_rest.create_scope_collection(bucket=self.metadata_bucket_name,scope=self.metadata_bucket_name,collection=self.metadata_bucket_name)
+            self.collection_rest.create_scope_collection(bucket=self.dst_bucket_name,scope=self.dst_bucket_name,collection=self.dst_bucket_name)
 
     def tearDown(self):
         super(EventingExpired, self).tearDown()
@@ -80,4 +85,11 @@ class EventingExpired(EventingBaseTest):
         self.deploy_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_collection_TTL(self):
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        body = self.create_save_function_body(self.function_name, "handler_code/ABO/insert_exp_delete_only.js")
+        self.deploy_function(body)
+        self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         self.undeploy_and_delete_function(body)
