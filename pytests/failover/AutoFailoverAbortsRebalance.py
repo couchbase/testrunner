@@ -24,10 +24,6 @@ class AutoFailoverAbortsRebalance(AutoFailoverBaseTest, BaseTestCase):
         self.master = self.servers[0]
         self._get_params()
         self.rest = RestConnection(self.orchestrator)
-        self.task_manager = TaskManager("Autofailover_thread")
-        self.task_manager.start()
-        self.node_failure_task_manager = TaskManager("Nodes_failure_detector_thread")
-        self.node_failure_task_manager.start()
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
         self.num_buckets = self.num_buckets - 1  # this is done as default is created by base class
         if self.num_buckets:
