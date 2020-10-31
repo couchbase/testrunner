@@ -207,7 +207,7 @@ class Node:
         log.info("starting node {0}".format(self.index))
 
         logf = open(self.nslog, 'w')
-        args = ["python",
+        args = ["python3",
                 "cluster_run",
                 "--node=%s" % 1,
                 "--dont-rename",
