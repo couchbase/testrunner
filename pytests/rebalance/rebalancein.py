@@ -424,35 +424,34 @@ class RebalanceInTests(RebalanceBaseTest):
     Once all nodes have been rebalanced in the test is finished."""
     def incremental_rebalance_in_with_ops(self):
         for i in range(1, self.num_servers, 2):
-            tasks = list()
+            tasks = [self.cluster.async_rebalance(self.servers[:i], self.servers[i:i + 2], [])]
             if self.doc_ops is not None:
-                # define which doc's operation will be performed during
-                # rebalancing only one type of ops can be passed
-                if "update" in self.doc_ops:
-                    # 1/2th of data will be updated in each iteration
-                    tasks += self._async_load_all_buckets(self.master, self.gen_update, "update", 0, batch_size=20000, pause_secs=5, timeout_secs=180)
-                elif "create" in self.doc_ops:
+                # define which doc's operation will be performed during rebalancing
+                # only one type of ops can be passed
+                if ("update" in self.doc_ops):
+                    gen_update = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
+                    tasks += self._async_load_all_buckets(self.master, gen_update, "update", 0)
+                elif ("create" in self.doc_ops):
                     # 1/2th of initial data will be added in each iteration
-                    gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items * (1 + i) // 2.0, end=self.num_items * (1 + i / 2.0))
-                    tasks += self._async_load_all_buckets(self.master, gen_create, "create", 0, batch_size=20000, pause_secs=5, timeout_secs=180)
-                elif "delete" in self.doc_ops:
+                    gen_create = BlobGenerator('mike', 'mike-',
+                                               self.value_size, start=int(self.num_items * (1 + i) // 2.0),
+                                               end=int(self.num_items * (1 + i // 2.0)))
+                    tasks += self._async_load_all_buckets(self.master, gen_create, "create", 0, batch_size=20000,
+                                                          pause_secs=5, timeout_secs=180)
+                elif ("delete" in self.doc_ops):
                     # 1/(num_servers) of initial data will be removed after each iteration
                     # at the end we should get empty base( or couple items)
-                    gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=int(self.num_items * (1 - i // (self.num_servers - 1.0))) + 1, end=int(self.num_items * (1 - (i - 1) // (self.num_servers - 1.0))))
-                    tasks += self._async_load_all_buckets(self.master, gen_delete, "delete", 0, batch_size=20000, pause_secs=5, timeout_secs=180)
-
-            rebalance_task = self.cluster.async_rebalance(
-                self.servers[:i], self.servers[i:i + 2], [],
-                sleep_before_rebalance=self.sleep_before_rebalance)
-
-            rebalance_task.result()
+                    gen_delete = BlobGenerator('mike', 'mike-', self.value_size,
+                                               start=int(self.num_items * (1 - i / (self.num_servers - 1.0))) + 1,
+                                               end=int(self.num_items * (1 - (i - 1) / (self.num_servers - 1.0))))
+                    tasks += self._async_load_all_buckets(self.master, gen_delete, "delete", 0, batch_size=20000,
+                                                          pause_secs=5, timeout_secs=180)
+            self.sleep(30)
             for task in tasks:
                 task.result()
-            self.verify_cluster_stats(self.servers[:i + 2])
-
+            self.verify_cluster_stats()
             # Validate seq_no snap_start/stop values after rebalance
             self.check_snap_start_corruption()
-
         self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes into a cluster  during view queries.
