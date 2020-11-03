@@ -48,12 +48,15 @@ class rbacTest(ldaptest):
         self.ldap_users = rbacmain().returnUserList(self.user_id)
         if self.auth_type == 'ldap' or self.auth_type == 'pam':
             rbacmain(self.master, 'builtin')._delete_user('cbadminbucket')
+            RbacBase().enable_ldap(rest)
         # rbacmain(self.master, self.auth_type)._delete_user_from_roles(self.master)
         if self.auth_type == 'ldap' or self.auth_type=='LDAPGroup':
             # rbacmain().setup_auth_mechanism(self.servers,'ldap',rest)
+            RbacBase().enable_ldap(rest)
             self._removeLdapUserRemote(self.ldap_users)
             self._createLDAPUser(self.ldap_users)
         elif self.auth_type == "pam":
+            RbacBase().enable_ldap(rest)
             rbacmain().setup_auth_mechanism(self.servers,'pam', rest)
             rbacmain().add_remove_local_user(self.servers, self.ldap_users, 'deluser')
             rbacmain().add_remove_local_user(self.servers, self.ldap_users,'adduser')
