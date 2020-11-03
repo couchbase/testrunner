@@ -350,7 +350,8 @@ class StableTopFTS(FTSBaseTest):
         emp_index = self.create_index(emp, "emp_index")
         wiki_index = self.create_index(wiki, "wiki_index")
 
-        self.wait_for_indexing_complete()
+        self.wait_for_indexing_complete(es_index="emp_es_index")
+        self.wait_for_indexing_complete(es_index="wiki_es_index")
 
         # create compound alias
         alias = self.create_alias(target_indexes=[emp_index, wiki_index],

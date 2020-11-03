@@ -580,6 +580,7 @@ class NodeHelper:
         for server in warmupnodes:
             for bucket in bucket_names:
                 while time.time() - start < 150:
+                    mc = None
                     try:
                         mc = MemcachedClientHelper.direct_client(server, bucket)
                         if mc.stats()["ep_warmup_thread"] == "complete":
@@ -600,10 +601,10 @@ class NodeHelper:
                     except Exception as e:
                         NodeHelper._log.info(e)
                         time.sleep(10)
-                if mc.stats()["ep_warmup_thread"] == "running":
-                    NodeHelper._log.info(
-                        "ERROR: ep_warmup_thread's status not complete")
-                mc.close()
+                    if mc.stats()["ep_warmup_thread"] == "running":
+                        NodeHelper._log.info(
+                            "ERROR: ep_warmup_thread's status not complete")
+                    mc.close()
 
     @staticmethod
     def wait_node_restarted(
@@ -4259,7 +4260,7 @@ class FTSBaseTest(unittest.TestCase):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)
 
-    def wait_for_indexing_complete(self, item_count=None):
+    def wait_for_indexing_complete(self, item_count=None, es_index="es_index"):
         """
         Wait for index_count for any index to stabilize or reach the
         index count specified by item_count
@@ -4288,8 +4289,8 @@ class FTSBaseTest(unittest.TestCase):
                                                                                            index.name,
                                                                                            index_doc_count))
                     else:
-                        self.es.update_index('es_index')
-                        es_index_count = self.es.get_index_count('es_index')
+                        self.es.update_index(es_index)
+                        es_index_count = self.es.get_index_count(es_index)
                         self.log.info("Docs in bucket = %s, docs in FTS index '%s':"
                                       " %s, docs in ES index: %s "
                                       % (bucket_doc_count,
