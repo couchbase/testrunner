@@ -102,6 +102,7 @@ class QueryTests(BaseTestCase):
         self.value_size = self.input.param("value_size", 0)
         self.isprepared = False
         self.named_prepare = self.input.param("named_prepare", None)
+        self.udfs = self.input.param("udfs", False)
         self.encoded_prepare = self.input.param("encoded_prepare", False)
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
         shell = RemoteMachineShellConnection(self.master)
@@ -1411,8 +1412,9 @@ class QueryTests(BaseTestCase):
 
             if self.analytics:
                 query = query + ";"
-                for bucket in self.buckets:
-                    query = query.replace(bucket.name, bucket.name + "_shadow")
+                if not self.udfs:
+                    for bucket in self.buckets:
+                        query = query.replace(bucket.name, bucket.name + "_shadow")
                 result1 = RestConnection(self.cbas_node).execute_statement_on_cbas(query,
                                                                                    "immediate")
                 try:
@@ -2711,7 +2713,7 @@ class QueryTests(BaseTestCase):
         if role not in ["ro_admin", "replication_admin", "query_insert(default)", "query_delete(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name),"query_insert(`{0}`)".format(self.bucket_name),"query_update(`{0}`)".format(self.bucket_name),"query_delete(`{0}`)".format(self.bucket_name),
                         "query_update(default)", "bucket_full_access(default)", "query_system_catalog",
                         "views_admin(default)"]:
-            self.query = "prepare `st1{0}` from select * from `{0}` union select * from `{0}` union select * from `{0}`".format(self.bucket_name)
+            self.query = "prepare `st1{0}` from select * from {0} union select * from {0} union select * from {0}".format(self.bucket_name)
             res = self.curl_with_roles(self.query)
             self.query = 'execute `st1{0}`'.format(self.bucket_name)
             res = self.curl_with_roles(self.query)
@@ -2723,8 +2725,8 @@ class QueryTests(BaseTestCase):
                 self.assertTrue(res['status'] == 'success')
 
             if role not in ["query_insert(default)", "query_delete(default)", "query_update(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name),"query_insert(`{0}`)".format(self.bucket_name),"query_update(`{0}`)".format(self.bucket_name),"query_delete(`{0}`)".format(self.bucket_name)]:
-                self.query = "prepare `st2{0}` from select * from `{0}` union select * from " \
-                             "standard_bucket0 union select * from `{0}`".format(self.bucket_name)
+                self.query = "prepare `st2{0}` from select * from {0} union select * from " \
+                             "standard_bucket0 union select * from {0}".format(self.bucket_name)
                 res = self.curl_with_roles(self.query)
 
                 if role in ["bucket_admin(standard_bucket0)", "views_admin(standard_bucket0)",
