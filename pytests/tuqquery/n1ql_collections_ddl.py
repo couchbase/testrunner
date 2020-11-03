@@ -1042,7 +1042,7 @@ class QueryCollectionsDDLTests(QueryTests):
             "test_queries": [
                 {
                     "text": "create scope bucket1.scope1",
-                    "expected_error": "Scope with this name already exists"
+                    "expected_error": "Scope with name \"scope1\" already exists"
                 }
             ]
 
@@ -1123,7 +1123,7 @@ class QueryCollectionsDDLTests(QueryTests):
             "test_queries": [
                 {
                     "text": "create collection bucket1.scope1.collection1",
-                    "expected_error": "Collection with this name already exists"
+                    "expected_error": "Collection with name \"collection1\" in scope \"scope1\" already exists"
                 }
             ]
         },
@@ -1589,7 +1589,7 @@ class QueryCollectionsDDLTests(QueryTests):
 
         self.rest_client.create_scope_collection(bucket=bucket_name, scope=scope_name, collection=collection_name)
         # Allow time for scope and collection to be reflected in manifest after creation
-        self.sleep(2)
+        self.sleep(8)
         self.collections_helper.delete_collection(keyspace=keyspace_name, bucket_name=bucket_name,
                                                   scope_name=scope_name, collection_name=collection_name)
 
@@ -1613,7 +1613,7 @@ class QueryCollectionsDDLTests(QueryTests):
                                                   collection_name=collection_name)
 
         #Allow time for scope and collection to be reflected in manifest after creation
-        self.sleep(2)
+        self.sleep(8)
 
         # load document into collection
         try:
@@ -1741,7 +1741,7 @@ class QueryCollectionsDDLTests(QueryTests):
         scope_created = self.cli_client.create_scope(bucket=bucket_name, scope=scope_name)
 
         # Allow time for scope and collection to be reflected in manifest after creation
-        self.sleep(2)
+        self.sleep(8)
 
         if scope_created:
             self.collections_helper.create_collection(bucket_name=bucket_name, scope_name=scope_name,
@@ -1765,7 +1765,7 @@ class QueryCollectionsDDLTests(QueryTests):
         self.rest_client.create_scope(bucket=bucket_name, scope=scope_name)
 
         # Allow time for scope and collection to be reflected in manifest after creation
-        self.sleep(2)
+        self.sleep(8)
 
         self.collections_helper.create_collection(bucket_name=bucket_name, scope_name=scope_name,
                                                   collection_name=collection_name)
