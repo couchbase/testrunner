@@ -544,6 +544,10 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
     def create_collection_restore_cluster_host(self, num_collection=1):
         bucket_name = self.buckets[0].name
         scopes = self.get_bucket_scope_cluster_host()
+        if not scopes:
+            self.sleep(10, "Wait for scopes created completely")
+            scopes = self.get_bucket_scope_cluster_host()
+        self.create_scope_restore_cluster_host(len(scopes) - 1)
         if scopes:
             for x in range(num_collection):
                 for scope in scopes:

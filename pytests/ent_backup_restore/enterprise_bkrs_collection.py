@@ -231,7 +231,11 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
             self.fail("Need number_of_backups >= 2")
         self.create_scope_cluster_host()
         self.create_collection_cluster_host(self.backupset.col_per_scope)
+        self.sleep(10)
         scopes = self.get_bucket_scope_cluster_host()
+        if not scopes:
+            self.sleep(10, "Wait for scopes and collections created completely")
+            scopes = self.get_bucket_scope_cluster_host()
         scopes_id = []
         for scope in scopes:
             if scope == "_default":
