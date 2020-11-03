@@ -602,10 +602,10 @@ class QueryAutoPrepareTests(QueryTests):
     def test_prepared_collection_query_context_switch(self):
         try:
             self.run_cbq_query(query="PREPARE p1 AS SELECT * FROM test1 b WHERE b.name = 'old hotel'", query_context='default:default.test')
-            results = self.run_cbq_query(query="EXECUTE p1")
+            results = self.run_cbq_query(query="EXECUTE p1", query_context='default:default.test')
             self.assertEqual(results['results'][0]['b'], {'name': 'old hotel', 'type': 'hotel'})
             self.run_cbq_query(query="PREPARE p2 AS SELECT * FROM test1 b WHERE b.name = 'old hotel'", query_context='default:default.test2')
-            results = self.run_cbq_query(query="EXECUTE p2")
+            results = self.run_cbq_query(query="EXECUTE p2", query_context='default:default.test2')
             self.assertEqual(results['results'], [])
         except Exception as e:
             self.log.info("Prepared statement failed {0}".format(str(e)))
@@ -633,11 +633,11 @@ class QueryAutoPrepareTests(QueryTests):
 
     def test_prepared_context_join(self):
         results = self.run_cbq_query(query='PREPARE p1 as select * from default:default.test.test1 t1 INNER JOIN test2 t2 ON t1.name = t2.name where t1.name = "new hotel"', query_context='default:default.test2')
-        results = self.run_cbq_query(query="EXECUTE p1")
+        results = self.run_cbq_query(query="EXECUTE p1", query_context='default:default.test2')
         self.assertEqual(results['results'][0], {'t1': {'name': 'new hotel', 'type': 'hotel'}, 't2': {'name': 'new hotel', 'type': 'hotel'}}, {'t1': {'name': 'new hotel', 'type': 'hotel'}, 't2': {'name': 'new hotel', 'type': 'hotel'}})
 
         results2 = self.run_cbq_query(query='PREPARE p2 as select * from default:default.test.test1 t1 INNER JOIN test2 t2 ON t1.name = t2.name where t1.name = "new hotel"', query_context='default:default.test')
-        results2 = self.run_cbq_query(query="EXECUTE p2")
+        results2 = self.run_cbq_query(query="EXECUTE p2", query_context='default:default.test')
         self.assertEqual(results2['results'][0], {'t1': {'name': 'new hotel', 'type': 'hotel'}, 't2': {'name': 'new hotel', 'type': 'hotel'}})
 
         try:
@@ -674,8 +674,8 @@ class QueryAutoPrepareTests(QueryTests):
 
     def test_prepared_context_bucket_scope(self):
         results = self.run_cbq_query(query='PREPARE p1 as select * from test1 where name = "new hotel"', query_context='default.test')
-        results = self.run_cbq_query(query="EXECUTE p1")
-        self.assertEqual(results['results'][0],{'test1': {'name': 'new hotel', 'type': 'hotel'}})
+        results = self.run_cbq_query(query="EXECUTE p1", query_context='default.test')
+        self.assertEqual(results['results'][0], {'test1': {'name': 'new hotel', 'type': 'hotel'}})
         try:
             results = self.run_cbq_query(query="EXECUTE p1", query_context='default:default.test')
             self.fail()
@@ -684,7 +684,7 @@ class QueryAutoPrepareTests(QueryTests):
 
     def test_prepared_context_name_bucket_scope(self):
         results = self.run_cbq_query(query='PREPARE p1 as select * from test1 where name = "new hotel"', query_context='default:default.test')
-        results = self.run_cbq_query(query="EXECUTE p1")
+        results = self.run_cbq_query(query="EXECUTE p1", query_context='default:default.test')
         self.assertEqual(results['results'][0],{'test1': {'name': 'new hotel', 'type': 'hotel'}})
         try:
             results = self.run_cbq_query(query="EXECUTE p1", query_context='default.test')
@@ -694,7 +694,7 @@ class QueryAutoPrepareTests(QueryTests):
 
     def test_prepared_context_namespace(self):
         results = self.run_cbq_query(query='PREPARE p1 as select * from default.test.test1 where name = "new hotel"', query_context='default:')
-        results = self.run_cbq_query(query="EXECUTE p1")
+        results = self.run_cbq_query(query="EXECUTE p1", query_context='default:')
         self.assertEqual(results['results'][0], {'test1': {'name': 'new hotel', 'type': 'hotel'}})
         try:
             results = self.run_cbq_query(query="EXECUTE p1", query_context='default.test')
@@ -704,7 +704,7 @@ class QueryAutoPrepareTests(QueryTests):
 
     def test_prepared_context_semicolon_bucket_scope(self):
         results = self.run_cbq_query(query='PREPARE p1 as select * from test1 where name = "new hotel"', query_context=':default.test')
-        results = self.run_cbq_query(query="EXECUTE p1")
+        results = self.run_cbq_query(query="EXECUTE p1", query_context=':default.test')
         self.assertEqual(results['results'][0], {'test1': {'name': 'new hotel', 'type': 'hotel'}})
         try:
             results = self.run_cbq_query(query="EXECUTE p1", query_context='default.test')
@@ -717,7 +717,7 @@ class QueryAutoPrepareTests(QueryTests):
         results = self.run_cbq_query(query="EXECUTE p1")
         self.assertEqual(results['metrics']['resultCount'], 72)
         try:
-            results = self.run_cbq_query(query="EXECUTE p1", query_context='default.test')
+            results = self.run_cbq_query(query="EXECUTE p1")
             self.assertEqual(results['metrics']['resultCount'], 72)
         except Exception as e:
             self.log.error(str(e))
@@ -729,10 +729,10 @@ class QueryAutoPrepareTests(QueryTests):
         self.assertEqual(results['results'][0], {'test1': {'name': 'new hotel', 'type': 'hotel'}})
         try:
             results = self.run_cbq_query(query="EXECUTE p1", query_context='default.test')
-            self.assertEqual(results['results'][0], {'test1': {'name': 'new hotel', 'type': 'hotel'}})
+            self.fail()
         except Exception as e:
             self.log.error(str(e))
-            self.fail()
+            self.assertTrue("{'code': 4040, 'msg': 'No such prepared statement: p1, context: default.test'}" in str(e))
 
     def test_prepared_collection_query_context_rebalance(self):
         try:
