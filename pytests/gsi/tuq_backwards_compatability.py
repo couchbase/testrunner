@@ -39,18 +39,21 @@ class UpgradeBackwardsCollections(UpgradeSecondaryIndex):
             for upgrade_thread in upgrade_threads:
                 upgrade_thread.join()
             self.upgrade_servers.append(server)
-        self.sleep(100)
+        self.sleep(180)
         msg = "Cluster is not healthy after upgrade"
         self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
         self.log.info("Cluster is healthy")
         rest = RestConnection(self.master)
         nodes_all = rest.node_statuses()
-        for cluster_node in nodes_all:
-            if cluster_node.ip == self.master.ip:
-                self.log.info("Adding Back: {0}".format(self.master.ip))
-                rest.add_back_node(cluster_node.id)
-                rest.set_recovery_type(otpNode=cluster_node.id,
+        try:
+            for cluster_node in nodes_all:
+                if cluster_node.ip == self.master.ip:
+                    self.log.info("Adding Back: {0}".format(self.master.ip))
+                    rest.add_back_node(cluster_node.id)
+                    rest.set_recovery_type(otpNode=cluster_node.id,
                                        recoveryType="full")
+        except Exception as e:
+            self.log.error(str(e))
         self.log.info("Adding node back to cluster...")
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
         rebalance.result()
@@ -111,18 +114,21 @@ class UpgradeBackwardsCollections(UpgradeSecondaryIndex):
             for upgrade_thread in upgrade_threads:
                 upgrade_thread.join()
             self.upgrade_servers.append(server)
-        self.sleep(100)
+        self.sleep(180)
         msg = "Cluster is not healthy after upgrade"
         self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
         self.log.info("Cluster is healthy")
         rest = RestConnection(self.master)
         nodes_all = rest.node_statuses()
-        for cluster_node in nodes_all:
-            if cluster_node.ip == self.master.ip:
-                self.log.info("Adding Back: {0}".format(self.master.ip))
-                rest.add_back_node(cluster_node.id)
-                rest.set_recovery_type(otpNode=cluster_node.id,
-                                       recoveryType="full")
+        try:
+            for cluster_node in nodes_all:
+                if cluster_node.ip == self.master.ip:
+                    self.log.info("Adding Back: {0}".format(self.master.ip))
+                    rest.add_back_node(cluster_node.id)
+                    rest.set_recovery_type(otpNode=cluster_node.id,
+                                           recoveryType="full")
+        except Exception as e:
+            self.log.error(str(e))
         self.log.info("Adding node back to cluster...")
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
         rebalance.result()
@@ -202,18 +208,21 @@ class UpgradeBackwardsCollections(UpgradeSecondaryIndex):
             for upgrade_thread in upgrade_threads:
                 upgrade_thread.join()
             self.upgrade_servers.append(server)
-        self.sleep(100)
+        self.sleep(180)
         msg = "Cluster is not healthy after upgrade"
         self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
         self.log.info("Cluster is healthy")
         rest = RestConnection(self.master)
         nodes_all = rest.node_statuses()
-        for cluster_node in nodes_all:
-            if cluster_node.ip == self.master.ip:
-                self.log.info("Adding Back: {0}".format(self.master.ip))
-                rest.add_back_node(cluster_node.id)
-                rest.set_recovery_type(otpNode=cluster_node.id,
-                                       recoveryType="full")
+        try:
+            for cluster_node in nodes_all:
+                if cluster_node.ip == self.master.ip:
+                    self.log.info("Adding Back: {0}".format(self.master.ip))
+                    rest.add_back_node(cluster_node.id)
+                    rest.set_recovery_type(otpNode=cluster_node.id,
+                                           recoveryType="full")
+        except Exception as e:
+            self.log.error(str(e))
         self.log.info("Adding node back to cluster...")
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
         rebalance.result()
