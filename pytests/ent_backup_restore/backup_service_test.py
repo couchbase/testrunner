@@ -6,10 +6,11 @@ import threading
 
 from ent_backup_restore.backup_service_base import BackupServiceBase, HistoryFile, MultipleRemoteShellConnections
 from lib.couchbase_helper.time_helper import TimeUtil
-from ent_backup_restore.backup_service_base import Prometheus, FailoverServer
+from ent_backup_restore.backup_service_base import Prometheus, FailoverServer, ScheduleTest, Time
 from membase.api.rest_client import RestConnection
 from lib.backup_service_client.models.task_template import TaskTemplate
 from lib.backup_service_client.models.task_template_schedule import TaskTemplateSchedule
+from lib.backup_service_client.models.task_template_options import TaskTemplateOptions
 from backup_service_client.rest import ApiException
 from lib.backup_service_client.models.body import Body
 from lib.backup_service_client.models.body1 import Body1
@@ -2206,3 +2207,188 @@ class BackupServiceTest(BackupServiceBase):
         # If we're unable to have a task scheduled on a non-leader node, then simply pass
         self.log.info("Unable to schedule a task on a non-leader node")
 
+    # Schedule testing
+
+    def test_next_scheduled_time(self):
+        """ Test if the next scheduled time is correct for a simple task schedule
+        """
+        self.time.change_system_time(f"next friday 0800")
+
+        # Define a simple schedule
+        schedule = \
+        [
+            (1, 'HOURS', '22:00'),
+        ]
+
+        self.schedule_test([schedule], 1)
+
+    def test_complex_schedule(self):
+        """ Test a complex schedule
+        """
+        self.time.change_system_time(f"next friday 0800")
+
+        # Define a complex schedule
+        schedule = \
+        [
+            (1, 'MONDAY', '01:00'),
+            (6, 'DAYS', None),
+            (1, 'WEEKS', '22:04'),
+            (8, 'MONDAY', '13:11'),
+            (10, 'WEDNESDAY', '14:25'),
+            (11, 'FRIDAY', '03:37'),
+            (24, 'DAYS', '19:42'),
+        ]
+
+        self.schedule_test([schedule], 5)
+
+    def test_tasks_scheduled_for_same_time(self):
+        """ Tests if at least 1 task succeeds when tasks are scheduled at the same time
+        """
+        repo_name, plan_name = "my_repo", "my_plan"
+
+        # Define a schedule which schedules tasks for the same time.
+        schedule = \
+        [
+            (1, 'HOURS', '05:00'),
+            (1, 'HOURS', '05:00'),
+            (1, 'HOURS', '05:00'),
+            (1, 'HOURS', '05:00'),
+        ]
+
+        self.time.change_system_time("next friday 0800")
+        self.create_plan_and_repository(plan_name, repo_name, schedule)
+
+        # Allow the repository to calculate its schedule
+        self.sleep(15)
+
+        # The time and task name to be executed next by the backup service
+        time, _, task_name = self.get_repository('active', repo_name).next_scheduled
+
+        # Travel to scheduled time
+        self.time.change_system_time(str(time - datetime.timedelta(minutes=1)))
+        self.sleep(60)
+
+        # Check at least 1 of the tasks succeed as its currently not possible to schedule tasks
+        # for the same time and expect them all to succeed.
+        # The tasks do not take a long time so we can wait for them serially
+        self.assertTrue(any([self.wait_for_backup_task("active", repo_name, 20, 10, f"task{i}") for i in range(4)]))
+
+    def test_merge_options(self):
+        """ Test the merge options backup the correct set of backups
+        """
+        self.time.change_system_time("next friday 0800")
+        #              m (The merge window) (Starts 1 day ago with a window size of 2)
+        #            <--->
+        # Time/Day 1 2 3 4 5
+        #    02:00 b b b b b (The last backup before the merge is the 5th Task)
+        #    06:00         m (The merge is the 6th Task)
+
+        # Define a schedule
+        schedule = \
+        [
+            (1, 'DAYS', '02:00'),
+            (5, 'DAYS', '06:00'),
+        ]
+
+        # Make the second task a merge with offset_start = 1, offset_end = 2
+        merge_map = {1: (1, 2)}
+
+        schedule_test = ScheduleTest(self, [schedule], merge_map=merge_map)
+
+        schedule_test.run(5)
+        self.sleep(60) # Takes a moment to update the backups
+        backups_before_merge = self.get_backups("active", "repo_name0")
+        self.assertEqual(len(backups_before_merge), 5)
+
+        schedule_test.run(1)
+        self.sleep(60) # Takes a moment to update the backups
+        backups_after_merge = self.get_backups("active", "repo_name0")
+
+        # Check the merge backed up the correct backups
+        self.assertEqual(len(backups_after_merge), 3)
+        self.assertIn(backups_before_merge[0]._date, [backup._date for backup in backups_after_merge]) # Check backup 1 is not part of the merge
+        self.assertIn(backups_before_merge[4]._date, [backup._date for backup in backups_after_merge]) # Check backup 5 is not part of the merge
+
+    def test_concurrent_merge(self):
+        self.time.change_system_time("next friday 0800")
+        #              m (The merge window) (Starts 1 day ago with a window size of 2)
+        #            <--->
+        # Time/Day 1 2 3 4 5
+        #    02:00 b b b b b (The last backup before the merge is the 5th Task)
+        #    06:00        2m (The merge is the 6th and 7th Task)
+
+        # Define a schedule
+        schedule = \
+        [
+            (1, 'DAYS', '02:00'),
+            (5, 'DAYS', '06:00'), # Concurrent merge
+            (5, 'DAYS', '06:00'), # Concurrent merge
+        ]
+
+        # Make the second and third task a merge with offset_start = 1, offset_end = 2
+        merge_map = {1: (1, 2), 2: (1, 2)}
+
+        schedule_test = ScheduleTest(self, [schedule], merge_map=merge_map)
+
+        schedule_test.run(5)
+        self.sleep(60) # Takes a moment to update the backups
+        backups_before_merge = self.get_backups("active", "repo_name0")
+        self.assertEqual(len(backups_before_merge), 5)
+
+        # The time and task name to be executed next by the backup service
+        time, _, task_name = self.get_repository('active', "repo_name0").next_scheduled
+
+        # Travel to scheduled time
+        self.time.change_system_time(str(time - datetime.timedelta(minutes=1)))
+        self.sleep(60)
+
+        # Check serially that at least 1 of the tasks succeed
+        self.assertTrue(any([self.wait_for_backup_task("active", "repo_name0", 20, 10, f"task{i}") for i in range(1,3)]))
+
+    def test_multiple_repository_schedules(self):
+        """ Test the schedules of multiple repositories
+        """
+        schedule_a = \
+        [
+            (1, 'SUNDAY', '01:00'),
+        ]
+
+        schedule_b = \
+        [
+            (1, 'MONDAY', '01:00'),
+        ]
+
+        self.time.change_system_time("next friday 0800")
+
+        self.schedule_test([schedule_a, schedule_b], 6)
+
+    # Concurrent scheduling of test
+
+    def test_concurrent_repository_schedules(self):
+        """ Test repository-wise concurrent schedules
+        """
+        repo_name, plan_name = "my_repo", "my_plan"
+
+        schedule_a = \
+        [
+            (1, 'SUNDAY', '01:00'),
+        ]
+
+        schedule_b = \
+        [
+            (1, 'SUNDAY', '01:00'),
+        ]
+
+        self.time.change_system_time("next friday 0800")
+        self.create_plan_and_repository("plan_name0", "repo_name0", schedule_a)
+        self.create_plan_and_repository("plan_name1", "repo_name1", schedule_b)
+
+        # The time and task name to be executed next by the backup service
+        time, _, task_name = self.get_repository('active', "repo_name0").next_scheduled
+
+        # Travel to scheduled time
+        self.time.change_system_time(str(time - datetime.timedelta(minutes=1)))
+        self.sleep(60)
+
+        # Check serially that at least 1 of the tasks succeed
+        self.assertTrue(any([self.wait_for_backup_task("active", f"repo_name{i}", 20, 10, f"task0") for i in range(2)]))
