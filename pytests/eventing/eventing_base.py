@@ -136,7 +136,6 @@ class EventingBaseTest(QueryHelperTests):
     def create_save_function_body(self, appname, appcode, description="Sample Description",
                                   checkpoint_interval=20000, cleanup_timers=False,
                                   dcp_stream_boundary="everything", deployment_status=False,
-                                  # rbacpass="password", rbacrole="admin", rbacuser="cbadminbucket",
                                   skip_timer_threshold=86400,
                                   sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
                                   timer_worker_pool_size=3, worker_count=3, processing_status=False ,
@@ -396,9 +395,7 @@ class EventingBaseTest(QueryHelperTests):
     def eventing_stats(self):
         self.sleep(5)
         content=self.rest.get_all_eventing_stats()
-        js=json.loads(content)
-        log.info("execution stats: {0}".format(js))
-        return  js
+        log.info("execution stats: {0}".format(content))
 
     def deploy_function(self, body, deployment_fail=False, wait_for_bootstrap=True,pause_resume=False,pause_resume_number=1,
                         deployment_status=True,processing_status=True):
@@ -602,9 +599,11 @@ class EventingBaseTest(QueryHelperTests):
         ClusterOperationHelper.wait_for_ns_servers_or_assert([server], self, wait_if_warmup=True)
 
     def undeploy_delete_all_functions(self):
-        content=self.rest.get_deployed_eventing_apps()
-        res = list(content.keys())
-        log.info("all keys {}".format(res))
+        self.refresh_rest_server()
+        result = self.rest.get_composite_eventing_status()
+        res=[]
+        for i in range(len(result['apps'])):
+            res.append(result['apps'][i]['name'])
         for a in res:
             self.rest.undeploy_function(a)
         for a in res:
@@ -928,6 +927,16 @@ class EventingBaseTest(QueryHelperTests):
     def create_scope_collection(self,bucket,scope,collection):
         self.collection_rest.create_scope_collection(bucket=bucket, scope=scope, collection=collection)
 
+    def create_n_scope(self,bucket,num=1):
+        for i in range(num):
+            scope_name="scope_"+str(i)
+            self.rest.create_scope(bucket,scope_name)
+
+    def create_n_collections(self,bucket,scope,num):
+        for i in range(num):
+            collection_name="coll_"+str(i)
+            self.rest.create_collection(bucket,scope,collection_name)
+
     '''
         Method to check number of docs in a collection
     '''
@@ -936,6 +945,11 @@ class EventingBaseTest(QueryHelperTests):
         if namespace==None:
             namespace="dst_bucket.dst_bucket.dst_bucket"
         count=0
+        try:
+            query = "create primary index on " + namespace
+            result_set = self.n1ql_helper.run_cbq_query(query, server=self.n1ql_node)
+        except Exception as e:
+            pass
         actual_count=self.get_count(namespace)
         while actual_count != expected_count and count < 20:
             message = "Waiting for handler code {2} to complete bucket operations... Current : {0} Expected : {1}".\
@@ -954,6 +968,7 @@ class EventingBaseTest(QueryHelperTests):
             if expected_duplicate and actual_count > expected_count:
                 break
         if actual_count != expected_count:
+            self.print_eventing_stats_from_all_eventing_nodes()
             total_dcp_backlog = 0
             timers_in_past = 0
             lcb = {}
@@ -973,8 +988,6 @@ class EventingBaseTest(QueryHelperTests):
                 log.debug("Full Stats for Node {0} is \n{1} ".format(eventing_node.ip, json.dumps(full_out,
                                                                                                 sort_keys=True,
                                                                                                 indent=4)))
-            if not expected_duplicate:
-                self.print_timer_alarm_context()
             if actual_count < expected_count:
                 self.skip_metabucket_check = True
                 raise Exception("missing data in destination bucket. Current : {0} "
@@ -990,7 +1003,7 @@ class EventingBaseTest(QueryHelperTests):
                               "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(
                     actual_count, expected_count, total_dcp_backlog, timers_in_past, lcb))
         log.info("Final docs count... Current : {0} Expected : {1}".format(actual_count, expected_count))
-        self.print_eventing_stats_from_all_eventing_nodes()
+
 
 
     def get_count(self,bucket):
@@ -1020,3 +1033,57 @@ class EventingBaseTest(QueryHelperTests):
         if wait_for_loading:
             task.result()
 
+    def create_function_with_collection(self, appname, appcode,
+                                 dcp_stream_boundary="everything",src_namespace="src_bucket._default._default",
+                                        meta_namespace="metadata._default._default",
+                                        collection_bindings=["dst_bucket.dst_bucket._default._default.rw"],is_curl=False,
+                                        hostpath=None, validate_ssl=False):
+        src_map=src_namespace.split(".")
+        meta_map=meta_namespace.split(".")
+        src_bucket=src_map[0]
+        src_scope=src_map[1]
+        src_collection=src_map[2]
+        meta_bucket = meta_map[0]
+        meta_scope = meta_map[1]
+        meta_collection = meta_map[2]
+        body = {}
+        body['appname'] = appname
+        script_dir = os.path.dirname(__file__)
+        abs_file_path = os.path.join(script_dir, appcode)
+        fh = open(abs_file_path, "r")
+        body['appcode'] = fh.read()
+        fh.close()
+        body['depcfg'] = {}
+        body['depcfg']['metadata_bucket'] = meta_bucket
+        body['depcfg']['metadata_scope'] = meta_scope
+        body['depcfg']['metadata_collection'] = meta_collection
+        body['depcfg']['source_bucket'] = src_bucket
+        body['depcfg']['source_scope'] = src_scope
+        body['depcfg']['source_collection'] = src_collection
+        body['depcfg']['curl'] = []
+        body['depcfg']['buckets'] = []
+        for binding in collection_bindings:
+            bind_map=binding.split(".")
+            if  len(bind_map)< 5:
+                raise Exception("Binding {} doesn't have all the fields".format(binding))
+            body['depcfg']['buckets'].append(
+                {"alias": bind_map[0], "bucket_name": bind_map[1], "scope_name": bind_map[2],
+                 "collection_name": bind_map[3], "access": bind_map[4]})
+        body['settings'] = {}
+        body['settings']['dcp_stream_boundary'] = dcp_stream_boundary
+        body['settings']['deployment_status'] = False
+        body['settings']['processing_status'] = False
+        if is_curl:
+            if hostpath != None:
+                body['depcfg']['curl'].append({"hostname": self.hostname+hostpath, "value": "server", "auth_type": self.auth_type,
+                                               "username": self.curl_username, "password": self.curl_password,
+                                               "allow_cookies": self.cookies,"validate_ssl_certificate": validate_ssl})
+            else:
+                body['depcfg']['curl'].append(
+                    {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                     "username": self.curl_username, "password": self.curl_password, "allow_cookies": self.cookies,"validate_ssl_certificate": validate_ssl})
+            if self.auth_type=="bearer":
+                body['depcfg']['curl'][0]['bearer_key']=self.bearer_key
+        self.rest.create_function(body['appname'], body)
+        self.log.info("saving function {}".format(body['appname']))
+        return body
