@@ -32,7 +32,7 @@ class TaskTemplate(object):
         'name': 'str',
         'task_type': 'str',
         'schedule': 'TaskTemplateSchedule',
-        'options': 'TaskTemplateOptions',
+        'merge_options': 'TaskTemplateOptions',
         'full_backup': 'bool'
     }
 
@@ -40,25 +40,31 @@ class TaskTemplate(object):
         'name': 'name',
         'task_type': 'task_type',
         'schedule': 'schedule',
-        'options': 'options',
+        'merge_options': 'merge_options',
         'full_backup': 'full_backup'
     }
 
-    def __init__(self, name=None, task_type=None, schedule=None, options=None, full_backup=None):  # noqa: E501
+    def __init__(self, name=None, task_type=None, schedule=None, merge_options=None, full_backup=None):  # noqa: E501
         """TaskTemplate - a model defined in Swagger"""  # noqa: E501
         self._name = None
         self._task_type = None
         self._schedule = None
-        self._options = None
+        self._merge_options = None
         self._full_backup = None
         self.discriminator = None
         self.name = name
         self.task_type = task_type
         self.schedule = schedule
-        if options is not None:
-            self.options = options
+        if merge_options is not None:
+            self.merge_options = merge_options
         if full_backup is not None:
             self.full_backup = full_backup
+
+    @property
+    def expected_next_run_time(self, start_time):
+        """ Calculate the next expected run time given a `start_time`
+        """
+        return self.schedule.expected_next_run_time(start_time)
 
     @property
     def name(self):
@@ -138,25 +144,25 @@ class TaskTemplate(object):
         self._schedule = schedule
 
     @property
-    def options(self):
+    def merge_options(self):
         """Gets the options of this TaskTemplate.  # noqa: E501
 
 
         :return: The options of this TaskTemplate.  # noqa: E501
         :rtype: TaskTemplateOptions
         """
-        return self._options
+        return self._merge_options
 
-    @options.setter
-    def options(self, options):
+    @merge_options.setter
+    def merge_options(self, merge_options):
         """Sets the options of this TaskTemplate.
 
 
-        :param options: The options of this TaskTemplate.  # noqa: E501
+        :param merge_options: The merge_options of this TaskTemplate.  # noqa: E501
         :type: TaskTemplateOptions
         """
 
-        self._options = options
+        self._merge_options = merge_options
 
     @property
     def full_backup(self):

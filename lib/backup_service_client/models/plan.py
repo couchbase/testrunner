@@ -63,6 +63,25 @@ class Plan(object):
         if tasks is not None:
             self.tasks = tasks
 
+    def recalculate_task_by_name(self, task_name, start_time):
+        self.find_task_by_name(task_name).schedule.recalculate(start_time)
+
+    def recalculate_all(self, start_time):
+        for task in self.tasks:
+            task.schedule.recalculate(start_time)
+
+    def find_task_by_name(self, task_name):
+        """ Finds a task by name
+        """
+        for task in self.tasks:
+            if task.name == task_name:
+                return task
+
+    def expected_next_run_time(self, start_time):
+        """ Gets the next expected task and its expected run time
+        """
+        return min((task.schedule.expected_time, task) for task in self.tasks)
+
     @property
     def name(self):
         """Gets the name of this Plan.  # noqa: E501

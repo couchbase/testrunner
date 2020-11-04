@@ -30,7 +30,7 @@ class TaskTemplateOptions(object):
     """
     swagger_types = {
         'offset_start': 'int',
-        'offset_end': 'Interger'
+        'offset_end': 'int'
     }
 
     attribute_map = {
