@@ -1696,6 +1696,8 @@ class QueryCollectionsDDLTests(QueryTests):
         self.collections_helper.create_collection(bucket_name=bucket_name, scope_name=scope_name,
                                                   collection_name=collection_name)
 
+        self.sleep(8)
+
         # load document into collection
         try:
             self.run_cbq_query(
