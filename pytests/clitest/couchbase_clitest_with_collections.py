@@ -68,6 +68,9 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
                 raise("No _default scope in cluster")
         else:
             custom_scopes = self.get_bucket_scope()
+            if not custom_scopes:
+                self.sleep(10)
+                custom_scopes = self.get_bucket_scope()
             if isinstance(custom_scopes, tuple):
                 custom_scopes = custom_scopes[0]
             for scope in custom_scopes:
@@ -165,13 +168,14 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
                     self.cli_col.create_scope(bucket=bucket_name, scope=scope_name)
             except Exception as e:
                 error_expected = False
-                errors = ["Scope with this name already exists",
+                errors = ["already exists",
                           "First character must not be"]
                 for error in errors:
                     if error in str(e):
                         error_expected = True
                 if not error_expected:
-                    raise("Rest failed to block create scope with same name")
+                    raise("Rest failed to block create scope with same name. Error: {0}"\
+                                                                          .format(str(e)))
         if self.create_existing_collection:
             collection_name = collections[0]
             if self.block_char:
@@ -179,8 +183,8 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
             try:
                 if self.use_rest:
                     self.rest.create_collection(bucket=bucket_name, scope=scope_name,
-                                                   collection="mycollection_{0}_0".format(scope_name),
-                                                   params=None, num_retries=1)
+                                                collection="mycollection_{0}_0".format(scope_name),
+                                                params=None, num_retries=1)
                 else:
                     self.cli_col.create_collection(bucket=bucket_name, scope=scope_name,
                                                    collection="mycollection_{0}_0".format(scope_name))
