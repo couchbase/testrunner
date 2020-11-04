@@ -2392,3 +2392,158 @@ class BackupServiceTest(BackupServiceBase):
 
         # Check serially that at least 1 of the tasks succeed
         self.assertTrue(any([self.wait_for_backup_task("active", f"repo_name{i}", 20, 10, f"task0") for i in range(2)]))
+
+    def test_task_queue_overpopulation(self):
+        """ Trigger a lot of one-off-tasks
+
+        Unfortunately, it's impossible to cause the Task Queue to overpopulate if 3 nodes are being used.
+        Conversely, we can test the service is resilient to task queue overpopulation instead. The exact
+        behaviour is for the task to run, however many tasks will fail because there is mutual exclusion
+        at the archive level.
+        """
+        repo_name = "my_repo"
+
+        # Load buckets with data
+        self._load_all_buckets(self.master, BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items), "create", 0)
+
+        for i in range(10):
+            self.create_repository_with_default_plan(f"{repo_name}{i}")
+
+        for i in range(50):
+            for j in range(10):
+                # Perform a one off backup
+                self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_backup_post_with_http_info(f"{repo_name}{j}", body=Body4(full_backup = True))[1], 200)
+
+    def test_time_change_detection(self):
+        """ Test Tasks are rescheduled after time change
+
+        params:
+            change: Set time 'forward' or 'backward'
+        """
+        backwards = self.input.param('change', 'backward') == 'backward'
+
+        # Manipulate time
+        # self.time = Time(self.multiple_remote_shell_connections)
+
+        self.time.change_system_time("next friday 0745")
+
+        schedule = \
+        [
+            (1, 'HOURS', None),
+        ]
+
+        schedule_test = ScheduleTest(self, [schedule])
+
+        # Should schedule tasks at 9, 10, 11
+        schedule_test.run(3)
+
+        self.sleep(15)
+
+        self.time.change_system_time('0745' if backwards else '1315')
+
+        # Give the backup service time to reconstruct the schedule
+        self.sleep(60)
+
+        next_time, _, _ = self.get_repository('active', schedule_test.plan_repo[0][1]).next_scheduled
+
+        # The next time should be scheduled at 12 or 15 depending on time travel direction
+        self.assertEqual(next_time.hour, 12 if backwards else 15)
+
+    def test_user_warned_when_desyncing_nodes(self):
+        """ Test NSServer's time de-sync warning
+        """
+        self.time.change_system_time('next friday 0800')
+
+        # Manipulate time
+        time_n2 = Time(RemoteMachineShellConnection(self.input.clusters[0][1]))
+        time_n3 = Time(RemoteMachineShellConnection(self.input.clusters[0][2]))
+
+        self.create_repository_with_default_plan("repo_name")
+
+        time_n2.change_system_time('14:00')
+        time_n3.change_system_time('15:00')
+
+        self.sleep(10)
+
+        for alert in RestConnection(self.input.clusters[0][0]).get_alerts():
+            if "time on node" and "is not synchronized" in alert['msg']:
+                return
+
+        self.fail("Could not find the time de-sync warning in the alerts")
+
+    def test_desyncing_non_leader_nodes(self):
+        """ Test if a task scheduled on a non-leader node with its time de-synced
+            results in a different backup name.
+
+            Currently the name of the backup is different and the start and end times
+            are not aware of the timezone change so we can simply check the start
+            and times have a consistent run time, i.e. by being scheduled in a
+            different timezones, the difference between the start and end times
+            is not too large.
+        """
+        change_timezone = self.input.param("change_timezone", False)
+
+        # Load buckets with a lot of data so the subequent backup takes a long time
+        self._load_all_buckets(self.master, BlobGenerator("ent-backup", "ent-backup-", 5000, end=100), "create", 0)
+
+        self.time.change_system_time('next friday 0800')
+
+        if change_timezone:
+            self.solo_time[1].set_timezone('Pacific/Apia')
+            self.solo_time[2].set_timezone('Pacific/Apia')
+        else:
+            self.solo_time[1].change_system_time('15:00')
+            self.solo_time[2].change_system_time('15:00')
+
+        def callback(task, server_task_scheduled_on, repo_name, task_name):
+            self.wait_for_backup_task("active", repo_name, 20, 2, task_name)
+            task = self.get_task_history("active", repo_name, task_name)[0]
+
+            task_time_start, task_time_end = TimeUtil.rfc3339nano_to_datetime(task.start), TimeUtil.rfc3339nano_to_datetime(task.end)
+            node_time_start, node_time_end = TimeUtil.rfc3339nano_to_datetime(task.node_runs[0].start), TimeUtil.rfc3339nano_to_datetime(task.node_runs[0].end)
+
+            self.assertLess(abs(task_time_end - task_time_start).total_seconds(), 120)
+            self.assertLess(abs(node_time_end - node_time_start).total_seconds(), 120)
+
+        self.schedule_task_on_non_leader_node(callback)
+
+    def test_timezone_modifications(self):
+        """ Tests timezone modifications
+
+        Tests the backup service responds to timezone changes.
+        """
+        curr_leader = self.get_leader()
+        self.configuration.host = f"http://{curr_leader.ip}:{8091}/_p/backup/api/v1"
+
+        self.time.change_system_time('next friday 0745')
+
+        failover_server = FailoverServer(self.input.clusters[0], curr_leader)
+
+        schedule = \
+        [
+            (1, 'HOURS', None),
+        ]
+
+        schedule_test = ScheduleTest(self, [schedule])
+
+        # Should schedule tasks at 9
+        schedule_test.run(1)
+
+        self.time.set_timezone('Pacific/Apia')
+
+        # Failover the leader
+        failover_server.failover(graceful=False)
+        self.sleep(60)
+        failover_server.rebalance()
+
+        curr_leader = self.get_leader()
+        self.configuration.host = f"http://{curr_leader.ip}:{8091}/_p/backup/api/v1"
+
+        # Should schedule tasks at 10
+        schedule_test.run(1)
+
+        time, _, _ = self.get_repository('active', schedule_test.plan_repo[0][1]).next_scheduled
+
+        # TODO: when the backup service responds to timezone changes.
+        # self.assertEqual(time.hour, None)
+        # self.assertEqual(time.tzinfo, None)

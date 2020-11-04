@@ -62,8 +62,11 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # A connection to every single machine in the cluster
         self.multiple_remote_shell_connections = MultipleRemoteShellConnections(self.input.clusters[0])
 
-        # Manipulate time
+        # Manipulate time on all nodes
         self.time = Time(self.multiple_remote_shell_connections)
+
+        # Manipulate time on individual nodes
+        self.solo_time = [Time(RemoteMachineShellConnection(server)) for server in self.input.clusters[0]]
 
     def setUp(self):
         """ Sets up.
@@ -519,6 +522,38 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         """
         ScheduleTest(self, schedules, merge_map).run(cycles)
 
+    def schedule_task_on_non_leader_node(self, callback):
+        """ Attempts to schedule a task on a non-leader node
+        """
+        repositories = [f"my_repo{i}" for i in range(5)]
+
+        # Create a bunch of repositories
+        for repo_name in repositories:
+            self.create_repository_with_default_plan(repo_name)
+
+        leader = self.get_leader()
+
+        for repo_name in repositories:
+            # Perform a one off backup
+            task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, body=Body4(full_backup=True)).task_name
+
+            # Fetch repository information
+            repository = self.repository_api.cluster_self_repository_state_id_get('active', repo_name)
+            # Fetch task from running_one_off
+            self.assertIsNotNone(repository.running_one_off, "Expected a task to be currently running")
+
+            task = next(iter(repository.running_one_off.values()))
+            # Obtain the server that the task was scheduled on
+            server_task_scheduled_on = self.uuid_to_server(task.node_runs[0].node_id)
+
+            #  If the task was scheduled on a non-leader node, call the callback
+            if leader != server_task_scheduled_on:
+                callback(task, server_task_scheduled_on, repo_name, task_name)
+                return
+
+        # If we're unable to have a task scheduled on a non-leader node, then simply pass
+        self.log.info("Unable to schedule a task on a non-leader node")
+
     # Clean up cbbackupmgr
     def tearDown(self):
         """ Tears down.
@@ -830,6 +865,9 @@ class FailoverServer:
         # Check the node health status to check if it's still failing over
         self.rest_conn.set_recovery_type(self.node_id, recovery_type)
         self.rest_conn.add_back_node(self.node_id)
+        self.cluster.rebalance(self.servers, [], [])
+
+    def rebalance(self):
         self.cluster.rebalance(self.servers, [], [])
 
     @property
