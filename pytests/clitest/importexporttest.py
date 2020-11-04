@@ -820,7 +820,8 @@ class ImportExportTests(CliBaseTest):
             self.load_scope_name = scopes[0]
             for collection in collections:
                 if self.load_scope_name in collection:
-                  self.collection_id = self.get_collections_id(self.load_scope_name, collection)
+                    self.load_collection_name = collection
+                    self.collection_id = self.get_collections_id(self.load_scope_name, collection)
             col_cmd += " -c {0}".format(self.collection_id)
         self.sleep(10)
         self.load_all_buckets(self.master, ratio=0.1,
@@ -841,6 +842,8 @@ class ImportExportTests(CliBaseTest):
                                      "default", self.format_type, secure_conn, export_file)
         if self.custom_scopes:
             ex_cmd_str += " --scope-field {0}".format(scopes[0])
+        if self.custom_collections:
+            ex_cmd_str += " --collection-field {0}".format(collections[0])
         output, error = shell.execute_command(ex_cmd_str)
         if not self._check_output("successfully", output):
             if self.should_fail:
@@ -851,22 +854,25 @@ class ImportExportTests(CliBaseTest):
                 return
             else:
                 self.fail("Failed to export data.")
-        if self.load_to_collection:
-            output, error = shell.execute_command("cat {0} | grep {1}".format(export_file,
-                                                                          self.load_scope_name))
-            if not self._check_output(self.load_scope_name, output):
-                self.fail("Failed to export collection data")
 
         if self.custom_scopes:
-            if self.custom_collections and not self._check_output("scope", output):
+            scope_o, _ = shell.execute_command("cat {0} | grep {1}".format(export_file, "scope"))
+            if self.custom_collections and not self._check_output("scope", scope_o):
                 raise("Failed to export scope")
             else:
                 self.log.info("Found scope in export file")
         if self.custom_collections:
-            if not self._check_output("collection", output):
-                raise("Failed to export collection")
+            if self.load_to_collection:
+                output, error = shell.execute_command("cat {0} | grep {1}".format(export_file,
+                                                                          self.load_scope_name))
+                if not self._check_output(self.load_scope_name, output):
+                    self.fail("Failed to export collection data")
             else:
-                self.log.info("Found collection in export file")
+                col_o, _ = shell.execute_command("cat {0} | grep {1}".format(export_file, "mycollection"))
+                if not self._check_output("collection", col_o):
+                    raise("Failed to export collection")
+                else:
+                    self.log.info("Found collection in export file")
 
     def test_import_with_collection(self):
         """
@@ -1519,12 +1525,22 @@ class ImportExportTests(CliBaseTest):
 
     def _check_output(self, word_check, output):
         found = False
-        if len(output) >=1 :
-            for x in output:
-                if word_check.lower() in x.lower():
-                    self.log.info("Found \"%s\" in CLI output" % word_check)
-                    found = True
-                    break
+        if len(output) >= 1:
+            if isinstance(word_check, list):
+                for ele in word_check:
+                    for x in output:
+                        if ele.lower() in x.lower():
+                            self.log.info("Found '{0} in CLI output".format(ele))
+                            found = True
+                            break
+            elif isinstance(word_check, str):
+                for x in output:
+                    if word_check.lower() in x.lower():
+                        self.log.info("Found '{0}' in CLI output".format(word_check))
+                        found = True
+                        break
+            else:
+                self.log.error("invalid {0}".format(word_check))
         return found
 
     def _remote_copy_import_file(self, import_file):
