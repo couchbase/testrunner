@@ -9,6 +9,9 @@ from TestInput import TestInputSingleton
 from lib.couchbase_helper.time_helper import TimeUtil
 from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase
 from membase.api.rest_client import RestConnection
+from lib.backup_service_client.models.task_template import TaskTemplate
+from lib.backup_service_client.models.task_template_schedule import TaskTemplateSchedule
+from lib.backup_service_client.models.task_template_options import TaskTemplateOptions
 from lib.backup_service_client.configuration import Configuration
 from lib.backup_service_client.api_client import ApiClient
 from lib.backup_service_client.api.plan_api import PlanApi
@@ -19,6 +22,7 @@ from lib.backup_service_client.api.active_repository_api import ActiveRepository
 from lib.backup_service_client.models.body2 import Body2
 from lib.backup_service_client.models.body3 import Body3
 from lib.backup_service_client.models.body4 import Body4
+from lib.backup_service_client.models.plan import Plan
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from lib.membase.helper.bucket_helper import BucketOperationHelper
 from couchbase_helper.cluster import Cluster
@@ -53,6 +57,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         # Backup Service Constants
         self.default_plans = ["_hourly_backups", "_daily_backups"]
+        self.periods = ["MINUTES", "HOURS", "DAYS", "WEEKS", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
 
         # A connection to every single machine in the cluster
         self.multiple_remote_shell_connections = MultipleRemoteShellConnections(self.input.clusters[0])
@@ -264,6 +269,42 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         """
         return self.repository_api.cluster_self_repository_state_id_info_get(state, repo_name).backups
 
+    def create_plan(self, plan_name, plan):
+        """ Creates a plan
+
+        Attr:
+            plan_name (str): The name of the new plan.
+
+        """
+        return self.plan_api.plan_name_post(plan_name, body=plan)
+
+    def create_repository(self, repo_name, plan_name):
+        """ Creates an active repository
+
+        Creates an active repository with a filesystem archive. If the objstore provider is set, then
+        backs up to the cloud.
+
+        Attr:
+            repo_name (str): The name of the new repository.
+            plan_name (str): The name of the plan to attach.
+        """
+        body = Body2(plan=plan_name, archive=self.backupset.directory)
+
+        if self.objstore_provider:
+            body = self.set_cloud_credentials(body)
+
+        # Add repositories and tie plan to repository
+        return self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+    def get_repository(self, state, repo_name):
+        """ Gets a repository.
+
+        Attr:
+            state (str): The state of the repository e.g. 'active'.
+            repo_name (str): THe name of the repository to fetch.
+        """
+        return self.repository_api.cluster_self_repository_state_id_get('active', repo_name)
+
     def get_task_history(self, state, repo_name, task_name=None):
         if task_name:
             return self.repository_api.cluster_self_repository_state_id_task_history_get(state, repo_name, task_name=task_name)
@@ -272,7 +313,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
     def map_task_to_backup(self, state, repo_name, task_name):
         return self.get_task_history(state, repo_name, task_name=task_name)[0].backup
 
-    def wait_for_backup_task(self, state, repo_name, retries, sleep_time, task_name=None):
+    def wait_for_backup_task(self, state, repo_name, retries, sleep_time, task_name=None, task_scheduled_time=None):
         """ Wait for the latest backup Task to complete.
         """
         # Wait for any existing running tasks to finish running
@@ -292,11 +333,19 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             for i in range(0, retries):
                 task_history = self.get_task_history(state, repo_name, task_name)
 
+                # Be more specific by filtering tasks which match the original schedule time
+                if task_scheduled_time:
+                    task_history = [task for task in task_history if TimeUtil.rfc3339nano_to_datetime(task.start) >= TimeUtil.rfc3339nano_to_datetime(task_scheduled_time)]
+
                 if i == retries - 1:
                     return False
 
-                if len(task_history) > 0 and task_history[0].status == 'done':
-                    return True
+                if len(task_history) > 0:
+                    if task_history[0].status == 'done':
+                        return True
+
+                    if task_history[0].status == 'failed':
+                        return False
 
                 self.sleep(sleep_time)
 
@@ -433,6 +482,42 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         log_time, leader = logs[-1]
 
         return leader
+
+    def create_plan_and_repository(self, plan_name, repo_name, schedule, merge_map=None):
+        """ Creates a plan with a schedule and attaches it to the repository
+
+        Attr:
+            plan_name (str): The name of the plan.
+            repo_name (str): The name of the repository.
+            schedule (list): A list of tuples of the format [(frequency, period, at_time), ..]
+            merge_map (dict): A dict of the format {int: (start_offset, end_offset), } where the tuple can be None
+        """
+        if not merge_map:
+            merge_map = {}
+
+        def get_task_type(i):
+            return "MERGE" if i in merge_map else "BACKUP"
+
+        def get_merge_options(i):
+            merge_options = merge_map.get(i, None)
+
+            if merge_options:
+                return TaskTemplateOptions(offset_start = merge_options[0], offset_end = merge_options[1])
+
+            return merge_options
+
+        plan = Plan(name=plan_name, tasks=[TaskTemplate(name=f"task{i}", task_type=get_task_type(i), schedule=TaskTemplateSchedule(job_type=get_task_type(i),\
+                                           frequency=freq, period=period, time=at_time), merge_options = get_merge_options(i)) for i, (freq, period, at_time) in enumerate(schedule)])
+
+        self.create_plan(plan_name, plan)
+        self.create_repository(repo_name, plan_name)
+
+        return plan, repo_name
+
+    def schedule_test(self, schedules, cycles, merge_map=None):
+        """ Runs a schedule test
+        """
+        ScheduleTest(self, schedules, merge_map).run(cycles)
 
     # Clean up cbbackupmgr
     def tearDown(self):
@@ -750,3 +835,62 @@ class FailoverServer:
     @property
     def node_id(self):
         return next((node.id for node in self.rest_conn.node_statuses() if node.ip == self.server.ip), None)
+
+class ScheduleTest:
+
+    def __init__(self, backup, schedules, merge_map=None):
+        """ Constructor
+
+        backup (BackupServiceBase): A BackupServiceBase object to manipulate the backup service
+        """
+        self.backup = backup
+        # Create plans and repos using schedule
+        self.plan_repo = [self.backup.create_plan_and_repository(f"plan_name{i}", f"repo_name{i}", schedule, merge_map=merge_map) for i, schedule in enumerate(schedules)]
+        # The expected time calculations are made using `now`
+        self.curr_time, self.curr_scheduled_time_as_string, self.curr_task_name, self.elapsed_cycles = None, None, None, 0
+
+        self.reconstruct_schedule()
+
+        self.backup.sleep(5)
+
+    def run(self, cycles):
+        """ Runs a schedule test
+        """
+        for i in range(cycles):
+            if self.elapsed_cycles > 0:
+                for plan, _ in self.plan_repo:
+                    plan.recalculate_task_by_name(self.curr_task_name, self.now)
+
+            # Obtain the actual time and task to execute from the repository
+            for j in range(5):
+                (next_time, next_time_as_string, next_task_name), repo_name = min((self.backup.get_repository('active', repo_name).next_scheduled, repo_name) for _, repo_name in self.plan_repo)
+                if next_time == self.curr_time:
+                    self.backup.sleep(5)
+                else:
+                    self.curr_time, self.curr_scheduled_time_as_string, self.curr_task_name = next_time, next_time_as_string, next_task_name
+                    break
+
+            # Predict an expected task and its time to execute
+            (expected_time, expected_task), expected_repo_name = min((plan.expected_next_run_time(self.now), repo_name) for plan, repo_name in self.plan_repo) # The expected task and its time to execute
+
+            self.backup.log.info(f"\nExpected time for {expected_task} is {expected_time} | Actual time for {self.curr_task_name} is {self.curr_time} | Using start time {self.now}")
+
+            self.backup.assertLess(abs(expected_time - self.curr_time).total_seconds(), 120)
+
+            # Travel to a minute before scheduled time
+            self.backup.time.change_system_time(str(self.curr_time - datetime.timedelta(minutes=1)))
+
+            # Sleep till task is triggered
+            self.backup.sleep(60)
+            self.now = self.backup.time.get_system_time() # Get time needed to calculate the next prediction
+            self.backup.wait_for_backup_task("active", repo_name, 20, 2, self.curr_task_name, self.curr_scheduled_time_as_string)
+
+            self.elapsed_cycles = self.elapsed_cycles + 1
+
+    def reconstruct_schedule(self):
+        """ Recomputes all expected scheduled times
+        """
+        self.now = self.backup.time.get_system_time()
+
+        for plan, _ in self.plan_repo:
+            plan.recalculate_all(self.now)
