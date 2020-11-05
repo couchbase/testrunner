@@ -268,12 +268,12 @@ class basic_ops(BaseTestCase):
             else:
                 self.assertNotEqual("API is accessible from localhost only", output[0])
 
-    def verify_stat(self,items, value=b"active" ):
+    def verify_stat(self, items, value=b"active"):
         mc = MemcachedClient(self.master.ip, 11210)
         mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
         mc.bucket_select('default')
         stats = mc.stats()
-        self.assertEqual(stats['ep_compression_mode'], value)
+        self.assertEqual(str(stats['ep_compression_mode']), str(value))
         self.assertEqual(int(stats['ep_item_compressor_num_compressed']), items)
         self.assertNotEqual(int(stats['vb_active_itm_memory']), int(stats['vb_active_itm_memory_uncompressed']))
 
