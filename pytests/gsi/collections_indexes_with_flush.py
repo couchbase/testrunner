@@ -56,7 +56,9 @@ class CollectionsIndexesWithFlush(BaseSecondaryIndexingTests):
             num_rollback = self.rest.get_num_rollback_stat(bucket=self.test_bucket)
             self.log.info(f"No. of rollbacks: {num_rollback}")
             self.cluster.bucket_flush(server=self.master, bucket=self.test_bucket, timeout=600)
-            self.sleep(15, "Giving some time to indexer to update indexes after flush")
+            self.sleep(120, "Giving some time to indexer to update indexes after flush")
+            index_info = self.rest.get_indexer_metadata()['status']
+            self.log.info(index_info)
             result = self.run_cbq_query(query=select_query)['results'][0]['$1']
             self.assertEqual(result, 0, "Doc count not matching")
             rollback_after_flush = self.rest.get_num_rollback_stat(bucket=self.test_bucket)

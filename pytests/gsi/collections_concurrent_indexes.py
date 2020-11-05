@@ -187,9 +187,9 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                         self.fail(err)
             self.log.info(f"No of concurrent indexes issued: {count_err_1}/{count_err_1 + count_err_2}")
         
-        result = self.wait_until_indexes_online(timeout=20 * self.num_of_indexes * 4)
+        result = self.wait_until_indexes_online(timeout=60 * self.num_of_indexes * 4)
         if not result:
-            self.log.warn("All indexes didn't build in given timeout. Increase timeout or check logs")
+            self.log.error("All indexes didn't build in given timeout. Increase timeout or check logs")
         self.sleep(20)
         index_info = self.rest.get_indexer_metadata()['status']
         self.assertEqual(len(index_info), len(index_gen_query_list), "No. of indexes is not matching to expected value")
