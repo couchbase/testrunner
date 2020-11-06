@@ -274,13 +274,26 @@ class QueryCollectionsEnd2EndTests(QueryTests):
 
             # initial insert. Expected result - success
             try:
-                query = "insert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id', {'val':1, 'name' : '"+keyspace+"_name' })"
-                result = self.run_cbq_query(query)
-                if result['status'] != 'success':
-                    self.log.info(result['errors'])
-                    errors.append({"reason": "insert_no_index",
+                try:
+                    query = "insert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id', {'val':1, 'name' : '"+keyspace+"_name' })"
+                    result = self.run_cbq_query(query)
+                    if result['status'] != 'success':
+                        self.log.info(result['errors'])
+                        errors.append({"reason": "insert_no_index",
                                    "message": "Initial insert is failed, cannot continue tests, aborting test suite1."})
-                    return False, errors
+                        return False, errors
+                except CBQError as e:
+                    self.log.info(str(e))
+                    # Wait for some more time to allow metadata changes for scopes/collections to propagate before using the new scope/collections
+                    self.sleep(10)
+                    query = "insert into " + keyspace + " (KEY, VALUE) VALUES ('" + keyspace + "_id', {'val':1, 'name' : '" + keyspace + "_name' })"
+                    result = self.run_cbq_query(query)
+                    if result['status'] != 'success':
+                        self.log.info(result['errors'])
+                        errors.append({"reason": "insert_no_index",
+                                       "message": "Initial insert is failed, cannot continue tests, aborting test suite1."})
+                        return False, errors
+
                 query = "select * from "+keyspace+" use keys ['"+keyspace+"_id']"
                 result = self.run_cbq_query(query)
                 self.assertEquals(result['results'][0][collection_name]['name'], keyspace+'_name', "Wrong insert results!")
