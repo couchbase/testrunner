@@ -161,7 +161,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         index_field_list = ['age', 'city', 'country', 'title', 'firstName', 'lastName', 'streetAddress',
                             'suffix', 'filler1', 'phone']
         for collection_namespace in collection_namespaces:
-            for index_fields, idx_num in zip(index_field_list, range(10)):
+            for index_fields, idx_num in zip(index_field_list, range(self.num_of_indexes)):
                 index_gen = QueryDefinition(index_name=f'{idx_prefix}_{idx_num}', index_fields=[index_fields])
                 index_gen_list.append(index_gen)
                 query = index_gen.generate_index_create_query(namespace=collection_namespace,
@@ -191,36 +191,42 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                     elif self.err_msg3 in str(err):
                         continue
                     else:
-                        self.fail(err)
+                        self.log.info(err)
         self.wait_until_indexes_online(defer_build=self.defer_build)
-        index_meta_info = self.rest.get_indexer_metadata()['status']
-        # self.assertEqual(len(index_meta_info), 10 * (self.num_replicas + 1) )
 
         tasks = []
         self.log.info("Swapping out Indexer node B with C and D")
-        add_nodes = [self.servers[2]]
+        add_nodes = self.servers[2:]
         remove_node = [self.servers[1]]
-        try:
-            tasks.append(self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
-                                                      to_remove=remove_node, services=['index', 'index']))
-            for collection_namespace in collection_namespaces:
-                _, keyspace = collection_namespace.split(':')
-                bucket, scope, collection = keyspace.split('.')
-                gen_create = SDKDataLoader(num_ops=10 ** 3, percent_create=100, percent_update=0, percent_delete=0,
-                                           scope=scope, collection=collection, json_template='Person',
-                                           key_prefix="new_doc_")
-                tasks.extend(self.data_ops_javasdk_loader_in_batches(sdk_data_loader=gen_create, batch_size=10 ** 4))
-            for task in tasks:
+        tasks.append(self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
+                                                  to_remove=remove_node, services=['index', 'index']))
+        for collection_namespace in collection_namespaces:
+            _, keyspace = collection_namespace.split(':')
+            bucket, scope, collection = keyspace.split('.')
+            gen_create = SDKDataLoader(num_ops=10 ** 3, percent_create=100, percent_update=0, percent_delete=0,
+                                       scope=scope, collection=collection, json_template='Person',
+                                       key_prefix="new_doc_")
+            tasks.extend(self.data_ops_javasdk_loader_in_batches(sdk_data_loader=gen_create, batch_size=10 ** 4))
+        
+        for task in tasks:
+            try:
                 task.result()
-        except Exception as err:
-            self.fail(err)
+            except Exception as err:
+                self.log.error(err)
         rebalance_status = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
 
         self.wait_until_indexes_online(defer_build=self.defer_build)
         if self.defer_build:
             for build_query in index_build_query_list:
-                self.run_cbq_query(query=build_query)
+                try:
+                    self.run_cbq_query(query=build_query)
+                except Exception as err:
+                    self.log.info(err)
         self.wait_until_indexes_online(timeout=1800)
         index_meta_info = self.rest.get_indexer_metadata()['status']
-        pass
+        self.assertEqual(len(index_meta_info), self.num_of_indexes * (self.num_replicas + 1) * self.num_scopes * self.num_collections * 2)
+        for index in index_meta_info:
+            self.assertEqual(index['status'], 'Ready', index['status'])
+            self.assertEqual(index['completion'], 100, index['completion'])
+            self.assertFalse(index['stale'], index['stale'])
