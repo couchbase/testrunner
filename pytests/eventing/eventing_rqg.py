@@ -125,12 +125,13 @@ class EventingRQG(EventingBaseTest):
                 self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
                 self.sleep(10)
                 self.eventing_stats()
+                self.verify_n1ql_stats(s*k)
             except Exception as e:
                 log.error(e)
             finally:
                 self.undeploy_delete_all_functions()
-        self.delete_temp_handler_code()
-        self.verify_n1ql_stats(s)
+            self.delete_temp_handler_code()
+
 
 
     def create_function_and_deploy(self, query, replace=True):

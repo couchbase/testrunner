@@ -1029,7 +1029,7 @@ class EventingBaseTest(QueryHelperTests):
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=100, percent_delete=0,
                                             scope=collection_list[1], collection=collection_list[2],doc_expiry=expiry)
         task=self.cluster.async_load_gen_docs(self.master, collection_list[0], self.gen_create, pause_secs=1,
-                                         timeout_secs=300)
+                                         timeout_secs=300,exp=expiry)
         if wait_for_loading:
             task.result()
 

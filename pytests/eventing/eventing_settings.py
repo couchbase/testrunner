@@ -179,6 +179,7 @@ class EventingSettings(EventingBaseTest):
         # remove alias before deploying
         del body['depcfg']['buckets']
         # deploy a function without any alias
+        self.rest.create_function(body['appname'],body)
         self.deploy_function(body)
         # make sure no doc in destination bucket
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)

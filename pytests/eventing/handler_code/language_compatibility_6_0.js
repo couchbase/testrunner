@@ -7,7 +7,7 @@ function OnUpdate(doc, meta) {
         log('error:',e);
         //var obj=JSON.parse(e);
         //log(obj);
-        if(e["message"]["name"]=="LCB_KEY_ENOENT"){
+        if(e["message"]["name"]=="LCB_ERR_DOCUMENT_NOT_FOUND"){
             dst_bucket[meta.id]=e;
         }
     }

@@ -14,8 +14,6 @@ log = logging.getLogger()
 class EventingVolume(EventingBaseTest):
     def setUp(self):
         super(EventingVolume, self).setUp()
-        # Un-deploy and delete all the functions
-        self.undeploy_delete_all_functions()
         self.dst_bucket_name2 = self.input.param('dst_bucket_name2', 'dst_bucket2')
         self.dst_bucket_name3 = self.input.param('dst_bucket_name3', 'dst_bucket3')
         self.sbm_bucket= self.input.param('sbm_bucket', 'sbm_bucket')
@@ -105,7 +103,8 @@ class EventingVolume(EventingBaseTest):
                                                cpp_worker_thread_count=self.cpp_worker_thread_count)
         # this is required to deploy multiple functions at the same time
         del body2['depcfg']['buckets'][0]
-        body2['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name1})
+        body2['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name1,"access": "rw"})
+        self.rest.create_function(body2['appname'], body2)
         self.deploy_function(body2, wait_for_bootstrap=False)
         # deploy the third function - N1QL op with doc timers
         body3 = self.create_save_function_body(self.function_name + "_n1ql_op_with_doc_timers",
@@ -114,7 +113,8 @@ class EventingVolume(EventingBaseTest):
                                                cpp_worker_thread_count=self.cpp_worker_thread_count)
         # this is required to deploy multiple functions at the same time
         del body3['depcfg']['buckets'][0]
-        body3['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name2})
+        body3['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name2,"access": "rw"})
+        self.rest.create_function(body3['appname'], body3)
         self.deploy_function(body3, wait_for_bootstrap=False)
         body4 = self.create_save_function_body(self.function_name + "_curl_post",
                                                HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_POST, worker_count=self.worker_count,
@@ -126,6 +126,7 @@ class EventingVolume(EventingBaseTest):
         del body4['depcfg']['buckets'][0]
         body4['depcfg']['buckets'].append(
             {"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name3, "access": "rw"})
+        self.rest.create_function(body4['appname'], body4)
         self.deploy_function(body4, wait_for_bootstrap=False)
         body5 = self.create_save_function_body(self.function_name + "_SBM",
                                                HANDLER_CODE.BUCKET_OP_SOURCE_DOC_MUTATION,
@@ -134,6 +135,7 @@ class EventingVolume(EventingBaseTest):
         del body5['depcfg']['buckets'][0]
         body5['depcfg']['buckets'].append(
             {"alias": self.src_bucket_name, "bucket_name": self.sbm_bucket, "access": "rw"})
+        self.rest.create_function(body5['appname'], body5)
         self.deploy_function(body5, wait_for_bootstrap=False)
         body = [body1, body2, body3, body4, body5]
         return body

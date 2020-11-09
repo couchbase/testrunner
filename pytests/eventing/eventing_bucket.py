@@ -59,7 +59,7 @@ class EventingBucket(EventingBaseTest):
 
     def tearDown(self):
         try:
-            self.cleanup_eventing()
+            self.undeploy_delete_all_functions()
         except:
             # This is just a cleanup API. Ignore the exceptions.
             pass
@@ -178,7 +178,7 @@ class EventingBucket(EventingBaseTest):
         # push the source bucket to dgm
         self.push_to_dgm(self.src_bucket_name, 50)
         body = self.create_save_function_body(self.function_name, self.handler_code,
-                                              dcp_stream_boundary="from_now")
+                                              dcp_stream_boundary="from_now",src_binding=True)
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
@@ -267,7 +267,7 @@ class EventingBucket(EventingBaseTest):
 
     def test_bucket_compaction_when_eventing_is_processing_mutations(self):
         gen_load_copy = copy.deepcopy(self.gens_load)
-        body = self.create_save_function_body(self.function_name, self.handler_code)
+        body = self.create_save_function_body(self.function_name, self.handler_code,src_binding=True)
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
@@ -306,13 +306,6 @@ class EventingBucket(EventingBaseTest):
         self.skip_metabucket_check=True
 
     def test_source_and_destination_bucket_interchanged(self):
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
-        values = ['1', '10']
-        gen_load_non_json = JSONNonDocGenerator('non_json_docs', values, start=0, end=2016 * self.docs_per_day)
-        gen_load_non_json_del = copy.deepcopy(gen_load_non_json)
-        self.cluster.load_gen_docs(self.master, self.dst_bucket_name, gen_load_non_json, self.buckets[0].kvs[1],
-                                   'create', compression=self.sdk_compression)
         # deploy the first function
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
                                               worker_count=3)
@@ -326,8 +319,10 @@ class EventingBucket(EventingBaseTest):
         body1['depcfg']['source_bucket'] = self.dst_bucket_name
         del body1['depcfg']['buckets'][0]
         body1['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
+        self.rest.create_function(body1['appname'],body1)
         try:
-            self.deploy_function(body1)
+            self.deploy_function(body1,wait_for_bootstrap=False)
+            self.fail("Handler deployed with recursion")
         except Exception as ex:
             if "ERR_INTER_BUCKET_RECURSION" in str(ex):
                 pass
@@ -376,41 +371,6 @@ class EventingBucket(EventingBaseTest):
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
 
-    def test_eventing_where_source_and_destination_bucket_are_same(self):
-        # load some data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.SRC_AND_DST_BUCKET_ARE_SAME,
-                                              worker_count=3)
-        # create an alias so that src bucket is also destination bucket
-        del body['depcfg']['buckets'][0]
-        body['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.src_bucket_name})
-        self.deploy_function(body)
-        # sleep intentionally added as we are validating no mutations are processed by eventing
-        self.sleep(60)
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
-        # Undeploy and delete the function
-        self.undeploy_and_delete_function(body)
-
-    def test_eventing_where_we_read_source_bucket_data_from_handler_code(self):
-        # load some data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_READ_SOURCE_BUCKET,
-                                              worker_count=3)
-        # create an alias so that src bucket as well so that we can read data from source bucket
-        body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
-        self.deploy_function(body)
-        # sleep intentionally added as we are validating no mutations are processed by eventing
-        self.sleep(60)
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
-        # delete all documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
-        # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
-        self.undeploy_and_delete_function(body)
-
     def test_eventing_with_different_compression_modes(self):
         compression_mode = self.input.param('compression_mode', 'passive')
         bucket_type = self.input.param('bucket_type', 'membase')
@@ -433,7 +393,7 @@ class EventingBucket(EventingBaseTest):
                                                                    bucket_params=bucket_params))
         for task in tasks:
             task.result()
-        body = self.create_save_function_body(self.function_name, self.handler_code)
+        body = self.create_save_function_body(self.function_name, self.handler_code,src_binding=True)
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
         self.deploy_function(body)
         if self.pause_resume:
@@ -443,7 +403,6 @@ class EventingBucket(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
@@ -456,7 +415,6 @@ class EventingBucket(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
@@ -473,6 +431,7 @@ class EventingBucket(EventingBaseTest):
                                               worker_count=3)
         # create an alias so that src bucket as well so that we can read data from source bucket
         body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
+        self.rest.create_function(body['appname'], body)
         self.deploy_function(body)
         # sleep intentionally added as we are validating no mutations are processed by eventing
         self.sleep(60)
@@ -507,15 +466,13 @@ class EventingBucket(EventingBaseTest):
 
     #MB-30973
     def test_cleanup_metadata(self):
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMER,
-                                              worker_count=3)
-        # create an alias so that src bucket as well so that we can read data from source bucket
-        body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMER)
         self.deploy_function(body)
         # sleep intentionally added as we are validating no mutations are processed by eventing
         self.sleep(60)
         countMap = self.get_buckets_itemCount()
         initalDoc = countMap["metadata"]
+        assert int(initalDoc) != 0
         # load some data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
@@ -526,17 +483,11 @@ class EventingBucket(EventingBaseTest):
         finalDoc = countMap["metadata"]
         assert int(finalDoc) == 0
 
-
-
     def test_source_bucket_mutation_with_read_access(self):
         # load some data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION,
-                                              worker_count=3)
-        # create an alias so that src bucket is also destination bucket
-        del body['depcfg']['buckets'][0]
-        body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
+        body = self.create_save_function_body(self.function_name,"handler_code/bucket_op_read_only.js",src_binding=True)
         self.deploy_function(body)
         # sleep intentionally added as we are validating no mutations are processed by eventing
         self.sleep(60)

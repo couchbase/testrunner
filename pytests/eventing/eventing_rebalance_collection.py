@@ -309,10 +309,10 @@ class EventingRebalanceCollection(EventingBaseTest):
         self.verify_doc_count_collections("src_bucket.scope_1.coll_1", self.docs_per_day * self.num_docs)
         all_eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         self.log.info("Eventing Nodes after rebalance out {}".format(all_eventing_nodes))
+        self.master = self.get_nodes_from_services_map(service_type="kv")
         # add the previously removed nodes as part of swap rebalance
-        master = self.servers[0]
         for node in to_remove_nodes:
-            self.rest.add_node(master.rest_username, master.rest_password, node.ip, node.port,
+            self.rest.add_node(self.master.rest_username, self.master.rest_password, node.ip, node.port,
                                services=["eventing"])
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
                                      wait_for_loading=False)
@@ -365,7 +365,7 @@ class EventingRebalanceCollection(EventingBaseTest):
         # add the previously removed nodes as part of swap rebalance
         for node in to_remove_nodes:
             self.rest.add_node(self.master.rest_username, self.master.rest_password, node.ip, node.port,
-                               services=["eventing"])
+                               services=["kv"])
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
                                      wait_for_loading=False)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.scope_1.coll_1",

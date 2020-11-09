@@ -188,11 +188,14 @@ class EventingLifeCycle(EventingBaseTest):
         # do some mutations
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
+        eventing_ip = self.get_nodes_from_services_map(service_type="eventing")
         # get debugger url
-        pattern = re.compile(r'devtools://devtools/bundled/js_app.html(.*)')
+        pattern = re.compile(eventing_ip.ip+':9140(.*)')
         while count < 10:
             out2 = self.rest.get_eventing_debugger_url(self.function_name)
-            matched = re.match(pattern, out2.decode('utf-8'))
+            self.log.info("url generated {}".format(out2))
+            url=json.loads(out2)
+            matched = re.match(pattern, url["websocket"])
             if matched:
                 log.info("Got debugger url : {0}{1}".format(matched.group(0), matched.group(1)))
                 match = True
@@ -225,11 +228,13 @@ class EventingLifeCycle(EventingBaseTest):
         # do some mutations
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
+        eventing_ip = self.get_nodes_from_services_map(service_type="eventing")
         # get debugger url
-        pattern = re.compile(r'devtools://devtools/bundled/js_app.html(.*)')
+        pattern = re.compile(eventing_ip.ip + ':9140(.*)')
         while count < 10:
             out2 = self.rest.get_eventing_debugger_url(self.function_name)
-            matched = re.match(pattern, out2.decode('utf-8'))
+            url = json.loads(out2)
+            matched = re.match(pattern, url["websocket"])
             if matched:
                 log.info("Got debugger url : {0}{1}".format(matched.group(0), matched.group(1)))
                 match = True
@@ -283,10 +288,13 @@ class EventingLifeCycle(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         # get debugger url
-        pattern = re.compile(r'devtools://devtools/bundled/js_app.html(.*)')
+        eventing_ip = self.get_nodes_from_services_map(service_type="eventing")
+        # get debugger url
+        pattern = re.compile(eventing_ip.ip + ':9140(.*)')
         while count < 10:
             out2 = self.rest.get_eventing_debugger_url(self.function_name)
-            matched = re.match(pattern, out2)
+            url = json.loads(out2)
+            matched = re.match(pattern, url["websocket"])
             if matched:
                 log.info("Got debugger url : {0}{1}".format(matched.group(0), matched.group(1)))
                 match = True
@@ -332,11 +340,13 @@ class EventingLifeCycle(EventingBaseTest):
         # do some mutations
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
+        eventing_ip = self.get_nodes_from_services_map(service_type="eventing")
         # get debugger url
-        pattern = re.compile(r'devtools://devtools/bundled/js_app.html(.*)')
+        pattern = re.compile(eventing_ip.ip + ':9140(.*)')
         while count < 10:
             out2 = self.rest.get_eventing_debugger_url(self.function_name)
-            matched = re.match(pattern, out2.decode('utf-8'))
+            url = json.loads(out2)
+            matched = re.match(pattern, url["websocket"])
             if matched:
                 log.info("Got debugger url : {0}{1}".format(matched.group(0), matched.group(1)))
                 match = True
@@ -358,6 +368,7 @@ class EventingLifeCycle(EventingBaseTest):
         body['depcfg']['curl'].append(
             {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type, "username": self.curl_username,
              "password": self.curl_password, "cookies": self.cookies})
+        self.rest.create_function(body['appname'], body)
         self.deploy_function(body)
         #enable debugger
         self.rest.enable_eventing_debugger()
@@ -367,11 +378,13 @@ class EventingLifeCycle(EventingBaseTest):
         # do some mutations
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
+        eventing_ip = self.get_nodes_from_services_map(service_type="eventing")
         # get debugger url
-        pattern = re.compile(r'devtools://devtools/bundled/js_app.html(.*)')
+        pattern = re.compile(eventing_ip.ip + ':9140(.*)')
         while count < 10:
             out2 = self.rest.get_eventing_debugger_url(self.function_name)
-            matched = re.match(pattern, out2.decode('utf-8'))
+            url = json.loads(out2)
+            matched = re.match(pattern, url["websocket"])
             if matched:
                 log.info("Got debugger url : {0}{1}".format(matched.group(0), matched.group(1)))
                 match = True
@@ -393,6 +406,7 @@ class EventingLifeCycle(EventingBaseTest):
         body['depcfg']['curl'].append(
             {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type, "username": self.curl_username,
              "password": self.curl_password, "cookies": self.cookies})
+        self.rest.create_function(body['appname'],body)
         self.deploy_function(body)
         # export the function that we have created
         output = self.rest.export_function(self.function_name)
@@ -421,10 +435,13 @@ class EventingLifeCycle(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         # get debugger url
-        pattern = re.compile(r'devtools://devtools/bundled/js_app.html(.*)')
+        eventing_ip = self.get_nodes_from_services_map(service_type="eventing")
+        # get debugger url
+        pattern = re.compile(eventing_ip.ip + ':9140(.*)')
         while count < 10:
             out2 = self.rest.get_eventing_debugger_url(self.function_name)
-            matched = re.match(pattern, out2.decode('utf-8'))
+            url = json.loads(out2)
+            matched = re.match(pattern, url["websocket"])
             if matched:
                 log.info("Got debugger url : {0}{1}".format(matched.group(0), matched.group(1)))
                 match = True

@@ -18,9 +18,7 @@ class EventingSourceMutation(EventingBaseTest):
         if self.create_functions_buckets:
             self.replicas = self.input.param("replicas", 0)
             self.bucket_size = 100
-            # This is needed as we have increased the context size to 93KB. If this is not increased the metadata
-            # bucket goes into heavy DGM
-            self.metadata_bucket_size = 400
+            self.metadata_bucket_size = 100
             log.info(self.bucket_size)
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                        replicas=self.replicas)
@@ -36,50 +34,13 @@ class EventingSourceMutation(EventingBaseTest):
             self.buckets = RestConnection(self.master).get_buckets()
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.expiry = 3
-        handler_code = self.input.param('handler_code', 'bucket_op')
-        if handler_code == 'bucket_op':
-            self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
-        elif handler_code == 'bucket_op_with_timers':
-            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS
-        elif handler_code == 'bucket_op_with_cron_timers':
-            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMERS
-        elif handler_code == 'n1ql_op_with_timers':
-            # index is required for delete operation through n1ql
-            self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-            self.n1ql_helper = N1QLHelper(shell=self.shell,
-                                          max_verify=self.max_verify,
-                                          buckets=self.buckets,
-                                          item_flag=self.item_flag,
-                                          n1ql_port=self.n1ql_port,
-                                          full_docs_list=self.full_docs_list,
-                                          log=self.log, input=self.input,
-                                          master=self.master,
-                                          use_rest=True
-                                          )
-            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
-            self.handler_code = HANDLER_CODE.N1QL_OPS_WITH_TIMERS
-        elif handler_code == 'n1ql_op_without_timers':
-            # index is required for delete operation through n1ql
-            self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-            self.n1ql_helper = N1QLHelper(shell=self.shell,
-                                          max_verify=self.max_verify,
-                                          buckets=self.buckets,
-                                          item_flag=self.item_flag,
-                                          n1ql_port=self.n1ql_port,
-                                          full_docs_list=self.full_docs_list,
-                                          log=self.log, input=self.input,
-                                          master=self.master,
-                                          use_rest=True
-                                          )
-            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
-            self.handler_code = HANDLER_CODE.N1QL_OPS_WITHOUT_TIMERS
-        elif handler_code == 'source_bucket_mutation':
-            self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION
-        else:
-            self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
         force_disable_new_orchestration = self.input.param('force_disable_new_orchestration', False)
         if force_disable_new_orchestration:
             self.rest.diag_eval("ns_config:set(force_disable_new_orchestration, true).")
+        if self.non_default_collection:
+            self.create_scope_collection(bucket=self.src_bucket_name,scope=self.src_bucket_name,collection=self.src_bucket_name)
+            self.create_scope_collection(bucket=self.metadata_bucket_name,scope=self.metadata_bucket_name,collection=self.metadata_bucket_name)
+            self.create_scope_collection(bucket=self.dst_bucket_name,scope=self.dst_bucket_name,collection=self.dst_bucket_name)
 
     def tearDown(self):
         try:
@@ -95,20 +56,20 @@ class EventingSourceMutation(EventingBaseTest):
         super(EventingSourceMutation, self).tearDown()
 
     def test_inter_handler_recursion(self):
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION,
                                               worker_count=3)
         self.deploy_function(body)
         body1 = self.create_save_function_body(self.function_name+"_2", HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION,
                                               worker_count=3)
         try:
-            self.deploy_function(body1)
+            self.deploy_function(body1,wait_for_bootstrap=False)
+            raise Exception("Handler deployed even with inter handler recursion")
         except Exception as ex:
+            self.log.info("Exception Thrown {}".format(ex))
             if "ERR_INTER_FUNCTION_RECURSION" in str(ex):
                 pass
             else:
-                raise Exception("No inter handler recursion observed")
+                self.fail("No inter handler recursion observed")
         self.undeploy_function(body)
         self.deploy_function(body1)
         try:
@@ -191,3 +152,32 @@ class EventingSourceMutation(EventingBaseTest):
         if count > 1:
             self.fail("Seeing runtime recusrion in logs {}".format(count))
         self.undeploy_and_delete_function(body)
+
+
+    def test_inter_handler_recursion_named_collections(self):
+        body = self.create_function_with_collection(self.function_name, HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION,
+                                              src_namespace="src_bucket.src_bucket.src_bucket",
+                                                    collection_bindings=["src_bucket.src_bucket.src_bucket.src_bucket.rw"])
+        self.deploy_function(body)
+        body1 = self.create_function_with_collection(self.function_name+"_2", HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION,
+                                                     src_namespace="src_bucket.src_bucket.src_bucket",
+                                                     collection_bindings=["src_bucket.src_bucket.src_bucket.src_bucket.rw"])
+        try:
+            self.deploy_function(body1,wait_for_bootstrap=False)
+            raise Exception("Handler deployed even with inter handler recursion")
+        except Exception as ex:
+            self.log.info("Exception Thrown {}".format(ex))
+            if "ERR_INTER_FUNCTION_RECURSION" in str(ex):
+                pass
+            else:
+                self.fail("No inter handler recursion observed")
+        self.undeploy_function(body)
+        self.deploy_function(body1)
+        try:
+            self.deploy_function(body)
+        except Exception as ex:
+            if "ERR_INTER_FUNCTION_RECURSION" in str(ex):
+                pass
+            else:
+                raise Exception("No inter handler recursion observed")
+        self.undeploy_function(body1)
