@@ -483,10 +483,14 @@ class XdcrCLITest(CliBaseTest):
 
     def tearDown(self):
         for server in self.servers:
-            rest = RestConnection(server)
-            rest.remove_all_remote_clusters()
-            rest.remove_all_replications()
-            rest.remove_all_recoveries()
+            try:
+                rest = RestConnection(server)
+                rest.remove_all_replications()
+                rest.remove_all_remote_clusters()
+                rest.remove_all_recoveries()
+            except Exception as e:
+                if e:
+                    print("Error: ", str(e))
         super(XdcrCLITest, self).tearDown()
 
     def __execute_cli(self, cli_command, options, cluster_host="localhost"):
@@ -736,10 +740,14 @@ class XdcrCLITest(CliBaseTest):
                 collections = self._extract_collection_names(collections)
             collections_id = []
             for collection in collections:
-                if collection == "_default" and self.custom_collections:
-                    collections.remove(collection)
-                    continue
-                collections_id.append(self.get_collections_id(scopes[0],collection))
+                if collection == "_default":
+                    if len(collections) > 1 and self.custom_collections:
+                        collections.remove(collection)
+                        continue
+                    else:
+                        collections_id.append("0x0")
+                        break
+                collections_id.append(self.get_collections_id(scopes[0], collection))
             collections_id = list(filter(None, collections_id))
             if collections_id:
                 load_collection_id_src = collections_id[0]
@@ -766,7 +774,7 @@ class XdcrCLITest(CliBaseTest):
         self.sleep(10)
         output, _ = self.__execute_cli(cli_command, options)
         if not error_expected:
-            self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["create"], output[0])
+            self.assertTrue(self._check_output(XdcrCLITest.XDCR_REPLICATE_SUCCESS["create"], output))
         else:
             return
 
