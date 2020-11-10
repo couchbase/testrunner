@@ -1908,8 +1908,32 @@ class RestConnection(object):
             index_map = RestParser().parse_index_stats_response_collections(json_parsed, index_map=index_map)
         return index_map
 
-    def get_index_official_stats(self, timeout=120, index_map=None):
+    def get_all_index_stats(self, timeout=120, inst_id_filter=[], consumer_filter=None, text=False):
+        """return: json object or text response of :9102/stats"""
+        api = self.index_baseUrl + 'stats'
+        all_index_stats = {}
+        if inst_id_filter:
+            inst_id_filter = json.dumps(inst_id_filter)
+        elif consumer_filter:
+            api += f"?consumerFilter={consumer_filter}"
+        else:
+            inst_id_filter = ""
+        status, content, _ = self._http_request(api, timeout=timeout, params=inst_id_filter)
+        if status:
+            if text:
+                all_index_stats = content.decode("utf8").replace('":', '": ').replace(",", ", ")
+            else:
+                all_index_stats = json.loads(content)
+        return all_index_stats
+    
+    def get_index_official_stats(self, timeout=120, index_map=None, bucket="", scope="", collection=""):
         api = self.index_baseUrl + 'api/v1/stats'
+        if bucket:
+            api += f'/`{bucket.replace("%", "%25")}`'
+            if scope:
+                api += f'.{scope}'
+                if collection:
+                    api += f'.{collection}'
         status, content, header = self._http_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
