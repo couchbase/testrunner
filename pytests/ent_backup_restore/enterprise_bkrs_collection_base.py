@@ -615,7 +615,11 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
 
     def verify_scopes_in_restore_cluster_host(self):
         backup_scopes = self.get_bucket_scope_cluster_host()
+        if isinstance(backup_scopes, tuple):
+            backup_scopes = backup_scopes[0]
         restore_scopes = self.get_bucket_scope_restore_cluster_host()
+        if isinstance(restore_scopes, tuple):
+            restore_scopes = restore_scopes[0]
         not_found_scopes = []
         for restore_scope in restore_scopes:
             if isinstance(restore_scope, list):
@@ -624,7 +628,6 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                         self.log.info("Found '{0} in restore scopes {1}".format(ele, restore_scope))
                     else:
                         not_found_scopes.append(ele)
-                        self.fail("Scope {0} failed to restore".format(ele))
                 if not_found_scopes:
                     self.fail("Scope {0} failed to restore".format(not_found_scopes))
                 else:
