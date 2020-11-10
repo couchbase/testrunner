@@ -939,7 +939,8 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                     self.cluster.rebalance(list(servers.values()),
                                            list(servers_in.values()),
                                            list(servers_out.values()),
-                                           services=[servicesNodeOut])
+                                           services=[servicesNodeOut],
+                                           sleep_before_rebalance=15)
                 elif self.upgrade_services_in is not None \
                         and len(self.upgrade_services_in) > 0:
                     tem_services = self.upgrade_services_in[
@@ -948,12 +949,14 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                     self.cluster.rebalance(list(servers.values()),
                                            list(servers_in.values()),
                                            list(servers_out.values()),
-                                           services=tem_services)
+                                           services=tem_services,
+                                           sleep_before_rebalance=15)
                     start_services_num += len(list(servers_in.values()))
                 else:
                     self.cluster.rebalance(list(servers.values()),
                                            list(servers_in.values()),
-                                           list(servers_out.values()))
+                                           list(servers_out.values()),
+                                           sleep_before_rebalance=15)
             except Exception as ex:
                 self.log.info(ex)
                 raise

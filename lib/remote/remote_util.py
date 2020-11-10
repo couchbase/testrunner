@@ -2959,7 +2959,6 @@ class RemoteMachineShellConnection(KeepRefs):
             self.terminate_processes(self.info, terminate_process_list)
             if not self.nonroot:
                 self.remove_folders(linux_folders)
-                self.kill_memcached()
                 output, error = self.execute_command("ipcrm")
                 self.log_command_output(output, error, debug=debug_logs)
         elif self.info.distribution_type.lower() == 'mac':

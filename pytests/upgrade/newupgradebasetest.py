@@ -22,7 +22,9 @@ from TestInput import TestInputSingleton
 from pytests.fts.fts_base import QUERY
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
+from query_tests_helper import QueryHelperTests
 from couchbase_helper.tuq_generators import JsonGenerator
+from fts.fts_base import FTSIndex, FTSBaseTest
 from pytests.fts.fts_callable import FTSCallable
 from pytests.tuqquery.n1ql_callable import N1QLCallable
 from pprint import pprint
@@ -37,6 +39,9 @@ from testconstants import CB_VERSION_NAME
 from testconstants import COUCHBASE_FROM_VERSION_3
 from testconstants import COUCHBASE_MP_VERSION
 from testconstants import CE_EE_ON_SAME_FOLDER
+from collection.collections_cli_client import CollectionsCLI
+from collection.collections_rest_client import CollectionsRest
+from collection.collections_stats import CollectionsStats
 
 try:
     from lib.sdk_client import SDKClient
@@ -145,6 +150,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.drop_default_collection = self.input.param("drop_default_collection", False)
         self.log_filename = self.input.param("filename", "loginfo_collecion")
         self.node_down = self.input.param("node_down", False)
+        self.scan_consistency = self.input.param("scan_consistency", "request_plus")
 
         self.load_scope_id = ""
         self.load_scope = ""
@@ -152,6 +158,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.scopes = None
         self.collections = None
         self.upgrade_master_node = None
+        self.n1ql = QueryHelperTests
 
         self.during_ops = None
         if "during-ops" in self.input.test_params:
@@ -1468,8 +1475,28 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self.cli_col.delete_collection(bucket=bucket_name, scope="_{0}".format(bucket_name),
                                                   collection="_{0}".format(bucket_name))
 
-    def _create_scope_collection(self):
-        bucket_name = self.buckets[0].name
+    def get_col_item_count(self, server=None, bucket=None, scope, collection=None, cluster_stats=None):
+        if not server:
+            raise("Need to pass which server to get item count")
+        if not cluster_stats:
+            raise("Need to pass cluster stats to get item count")
+        if not scope:
+            scope = "_default"
+        if not collection:
+            collection = "_default"
+        if not bucket:
+            bucket = "default"
+        return cluster_stats.get_collection_item_count(bucket, scope, collection, server, cluster_stats)
+
+    def _create_scope_collection(self, rest=None, cli=None, bucket=None):
+        if rest:
+            self.rest_col = rest
+        if cli:
+            self.cli_col = cli
+        if bucket:
+            bucket_name = bucket
+        else:
+            bucket_name = self.buckets[0].name
         for x in range(self.num_scopes):
             scope_name = "scope{0}".format(x)
             if self.non_ascii_name:
@@ -1527,13 +1554,23 @@ class NewUpgradeBaseTest(BaseTestCase):
                 collection_names.append(x.split(":name:")[1].strip())
         return collection_names, error
 
-    def get_scopes_id(self, scope):
-        bucket = self.buckets[0]
-        return self.stat_col.get_scope_id(bucket, scope)
+    def get_scopes_id(self, scope, bucket=None, stat_col=None):
+        if bucket:
+            get_bucket = bucket
+        else:
+            get_bucket = self.buckets[0]
+        if stat_col:
+            self.stat_col = stat_col
+        return self.stat_col.get_scope_id(get_bucket, scope)
 
-    def get_collections_id(self, scope, collection):
-        bucket = self.buckets[0]
-        return self.stat_col.get_collection_id(bucket, scope, collection)
+    def get_collections_id(self, scope, collection, bucket=None, stat_col=None):
+        if bucket:
+            get_bucket = bucket
+        else:
+            get_bucket = self.buckets[0]
+        if stat_col:
+            self.stat_col = stat_col
+        return self.stat_col.get_collection_id(get_bucket, scope, collection)
 
     def get_collection_load_id(self):
         scopes = self.get_bucket_scope()
@@ -1573,6 +1610,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         cluster = self.master
         shell = RemoteMachineShellConnection(self.master)
         for bucket in self.buckets:
+            self.sleep(7)
             shell.execute_cbworkloadgen(cluster.rest_username,
                                         cluster.rest_password,
                                         self.num_items,
@@ -1580,6 +1618,12 @@ class NewUpgradeBaseTest(BaseTestCase):
                                         bucket.name,
                                         item_size,
                                         command_options)
+
+    def load_to_collections_bucket(self):
+        self.load_collection_id = self.get_collection_load_id()
+        option = " -c {0} ".format(self.load_collection_id)
+        self.sleep(10)
+        self.load_collection_all_buckets(command_options=option )
 
     def _verify_collection_data(self):
         items_match = False
@@ -1593,3 +1637,113 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.log.info("data loaded to collecion")
         if not items_match:
             self.log.error("Failed to load to collection")
+
+    def pre_upgrade(self, servers):
+        if self.rest is None:
+            self._new_master(self.master)
+        self.ddocs_num = self.input.param("ddocs_num", 0)
+        if int(self.ddocs_num) > 0:
+            self.create_ddocs_and_views()
+            verify_data = False
+            if self.scan_consistency != "request_plus":
+                verify_data = True
+            self.gens_load = self.generate_docs(self.docs_per_day)
+            self.load(self.gens_load, flag=self.item_flag,
+                  verify_data=verify_data, batch_size=self.batch_size)
+        rest = RestConnection(servers[0])
+        output, rq_content, header = rest.set_auto_compaction(dbFragmentThresholdPercentage=20, viewFragmntThresholdPercentage=20)
+        self.assertTrue(output, "Error in set_auto_compaction... {0}".format(rq_content))
+        status, content, header = rest.set_indexer_compaction(mode="full", fragmentation=20)
+        self.assertTrue(status, "Error in setting Append Only Compaction... {0}".format(content))
+        operation_type = self.input.param("pre_upgrade", "")
+        if operation_type:
+            self.n1ql.run_async_index_operations(operation_type)
+
+    def during_upgrade(self, servers):
+        self.ddocs_num = self.input.param("ddocs_num", 0)
+        if int(self.ddocs_num) > 0:
+            self.create_ddocs_and_views()
+            kv_tasks = self.async_run_doc_ops()
+            operation_type = self.input.param("during_upgrade", "")
+            self.n1ql.run_async_index_operations(operation_type)
+            for task in kv_tasks:
+                task.result()
+
+    def post_upgrade(self, servers):
+        self.log.info(" Doing post upgrade")
+        self.ddocs_num = self.input.param("ddocs_num", 0)
+        self.add_built_in_server_user()
+        if int(self.ddocs_num) > 0:
+            self.create_ddocs_and_views(servers[0])
+            kv_tasks = self.async_run_doc_ops()
+            operation_type = self.input.param("post_upgrade", "")
+            self.n1ql.run_async_index_operations(operation_type)
+            for task in kv_tasks:
+                task.result()
+        self.verification(servers, check_items=False)
+
+    def _create_ephemeral_buckets(self):
+        create_ephemeral_buckets = self.input.param(
+            "create_ephemeral_buckets", False)
+        if not create_ephemeral_buckets:
+            return
+        rest = RestConnection(self.master)
+        versions = rest.get_nodes_versions()
+        for version in versions:
+            if "5" > version:
+                self.log.info("Atleast one of the nodes in the cluster is "
+                              "pre 5.0 version. Hence not creating ephemeral"
+                              "bucket for the cluster.")
+                return
+        num_ephemeral_bucket = self.input.param("num_ephemeral_bucket", 1)
+        server = self.master
+        server_id = RestConnection(server).get_nodes_self().id
+        ram_size = RestConnection(server).get_nodes_self().memoryQuota
+        bucket_size = self._get_bucket_size(ram_size, self.bucket_size +
+                                                      num_ephemeral_bucket)
+        self.log.info("Creating ephemeral buckets")
+        self.log.info("Changing the existing buckets size to accomodate new "
+                      "buckets")
+        for bucket in self.buckets:
+            rest.change_bucket_props(bucket, ramQuotaMB=bucket_size)
+
+        bucket_tasks = []
+        bucket_params = copy.deepcopy(
+            self.bucket_base_params['membase']['non_ephemeral'])
+        bucket_params['size'] = bucket_size
+        bucket_params['bucket_type'] = 'ephemeral'
+        bucket_params['eviction_policy'] = 'noEviction'
+        ephemeral_buckets = []
+        self.log.info("Creating ephemeral buckets now")
+        for i in range(num_ephemeral_bucket):
+            name = 'ephemeral_bucket' + str(i)
+            port = STANDARD_BUCKET_PORT + i + 1
+            bucket_priority = None
+            if self.standard_bucket_priority is not None:
+                bucket_priority = self.get_bucket_priority(
+                    self.standard_bucket_priority[i])
+
+            bucket_params['bucket_priority'] = bucket_priority
+            bucket_tasks.append(
+                self.cluster.async_create_standard_bucket(name=name, port=port,
+                                                          bucket_params=bucket_params))
+            bucket = Bucket(name=name, authType=None, saslPassword=None,
+                            num_replicas=self.num_replicas,
+                            bucket_size=self.bucket_size,
+                            port=port, master_id=server_id,
+                            eviction_policy='noEviction', lww=self.lww)
+            self.buckets.append(bucket)
+            ephemeral_buckets.append(bucket)
+
+        for task in bucket_tasks:
+            task.result(self.wait_timeout * 10)
+
+        if self.enable_time_sync:
+            self._set_time_sync_on_buckets(
+                ['standard_bucket' + str(i) for i in range(
+                    num_ephemeral_bucket)])
+        load_gen = BlobGenerator('upgrade', 'upgrade-', self.value_size,
+                                 end=self.num_items)
+        for bucket in ephemeral_buckets:
+            self._load_bucket(bucket, self.master, load_gen, "create",
+                              self.expire_time)

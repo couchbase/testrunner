@@ -41,7 +41,8 @@ class EventingBaseTest(QueryHelperTests):
         if str(self.__class__).find('newupgradetests') != -1 or \
                     str(self.__class__).find('upgradeXDCR') != -1 or \
                     str(self.__class__).find('Upgrade_EpTests') != -1 or \
-                    str(self.__class__).find('UpgradeTests')  != -1:
+                    str(self.__class__).find('UpgradeTests')  != -1 or \
+                    str(self.__class__).find('MultiNodesUpgradeTests') != -1:
             self.is_upgrade_test = True
         if not self.is_upgrade_test:
             self.input.test_params.update({"default_bucket": False})
