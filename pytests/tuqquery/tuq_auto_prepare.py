@@ -766,4 +766,5 @@ class QueryAutoPrepareTests(QueryTests):
             self.log.error("Prepared statement failed {0}".format(str(e)))
             self.fail()
         results = self.run_cbq_query("SELECT * from system:prepareds")
-        self.assertEqual(results['metrics']['resultCount'], 6)
+        self.log.info(str(results))
+        self.assertEqual(results['metrics']['resultCount'], 6, "Results mismatch {0}".format(results))
