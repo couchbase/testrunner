@@ -1411,7 +1411,8 @@ class QueryTests(BaseTestCase):
                 self.log.info('RUN QUERY %s' % query)
 
             if self.analytics:
-                query = query + ";"
+                if ';' not in query:
+                    query = query + ";"
                 if not self.udfs:
                     for bucket in self.buckets:
                         query = query.replace(bucket.name, bucket.name + "_shadow")
@@ -2570,6 +2571,11 @@ class QueryTests(BaseTestCase):
             names = ','.join(list)
             self.query = "GRANT {0} on {1} to {2}".format(role, names, self.users[0]['id'])
             actual_result = self.run_cbq_query()
+        elif self.udfs:
+            roles = role.split(",")
+            for role in roles:
+                self.query = "GRANT {0} to {1}".format(role, self.users[0]['id'])
+                actual_result = self.run_cbq_query()
         elif "," in role:
             roles = role.split(",")
             for role in roles:

@@ -753,6 +753,7 @@ class QueryAutoPrepareTests(QueryTests):
         self.assertEqual(results['metrics']['resultCount'], 3)
 
     def test_system_prepareds(self):
+        validated = False
         try:
             self.run_cbq_query(query="PREPARE p3 AS SELECT * FROM default where name = 'employee-9'")
         except Exception as e:
@@ -765,6 +766,21 @@ class QueryAutoPrepareTests(QueryTests):
         except Exception as e:
             self.log.error("Prepared statement failed {0}".format(str(e)))
             self.fail()
-        results = self.run_cbq_query("SELECT * from system:prepareds")
-        self.log.info(str(results))
-        self.assertEqual(results['metrics']['resultCount'], 6, "Results mismatch {0}".format(results))
+        attempts = 0
+        tries = 5
+        while attempts < tries:
+            attempts = attempts + 1
+            try:
+                results = self.run_cbq_query("SELECT * from system:prepareds")
+                self.log.info(str(results))
+                if results['metrics']['resultCount'] == 6:
+                    validated = True
+                    break
+                else:
+                    self.log.info(str(results))
+                    self.sleep(1)
+            except Exception as ex:
+                self.log.error(str(ex))
+                self.sleep(1)
+        if not validated:
+            self.fail("System:prepareds was not properly updated, please check logs above.")

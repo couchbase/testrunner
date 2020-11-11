@@ -22,14 +22,70 @@ class QueryUDFTests(QueryTests):
         self.invalid = self.input.param("invalid", False)
         self.reserved_word = self.input.param("reserved_word", False)
         self.replace = self.input.param("replace", False)
+        if not self.analytics:
+            self.run_cbq_query(query="delete from system:prepareds")
+        users = self.input.param("users", None)
+        self.inp_users = []
+        if users:
+            self.inp_users = eval(eval(users))
+        self.users = self.get_user_list()
+        self.roles = self.get_user_role_list()
+        self.all_buckets = self.input.param("all_buckets", False)
+        self.scoped = self.input.param("scoped", False)
+        self.rebalance_in = self.input.param("rebalance_in", False)
         self.log.info("==============  QuerySanityTests setup has completed ==============")
         self.log_config_info()
 
     def suite_setUp(self):
         super(QueryUDFTests, self).suite_setUp()
         self.log.info("==============  QueryUDFTests suite_setup has started ==============")
+        if self.load_collections:
+            self.run_cbq_query(query='CREATE INDEX idx on default(name)')
+            self.sleep(5)
+            self.wait_for_all_indexes_online()
+            self.collections_helper.create_scope(bucket_name="default", scope_name="test2")
+            self.collections_helper.create_collection(bucket_name="default", scope_name="test2",
+                                                      collection_name=self.collections[0])
+            self.collections_helper.create_collection(bucket_name="default", scope_name="test2",
+                                                      collection_name=self.collections[1])
+            self.run_cbq_query(
+                query="CREATE INDEX idx1 on default:default.test2.{0}(name)".format(self.collections[0]))
+            self.run_cbq_query(
+                query="CREATE INDEX idx2 on default:default.test2.{0}(name)".format(self.collections[1]))
+            self.sleep(5)
+            self.wait_for_all_indexes_online()
+            self.run_cbq_query(
+                query=('INSERT INTO default:default.test2.{0}'.format(self.collections[
+                    1]) + '(KEY, VALUE) VALUES ("key1", { "type" : "hotel", "name" : "old hotel" })'))
+            self.run_cbq_query(
+                query=('INSERT INTO default:default.test2.{0}'.format(self.collections[1]) + '(KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "new hotel" })'))
+            self.run_cbq_query(
+                query=('INSERT INTO default:default.test2.{0}'.format(self.collections[1]) + '(KEY, VALUE) VALUES ("key3", { "type" : "hotel", "name" : "new hotel" })'))
+            self.sleep(20)
+        if self.load_sample:
+            self.rest.load_sample("travel-sample")
+            init_time = time.time()
+            while True:
+                next_time = time.time()
+                query_response = self.run_cbq_query("SELECT COUNT(*) FROM `travel-sample`")
+                if query_response['results'][0]['$1'] == 31591:
+                    break
+                if next_time - init_time > 600:
+                    break
+                time.sleep(1)
+            self.wait_for_all_indexes_online()
         if self.analytics:
             self.run_cbq_query(query="CREATE DATASET default on default")
+            self.run_cbq_query(query="connect link Local")
+            self.run_cbq_query(query="CREATE DATASET collection1 on default.test.test1")
+            self.run_cbq_query(query="connect link Local")
+            self.run_cbq_query(query="CREATE DATASET collection2 on default.test.test2")
+            self.run_cbq_query(query="connect link Local")
+            self.run_cbq_query(query="CREATE DATASET collection3 on default.test2.test1")
+            self.run_cbq_query(query="connect link Local")
+            self.run_cbq_query(query="CREATE DATASET collection4 on default.test2.test2")
+            self.run_cbq_query(query="connect link Local")
+            self.run_cbq_query(query="CREATE DATASET travel on `travel-sample`")
             self.run_cbq_query(query="connect link Local")
         self.log.info("==============  QueryUDFTests suite_setup has completed ==============")
 
@@ -41,7 +97,13 @@ class QueryUDFTests(QueryTests):
     def suite_tearDown(self):
         self.log.info("==============  QueryUDFTests suite_tearDown has started ==============")
         if self.analytics:
-            self.run_cbq_query(query="DROP DATASET default ")
+            self.run_cbq_query(query="DROP DATASET default")
+            self.run_cbq_query(query="DROP DATASET travel")
+            self.run_cbq_query(query="DROP DATASET collection1")
+            self.run_cbq_query(query="DROP DATASET collection2")
+            self.run_cbq_query(query="DROP DATASET collection3")
+            self.run_cbq_query(query="DROP DATASET collection4")
+
         self.log.info("==============  QueryUDFTests suite_tearDown has completed ==============")
         super(QueryUDFTests, self).suite_tearDown()
 
@@ -56,9 +118,9 @@ class QueryUDFTests(QueryTests):
                 if self.analytics:
                     if self.named_params:
                         if self.special_chars:
-                            self.run_cbq_query("CREATE ANALYTICS FUNCTION celsius(deg_) { (`deg_` - 32) * 5/9}")
+                            self.run_cbq_query("CREATE OR REPLACE ANALYTICS FUNCTION celsius(deg_) { (`deg_` - 32) * 5/9}")
                         else:
-                            self.run_cbq_query("CREATE ANALYTICS FUNCTION celsius(degrees) { (degrees - 32) * 5/9 }")
+                            self.run_cbq_query("CREATE OR REPLACE ANALYTICS FUNCTION celsius(degrees) { (degrees - 32) * 5/9 }")
                     elif self.no_params:
                         self.run_cbq_query("CREATE ANALYTICS FUNCTION celsius() { (10 - 32) * 5/9 }")
                     else:
@@ -126,50 +188,83 @@ class QueryUDFTests(QueryTests):
     def test_inline_drop_function(self):
         try:
             try:
-                if self.special_chars:
-                    self.run_cbq_query("CREATE FUNCTION `c%.-_`(...) LANGUAGE INLINE AS (args[0] - 32) * 5/9")
+                if self.analytics:
+                    if self.special_chars:
+                        self.run_cbq_query("CREATE OR REPLACE ANALYTICS FUNCTION `c%.-_`(param1) {(param1 - 32) * 5/9}")
+                    else:
+                        self.run_cbq_query("CREATE OR REPLACE ANALYTICS FUNCTION cels(param1) {(param1 - 32) * 5/9}")
                 else:
-                    self.run_cbq_query("CREATE FUNCTION cels(...) LANGUAGE INLINE AS (args[0] - 32) * 5/9")
+                    if self.special_chars:
+                        self.run_cbq_query("CREATE FUNCTION `c%.-_`(...) LANGUAGE INLINE AS (args[0] - 32) * 5/9")
+                    else:
+                        self.run_cbq_query("CREATE FUNCTION cels(...) LANGUAGE INLINE AS (args[0] - 32) * 5/9")
             except Exception as e:
                 self.log.error(str(e))
             try:
-                if self.special_chars:
-                    proper = self.run_cbq_query("EXECUTE FUNCTION `c%.-_`(10)")
+                if self.analytics:
+                    if self.special_chars:
+                        proper = self.run_cbq_query("SELECT RAW `c%.-_`(10)")
+                    else:
+                        proper = self.run_cbq_query("SELECT RAW cels(10)")
                 else:
-                    proper = self.run_cbq_query("EXECUTE FUNCTION cels(10)")
+                    if self.special_chars:
+                        proper = self.run_cbq_query("EXECUTE FUNCTION `c%.-_`(10)")
+                    else:
+                        proper = self.run_cbq_query("EXECUTE FUNCTION cels(10)")
                 self.assertEqual(proper['results'], [-12.222222222222221])
             except Exception as e:
                 self.log.error(str(e))
             try:
-                if self.special_chars:
-                    results = self.run_cbq_query("DROP FUNCTION `c%.-_`")
+                if self.analytics:
+                    if self.special_chars:
+                        results = self.run_cbq_query("DROP ANALYTICS FUNCTION `c%.-_`")
+                    else:
+                        results = self.run_cbq_query("DROP ANALYTICS FUNCTION cels")
                 else:
-                    results = self.run_cbq_query("DROP FUNCTION cels")
+                    if self.special_chars:
+                        results = self.run_cbq_query("DROP FUNCTION `c%.-_`")
+                    else:
+                        results = self.run_cbq_query("DROP FUNCTION cels")
                 self.assertEqual(results['status'], 'success')
             except Exception as e:
                 self.log.error(str(e))
                 self.fail()
             try:
-                if self.special_chars:
-                    self.run_cbq_query("EXECUTE FUNCTION `c%.-_`(10)")
+                if self.analytics:
+                    if self.special_chars:
+                        self.run_cbq_query("SELECT RAW `c%.-_`(10)")
+                    else:
+                        self.run_cbq_query("SELECT RAW cels(10)")
                 else:
-                    self.run_cbq_query("EXECUTE FUNCTION cels(10)")
+                    if self.special_chars:
+                        self.run_cbq_query("EXECUTE FUNCTION `c%.-_`(10)")
+                    else:
+                        self.run_cbq_query("EXECUTE FUNCTION cels(10)")
                 self.fail("Query should have error'd, but it did not")
             except Exception as e:
                 self.log.error(str(e))
                 self.assertTrue('Function not found' in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
         finally:
             try:
-                if self.special_chars:
-                    self.run_cbq_query("DROP FUNCTION `c%.-_`")
+                if self.analytics:
+                    if self.special_chars:
+                        self.run_cbq_query("DROP ANALYTICS FUNCTION `c%.-_`")
+                    else:
+                        self.run_cbq_query("DROP ANALYTICS FUNCTION cels")
                 else:
-                    self.run_cbq_query("DROP FUNCTION cels")
+                    if self.special_chars:
+                        self.run_cbq_query("DROP FUNCTION `c%.-_`")
+                    else:
+                        self.run_cbq_query("DROP FUNCTION cels")
             except Exception as e:
-                pass
+                self.log.info(str(e))
 
     def test_inline_drop_missing_function(self):
         try:
-            self.run_cbq_query(query="DROP FUNCTION func_does_not_exist")
+            if self.analytics:
+                self.run_cbq_query(query="DROP ANALYTICS FUNCTION func_does_not_exist")
+            else:
+                self.run_cbq_query(query="DROP FUNCTION func_does_not_exist")
         except Exception as e:
             self.log.error(str(e))
             self.assertTrue('Function not found func_does_not_exist' in str(e), "Error message is wrong {0}".format(str(e)))
@@ -207,12 +302,194 @@ class QueryUDFTests(QueryTests):
 
     def test_inline_function_syntax_scope(self):
         try:
-            self.run_cbq_query("CREATE FUNCTION default:default.{0}.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9".format(self.scope))
+            if self.analytics:
+                self.run_cbq_query(
+                    "CREATE OR REPLACE ANALYTICS FUNCTION collection1.celsius(degrees) {(degrees - 32) * 5/9}")
+                results = self.run_cbq_query("SELECT RAW collection1.celsius(10)".format(self.scope))
+            else:
+                self.run_cbq_query("CREATE FUNCTION default:default.{0}.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9".format(self.scope))
+                results = self.run_cbq_query("EXECUTE FUNCTION default:default.{0}.celsius(10)".format(self.scope))
+            self.assertEqual(results['results'], [-12.222222222222221])
+            if not self.analytics:
+                results = self.run_cbq_query("EXECUTE FUNCTION celsius(10)".format(self.scope))
+                self.fail()
+        except Exception as e:
+            self.log.info(str(e))
+            self.assertTrue('Function not found celsius' in str(e))
+        finally:
+            try:
+                if self.analytics:
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION collection1.celsius".format(self.scope))
+                else:
+                    self.run_cbq_query("DROP FUNCTION default:default.{0}.celsius".format(self.scope))
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_inline_function_query_context(self):
+        try:
+            self.run_cbq_query("CREATE FUNCTION celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9", query_context='default:default.test')
             results = self.run_cbq_query("EXECUTE FUNCTION default:default.{0}.celsius(10)".format(self.scope))
+            self.assertEqual(results['results'], [-12.222222222222221])
+            results = self.run_cbq_query("EXECUTE FUNCTION celsius(10)")
+        except Exception as e:
+            self.log.info(str(e))
+            self.assertTrue('Function not found celsius' in str(e))
+        try:
+            results = self.run_cbq_query("EXECUTE FUNCTION celsius(10)", query_context='default:default.test')
             self.assertEqual(results['results'], [-12.222222222222221])
         finally:
             try:
-                self.run_cbq_query("DROP FUNCTION default:default.{0}.celsius".format(self.scope))
+                self.run_cbq_query("DROP FUNCTION celsius".format(self.scope), query_context='default:default.test')
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_inline_join(self):
+        try:
+            if self.analytics:
+                self.run_cbq_query(
+                    "CREATE OR REPLACE ANALYTICS FUNCTION func1(nameval) { (select * from collection1 t1 INNER JOIN collection4 t2 ON t1.name = t2.name where t1.name = nameval) }")
+            else:
+                self.run_cbq_query("CREATE OR REPLACE FUNCTION func1(nameval) {{ (select * from default:default.test.test1 t1 INNER JOIN default:default.test2.test2 t2 ON t1.name = t2.name where t1.name = nameval) }}".format(self.scope,self.collections[0]))
+                results = self.run_cbq_query("EXECUTE FUNCTION func1('old hotel')")
+                self.assertEqual(results['results'], [[{'t1': {'name': 'old hotel', 'type': 'hotel'}, 't2': {'name': 'old hotel', 'type': 'hotel'}}, {'t1': {'name': 'old hotel', 'nested': {'fields': 'fake'}}, 't2': {'name': 'old hotel', 'type': 'hotel'}}, {'t1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}, 't2': {'name': 'old hotel', 'type': 'hotel'}}]])
+            results = self.run_cbq_query("select func1('old hotel')")
+            self.assertEqual(results['results'], [{'$1': [{'t1': {'name': 'old hotel', 'type': 'hotel'}, 't2': {'name': 'old hotel', 'type': 'hotel'}}, {'t1': {'name': 'old hotel', 'nested': {'fields': 'fake'}}, 't2': {'name': 'old hotel', 'type': 'hotel'}}, {'t1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}, 't2': {'name': 'old hotel', 'type': 'hotel'}}]}])
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+        finally:
+            try:
+                if self.analytics:
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func1")
+                else:
+                    self.run_cbq_query("DROP FUNCTION func1")
+            except Exception as e:
+                self.log.error(str(e))
+
+    '''Test a query that uses a function containing a query in the from'''
+    def test_inline_subquery_from(self):
+        if not self.analytics:
+            string_functions = '[{"name" : "concater","code" : "function concater(a,b) { var text = \\"\\"; var x; for (x in a) {if (x = b) { return x; }} return \\"n\\"; }"}]'
+            functions = '[{"name" : "comparator","code" : "function comparator(a, b) {if (a > b) { return \\"old hotel\\"; } else { return \\"new hotel\\" }}"}]'
+            function_names = ["comparator"]
+            function_names2 = ["concater","comparator"]
+            created = self.create_library("strings", functions, function_names)
+            created2 = self.create_library("strings",string_functions,function_names2)
+        try:
+            if self.analytics:
+                self.run_cbq_query("CREATE OR REPLACE ANALYTICS FUNCTION func2(degrees) { (degrees - 32)} ")
+                self.run_cbq_query(
+                    "CREATE OR REPLACE ANALYTICS FUNCTION func4(nameval) {{ (select * from collection1 where name = nameval) }}".format(
+                        self.scope, self.collections[0]))
+                results = self.run_cbq_query(
+                    "SELECT f.test1.name FROM func4('old hotel') as f LET maximum_no = func2(36) WHERE ANY v in f.test1.numbers SATISFIES v = maximum_no END GROUP BY f.test1.name LETTING letter = 'o' HAVING f.test1.name > letter")
+                self.assertEqual(results['results'], [{'name': 'old hotel'}])
+            else:
+                self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "comparator" AT "strings"')
+                self.run_cbq_query("CREATE FUNCTION func2(degrees) LANGUAGE INLINE AS (degrees - 32) ")
+                self.run_cbq_query(query='CREATE FUNCTION func3(a,b) LANGUAGE JAVASCRIPT AS "concater" AT "strings"')
+                self.run_cbq_query(
+                    "CREATE OR REPLACE FUNCTION func4(nameval) {{ (select * from default:default.{0}.{1} where name = nameval) }}".format(
+                        self.scope, self.collections[0]))
+                results = self.run_cbq_query(
+                    "SELECT f.test1.name FROM func4('old hotel') as f LET maximum_no = func2(36) WHERE ANY v in f.test1.numbers SATISFIES v = maximum_no END GROUP BY f.test1.name LETTING letter = func3('old hotel', 'o') HAVING f.test1.name > letter")
+                self.assertEqual(results['results'], [{'name': 'old hotel'}])
+        finally:
+            try:
+                if self.analytics:
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func1")
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func2")
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func3")
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func4")
+                else:
+                    self.delete_library("strings")
+                    self.run_cbq_query("DROP FUNCTION func1")
+                    self.run_cbq_query("DROP FUNCTION func2")
+                    self.run_cbq_query("DROP FUNCTION func3")
+                    self.run_cbq_query("DROP FUNCTION func4")
+            except Exception as e:
+                self.log.error(str(e))
+
+    '''Test a function that contains a subquery and uses other functions'''
+    def test_inline_subquery_nested(self):
+        string_functions = '[{"name" : "concater","code" : "function concater(a,b) { var text = \\"\\"; var x; for (x in a) {if (x = b) { return x; }} return \\"n\\"; }"}]'
+        functions = '[{"name" : "comparator","code" : "function comparator(a, b) {if (a > b) { return \\"old hotel\\"; } else { return \\"new hotel\\" }}"}]'
+        function_names = ["comparator"]
+        function_names2 = ["concater","comparator"]
+        created = self.create_library("strings", functions, function_names)
+        created2 = self.create_library("strings",string_functions,function_names2)
+        try:
+            self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "comparator" AT "strings"')
+            self.run_cbq_query("CREATE FUNCTION func2(degrees) LANGUAGE INLINE AS (degrees - 32) ")
+            self.run_cbq_query(query='CREATE FUNCTION func3(a,b) LANGUAGE JAVASCRIPT AS "concater" AT "strings"')
+            self.run_cbq_query(
+                "CREATE OR REPLACE FUNCTION func4(nameval) {{ (select * from default:default.{0}.{1} where name = nameval) }}".format(
+                    self.scope, self.collections[0]))
+            results = self.run_cbq_query(
+                "CREATE OR REPLACE FUNCTION func5(nameval) {(SELECT f.test1.name FROM func4(nameval) as f LET maximum_no = func2(36) WHERE ANY v in f.test1.numbers SATISFIES v = maximum_no END GROUP BY f.test1.name LETTING letter = func3('old hotel', 'o') HAVING f.test1.name > letter)}")
+            results = self.run_cbq_query(query="select func5('old hotel')")
+            self.assertEqual(results['results'], [{'$1': [{'name': 'old hotel'}]}])
+            results2 = self.run_cbq_query(query="EXECUTE FUNCTION func5('old hotel')")
+            self.assertEqual(results2['results'], [[{'name': 'old hotel'}]])
+        finally:
+            try:
+                self.delete_library("strings")
+                self.run_cbq_query("DROP FUNCTION func1")
+                self.run_cbq_query("DROP FUNCTION func2")
+                self.run_cbq_query("DROP FUNCTION func3")
+                self.run_cbq_query("DROP FUNCTION func4")
+                self.run_cbq_query("DROP FUNCTION func5")
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_inline_subquery_where(self):
+        try:
+            if self.analytics:
+                self.run_cbq_query(
+                    "CREATE OR REPLACE ANALYTICS FUNCTION func4(doctype) { (SELECT RAW city FROM travel WHERE `type` = doctype) }")
+                results = self.run_cbq_query(
+                    'SELECT t1.city FROM travel t1 WHERE t1.type = "landmark" AND t1.city IN func4("airport")')
+                self.assertEqual(results['metrics']['resultCount'], 2776)
+                results = self.run_cbq_query(
+                    'CREATE OR REPLACE ANALYTICS FUNCTION func5(doctype) {(SELECT t1.city FROM travel t1 WHERE t1.`type` = "landmark" AND t1.city IN func4(doctype))}')
+                results = self.run_cbq_query('SELECT RAW func5("airport")')
+                self.assertEqual(results['metrics']['resultCount'], 1)
+            else:
+                self.run_cbq_query(
+                    "CREATE OR REPLACE FUNCTION func4(doctype) { (SELECT RAW city FROM `travel-sample` WHERE type = doctype) }")
+                results = self.run_cbq_query('SELECT t1.city FROM `travel-sample` t1 WHERE t1.type = "landmark" AND t1.city IN func4("airport")')
+                self.assertEqual(results['metrics']['resultCount'], 2776)
+                results = self.run_cbq_query(
+                    'CREATE OR REPLACE FUNCTION func5(doctype) {(SELECT t1.city FROM `travel-sample` t1 WHERE t1.type = "landmark" AND t1.city IN func4(doctype))}')
+                results = self.run_cbq_query('EXECUTE FUNCTION func5("airport")')
+                self.assertEqual(results['metrics']['resultCount'], 1)
+        finally:
+            try:
+                if self.analytics:
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func4")
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func5")
+                else:
+                    self.run_cbq_query("DROP FUNCTION func4")
+                    self.run_cbq_query("DROP FUNCTION func5")
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_inline_subquery_select(self):
+        try:
+            self.run_cbq_query(
+                "CREATE OR REPLACE FUNCTION func4() { (SELECT RAW t1.geo.alt FROM `travel-sample`) }")
+            results = self.run_cbq_query('SELECT array_length(func4()) FROM `travel-sample`')
+            self.assertEqual(results['metrics']['resultCount'], 31591)
+            self.assertEqual(results['results'][0], {'$1': 31591})
+            results = self.run_cbq_query(
+                'CREATE OR REPLACE FUNCTION func5() {(SELECT array_length(func4()) FROM `travel-sample`)}')
+            results = self.run_cbq_query('EXECUTE FUNCTION func5()')
+            self.assertEqual(results['metrics']['resultCount'], 31591)
+            self.assertEqual(results['results'][0], {'$1': 31591})
+        finally:
+            try:
+                self.run_cbq_query("DROP FUNCTION func4")
+                self.run_cbq_query("DROP FUNCTION func5")
             except Exception as e:
                 self.log.error(str(e))
 
@@ -356,20 +633,32 @@ class QueryUDFTests(QueryTests):
 
     def test_nested_inline_function(self):
         try:
-            self.run_cbq_query("CREATE FUNCTION celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9")
-            self.run_cbq_query("CREATE FUNCTION invert(...) { (celsius(args[0]) * 9/5) + 32 }")
-            results = self.run_cbq_query("EXECUTE FUNCTION invert(10)")
-            self.assertEqual(results['results'], [10])
+            if self.analytics:
+                self.run_cbq_query("CREATE OR REPLACE ANALYTICS FUNCTION celsius(degrees) {(degrees - 32) * 5/9}")
+                self.run_cbq_query("CREATE OR REPLACE ANALYTICS FUNCTION invert(param1) { (celsius(param1) * 9/5) + 32 }")
+                results = self.run_cbq_query("SELECT RAW invert(10)")
+                self.assertEqual(results['results'], [10])
+            else:
+                self.run_cbq_query("CREATE FUNCTION celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9")
+                self.run_cbq_query("CREATE FUNCTION invert(...) { (celsius(args[0]) * 9/5) + 32 }")
+                results = self.run_cbq_query("EXECUTE FUNCTION invert(10)")
+                self.assertEqual(results['results'], [10])
         except Exception as e:
             self.log.error(str(e))
             self.fail()
         finally:
             try:
-                self.run_cbq_query("DROP FUNCTION celsius")
+                if self.analytics:
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION celsius")
+                else:
+                    self.run_cbq_query("DROP FUNCTION celsius")
             except Exception as e:
                 self.log.error(str(e))
             try:
-                self.run_cbq_query("DROP FUNCTION invert")
+                if self.analytics:
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION invert")
+                else:
+                    self.run_cbq_query("DROP FUNCTION invert")
             except Exception as e:
                 self.log.error(str(e))
 
@@ -398,15 +687,25 @@ class QueryUDFTests(QueryTests):
     def test_inline_where(self):
         try:
             try:
-                self.run_cbq_query("CREATE FUNCTION func1(degrees) LANGUAGE INLINE AS (degrees - 32) ")
+                if self.analytics:
+                    self.run_cbq_query("CREATE OR REPLACE ANALYTICS FUNCTION func1(degrees) {(degrees - 32)} ")
+                else:
+                    self.run_cbq_query("CREATE FUNCTION func1(degrees) LANGUAGE INLINE AS (degrees - 32) ")
             except Exception as e:
                 self.log.error(str(e))
                 self.fail("Valid syntax creation error'd {0}".format(str(e)))
-            results = self.run_cbq_query("SELECT * FROM default:default.test.test1  WHERE ANY v in test1.numbers SATISFIES v = func1(36) END")
+            if self.analytics:
+                results = self.run_cbq_query(
+                    "SELECT * FROM collection1 WHERE ANY v in collection1.numbers SATISFIES v = func1(36) END")
+            else:
+                results = self.run_cbq_query("SELECT * FROM default:default.test.test1  WHERE ANY v in test1.numbers SATISFIES v = func1(36) END")
             self.assertEqual(results['results'], [{'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
         finally:
             try:
-                self.run_cbq_query("DROP FUNCTION func1")
+                if self.analytics:
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func1")
+                else:
+                    self.run_cbq_query("DROP FUNCTION func1")
             except Exception as e:
                 self.log.error(str(e))
 
@@ -757,6 +1056,38 @@ class QueryUDFTests(QueryTests):
 #
 #   JS-Inline Hybrid Tests
 ##############################################################################################
+    '''The stated udf limit is 500, make sure we can create and use 500 functions'''
+    def test_udf_limits(self):
+        try:
+            function_name=''
+            for i in range(0,500):
+                function_name = "func" + str(i)
+                self.run_cbq_query(query='CREATE OR REPLACE FUNCTION {0}(...) {{ (args[0] * 9/5) + 32 }}'.format(function_name))
+
+            result = self.run_cbq_query(query="select * from system:functions")
+            self.assertEqual(result['metrics']['resultCount'], 500)
+
+            for i in range(0,500):
+                function_name = "func" + str(i)
+                results = self.run_cbq_query(query='EXECUTE FUNCTION {0}(10)'.format(function_name))
+                self.assertEqual(results['results'], [50])
+
+            if self.rebalance_in:
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                         self.servers[self.nodes_init: (self.nodes_init + 1)], [], services=['n1ql'])
+                rebalance.result()
+
+                for i in range(0,500):
+                    function_name = "func" + str(i)
+                    results = self.run_cbq_query(query='EXECUTE FUNCTION {0}(10)'.format(function_name), server=self.servers[self.nodes_init])
+                    self.assertEqual(results['results'], [50])
+        finally:
+            for i in range(0,500):
+                function_name = "func" + str(i)
+                try:
+                    self.run_cbq_query(query='DROP FUNCTION {0}'.format(function_name))
+                except Exception as e:
+                    self.log.error(str(e))
 
     def test_create_or_replace_js_to_inline(self):
         try:
@@ -842,7 +1173,257 @@ class QueryUDFTests(QueryTests):
             except Exception as e:
                 self.log.error(str(e))
 
+    def test_udf_insert(self):
+        try:
+            self.run_cbq_query(
+                "CREATE OR REPLACE FUNCTION func1(nameval) {{ (select * from default:default.{0}.{1} where name = nameval) }}".format(
+                    self.scope, self.collections[0]))
+            results = self.run_cbq_query(query='INSERT INTO default (KEY, VALUE) VALUES ("key5", {"field1":func1("old hotel")}) RETURNING *')
+            self.assertEqual(results['results'], [{'default': {'field1': [{'test1': {'name': 'old hotel', 'type': 'hotel'}}, {'test1': {'name': 'old hotel', 'nested': {'fields': 'fake'}}}, {'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}]}}])
+        finally:
+            try:
+                self.run_cbq_query("DROP FUNCTION func1")
+            except Exception as e:
+                self.log.error(str(e))
 
+    def test_udf_let(self):
+        try:
+            if self.analytics:
+                self.run_cbq_query("CREATE OR REPLACE ANALYTICS FUNCTION func1(degrees) {(degrees - 32)} ")
+                results = self.run_cbq_query(
+                    "SELECT * FROM collection1 LET maximum_no = func1(36) WHERE ANY v in collection1.numbers SATISFIES v = maximum_no END")
+                self.assertEqual(results['results'],
+                                 [{'maximum_no': 4, 'collection1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+            else:
+                self.run_cbq_query("CREATE FUNCTION func1(degrees) LANGUAGE INLINE AS (degrees - 32) ")
+                results = self.run_cbq_query(
+                    "SELECT * FROM default:default.test.test1 LET maximum_no = func1(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END")
+                self.assertEqual(results['results'], [{'maximum_no': 4, 'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+
+                functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+                function_names = ["adder", "multiplier"]
+                created = self.create_library("math", functions, function_names)
+                self.run_cbq_query(
+                    query='CREATE OR REPLACE FUNCTION func2(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
+                results = self.run_cbq_query(
+                    "SELECT * FROM default:default.test.test1 LET maxi=func2(1,3) WHERE ANY v in test1.numbers SATISFIES v = maxi END")
+                self.assertEqual(results['results'], [{'maxi': 4, 'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+
+        finally:
+            try:
+                if self.analytics:
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func1")
+                else:
+                    self.delete_library("math")
+                    self.run_cbq_query("DROP FUNCTION func1")
+                    self.run_cbq_query("DROP FUNCTION func2")
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_udf_groupby(self):
+        if not self.analytics:
+            functions = '[{"name" : "comparator","code" : "function comparator(a, b) {if (a > b) { return \\"old hotel\\"; } else { return \\"new hotel\\" }}"}]'
+            function_names = ["comparator"]
+            created = self.create_library("math", functions, function_names)
+        try:
+            if self.analytics:
+                self.run_cbq_query("CREATE FUNCTION func2(degrees) {(degrees - 32)}")
+                results = self.run_cbq_query(
+                    "SELECT COUNT(name), hotel_name FROM default:default.test.test1 LET maximum_no = func2(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END GROUP BY name AS hotel_name")
+                self.assertEqual(results['results'], [{'$1': 1, 'hotel_name': 'new hotel'}])
+            else:
+                self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "comparator" AT "math"')
+                self.run_cbq_query("CREATE FUNCTION func2(degrees) LANGUAGE INLINE AS (degrees - 32) ")
+                results = self.run_cbq_query(
+                    "SELECT COUNT(name), hotel_name FROM default:default.test.test1 LET maximum_no = func2(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END GROUP BY func1(1,2) AS hotel_name")
+                self.assertEqual(results['results'], [{'$1': 1, 'hotel_name': 'new hotel'}])
+                results2 = self.run_cbq_query(
+                    "SELECT COUNT(name), hotel_name FROM default:default.test.test1 LET maximum_no = func2(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END GROUP BY func1(2,1) AS hotel_name")
+                self.assertEqual(results2['results'], [{'$1': 1, 'hotel_name': 'old hotel'}])
+        finally:
+            try:
+                if self.analytics:
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func2")
+                else:
+                    self.delete_library("math")
+                    self.run_cbq_query("DROP FUNCTION func1")
+                    self.run_cbq_query("DROP FUNCTION func2")
+
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_udf_having(self):
+        if not self.analytics:
+            functions = '[{"name" : "comparator","code" : "function comparator(a, b) {if (a > b) { return \\"old hotel\\"; } else { return \\"new hotel\\" }}"}]'
+            function_names = ["comparator"]
+            created = self.create_library("math", functions, function_names)
+        try:
+            if self.analytics:
+                self.run_cbq_query("CREATE OR REPLACE ANALYTICS FUNCTION func2(degrees) {(degrees - 32)} ")
+                results = self.run_cbq_query(
+                    "SELECT name FROM collection1 LET maximum_no = func2(36) WHERE ANY v in collection1.numbers SATISFIES v = maximum_no END GROUP BY name HAVING name = 'old_hotel'")
+                self.assertEqual(results['results'], [{'name': 'old hotel'}])
+            else:
+                self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "comparator" AT "math"')
+                self.run_cbq_query("CREATE FUNCTION func2(degrees) LANGUAGE INLINE AS (degrees - 32) ")
+                results = self.run_cbq_query(
+                    "SELECT name FROM default:default.test.test1 LET maximum_no = func2(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END GROUP BY name HAVING name = func1(1,2)")
+                self.assertEqual(results['results'], [])
+                results2 = self.run_cbq_query(
+                    "SELECT name FROM default:default.test.test1 LET maximum_no = func2(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END GROUP BY name HAVING name = func1(2,1)")
+                self.assertEqual(results2['results'], [{'name': 'old hotel'}])
+        finally:
+            try:
+                if self.analytics:
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func2")
+                else:
+                    self.delete_library("math")
+                    self.run_cbq_query("DROP FUNCTION func1")
+                    self.run_cbq_query("DROP FUNCTION func2")
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_udf_letting(self):
+        string_functions = '[{"name" : "concater","code" : "function concater(a,b) { var text = \\"\\"; var x; for (x in a) {if (x = b) { return x; }} return \\"n\\"; }"}]'
+        functions = '[{"name" : "comparator","code" : "function comparator(a, b) {if (a > b) { return \\"old hotel\\"; } else { return \\"new hotel\\" }}"}]'
+        function_names = ["comparator"]
+        function_names2 = ["concater","comparator"]
+        created = self.create_library("strings", functions, function_names)
+        created2 = self.create_library("strings",string_functions,function_names2)
+        try:
+            self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "comparator" AT "strings"')
+            self.run_cbq_query("CREATE FUNCTION func2(degrees) LANGUAGE INLINE AS (degrees - 32) ")
+            self.run_cbq_query(query='CREATE FUNCTION func3(a,b) LANGUAGE JAVASCRIPT AS "concater" AT "strings"')
+
+            results = self.run_cbq_query(
+                "SELECT name FROM default:default.test.test1 LET maximum_no = func2(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END GROUP BY name LETTING letter = func3('random string', 'x') HAVING name > letter")
+            self.assertEqual(results['results'], [])
+            results2 = self.run_cbq_query(
+                "SELECT name FROM default:default.test.test1 LET maximum_no = func2(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END GROUP BY name LETTING letter = func3('old hotel','o') HAVING name > letter")
+            self.assertEqual(results2['results'], [{'name': 'old hotel'}])
+        finally:
+            try:
+                self.delete_library("strings")
+                self.run_cbq_query("DROP FUNCTION func1")
+                self.run_cbq_query("DROP FUNCTION func2")
+                self.run_cbq_query("DROP FUNCTION func3")
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_udf_orderby(self):
+        string_functions = '[{"name" : "concater","code" : "function concater(a,b) { var text = \\"\\"; var x; for (x in a) {if (x = b) { return x; }} return \\"n\\"; }"}]'
+        functions = '[{"name" : "comparator","code" : "function comparator(a, b) {if (a > b) { return \\"old hotel\\"; } else { return \\"new hotel\\" }}"}]'
+        function_names = ["comparator"]
+        function_names2 = ["concater","comparator"]
+        created = self.create_library("strings", functions, function_names)
+        created2 = self.create_library("strings",string_functions,function_names2)
+        try:
+            self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "comparator" AT "strings"')
+            self.run_cbq_query("CREATE FUNCTION func2(degrees) LANGUAGE INLINE AS (degrees - 32) ")
+            self.run_cbq_query(query='CREATE FUNCTION func3(a,b) LANGUAGE JAVASCRIPT AS "concater" AT "strings"')
+
+            results = self.run_cbq_query(
+                "SELECT name FROM default:default.test.test1 LET maximum_no = func2(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END ORDER BY func1(2,1)")
+            self.assertEqual(results['results'], [{'name': 'old hotel'}])
+            results2 = self.run_cbq_query(
+                "SELECT name FROM default:default.test.test1 LET maximum_no = func2(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END ORDER BY func1(1,2) ")
+            self.assertEqual(results2['results'], [{'name': 'old hotel'}])
+        finally:
+            try:
+                self.delete_library("strings")
+                self.run_cbq_query("DROP FUNCTION func1")
+                self.run_cbq_query("DROP FUNCTION func2")
+                self.run_cbq_query("DROP FUNCTION func3")
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_udf_prepareds(self):
+        try:
+            self.run_cbq_query(
+                "CREATE OR REPLACE FUNCTION func1(nameval) {{ (select * from default:default.{0}.{1} where name = nameval) }}".format(
+                    self.scope, self.collections[0]))
+            results = self.run_cbq_query("PREPARE p1 as EXECUTE FUNCTION func1('old hotel')")
+            results = self.run_cbq_query("EXECUTE p1")
+            self.assertEqual(results['results'], [[{'test1': {'name': 'old hotel', 'type': 'hotel'}},
+                                                   {'test1': {'name': 'old hotel', 'nested': {'fields': 'fake'}}},
+                                                   {'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}]])
+            results = self.run_cbq_query("PREPARE p2 as select func1('old hotel')")
+            results = self.run_cbq_query("EXECUTE p2")
+            self.assertEqual(results['results'], [{'$1': [{'test1': {'name': 'old hotel', 'type': 'hotel'}}, {
+                'test1': {'name': 'old hotel', 'nested': {'fields': 'fake'}}}, {'test1': {'name': 'old hotel',
+                                                                                          'numbers': [1, 2, 3,
+                                                                                                      4]}}]}])
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+        finally:
+            try:
+                self.run_cbq_query("DROP FUNCTION func1")
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_udf_prepareds_update(self):
+        try:
+            self.run_cbq_query(
+                "CREATE OR REPLACE FUNCTION func1(nameval) {{ (select * from default:default.{0}.{1} where name = nameval) }}".format(
+                    self.scope, self.collections[0]))
+            results = self.run_cbq_query("PREPARE p1 as EXECUTE FUNCTION func1('old hotel')")
+            results = self.run_cbq_query("EXECUTE p1")
+            self.assertEqual(results['results'], [[{'test1': {'name': 'old hotel', 'type': 'hotel'}},
+                                                   {'test1': {'name': 'old hotel', 'nested': {'fields': 'fake'}}},
+                                                   {'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}]])
+            self.run_cbq_query("CREATE OR REPLACE FUNCTION func1(...) {args[0]}")
+            results = self.run_cbq_query("EXECUTE p1")
+            self.assertEqual(results['results'], [{'name': 'old hotel'}])
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+        finally:
+            try:
+                self.run_cbq_query("DROP FUNCTION func1")
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_udf_prepareds_update_js_inline(self):
+        try:
+            self.run_cbq_query("CREATE FUNCTION func1(degrees) LANGUAGE INLINE AS (degrees - 32) ")
+            results = self.run_cbq_query(
+                "PREPARE p1 as SELECT * FROM default:default.test.test1 LET maximum_no = func1(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END")
+            results = self.run_cbq_query("EXECUTE p1")
+            self.assertEqual(results['results'], [{'maximum_no': 4, 'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+
+            functions = '[{"name" : "adder","code" : "function adder(a) { return (a - 32); }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            function_names = ["adder", "multiplier"]
+            created = self.create_library("math", functions, function_names)
+            self.run_cbq_query(
+                query='CREATE OR REPLACE FUNCTION func1(a) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
+            results = self.run_cbq_query("EXECUTE p1")
+            self.assertEqual(results['results'], [{'maximum_no': 4, 'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+        finally:
+            try:
+                self.run_cbq_query("DROP FUNCTION func1")
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_udf_prepared_drop(self):
+        try:
+            self.run_cbq_query(
+                "CREATE OR REPLACE FUNCTION func1(nameval) {{ (select * from default:default.{0}.{1} where name = nameval) }}".format(
+                    self.scope, self.collections[0]))
+            results = self.run_cbq_query("PREPARE p1 as EXECUTE FUNCTION func1('old hotel')")
+            self.run_cbq_query("DROP FUNCTION func1")
+            results = self.run_cbq_query("EXECUTE p1")
+        except Exception as e:
+            self.log.error(str(e))
+            self.assertTrue("Function not found func1" in str(e))
+        finally:
+            try:
+                self.run_cbq_query("DROP FUNCTION func1")
+            except Exception as e:
+                self.log.error(str(e))
 ##############################################################################################
 #
 #   JAVASCRIPT Libraries
@@ -985,4 +1566,349 @@ class QueryUDFTests(QueryTests):
             deleted = True
         return deleted
 
+    ''' Test rbac when you have creation/execution on a function that attemps to access a bucket you dont have perms for'''
+    def test_inline_rbac_query(self):
+        try:
+            self.create_users()
+            self.grant_role()
+            res = self.curl_with_roles("CREATE OR REPLACE FUNCTION func1(nameval) {{ (select * from default:default.{0}.{1} where name = nameval) }}".format(self.scope, self.collections[0]))
+            self.assertEqual(res['status'], 'success')
 
+            res = self.curl_with_roles('EXECUTE FUNCTION func1("old hotel")')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('select raw func1("old hotel")')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+        finally:
+            try:
+                self.delete_library("math")
+                self.run_cbq_query("DROP FUNCTION func1")
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_inline_rbac(self):
+        try:
+            self.create_users()
+            self.grant_role()
+            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            function_names = ["adder", "multiplier"]
+            created = self.create_library("math", functions, function_names)
+            res = self.curl_with_roles('CREATE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            if self.scoped:
+                self.assertEqual(res['status'], 'success')
+            else:
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION default:default.test2.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS \"adder\" AT \"math\"')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION default:celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            if self.scoped:
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            else:
+                self.assertEqual(res['status'], 'success')
+            res = self.curl_with_roles('CREATE FUNCTION celsius1(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            if self.scoped:
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            else:
+                self.assertEqual(res['status'], 'success')
+            if self.scoped:
+                res = self.curl_with_roles('SELECT RAW default:default.test.celsius(10)')
+                self.assertEqual(res['results'], [-12.222222222222221])
+                res = self.curl_with_roles('EXECUTE FUNCTION default:default.test.celsius(10)')
+                self.assertEqual(res['results'], [-12.222222222222221])
+            else:
+                res = self.curl_with_roles('SELECT RAW celsius(10)')
+                self.assertEqual(res['results'], [-12.222222222222221])
+                res = self.curl_with_roles('SELECT RAW celsius1(10)')
+                self.assertEqual(res['results'], [-12.222222222222221])
+                res = self.curl_with_roles('EXECUTE FUNCTION celsius(10)')
+                self.assertEqual(res['results'], [-12.222222222222221])
+                res = self.curl_with_roles('EXECUTE FUNCTION celsius1(10)')
+                self.assertEqual(res['results'], [-12.222222222222221])
+        finally:
+            try:
+                self.delete_library("math")
+                if self.scoped:
+                    self.run_cbq_query("DROP FUNCTION default:default.test.celsius")
+                else:
+                    self.run_cbq_query("DROP FUNCTION celsius")
+                    self.run_cbq_query("DROP FUNCTION celsius1")
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_inline_rbac_creation(self):
+        try:
+            self.create_users()
+            self.grant_role()
+            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            function_names = ["adder", "multiplier"]
+            created = self.create_library("math", functions, function_names)
+            res = self.curl_with_roles('CREATE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            if self.scoped:
+                self.assertEqual(res['status'], 'success')
+            else:
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION default:default.test2.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS \"adder\" AT \"math\"')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION default:celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            if self.scoped:
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            else:
+                self.assertEqual(res['status'], 'success')
+            res = self.curl_with_roles('CREATE FUNCTION celsius1(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            if self.scoped:
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            else:
+                self.assertEqual(res['status'], 'success')
+
+            if self.scoped:
+                res = self.curl_with_roles('SELECT default:default.test.celsius(10)')
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                res = self.curl_with_roles('EXECUTE FUNCTION default:default.test.celsius(10)')
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            else:
+                res = self.curl_with_roles('SELECT RAW celsius(10)')
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                res = self.curl_with_roles('SELECT RAW celsius1(10)')
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                res = self.curl_with_roles('EXECUTE FUNCTION celsius(10)')
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                res = self.curl_with_roles('EXECUTE FUNCTION celsius1(10)')
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+        finally:
+            try:
+                self.delete_library("math")
+                if self.scoped:
+                    self.run_cbq_query("DROP FUNCTION default:default.test.celsius")
+                else:
+                    self.run_cbq_query("DROP FUNCTION celsius")
+                    self.run_cbq_query("DROP FUNCTION celsius1")
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_inline_rbac_execution(self):
+        try:
+            self.create_users()
+            self.grant_role()
+            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            function_names = ["adder", "multiplier"]
+            created = self.create_library("math", functions, function_names)
+            res = self.curl_with_roles('CREATE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION default:default.test2.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS \"adder\" AT \"math\"')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION default:celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION celsius1(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+
+            self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
+            self.run_cbq_query(query='CREATE FUNCTION default:celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.run_cbq_query(query='CREATE FUNCTION celsius1(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.run_cbq_query(query='CREATE FUNCTION default:default.test.celsius1(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+
+
+            res = self.curl_with_roles('SELECT RAW celsius(10)')
+            if self.scoped:
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'],
+                                "Error message is wrong: {0}".format(str(res)))
+            else:
+                self.assertEqual(res['results'], [-12.222222222222221])
+            res = self.curl_with_roles('SELECT RAW celsius1(10)')
+            if self.scoped:
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'],
+                                "Error message is wrong: {0}".format(str(res)))
+            else:
+                self.assertEqual(res['results'], [-12.222222222222221])
+            res = self.curl_with_roles('EXECUTE FUNCTION celsius(10)')
+            if self.scoped:
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'],
+                                "Error message is wrong: {0}".format(str(res)))
+            else:
+                self.assertEqual(res['results'], [-12.222222222222221])
+            res = self.curl_with_roles('EXECUTE FUNCTION celsius1(10)')
+            if self.scoped:
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'],
+                                "Error message is wrong: {0}".format(str(res)))
+            else:
+                self.assertEqual(res['results'], [-12.222222222222221])
+            res = self.curl_with_roles('SELECT RAW func1(10,20)')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('EXECUTE FUNCTION func1(10)')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('SELECT RAW default:default.test.celsius1(10)')
+            if self.scoped:
+                self.assertEqual(res['results'], [-12.222222222222221])
+            else:
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('EXECUTE FUNCTION default:default.test.celsius1(10)')
+            if self.scoped:
+                self.assertEqual(res['results'], [-12.222222222222221])
+            else:
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+        finally:
+            try:
+                self.delete_library("math")
+                self.run_cbq_query("DROP FUNCTION celsius")
+                self.run_cbq_query("DROP FUNCTION celsius1")
+                self.run_cbq_query("DROP FUNCTION func1")
+                self.run_cbq_query("DROP FUNCTION default:default.test.celsius1")
+
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_js_rbac(self):
+        try:
+            self.create_users()
+            self.grant_role()
+            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            function_names = ["adder", "multiplier"]
+            created = self.create_library("math", functions, function_names)
+            res = self.curl_with_roles('CREATE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION default:default.test2.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION default:celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION celsius1(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION default:default.test.func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
+            if self.scoped:
+                self.assertEqual(res['status'], 'success')
+            else:
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION default:default.test2.func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION default:func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
+            if self.scoped:
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'],
+                                "Error message is wrong: {0}".format(str(res)))
+            else:
+                self.assertEqual(res['status'], 'success')
+
+            if self.scoped:
+                res = self.curl_with_roles('SELECT RAW default:default.test.func1(10,20)')
+                self.assertEqual(res['results'], [30])
+                res = self.curl_with_roles('EXECUTE FUNCTION default:default.test.func1(10,20)')
+                self.assertEqual(res['results'], [30])
+            else:
+                res = self.curl_with_roles('SELECT RAW func1(10,20)')
+                self.assertEqual(res['results'], [30])
+                res = self.curl_with_roles('EXECUTE FUNCTION func1(10,20)')
+                self.assertEqual(res['results'], [30])
+        finally:
+            try:
+                self.delete_library("math")
+                if self.scoped:
+                    self.run_cbq_query("DROP FUNCTION default:default.test.func1")
+                else:
+                    self.run_cbq_query("DROP FUNCTION func1")
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_js_rbac_creation(self):
+        try:
+            self.create_users()
+            self.grant_role()
+            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            function_names = ["adder", "multiplier"]
+            created = self.create_library("math", functions, function_names)
+            res = self.curl_with_roles('CREATE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION default:default.test2.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION default:celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION celsius1(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION default:default.test.func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
+            if self.scoped:
+                self.assertEqual(res['status'], 'success')
+            else:
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION default:default.test2.func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
+            if self.scoped:
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'],
+                                "Error message is wrong: {0}".format(str(res)))
+            else:
+                self.assertEqual(res['status'], 'success')
+
+            if self.scoped:
+                res = self.curl_with_roles('SELECT RAW default:default.test.func1(10,20)')
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'],
+                                "Error message is wrong: {0}".format(str(res)))
+                res = self.curl_with_roles('EXECUTE FUNCTION default:default.test.func1(10,20)')
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'],
+                                "Error message is wrong: {0}".format(str(res)))
+            else:
+                res = self.curl_with_roles('SELECT RAW func1(10,20)')
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                res = self.curl_with_roles('EXECUTE FUNCTION func1(10,20)')
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+        finally:
+            try:
+                self.delete_library("math")
+                if self.scoped:
+                    self.run_cbq_query("DROP FUNCTION default:default.test.func1")
+                else:
+                    self.run_cbq_query("DROP FUNCTION func1")
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_js_rbac_execution(self):
+        try:
+            self.create_users()
+            self.grant_role()
+            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            function_names = ["adder", "multiplier"]
+            created = self.create_library("math", functions, function_names)
+            res = self.curl_with_roles('CREATE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION default:default.test2.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION default:celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            res = self.curl_with_roles('CREATE FUNCTION celsius1(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+
+            self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
+            self.run_cbq_query(query='CREATE FUNCTION default:celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.run_cbq_query(query='CREATE FUNCTION celsius1(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            self.run_cbq_query(query='CREATE FUNCTION default:default.test.func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
+
+            if self.scoped:
+                res = self.curl_with_roles('SELECT RAW default:default.test.func1(10,20)')
+                self.assertEqual(res['results'], [30])
+                res = self.curl_with_roles('EXECUTE FUNCTION default:default.test.func1(10,20)')
+                self.assertEqual(res['results'], [30])
+            else:
+                res = self.curl_with_roles('SELECT RAW celsius(10)')
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                res = self.curl_with_roles('SELECT RAW celsius1(10)')
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                res = self.curl_with_roles('EXECUTE FUNCTION celsius(10)')
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                res = self.curl_with_roles('EXECUTE FUNCTION celsius1(10)')
+                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                res = self.curl_with_roles('SELECT RAW func1(10,20)')
+                self.assertEqual(res['results'], [30])
+                res = self.curl_with_roles('EXECUTE FUNCTION func1(10,20)')
+                self.assertEqual(res['results'], [30])
+        finally:
+            try:
+                self.delete_library("math")
+                self.run_cbq_query("DROP FUNCTION celsius")
+                self.run_cbq_query("DROP FUNCTION celsius1")
+                self.run_cbq_query("DROP FUNCTION func1")
+                self.run_cbq_query("DROP FUNCTION default:default.test.func1")
+
+            except Exception as e:
+                self.log.error(str(e))
