@@ -19,6 +19,7 @@ from lib.backup_service_client.api.import_api import ImportApi
 from lib.backup_service_client.api.repository_api import RepositoryApi
 from lib.backup_service_client.api.configuration_api import ConfigurationApi
 from lib.backup_service_client.api.active_repository_api import ActiveRepositoryApi
+from lib.backup_service_client.models.body1 import Body1
 from lib.backup_service_client.models.body2 import Body2
 from lib.backup_service_client.models.body3 import Body3
 from lib.backup_service_client.models.body4 import Body4
@@ -412,6 +413,24 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
             self.take_one_off_backup(state, repo_name, i < 1, retries, sleep_time)
 
+    def take_one_off_restore(self, state, repo_name, retries, sleep_time, target=None):
+        """ Performs a one off restore
+
+        Args:
+             target (TestInputServer): The target to restore to.
+        """
+        if not target:
+            target = self.backupset.cluster_host
+
+        # Specify restore target
+        body = Body1(target=f"{target.ip}:{target.port}", user=target.rest_username, password=target.rest_password)
+        # Take one off restore
+        task_name = self.repository_api.cluster_self_repository_state_id_restore_post(state, repo_name, body=body).task_name
+        # Check the task completed successfully
+        self.assertTrue(self.wait_for_backup_task(state, repo_name, retries, sleep_time, task_name=task_name))
+
+        return task_name
+
     def create_repository_with_default_plan(self, repo_name):
         """ Create a repository with a random default plan
         """
@@ -553,6 +572,20 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         # If we're unable to have a task scheduled on a non-leader node, then simply pass
         self.log.info("Unable to schedule a task on a non-leader node")
+
+    def replace_services(self, server, new_services):
+        """ Changes the services of a server
+        """
+        # Remove server and rebalance
+        self.cluster.rebalance(self.input.clusters[0], [], [server])
+
+        # Add back with new services
+        RestConnection(self.input.clusters[0][0]).add_node(server.rest_username, server.rest_password, server.ip, services=new_services)
+        # Rebalance
+        self.cluster.rebalance(self.input.clusters[0], [], [])
+
+        # A little sleep for services to warmup
+        self.sleep(15)
 
     # Clean up cbbackupmgr
     def tearDown(self):

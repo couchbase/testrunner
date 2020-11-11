@@ -26,6 +26,9 @@ from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from couchbase_helper.cluster import Cluster
 from membase.api.exception import ServerAlreadyJoinedException
+from couchbase_helper.document import View
+from pytests.eventing.eventing_constants import HANDLER_CODE
+from pytests.fts.fts_callable import FTSCallable
 
 class BackupServiceTest(BackupServiceBase):
     def setUp(self):
@@ -2547,3 +2550,189 @@ class BackupServiceTest(BackupServiceBase):
         # TODO: when the backup service responds to timezone changes.
         # self.assertEqual(time.hour, None)
         # self.assertEqual(time.tzinfo, None)
+
+    # Specific services
+
+    def test_restoring_eventing(self):
+        """ Test the backup service can restore eventing:
+
+        params:
+            sasl_buckets (int): The number of buckets to create. At least 3 buckets are required.
+        """
+        repo_name, full_backup, rest_connection = "my_repo", self.input.param("full_backup", True), RestConnection(self.backupset.cluster_host)
+
+        self.create_repository_with_default_plan(repo_name)
+
+        # Create eventing related stuff
+        self.src_bucket_name, self.dst_bucket_name, self.metadata_bucket_name, self.use_memory_manager = "bucket0", "bucket1", "bucket2", True
+        eventing_body = self.create_save_function_body("eventing_function", HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
+        self.deploy_function(eventing_body)
+
+        # Perform a one off backup
+        self.take_one_off_backup("active", repo_name, full_backup, 20, 20)
+
+        # Delete eventing related stuff
+        self.bkrs_undeploy_and_delete_function(eventing_body, rest_connection)
+
+        # Perform a one off restore
+        self.take_one_off_restore("active", repo_name, 20, 5, self.backupset.cluster_host)
+
+        # Check the eventing related stuff was restored
+        function_details = json.loads(rest_connection.get_function_details("eventing_function"))
+        self.assertTrue(function_details['appname'], eventing_body['appname'])
+        self.assertTrue(function_details['appcode'], eventing_body['appcode'])
+
+        # Delete eventing related stuff
+        self.bkrs_undeploy_and_delete_function(eventing_body, rest_connection)
+
+    def test_restoring_views(self):
+        """ Test the backup service can restore views.
+        """
+        repo_name, full_backup= "my_repo", self.input.param("full_backup", True)
+        design_doc_name, view = "design_doc", View("view_name", "function (doc) { emit(doc._id, doc); }")
+
+        self._load_all_buckets(self.master, BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items), "create", 0)
+        self.create_repository_with_default_plan(repo_name)
+
+        # Create a view
+        self.cluster.create_view(self.backupset.cluster_host, design_doc_name, view, "default")
+
+        # Check the view exists
+        result = self.cluster.query_view(self.backupset.cluster_host, "dev_" + design_doc_name, view.name, {"full_set": "true", "stale": "false", "connection_timeout": 60000}, timeout=30)
+        self.assertEqual(len(result['rows']), self.num_items)
+
+        # Perform a one off backup
+        self.take_one_off_backup("active", repo_name, full_backup, 20, 20)
+
+        # Delete view related stuff
+        success = self.cluster.delete_view(self.backupset.cluster_host, design_doc_name, view, "default")
+        self.assertTrue(success, "Unable to delete view")
+
+        # Perform a one off restore
+        self.take_one_off_restore("active", repo_name, 20, 5, self.backupset.cluster_host)
+
+        # Check the view exists after the restore
+        result = self.cluster.query_view(self.backupset.cluster_host, "dev_" + design_doc_name, view.name, {"full_set": "true", "stale": "false", "connection_timeout": 60000}, timeout=30)
+        self.assertEqual(len(result['rows']), self.num_items, "Failed to restore view")
+
+        # Delete view related stuff
+        self.cluster.delete_view(self.backupset.cluster_host, design_doc_name, view, "default")
+
+    def test_restoring_indexes(self):
+        """ Test the backup service can restore indexes.
+        """
+        repo_name, full_backup = "my_repo", self.input.param("full_backup", True)
+        username = self.backupset.cluster_host.rest_username
+        password = self.backupset.cluster_host.rest_password
+
+        self._load_all_buckets(self.master, DocumentGenerator('test_docs', '{{"age": {0}}}', range(1000), start=0, end=self.num_items), "create", 0)
+        self.create_repository_with_default_plan(repo_name)
+
+        rest_connection = RestConnection(self.master)
+
+        # Create an index
+        remote_client = RemoteMachineShellConnection(self.backupset.cluster_host)
+        remote_client.execute_command(f"{self.cli_command_location}cbindex -type create -bucket default -index age -fields=age --auth={username}:{password}")
+
+        # Perform a one off backup
+        self.take_one_off_backup("active", repo_name, full_backup, 20, 20)
+
+        # Delete the index
+        remote_client.execute_command(f"{self.cli_command_location}cbindex -type drop -bucket default -index age --auth={username}:{password}")
+
+        # Perform a one off restore
+        self.take_one_off_restore("active", repo_name, 20, 5, self.backupset.cluster_host)
+
+        output, error = remote_client.execute_command(f"{self.cli_command_location}cbindex -type list -auth={username}:{password}")
+        remote_client.disconnect()
+
+        # Test the index was restored succesfully
+        self.assertTrue(any('Index:default/_default/_default/age' in line for line in output), "The index was not restored successfully")
+
+        # Delete the index
+        remote_client.execute_command(f"{self.cli_command_location}cbindex -type drop -bucket default -index age --auth={username}:{password}")
+
+    def test_restoring_fts(self):
+        """ Test the backup service can restore fts.
+        """
+        repo_name, full_backup = "my_repo", self.input.param("full_backup", True)
+
+        self._load_all_buckets(self.master, DocumentGenerator('test_docs', '{{"age": {0}}}', range(1000), start=0, end=self.num_items), "create", 0)
+        self.create_repository_with_default_plan(repo_name)
+
+        rest_connection, fts_callable = RestConnection(self.master), FTSCallable(nodes=self.servers, es_validate=False)
+
+        # Create fts index/alias
+        index = fts_callable.create_default_index(index_name="index_default", bucket_name="default")
+        fts_callable.wait_for_indexing_complete()
+        alias = fts_callable.create_alias(target_indexes=[index])
+
+        # Perform a one off backup
+        self.take_one_off_backup("active", repo_name, full_backup, 20, 20)
+
+        # Delete index and alias
+        rest_connection.delete_fts_index(index.name)
+        rest_connection.delete_fts_index(alias.name)
+
+        # Perform a one off restore
+        self.take_one_off_restore("active", repo_name, 20, 5, self.backupset.cluster_host)
+
+        # Test the index and alias was restored successfully
+        status, result = rest_connection.get_fts_index_definition(index.name)
+        self.assertEqual(result['indexDef']['name'], index.name)
+        status, result = rest_connection.get_fts_index_definition(alias.name)
+        self.assertEqual(result['indexDef']['name'], alias.name)
+
+        # Delete index and alias
+        rest_connection.delete_fts_index(index.name)
+        rest_connection.delete_fts_index(alias.name)
+
+    def test_restoring_analytics(self):
+        """ Test the backup service can restore analytics
+        """
+        repo_name, full_backup, rest_connection = "my_repo", self.input.param("full_backup", True), RestConnection(self.input.clusters[0][2])
+        username = self.backupset.cluster_host.rest_username
+        password = self.backupset.cluster_host.rest_password
+
+        self.replace_services(self.input.clusters[0][2], ['cbas'])
+
+        def drop():
+            rest_connection.execute_statement_on_cbas("DROP DATASET dataset1", None, username=username, password=password)
+            rest_connection.execute_statement_on_cbas("DROP DATASET dataset2", None, username=username, password=password)
+            self.sleep(5)
+
+        def create():
+            rest_connection.execute_statement_on_cbas("CREATE DATASET dataset1 ON `default` WHERE TONUMBER(`age`)<30", None, username=username, password=password)
+            rest_connection.execute_statement_on_cbas("CREATE DATASET dataset2 ON `default` WHERE TONUMBER(`age`)>30", None, username=username, password=password)
+
+        def connect():
+            rest_connection.execute_statement_on_cbas("CONNECT LINK Local", None, username=username, password=password)
+            self.sleep(5)
+
+        drop()
+
+        self._load_all_buckets(self.master, DocumentGenerator('test_docs', '{{"age": {0}}}', range(1000), start=0, end=self.num_items), "create", 0)
+        self.create_repository_with_default_plan(repo_name)
+
+        # Create analytics related stuff
+        create()
+        connect()
+
+        # Perform a one off backup
+        self.take_one_off_backup("active", repo_name, full_backup, 20, 20)
+
+        # Delete analytics related stuff
+        drop()
+
+        # Perform a one off restore
+        self.take_one_off_restore("active", repo_name, 20, 5, self.backupset.cluster_host)
+
+        # Connect the links after the restore completes
+        connect()
+
+        # Check the dataverse and links are restored
+        value = json.loads(rest_connection.execute_statement_on_cbas("SELECT VALUE COUNT(*) FROM dataset1", None, username=username, password=password))
+        self.assertEqual(value['results'], [30])
+        value = json.loads(rest_connection.execute_statement_on_cbas("SELECT VALUE COUNT(*) FROM dataset2", None, username=username, password=password))
+        self.assertEqual(value['results'], [969])
+        drop()
