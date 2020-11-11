@@ -137,6 +137,47 @@ class basic_ops(BaseTestCase):
         if active_bucket_items * self.num_replicas != replica_bucket_items:
             self.fail("Mismatch in data !!!")
 
+    def test_MB_36087(self):
+        try:
+            from sdk_client import SDKClient
+        except:
+            from sdk_client3 import SDKClient
+        import couchbase.subdocument as SD
+
+        g_key = "test_doc"
+        bucket_name = "default"
+        sdk_client = SDKClient(scheme='couchbase', hosts=[self.master.ip],
+                               bucket=bucket_name)
+        rest = RestConnection(self.master)
+        client = VBucketAwareMemcached(rest, bucket_name)
+        for i in range(self.num_items):
+            key = g_key + str(i)
+            mcd = client.memcached(key)
+            rc = mcd.set(key, 0, 0, json.dumps({'value': 'value2'}))
+            sdk_client.mutate_in(key,
+                                 SD.upsert("subdoc_key", "subdoc_val",
+                                           xattr=True,
+                                           create_parents=True))
+            # Wait for key to persist
+            persisted = 0
+            while persisted == 0:
+                opaque, rep_time, persist_time, persisted, cas = \
+                    client.observe(key)
+
+            # Evict the key
+            try:
+                rc = mcd.evict_key(key)
+            except MemcachedError as exp:
+                self.fail("Exception with evict meta - %s" % exp)
+
+            # Perform del_with_meta
+            try:
+                mcd = client.memcached(key)
+                _, flags, exp, seqno, cas = client.memcached(key).getMeta(key)
+                rc = mcd.del_with_meta(key, 0, 0, 2, cas+1)
+            except MemcachedError as exp:
+                self.fail("Exception with del_with meta - {0}".format(exp))
+
     # Reproduce test case for MB-28078
     def do_setWithMeta_twice(self):
 
