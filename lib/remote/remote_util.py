@@ -4749,6 +4749,26 @@ class RemoteMachineShellConnection(KeepRefs):
             log.error("Command didn't run successfully. Error: {0}".format(r))
         return o, r
 
+    def execute_cbexport(self, target, bucket, scope=None, collection=None, output_file="/tmp/output.json"):
+        """
+        """
+        self.execute_command("rm -f {output_file}")
+
+        command = f"{LINUX_COUCHBASE_BIN_PATH}cbexport json -c couchbase://{target.ip} -u {target.rest_username} -p {target.rest_password} -b {bucket} -o {output_file} -f list"
+
+        if scope:
+            command += f" -scope-field {scope}"
+
+        if collection:
+            command += f" -collection-field {collection}"
+
+        output, error, exit_code  = self.execute_command(command, get_exit_code=True)
+        if exit_code > 0:
+            return None
+
+        output, error = self.execute_command("cat /tmp/output.json")
+        return json.loads(''.join(output))
+
     def remove_win_backup_dir(self):
         win_paths = [WIN_CB_PATH, testconstants.WIN_MB_PATH]
         for each_path in win_paths:

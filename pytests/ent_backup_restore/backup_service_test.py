@@ -2,11 +2,12 @@ import re
 import json
 import random
 import datetime
+import itertools
 import threading
 
 from ent_backup_restore.backup_service_base import BackupServiceBase, HistoryFile, MultipleRemoteShellConnections
 from lib.couchbase_helper.time_helper import TimeUtil
-from ent_backup_restore.backup_service_base import Prometheus, FailoverServer, ScheduleTest, Time
+from ent_backup_restore.backup_service_base import Prometheus, FailoverServer, ScheduleTest, Time, DocumentUtil
 from membase.api.rest_client import RestConnection
 from lib.backup_service_client.models.task_template import TaskTemplate
 from lib.backup_service_client.models.task_template_schedule import TaskTemplateSchedule
@@ -2736,3 +2737,111 @@ class BackupServiceTest(BackupServiceBase):
         value = json.loads(rest_connection.execute_statement_on_cbas("SELECT VALUE COUNT(*) FROM dataset2", None, username=username, password=password))
         self.assertEqual(value['results'], [969])
         drop()
+
+    def test_restoring_collections(self):
+        """ Test the backup service can restore collections
+
+        Params:
+            no_of_scopes (int): The number of scopes.
+            no_of_collections (int): The number of collections in each scope.
+            full_backup (bool): Take a full backup.
+        """
+        repo_name, full_backup, bucket_name = "full_name", self.input.param("full_backup", True), "default"
+        no_of_scopes, no_of_collections, no_of_items = self.input.param("no_of_scopes", 5), self.input.param("no_of_collection", 5), 100
+        remote_connection = RemoteMachineShellConnection(self.backupset.cluster_host)
+
+        # Create a repository with a default plan
+        self.create_repository_with_default_plan(repo_name)
+
+        # Create scopes and collections
+        ids = self.create_variable_no_of_collections_and_scopes(self.backupset.cluster_host, bucket_name, no_of_scopes, no_of_collections)
+
+        # Populate each collection with documents
+        for collection_id in ids:
+            remote_connection.execute_cbworkloadgen(self.backupset.cluster_host.rest_username, self.backupset.cluster_host.rest_password, no_of_items, "1", bucket_name, 3, f"-j -c {collection_id}")
+
+        self.sleep(30)
+
+        # A function which identifies our documents uniquely
+        document_key_function = DocumentUtil.unique_document_key("name", "scope", "collection")
+
+        # Collect the documents from the bucket
+        data = remote_connection.execute_cbexport(self.backupset.cluster_host, bucket_name, "scope", "collection")
+        data.sort(key=document_key_function)
+        self.assertEqual(len(data), no_of_collections * no_of_scopes * no_of_items)
+
+        # Perform a one off backup
+        self.take_one_off_backup("active", repo_name, full_backup, 20, 20)
+
+        # Delete contents of the bucket
+        self.flush_all_buckets()
+
+        # Perform a one off restore
+        self.take_one_off_restore("active", repo_name, 20, 5, self.backupset.cluster_host)
+
+        # Check the documents were successfully restored
+        data_after_restore = remote_connection.execute_cbexport(self.backupset.cluster_host, bucket_name, "scope", "collection")
+        data_after_restore.sort(key=document_key_function)
+        self.assertEqual(data, data_after_restore)
+
+        data_after_restore_dict = {document_key_function(document): document for document in data_after_restore}
+
+        for scope_no, collection_no, item_no in itertools.product(range(no_of_scopes), range(no_of_collections), range(no_of_items)):
+            document = data_after_restore_dict[(f"scope{scope_no}", f"collection{collection_no}", f"pymc{item_no}")]
+            self.assertEqual(document['index'], str(item_no))
+            self.assertEqual(document['body'], "000")
+
+    def test_merging_and_restoring_with_collections(self):
+        """ Test merging and restoring with collections
+        """
+        repo_name, full_backup, bucket_name, no_of_backups = "full_name", self.input.param("full_backup", True), "default", 2
+        no_of_scopes, no_of_collections, no_of_items = self.input.param("no_of_scopes", 5), self.input.param("no_of_collection", 5), 100
+        remote_connection = RemoteMachineShellConnection(self.backupset.cluster_host)
+
+        # Create a repository with a default plan
+        self.create_repository_with_default_plan(repo_name)
+
+        # Create scopes and collections
+        ids = self.create_variable_no_of_collections_and_scopes(self.backupset.cluster_host, bucket_name, no_of_scopes, no_of_collections)
+
+        # Take n one off backups
+        def provisioning_function(i):
+            for collection_id in ids:
+                remote_connection.execute_cbworkloadgen(self.backupset.cluster_host.rest_username, self.backupset.cluster_host.rest_password, no_of_items, "1", bucket_name, 2 + i, f"-j -c {collection_id}")
+
+        self.take_n_one_off_backups("active", repo_name, None, no_of_backups, doc_load_sleep=30, data_provisioning_function=provisioning_function)
+
+        backups = [backup._date for backup in self.get_backups("active", repo_name)]
+        self.assertEqual(len(backups), no_of_backups)
+
+        # Take a merge
+        self.take_one_off_merge("active", repo_name, backups[0], backups[-1], 20, 20)
+
+        backups = [backup._date for backup in self.get_backups("active", repo_name)]
+        self.assertEqual(len(backups), 1)
+
+        # A function which identifies our documents uniquely
+        document_key_function = DocumentUtil.unique_document_key("name", "scope", "collection")
+
+        # Collect the documents from the bucket
+        data = remote_connection.execute_cbexport(self.backupset.cluster_host, bucket_name, "scope", "collection")
+        data.sort(key=document_key_function)
+        self.assertEqual(len(data), no_of_collections * no_of_scopes * no_of_items)
+
+        # Delete contents of the bucket
+        self.flush_all_buckets()
+
+        # Perform a one off restore
+        self.take_one_off_restore("active", repo_name, 20, 5, self.backupset.cluster_host)
+
+        # Check the documents were successfully restored
+        data_after_restore = remote_connection.execute_cbexport(self.backupset.cluster_host, bucket_name, "scope", "collection")
+        data_after_restore.sort(key=document_key_function)
+        self.assertEqual(data, data_after_restore)
+
+        data_after_restore_dict = {document_key_function(document): document for document in data_after_restore}
+
+        for scope_no, collection_no, item_no in itertools.product(range(no_of_scopes), range(no_of_collections), range(no_of_items)):
+            document = data_after_restore_dict[(f"scope{scope_no}", f"collection{collection_no}", f"pymc{item_no}")]
+            self.assertEqual(document['index'], str(item_no))
+            self.assertEqual(document['body'], "0" * (1 + no_of_backups))

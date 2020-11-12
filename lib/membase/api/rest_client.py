@@ -650,6 +650,23 @@ class RestConnection(object):
                 raise Exception("Create collection failed : status:{0},content:{1}".format(status, content))
         return status
 
+    def put_collection_scope_manifest(self, bucket, manifest, ensure_manifest=True):
+        """ Put collection scope manifest to bulk update collection/scopes
+
+        Args:
+            ensure_manifest (bool): If set, blocks until the manifest has been applied to all nodes as the endpoint is asynchronous.
+        """
+        if isinstance(bucket, Bucket):
+            bucket = bucket.name
+
+        params, headers = json.dumps(manifest), self._create_capi_headers()
+        status, content, _ = self._http_request(f"{self.baseUrl}pools/default/buckets/{bucket}/collections", 'PUT', params=params, headers=headers)
+
+        if ensure_manifest:
+            uid = json.loads(content)['uid']
+            ensure_manifest_status, manifest_content, _ = self._http_request(f"{self.baseUrl}pools/default/buckets/{bucket}/collections/@ensureManifest/{uid}", 'POST', headers=headers)
+
+        return status
 
     def get_bucket_manifest(self, bucket):
         if isinstance(bucket, Bucket):

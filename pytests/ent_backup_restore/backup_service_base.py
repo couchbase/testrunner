@@ -23,6 +23,7 @@ from lib.backup_service_client.models.body1 import Body1
 from lib.backup_service_client.models.body2 import Body2
 from lib.backup_service_client.models.body3 import Body3
 from lib.backup_service_client.models.body4 import Body4
+from lib.backup_service_client.models.body5 import Body5
 from lib.backup_service_client.models.plan import Plan
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from lib.membase.helper.bucket_helper import BucketOperationHelper
@@ -386,6 +387,15 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         body.cloud_force_path_style = True
         return body
 
+    def take_one_off_merge(self, state, repo_name, start, end, retries, sleep_time):
+        """ Take a one off merge
+        """
+        # Perform a one off merge
+        task_name = self.active_repository_api.cluster_self_repository_active_id_merge_post(repo_name, body=Body5(start=start, end=end)).task_name
+        # Wait until task is completed
+        self.assertTrue(self.wait_for_backup_task(state, repo_name, retries, sleep_time, task_name=task_name))
+        return task_name
+
     def take_one_off_backup(self, state, repo_name, full_backup, retries, sleep_time):
         """ Take a one off backup
         """
@@ -466,6 +476,26 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         rest_conn.create_scope(bucket_name, scope_name)
         rest_conn.create_collection(bucket_name, scope_name, collection_name)
         return rest_conn.get_collection_uid(bucket_name, scope_name, collection_name)
+
+    def create_variable_no_of_collections_and_scopes(self, cluster_host, bucket_name, no_of_scopes, no_of_collections):
+        """ Create `no_of_collections` in each `no_of_scopes` scopes in `bucket_name`
+        """
+        rest_conn = RestConnection(cluster_host)
+
+        # Grab the current manifest and remove the uids
+        manifest = rest_conn.get_bucket_manifest(bucket_name)
+        manifest.pop('uid')
+        for scope in manifest['scopes']:
+            scope.pop('uid')
+            for collection in scope['collections']:
+                collection.pop('uid')
+
+        # Do a bulk update to create scopes and collections
+        manifest['scopes'] += [{'name': f"scope{i}", 'collections': [{'name': f"collection{j}"} for j in range(no_of_collections)]} for i in range(no_of_scopes)]
+        rest_conn.put_collection_scope_manifest(bucket_name, manifest)
+
+        # Return a list of all the collection ids
+        return [rest_conn.get_collection_uid(bucket_name, f"scope{i}", f"collection{j}") for i in range(no_of_scopes) for j in range(no_of_collections)]
 
     def get_hidden_repo_name(self, repo_name):
         """ Get the hidden repo name for `repo_name`
@@ -965,3 +995,19 @@ class ScheduleTest:
 
         for plan, _ in self.plan_repo:
             plan.recalculate_all(self.now)
+
+class DocumentUtil:
+
+    @staticmethod
+    def unique_document_key(id_field_name, scope_field_name=None, collection_field_name=None):
+        """ Returns a function which extracts a key to uniquely identifies a document.
+
+            Can be used documents emitted by the cbexport tool as if they contain a scope/collection field.
+
+            If the scope_field_name and collection_field_name is not provided, then the unique_id is used
+            on its own.
+        """
+        if scope_field_name and collection_field_name:
+            return lambda document: (document[scope_field_name], document[collection_field_name], document[id_field_name])
+
+        return lambda document: document[id_field_name]
