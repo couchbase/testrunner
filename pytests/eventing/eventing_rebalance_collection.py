@@ -378,3 +378,90 @@ class EventingRebalanceCollection(EventingBaseTest):
         self.verify_all_handler(self.docs_per_day * self.num_docs)
         self.verify_doc_count_collections("src_bucket.scope_1.coll_1", self.docs_per_day * self.num_docs * 3)
         self.undeploy_delete_all_functions()
+
+    def test_rebalance_in_with_different_topologies(self):
+        self.services_in = self.input.param("services_in")
+        self.create_save_handlers()
+        self.deploy_all_handlers()
+        # load data
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                     wait_for_loading=False)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.scope_1.coll_1",
+                                     wait_for_loading=False)
+        # rebalance in a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                 services=[self.services_in])
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        # Wait for eventing to catch up with all the update mutations and verify results after rebalance
+        self.verify_all_handler(self.docs_per_day * self.num_docs)
+        self.verify_doc_count_collections("src_bucket.scope_1.coll_1", self.docs_per_day * self.num_docs * 2)
+        # delete json documents
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default", is_delete=True,
+                                     wait_for_loading=False)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.scope_1.coll_1", is_delete=True,
+                                     wait_for_loading=False)
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_all_handler(0)
+        self.verify_doc_count_collections("src_bucket.scope_1.coll_1", self.docs_per_day * self.num_docs)
+        self.undeploy_delete_all_functions()
+
+    def test_rebalance_out_with_different_topologies(self):
+        self.server_out = self.input.param("server_out")
+        self.create_save_handlers()
+        self.deploy_all_handlers()
+        # load data
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                     wait_for_loading=False)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.scope_1.coll_1",
+                                     wait_for_loading=False)
+        nodes_out_list = self.servers[self.server_out]
+        # rebalance out a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_list])
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        # Wait for eventing to catch up with all the update mutations and verify results after rebalance
+        self.verify_all_handler(self.docs_per_day * self.num_docs)
+        self.verify_doc_count_collections("src_bucket.scope_1.coll_1", self.docs_per_day * self.num_docs * 2)
+        # delete json documents
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default", is_delete=True,
+                                     wait_for_loading=False)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.scope_1.coll_1", is_delete=True,
+                                     wait_for_loading=False)
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_all_handler(0)
+        self.verify_doc_count_collections("src_bucket.scope_1.coll_1", self.docs_per_day * self.num_docs)
+        self.undeploy_delete_all_functions()
+
+    def test_swap_rebalance_with_different_topologies(self):
+        self.server_out = self.input.param("server_out")
+        self.services_in = self.input.param("services_in")
+        self.create_save_handlers()
+        self.deploy_all_handlers()
+        # load data
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                     wait_for_loading=False)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.scope_1.coll_1",
+                                     wait_for_loading=False)
+        nodes_out_list = self.servers[self.server_out]
+        # do a swap rebalance
+        self.rest.add_node(self.master.rest_username, self.master.rest_password, self.servers[self.nodes_init].ip,
+                           self.servers[self.nodes_init].port, services=[self.services_in])
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_list])
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        # Wait for eventing to catch up with all the update mutations and verify results after rebalance
+        self.verify_all_handler(self.docs_per_day * self.num_docs)
+        self.verify_doc_count_collections("src_bucket.scope_1.coll_1", self.docs_per_day * self.num_docs * 2)
+        # delete json documents
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default", is_delete=True,
+                                     wait_for_loading=False)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.scope_1.coll_1", is_delete=True,
+                                     wait_for_loading=False)
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_all_handler(0)
+        self.verify_doc_count_collections("src_bucket.scope_1.coll_1", self.docs_per_day * self.num_docs)
+        self.undeploy_delete_all_functions()

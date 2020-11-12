@@ -14,10 +14,9 @@ import json
 class EventingN1QL(EventingBaseTest):
     def setUp(self):
         super(EventingN1QL, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=1200)
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
         if self.create_functions_buckets:
             self.bucket_size = 200
-            log.info(self.bucket_size)
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                        replicas=self.num_replicas)
             self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
@@ -172,20 +171,17 @@ class EventingN1QL(EventingBaseTest):
     def test_global_variable(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.GLOBAL_VARIABLE,
+        try:
+            body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.GLOBAL_VARIABLE,
                                               dcp_stream_boundary="from_now")
-        try :
-            self.deploy_function(body, deployment_fail=True)
         except Exception as e:
             if "ERR_HANDLER_COMPILATION" not in str(e):
                 self.fail("Deployment is expected to be failed but no message of failure")
 
     def test_empty_handler(self):
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.EMPTY,
-                                              dcp_stream_boundary="from_now")
         try:
+            body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.EMPTY,
+                                              dcp_stream_boundary="from_now")
             self.deploy_function(body, deployment_fail=True)
         except Exception as e:
             if "Function handler should not be empty" not in str(e):
@@ -194,10 +190,9 @@ class EventingN1QL(EventingBaseTest):
     def test_without_update_delete(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.RANDOM,
-                                              dcp_stream_boundary="from_now")
-        # MB-27126
         try:
+            body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.RANDOM,
+                                              dcp_stream_boundary="from_now")
             self.deploy_function(body, deployment_fail=True)
         except Exception as e:
             if "Handler code is missing OnUpdate() and OnDelete() functions. At least one of them is needed to deploy the handler" not in str(e):
