@@ -4569,7 +4569,7 @@ class FTSBaseTest(unittest.TestCase):
             return index.fts_queries
 
     def create_index(self, bucket, index_name, index_params=None,
-                     plan_params=None, collection_index=False, type=None, analyzer="standard"):
+                     plan_params=None, collection_index=False, _type=None, analyzer="standard"):
         """
         Creates a default index given bucket, index_name and plan_params
         """
@@ -4584,7 +4584,7 @@ class FTSBaseTest(unittest.TestCase):
             index_params=index_params,
             plan_params=plan_params,
             collection_index=collection_index,
-            _type=type,
+            _type=_type,
             analyzer=analyzer)
         self.is_index_partitioned_balanced(index)
         return index
@@ -4600,7 +4600,7 @@ class FTSBaseTest(unittest.TestCase):
                 self.create_index(
                     bucket,
                     f"{bucket.name}_index_{count + 1}",
-                    plan_params=plan_params, type=tp, collection_index=collection_index)
+                    plan_params=plan_params, _type=tp, collection_index=collection_index)
 
     def define_index_parameters_collection_related(self):
         collection_index = self.container_type == 'collection'

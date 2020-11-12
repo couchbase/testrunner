@@ -748,7 +748,7 @@ class MovingTopFTS(FTSBaseTest):
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index",
             collection_index=collection_index,
-            type=_type
+            _type=_type
         )
         self.load_data()
         self.wait_for_indexing_complete()
@@ -1268,7 +1268,7 @@ class MovingTopFTS(FTSBaseTest):
 
         self._cb_cluster.flush_buckets([bucket])
         collection_index, _type = self.define_index_parameters_collection_related()
-        index = self.create_index(bucket, "default_index", collection_index=collection_index, type=_type)
+        index = self.create_index(bucket, "default_index", collection_index=collection_index, _type=_type)
         self.load_data()
         self.wait_for_indexing_complete()
 
@@ -1363,6 +1363,7 @@ class MovingTopFTS(FTSBaseTest):
                     "Hits after rollback and failover of primary FTS node: %s" % hits3)
                 self.assertEqual(hits2, hits3,
                                  "Mutated items after FTS node failover are not equal to that after rollback")
+
 
     def test_cancel_node_removal_rebalance(self):
         """

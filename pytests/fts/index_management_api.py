@@ -136,11 +136,11 @@ class IndexManagementAPI(FTSBaseTest):
         fts_index_1 = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
             index_name="default_index_1",
-            collection_index=collection_index, type=_type)
+            collection_index=collection_index, _type=_type)
         fts_index_2 = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
             index_name="default_index_2",
-            collection_index=collection_index, type=_type)
+            collection_index=collection_index, _type=_type)
         self.wait_for_indexing_complete()
         self.fts_rest.disable_querying_on_fts_index(fts_index_1.name)
         self.sleep(5)
