@@ -3513,3 +3513,472 @@ class StableTopFTS(FTSBaseTest):
                         '"filler": "filler"' \
                     '})'
             self._cb_cluster.run_n1ql_query(query=query)
+
+    def _create_oso_containers(self, bucket=None, num_scopes=1, collections_per_scope=1, docs_per_collection=10000):
+        load_tasks = []
+        for i in range(1, num_scopes+1):
+            scope_name = "scope_"+str(i)
+            self.cli_client.create_scope(bucket="default", scope=scope_name);
+            self.sleep(10)
+            for j in range(1, collections_per_scope+1):
+                collection_name = "collection_"+str(j)
+                self._create_collection(bucket="default", scope=scope_name, collection=collection_name)
+
+                #load data into collections
+                gen_create = SDKDataLoader(num_ops=docs_per_collection, percent_create=100, percent_update=0, percent_delete=0,
+                             load_pattern="uniform", start_seq_num=1, key_prefix="doc_", key_suffix="_",
+                             scope=scope_name, collection=collection_name, json_template="emp", doc_expiry=0,
+                             doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
+                             start=0, end=0, op_type="create", all_collections=False, es_compare=False, es_host=None, es_port=None,
+                             es_login=None, es_password=None)
+
+                load_tasks = self._cb_cluster.async_load_bucket_from_generator(bucket, gen_create)
+                for task in load_tasks:
+                    task.result()
+
+    def _fill_collection(self, bucket=None, scope=None, collection=None, num_docs=1000, start_seq_num=1):
+        gen_create = SDKDataLoader(num_ops=num_docs, percent_create=100, percent_update=0, percent_delete=0,
+                     load_pattern="uniform", start_seq_num=start_seq_num, key_prefix="doc_", key_suffix="_",
+                     scope=scope, collection=collection, json_template="emp", doc_expiry=0,
+                     doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
+                     start=0, end=0, op_type="create", all_collections=False, es_compare=False, es_host=None, es_port=None,
+                     es_login=None, es_password=None)#
+
+        load_tasks = self._cb_cluster.async_load_bucket_from_generator(bucket, gen_create)
+        for task in load_tasks:
+            task.result()
+
+    def _update_collection(self, bucket=None, scope=None, collection=None, num_docs=1000, start=1):
+        gen_create = SDKDataLoader(num_ops=num_docs, percent_create=0, percent_update=100, percent_delete=0,
+                     load_pattern="uniform", start_seq_num=start, key_prefix="doc_", key_suffix="_",
+                     scope=scope, collection=collection, json_template="emp", doc_expiry=0,
+                     doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
+                     start=start, end=start+num_docs, op_type="create", all_collections=False, es_compare=False, es_host=None, es_port=None,
+                     es_login=None, es_password=None)
+
+        load_tasks = self._cb_cluster.async_load_bucket_from_generator(bucket, gen_create)
+        for task in load_tasks:
+            task.result()
+
+    def _delete_from_collection(self, bucket=None, scope=None, collection=None, num_docs=1000, start=1):
+        gen_create = SDKDataLoader(num_ops=num_docs, percent_create=0, percent_update=0, percent_delete=100,
+                     load_pattern="uniform", start_seq_num=start, key_prefix="doc_", key_suffix="_",
+                     scope=scope, collection=collection, json_template="emp", doc_expiry=0,
+                     doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
+                     start=start, end=start+num_docs, op_type="create", all_collections=False, es_compare=False, es_host=None, es_port=None,
+                     es_login=None, es_password=None)
+
+        load_tasks = self._cb_cluster.async_load_bucket_from_generator(bucket, gen_create)
+        for task in load_tasks:
+            task.result()
+
+    def test_index_creation_oso(self):
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        num_scopes = TestInputSingleton.input.param("num_scopes", 5)
+        collections_per_scope = TestInputSingleton.input.param("collections_per_scope", 20)
+        docs_per_collection = TestInputSingleton.input.param("docs_per_collection", 10000)
+        self._create_oso_containers(bucket=bucket, num_scopes=num_scopes, collections_per_scope=collections_per_scope, docs_per_collection=docs_per_collection)
+
+        test_scope = "scope_"+str(num_scopes)
+        test_collection = "test_collection"
+        self._create_collection(bucket="default", scope=test_scope, collection=test_collection)
+        self._fill_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=1000)
+        test_index = self.create_index(self._cb_cluster.get_bucket_by_name('default'),
+                                       "test_index", collection_index=True, _type=f"{test_scope}.{test_collection}")
+        self.wait_for_indexing_complete_simple(item_count=1000, index=test_index)
+
+        multi_collections = []
+        for i in range(1, 4):
+            coll_name = test_collection + "_" + str(i)
+            self._create_collection(bucket="default", scope=test_scope, collection=coll_name)
+            self._fill_collection(bucket=bucket, scope=test_scope, collection=coll_name, num_docs=1000, start_seq_num=1000*i+1)
+            multi_collections.append(coll_name)
+        _type_multi = []
+        for c in multi_collections:
+            _type_multi.append(f"{test_scope}.{c}")
+        test_index_multi = self.create_index(self._cb_cluster.get_bucket_by_name('default'),
+                                       "test_index_multi", collection_index=True, _type=_type_multi)
+        self.wait_for_indexing_complete_simple(item_count=3000, index=test_index_multi)
+
+        test_query = {"match": "emp", "field": "type"}
+        hits_before, _, _, _ = test_index.execute_query(test_query)
+        hits_before_multi, _, _, _ = test_index_multi.execute_query(test_query)
+
+        additional_collections_per_scope = TestInputSingleton.input.param("additional_collections_per_scope", 2)
+
+        for i in range(1, num_scopes+1):
+            scope_name = "scope_" + str(i)
+            for j in (collections_per_scope+2, additional_collections_per_scope+1):
+                collection_name = "collection_" + str(j)
+                self._create_collection(bucket="default", scope=scope_name, collection=collection_name)
+                self._fill_collection(bucket=bucket, scope=scope_name, collection=collection_name)
+
+        hits_after, _, _, _ = test_index.execute_query(test_query)
+        hits_after_multi, _, _, _ = test_index_multi.execute_query(test_query)
+        errors = []
+        try:
+            self.assertEqual(hits_before, hits_after)
+        except AssertionError as e:
+            errors.append("Hits before and after additional data load do not match for single collection index.")
+        try:
+            self.assertEqual(hits_before_multi, hits_after_multi)
+        except AssertionError as e:
+            errors.append("Hits before and after additional data load do not match for multi collection index.")
+
+        try:
+            self.assertEqual(len(errors), 0)
+        except AssertionError as ex:
+            for err in errors:
+                self.log.error(err)
+            self.fail()
+
+    def test_data_mutations_oso(self):
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        num_scopes = TestInputSingleton.input.param("num_scopes", 5)
+        collections_per_scope = TestInputSingleton.input.param("collections_per_scope", 20)
+        docs_per_collection = TestInputSingleton.input.param("docs_per_collection", 10000)
+        self._create_oso_containers(bucket=bucket, num_scopes=num_scopes, collections_per_scope=collections_per_scope, docs_per_collection=docs_per_collection)
+
+        test_scope = "scope_"+str(num_scopes)
+        test_collection = "test_collection"
+        self._create_collection(bucket="default", scope=test_scope, collection=test_collection)
+        self._fill_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=1000)
+
+        test_index = self.create_index(self._cb_cluster.get_bucket_by_name('default'),
+                                       "test_index", collection_index=True, _type=f"{test_scope}.{test_collection}")
+        self.wait_for_indexing_complete_simple(item_count=1000, index=test_index)
+
+        multi_collections = []
+        for i in range(1, 4):
+            coll_name = test_collection + "_" + str(i)
+            self._create_collection(bucket="default", scope=test_scope, collection=coll_name)
+            self._fill_collection(bucket=bucket, scope=test_scope, collection=coll_name, num_docs=1000, start_seq_num=1000*i+1)
+            multi_collections.append(coll_name)
+        _type_multi = []
+        for c in multi_collections:
+            _type_multi.append(f"{test_scope}.{c}")
+        test_index_multi = self.create_index(self._cb_cluster.get_bucket_by_name('default'),
+                                       "test_index_multi", collection_index=True, _type=_type_multi)
+        self.wait_for_indexing_complete_simple(item_count=3000, index=test_index_multi)
+
+        additional_collections_per_scope = TestInputSingleton.input.param("additional_collections_per_scope", 2)
+
+        for i in range(1, num_scopes+1):
+            scope_name = "scope_" + str(i)
+            for j in (collections_per_scope+2, additional_collections_per_scope+1):
+                collection_name = "collection_" + str(j)
+                self._create_collection(bucket="default", scope=scope_name, collection=collection_name)
+                self._fill_collection(bucket=bucket, scope=scope_name, collection=collection_name)
+
+        for i in range(1, num_scopes+1):
+            scope_name = "scope_" + str(i)
+            for j in (1, additional_collections_per_scope+1):
+                collection_name = "collection_" + str(j)
+                self._update_collection(bucket=bucket, scope=scope_name, collection=collection_name)
+
+        self._update_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=1000)
+        for i in range(1, 4):
+            self._update_collection(bucket=bucket, scope=test_scope, collection=test_collection+"_"+str(i), num_docs=1000, start=1000*i+1)
+
+        self.wait_for_indexing_complete_simple(item_count=1000, index=test_index)
+        self.wait_for_indexing_complete_simple(item_count=3000, index=test_index_multi)
+
+        test_query = {"query": "mutated:1"}
+        hits, _, _, _ = test_index.execute_query(test_query)
+        hits_multi, _, _, _ = test_index_multi.execute_query(test_query)
+
+        errors = []
+        try:
+            self.assertEqual(hits, 1000)
+        except AssertionError as e:
+            errors.append("Full update of test collection is failed, or fts index produces wrong results for test query.")
+        try:
+            self.assertEqual(hits_multi, 3000)
+        except AssertionError as e:
+            errors.append("Full update of test collections for multi collection index is failed, or multi collections fts index produces wrong results for test query.")
+
+        try:
+            self.assertEqual(len(errors), 0)
+        except AssertionError as ex:
+            for err in errors:
+                self.log.error(err)
+            self.fail()
+
+    def test_doc_id_oso(self):
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        num_scopes = TestInputSingleton.input.param("num_scopes", 5)
+        collections_per_scope = TestInputSingleton.input.param("collections_per_scope", 20)
+        docs_per_collection = TestInputSingleton.input.param("docs_per_collection", 10000)
+        self._create_oso_containers(bucket=bucket, num_scopes=num_scopes, collections_per_scope=collections_per_scope, docs_per_collection=docs_per_collection)
+
+        test_scope = "scope_"+str(num_scopes)
+        test_collection = "test_collection"
+        self._create_collection(bucket="default", scope=test_scope, collection=test_collection)
+        self._fill_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=1000, start_seq_num=1001)
+
+        test_index = self.create_index(self._cb_cluster.get_bucket_by_name('default'),
+                                       "test_index", collection_index=True, _type=f"{test_scope}.{test_collection}")
+
+        additional_collections_per_scope = TestInputSingleton.input.param("additional_collections_per_scope", 2)
+
+        for i in range(1, num_scopes+1):
+            scope_name = "scope_" + str(i)
+            for j in (collections_per_scope+2, additional_collections_per_scope+1):
+                collection_name = "collection_" + str(j)
+                self._create_collection(bucket="default", scope=scope_name, collection=collection_name)
+                self._fill_collection(bucket=bucket, scope=scope_name, collection=collection_name)
+
+        self._fill_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=1000, start_seq_num=1)
+
+        test_query = {"match": "emp", "field": "type"}
+        hits, _, _, _ = test_index.execute_query(test_query)
+        self.assertEqual(hits, 2000, "Test for doc_id special load order is failed.")
+
+    def test_partial_rollback_oso(self):
+        from lib.memcached.helper.data_helper import MemcachedClientHelper
+        #items = 50000, update = True, upd = 30, upd_del_fields = ['dept']
+
+        bucket = self._cb_cluster.get_bucket_by_name("default")
+        self._cb_cluster.flush_buckets([bucket])
+
+        num_scopes = TestInputSingleton.input.param("num_scopes", 5)
+        collections_per_scope = TestInputSingleton.input.param("collections_per_scope", 20)
+        docs_per_collection = TestInputSingleton.input.param("docs_per_collection", 10000)
+        self._create_oso_containers(bucket=bucket, num_scopes=num_scopes, collections_per_scope=collections_per_scope, docs_per_collection=docs_per_collection)
+
+        test_scope = "scope_"+str(num_scopes)
+        test_collection = "test_collection"
+        self._create_collection(bucket="default", scope=test_scope, collection=test_collection)
+        self._fill_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=1000)
+
+        test_index = self.create_index(self._cb_cluster.get_bucket_by_name('default'),
+                                       "test_index", collection_index=True, _type=f"{test_scope}.{test_collection}")
+        self.wait_for_indexing_complete_simple(item_count=1000, index=test_index)
+
+        multi_collections = []
+        for i in range(1, 4):
+            coll_name = test_collection + "_" + str(i)
+            self._create_collection(bucket="default", scope=test_scope, collection=coll_name)
+            self._fill_collection(bucket=bucket, scope=test_scope, collection=coll_name, num_docs=1000, start_seq_num=1000*i+1)
+            multi_collections.append(coll_name)
+        _type_multi = []
+        for c in multi_collections:
+            _type_multi.append(f"{test_scope}.{c}")
+        test_index_multi = self.create_index(self._cb_cluster.get_bucket_by_name('default'),
+                                       "test_index_multi", collection_index=True, _type=_type_multi)
+        self.wait_for_indexing_complete_simple(item_count=3000, index=test_index_multi)
+
+
+        additional_collections_per_scope = TestInputSingleton.input.param("additional_collections_per_scope", 2)
+
+        for i in range(1, num_scopes+1):
+            scope_name = "scope_" + str(i)
+            for j in (collections_per_scope+2, additional_collections_per_scope+1):
+                collection_name = "collection_" + str(j)
+                self._create_collection(bucket="default", scope=scope_name, collection=collection_name)
+                self._fill_collection(bucket=bucket, scope=scope_name, collection=collection_name)
+
+        for i in range(1, num_scopes+1):
+            scope_name = "scope_" + str(i)
+            for j in (1, additional_collections_per_scope+1):
+                collection_name = "collection_" + str(j)
+                self._update_collection(bucket=bucket, scope=scope_name, collection=collection_name)
+
+        # Stop Persistence on Node A & Node B
+        self.log.info("Stopping persistence on {0}".
+                      format(self._input.servers[:2]))
+        mem_client = MemcachedClientHelper.direct_client(self._input.servers[0],
+                                                         bucket)
+        mem_client.stop_persistence()
+        mem_client = MemcachedClientHelper.direct_client(self._input.servers[1],
+                                                         bucket)
+        mem_client.stop_persistence()
+
+        # Perform mutations on the bucket
+        if self._update:
+            self._update_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=300)
+            for i in range(1, 4):
+                self._update_collection(bucket=bucket, scope=test_scope, collection=test_collection + "_" + str(i),
+                                        num_docs=300, start=1000 * i + 1)
+
+        if self._delete:
+            self._delete_from_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=100)
+            for i in range(1, 4):
+                self._update_collection(bucket=bucket, scope=test_scope, collection=test_collection + "_" + str(i),
+                                        num_docs=100, start=1000 * i + 1)
+
+        self.wait_for_indexing_complete_simple(item_count=900, index=test_index)
+        self.wait_for_indexing_complete_simple(item_count=2700, index=test_index_multi)
+
+        # Run FTS Query to fetch the initial count of mutated items
+        query = {"query": "mutated:>0"}
+
+        hits1_simple_index, _, _, _ = test_index.execute_query(query)
+        self.log.info("Hits for simple index before rollback: %s" % hits1_simple_index)
+
+        hits1_multi_index, _, _, _ = test_index_multi.execute_query(query)
+        self.log.info("Hits for multi index before rollback: %s" % hits1_multi_index)
+
+        # Fetch count of docs in index and bucket
+        before_simple_index_doc_count = test_index.get_indexed_doc_count()
+        before_multi_index_doc_count = test_index_multi.get_indexed_doc_count()
+        before_bucket_doc_count = test_index.get_src_bucket_doc_count()
+
+        self.log.info("Docs in Bucket : %s, Docs in simple Index : %s, Docs in multi Index: %s" % (
+            before_bucket_doc_count, before_simple_index_doc_count, before_multi_index_doc_count))
+
+        # Kill memcached on Node A
+        self.log.info("Killing memcached on {0}".format(self._master.ip))
+        shell = RemoteMachineShellConnection(self._master)
+        shell.kill_memcached()
+
+        # Start persistence on Node B
+        self.log.info("Starting persistence on {0}".
+                      format(self._input.servers[1].ip))
+        mem_client = MemcachedClientHelper.direct_client(self._input.servers[1],
+                                                         bucket)
+        mem_client.start_persistence()
+
+        # Failover Node B
+        failover_task = self._cb_cluster.async_failover(
+            node=self._input.servers[1])
+        failover_task.result()
+
+        # Wait for Failover & FTS index rollback to complete
+        self.wait_for_indexing_complete_simple(item_count=900, index=test_index)
+        self.wait_for_indexing_complete_simple(item_count=2700, index=test_index_multi)
+
+        # Run FTS query to fetch count of mutated items post rollback.
+        hits2_simple_index, _, _, _ = test_index.execute_query(query)
+        self.log.info("Hits for simple index after rollback: %s" % hits2_simple_index)
+
+        hits2_multi_index, _, _, _ = test_index_multi.execute_query(query)
+        self.log.info("Hits for multi index after rollback: %s" % hits2_multi_index)
+
+        # Fetch count of docs in index and bucket
+        after_simple_index_doc_count = test_index.get_indexed_doc_count()
+        after_multi_index_doc_count = test_index_multi.get_indexed_doc_count()
+        after_bucket_doc_count = test_index.get_src_bucket_doc_count()
+
+        self.log.info("Docs in Bucket : %s, Docs in simple Index : %s, Docs in multi Index: %s" % (
+            after_bucket_doc_count, after_simple_index_doc_count, after_multi_index_doc_count))
+
+        # Validation : If there are deletes, validate the #docs in index goes
+        #  up post rollback
+        if self._input.param("delete", False):
+            self.assertGreater(after_simple_index_doc_count, before_simple_index_doc_count,
+                               "Deletes : Simple index count after rollback not "
+                               "greater than before rollback")
+            self.assertGreater(after_multi_index_doc_count, before_multi_index_doc_count,
+                               "Deletes : Multi index count after rollback not "
+                               "greater than before rollback")
+        else:
+            # For Updates, validate that #hits goes down in the query output
+            # post rollback
+            self.assertGreater(hits1_simple_index, hits2_simple_index,
+                               "Mutated items before rollback are not more "
+                               "than after rollback for simple index")
+            self.assertGreater(hits1_multi_index, hits2_multi_index,
+                               "Mutated items before rollback are not more "
+                               "than after rollback for multi index")
+
+        # Failover FTS node
+        failover_fts_node = self._input.param("failover_fts_node", False)
+
+        if failover_fts_node:
+            failover_task = self._cb_cluster.async_failover(
+                node=self._input.servers[2])
+            failover_task.result()
+            self.sleep(10)
+
+            # Run FTS query to fetch count of mutated items post FTS node failover.
+            for index in self._cb_cluster.get_indexes():
+                hits3_simple_index, _, _, _ = test_index.execute_query(query)
+                hits3_multi_index, _, _, _ = test_index_multi.execute_query(query)
+
+                self.log.info(
+                    "Hits after rollback and failover of primary FTS node for simple index: %s" % hits3_simple_index)
+                self.log.info(
+                    "Hits after rollback and failover of primary FTS node for multi index: %s" % hits3_multi_index)
+                self.assertEqual(hits2_simple_index, hits3_simple_index,
+                                 "Mutated items after FTS node failover are not equal to that after rollback for simple index")
+                self.assertEqual(hits2_multi_index, hits3_multi_index,
+                                 "Mutated items after FTS node failover are not equal to that after rollback for multi index")
+
+    def test_flush_bucket_oso(self):
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        num_scopes = TestInputSingleton.input.param("num_scopes", 5)
+        collections_per_scope = TestInputSingleton.input.param("collections_per_scope", 20)
+        docs_per_collection = TestInputSingleton.input.param("docs_per_collection", 10000)
+        self._create_oso_containers(bucket=bucket, num_scopes=num_scopes, collections_per_scope=collections_per_scope, docs_per_collection=docs_per_collection)
+
+        test_scope = "scope_"+str(num_scopes)
+        test_collection = "test_collection"
+        self._create_collection(bucket="default", scope=test_scope, collection=test_collection)
+        self._fill_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=1000)
+
+        test_index = self.create_index(self._cb_cluster.get_bucket_by_name('default'),
+                                       "test_index", collection_index=True, _type=f"{test_scope}.{test_collection}")
+        self.wait_for_indexing_complete_simple(item_count=1000, index=test_index)
+
+        multi_collections = []
+        for i in range(1, 4):
+            coll_name = test_collection + "_" + str(i)
+            self._create_collection(bucket="default", scope=test_scope, collection=coll_name)
+            self._fill_collection(bucket=bucket, scope=test_scope, collection=coll_name, num_docs=1000, start_seq_num=1000*i+1)
+            multi_collections.append(coll_name)
+        _type_multi = []
+        for c in multi_collections:
+            _type_multi.append(f"{test_scope}.{c}")
+        test_index_multi = self.create_index(self._cb_cluster.get_bucket_by_name('default'),
+                                       "test_index_multi", collection_index=True, _type=_type_multi)
+        self.wait_for_indexing_complete_simple(item_count=3000, index=test_index_multi)
+
+        additional_collections_per_scope = TestInputSingleton.input.param("additional_collections_per_scope", 2)
+
+        for i in range(1, num_scopes+1):
+            scope_name = "scope_" + str(i)
+            for j in (collections_per_scope+2, additional_collections_per_scope+1):
+                collection_name = "collection_" + str(j)
+                self._create_collection(bucket="default", scope=scope_name, collection=collection_name)
+                self._fill_collection(bucket=bucket, scope=scope_name, collection=collection_name)
+
+        for i in range(1, num_scopes+1):
+            scope_name = "scope_" + str(i)
+            for j in (1, additional_collections_per_scope+1):
+                collection_name = "collection_" + str(j)
+                self._update_collection(bucket=bucket, scope=scope_name, collection=collection_name)
+
+        self._update_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=1000)
+        for i in range(1, 4):
+            self._update_collection(bucket=bucket, scope=test_scope, collection=test_collection+"_"+str(i), num_docs=1000, start=1000*i+1)
+
+        self.wait_for_indexing_complete_simple(item_count=1000, index=test_index)
+        self.wait_for_indexing_complete_simple(item_count=3000, index=test_index_multi)
+
+        self._cb_cluster.flush_buckets([bucket])
+
+        simple_index_doc_count = test_index.get_indexed_doc_count()
+        multi_index_doc_count = test_index_multi.get_indexed_doc_count()
+        bucket_doc_count = test_index.get_src_bucket_doc_count()
+
+        errors = []
+        try:
+            self.assertEquals(simple_index_doc_count, 0)
+        except AssertionError as e:
+            errors.append("Simple index contains documents after source bucket flush")
+        try:
+            self.assertEquals(multi_index_doc_count, 0)
+        except AssertionError as e:
+            errors.append("Multi index contains documents after source bucket flush")
+        try:
+            self.assertEquals(bucket_doc_count, 0)
+        except AssertionError as e:
+            errors.append("Source bucket contains documents after source bucket flush")
+
+        try:
+            self.assertEqual(len(errors), 0)
+        except AssertionError as ex:
+            for err in errors:
+                self.log.error(err)
+            self.fail()

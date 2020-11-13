@@ -4260,6 +4260,35 @@ class FTSBaseTest(unittest.TestCase):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)
 
+    def wait_for_indexing_complete_simple(self, item_count=0, index=None):
+        retry = self._input.param("index_retry", 20)
+        for index in self._cb_cluster.get_indexes():
+            if index.index_type == "fulltext-alias":
+                return
+            retry_count = retry
+            prev_count = 0
+            while retry_count > 0:
+                fail = False
+                try:
+                    index_doc_count = index.get_indexed_doc_count()
+                    if item_count and index_doc_count > item_count:
+                        return
+
+                    if item_count == index_doc_count:
+                        return
+
+                    if prev_count < index_doc_count or prev_count > index_doc_count:
+                        prev_count = index_doc_count
+                        retry_count = retry
+                    else:
+                        retry_count -= 1
+                except Exception as e:
+                    self.log.info(e)
+                    if fail:
+                        self.fail(e)
+                    retry_count -= 1
+                time.sleep(6)
+
     def wait_for_indexing_complete(self, item_count=None, es_index="es_index"):
         """
         Wait for index_count for any index to stabilize or reach the
