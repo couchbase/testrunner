@@ -8,6 +8,7 @@ import threading
 from ent_backup_restore.backup_service_base import BackupServiceBase, HistoryFile, MultipleRemoteShellConnections
 from lib.couchbase_helper.time_helper import TimeUtil
 from ent_backup_restore.backup_service_base import Prometheus, FailoverServer, ScheduleTest, Time, DocumentUtil
+from ent_backup_restore.backup_service_base import Collector
 from membase.api.rest_client import RestConnection
 from lib.backup_service_client.models.task_template import TaskTemplate
 from lib.backup_service_client.models.task_template_schedule import TaskTemplateSchedule
@@ -2845,3 +2846,122 @@ class BackupServiceTest(BackupServiceBase):
             document = data_after_restore_dict[(f"scope{scope_no}", f"collection{collection_no}", f"pymc{item_no}")]
             self.assertEqual(document['index'], str(item_no))
             self.assertEqual(document['body'], "0" * (1 + no_of_backups))
+    # Test logs
+
+    def test_logs_can_be_collected(self):
+        """ Test the logs can be collected
+        """
+        with Collector(self.backupset.cluster_host) as collector:
+            collector.collect()
+
+            # Check the backup service log file is present
+            self.assertIn(Collector.backup_service_log, collector.files())
+
+            # Check the backup service log file is populated with at least a 100 lines
+            output, error = collector.remote_connection.execute_command(f"cat {collector.col_path}/{Collector.backup_service_log}")
+            self.assertGreaterEqual(len(output), 100)
+
+    def test_logs_can_be_redacted(self):
+        """ Test the logs can be redacted
+        """
+        # Examine key 'test_doc-0'
+        self.test_user_can_observe_document_changing()
+
+        with Collector(self.backupset.cluster_host, log_redaction=True) as collector:
+            collector.collect()
+
+            # Check the backup service log file is present
+            self.assertIn(Collector.backup_service_log, collector.files())
+
+            # Check the backup service log file is populated with at least a 100 lines
+            output, error = collector.remote_connection.execute_command(f"cat {collector.col_path}/{Collector.backup_service_log}")
+
+            for line in output:
+                if 'test_doc-0' in output:
+                    self.fail(f"The redacted key was found in the output: {line}")
+
+            output = [line for line in output if 'Running command /opt/couchbase/bin/cbbackupmgr examine' in line]
+            self.assertGreaterEqual(len(output), 1)
+
+            for line in output:
+                self.assertIsNotNone(re.search(r'<ud>[A-z0-9]{40}<\/ud>', line))
+
+    def test_logging(self):
+        """ Test a subset of operations to see if they are logged
+        """
+        # Change the system time
+        self.time.change_system_time("next friday 0745")
+
+        # Empty logs
+        self.empty_logs(self.backupset.cluster_host)
+
+        # Rebalance 3 node cluster into a 1 node cluster
+        self.cluster.rebalance(self.input.clusters[0], [], self.input.clusters[0][1:], services=[server.services for server in self.servers])
+
+        # Define a simple schedule
+        schedule = \
+        [
+            (1, 'HOURS', '22:00'),
+        ]
+
+        # Schedule test
+        self.schedule_test([schedule], 1)
+
+        # One off restore
+        self.take_one_off_restore("active", "repo_name0", 20, 5, self.backupset.cluster_host)
+
+        matchers = \
+        [
+            '(Rebalance) Starting rebalance',
+            '(Rebalance) Removing node from service',
+            '(Rebalance) Rebalance done',
+            '(REST) POST /api/v1/plan/plan_name0',
+            '(HTTP Manager) Added plan',
+            '(Runner) Running command /opt/couchbase/bin/cbbackupmgr config',
+            '(REST) POST /api/v1/cluster/self/repository/active/repo_name0',
+            '(Clockkeeper) Adding job',
+            '(Dispatcher) Dispatching task',
+            '(Worker) Added task to queue',
+            '(Worker) Running task',
+            '(Worker) Task done',
+            '(Runner) Running command /opt/couchbase/bin/cbbackupmgr restore'
+        ]
+
+        # Read logs
+        output = self.read_logs(self.backupset.cluster_host)
+
+        for matcher in matchers:
+            found = False
+            for line in output:
+                if matcher in line:
+                    found = True
+            self.assertTrue(found, f"Could not find: '{matcher}' in the logs")
+
+    def test_logs_for_sensitive_information(self):
+        """ Test the logs do not contain AWS credentials
+        """
+        repo_name = "my_repo"
+
+        # This test requires an objstore_provider for Cloud testing
+        self.assertIsNotNone(self.objstore_provider)
+
+        # Load buckets with data
+        self._load_all_buckets(self.master, BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items), "create", 0)
+
+        # Empty logs
+        self.empty_logs(self.backupset.cluster_host)
+
+        # Create a cloud repository with a default plan
+        self.create_repository_with_default_plan(repo_name)
+
+        # Perform a one off backup
+        self.take_one_off_backup("active", repo_name, True, 20, 20)
+
+        # Retrieve logs
+        output = self.read_logs(self.backupset.cluster_host)
+        self.assertGreater(len(output), 0)
+
+        # Check aws credentials are not present in the logs
+        for line in output:
+            self.assertNotIn(self.objstore_provider.secret_key_id, line)
+            self.assertNotIn(self.objstore_provider.secret_access_key, line)

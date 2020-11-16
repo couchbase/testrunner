@@ -70,6 +70,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # Manipulate time on individual nodes
         self.solo_time = [Time(RemoteMachineShellConnection(server)) for server in self.input.clusters[0]]
 
+        # Log files
+        self.log_directory = f"/opt/couchbase/var/lib/couchbase/logs/backup_service.log"
+
     def setUp(self):
         """ Sets up.
 
@@ -505,12 +508,17 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
     def read_logs(self, server):
         """ Returns the backup service logs
         """
-        log_directory = f"/opt/couchbase/var/lib/couchbase/logs/backup_service.log"
-
         remote_client = RemoteMachineShellConnection(server)
-        output, error = remote_client.execute_command(f"cat {log_directory}")
+        output, error = remote_client.execute_command(f"cat {self.log_directory}")
         remote_client.disconnect()
         return output
+
+    def empty_logs(self, server):
+        """ Deletes the backup service logs
+        """
+        remote_client = RemoteMachineShellConnection(server)
+        output, error = remote_client.execute_command(f"echo > {self.log_directory}")
+        remote_client.disconnect()
 
     def get_leader(self):
         """ Gets the leader from the logs
@@ -880,6 +888,41 @@ class MultipleRemoteShellConnections:
         def wrap(*args, **kwargs):
             return [func(conn, *args, **kwargs) for conn in self.connections]
         return wrap
+
+class Collector:
+    """ Collects logs
+    """
+    # Log file
+    backup_service_log = "ns_server.backup_service.log"
+
+    def __init__(self, server, log_redaction=False):
+        self.server, self.remote_connection = server, RemoteMachineShellConnection(server)
+        self.log_redaction = log_redaction
+        self.out_path = f"/tmp/output-{server.ip}"
+        self.zip_path = f"{self.out_path}.zip"
+        self.red_path = f"{self.out_path}-redacted.zip"
+        self.col_path = f"{self.out_path}/cbcollect_info_ns*"
+        self.remote_connection.execute_command("yum install -y unzip")
+        self.clean_up()
+
+    def __enter__(self):
+        return self
+
+    def clean_up(self):
+        self.remote_connection.execute_command(f"rm -rf {self.out_path} {self.zip_path} {self.red_path}")
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self.clean_up()
+        self.remote_connection.disconnect()
+
+    def collect(self):
+        self.clean_up()
+        self.remote_connection.execute_cbcollect_info(self.zip_path, options= "--log-redaction-level=partial" if self.log_redaction else "")
+        self.remote_connection.execute_command(f"unzip {self.red_path if self.log_redaction else self.zip_path} -d {self.out_path}")
+
+    def files(self):
+        output, error = self.remote_connection.execute_command(f"ls {self.col_path}")
+        return output
 
 class Prometheus:
     """ A class to obtain stats from Prometheus
