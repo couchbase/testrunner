@@ -42,6 +42,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.use_replica_index = self.input.param("use_replica_index", False)
         self.failover_index = self.input.param("failover_index", False)
         self.index_partitioned = self.input.param('index_partitioned', False)
+        self.num_fts_indexes = self.input.param("num_fts_indexes", 1)
+        self.num_fts_partitions = self.input.param("num_fts_partitions", 17)
+        self.num_fts_replicas = self.input.param("num_fts_replicas", 1)
+        self.search_rebalance_time_limit = self.input.param("search_rebalance_time_limit", 120000)
         self.index_ram = self.input.param('index_ram', 512)
 
     def tearDown(self):
@@ -768,6 +772,190 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         if self.errors:
             self.fail(str(self.errors))
 
+    def test_fts_failover_drop_index_addback_rebalance(self):
+        self.ft_object = FlexIndexTests()
+        self.ft_object.init_flex_object(self)
+        self._load_emp_dataset(end=self.num_items)
+        self.errors = []
+        all_fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+        fts_indexes = self.create_fts_indexes_failover_addback()
+
+        test = "Test to failover/adback each node"
+        self.log.info(test)
+
+        all_kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+
+        for kv_node in all_kv_nodes:
+            self.failover_addback_node(kv_node)
+
+        fts_node = all_fts_nodes.pop()
+        drop_index = fts_indexes.pop()
+        self.failover_addback_node(fts_node, drop_index_failover=True, drop_index=drop_index.name)
+        self.verify_search_rebalance_timetaken()
+        for index in fts_indexes:
+            self.ft_object.wait_for_fts_indexing_complete(index, self.num_items)
+
+        for index_node in all_fts_nodes:
+            initial_part_creation_timestamp = self.get_max_timestamp_of_partitions(index_node)
+            self.failover_addback_node(index_node)
+            self.verify_search_rebalance_timetaken()
+            for index in fts_indexes:
+                self.ft_object.wait_for_fts_indexing_complete(index, self.num_items)
+            final_part_creation_timestamp = self.get_max_timestamp_of_partitions(index_node)
+            if final_part_creation_timestamp not in initial_part_creation_timestamp:
+                self.log.info("ERROR: FAILED: timestamp of partitions before ({0}) and after ({1}) "
+                              "failover/addback are not matching on node {2}".format(initial_part_creation_timestamp,
+                                                                                     final_part_creation_timestamp,
+                                                                                     index_node))
+                self.errors.append("timestamp of partitions before ({0}) and after ({1}) "
+                                   "failover/addback are not matching on node {2}".format(initial_part_creation_timestamp,
+                                                                                          final_part_creation_timestamp,
+                                                                                          index_node))
+
+        if self.errors:
+            self.fail(str(self.errors))
+
+    def test_fts_failover_addback_create_index_rebalance(self):
+        self.ft_object = FlexIndexTests()
+        self.ft_object.init_flex_object(self)
+        self._load_emp_dataset(end=self.num_items)
+        self.errors = []
+        all_fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+        fts_indexes = self.create_fts_indexes_failover_addback()
+
+        test = "Test to failover/adback each node"
+        self.log.info(test)
+
+        all_kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+
+        for kv_node in all_kv_nodes:
+            self.failover_addback_node(kv_node)
+
+        fts_node = all_fts_nodes.pop()
+        initial_part_creation_timestamp = self.get_max_timestamp_of_partitions(fts_node)
+        self.failover_addback_node(fts_node)
+        self.verify_search_rebalance_timetaken()
+        for index in fts_indexes:
+            self.ft_object.wait_for_fts_indexing_complete(index, self.num_items)
+        final_part_creation_timestamp = self.get_max_timestamp_of_partitions(fts_node)
+        if final_part_creation_timestamp not in initial_part_creation_timestamp:
+            self.log.info("ERROR: FAILED: timestamp of partitions before ({0}) and after ({1}) "
+                          "failover/addback are not matching on node {2}".format(initial_part_creation_timestamp,
+                                                                                 final_part_creation_timestamp,
+                                                                                 fts_node))
+            self.errors.append("timestamp of partitions before ({0}) and after ({1}) "
+                               "failover/addback are not matching on node {2}".format(initial_part_creation_timestamp,
+                                                                                      final_part_creation_timestamp,
+                                                                                      fts_node))
+        self.create_fts_index("fts_index_4", 17, 3)
+
+        for index_node in all_fts_nodes:
+            initial_part_creation_timestamp = self.get_max_timestamp_of_partitions(index_node)
+            self.failover_addback_node(index_node)
+            self.verify_search_rebalance_timetaken()
+            for index in fts_indexes:
+                self.ft_object.wait_for_fts_indexing_complete(index, self.num_items)
+            final_part_creation_timestamp = self.get_max_timestamp_of_partitions(index_node)
+            if final_part_creation_timestamp not in initial_part_creation_timestamp:
+                self.log.info("ERROR: FAILED: timestamp of partitions before ({0}) and after ({1}) "
+                              "failover/addback are not matching on node {2}".format(initial_part_creation_timestamp,
+                                                                                     final_part_creation_timestamp,
+                                                                                     index_node))
+                self.errors.append("timestamp of partitions before ({0}) and after ({1}) "
+                                   "failover/addback are not matching on node {2}".format(initial_part_creation_timestamp,
+                                                                                          final_part_creation_timestamp,
+                                                                                          index_node))
+
+        if self.errors:
+            self.fail(str(self.errors))
+
+    def test_fts_addback_failover_rebalance(self):
+        self.ft_object = FlexIndexTests()
+        self.ft_object.init_flex_object(self)
+        self._load_emp_dataset(end=self.num_items)
+        self.errors = []
+        all_fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+        fts_indexes = self.create_fts_indexes_failover_addback()
+
+        test = "Test to failover/adback each node"
+        self.log.info(test)
+
+        all_kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+
+        for kv_node in all_kv_nodes:
+            self.failover_addback_node(kv_node)
+
+        for index_node in all_fts_nodes:
+            initial_part_creation_timestamp = self.get_max_timestamp_of_partitions(index_node)
+            self.failover_addback_node(index_node)
+            self.verify_search_rebalance_timetaken()
+            for index in fts_indexes:
+                self.ft_object.wait_for_fts_indexing_complete(index, self.num_items)
+            final_part_creation_timestamp = self.get_max_timestamp_of_partitions(index_node)
+            if final_part_creation_timestamp not in initial_part_creation_timestamp:
+                self.log.info("ERROR: FAILED: timestamp of partitions before ({0}) and after ({1}) "
+                              "failover/addback are not matching on node {2}".format(initial_part_creation_timestamp,
+                                                                                     final_part_creation_timestamp,
+                                                                                     index_node))
+                self.errors.append("timestamp of partitions before ({0}) and after ({1}) "
+                                   "failover/addback are not matching on node {2}".format(initial_part_creation_timestamp,
+                                                                                          final_part_creation_timestamp,
+                                                                                          index_node))
+
+        if self.errors:
+            self.fail(str(self.errors))
+
+    def test_fts_addback_failover_multinode_rebalance(self):
+        self.ft_object = FlexIndexTests()
+        self.ft_object.init_flex_object(self)
+        self._load_emp_dataset(end=self.num_items)
+        self.errors = []
+        all_fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+        fts_indexes = self.create_fts_indexes_failover_addback()
+
+        test = "Test to failover/adback each node"
+        self.log.info(test)
+
+        all_kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+
+        for kv_node in all_kv_nodes:
+            self.failover_addback_node(kv_node)
+
+        fts_nodes = []
+        fts_nodes.append(all_fts_nodes.pop())
+        fts_nodes.append(all_fts_nodes.pop())
+        self.failover_addback_multi_node(fts_nodes)
+        self.verify_search_rebalance_timetaken()
+        for index in fts_indexes:
+            self.ft_object.wait_for_fts_indexing_complete(index, self.num_items)
+
+        for index_node in all_fts_nodes:
+            initial_part_creation_timestamp = self.get_max_timestamp_of_partitions(index_node)
+            self.failover_addback_node(index_node)
+            self.verify_search_rebalance_timetaken()
+            for index in fts_indexes:
+                self.ft_object.wait_for_fts_indexing_complete(index, self.num_items)
+            final_part_creation_timestamp = self.get_max_timestamp_of_partitions(index_node)
+            if final_part_creation_timestamp not in initial_part_creation_timestamp:
+                self.log.info("ERROR: FAILED: timestamp of partitions before ({0}) and after ({1}) "
+                              "failover/addback are not matching on node {2}".format(initial_part_creation_timestamp,
+                                                                                     final_part_creation_timestamp,
+                                                                                     index_node))
+                self.errors.append("timestamp of partitions before ({0}) and after ({1}) "
+                                   "failover/addback are not matching on node {2}".format(initial_part_creation_timestamp,
+                                                                                          final_part_creation_timestamp,
+                                                                                          index_node))
+
+        if self.errors:
+            self.fail(str(self.errors))
+
+    def get_max_timestamp_of_partitions(self, node):
+        data_dir = RestConnection(node).get_data_path()
+        shell = RemoteMachineShellConnection(node)
+        timestamp, err = shell.execute_command("ls -ltr {0}/@fts | grep pindex | "
+                                               "awk -P {{'print $8'}} | tail -1".format(data_dir))
+        return timestamp[0]
+
     def load_doc_thread_once(self, start=None, end=None):
         self.log.info(threading.currentThread().getName() + " Started")
         self._load_emp_dataset(start=start, end=end, flush=False)
@@ -791,7 +979,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         rebalace_report = self.rest.get_rebalance_report(rebalance_URI)
         search_rebalanace_time_taken = rebalace_report["stageInfo"]["search"]["timeTaken"]
         self.log.info("Search rebalance time taken : {0}".format(search_rebalanace_time_taken))
-        if search_rebalanace_time_taken > 120000:
+        if search_rebalanace_time_taken > self.search_rebalance_time_limit:
             self.log.info("ERROR: FAILED: rebalance for search taken more time than expected")
             self.errors.append("rebalance for search taken more time than expected")
 
@@ -884,14 +1072,86 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         return fts_indexes
 
-    def failover_addback_node(self, node):
+    def create_fts_indexes_failover_addback(self):
+        fts_indexes = []
+        fts_index1 = self.create_fts_index("fts_index_1", self.num_fts_partitions, self.num_fts_replicas)
+        fts_indexes.append(fts_index1)
+        if self.num_fts_indexes == 2 or self.num_fts_indexes == 3:
+            fts_index2 = self.create_fts_index("fts_index_2", 17, 3)
+            fts_indexes.append(fts_index2)
+        if self.num_fts_indexes == 3:
+            fts_index3 = self.create_fts_index("fts_index_3", 25, 2)
+            fts_indexes.append(fts_index3)
+
+        return fts_indexes
+
+    def create_fts_index(self, index_name, num_fts_partitions, num_fts_replicas):
+        index_params = {
+            "default_analyzer": "keyword",
+            "default_datetime_parser": "dateTimeOptional",
+            "default_field": "_all",
+            "default_mapping": {
+                "default_analyzer": "keyword",
+                "dynamic": True,
+                "enabled": True,
+                "properties": {
+                    "name": {
+                        "enabled": True,
+                        "dynamic": False,
+                        "fields": [
+                            {
+                                "index": True,
+                                "name": "name",
+                                "type": "text"
+                            }
+                        ]
+                    }
+                }
+            },
+            "default_type": "_default",
+            "docvalues_dynamic": True,
+            "index_dynamic": True,
+            "store_dynamic": False,
+            "type_field": "type"
+        }
+        plan_params = {"indexPartitions": num_fts_partitions, "numReplicas": num_fts_replicas}
+        fts_index = self.ft_object.create_fts_index(
+            name=index_name, source_name=self.bucket_name, doc_count=self.num_items,
+            index_params=index_params, plan_params=plan_params)
+
+        return fts_index
+
+    def failover_addback_node(self, node, create_index_failover=False, drop_index_failover=False, drop_index=None):
         failover_task = self.cluster.async_failover([self.master], failover_nodes=[node], graceful=False)
         failover_task.result()
         self.sleep(10)
+        if create_index_failover:
+            self.create_fts_index("fts_index_4", 17, 3)
+        if drop_index_failover:
+            self.ft_object.delete_fts_index(drop_index)
+        shell = RemoteMachineShellConnection(node)
+        shell.restart_couchbase()
         # do a full recovery and rebalance
         add_back_ip = node.ip
         self.rest.set_recovery_type('ns_1@' + add_back_ip, "full")
         self.rest.add_back_node('ns_1@' + add_back_ip)
+        self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        result = self.rest.monitorRebalance()
+        self.log.info("successfully rebalanced cluster {0}".format(result))
+
+    def failover_addback_multi_node(self, nodelist):
+        for node in nodelist:
+            failover_task = self.cluster.async_failover([self.master], failover_nodes=[node], graceful=False)
+            failover_task.result()
+        self.sleep(10)
+        for node in nodelist:
+            shell = RemoteMachineShellConnection(node)
+            shell.restart_couchbase()
+        # do a full recovery and rebalance
+        for node in nodelist:
+            add_back_ip = node.ip
+            self.rest.set_recovery_type('ns_1@' + add_back_ip, "full")
+            self.rest.add_back_node('ns_1@' + add_back_ip)
         self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
         result = self.rest.monitorRebalance()
         self.log.info("successfully rebalanced cluster {0}".format(result))

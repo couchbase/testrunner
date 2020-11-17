@@ -386,6 +386,11 @@ class QueryTests(BaseTestCase):
 
         return fts_index
 
+    def delete_fts_index(self, index_name):
+        self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
+        rest = RestConnection(self.cbcluster.get_random_fts_node())
+        rest.delete_fts_index(index_name)
+
     def wait_for_fts_indexing_complete(self, fts_index, doc_count, max_retry_count=30):
         indexed_doc_count = 0
         retry_count = max_retry_count
