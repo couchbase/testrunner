@@ -43,9 +43,11 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # Configure the master server based on the sorted list of clusters
         self.master = next((server for server in self.servers if server.ip == self.input.clusters[0][0].ip))
 
+        self.use_https = self.input.param('use_https', False)
+
         # Rest API Configuration
         self.configuration = Configuration()
-        self.configuration.host = f"http://{self.master.ip}:{8091}/_p/backup/api/v1"
+        self.configure_host(self.master.ip, use_https=self.use_https)
         self.configuration.username = self.master.rest_username
         self.configuration.password = self.master.rest_password
         self.api_client = ApiClient(self.configuration)
@@ -119,6 +121,17 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         self.temporary_directories.append(self.backupset.objstore_alternative_staging_directory)
         self.temporary_directories.append(self.directory_to_share)
         self.temporary_directories.append(self.backupset.directory)
+
+    def configure_host(self, ip, use_https=False):
+        """ Modify the target to which http requests are made to
+        """
+        self.configuration.host = f"http{'s' if use_https else ''}://{self.master.ip}:{18091 if use_https else 8091}/_p/backup/api/v1"
+
+        # The certificate used by default is self-signed, so we cannot verify
+        # it's integrity by going to a trusted CA and checking if it's signed
+        # by the CA's public key so we can just omit that process.
+        if use_https:
+            self.configuration.verify_ssl = False
 
     def mkdir(self, directory):
         """ Creates a directory
