@@ -4,7 +4,6 @@ import copy
 import logger
 import logging
 import re
-import urllib.request, urllib.parse, urllib.error
 import random
 
 from couchbase_helper.cluster import Cluster
@@ -164,7 +163,7 @@ class TEST_XDCR_PARAM:
     DESIRED_LATENCY = "desired_latency"
     COMPRESSION_TYPE = "compression_type"
     EXPLICIT_MAPPING = "explicit_mapping"
-    MAPPING_RULES = "mapping_rules"
+    MAPPING_RULES = "colmapping_rules"
     MIGRATION_MODE = "migration_mode"
     MIRRORING_MODE = "mirroring_mode"
 
@@ -247,7 +246,7 @@ class BUCKET_COLLECTIONS_DENSITY:
             while self.num_scopes*self.num_collections > 1000:
                 self.num_scopes //= 10
                 self.num_collections //= 10
-            self.num_docs = random.randint(1000, 10000)
+            self.num_docs = random.randint(100, 10000)
         else:
             self.num_scopes = self.density_map[self.density]["num_scopes"]
             self.num_collections = self.density_map[self.density]["num_collections_per_scope"]
@@ -854,11 +853,11 @@ class XDCReplication:
                 for _ in masked_input:
                     self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression'].replace(
                         _, masked_input[_])
-        if "mapping_rules" in self.__test_xdcr_params:
+        if "colmapping_rules" in self.__test_xdcr_params:
             masked_input = {"comma": ',', "colon": ':'}
             for _ in masked_input:
-                self.__test_xdcr_params['mapping_rules'] = self.__test_xdcr_params[
-                    'mapping_rules'].replace(
+                self.__test_xdcr_params['colmapping_rules'] = self.__test_xdcr_params[
+                    'colmapping_rules'].replace(
                     _, masked_input[_])
 
     def __convert_test_to_xdcr_params(self):
@@ -3279,7 +3278,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                     break
             if not self._dgm_run:
                 return cluster.async_load_all_buckets(self._num_items,
-                                                      self._value_size)
+                                                      self._value_size,
+                                                      self._expires)
             else:
                 #TODO: async this!
                 cluster.load_all_buckets_till_dgm(
@@ -3295,7 +3295,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 if i >= len(self.__cb_clusters) - 1:
                     break
             if not self._dgm_run:
-                cluster.load_all_buckets(self._num_items, self._value_size)
+                cluster.load_all_buckets(self._num_items, self._value_size, self._expires)
             else:
                 cluster.load_all_buckets_till_dgm(
                     active_resident_threshold=self._active_resident_threshold,
@@ -3308,7 +3308,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 active_resident_threshold=self._active_resident_threshold,
                 item=self._num_items)
         else:
-            hub.load_all_buckets(self._num_items, self._value_size)
+            hub.load_all_buckets(self._num_items, self._value_size, self._expires)
 
     def __async_load_star(self):
         hub = self.__cb_clusters[0]
@@ -3318,7 +3318,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 active_resident_threshold=self._active_resident_threshold,
                 item=self._num_items)
         else:
-            return hub.async_load_all_buckets(self._num_items, self._value_size)
+            return hub.async_load_all_buckets(self._num_items, self._value_size, self._expires)
 
     def __load_ring(self):
         self.__load_chain()

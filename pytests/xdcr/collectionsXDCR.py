@@ -79,6 +79,7 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                                                                                bucket, self.DEFAULT_SCOPE,
                                                                                collection_name
                                                                                ))
+
         if new_scope_collection:
             for cluster in self.get_cluster_objects_for_input(new_scope_collection):
                 for bucket in RestConnection(cluster.get_master_node()).get_buckets():
@@ -86,6 +87,8 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                                                                                      bucket, scope_name,
                                                                                      collection_name
                                                                                      ))
+                tasks.append(cluster.load_all_buckets(1000))
+
         if drop_recreate_scope:
             for cluster in self.get_cluster_objects_for_input(drop_recreate_scope):
                 for bucket in RestConnection(cluster.get_master_node()).get_buckets():
@@ -97,6 +100,7 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                     tasks.append(cluster.get_cluster().async_create_scope(cluster.get_master_node(),
                                                                           bucket, scope_name
                                                                           ))
+                tasks.append(cluster.load_all_buckets(1000))
 
         if drop_recreate_collection:
             for cluster in self.get_cluster_objects_for_input(drop_recreate_collection):
@@ -112,6 +116,8 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                                                                                bucket, scope_name,
                                                                                collection_name
                                                                                ))
+                tasks.append(cluster.load_all_buckets(1000))
+
         if explicit_mapping:
             for cluster in self.get_cluster_objects_for_input(explicit_mapping):
                 if True in cluster.get_xdcr_param("collectionsExplicitMapping"):
@@ -119,12 +125,30 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                 self.log.info("collectionsExplicitMapping is false as expected")
 
         if mapping_rules:
+            explicit_map_index = self._input.param("explicit_map_index", 0)
+            explicit_mapping_rules = ['"_default._default":"_default._default"',
+                                      '',
+                                      '"_default._default":"a-%s-s%-z.1%-c-%2"',
+                                      '"_default":"_default","scope_1":"scope_1"',
+                                      '"_default":"_default","scope_1.collection_1":"scope_1.collection_1"',
+                                      '"scope1":"scope1","scope_1.collection_1":"scope_1.collection_1"',
+                                      '"nonexistent":"_default"',
+                                      '"_default.nonexistent":"scope_1.collection_1"'
+                                      ]
             for cluster in self.get_cluster_objects_for_input(mapping_rules):
-                rules = cluster.get_xdcr_param("colMappingRules")
-                for rule in rules:
-                    if rule:
-                        self.fail("colMappingRules is expected to be empty by default but it is {0}".format(rules))
-                self.log.info("colMappingRules is empty as expected")
+                try:
+                    setting_val_map = {"collectionsExplicitMapping": "true",
+                                       "colMappingRules": '{' +
+                                                          explicit_mapping_rules[explicit_map_index] +
+                                                          '}'
+                                       }
+                    RestConnection(cluster.get_master_node()).set_xdcr_params("default", "default",
+                                                                              setting_val_map)
+                except Exception as e:
+                    if "nonexistent" in explicit_mapping_rules[explicit_map_index]:
+                        self.log.info("Test failed as expected for nonexistent source namespace")
+                    else:
+                        self.fail(str(e))
 
         if migration_mode:
             for cluster in self.get_cluster_objects_for_input(migration_mode):
@@ -142,3 +166,4 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
             task.result()
         self.perform_update_delete()
         self.verify_results()
+
