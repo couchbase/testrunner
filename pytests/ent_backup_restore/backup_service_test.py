@@ -8,7 +8,7 @@ import threading
 from ent_backup_restore.backup_service_base import BackupServiceBase, HistoryFile, MultipleRemoteShellConnections
 from lib.couchbase_helper.time_helper import TimeUtil
 from ent_backup_restore.backup_service_base import Prometheus, FailoverServer, ScheduleTest, Time, DocumentUtil
-from ent_backup_restore.backup_service_base import Collector
+from ent_backup_restore.backup_service_base import Collector, File
 from membase.api.rest_client import RestConnection
 from lib.backup_service_client.models.task_template import TaskTemplate
 from lib.backup_service_client.models.task_template_schedule import TaskTemplateSchedule
@@ -2886,14 +2886,11 @@ class BackupServiceTest(BackupServiceBase):
             for line in output:
                 self.assertIsNotNone(re.search(r'<ud>[A-z0-9]{40}<\/ud>', line))
 
-    def test_logging(self):
-        """ Test a subset of operations to see if they are logged
+    def test_logging_preamble(self):
+        """ Execute a subset of backup service events to trigger logging.
         """
         # Change the system time
         self.time.change_system_time("next friday 0745")
-
-        # Empty logs
-        self.empty_logs(self.backupset.cluster_host)
 
         # Rebalance 3 node cluster into a 1 node cluster
         self.cluster.rebalance(self.input.clusters[0], [], self.input.clusters[0][1:], services=[server.services for server in self.servers])
@@ -2910,7 +2907,16 @@ class BackupServiceTest(BackupServiceBase):
         # One off restore
         self.take_one_off_restore("active", "repo_name0", 20, 5, self.backupset.cluster_host)
 
-        matchers = \
+    def test_logging(self):
+        """ Test a subset of operations to see if they are logged
+        """
+        file = File(self.backupset.cluster_host, self.log_directory)
+
+        # Empty log file and execute some backup service events
+        file.empty()
+        self.test_logging_preamble()
+
+        substrings = \
         [
             '(Rebalance) Starting rebalance',
             '(Rebalance) Removing node from service',
@@ -2928,19 +2934,16 @@ class BackupServiceTest(BackupServiceBase):
         ]
 
         # Read logs
-        output = self.read_logs(self.backupset.cluster_host)
+        output = file.read()
 
-        for matcher in matchers:
-            found = False
-            for line in output:
-                if matcher in line:
-                    found = True
-            self.assertTrue(found, f"Could not find: '{matcher}' in the logs")
+        # Check if the substrings are present in the output
+        success, string_not_found = File.find(output, substrings)
+        self.assertTrue(success, f"Could not find: '{string_not_found}' in the logs")
 
     def test_logs_for_sensitive_information(self):
         """ Test the logs do not contain AWS credentials
         """
-        repo_name = "my_repo"
+        repo_name, file = "my_repo", File(self.backupset.cluster_host, self.log_directory)
 
         # This test requires an objstore_provider for Cloud testing
         self.assertIsNotNone(self.objstore_provider)
@@ -2949,7 +2952,7 @@ class BackupServiceTest(BackupServiceBase):
         self._load_all_buckets(self.master, BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items), "create", 0)
 
         # Empty logs
-        self.empty_logs(self.backupset.cluster_host)
+        file.empty()
 
         # Create a cloud repository with a default plan
         self.create_repository_with_default_plan(repo_name)
@@ -2958,10 +2961,69 @@ class BackupServiceTest(BackupServiceBase):
         self.take_one_off_backup("active", repo_name, True, 20, 20)
 
         # Retrieve logs
-        output = self.read_logs(self.backupset.cluster_host)
+        output = file.read()
         self.assertGreater(len(output), 0)
 
         # Check aws credentials are not present in the logs
         for line in output:
             self.assertNotIn(self.objstore_provider.secret_key_id, line)
             self.assertNotIn(self.objstore_provider.secret_access_key, line)
+
+    def test_audit_service(self):
+        """ Test that the service generates audit events
+        """
+        repo_name = "repo_name"
+        rest_conn = RestConnection(self.backupset.cluster_host)
+        log_path = "/opt/couchbase/var/lib/couchbase/logs"
+        file = File(self.backupset.cluster_host, f"{log_path}/audit.log")
+        file.empty()
+
+        audit_descriptors = rest_conn.get_audit_descriptors()
+
+        non_backup_descriptors = [str(descriptor['id']) for descriptor in audit_descriptors if descriptor['module'] != 'backup']
+
+        rest_conn.setAuditSettings(logPath=log_path, services_to_disable=non_backup_descriptors)
+
+        self.create_repository_with_default_plan(repo_name)
+
+        # One off backup
+        self.take_one_off_backup("active", repo_name, False, 20, 20)
+
+        # One off restore
+        self.take_one_off_restore("active", repo_name, 20, 5, self.backupset.cluster_host)
+
+        # Pause the repository and expect it to succeed
+        self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_pause_post_with_http_info(repo_name)[1], 200)
+
+        # Read logs
+        events = []
+        # Due to an interaction in which emptying the audit log results in non-JSON artifacts
+        # where the non-JSON artifact is a large list of nulls populating the first line of the
+        # audit log, we have to filter out non-JSON content
+        for line in file.read():
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                pass
+
+        # Create a dictionary of event names to events
+        seen_events = {event['name']: event for event in events if event['id'] in range(45056, 45064 + 1024)}
+        # Check the expected set of event names are present in the set of seen_events
+        self.assertTrue({'Backup repository', 'Restore repository', 'Fetch repository', 'Pause repository', 'Add repository'}.issubset(seen_events.keys()))
+
+        # Check some of the descriptions
+        self.assertEqual(seen_events['Add repository']['description'], 'A new active backup repository was added')
+        self.assertEqual(seen_events['Backup repository']['description'], 'A manual backup was triggered on an active repository')
+
+        # Check the important fields are present
+        for event in seen_events.values():
+            expected_fields = {'id', 'name', 'description', 'local'}
+            self.assertTrue(expected_fields.issubset(event.keys()))
+
+            # Check these fields are non-empty
+            for field in expected_fields:
+                self.assertTrue(event[field])
+
+            ip_port_fields = {'ip', 'port'}
+            # Check the ip and port fields are present in the local field
+            self.assertTrue(ip_port_fields.issubset(event['local'].keys()))

@@ -518,28 +518,13 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         """
         return self.repository_api.cluster_self_repository_state_id_get('active', repo_name).repo
 
-    def read_logs(self, server):
-        """ Returns the backup service logs
-        """
-        remote_client = RemoteMachineShellConnection(server)
-        output, error = remote_client.execute_command(f"cat {self.log_directory}")
-        remote_client.disconnect()
-        return output
-
-    def empty_logs(self, server):
-        """ Deletes the backup service logs
-        """
-        remote_client = RemoteMachineShellConnection(server)
-        output, error = remote_client.execute_command(f"echo > {self.log_directory}")
-        remote_client.disconnect()
-
     def get_leader(self):
         """ Gets the leader from the logs
         """
         # Obtain log entries from all nodes which contain "Setting self as leader"
         # Save entries as a list of tuples where the first element is the log time and the
         # second element is the server from where that entry was obtained
-        logs = [(TimeUtil.rfc3339nano_to_datetime(log.split("\t")[0]), server) for server in self.input.clusters[0] for log in self.read_logs(server) if "Setting self as leader" in log]
+        logs = [(TimeUtil.rfc3339nano_to_datetime(log.split("\t")[0]), server) for server in self.input.clusters[0] for log in File(server, self.log_directory).read() if "Setting self as leader" in log]
 
         # Sort in ascending order based on log time which is the first element in tuple
         logs.sort()
@@ -901,6 +886,42 @@ class MultipleRemoteShellConnections:
         def wrap(*args, **kwargs):
             return [func(conn, *args, **kwargs) for conn in self.connections]
         return wrap
+
+class File:
+    def __init__(self, server, file_name):
+        self.file_name, self.remote_client = file_name, RemoteMachineShellConnection(server)
+
+    def read(self):
+        """ Returns the contents of a file
+        """
+        output, error = self.remote_client.execute_command(f"cat {self.file_name}")
+        return output
+
+    def empty(self):
+        """ Empties a file
+        """
+        self.remote_client.execute_command(f"echo -n > {self.file_name}")
+
+    def delete(self):
+        self.remote_client.execute_command(f"rm -f {self.file_name}")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self.remote_connection.disconnect()
+
+    @staticmethod
+    def find(output, substrings):
+        """ Checks if all the substrings are present in the output
+        """
+        for substring in substrings:
+            found = False
+            for line in output:
+                if substring in line:
+                    found = True
+            return False, substring
+        return True, None
 
 class Collector:
     """ Collects logs

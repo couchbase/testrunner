@@ -4484,21 +4484,30 @@ class RestConnection(object):
         [auditd_enabled]:<enabled disabled status for auditd>
         [rotate_interval]:<log rotate interval in seconds>
     '''
-    def setAuditSettings(self, enabled='true', rotateInterval=86400, logPath='/opt/couchbase/var/lib/couchbase/logs'):
+    def setAuditSettings(self, enabled='true', rotateInterval=86400, logPath='/opt/couchbase/var/lib/couchbase/logs', services_to_disable=None):
         api = self.baseUrl + "settings/audit"
-        params = urllib.parse.urlencode({
-                                    'rotateInterval':'{0}'.format(rotateInterval),
-                                    'auditdEnabled':'{0}'.format(enabled),
-                                    'logPath':'{0}'.format(logPath)
-                                    })
+
+        params = {'rotateInterval':'{0}'.format(rotateInterval),
+                  'auditdEnabled':'{0}'.format(enabled),
+                  'logPath':'{0}'.format(logPath)}
+
+        if services_to_disable:
+            params['disabled'] = ",".join(services_to_disable)
+
+        params = urllib.parse.urlencode(params)
         status, content, header = self._http_request(api, 'POST', params)
         log.info ("Value os status is {0}".format(status))
         log.info ("Value of content is {0}".format(content))
-        if (status):
+        if status:
             return status
         else:
             return status, json.loads(content)
-    
+
+    def get_audit_descriptors(self):
+        api = self.baseUrl + "/settings/audit/descriptors"
+        status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers())
+        return json.loads(content) if status else None
+
     def _set_secrets_password(self, new_password):
         api = self.baseUrl + "/node/controller/changeMasterPassword"
         params = urllib.parse.urlencode({
