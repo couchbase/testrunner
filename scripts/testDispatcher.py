@@ -394,8 +394,18 @@ def main():
             print((traceback.format_exc()))
             print(data)
 
-    print('tests to launch:')
-    for i in testsToLaunch: print(i['component'], i['subcomponent'], '-->', i['framework'])
+    total_req_servercount = 0
+    total_req_addservercount = 0
+    for i in testsToLaunch:
+        total_req_servercount = total_req_servercount + i['serverCount']
+        total_req_addservercount = total_req_addservercount + i['addPoolServerCount']
+    print('\n-->Test jobs to launch: {} and required serverCount={}, addPoolServerCount={}'.format(
+        len(testsToLaunch), total_req_servercount, total_req_addservercount))
+    print('#component, subcomponent, serverCount, '
+          'addPoolServerCount --> framework')
+    for i in testsToLaunch: print('{}, {}, {}, {} --> {}'.format(i['component'],
+                                  i['subcomponent'], i['serverCount'],
+                                  i['addPoolServerCount'], i['framework']))
     print('\n\n')
 
     launchStringBase = str(options.jenkins_server_url) + '/job/' + str(options.launch_job)
