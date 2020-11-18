@@ -285,7 +285,7 @@ class QueryTests(BaseTestCase):
     def log_config_info(self):
         try:
             current_indexes = []
-            query_response = self.run_cbq_query("SELECT * FROM system:indexes")
+            query_response = self.run_cbq_query("SELECT * FROM system:indexes WHERE indexes.bucket_id is missing")
             current_indexes = [(i['indexes']['name'],
                                 i['indexes']['keyspace_id'],
                                 frozenset([key.replace('`', '').replace('(', '').replace(')', '')
@@ -293,7 +293,7 @@ class QueryTests(BaseTestCase):
                                 i['indexes']['state'],
                                 i['indexes']['using']) for i in query_response['results']]
             # get all buckets
-            query_response = self.run_cbq_query("SELECT * FROM system:keyspaces")
+            query_response = self.run_cbq_query("SELECT * FROM system:keyspaces WHERE keyspaces.`bucket` is missing")
             buckets = [i['keyspaces']['name'] for i in query_response['results']]
             self.log.info("==============  System Config: ==============\n")
             for bucket in buckets:
@@ -875,7 +875,7 @@ class QueryTests(BaseTestCase):
         self.log.info("indexers ready")
 
     def is_index_present(self, bucket_name, index_name, fields_set=None, using=None, status="online"):
-        query_response = self.run_cbq_query("SELECT * FROM system:indexes")
+        query_response = self.run_cbq_query("SELECT * FROM system:indexes WHERE indexes.bucket_id is missing")
         if fields_set is None and using is None:
             if status is "any":
                 desired_index = (index_name, bucket_name)
@@ -981,7 +981,7 @@ class QueryTests(BaseTestCase):
         return num_indexes
 
     def get_parsed_indexes(self):
-        query_response = self.run_cbq_query("SELECT * FROM system:indexes")
+        query_response = self.run_cbq_query("SELECT * FROM system:indexes WHERE indexes.bucket_id is missing")
         current_indexes = [{'name': i['indexes']['name'],
                             'bucket': i['indexes']['keyspace_id'],
                             'fields': frozenset([(key.replace('`', '').replace('(', '').replace(')', '').replace(
@@ -1718,7 +1718,7 @@ class QueryTests(BaseTestCase):
 
     def ensure_primary_indexes_exist(self):
         self.log.info("--> start: ensure_primary_indexes_exist..")
-        query_response = self.run_cbq_query("SELECT * FROM system:keyspaces")
+        query_response = self.run_cbq_query("SELECT * FROM system:keyspaces WHERE keyspaces.`bucket` is missing")
         self.log.info("-->query_response:{}".format(query_response))
         buckets = [i['keyspaces']['name'] for i in query_response['results']]
         current_indexes = self.get_parsed_indexes()

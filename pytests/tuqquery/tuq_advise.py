@@ -23,7 +23,7 @@ class QueryAdviseTests(QueryTests):
                 time.sleep(1)
 
             self.wait_for_all_indexes_online()
-            list_of_indexes = self.run_cbq_query(query="select raw name from system:indexes")
+            list_of_indexes = self.run_cbq_query(query="select raw name from system:indexes WHERE indexes.bucket_id is missing")
 
             for index in list_of_indexes['results']:
                 if index == "#primary":
@@ -430,7 +430,7 @@ class QueryAdviseTests(QueryTests):
     def test_array_func(self):
         field_list =['`roomType`','DISTINCT ARRAY [`s`.`level`, `s`.`size`, `s`.`num`] FOR s in `rooms` END','`guestCode`','`startTime`','`endTime`','array_distinct(ifmissing((array_star((`rooms`)).`num`), []))']
         try:
-            results_fake_field = self.run_cbq_query(query="advise SELECT META(p).id, ARRAY_DISTINCT(IFMISSING(rooms[*].num,[])) FROM `travel-sample` AS p WHERE type = 'hotel' AND (guestCode = IFNULL($guestCode, '') OR guestCode = '') AND (roomType = IFNULL($roomType,'R') OR roomType = IFNULL($roomType,'D') ) AND ($checkinTime BETWEEN startTime AND endTime) AND (ANY s IN rooms SATISFIES [s.level,s.size, s.num] = [$level, $size, $num] END)", server=self.master)
+            results_fake_field = self.run_cbq_query(query="advise SELECT META(p).id, ARRAY_DISTINCT(IFMISSING(rooms[*].num,[])) FROM `travel-sample` AS p WHERE type = 'hotel' AND (guestCode = IFNULL($guestCode, '') OR guestCode = '') AND (roomType = IFNULL($roomType,'R') OR roomType = IFNULL($roomType,'D') ) AND ($checkinTime BETWEEN startTime AND endTime) AND (ANY s IN rooms SATISFIES [s.`level`,s.size, s.num] = [$level, $size, $num] END)", server=self.master)
             for field in field_list:
                 self.assertTrue(field in results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][0]['index_statement'], "The field is missing from the recommended index: {0}".format(field))
         except Exception as e:
