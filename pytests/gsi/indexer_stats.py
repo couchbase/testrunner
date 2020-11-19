@@ -109,6 +109,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
                                                              pause_secs=1,
                                                              timeout_secs=300)
                 self.task.result()
+        self.wait_until_indexes_online(defer_build=self.defer_build)
         self.sleep(30, "Wait for index scan to complete")
         self.buckets = self.rest.get_buckets()
         self.index_status = self.rest.get_indexer_metadata()
@@ -215,6 +216,8 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
                 self.fail(f"Failed for consumer filter:{consumer_filter}")
         api = f'{self.rest.index_baseUrl}api/v1/stats'
         status, external_api_stats_text, _ = self.rest._http_request(api=api)
+        if not status:
+            raise Exception("Request ot external stats api failed")
         external_api_stats_text = external_api_stats_text.decode("utf8")\
             .replace('":', '": ').replace(",", ", ")
         external_api_stats_json_text = json.dumps(json.loads(
@@ -577,7 +580,10 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         """MB-41287 and MB-41178"""
         if len(self.servers) < 2:
             self.fail("Atleast 2 servers needed for this test")
-        rest_connections = [RestConnection(server) for server in self.servers]
+        indexer_nodes = self.get_nodes_from_services_map(
+            service_type="index", get_all_nodes=True)
+        rest_connections = [RestConnection(indexer_node)
+                            for indexer_node in indexer_nodes]
         bucket_name = self.buckets[-1].name
         for idx_num in range(self.num_indexes):
             index_name = f"test_idx_{idx_num}"
@@ -586,18 +592,40 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
             query = index_def.generate_index_create_query(
                 namespace=f"default:`{bucket_name}`",
                 defer_build=self.defer_build)
-            self.run_cbq_query(query)
+            try:
+                self.run_cbq_query(query)
+            except Exception as e:
+                self.log.error("Memory may be insufficient - " + e)
+                raise
             self.wait_until_specific_index_online(
                 index_name=index_name, defer_build=self.defer_build)
             index_exists = False
             for rest in rest_connections:
-                storage_stats = rest.get_index_storage_stats()
-                if storage_stats.get(bucket_name, None):
-                    if storage_stats[bucket_name].get(index_name, None):
+                storage_stats = {}
+                status = False
+                indexer_warmup_message =\
+                    b'Indexer In Warmup. Please try again later.'
+                content = ""
+                api = rest.index_baseUrl + 'stats/storage'
+                while True:
+                    status, content, _ = rest._http_request(api)
+                    if not status:
+                        raise Exception(content)
+                    if content != indexer_warmup_message:
+                        break
+                    self.sleep(5, message="Wait for indexer to warmup")
+                try:
+                    storage_stats = json.loads(content)
+                except Exception:
+                    self.log.error("***malformed json***")
+                    self.log.error(content)
+                    self.log.error("********************")
+                    raise
+                for index_stats in storage_stats:
+                    if f"{bucket_name}:{index_name}" == index_stats['Index']:
                         index_exists = True
-            self.assertEqual(
-                index_exists,
-                True, msg=f"{bucket_name}:{index_name} not found")
+            self.assertTrue(
+                index_exists, msg=f"{bucket_name}:{index_name} not found")
 
     def test_dropped_index_stats(self):
         """
@@ -648,11 +676,14 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
     def test_internal_stats_availability_in_cluster(self):
         """
         Indexes are spread across multiple available nodes. On querying stats
-        of a node should gives stats of indexes residing on that node only
+        of a node should give stats of indexes residing on that node only
         """
         if len(self.servers) < 2:
             self.fail("Atleast 2 servers needed for this test")
-        rest_connections = [RestConnection(server) for server in self.servers]
+        indexer_nodes = self.get_nodes_from_services_map(
+            service_type="index", get_all_nodes=True)
+        rest_connections = [RestConnection(indexer_node)
+                            for indexer_node in indexer_nodes]
         index_status = [
             rest.get_indexer_metadata() for rest in rest_connections]
         reference_status = index_status[0]
@@ -721,9 +752,16 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         self.assertSetEqual(available_indexes, set(self.default_indexes))
 
     def test_external_stats_availability_in_cluster(self):
+        """
+        Indexes are spread across multiple available nodes. On querying stats
+        of a node should give stats of indexes residing on that node only
+        """
         if len(self.servers) < 2:
             self.fail("Atleast 2 servers needed for this test")
-        rest_connections = [RestConnection(server) for server in self.servers]
+        indexer_nodes = self.get_nodes_from_services_map(
+            service_type="index", get_all_nodes=True)
+        rest_connections = [RestConnection(indexer_node)
+                            for indexer_node in indexer_nodes]
         all_index_stats = [
             rest.get_all_index_stats() for rest in rest_connections]
         all_indexes = [set(
@@ -756,8 +794,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
                 external_api_filtered_stats, False)
             if not is_index_stat_available:
                 self.fail(msg=f"stats for {api_filter} missing")
-            for node_num, current_stats in enumerate(
-                    external_api_filtered_stats):
+            for current_stats in external_api_filtered_stats:
                 if current_stats[0]:
                     external_api_stats_key_set = set(
                         json.loads(current_stats[1]).keys()
