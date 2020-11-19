@@ -4,6 +4,7 @@ import json
 import shlex
 import random
 import datetime
+import abc
 
 from TestInput import TestInputSingleton
 from lib.couchbase_helper.time_helper import TimeUtil
@@ -104,7 +105,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         # Share archive directory
         self.directory_to_share = "/tmp/share"
-        self.nfs_connection = NfsConnection(self.input.clusters[0][0], self.input.clusters[0])
+        self.nfs_connection = NfsConnection(self.input.clusters[0][0], self.input.clusters[0], NfsShareFactory() if self.input.param("share_type", "nfs") == "nfs" else SambaShareFactory())
         self.nfs_connection.share(self.directory_to_share, self.backupset.directory)
 
         # A connection to every single machine in the cluster
@@ -771,8 +772,8 @@ class HistoryFile:
         self.remote_shell.execute_command(f"sed -i '$ d' {self.history_file}")
 
 class NfsConnection:
-    def __init__(self, server, clients):
-        self.server, self.clients = NfsServer(server), [NfsClient(server, client) for client in clients]
+    def __init__(self, server, clients, abstract_share_factory):
+        self.server, self.clients = abstract_share_factory.create_server(server), [abstract_share_factory.create_client(server, client) for client in clients]
 
     def share(self, directory_to_share, directory_to_mount, privileges={}):
         self.server.share(directory_to_share, privileges=privileges)
@@ -786,7 +787,69 @@ class NfsConnection:
         for client in self.clients:
             client.clean(directory_to_mount)
 
-class NfsServer:
+class AbstractShareFactory(abc.ABC):
+
+    @abc.abstractmethod
+    def create_client(self, server, client):
+        raise NotImplementedError("Please Implement this method")
+
+    @abc.abstractmethod
+    def create_server(self, server):
+        raise NotImplementedError("Please Implement this method")
+
+class NfsShareFactory(AbstractShareFactory):
+
+    def create_client(self, server, client):
+        return NfsClient(server, client)
+
+    def create_server(self, server):
+        return NfsServer(server)
+
+class SambaShareFactory(AbstractShareFactory):
+
+    def create_client(self, server, client):
+        return SambaClient(server, client)
+
+    def create_server(self, server):
+        return SambaServer(server)
+
+class Client(abc.ABC):
+
+    def __init__(self, server, client):
+        self.server, self.client, self.remote_shell = server, client, RemoteMachineShellConnection(client)
+        self.provision()
+
+    @abc.abstractmethod
+    def provision(self):
+        raise NotImplementedError("Please Implement this method")
+
+    @abc.abstractmethod
+    def mount(self, directory_to_share, directory_to_mount):
+        raise NotImplementedError("Please Implement this method")
+
+    @abc.abstractmethod
+    def clean(self, directory_to_mount):
+        raise NotImplementedError("Please Implement this method")
+
+class Server(abc.ABC):
+
+    def __init__(self, server):
+        self.remote_shell = RemoteMachineShellConnection(server)
+        self.provision()
+
+    @abc.abstractmethod
+    def provision(self):
+        raise NotImplementedError("Please Implement this method")
+
+    @abc.abstractmethod
+    def share(self, directory_to_share, privileges={}):
+        raise NotImplementedError("Please Implement this method")
+
+    @abc.abstractmethod
+    def clean(self):
+        raise NotImplementedError("Please Implement this method")
+
+class NfsServer(Server):
     exports_directory = "/etc/exports"
 
     def __init__(self, server):
@@ -839,10 +902,10 @@ class NfsServer:
     def clean(self):
         self.remote_shell.execute_command(f"echo -n > {NfsServer.exports_directory} && exportfs -a")
 
-class NfsClient:
+class NfsClient(Client):
+
     def __init__(self, server, client):
-        self.server, self.client, self.remote_shell = server, client, RemoteMachineShellConnection(client)
-        self.provision()
+        super().__init__(server, client)
 
     def provision(self):
         self.remote_shell.execute_command("yum -y install nfs-utils")
@@ -856,6 +919,69 @@ class NfsClient:
 
     def clean(self, directory_to_mount):
         self.remote_shell.execute_command(f"umount -f -l {directory_to_mount}")
+
+class SambaClient(Client):
+
+    def __init__(self, server, client):
+        super().__init__(server, client)
+
+    def provision(self):
+        self.remote_shell.execute_command(f"yum -y install samba-client cifs-utils")
+
+    def mount(self, directory_to_share, directory_to_mount):
+        self.remote_shell.execute_command(f"umount -f -l {directory_to_mount}")
+        self.remote_shell.execute_command(f"rm -rf {directory_to_mount}")
+        self.remote_shell.execute_command(f"mkdir -p {directory_to_mount}")
+        self.remote_shell.execute_command(f"mount -t cifs -o username=Couchbase,password=password //{self.server.ip}/Anonymous {directory_to_mount}")
+
+    def clean(self, directory_to_mount):
+        self.remote_shell.execute_command(f"umount -f -l {directory_to_mount}")
+
+class SambaServer(Server):
+    samba_config_directory = "/etc/samba/smb.conf"
+
+    def __init__(self, server):
+        super().__init__(server)
+
+    def provision(self):
+        self.remote_shell.execute_command("yum -y install samba")
+
+    def share(self, directory_to_share, privileges={}):
+        """ Shares `directory_to_share`
+
+        params:
+            directory_to_share (str): The directory that will be shared, it will be created/emptied.
+            privileges (dict): A dict of hosts to host specific privileges where privilegs are comma
+            separated e.g. {'127.0.0.1': 'ro'}.
+        """
+
+        if privileges:
+            not NotImplementedError("This is currently unsupported")
+
+        file = (f"[global]\n"
+                f"workgroup = WORKGROUP\n"
+                f"security = user\n"
+                f"map to guest = bad user\n"
+                f"netbios name = TEST\n"
+                f"[Anonymous]\n"
+                f"path = {directory_to_share}\n"
+                f"browsable = yes\n"
+                f"writable = yes\n"
+                f"guest ok = yes\n"
+                f"guest account = couchbase\n"
+                f"read only = no")
+
+        self.remote_shell.execute_command(f"rm -rf {directory_to_share}")
+        self.remote_shell.execute_command(f"mkdir -p {directory_to_share}")
+        self.remote_shell.execute_command(f"chmod -R 777 {directory_to_share}")
+        self.remote_shell.execute_command(f"chown -R couchbase:couchbase {directory_to_share}")
+        self.remote_shell.execute_command(f"echo '{file}' > {SambaServer.samba_config_directory}")
+        self.remote_shell.execute_command(f"systemctl restart smb.service")
+        self.remote_shell.execute_command(f"(echo \"password\"; echo \"password\") | smbpasswd -a couchbase")
+        self.remote_shell.execute_command(f"smbpasswd -e couchbase")
+
+    def clean(self):
+        self.remote_shell.execute_command(f"echo -n > {SambaServer.samba_config_directory} && systemctl stop smb.service")
 
 class MultipleRemoteShellConnections:
     """ A class to handle connections to multiple servers in one go.
