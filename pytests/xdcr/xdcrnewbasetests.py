@@ -2728,6 +2728,12 @@ class Utility:
 
 class XDCRNewBaseTest(unittest.TestCase):
 
+    def suite_setUp(self):
+        pass
+
+    def suite_tearDown(self):
+        pass
+
     def setUp(self):
         unittest.TestCase.setUp(self)
         self._input = TestInputSingleton.input
