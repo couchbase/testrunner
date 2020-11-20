@@ -1595,8 +1595,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def validate_backup_data(self, server_host, server_bucket, master_key,
                              perNode, getReplica, mode, items, key_check,
-                             validate_keys=False,
-                             regex_pattern=None, swap=False, backup_name=None, filter_keys=None):
+                             validate_keys=False, regex_pattern=None,
+                             swap=False, backup_name=None, filter_keys=None,
+                             skip_stats_check=False):
         """Compare data in cluster with data in backup file.
 
            This function checks if key:value pairs in the cluster are present in the backup file i.e.
@@ -1609,6 +1610,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                perNode (bool): If set we oraganize collected data per node else we take a union. (Always set this to False)
                mode (str): e.g. "memory"
                backup_name (str): If None retrieves a backup from the filesystem (or cloud) otherwise uses the backup_name provided.
+               skip_stats_check (bool): Skip fetching cluster stats
         """
         data_matched = True
         data_collector = DataCollector()
@@ -1689,14 +1691,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 buckets_data[bucket.name][key] = value
             self.log.info("*** Compare data in bucket and in backup file of bucket {0} ***"
                           .format(bucket.name))
-            failed_persisted_bucket = []
-            ready = RebalanceHelper.wait_for_stats_on_all(self.backupset.cluster_host,
-                                                          bucket.name, 'ep_queue_size',
-                                                          0, timeout_in_seconds=120)
-            if not ready:
-                failed_persisted_bucket.append(bucket.name)
-            if failed_persisted_bucket:
-                self.fail("Buckets {0} did not persisted.".format(failed_persisted_bucket))
+            if not skip_stats_check:
+                failed_persisted_bucket = []
+                ready = RebalanceHelper.wait_for_stats_on_all(self.backupset.cluster_host,
+                                                              bucket.name, 'ep_queue_size',
+                                                              0, timeout_in_seconds=120)
+                if not ready:
+                    failed_persisted_bucket.append(bucket.name)
+                if failed_persisted_bucket:
+                    self.fail("Buckets {0} did not persisted.".format(failed_persisted_bucket))
             count = 0
             key_count = 0
             version = RestConnection(self.backupset.backup_host).get_nodes_version()

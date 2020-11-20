@@ -681,7 +681,7 @@ class BackupServiceTest(BackupServiceBase):
         backup_name = self.map_task_to_backup("active", repo_name, task_name)
 
         # Check backup content equals content of backup cluster
-        self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name=backup_name)
+        self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name=backup_name, skip_stats_check=True)
 
     def test_one_off_incr_backup(self):
         """ Test one off backup full backup followed by one off incremental backup
@@ -732,7 +732,7 @@ class BackupServiceTest(BackupServiceBase):
             filter_keys = set(key for key, val in get_blob_gen(i))
 
             # Check backup content equals content of backup cluster
-            self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name=backup_name, filter_keys=filter_keys)
+            self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name=backup_name, filter_keys=filter_keys, skip_stats_check=True)
 
     def test_one_off_merge(self):
         """ Test one off merge
@@ -789,7 +789,7 @@ class BackupServiceTest(BackupServiceBase):
         backups = [backup._date for backup in self.get_backups("active", repo_name)]
 
         # Check backup content equals content of backup cluster
-        self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name=backup_name, filter_keys = filter_keys)
+        self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name=backup_name, filter_keys = filter_keys, skip_stats_check=True)
 
         backups = [backup._date for backup in self.get_backups("active", repo_name)]
         self.assertEqual(len(backups) - 1, no_of_backups - subtrahend_for_no_of_backups)
@@ -890,7 +890,7 @@ class BackupServiceTest(BackupServiceBase):
         self.assertTrue(self.wait_for_backup_task("active", repo_name, 20, 5))
 
         # Check backup content equals content of cluster after restore
-        self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name=backup_name)
+        self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name=backup_name, skip_stats_check=True)
 
     def test_invalid_tasks(self):
         """ Merging/Restoring backups that do not exist.
@@ -1920,7 +1920,7 @@ class BackupServiceTest(BackupServiceBase):
             self.backupset.objstore_staging_directory = repository.cloud_info.staging_dir
 
         # Check backup content equals content of cluster after restore
-        self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name = backup_name)
+        self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name = backup_name, skip_stats_check=True)
 
     # Nsserver tests
 
