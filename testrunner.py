@@ -13,8 +13,7 @@ from pprint import pprint
 sys.path = ["lib", "pytests", "pysystests"] + sys.path
 
 if sys.hexversion < 0x30706f0:
-    print("Testrunner requires version 3.7.6+ of python")
-    sys.exit()
+    sys.exit("Testrunner requires version 3.7.6+ of python (found: " + sys.version + ")")
 
 import re
 import time
