@@ -3027,3 +3027,12 @@ class BackupServiceTest(BackupServiceBase):
             ip_port_fields = {'ip', 'port'}
             # Check the ip and port fields are present in the local field
             self.assertTrue(ip_port_fields.issubset(event['local'].keys()))
+
+    def test_sanity(self):
+        """ A sanity tests """
+        tests = [self.test_one_off_backup, self.test_one_off_restore, self.test_one_off_merge]
+
+        for test in tests:
+            test()
+            self.tearDown()
+            self.setUp()
