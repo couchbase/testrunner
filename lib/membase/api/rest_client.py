@@ -5456,6 +5456,26 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
+    # Upload a root certificate
+    def upload_cluster_ca(self, certificate):
+        """ Upload a certificate the cluster
+
+        This can be a root certificate or an intermediate certificate.
+        """
+        headers = self._create_capi_headers()
+        headers['Content-Type'] = 'application/octet-stream'
+        status, content, header = self._http_request(self.baseUrl + "controller/uploadClusterCA", 'POST', headers=headers, params=certificate)
+        return status, content
+
+    def reload_certificate(self):
+        """ Reload certificate
+
+        Call this function after uploading a certificate to the cluster to activate the new certificate.
+        """
+        headers = self._create_capi_headers()
+        status, content, header = self._http_request(self.baseUrl + "node/controller/reloadCertificate", 'POST', headers=headers)
+        return status, content
+
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
         self.implementationVersion = implementationVersion

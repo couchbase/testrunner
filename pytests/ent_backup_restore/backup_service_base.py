@@ -44,6 +44,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # Configure the master server based on the sorted list of clusters
         self.master = next((server for server in self.servers if server.ip == self.input.clusters[0][0].ip))
 
+        # Node to node encryption
+        self.node_to_node_encryption = NodeToNodeEncryption(self.input.clusters[0][0])
+
         self.use_https = self.input.param('use_https', False)
 
         # Rest API Configuration
@@ -122,6 +125,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         self.temporary_directories.append(self.backupset.objstore_alternative_staging_directory)
         self.temporary_directories.append(self.directory_to_share)
         self.temporary_directories.append(self.backupset.directory)
+
+        if self.input.param('node_to_node_encryption', False):
+            self.assertTrue(self.node_to_node_encryption.enable())
 
     def configure_host(self, ip, use_https=False):
         """ Modify the target to which http requests are made to
@@ -649,6 +655,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             self.nfs_connection.clean(self.backupset.directory)
         except AttributeError:
             pass
+
+        if self.input.param('node_to_node_encryption', False):
+            self.node_to_node_encryption.disable()
 
         # We have to be careful about how we tear things down to speed up tests,
         # all rebalances must be skipped until the last test is run to avoid
@@ -1214,3 +1223,199 @@ class DocumentUtil:
             return lambda document: (document[scope_field_name], document[collection_field_name], document[id_field_name])
 
         return lambda document: document[id_field_name]
+
+class NodeToNodeEncryption:
+
+    def __init__(self, server):
+        """ Constructor
+
+        Args:
+            server (TestInputServer): A server.
+        """
+        self.server, self.remote_connection = server, RemoteMachineShellConnection(server)
+        self.common = f"-c http://{server.ip}:{server.port} -u {server.rest_username} -p {server.rest_password}"
+
+    def enable(self):
+        """ Enables node to node encryption
+
+        Returns:
+            (bool): Upon success
+        """
+        self.remote_connection.execute_command(f"/opt/couchbase/bin/couchbase-cli setting-autofailover {self.common} --enable-auto-failover 0", debug=True)
+        self.remote_connection.execute_command(f"/opt/couchbase/bin/couchbase-cli node-to-node-encryption {self.common} --enable", debug=True)
+        self.remote_connection.execute_command(f"/opt/couchbase/bin/couchbase-cli setting-security {self.common} --set --cluster-encryption-level all", debug=True)
+        self.remote_connection.execute_command(f"/opt/couchbase/bin/couchbase-cli setting-autofailover {self.common} --auto-failover-timeout 120 --enable-failover-of-server-groups 1 --max-failovers 2 --can-abort-rebalance 1", debug=True)
+
+        output, error = self.remote_connection.execute_command(f"/opt/couchbase/bin/couchbase-cli node-to-node-encryption {self.common} --get")
+        return "Node-to-node encryption is enabled" in output[0]
+
+    def disable(self):
+        """ Disables node to node encryption
+        """
+        self.remote_connection.execute_command(f"/opt/couchbase/bin/couchbase-cli setting-security {self.common} --set --cluster-encryption-level control", debug=True)
+        self.remote_connection.execute_command(f"/opt/couchbase/bin/couchbase-cli node-to-node-encryption {self.common} --disable", debug=True)
+
+class CryptoTester:
+
+    def __init__(self, clusters):
+        """ Constructor
+
+        Args:
+            clusters (list (TestInputServer)): The clusters to provision
+        """
+        # An object that creates key pairs
+        self.clusters, self.crypto = clusters, Crypto(clusters[0])
+
+        # A certificate signing request requires a certificate extension which determines
+        # how the certificate will be used (e.g. for encipherment of keys).
+        self.certificate_extension = \
+        {
+            'basicConstraints': 'CA:FALSE',
+            'subjectKeyIdentifier': 'hash',
+            'authorityKeyIdentifier': 'keyid,issuer:always',
+            'extendedKeyUsage': 'serverAuth',
+            'keyUsage': 'digitalSignature,keyEncipherment'
+        }
+
+        # Create all key pairs
+        self.create()
+
+    def get_per_node_pair(self):
+        """ Get a list of all per-node private keys and certificates
+        """
+        return self.per_node_pair
+
+    def get_root_private_key(self):
+        """ Get the root private key
+        """
+        return self.root_private_key
+
+    def get_root_certificate(self):
+        """ Get the root certificate
+        """
+        return self.root_certificate
+
+    def create(self):
+        """ Generates all private key and certificate pairs.
+
+        Generates a root private key and a root certificate.
+        Generates a per-node private key and a certificate that has been signed by the root private key.
+        """
+        # Create the cluster wide key and certificate pair
+        self.root_private_key = self.crypto.create_private_key()
+        self.root_certificate = self.crypto.create_root_certificate(self.root_private_key)
+
+        self.per_node_pair = []
+        # Create the per node private-key and signing request
+        for server in self.clusters:
+            per_node_private_key = self.crypto.create_private_key()
+            per_node_signing_req = self.crypto.create_signing_request(per_node_private_key)
+            self.per_node_pair.append((per_node_private_key, per_node_signing_req))
+
+        # Sign requests using the root private key to generate a per node certificate
+        for i, (per_node_private_key, per_node_signing_req) in enumerate(self.per_node_pair):
+            # Configure the subjectAltName in the certificate extension - Supply the IP of the server
+            self.certificate_extension['subjectAltName'] = f"IP:{self.clusters[i].ip}"
+            # Sign the request root private key to obain a certificate
+            per_node_certificate = self.crypto.sign_request(self.root_private_key, self.root_certificate, per_node_signing_req, self.certificate_extension)
+            # Replace the signing request with the certificate in our per-node data-structure
+            self.per_node_pair[i] = per_node_private_key, per_node_certificate
+
+    def upload(self):
+        """ Activates the root certificate and the per-node key pairs.
+        """
+        # Place the per-node private key and certificate in /opt/couchbase/...
+        for ((per_node_private_key, per_node_certificate), server) in zip(self.per_node_pair, self.clusters):
+            connection = RemoteMachineShellConnection(server)
+            connection.execute_command(f"mkdir -p /opt/couchbase/var/lib/couchbase/inbox/")
+            connection.execute_command(f"echo '{per_node_private_key}' > /opt/couchbase/var/lib/couchbase/inbox/pkey.key")
+            connection.execute_command(f"echo '{per_node_certificate}' > /opt/couchbase/var/lib/couchbase/inbox/chain.pem")
+            connection.execute_command(f"chmod -R a+x /opt/couchbase/var/lib/couchbase/inbox/")
+            connection.execute_command(f"chown -R couchbase:couchbase /opt/couchbase/var/lib/couchbase/inbox/")
+            connection.disconnect()
+
+        # Upload the root certificate
+        rest_connection = RestConnection(self.clusters[0])
+        rest_connection.upload_cluster_ca(self.root_certificate)
+        rest_connection.reload_certificate()
+
+class Crypto:
+
+    def __init__(self, server):
+        self.remote_connection = RemoteMachineShellConnection(server)
+
+    def clean(self, files):
+        self.remote_connection.execute_command(f"rm -f {' '.join(files)}")
+
+    def create_private_key(self):
+        """Generates a private key"""
+        keyfile = "/tmp/my_key.pem"
+        garbage = [keyfile]
+
+        self.clean(garbage)
+
+        self.remote_connection.execute_command(f"openssl genrsa -out {keyfile} 2048")
+        output, error = self.remote_connection.execute_command(f"cat {keyfile}")
+
+        self.clean(garbage)
+
+        return "\n".join(output)
+
+    def create_root_certificate(self, private_key):
+        """Generates a self-signed certificate from a private key
+
+        Creates a signing request and self-signs (notice the usage of the x509 flag to perform the self-sign)
+        """
+        keyfile = "/tmp/my_key.pem"
+        crtfile = "/tmp/my_certificate.pem"
+        garbage = [keyfile, crtfile]
+
+        self.clean(garbage)
+
+        self.remote_connection.execute_command(f"echo '{private_key}' > /tmp/my_key.pem")
+        self.remote_connection.execute_command(f"openssl req -new -x509 -days 3650 -sha256 -key /tmp/my_key.pem -out /tmp/my_certificate.pem -subj \"/CN=Couchbase Root CA\"")
+        output, error = self.remote_connection.execute_command(f"cat /tmp/my_certificate.pem")
+
+        self.clean(garbage)
+
+        return "\n".join(output)
+
+    def create_signing_request(self, private_key):
+        """Generate a signing request from a private key"""
+        keyfile = "/tmp/my_key"
+        request = "/tmp/my_certificate_signing_request.pem"
+        garbage = [keyfile, request]
+
+        self.clean(garbage)
+
+        self.remote_connection.execute_command(f"echo '{private_key}' > {keyfile}")
+        self.remote_connection.execute_command(f"openssl req -new -key {keyfile} -out {request} -subj \"/CN=Couchbase Server\"")
+        output, error = self.remote_connection.execute_command(f"cat {request}")
+
+        self.clean(garbage)
+
+        return "\n".join(output)
+
+    def sign_request(self, root_private_key, root_certificate, signing_request, certificate_extension):
+        """Sign a request from a private key accounting for the certificate extension """
+        root_key_file = "/tmp/root_private_key.pem"
+        root_certificate_file = "/tmp/root_certificate.pem"
+        signing_request_file = "/tmp/signing_request.pem"
+        certificate_extension_file = "/tmp/certificate_extension.pem"
+        certificate_file = "/tmp/certificate.pem"
+        garbage = [root_key_file, root_certificate_file, signing_request_file, certificate_extension_file, certificate_file]
+
+        certificate_extension = "\n".join([f"{key} ={val}" for key, val in certificate_extension.items()])
+
+        self.clean(garbage)
+
+        self.remote_connection.execute_command(f"echo '{root_private_key}' > {root_key_file}")
+        self.remote_connection.execute_command(f"echo '{root_certificate}' > {root_certificate_file}")
+        self.remote_connection.execute_command(f"echo '{signing_request} '> {signing_request_file}")
+        self.remote_connection.execute_command(f"echo '{certificate_extension}' > {certificate_extension_file}")
+        self.remote_connection.execute_command(f"openssl x509 -CA {root_certificate_file} -CAkey {root_key_file} -CAcreateserial -days 365 -req -in /tmp/signing_request.pem -out {certificate_file} -extfile {certificate_extension_file}")
+        output, error = self.remote_connection.execute_command(f"cat {certificate_file}")
+
+        self.clean(garbage)
+
+        return "\n".join(output)
