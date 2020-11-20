@@ -5121,7 +5121,7 @@ class RemoteMachineShellConnection(KeepRefs):
         else:
             log.info("*** You need to set rest password at ini file ***")
             rest_password = "password"
-        command = "curl http://{0}:{1}@localhost:{2}/diag/eval -X POST -d " \
+        command = "curl --silent --show-error http://{0}:{1}@localhost:{2}/diag/eval -X POST -d " \
                   "'ns_config:set(allow_nonlocal_eval, {3}).'".format(rest_username, rest_password,
                                                                       self.port, state.__str__().lower())
         server = {"ip": self.ip, "username": rest_username, "password": rest_password, "port": self.port}
