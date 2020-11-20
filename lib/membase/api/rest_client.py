@@ -1258,7 +1258,7 @@ class RestConnection(object):
         if status:
             return content.decode("utf-8")
         else:
-            log.error("/poos/default/certificate status:{0},content:{1}".format(status, content))
+            log.error("/pools/default/certificate status:{0},content:{1}".format(status, content))
             raise Exception("certificate API failed")
 
     def regenerate_cluster_certificate(self):

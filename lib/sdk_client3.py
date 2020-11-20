@@ -16,6 +16,7 @@ from couchbase.exceptions import CouchbaseException, BucketNotFoundException, Au
 from couchbase_core.cluster import PasswordAuthenticator
 from mc_bin_client import MemcachedError
 from memcached.helper.old_kvstore import ClientKeyValueStore
+from couchbase_core.connstr import ConnectionString
 
 
 class SDKClient(object):
@@ -25,10 +26,12 @@ class SDKClient(object):
 
     def __init__(self, bucket, hosts=["localhost"], scheme="couchbase",
                  ssl_path=None, uhm_options=None, username= None, password=None,
-                 quiet=True, certpath=None, transcoder=None, ipv6=False, compression=True):
+                 quiet=True, certpath=None, transcoder=None, ipv6=False, compression=True,
+                 sasl_mech=True):
+
         self.connection_string = \
             self._createString(scheme=scheme, bucket=bucket, hosts=hosts,
-                               certpath=certpath, uhm_options=uhm_options, ipv6=ipv6, compression=compression)
+                               certpath=certpath, uhm_options=uhm_options, ipv6=ipv6, compression=compression, sasl_mech=sasl_mech)
         self.bucket = bucket
         sys.setrecursionlimit(100)
         if username == None:
@@ -48,37 +51,34 @@ class SDKClient(object):
         self.log = logger.Logger.get_logger()
 
     def _createString(self, scheme="couchbase", bucket=None, hosts=["localhost"], certpath=None,
-                      uhm_options="", ipv6=False, compression=True):
+                      uhm_options="", ipv6=False, compression=True, sasl_mech=None):
         connection_string = "{0}://{1}".format(scheme, ", ".join(hosts).replace(" ", ""))
         # if bucket != None:
         #     connection_string = "{0}/{1}".format(connection_string, bucket)
         if uhm_options != None:
             connection_string = "{0}?{1}".format(connection_string, uhm_options)
-        if ipv6 == True:
-            if "?" in connection_string:
-                connection_string = "{0},ipv6=allow".format(connection_string)
-            else:
-                connection_string = "{0}?ipv6=allow".format(connection_string)
-        if compression == True:
-            if "?" in connection_string:
-                connection_string = "{0},compression=on".format(connection_string)
-            else:
-                connection_string = "{0}?compression=on".format(connection_string)
-        else:
-            if "?" in connection_string:
-                connection_string = "{0},compression=off".format(connection_string)
-            else:
-                connection_string = "{0}?compression=off".format(connection_string)
+        
+        conn_string = ConnectionString.parse(connection_string)
+        
         if scheme == "couchbases":
-            if "?" in connection_string:
-                connection_string = "{0},certpath={1}".format(connection_string, certpath)
-            else:
-                connection_string = "{0}?certpath={1}".format(connection_string, certpath)
-        return connection_string
+            conn_string.set_option('certpath',certpath)
+        
+        if sasl_mech is not None:
+            conn_string.set_option('sasl_mech_force',sasl_mech)
+        
+        if ipv6 == True:
+            conn_string.set_option('ipv6',"allow")
+        
+        if compression == True:
+            conn_string.set_option('compression',"on")
+        else:
+            conn_string.set_option('compression',"off")
+        
+        return conn_string
 
     def _createConn(self):
         try:
-            self.cluster = Cluster(self.connection_string,
+            self.cluster = Cluster(str(self.connection_string),
                                        ClusterOptions(PasswordAuthenticator(self.username, self.password)))
             self.cb = self.cluster.bucket(self.bucket)
             #self.default_collection = self.cb.default_collection()
@@ -453,7 +453,7 @@ class SDKClient(object):
             scope = self.cb.scope(scope)
             self.collection = scope.collection(collection)
         except Exception as e:
-            raise e   
+            raise e
 
     def upsert(self, key, value, cas=0, ttl=0, format=None, persist_to=0, replicate_to=0, scope=None, collection=None):
         try:

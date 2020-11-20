@@ -41,6 +41,12 @@ class ServerInfo():
 
 
 class rbacCollectionTest(BaseTestCase):
+    
+    def suite_setUp(self):    
+        pass
+    
+    def suite_tearDown(self):
+        pass
 
     def setUp(self):
         super(rbacCollectionTest, self).setUp()
@@ -50,9 +56,22 @@ class rbacCollectionTest(BaseTestCase):
         self.test_scope = self.input.param("test_scope",'collection')
         self.update_role = self.input.param("update_role",False)
         self.auth_type = self.input.param("auth_type",'users')
+        self.sasl_mech = None
+        self.certpath = None
         if self.auth_type == 'InternalGroup':
             ldapGroupBase().create_int_group("group1", ['user1'], '', [''], self.master,  user_creation=True)
             ldapGroupBase().create_int_group("group2", ['user2'], '', [''], self.master,  user_creation=True)
+        elif self.auth_type == "externalUser":
+            ldapGroupBase().create_ldap_config(self.master)
+            LdapUser('user1','password',self.master).user_setup()
+            LdapUser('user2','password',self.master).user_setup()
+            self.sasl_mech = 'PLAIN'
+            temp_cert = self.rest_client.get_cluster_ceritificate()
+            test_file = open("/tmp/server.crt",'w')
+            test_file.write(temp_cert)
+            test_file.close()
+            self.certpath = '/tmp/server.crt'
+            
 
     def tearDown(self):
         super(rbacCollectionTest, self).tearDown()
@@ -62,6 +81,17 @@ class rbacCollectionTest(BaseTestCase):
     def user_cleanup(self):
         rest_client = RestConnection(self.master)
         self.user_delete(rest_client)
+    
+    def download_cert(self):
+        tmp_path = "/tmp/server.pem"
+        for servers in self.servers:
+            cli_command = "ssl-manage"
+            remote_client = RemoteMachineShellConnection(servers)
+            options = "--regenerate-cert={0}".format(tmp_path)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options,
+                                                                cluster_host=servers.ip, user="Administrator",
+                                                                password="password")
+        return tmp_path
 
     #Remove users - based on domain
     def user_delete_username(self,rest_client,domain=None,username=None):
@@ -71,7 +101,7 @@ class rbacCollectionTest(BaseTestCase):
             else:
                 rest_client.delete_external_user(username)
         except:
-            self.log.info ("User deletion failed, probabaly first time run")
+            self.log.info ("User deletion failed, probably first time run")
 
     #Remove groups
     def group_delete_username(self,rest_client,username=None):
@@ -95,15 +125,24 @@ class rbacCollectionTest(BaseTestCase):
 
     #Create a single user
     def create_collection_read_write_user(self, user, bucket, scope, collection, role=None):
-        self.user_delete_username(RestConnection(self.master),'local',user)
-        if collection is None and scope is None:
-            payload = "name=" + user + "&roles=" + role + "[" + bucket  + "]&password=password"
-        elif collection is None:
-            payload = "name=" + user + "&roles=" + role + "[" + bucket + ":" + scope + "]&password=password"
+        if self.auth_type  == 'users':
+            self.user_delete_username(RestConnection(self.master),'local',user)
         else:
-            payload = "name=" + user + "&roles=" + role + "[" + bucket + ":" + scope + ":" + collection + "]&password=password"
+            self.user_delete_username(RestConnection(self.master),'external',user)
+        if collection is None:
+            payload = "name=" + user + "&roles=" + role + "[" + bucket + ":" + scope 
+        elif collection is None and scope in None:
+            payload = "name=" + user + "&roles=" + role + "[" + bucket  
+        else:
+            payload = "name=" + user + "&roles=" + role + "[" + bucket + ":" + scope + ":" + collection 
+        
+        if self.auth_type == 'extenalUser':
+            payload = payload + "]"
+            ExternalUser(user, payload, self.master).user_setup()
+        else:
+            payload = payload + "]&password=password"
+            status, content, header =  rbacmain(self.master, "builtin")._set_user_roles(user_name=user, payload=payload)
 
-        status, content, header =  rbacmain(self.master, "builtin")._set_user_roles(user_name=user, payload=payload)
 
     #Create user using a list, update user roles
     def create_collection_read_write_user_list(self, user_details, scope_scope, scope_collection,update=False):
@@ -129,11 +168,12 @@ class rbacCollectionTest(BaseTestCase):
         for item in user_list_role:
             if update:
                 user, final_role = self.get_current_roles(item['user'])
-                final_payload = "name=" + item['user'] + "&roles=" + item['role'] + "," + final_role + "&password=password"
+                final_payload = "name=" + item['user'] + "&roles=" + item['role'] + "," + final_role 
             else:
-                final_payload = "name=" + item['user'] + "&roles=" + item['role'] + "&password=password"
+                final_payload = "name=" + item['user'] + "&roles=" + item['role'] 
             self.log.info (final_payload)
             if self.auth_type == 'users':
+                final_payload = final_payload + + "&password=password"
                 self.user_delete_username(RestConnection(self.master), 'local', item['user'])
                 status, content, header =  rbacmain(self.master, "builtin")._set_user_roles(user_name=item['user'], payload=final_payload)
             elif self.auth_type == 'InternalGroup':
@@ -143,6 +183,10 @@ class rbacCollectionTest(BaseTestCase):
                     ldapGroupBase().create_grp_usr_internal(['user1'],self.master,roles=[''], groups=item['user'])
                 elif item['user'] == 'group2':
                     ldapGroupBase().create_grp_usr_internal(['user2'],self.master,roles=[''], groups=item['user'])
+            elif self.auth_type == 'externalUser':
+                self.user_delete_username(RestConnection(self.master), 'external', item['user'])
+                ExternalUser(item['user'], final_payload, self.master).user_setup()
+                
 
     #Update roles for users
     def update_roles(self,user_details, scope_scope, scope_collection,update=False):
@@ -189,16 +233,19 @@ class rbacCollectionTest(BaseTestCase):
     #Create SDK connection
     def collectionConnection(self, scope, collection, bucket='default', username=None):
         self.log.info("Scope {0} Collection {1} username {2}".format(scope,collection,username))
-        scheme = "couchbase"
+        if self.certpath is None:
+            scheme = "couchbase"
+        else:
+            scheme = "couchbases"
         host=self.master.ip
         if self.master.ip == "127.0.0.1":
             scheme = "http"
             host="{0}:{1}".format(self.master.ip, self.master.port)
         try:
             if username is None:
-                client = SDKClient(scheme=scheme, hosts = [host], bucket = bucket, username=collection, password = 'password')
+                client = SDKClient(scheme=scheme, hosts = [host], bucket = bucket, username=collection, password = 'password', certpath=self.certpath, sasl_mech=self.sasl_mech)
             else:
-                client = SDKClient(scheme=scheme, hosts = [host], bucket = bucket, username=username, password = 'password')
+                client = SDKClient(scheme=scheme, hosts = [host], bucket = bucket, username=username, password = 'password', certpath= self.certpath, sasl_mech=self.sasl_mech)
             return client
         except Exception as e:
             self.log.info (e.result.err)
@@ -379,7 +426,7 @@ class rbacCollectionTest(BaseTestCase):
         scopes = ['scope1','scope2']
         collections = ['collection1','collection2']
         roles = ['data_writer','data_reader']
-        if self.auth_type == 'users':
+        if self.auth_type == 'users' or self.auth_type == 'externalUser':
             users = ['user1','user2']
         elif self.auth_type == 'InternalGroup':
             users = ['group1','group2']
@@ -404,7 +451,7 @@ class rbacCollectionTest(BaseTestCase):
         scopes = ['scope1','scope2']
         collections = ['collection1','collection2']
         roles = ['data_writer','data_reader']
-        if self.auth_type == 'users':
+        if self.auth_type == 'users' or self.auth_type == 'externalUser':
             users = ['user1','user2']
         elif self.auth_type == 'InternalGroup':
             users = ['group1','group2']
@@ -501,7 +548,7 @@ class rbacCollectionTest(BaseTestCase):
         scopes = ['scope1','scope2']
         collections = ['collection1','collection2']
         roles = ['data_writer','data_reader']
-        if self.auth_type == 'users':
+        if self.auth_type == 'users' or self.auth_type == 'externalUser':
             users = ['user1','user2']
         else:
             users = ['group1','group2']
