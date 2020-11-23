@@ -163,7 +163,7 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                 self.log.info("collectionsMirroringMode is false as expected")
 
         for task in tasks:
-            task.result()
+            if task:
+                task.result()
         self.perform_update_delete()
         self.verify_results()
-

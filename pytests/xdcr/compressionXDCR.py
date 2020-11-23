@@ -138,8 +138,13 @@ class compression(XDCRNewBaseTest):
 
     def test_compression_with_unixdcr_backfill_load(self):
         self.setup_xdcr()
+        # Set bucket compression policy=off for standard_bucket_2
+        # to ensure data is uncompressed
+        RestConnection(self.src_cluster.get_master_node()). \
+            set_bucket_compressionMode("standard_bucket_2", "off")
         repl_time = int(time.time())
         self.sleep(60)
+
         self._set_compression_type(self.src_cluster, "standard_bucket_1", self.compression_type)
         self._set_compression_type(self.src_cluster, "standard_bucket_2")
 

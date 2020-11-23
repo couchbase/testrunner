@@ -8,6 +8,7 @@ from mc_bin_client import MemcachedClient, MemcachedError
 from membase.api.exception import XDCRCheckpointException
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from remote.remote_util import RemoteMachineShellConnection
+from collection.collections_rest_client import CollectionsRest
 
 from .xdcrnewbasetests import NodeHelper
 from .xdcrnewbasetests import XDCRNewBaseTest, REPLICATION_TYPE
@@ -586,6 +587,8 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             mem_client.stop_persistence()
 
         self.src_cluster.pause_all_replications()
+        CollectionsRest(self.src_master).create_scope_collection(
+            "not_persisted_scope", "not_persisted_collection", "default")
 
         gen = BlobGenerator("C1-", "C1-", self._value_size, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
@@ -625,12 +628,14 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             timeout=30, print_matches=False)
         self.assertGreater(count1, 0, "full rollback not received from DCP as expected")
         self.log.info("full rollback received from DCP as expected")
+        # scope_1, collection_1 create events occur before disabling persistence,
+        # so seqno will be rolled back to 2 not 0
         _, count2 = NodeHelper.check_goxdcr_log(
             nodes[0],
-            "Rolled back startSeqno to 0",
+            "Rolled back startSeqno to 2",
             goxdcr_log,
             timeout=30, print_matches=False)
-        self.assertGreater(count2, 0, "startSeqno not rolled back to 0 as expected")
-        self.log.info("startSeqno rolled back to 0 as expected")
+        self.assertGreater(count2, 2, "startSeqno not rolled back to 2 as expected")
+        self.log.info("startSeqno rolled back to 2 as expected")
 
         shell.disconnect()

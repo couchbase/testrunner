@@ -4173,6 +4173,15 @@ class RestConnection(object):
             raise BucketCompactionException(bucket)
         return True
 
+    def set_bucket_compressionMode(self, bucket="default", mode="passive"):
+        api = self.baseUrl + "pools/default/buckets/" + bucket
+        body = {'compressionMode': mode}
+        params = urllib.parse.urlencode(body)
+        headers = self._create_headers()
+        status, content, header = self._http_request(api, 'POST', params=params, headers=headers)
+        log.info("{0} with params: {1}".format(api, params))
+        if not status:
+            raise Exception("Unable to set compressionMode {0} for bucket {1}".format(mode, bucket))
 
     '''LDAP Rest API '''
     '''
