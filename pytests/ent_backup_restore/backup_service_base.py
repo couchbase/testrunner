@@ -68,6 +68,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # the cluster.
         TestInputSingleton.input.test_params["skip_cleanup"] = True
 
+        # Sort the available clusters by total memory in ascending order (if the total memory is the same, sort by ip)
+        TestInputSingleton.input.clusters[0].sort(key = lambda server: (ServerUtil(server).get_free_memory(), server.ip))
+
         super().setUp()
         self.preamble()
 
@@ -473,6 +476,25 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         if self.input.param("last_test", False):
             super().tearDown()
 
+class ServerUtil:
+    """ A class to obtain information about a server
+    """
+
+    def __init__(self, server):
+        self.remote_connection = RemoteMachineShellConnection(server)
+
+    def get_free_memory(self):
+        """ Gets the available on a server
+        """
+        output, error = self.remote_connection.execute_command("free -m | grep Mem | awk '{print $2}'")
+        return int(output[0])
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.remote_connection.disconnect()
+
 class Time:
     """ A class to manipulate time.
     """
@@ -576,6 +598,20 @@ class NfsServer:
         self.remote_shell = RemoteMachineShellConnection(server)
         self.provision()
 
+    def fetch_id(self, username, id_type='u'):
+        """ Fetch a id dynamically
+
+        Args:
+            id_type (str): If 'u' fetches the uid. If 'g' fetches the gid.
+        """
+        accepted_id_types = ['u', 'g']
+
+        if id_type not in accepted_id_types:
+            raise ValueError(f"The id_type:{id_type} is not in {accepted_id_types}")
+
+        output, error = self.remote_shell.execute_command(f"id -{id_type} {username}")
+        return int(output[0])
+
     def provision(self):
         self.remote_shell.execute_command("yum -y install nfs-utils")
         self.remote_shell.execute_command("systemctl start nfs-server.service")
@@ -599,8 +635,11 @@ class NfsServer:
         if not privileges:
             privileges['*'] = 'rw'
 
+        # Fetch uid, gid dynamically
+        uid, gid = self.fetch_id('couchbase', id_type='u'), self.fetch_id('couchbase', id_type='g')
+
         for host, privilege in privileges.items():
-            self.remote_shell.execute_command(f"echo '{directory_to_share} {host}({privilege},sync,all_squash,anonuid=997,anongid=996,fsid=1)' >> {NfsServer.exports_directory} && exportfs -a")
+            self.remote_shell.execute_command(f"echo '{directory_to_share} {host}({privilege},sync,all_squash,anonuid={uid},anongid={gid},fsid=1)' >> {NfsServer.exports_directory} && exportfs -a")
 
     def clean(self):
         self.remote_shell.execute_command(f"echo -n > {NfsServer.exports_directory} && exportfs -a")
