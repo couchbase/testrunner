@@ -3,8 +3,8 @@ import logging
 import os
 import subprocess
 
-from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase, Backupset
-from ent_backup_restore.validation_helpers.backup_restore_validations import BackupRestoreValidations
+#from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase, Backupset
+#from ent_backup_restore.validation_helpers.backup_restore_validations import BackupRestoreValidations
 from lib import testconstants
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection
@@ -19,7 +19,7 @@ from testconstants import COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH_RAW, WIN_
 log = logging.getLogger()
 
 
-class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
+class EventingTools(EventingBaseTest):
     def setUp(self):
         super(EventingTools, self).setUp()
         self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=500)

@@ -410,7 +410,7 @@ class EventingLifeCycle(EventingBaseTest):
     def test_eventing_debugger_ABO(self):
         count = 0
         match = False
-        body = self.create_save_function_body(self.function_name, "handler_code/ABO/insert.js")
+        body = self.create_save_function_body(self.function_name, "handler_code/ABO/insert.js",src_binding=True)
         self.deploy_function(body)
         #enable debugger
         self.rest.enable_eventing_debugger()

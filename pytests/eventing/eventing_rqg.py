@@ -96,6 +96,7 @@ class EventingRQG(EventingBaseTest):
                 self.undeploy_delete_all_functions()
                 self.delete_temp_handler_code()
         self.verify_n1ql_stats(s)
+        self.print_eventing_stats_from_all_eventing_nodes()
 
     def test_queries(self):
         test_file_path = self.template_file

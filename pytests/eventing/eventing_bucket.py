@@ -89,7 +89,9 @@ class EventingBucket(EventingBaseTest):
                       batch_size=self.batch_size)
         except:
             pass
-        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.n1ql_helper.drop_primary_index(server=self.n1ql_node)
+        self.n1ql_helper.create_primary_index(server=self.n1ql_node)
+        body = self.create_save_function_body(self.function_name, self.handler_code,src_binding=True)
         self.deploy_function(body)
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
         # Wait for eventing to catch up with all the update mutations and verify results
@@ -113,7 +115,7 @@ class EventingBucket(EventingBaseTest):
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                 self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
-        body = self.create_save_function_body(self.function_name, self.handler_code)
+        body = self.create_save_function_body(self.function_name, self.handler_code,src_binding=True)
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
@@ -142,7 +144,7 @@ class EventingBucket(EventingBaseTest):
         # push the destination bucket to dgm
         total_items = self.push_to_dgm(self.dst_bucket_name, 20)
         body = self.create_save_function_body(self.function_name, self.handler_code,
-                                              dcp_stream_boundary="from_now")
+                                              dcp_stream_boundary="from_now",src_binding=True)
         self.deploy_function(body)
         # load documents on the source bucket
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -169,7 +171,7 @@ class EventingBucket(EventingBaseTest):
         # push the source bucket to dgm
         self.push_to_dgm(self.src_bucket_name, 50)
         body = self.create_save_function_body(self.function_name, self.handler_code,
-                                              dcp_stream_boundary="from_now")
+                                              dcp_stream_boundary="from_now",src_binding=True)
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
@@ -205,7 +207,7 @@ class EventingBucket(EventingBaseTest):
         # push the metadata bucket to dgm
         self.push_to_dgm(self.metadata_bucket_name, 50)
         body = self.create_save_function_body(self.function_name, self.handler_code,
-                                              dcp_stream_boundary="from_now")
+                                              dcp_stream_boundary="from_now",src_binding=True)
         self.deploy_function(body)
         # load documents on the source bucket
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -231,7 +233,7 @@ class EventingBucket(EventingBaseTest):
         # push the metadata bucket to dgm
         items_from_dgm = self.push_to_dgm(self.dst_bucket_name, 50)
         body = self.create_save_function_body(self.function_name, self.handler_code,
-                                              dcp_stream_boundary="from_now")
+                                              dcp_stream_boundary="from_now",src_binding=True)
         self.deploy_function(body)
         try:
             # load documents on the source bucket
@@ -258,7 +260,7 @@ class EventingBucket(EventingBaseTest):
 
     def test_bucket_compaction_when_eventing_is_processing_mutations(self):
         gen_load_copy = copy.deepcopy(self.gens_load)
-        body = self.create_save_function_body(self.function_name, self.handler_code)
+        body = self.create_save_function_body(self.function_name, self.handler_code,src_binding=True)
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
@@ -335,7 +337,7 @@ class EventingBucket(EventingBaseTest):
                                                    eviction_policy='nruEviction')
         self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                             bucket_params=bucket_params)
-        body = self.create_save_function_body(self.function_name, self.handler_code)
+        body = self.create_save_function_body(self.function_name, self.handler_code,src_binding=True)
         # deploy function
         self.deploy_function(body)
         if self.pause_resume:
@@ -424,7 +426,7 @@ class EventingBucket(EventingBaseTest):
                                                                    bucket_params=bucket_params))
         for task in tasks:
             task.result()
-        body = self.create_save_function_body(self.function_name, self.handler_code)
+        body = self.create_save_function_body(self.function_name, self.handler_code,src_binding=True)
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
         self.deploy_function(body)
         if self.pause_resume:
