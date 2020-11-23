@@ -95,3 +95,15 @@ class CollectionsRest(object):
 
     def get_scope_collections(self, bucket, scope):
         return self.rest.get_scope_collections(bucket, scope)
+
+    def create_buckets_scopes_collections(self, num_buckets, num_scopes,
+                                          num_collections, bucket_size,
+                                          bucket_prefix="test_bucket",
+                                          scope_prefix="test_scope",
+                                          collection_prefix="test_collection"):
+        for bucket_id in range(1, num_buckets + 1):
+            bucket_name = f"{bucket_prefix}_{bucket_id}"
+            self.rest.create_bucket(bucket_name, ramQuotaMB=bucket_size)
+            self.create_scope_collection_count(num_scopes, num_collections,
+                                               scope_prefix, collection_prefix,
+                                               bucket_name)
