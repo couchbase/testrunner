@@ -25,6 +25,21 @@ from security.internal_user import InternalUser
 from security.external_user import ExternalUser
 from security.ldapGroupBase import ldapGroupBase
 
+class ServerInfo():
+    def __init__(self,
+                 ip,
+                 port,
+                 ssh_username,
+                 ssh_password,
+                 ssh_key=''):
+
+        self.ip = ip
+        self.rest_username = ssh_username
+        self.rest_password = ssh_password
+        self.port = port
+        self.ssh_key = ssh_key
+
+
 class rbacCollectionTest(BaseTestCase):
 
     def setUp(self):
@@ -81,13 +96,13 @@ class rbacCollectionTest(BaseTestCase):
     #Create a single user
     def create_collection_read_write_user(self, user, bucket, scope, collection, role=None):
         self.user_delete_username(RestConnection(self.master),'local',user)
-        if collection is None:
-            payload = "name=" + user + "&roles=" + role + "[" + bucket + ":" + scope + "]&password=password"
-        elif collection is None and scope in None:
+        if collection is None and scope is None:
             payload = "name=" + user + "&roles=" + role + "[" + bucket  + "]&password=password"
+        elif collection is None:
+            payload = "name=" + user + "&roles=" + role + "[" + bucket + ":" + scope + "]&password=password"
         else:
             payload = "name=" + user + "&roles=" + role + "[" + bucket + ":" + scope + ":" + collection + "]&password=password"
-        
+
         status, content, header =  rbacmain(self.master, "builtin")._set_user_roles(user_name=user, payload=payload)
 
     #Create user using a list, update user roles
@@ -99,10 +114,10 @@ class rbacCollectionTest(BaseTestCase):
             if scope_collection is None and scope_scope is None:
                 payload = item['role'] + "[" + item['bucket']  + "]"
             elif scope_collection is None:
-                payload = item['role'] + "[" + item['bucket'] + ":" + item['scope']  + "]"    
+                payload = item['role'] + "[" + item['bucket'] + ":" + item['scope']  + "]"
             else:
                 payload = item['role'] + "[" + item['bucket'] + ":" + item['scope'] + ":" + item['collection'] + "]"
-            
+
             if item['user'] in user_list:
                 user_index = user_list.index(item['user'])
                 final_role = (user_list_role[user_index])['role'] + ',' + payload
@@ -110,7 +125,7 @@ class rbacCollectionTest(BaseTestCase):
             else:
                 user_list.append(item['user'])
                 user_list_role.append({"user":item['user'],"role":payload})
-        
+
         for item in user_list_role:
             if update:
                 user, final_role = self.get_current_roles(item['user'])
@@ -140,7 +155,7 @@ class rbacCollectionTest(BaseTestCase):
                 payload = item['role'] + "[" + item['bucket']  + "]"
             else:
                 payload = item['role'] + "[" + item['bucket'] + ":" + item['scope'] + ":" + item['collection'] + "]"
-            
+
             if item['user'] in user_list:
                 user_index = user_list.index(item['user'])
                 final_role = (user_list_role[user_index])['role'] + ',' + payload
@@ -148,7 +163,7 @@ class rbacCollectionTest(BaseTestCase):
             else:
                 user_list.append(item['user'])
                 user_list_role.append({"user":item['user'],"role":payload})
-        
+
         for item in user_list_role:
             role_list = item['role'].split(',')
             for role_item in role_list:
@@ -193,7 +208,7 @@ class rbacCollectionTest(BaseTestCase):
     #Creates users and based on role - data_reader and data_writer validates the operation
     def check_permission_multiple_roles(self, role_details, access, update=False):
         self.log.info ("Roles details are --- {0}".format(role_details))
-        for details in role_details:        
+        for details in role_details:
             scope = details['scope']
             collection = details['collection']
             bucket = details['bucket']
@@ -218,9 +233,9 @@ class rbacCollectionTest(BaseTestCase):
                 self.update_roles(role_details, None,None,True)
             else:
                 self.create_collection_read_write_user_list(role_details, None,None)
-            
+
         for details in role_details:
-            count = count + 1        
+            count = count + 1
             scope = details['scope']
             collection = details['collection']
             bucket = details['bucket']
@@ -230,14 +245,14 @@ class rbacCollectionTest(BaseTestCase):
                 user = 'user1'
             elif user == 'group2':
                 user = 'user2'
-            
+
             try:
                 if details['role'] == 'data_writer':
                     client = self.collectionConnection(scope, collection, bucket, user)
                     result = client.insert(str(count), "{1:2}",scope=scope,collection=collection)
                     errorResult = True if result.error == 0 else False
                     self.assertTrue(errorResult,'Issue with insertion')
-                
+
                 if details['role'] == 'data_reader':
                     client = self.collectionConnection(scope, collection, bucket, 'Administrator')
                     result = client.insert(str(count), "{2:2}",scope=scope,collection=collection)
@@ -257,8 +272,8 @@ class rbacCollectionTest(BaseTestCase):
         collections = ['collection1','collection2']
         roles = ['data_writer','data_reader']
         original_role_details = deepcopy(role_details)
-            
-        for details in role_details:        
+
+        for details in role_details:
             scope = details['scope']
             collection = details['collection']
             bucket = details['bucket']
@@ -267,7 +282,7 @@ class rbacCollectionTest(BaseTestCase):
             self.sleep(10)
             self.rest.create_scope_collection(bucket=bucket, scope=scope, collection=collection)
             self.sleep(10)
-        
+
         count = 1
         for details in role_details:
             if updateScope == True:
@@ -288,32 +303,32 @@ class rbacCollectionTest(BaseTestCase):
                         break
 
         self.log.info ("Updated Role details are -{0}".format(role_details))
-        
+
         if (access['collection'] is True) and (access['scope'] is True):
             self.create_collection_read_write_user_list(original_role_details, True,True,True)
         elif (access['collection'] is False) and (access['scope'] is True):
             self.create_collection_read_write_user_list(original_role_details, True,True,None)
         elif (access['collection'] is False) and (access['scope'] is False):
             self.create_collection_read_write_user_list(original_role_details, True,None,None)
-            
+
         for details in role_details:
-            count = count + 1        
+            count = count + 1
             scope = details['scope']
             collection = details['collection']
             bucket = details['bucket']
             role = details['role']
             user = details['user']
-            
+
             try:
                 if details['role'] == 'data_writer':
                     client = self.collectionConnection(scope, collection, bucket, user)
                     result = client.insert(str(count), "{1:2}",scope=scope,collection=collection)
-        
+
                 if details['role'] == 'data_reader':
                     client = self.collectionConnection(scope, collection, bucket, 'Administrator')
                     result = client.insert(str(count), "{2:2}",scope=scope,collection=collection)
                     client = self.collectionConnection(scope, collection, bucket, user)
-                    result =  client.get(str(count), scope=scope, collection=collection)       
+                    result =  client.get(str(count), scope=scope, collection=collection)
             except Exception as e:
                 self.log.info (e.result.errstr)
                 if (updateScope is True ):
@@ -335,7 +350,7 @@ class rbacCollectionTest(BaseTestCase):
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope", collection="testcollection")
         self.sleep(10)
         self.create_collection_read_write_user("testuser", "testbucket", "testscope", "testcollection", role='data_writer')
-        
+
         try:
             client = self.collectionConnection("testscope1", "testcollection1", "testbucket", 'testuser')
             result = client.insert("testdoc", "{1:2}",scope="testscope1",collection="testcollection1")
@@ -343,15 +358,15 @@ class rbacCollectionTest(BaseTestCase):
             self.log.info (e.result.errstr)
             errorResult = True if (e.result.errstr == 'LCB_ERR_SCOPE_NOT_FOUND (217)') else False
             self.assertTrue(errorResult,"Error")
-    
+
         try:
             client = self.collectionConnection("testscope", "testcollection1", "testbucket", 'testuser')
             result = client.insert("testdoc", "{1:2}",scope="testscope",collection="testcollection1")
         except Exception as e:
             errorResult = True if (e.result.errstr == 'LCB_ERR_COLLECTION_NOT_FOUND (211)') else False
             self.assertTrue(errorResult,"Error")
-    
-        try:    
+
+        try:
             client = self.collectionConnection("testscope", "testcollection", "testbucket", 'testuser')
             result = client.insert("testdoc", "{1:2}",scope="testscope",collection="testcollection")
             errorResult = True if result.error == 0 else False
@@ -372,7 +387,7 @@ class rbacCollectionTest(BaseTestCase):
         final_roles = []
         access = {}
         final_return_roles=[]
-        
+
         final_roles=[]
         for scope in scopes:
             for collection in collections:
@@ -397,7 +412,7 @@ class rbacCollectionTest(BaseTestCase):
         final_roles = []
         access = {}
         final_return_roles=[]
-        
+
         final_roles=[]
         for scope in scopes:
             for collection in collections:
@@ -406,9 +421,9 @@ class rbacCollectionTest(BaseTestCase):
                         for bucket in buckets:
                             final_role = {"scope":scope,"collection":collection,'user':user,'role':role,'bucket':bucket}
                             final_roles.append(final_role)
-        
-        
-#         [{'scope': 'scope1', 'collection': 'collection1', 'user': 'user1', 'role': 'data_writer', 'bucket': 'default'}, 
+
+
+#         [{'scope': 'scope1', 'collection': 'collection1', 'user': 'user1', 'role': 'data_writer', 'bucket': 'default'},
 #         {'scope': 'scope1', 'collection': 'collection1', 'user': 'user2', 'role': 'data_writer', 'bucket': 'default'}]
         final_list1=[]
         for collection in collections:
@@ -421,9 +436,9 @@ class rbacCollectionTest(BaseTestCase):
                                 final_list.append(final)
                     final_list1.append(final_list)
         final_return_roles.extend(final_list1)
-        
 
-#         [{'scope': 'scope1', 'collection': 'collection1', 'user': 'user1', 'role': 'data_writer', 'bucket': 'default'}, 
+
+#         [{'scope': 'scope1', 'collection': 'collection1', 'user': 'user1', 'role': 'data_writer', 'bucket': 'default'},
 #          {'scope': 'scope1', 'collection': 'collection1', 'user': 'user1', 'role': 'data_reader', 'bucket': 'default'}]
         final_list1=[]
         for collection in collections:
@@ -436,8 +451,8 @@ class rbacCollectionTest(BaseTestCase):
                                 final_list.append(final)
                     final_list1.append(final_list)
         final_return_roles.extend(final_list1)
-        
-#         [{'scope': 'scope1', 'collection': 'collection2', 'user': 'user1', 'role': 'data_reader', 'bucket': 'default'}, 
+
+#         [{'scope': 'scope1', 'collection': 'collection2', 'user': 'user1', 'role': 'data_reader', 'bucket': 'default'},
 #          {'scope': 'scope1', 'collection': 'collection2', 'user': 'user2', 'role': 'data_writer', 'bucket': 'default'}]
         final_list1=[]
         for user in users:
@@ -459,12 +474,12 @@ class rbacCollectionTest(BaseTestCase):
             for i in range(1,len(list1),2):
                 if (i % 2) != 0:
                     final_list_return2.append(list1[i])
-        
+
         for i in range(0,len(final_list_return1)):
             final_return_list1.append([final_list_return1[i],final_list_return2[i]])
 
         final_return_roles.extend(final_return_list1[0:8])
-        
+
         return(final_return_roles)
 
     #Defines the scope of the role - bucket, bucket:scope, bucket:scope:collection
@@ -472,13 +487,13 @@ class rbacCollectionTest(BaseTestCase):
         access = {}
         if target == 'collection':
             access = {'bucket':True, 'scope':True, 'collection':True}
-        
+
         if target == 'scope':
             access = {'bucket':True, 'scope':True, 'collection':False}
-        
+
         if target == 'bucket':
             access = {'bucket':True, 'scope':False, 'collection':False}
-        
+
         return access
 
     #Function to create roles for multiple buckets
@@ -494,7 +509,7 @@ class rbacCollectionTest(BaseTestCase):
         final_roles = []
         access = {}
         final_return_roles=[]
-        
+
         for scope in scopes:
             for collection in collections:
                 for user in users:
@@ -502,7 +517,7 @@ class rbacCollectionTest(BaseTestCase):
                         for bucket in buckets:
                             final_role = {"scope":scope,"collection":collection,'user':user,'role':role,'bucket':bucket}
                             final_roles.append(final_role)
-        
+
         final_list1=[]
         for role in roles:
             for collection in collections:
@@ -514,9 +529,9 @@ class rbacCollectionTest(BaseTestCase):
                                 if (role in final['role'] and bucket in final['bucket'] and scope in final['scope'] and user in final['user'] and collection in final['collection']):
                                     final_list.append(final)
                             final_list1.append(final_list)
-        
+
         final_return_roles.extend(final_list1)
-        
+
         return final_return_roles
 
     #Helper function to run doc ops in parallel and capture exceptions during writes
@@ -592,12 +607,12 @@ class rbacCollectionTest(BaseTestCase):
         getScope = self.getRoles(self.test_scope)
         for role in roleSet:
             self.check_permission_multiple_roles(role,getScope)
-    
+
     #Test for error messages when user tries to access scope and collections
     #the user does not have access to
     def test_incorrect_scope_collection(self):
         self.check_incorrect_scope_collection()
-    
+
     #Defect - PYCBC-1014
     #Test for error message when user tries to access scope and collections
     #the user does not roles on. This test is for multiple roles on the same user
@@ -622,8 +637,8 @@ class rbacCollectionTest(BaseTestCase):
         self.assertTrue(result,'Role is not empty after deletion of collection ')
         result = True if (user == 'testuser') else False
         self.assertTrue(result,'user is deleted after deletion of collection')
-    
-    #Test uesr roles are cleaned up after collection is deleted 
+
+    #Test uesr roles are cleaned up after collection is deleted
     def test_delete_recreated_collection_check_roles(self):
         self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=100)
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope", collection="testcollection")
@@ -652,11 +667,11 @@ class rbacCollectionTest(BaseTestCase):
             create_docs = Thread(name='create_docs', target=self.createBulkDocuments, args=(client, "testscope", "testcollection",))
             create_docs.start()
         except Exception as e:
-            self.log.info (e)    
-        
+            self.log.info (e)
+
         self.rest.delete_collection("testbucket", "testscope", "testcollection")
         self.rest.delete_scope("testbucket", "testscope")
-        
+
         create_docs.join()
 
     #Create 1000 collections and users
@@ -814,7 +829,7 @@ class rbacCollectionTest(BaseTestCase):
         except Exception as e:
             self.assertTrue(False, "Issue with creating users during rebalance - Error message {0}".format(e))
 
-    #Delete users while rebalance in and data loading in parallel 
+    #Delete users while rebalance in and data loading in parallel
     def rebalance_in_delete_users(self):
         num_threads = []
         i = 1
@@ -896,6 +911,43 @@ class rbacCollectionTest(BaseTestCase):
         except Exception as e:
             errorResult = True if (e.result.errstr == 'LCB_ERR_AUTHENTICATION_FAILURE (206)') else False
             self.assertTrue(errorResult, "Group deleted but still able to insert data")
+
+
+    #Tests for scope admin
+    def rest_execute(self, bucket, scope, collection, username, password, method='POST'):
+        rest = RestConnection(self.master)
+        api = "http://10.112.191.101:8091" + '/pools/default/buckets/%s/collections/%s' % (bucket, scope)
+        body = {'name': collection}
+        params = urllib.parse.urlencode(body)
+        import base64
+        authorization = base64.encodebytes(('%s:%s' % (username, password)).encode()).decode()
+        header =  {'Content-Type': 'application/x-www-form-urlencoded',
+                'Authorization': 'Basic %s' % authorization,
+                'Accept': '*/*'}
+        self.sleep(10)
+        status, content, header = rest._http_request(api, 'POST', params=params, headers=header)
+        return status, content, header
+
+
+    def test_scope_admin_add_collection(self):
+        self.rest_client.delete_bucket("testbucket")
+        self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=100)
+        self.rest.create_scope_collection(bucket="testbucket", scope="testscope", collection="testcollection")
+        self.rest.create_scope_collection(bucket="testbucket", scope="testscope1", collection="testcollection")
+        self.create_collection_read_write_user('user_scope_admin', 'testbucket', 'testscope', None, role='scope_admin')
+        self.sleep(10)
+        status, content, header = self.rest_execute('testbucket', 'testscope1', 'collection1','user_scope_admin','password')
+        if status == True:
+            self.assertTrue(False,'Scope admin can create collection for scope  it does not have access to')
+        status, content, header = self.rest_execute('testbucket', 'testscope', 'collection1','user_scope_admin','password')
+        if status == False:
+            self.assertTrue(False,'Scope admin cannot create collection in scope it has access to')
+        self.create_collection_read_write_user('user_scope_admin_full', 'testbucket', None, None, role='scope_admin')
+        self.sleep(30)
+        status, content, header = self.rest_execute('testbucket', 'testscope', 'collection2','user_scope_admin_full','password')
+        if status == False:
+            self.assertTrue(False,'Scope admin can create collection for scope  it does not have access to')
+        
 
 
 
