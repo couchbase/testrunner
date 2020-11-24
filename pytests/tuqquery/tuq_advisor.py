@@ -18,24 +18,21 @@ class QueryAdvisorTests(QueryTests):
             while True:
                 next_time = time.time()
                 query_response = self.run_cbq_query("SELECT COUNT(*) FROM `" + self.bucket_name + "`")
+                self.log.info(f"{self.bucket_name}+ count: {query_response['results'][0]['$1']}")
                 if query_response['results'][0]['$1'] == 31591:
                     break
                 if next_time - init_time > 600:
                     break
-                time.sleep(1)
+                time.sleep(2)
 
             self.wait_for_all_indexes_online()
-            list_of_indexes = self.run_cbq_query(query="select raw name from system:indexes")
+            list_of_indexes = self.run_cbq_query(query="select raw name from system:indexes WHERE indexes.bucket_id is missing")
 
             for index in list_of_indexes['results']:
-                if index.find("primary") > 0:
+                if index == "def_primary":
                     continue
-                elif index.find("inventory") > 0:
-                    name = index.split("_")
-                    scope, collection = name[1], name[2]
-                    self.run_cbq_query(query="drop index {0}.{1}".format(collection,index), query_context='default:`travel-sample`.{0}'.format(scope))
                 else:
-                    self.run_cbq_query(query="drop index `travel-sample`.{0}".format(index))
+                    self.run_cbq_query(query="drop index `travel-sample`.`%s`" % index)
 
         self.purge_all_sessions()
 
@@ -123,6 +120,9 @@ class QueryAdvisorTests(QueryTests):
         except Exception as e:
             self.log.error("Advisor statement failed: {0}".format(e))
             self.fail()
+
+    def test_similar_query_array(self):
+        pass
 
     def test_query_output_array(self):
         # Run some queries
@@ -398,7 +398,7 @@ class QueryAdvisorTests(QueryTests):
             for duration in durations:
                 start = self.run_cbq_query(query="SELECT ADVISOR({{'action': 'start', 'duration': '{0}'}})".format(duration), server=self.master)
                 session = start['results'][0]['$1']['session']
-                self.sleep(2)
+                self.sleep(3)
                 complete = self.run_cbq_query(query="SELECT ADVISOR({'action':'list','status':'completed'}) as List", server=self.master)
                 name = complete['results'][0]['List'][0]['tasks_cache']['name']
                 delay = complete['results'][0]['List'][0]['tasks_cache']['delay']
@@ -483,6 +483,9 @@ class QueryAdvisorTests(QueryTests):
             self.log.error("Advisor session failed: {0}".format(e))
             self.fail()
 
+    def test_session_all(self):
+        pass
+
     def test_session_query_txn(self):
         query1=f'SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
         close_txn = ['ROLLBACK WORK', 'COMMIT']
@@ -549,18 +552,88 @@ class QueryAdvisorTests(QueryTests):
             self.fail()
 
     def test_get_active_session(self):
-        pass
+        try:
+            results = self.run_cbq_query(query="SELECT ADVISOR({'action': 'start', 'duration': '5000s', 'query_count': 2 })", server=self.master)
+            session = results['results'][0]['$1']['session']
+            results = self.run_cbq_query(query="SELECT airportname FROM `{0}` WHERE lower(city) = 'lyon' AND country = 'France'".format(self.bucket_name), server=self.master)
+            results = self.run_cbq_query(query="SELECT airportname FROM `{0}` WHERE lower(city) = 'lyon' AND country = 'France'".format(self.bucket_name), server=self.master)
+            # Get session
+            get = self.run_cbq_query(query="SELECT ADVISOR({{'action': 'get', 'session': '{0}'}}) as Get".format(session), server=self.master)
+            self.assertEqual(get['results'][0]['Get'], [])
+            # Abort session
+            abort = self.run_cbq_query(query="SELECT ADVISOR({{'action': 'abort', 'session': '{0}'}})".format(session), server=self.master)
+            results = self.run_cbq_query(query="SELECT ADVISOR({'action':'list', 'status': 'all'}) as List", server=self.master)
+            self.assertEqual(results['results'][0]['List'],[])
+        except Exception as e:
+            self.log.error("Advisor session failed: {0}".format(e))
+            self.fail()
 
     def test_negative_query_syntax_error(self):
-        pass
+        query_syntax = f'SELECT airportname FROM `{self.bucket_name}` WERE type = \\"airport\\"'
+        try:
+            advise = self.run_cbq_query(query=f"SELECT ADVISOR(\"{query_syntax}\") as Advisor", server=self.master)
+            self.assertEqual(advise["results"][0]["Advisor"], {})
+        except Exception as e:
+            self.log.error("Advisor session failed: {0}".format(e))
+            self.fail()
 
     def test_negative_invalid_arg(self):
-        pass
+        query = "SELECT ADVISOR({'action': 'start', 'duration': '10s', 'invalid': 10});"
+        error = "Error evaluating projection. - cause: Invalid arguments to Advisor() function: [invalid]"
+        try:
+            results = self.run_cbq_query(query=query, server=self.master)
+            self.fail("Start session did not fail. Error expected: {0}".format(error))
+        except CBQError as ex:
+            self.assertTrue(str(ex).find(error) > 0)
+        else:
+            self.fail("There were no errors. Error expected: {0}".format(error))
 
     def test_negative_missing_arg(self):
-        pass
+        query = "SELECT ADVISOR({'action': 'start', 'response': '10s'});"
+        error = "Error evaluating projection. - cause: advisor() not valid argument for 'duration'"
+        try:
+            results = self.run_cbq_query(query=query, server=self.master)
+            self.fail("Start session did not fail. Error expected: {0}".format(error))
+        except CBQError as ex:
+            self.assertTrue(str(ex).find(error) > 0)
+        else:
+            self.fail("There were no errors. Error expected: {0}".format(error))
 
     def test_negative_array(self):
+        query=f'SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
+        error = "Number of arguments to function ADVISOR must be 1. - at "
+        try:
+            results = self.run_cbq_query(query=f"SELECT ADVISOR('{query}','{query}')", server=self.master)
+            self.fail("Start session did not fail. Error expected: {0}".format(error))
+        except CBQError as ex:
+            self.assertTrue(str(ex).find(error) > 0)
+        else:
+            self.fail("There were no errors. Error expected: {0}".format(error))
+
+    def test_negative_invalid_value(self):
+        pass
+   
+    def test_negative_list(self):
+        error = "Error evaluating projection. - cause: advisor() not valid argument for 'status'"
+        try:
+            session = self.run_cbq_query(query="SELECT ADVISOR({'action':'list', 'status':'stopped'})", server=self.master)
+            self.fail("Start session did not fail. Error expected: {0}".format(error))
+        except CBQError as ex:
+            self.assertTrue(str(ex).find(error) > 0)
+        else:
+            self.fail("There were no errors. Error expected: {0}".format(error))
+
+    def test_negative_missing_session(self):
+        error = "Error evaluating projection. - cause: advisor() not valid argument for 'session'"
+        try:
+            session = self.run_cbq_query(query="SELECT ADVISOR({'action':'get'})", server=self.master)
+            self.fail("Start session did not fail. Error expected: {0}".format(error))
+        except CBQError as ex:
+            self.assertTrue(str(ex).find(error) > 0)
+        else:
+            self.fail("There were no errors. Error expected: {0}".format(error))
+
+    def test_negative_invalid_session(self):
         pass
 
     def test_session_query_cancel(self):
@@ -578,43 +651,58 @@ class QueryAdvisorTests(QueryTests):
     def test_session_collection_join(self):
         pass
 
-    def test_session_start_authorization(self):
+    def test_session_negative_authorization(self):
+        self.users = [{"id": "jackDoe", "name": "Jack Downing", "password": "password1"}]
+        self.create_users()
+        role = "query_select"
+        user_id = self.users[0]['id']
+        user_pwd = self.users[0]['password']
+        grant = self.run_cbq_query(query=f"GRANT {role} on `{self.bucket_name}` to {user_id}",server=self.master)
+        sessions_queries = ["SELECT ADVISOR({'action': 'start', 'duration': '1h', 'query_count': 2 })", "SELECT ADVISOR({'action': 'list', 'status': 'all'})"]
+        error = "User does not have credentials to run queries accessing the system tables. Add role query_system_catalog to allow the query to run."
+        for query in sessions_queries:
+            try:
+                results = self.run_cbq_query(query=query, username=user_id, password=user_pwd, server=self.master)
+                self.fail("Start session did not fail. Error expected: {0}".format(error))
+            except CBQError as ex:
+                self.assertTrue(str(ex).find(error) > 0)
+            else:
+                self.fail("There were no errors. Error expected: {0}".format(error))
+
+    def test_session_authorization(self):
+        self.users = [{"id": "janneDoe", "name": "Janne Downing", "password": "password1"}]
+        self.create_users()
+        role_ctlg = "query_system_catalog"
+        role_qury = "query_select"
+        user_id = self.users[0]['id']
+        user_pwd = self.users[0]['password']
+        grant_ctlg = self.run_cbq_query(query=f"GRANT {role_ctlg} to {user_id}",server=self.master)
+        grant_qury = self.run_cbq_query(query=f"GRANT {role_qury} on `{self.bucket_name}` to {user_id}",server=self.master)
+
+        query1=f'SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
+        try:
+            # Start session as authorized user
+            start = self.run_cbq_query(query="SELECT ADVISOR({'action': 'start', 'duration': '1h', 'query_count': 2 })", username=user_id, password=user_pwd, server=self.master)
+            session = start['results'][0]['$1']['session']
+            # Run query as other user
+            results = self.run_cbq_query(query=query1, server=self.master)
+            self.sleep(2)
+            # Stop and get session advise as authorized user
+            stop = self.run_cbq_query(query=f"SELECT ADVISOR({{'action': 'stop', 'session': '{session}'}}) as Stop", username=user_id, password=user_pwd, server=self.master)
+            get = self.run_cbq_query(query=f"SELECT ADVISOR({{'action': 'get', 'session': '{session}'}}) as Get", username=user_id, password=user_pwd, server=self.master)
+            for index in get['results'][0]['Get'][0][0]['recommended_indexes']:
+                for statement in index['statements']:
+                    self.assertEqual(statement['statement'], query1)
+            # Purge and list sessions as authorized user
+            purge = self.run_cbq_query(query=f"SELECT ADVISOR({{'action': 'purge', 'session': '{session}'}})", username=user_id, password=user_pwd, server=self.master)
+            sessions = self.run_cbq_query(query="SELECT ADVISOR({'action':'list', 'status': 'all'}) as List", username=user_id, password=user_pwd, server=self.master)
+            self.assertEqual(sessions['results'][0]['List'],[])
+        except Exception as e:
+            self.log.error("Advisor session failed: {0}".format(e))
+            self.fail()
+
+    def test_session_authorization_other(self):
         pass
-
-    def test_session_list_authorization(self):
-        pass
-
-
-
-
-
-
-                    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-
-
 
 
 
