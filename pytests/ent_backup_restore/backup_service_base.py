@@ -31,6 +31,12 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         2. Configures Rest API Sub-APIs.
         3. Backup Service Constants.
         """
+        # Sort the available clusters by total memory in ascending order (if the total memory is the same, sort by ip)
+        TestInputSingleton.input.clusters[0].sort(key = lambda server: (ServerUtil(server).get_free_memory(), server.ip))
+
+        # Configure the master server based on the sorted list of clusters
+        self.master = self.input.clusters[0][0]
+
         # Rest API Configuration
         self.configuration = Configuration()
         self.configuration.host = f"http://{self.master.ip}:{8091}/_p/backup/api/v1"
@@ -68,8 +74,6 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # the cluster.
         TestInputSingleton.input.test_params["skip_cleanup"] = True
 
-        # Sort the available clusters by total memory in ascending order (if the total memory is the same, sort by ip)
-        TestInputSingleton.input.clusters[0].sort(key = lambda server: (ServerUtil(server).get_free_memory(), server.ip))
 
         super().setUp()
         self.preamble()
@@ -441,7 +445,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         if self.is_backup_service_running():
             self.delete_all_repositories()
             self.delete_all_plans()
-            self.time.reset()
+            # If the reset_time flag is set, reset the time during the tearDown
+            if self.input.param('reset_time', False):
+                self.time.reset()
 
         # The tearDown before the setUp which means certain attributes such as the backupset do not exist
         try:
