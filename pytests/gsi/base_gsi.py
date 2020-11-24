@@ -1,5 +1,7 @@
 import logging
+import math
 import random
+import threading
 import time
 
 from couchbase_helper.cluster import Cluster
@@ -13,7 +15,9 @@ from couchbase_helper.query_definitions import QueryDefinition
 from collection.collections_rest_client import CollectionsRest
 from collection.collections_stats import CollectionsStats
 from collection.collections_cli_client import CollectionsCLI
+from tasks.task import ConcurrentIndexCreateTask
 from .newtuq import QueryTests
+from tasks.task import SDKLoadDocumentsTask
 
 log = logging.getLogger(__name__)
 
@@ -97,6 +101,65 @@ class BaseSecondaryIndexingTests(QueryTests):
             check = self.n1ql_helper.is_index_ready_and_in_list(bucket, query_definition.index_name,
                                                                 server=self.n1ql_node)
             self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
+
+    def _prepare_collection_for_indexing(self, num_scopes=1, num_collections=1):
+        self.keyspace = []
+        self.cli_rest.create_scope_collection_count(scope_num=num_scopes, collection_num=num_collections,
+                                                    scope_prefix=self.scope_prefix,
+                                                    collection_prefix=self.collection_prefix,
+                                                    bucket=self.test_bucket)
+        self.scopes = self.cli_rest.get_bucket_scopes(bucket=self.test_bucket)
+        self.collections = list(set(self.cli_rest.get_bucket_collections(bucket=self.test_bucket)))
+        self.scopes.remove('_default')
+        self.collections.remove('_default')
+        self.sleep(5)
+        for s_item in self.scopes:
+            for c_item in self.collections:
+                self.keyspace.append(f'default:{self.test_bucket}.{s_item}.{c_item}')
+
+    def create_indexes(self, num=0, defer_build=False, itr=0, expected_failure=None):
+        query_definition_generator = SQLDefinitionGenerator()
+        index_create_tasks = []
+        self.log.info(threading.currentThread().getName() + " Started")
+        if len(self.keyspace) < num:
+            num_indexes_collection = math.ceil(num / len(self.keyspace))
+        else:
+            num_indexes_collection = 1
+        for collection_keyspace in self.keyspace:
+            if self.run_tasks:
+                collection_name = collection_keyspace.split('.')[-1]
+                scope_name = collection_keyspace.split('.')[-2]
+                query_definitions = query_definition_generator. \
+                    generate_employee_data_query_definitions(index_name_prefix='idx_' +
+                                                                               scope_name + "_"
+                                                                               + collection_name,
+                                                             keyspace=collection_keyspace)
+                server = random.choice(self.n1ql_nodes)
+                index_create_task = ConcurrentIndexCreateTask(server, self.test_bucket, scope_name,
+                                                              collection_name, query_definitions,
+                                                              self.index_ops_obj, self.n1ql_helper, num_indexes_collection, defer_build,
+                                                              itr, expected_failure)
+                self.index_create_task_manager.schedule(index_create_task)
+                index_create_tasks.append(index_create_task)
+        self.log.info(threading.currentThread().getName() + " Completed")
+
+        return index_create_tasks
+
+    def load_docs(self, start_doc):
+        load_tasks = []
+        sdk_data_loader = SDKDataLoader(start_seq_num=start_doc, num_ops=self.num_items_in_collection,
+                                        percent_create=self.percent_create,
+                                        percent_update=self.percent_update, percent_delete=self.percent_delete,
+                                        all_collections=self.all_collections, timeout=1800,
+                                        json_template=self.dataset_template,
+                                        key_prefix="bigkeybigkeybigkeybigkeybigkeybigkeybigkeybigkeyb_")
+        for bucket in self.buckets:
+            _task = SDKLoadDocumentsTask(self.master, bucket, sdk_data_loader)
+            self.sdk_loader_manager.schedule(_task)
+            load_tasks.append(_task)
+
+        for task in load_tasks:
+            task.result()
 
     def async_create_index(self, bucket, query_definition, deploy_node_info=None, desc=None):
         index_where_clause = None
@@ -768,6 +831,34 @@ class BaseSecondaryIndexingTests(QueryTests):
                     return False
         return True
 
+
+    def _get_items_count_collections(self, index_node, keyspace, index_name):
+        """
+        Compares Items indexed count is sample
+        as items in the bucket.
+        """
+        try:
+            index_rest = RestConnection(index_node)
+            index_map = index_rest.get_index_stats_collections()
+            item_count = index_map[keyspace][index_name]["items_count"]
+        except Exception as e:
+            self.log.info(e)
+            item_count = -1
+        return item_count
+
+    def _get_index_map(self, index_node):
+        """
+        Compares Items indexed count is sample
+        as items in the bucket.
+        """
+        try:
+            index_rest = RestConnection(index_node)
+            index_map = index_rest.get_index_stats_collections()
+        except Exception as e:
+            self.log.info(e)
+            index_map = None
+        return index_map
+
     def verify_type_fields(self, num_hotels=0, num_airports=0, num_airlines=0, expected_failure=False):
         retries = 3
         query = "select * from `{0}` where type = {1} order by meta().id"
@@ -867,6 +958,64 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.log.error(f'Collection item count : {collection_itemcount}, '
                           f'item count for index {index_name}: {index_count}')
         return recovered, index_count, collection_itemcount
+
+    def _verify_index_count_less_than_collection(self, index_node, query_def):
+        recovered = False
+        index_name = query_def.index_name
+        keyspace = query_def.keyspace
+        collection_itemcount = self.n1ql_helper.get_collection_itemCount(keyspace)
+
+        index_count = self._get_items_count_collections(index_node, keyspace, index_name)
+        if int(index_count) and int(index_count) < int(collection_itemcount):
+            self.log.info(f'Collection item count : {collection_itemcount}, '
+                          f'item count for index {index_name}: {index_count}')
+            recovered = True
+        elif index_count == -1:
+            recovered = -1
+        self.log.info(f'Collection item count : {collection_itemcount}, '
+                      f'item count for index {index_name}: {index_count}')
+
+        return recovered, index_count, collection_itemcount
+
+    def check_index_recovered_snapshot(self, index_list, index_node, max_time=60):
+        indexes_not_recovered = []
+        stat_time = time.time()
+        end_time = stat_time + max_time
+        while time.time() < end_time:
+            if not index_list:
+                break
+
+            for index in index_list:
+                snap_recovered, index_count, collection_itemcount = \
+                    self._verify_index_count_less_than_collection(index_node, index["query_def"])
+                if snap_recovered == -1 :
+                    break
+                if not snap_recovered:
+                    error_map = {"index_name": index["name"], "index_count": index_count, "bucket_count": collection_itemcount}
+                    indexes_not_recovered.append(error_map)
+                else:
+                    index_list.remove(index)
+        if indexes_not_recovered:
+            return False
+        else:
+            return True
+
+    def check_if_index_count_zero(self, index_list, index_node):
+        index_count_zero = True
+        index_map = None
+        while not index_map:
+            index_map = self._get_index_map(index_node)
+        for index in index_list:
+            index_count = index_map[index["query_def"].keyspace][index["query_def"].index_name]["items_count"]
+            self.log.info("Index count on index {0} : {1}".format(index["query_def"].index_name, index_count))
+            if index_count:
+                index_count_zero = False
+
+        return index_count_zero
+
+    def _kill_all_processes_index(self, server):
+        shell = RemoteMachineShellConnection(server)
+        shell.execute_command("pkill indexer")
 
     def _check_all_bucket_items_indexed(self, query_definitions=None, buckets=None):
         """
@@ -1307,3 +1456,88 @@ class BaseSecondaryIndexingTests(QueryTests):
         rest = RestConnection(indexer_node)
         content = rest.cluster_status()
         return int(content['indexMemoryQuota'])
+
+class ConCurIndexOps(BaseSecondaryIndexingTests):
+    def __init__(self):
+        self.all_indexes_state = {"created": [], "deleted": [], "defer_build": []}
+        self.errors = []
+        self.test_fail = False
+        self._lock_queue = threading.Lock()
+        self.errors_lock_queue = threading.Lock()
+        self.create_index_lock = threading.Lock()
+        self.ignore_failure = False
+        self.stop_create_index = False
+
+    def update_errors(self, error_map):
+        with self.errors_lock_queue:
+            if not self.ignore_failure:
+                self.errors.append(error_map)
+
+    def update_ignore_failure_flag(self, flag):
+        with self.errors_lock_queue:
+            self.ignore_failure = flag
+
+    def get_ignore_failure_flag(self, flag):
+        with self.errors_lock_queue:
+            return self.ignore_failure
+
+    def update_stop_create_index(self, flag):
+        with self.create_index_lock:
+            self.stop_create_index = flag
+
+    def get_stop_create_index(self):
+        with self.create_index_lock:
+            return self.stop_create_index
+
+    def get_errors(self):
+        return self.errors
+
+    def get_delete_index_list(self):
+        return self.all_indexes_state["deleted"]
+
+    def get_create_index_list(self):
+        return self.all_indexes_state["created"]
+
+    def get_defer_index_list(self):
+        return self.all_indexes_state["defer_build"]
+
+    def all_indexes_metadata(self, index_meta=None, operation="create", defer_build=False):
+        with self._lock_queue:
+            if operation is "create" and defer_build:
+                self.all_indexes_state["defer_build"].append(index_meta)
+            elif operation is "create":
+                self.all_indexes_state["created"].append(index_meta)
+            elif operation is "delete" and defer_build:
+                try:
+                    index = self.all_indexes_state["defer_build"]. \
+                        pop(random.randrange(len(self.all_indexes_state["defer_build"])))
+                    self.all_indexes_state["deleted"].append(index)
+                except Exception as e:
+                    index = None
+                return index
+            elif operation is "delete":
+                try:
+                    index = self.all_indexes_state["created"]. \
+                        pop(random.randrange(len(self.all_indexes_state["created"])))
+                    self.all_indexes_state["deleted"].append(index)
+                except Exception as e:
+                    index = None
+                return index
+            elif operation is "scan":
+                try:
+                    index = random.choice(self.all_indexes_state["created"])
+                except Exception as e:
+                    index = None
+                return index
+            elif operation is "build":
+                try:
+                    index = self.all_indexes_state["defer_build"]. \
+                        pop(random.randrange(len(self.all_indexes_state["defer_build"])))
+                except Exception as e:
+                    index = None
+                return index
+
+    def build_complete_add_to_create(self, index):
+        with self._lock_queue:
+            if index is not None:
+                self.all_indexes_state["created"].append(index)

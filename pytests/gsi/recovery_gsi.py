@@ -1,17 +1,153 @@
 import logging
+import threading
 from threading import Thread
 import time
 
-from .base_gsi import BaseSecondaryIndexingTests
+from .base_gsi import BaseSecondaryIndexingTests, ConCurIndexOps
 from couchbase.n1ql import CONSISTENCY_REQUEST
 from couchbase_helper.query_definitions import QueryDefinition
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from membase.api.rest_client import RestConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
+from collection.collections_rest_client import CollectionsRest
+from tasks.taskmanager import TaskManager
 
 log = logging.getLogger(__name__)
 
+class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
+    def setUp(self):
+        super(CollectionsSecondaryIndexingRecoveryTests, self).setUp()
+        self.log.info("==============  PlasmaCollectionsTests setup has started ==============")
+        self.rest.delete_all_buckets()
+        self.num_scopes = self.input.param("num_scopes", 2)
+        self.num_collections = self.input.param("num_collections", 2)
+        self.num_pre_indexes = self.input.param("num_pre_indexes", 4)
+        self.test_timeout = self.input.param("test_timeout", 60)
+        self.test_bucket = self.input.param('test_bucket', 'test_bucket')
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.cli_rest = CollectionsRest(self.master)
+        self.scope_prefix = 'test_scope'
+        self.collection_prefix = 'test_collection'
+        self.run_cbq_query = self.n1ql_helper.run_cbq_query
+        self.batch_size = self.input.param("batch_size", 50000)
+        self.batch_size = self.input.param("batch_size", 100000)
+        self.start_doc = self.input.param("start_doc", 1)
+        self.num_items_in_collection = self.input.param("num_items_in_collection", 10000)
+        self.percent_create = self.input.param("percent_create", 100)
+        self.percent_update = self.input.param("percent_update", 0)
+        self.percent_delete = self.input.param("percent_delete", 0)
+        self.all_collections = self.input.param("all_collections", False)
+        self.dataset_template = self.input.param("dataset_template", "Employee")
+        self.moi_snapshot_interval = self.input.param("moi_snapshot_interval", 600000)
+        self.index_ops_obj = ConCurIndexOps()
+
+        self.log.info("Setting indexer memory quota to 256 MB and other settings...")
+        self.index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        self.n1ql_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=256)
+            rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": self.moi_snapshot_interval})
+
+        self.disk_location = RestConnection(self.index_nodes[0]).get_index_path()
+
+        self.log.info("==============  PlasmaCollectionsTests setup has completed ==============")
+
+    def tearDown(self):
+        self.log.info("==============  PlasmaCollectionsTests tearDown has started ==============")
+        super(CollectionsSecondaryIndexingRecoveryTests, self).tearDown()
+        self.log.info("==============  PlasmaCollectionsTests tearDown has completed ==============")
+
+    def suite_tearDown(self):
+        pass
+
+    def suite_setUp(self):
+        pass
+
+    def test_recovery_disk_snapshot(self):
+        self.index_create_task_manager = TaskManager(
+            "index_create_task_manager")
+        self.index_create_task_manager.start()
+        self.sdk_loader_manager = TaskManager(
+            "sdk_loader_manager")
+        self.sdk_loader_manager.start()
+
+        self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
+        self.run_tasks = True
+
+        index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
+        for task in index_create_tasks:
+            task.result()
+
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 3000})
+
+        self._kill_all_processes_index(self.index_nodes[0])
+
+        self.load_docs(self.start_doc)
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.log.info("some indexes did not process mutations on time")
+
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 1200000})
+
+        self._kill_all_processes_index(self.index_nodes[0])
+
+        self.sleep(10)
+
+        self.load_docs(self.num_items_in_collection)
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.log.info("some indexes did not process mutations on time")
+
+        self._kill_all_processes_index(self.index_nodes[0])
+        if not self.check_index_recovered_snapshot(self.index_ops_obj.get_create_index_list(), self.index_nodes[0]):
+            self.fail("Some indexes did not recover from snapshot")
+
+    def test_recovery_no_disk_snapshot(self):
+        self.index_create_task_manager = TaskManager(
+            "index_create_task_manager")
+        self.index_create_task_manager.start()
+        self.sdk_loader_manager = TaskManager(
+            "sdk_loader_manager")
+        self.sdk_loader_manager.start()
+
+        self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
+        self.run_tasks = True
+
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 1200000})
+
+        self._kill_all_processes_index(self.index_nodes[0])
+
+        index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
+        for task in index_create_tasks:
+            task.result()
+
+        self.load_docs(self.start_doc)
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.log.info("some indexes did not process mutations on time")
+
+        self.sleep(10)
+
+        self._kill_all_processes_index(self.index_nodes[0])
+        if not self.check_index_recovered_snapshot(self.index_ops_obj.get_create_index_list(), self.index_nodes[0]):
+            self.fail("Some indexes did not recover from snapshot")
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.log.info("Some indexes did not process mutations on time")
 
 class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
