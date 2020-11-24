@@ -62,16 +62,6 @@ class EventingTools(EventingBaseTest):
             self.handler_code = HANDLER_CODE.N1QL_OPS_WITH_TIMERS
         else:
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
-        self.backupset = Backupset()
-        self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
-        self.backupset.name = self.input.param("name", "backup")
-        self.backupset.backup_host = self.servers[0]
-        self.backupset.cluster_host = self.servers[0]
-        self.backupset.cluster_host_username = self.servers[0].rest_username
-        self.backupset.cluster_host_password = self.servers[0].rest_password
-        self.backupset.restore_cluster_host = self.servers[1]
-        self.backupset.restore_cluster_host_username = self.servers[1].rest_username
-        self.backupset.restore_cluster_host_password = self.servers[1].rest_password
         self.num_shards = self.input.param("num_shards", None)
         self.debug_logs = self.input.param("debug-logs", False)
         cmd = 'curl -g %s:8091/diag/eval -u Administrator:password ' % self.master.ip
@@ -112,21 +102,10 @@ class EventingTools(EventingBaseTest):
             if win_format in self.cli_command_location:
                 self.cli_command_location = self.cli_command_location.replace(win_format,
                                                                               cygwin_format)
-            self.backupset.directory = self.input.param("dir", WIN_TMP_PATH_RAW + "entbackup")
-        elif info == 'mac':
-            self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         else:
             raise Exception("OS not supported.")
         self.backup_validation_files_location = "/tmp/backuprestore" + self.master.ip
         self.backups = []
-        self.validation_helper = BackupRestoreValidations(self.backupset,
-                                                          self.cluster_to_backup,
-                                                          self.cluster_to_restore,
-                                                          self.buckets,
-                                                          self.backup_validation_files_location,
-                                                          self.backups,
-                                                          self.num_items,
-                                                          self.vbuckets)
         self.restore_only = self.input.param("restore-only", False)
         self.same_cluster = self.input.param("same-cluster", False)
         self.reset_restore_cluster = self.input.param("reset-restore-cluster", True)
@@ -139,38 +118,6 @@ class EventingTools(EventingBaseTest):
         include_buckets = include_buckets.split(",") if include_buckets else []
         exclude_buckets = self.input.param("exclude-buckets", "")
         exclude_buckets = exclude_buckets.split(",") if exclude_buckets else []
-        self.backupset.exclude_buckets = exclude_buckets
-        self.backupset.include_buckets = include_buckets
-        self.backupset.disable_bucket_config = self.input.param("disable-bucket-config", False)
-        self.backupset.disable_views = self.input.param("disable-views", False)
-        self.backupset.disable_gsi_indexes = self.input.param("disable-gsi-indexes", False)
-        self.backupset.disable_ft_indexes = self.input.param("disable-ft-indexes", False)
-        self.backupset.disable_data = self.input.param("disable-data", False)
-        self.backupset.disable_conf_res_restriction = self.input.param("disable-conf-res-restriction", None)
-        self.backupset.force_updates = self.input.param("force-updates", True)
-        self.backupset.resume = self.input.param("resume", False)
-        self.backupset.purge = self.input.param("purge", False)
-        self.backupset.threads = self.input.param("threads", self.number_of_processors())
-        self.backupset.start = self.input.param("start", 1)
-        self.backupset.end = self.input.param("stop", 1)
-        self.backupset.number_of_backups = self.input.param("number_of_backups", 1)
-        self.backupset.number_of_backups_after_upgrade = \
-            self.input.param("number_of_backups_after_upgrade", 0)
-        self.backupset.filter_keys = self.input.param("filter-keys", "")
-        self.backupset.random_keys = self.input.param("random_keys", False)
-        self.backupset.filter_values = self.input.param("filter-values", "")
-        self.backupset.no_ssl_verify = self.input.param("no-ssl-verify", False)
-        self.backupset.secure_conn = self.input.param("secure-conn", False)
-        self.backupset.bk_no_cert = self.input.param("bk-no-cert", False)
-        self.backupset.rt_no_cert = self.input.param("rt-no-cert", False)
-        self.backupset.backup_list_name = self.input.param("list-names", None)
-        self.backupset.backup_incr_backup = self.input.param("incr-backup", None)
-        self.backupset.bucket_backup = self.input.param("bucket-backup", None)
-        self.backupset.backup_to_compact = self.input.param("backup-to-compact", 0)
-        self.backupset.map_buckets = self.input.param("map-buckets", None)
-        self.add_node_services = self.input.param("add-node-services", "kv")
-        self.backupset.backup_compressed = \
-            self.input.param("backup-conpressed", False)
         self.number_of_backups_taken = 0
         self.vbucket_seqno = []
         self.expires = self.input.param("expires", 0)
@@ -181,8 +128,6 @@ class EventingTools(EventingBaseTest):
         self.skip_buckets = self.input.param("skip_buckets", False)
         self.lww_new = self.input.param("lww_new", False)
         self.skip_consistency = self.input.param("skip_consistency", False)
-        self.master_services = self.get_services([self.backupset.cluster_host],
-                                                 self.services_init, start_node=0)
         if not self.master_services:
             self.master_services = ["kv"]
         self.per_node = self.input.param("per_node", True)
@@ -203,32 +148,6 @@ class EventingTools(EventingBaseTest):
 
     def tearDown(self):
         super(EventingTools, self).tearDown()
-
-    @property
-    def cluster_to_backup(self):
-        return self.get_nodes_in_cluster(self.backupset.cluster_host)
-
-    @property
-    def cluster_to_restore(self):
-        return self.get_nodes_in_cluster(self.backupset.restore_cluster_host)
-
-    def test_backup_create(self):
-        body = self.create_save_function_body(self.function_name, self.handler_code)
-        # deploy the function
-        self.deploy_function(body)
-        # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        # self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
-        self.backup_create()
-        self.backup_create_validate()
-        self.backup_cluster()
-        self.backup_list()
-        self.cluster.rebalance([self.servers[0]], [self.servers[1]], [], services=["eventing"])
-        try:
-            self.backup_restore_validate()
-        except Exception as ex:
-            if "Extra elements found in the actual metadata Data" not in str(ex):
-                self.fail("restore failed : {0}".format(str(ex)))
-        self.cluster.rebalance([self.servers[0]], [], [self.servers[1]])
 
     def test_eventing_lifecycle_with_couchbase_cli(self):
         # load some data in the source bucket
