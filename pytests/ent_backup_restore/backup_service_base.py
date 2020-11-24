@@ -469,7 +469,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         # Call EnterpriseBackupRestoreBase's to delete archives/repositories and temporary directories
         # skipping any node ejection and rebalances
-        self.clean_up(self.input.clusters[1][0], skip_eject_and_rebalance=True)
+        self.clean_up(self.input.clusters[1][0], skip_eject_and_rebalance=not self.input.param("last_test", False))
 
         # Kill asynchronous tasks which are still running
         self.cluster.shutdown(force=True)
