@@ -815,7 +815,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                 self._create_restore_cluster()
                                 reset_restore_cluster = True
                         if not self.dgm_run and int(kv_quota) > 0:
-                            bucket_size = kv_quota
+                            bucket_size = (kv_quota * 0.7)
                     if not reset_restore_cluster and reset_cluster_count == 0:
                         self._create_restore_cluster()
                     self.log.info("replica in bucket {0} is {1}".format(bucket.name, replicas))
