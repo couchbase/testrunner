@@ -1416,7 +1416,7 @@ class BackupServiceTest(BackupServiceBase):
     def test_collection_unaware_backups(self):
         """ Test collection unaware backups
         """
-        repo_name, task_name, bucket_name, scope_name, collection_name, no_of_backups = "my_repo", "my_task", "bucket_name", "my_scope", "my_collection", 2
+        repo_name, task_name, bucket_name, scope_name, collection_name, no_of_backups = "my_repo", "my_task", "bucket_name", "_default", "_default", 2
 
         # Create bucket `bucket_name`
         self.replace_bucket(self.backupset.cluster_host, "default", bucket_name)
@@ -1436,19 +1436,19 @@ class BackupServiceTest(BackupServiceBase):
 
         self.assertEqual(len(self.get_backups("active", repo_name)), no_of_backups)
 
-        # Check user can examine collection unaware backups using a data path consisting of a bucket name
+        # Check user can examine collection-less backups using a data path consisting of a bucket name
         _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("test_docs-0", bucket_name))
         self.assertEqual(status, 200)
         data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
         for i in range(no_of_backups):
             self.assertEqual(data[i]['value']['age'], i * 100)
 
-        # Check user cannot examine a collection unaware bucket using a data path consisting of bucket.collection.scope
+        # Check user can examine collection-less backups using a data path consisting of the ._default._default suffix
         _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("test_docs-0", f"{bucket_name}.{scope_name}.{collection_name}"))
-        self.assertEqual(status, 500)
-        data = json.loads(response_data.data)
-        self.assertEqual("failed to run examine command", data['msg'])
-        self.assertIn("examining a specific collection in a collection unaware backup is unsupported", data['extras'])
+        self.assertEqual(status, 200)
+        data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
+        for i in range(no_of_backups):
+            self.assertEqual(data[i]['value']['age'], i * 100)
 
     def test_collection_aware_backups(self):
         """ Test collection aware backups
