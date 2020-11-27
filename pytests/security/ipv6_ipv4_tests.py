@@ -29,7 +29,7 @@ class ipv6_ipv4_tests(BaseTestCase):
     PROJECTOR_PORT = "9999"
     LOG_PATH = "/opt/couchbase/var/lib/couchbase/logs"
     BLOCK_PORTS_FILE_PATH = "pytests/security/block_ports.py"
-    
+
     def _port_map_(self):
         return IPv6_IPv4(self.servers).retrieve_port_map()
 
@@ -53,7 +53,7 @@ class ipv6_ipv4_tests(BaseTestCase):
         IPv6_IPv4(self.servers).delete_files()
         super(ipv6_ipv4_tests,self).tearDown()
 
-    
+
     def verify_logs_wrapper(self,node,logfile,query_strs):
         remote_client = RemoteMachineShellConnection(node)
         output = remote_client.read_remote_file(self.LOG_PATH, logfile)
@@ -171,9 +171,9 @@ class ipv6_ipv4_tests(BaseTestCase):
             # elif self.mode == "ipv4_ipv6":
             #     self.assertEquals(nodes_obj.check_ports([port],cluster_setting),mappings[0] if cluster_setting=="ipv4" else mappings[1])
 
-    
+
     #Check for results when ports for other ip family are blocked
-    #eg. for ipv4 family we blocked ports for ipv6 address family 
+    #eg. for ipv4 family we blocked ports for ipv6 address family
     def test_services_block_opposite_port(self):
         servs_inout = self.servers[1:4]
         services_in = []
@@ -208,8 +208,8 @@ class ipv6_ipv4_tests(BaseTestCase):
         fts_node = self.get_nodes_from_services_map(service_type='fts')
         if fts_node is not None:
             self.check_ports_on_blocking_opposite_addr_family(['8094'], kv_node, "fts")
-    
-    #Test all services after blocking ports, check for error message format in logs 
+
+    #Test all services after blocking ports, check for error message format in logs
     #Test also takes care with disabling different ip family
     def test_services(self):
         servs_inout = self.servers[1:4]
@@ -229,7 +229,7 @@ class ipv6_ipv4_tests(BaseTestCase):
             suffix2 = "6"
 
         # Check NS Server Ports
-        
+
         self.log.info("Checking NS Server Ports")
         self.check_ports_for_service([self.NSERV_PORT, self.NSERV_SSL_PORT], self.servers)
         query_str1 = "Failed to start dist inet" + suffix2 + "_tcp_dist on port 21100"
@@ -258,7 +258,7 @@ class ipv6_ipv4_tests(BaseTestCase):
                 self.check_ports_on_blocking([port],index_node,[query_str],"indexer.log")
             for netw in self.INDEXER_PORTS_NETWORK:
                 query_str = "Error in listening on network port :{0}".format(netw)
-                query_str1 = "Indexer exiting normally" 
+                query_str1 = "Indexer exiting normally"
                 self.check_ports_on_blocking([netw],index_node,[query_str,query_str1],"indexer.log")
             self.sleep(10)
 
@@ -300,8 +300,8 @@ class ipv6_ipv4_tests(BaseTestCase):
         if fts_node is not None:
             self.log.info("Checking FTS Ports")
             self.check_ports_for_service([self.FTS_PORT,self.FTS_SSL_PORT], [fts_node])
-            query_str1 = "listen tcp" + suffix2 + " 0.0.0.0:8094: bind: address already in use"
-            query_str2 = "listen tcp" + suffix2 + " :18094: bind: address already in use"
+            query_str1 = "init_http: listen, err: listen tcp" + suffix1 + " 0.0.0.0:8094: bind: address already in use -- main.mainServeHTTP() at init_http.go:188"
+            query_str2 = "init_http: listen, err: listen tcp" + suffix1 + " :18094: bind: address already in use -- main.mainServeHTTP() at init_http.go:188"
             self.check_ports_on_blocking([self.FTS_PORT],fts_node,[query_str1],"fts.log")
             self.check_ports_on_blocking([self.FTS_SSL_PORT],fts_node,[query_str2],"fts.log")
             self.sleep(10)
