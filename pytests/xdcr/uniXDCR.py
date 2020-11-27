@@ -24,6 +24,12 @@ class unidirectional(XDCRNewBaseTest):
     def tearDown(self):
         super(unidirectional, self).tearDown()
 
+    def suite_tearDown(self):
+        pass
+
+    def suite_setUp(self):
+        pass
+
     """Testing Unidirectional load( Loading only at source) Verifying whether XDCR replication is successful on
     subsequent destination clusters.Create/Update/Delete operations are performed based on doc-ops specified by the user. """
 
