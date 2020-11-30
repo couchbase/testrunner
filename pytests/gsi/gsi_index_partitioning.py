@@ -508,7 +508,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
             # rebalance out a node
             rebalance = self.cluster.async_rebalance(cluster_servers, [], [server_in])
-
+            self.sleep(20)
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
@@ -549,6 +549,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             services_in = ["index,fts", "index,fts"]
             rebalance = self.cluster.async_rebalance(cluster_servers, extra_servers[:2], [],
                                                      services=services_in)
+            self.sleep(20)
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
@@ -556,7 +557,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
             # rebalance out 2 node
             rebalance = self.cluster.async_rebalance(cluster_servers, [], extra_servers[:2])
-
+            self.sleep(20)
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
@@ -584,7 +585,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             for node in all_index_nodes:
                 serv_in = swap_node
                 rebalance = self.cluster.async_rebalance(cur_cluster_servers, [serv_in], [node], services=["index,fts"])
-
+                self.sleep(20)
                 reached = RestHelper(self.rest).rebalance_reached()
                 self.assertTrue(reached, "rebalance failed, stuck or did not complete")
                 rebalance.result()
