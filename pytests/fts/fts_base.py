@@ -24,7 +24,6 @@ from couchbase_helper.stats_tools import StatsCommon
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from TestInput import TestInputSingleton
-from lib.collection.collections_stats import CollectionsStats
 from lib.couchbase_helper.documentgenerator import GeoSpatialDataLoader, WikiJSONGenerator
 from lib.memcached.helper.data_helper import KVStoreAwareSmartClient
 from scripts.collect_server_info import cbcollectRunner
@@ -1978,7 +1977,6 @@ class CouchbaseCluster:
         self._kv_gen = {}
         self.__indexes = []
         self.__fts_nodes = []
-        self.__kv_nodes = []
         self.__non_fts_nodes = []
         # to avoid querying certain nodes that undergo crash/reboot scenarios
         self.__bypass_fts_nodes = []
@@ -2032,17 +2030,9 @@ class CouchbaseCluster:
                 if "n1ql" in services:
                     self.__n1ql_nodes.append(node)
 
-                if "kv" in services:
-                    if node not in self.__kv_nodes:
-                        self.__kv_nodes.append(node)
-
     def get_fts_nodes(self):
         self.__separate_nodes_on_services()
         return self.__fts_nodes
-
-    def get_kv_nodes(self):
-        self.__separate_nodes_on_services()
-        return self.__kv_nodes
 
     def get_num_fts_nodes(self):
         return len(self.get_fts_nodes())
@@ -2599,12 +2589,8 @@ class CouchbaseCluster:
             "Bucket with name: %s not found on the cluster" %
             bucket_name)
 
-#    def get_doc_count_in_bucket(self, bucket):
-#        return RestConnection(self.__master_node).get_active_key_count(bucket)
-
     def get_doc_count_in_bucket(self, bucket):
-        self.stat = CollectionsStats(self.__master_node)
-        return self.stat.get_collection_item_count_cumulative(bucket, "_default", "_default", self.get_kv_nodes())
+        return RestConnection(self.__master_node).get_active_key_count(bucket)
 
     def delete_bucket(self, bucket_name):
         """Delete bucket with given name
