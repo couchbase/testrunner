@@ -426,7 +426,10 @@ class EventingBucket(EventingBaseTest):
                                                                    bucket_params=bucket_params))
         for task in tasks:
             task.result()
-        body = self.create_save_function_body(self.function_name, self.handler_code,src_binding=True)
+        if self.is_sbm:
+            body = self.create_save_function_body(self.function_name, self.handler_code)
+        else:
+            body = self.create_save_function_body(self.function_name, self.handler_code,src_binding=True)
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
         self.deploy_function(body)
         if self.pause_resume:
