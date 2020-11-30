@@ -894,20 +894,33 @@ class RunQueriesThread(threading.Thread):
         try:
             self._run_queries()
         except Exception:
+            """ Only print out first 1000 chars if result is too long"""
+            if len(str(self._last_results)) > 1000:
+                results = str(self._last_results)[0:1000]
+            else:
+                results = json.dumps(self._last_results)
             self.log.error("Last query result:\n\n{0}\n\n"\
-                               .format(json.dumps(self._last_results,
-                                                  sort_keys=True)))
+                               .format(results, sort_keys=True)))
             self.test_results.addFailure(self.helper.testcase, sys.exc_info())
 
     def _run_queries(self):
+        count = 0
         for query in self.view.queries:
             # Simple query
             if isinstance(query, QueryHelper):
-                if self.verify_results:
-                    self._last_results = self._run_query(
-                        query.params, query.expected_num_docs)
-                else:
-                    self._last_results = self._run_query(query.params)
+                try:
+                    if self.verify_results:
+                        self._last_results = self._run_query(
+                            query.params, query.expected_num_docs)
+                    else:
+                        self._last_results = self._run_query(query.params)
+                except Exception as e:
+                    if e:
+                        self.log.error(str(e))
+                    count += 1
+                    if count == 5:
+                        break
+
             # Compare queries, don't verify the individual queries
             # but only the final result
             elif isinstance(query, QueryCompareHelper):
@@ -928,6 +941,8 @@ class RunQueriesThread(threading.Thread):
                     self.helper.testcase.assertEqual(diff, set())
             else:
                 self.helper.testcase.fail("no queries specified")
+        if count == 5:
+            raise("Stop queries after 5 failures")
 
     # If expected_num_docs is given, the results are verified
     def _run_query(self, query_params, expected_num_docs=None):
