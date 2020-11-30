@@ -570,9 +570,12 @@ class QueryAdvisorTests(QueryTests):
 
     def test_negative_query_syntax_error(self):
         query_syntax = f'SELECT airportname FROM `{self.bucket_name}` WERE type = \\"airport\\"'
+        error = "syntax error - at type"
         try:
             advise = self.run_cbq_query(query=f"SELECT ADVISOR(\"{query_syntax}\") as Advisor", server=self.master)
-            self.assertEqual(advise["results"][0]["Advisor"], {})
+            self.assertEqual(advise["results"][0]["Advisor"]["errors"][0]["error"], error)
+            self.assertEqual(advise["results"][0]["Advisor"]["errors"][0]["run_count"], 1)
+            self.assertEqual(advise["results"][0]["Advisor"]["errors"][0]["statement"], query_syntax.replace('\\',''))
         except Exception as e:
             self.log.error("Advisor session failed: {0}".format(e))
             self.fail()
