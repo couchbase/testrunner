@@ -1475,7 +1475,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self.cli_col.delete_collection(bucket=bucket_name, scope="_{0}".format(bucket_name),
                                                   collection="_{0}".format(bucket_name))
 
-    def get_col_item_count(self, server=None, bucket=None, scope, collection=None, cluster_stats=None):
+    def get_col_item_count(self, server=None, bucket=None, scope=None, collection=None, cluster_stats=None):
         if not server:
             raise("Need to pass which server to get item count")
         if not cluster_stats:
