@@ -4,6 +4,7 @@ from .tuq import QueryTests
 import time
 from deepdiff import DeepDiff
 from membase.api.exception import CBQError
+import threading
 
 class QueryAdvisorTests(QueryTests):
 
@@ -121,8 +122,17 @@ class QueryAdvisorTests(QueryTests):
             self.log.error("Advisor statement failed: {0}".format(e))
             self.fail()
 
-    def test_similar_query_array(self):
-        pass
+    def test_diff_query_array(self):
+        query1 = f"UPDATE `{self.bucket_name}` SET city = 'San Francisco' WHERE lower(city) = 'sanfrancisco'"
+        query2 = f"SELECT name, city FROM `{self.bucket_name}` WHERE type = 'hotel' AND country = 'France'"
+        query3 = f"SELECT airportname FROM `{self.bucket_name}` WHERE type = 'airport' AND lower(city) = 'lyon'"
+        try:
+            advise = self.run_cbq_query(query=f"SELECT ADVISOR([\"{query1}\", \"{query2}\", \"{query3}\"])", server=self.master)
+            self.assertEqual(len(advise['results'][0]['$1']['recommended_indexes']), 3)
+        except Exception as e:
+            self.log.error("Advisor statement failed: {0}".format(e))
+            self.fail()
+
 
     def test_query_output_array(self):
         # Run some queries
@@ -637,13 +647,77 @@ class QueryAdvisorTests(QueryTests):
             self.fail("There were no errors. Error expected: {0}".format(error))
 
     def test_negative_invalid_session(self):
-        pass
+        error = "Error evaluating projection. - cause: advisor() not valid argument for 'session'"
+        for action in ['get','purge','stop','abort']:
+            try:
+                session = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'{action}', 'session':123456}})", server=self.master)
+                self.fail("Start session did not fail. Error expected: {0}".format(error))
+            except CBQError as ex:
+                self.assertTrue(str(ex).find(error) > 0)
+            else:
+                self.fail("There were no errors. Error expected: {0}".format(error))
+
+    def run_async_query(self, query, username, password, server):
+        results = self.run_cbq_query(query=query, username=username, password=password, server=server)
+        # Check the query has been cancelled
+        self.assertEqual(results['status'], "stopped")
 
     def test_session_query_cancel(self):
-        pass
+        long_query = f"SELECT DISTINCT  MIN(aport.airportname) AS Airport__Name, MIN(lmark.name) AS Landmark_Name, MIN(aport.tz) AS Landmark_Time FROM `{self.bucket_name}` aport LEFT JOIN `travel-sample` lmark ON aport.city = lmark.city AND lmark.country = 'United States' AND lmark.type = 'landmark' WHERE aport.type = 'airport' GROUP BY lmark.name ORDER BY lmark.name LIMIT 3"
+        self.users = [{"id": "jimDoe", "name": "Jim Downing", "password": "password1"}]
+        self.create_users()
+        role = "admin"
+        user_id = self.users[0]['id']
+        user_pwd = self.users[0]['password']
+        grant = self.run_cbq_query(query=f"GRANT {role} to {user_id}",server=self.master)
+        cancel_query = f"DELETE FROM system:active_requests WHERE users = '{user_id}'"
+        # Create index for join query
+        create_index = f"CREATE INDEX `def_city` ON `{self.bucket_name}`(`city`)"
+        results = self.run_cbq_query(query=create_index,server=self.master)
+        th = threading.Thread(target=self.run_async_query,args=(long_query, user_id, user_pwd, self.master))
+        try:
+            start = self.run_cbq_query(query="SELECT ADVISOR({'action': 'start', 'duration': '1h', 'query_count': 2 })", server=self.master)
+            session = start['results'][0]['$1']['session']
+            # Spawn query in a thread
+            th.start()
+            # Cancel query
+            self.sleep(1)
+            cancel = self.run_cbq_query(query=cancel_query,username=user_id, password=user_pwd, server=self.master)
+            th.join()
+            # Stop and get session advise
+            stop = self.run_cbq_query(query=f"SELECT ADVISOR({{'action': 'stop', 'session': '{session}'}}) as Stop", server=self.master)
+            get = self.run_cbq_query(query=f"SELECT ADVISOR({{'action': 'get', 'session': '{session}'}}) as Get", server=self.master)
+            for index in get['results'][0]['Get'][0][0]['recommended_indexes']:
+                for statement in index['statements']:
+                    self.assertEqual(statement['statement'], long_query)
+        except Exception as e:
+            self.log.error("Advisor session failed: {0}".format(e))
+            self.fail()
+
 
     def test_session_query_timeout(self):
-        pass
+        long_query = f"SELECT DISTINCT  MIN(aport.airportname) AS Airport__Name, MIN(lmark.name) AS Landmark_Name, MIN(aport.tz) AS Landmark_Time FROM `{self.bucket_name}` aport LEFT JOIN `travel-sample` lmark ON aport.city = lmark.city AND lmark.country = 'United States' AND lmark.type = 'landmark' WHERE aport.type = 'airport' GROUP BY lmark.name ORDER BY lmark.name LIMIT 3"
+        # Create index for join query
+        create_index = f"CREATE INDEX `def_city` ON `{self.bucket_name}`(`city`)"
+        results = self.run_cbq_query(query=create_index,server=self.master)        
+        try:
+            start = self.run_cbq_query(query="SELECT ADVISOR({'action': 'start', 'duration': '1h', 'query_count': 2 })", server=self.master)
+            session = start['results'][0]['$1']['session']
+            try:
+                results = self.run_cbq_query(query=long_query, query_params={'timeout':'500ms'}, server=self.master)
+            except CBQError as ex:
+                self.assertTrue(str(ex).find("Timeout 500ms exceeded") > 0)
+             # Stop and get session advise
+            stop = self.run_cbq_query(query=f"SELECT ADVISOR({{'action': 'stop', 'session': '{session}'}}) as Stop", server=self.master)
+            get = self.run_cbq_query(query=f"SELECT ADVISOR({{'action': 'get', 'session': '{session}'}}) as Get", server=self.master)
+            for index in get['results'][0]['Get'][0][0]['recommended_indexes']:
+                for statement in index['statements']:
+                    self.assertEqual(statement['statement'], long_query)
+        except Exception as e:
+            self.log.error("Advisor session failed: {0}".format(e))
+            self.fail()
+           
+
 
     def test_session_collection(self):
         pass
