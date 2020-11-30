@@ -3741,6 +3741,54 @@ class QueryTests(BaseTestCase):
 
         return
 
+    ##############################################################################################
+    #
+    #   tuq_cbo_statistics helpers
+    #
+    ##############################################################################################
+
+    def collect_stats(self, bucket):
+        # Process index in default bucket
+        query_idx = f'select raw name from system:indexes where state = "online" and keyspace_id = "{bucket}"'
+        update_stats = f'update statistics for `{bucket}` INDEX(({query_idx}))'
+        try:
+            self.run_cbq_query(query=update_stats, server=self.master)
+        except Exception as e:
+            self.log.error("Update statistics error: {0}".format(e))
+
+        # Process index in bucket scopes and collections
+        query_ksp = f'select `scope`, name from system:keyspaces where `bucket` = "{bucket}"'
+        keyspaces = self.run_cbq_query(query=query_ksp, server=self.master)
+        for keyspace in keyspaces['results']:
+            scope = keyspace['scope']
+            collection = keyspace['name']
+            query_idx = f'select raw name from system:indexes where state = "online" and bucket_id = "{bucket}" and scope_id = "{scope}" and keyspace_id = "{collection}"'
+            update_stats = f'update statistics for `{bucket}`.{scope}.{collection} INDEX(({query_idx}))'
+            try:
+                self.run_cbq_query(query=update_stats, server=self.master)
+            except Exception as e:
+                self.log.error("Update statistics error: {0}".format(e))
+
+    def delete_stats(self, bucket):
+        # Process default bucket
+        delete_stats = f'update statistics for `{bucket}` delete all'
+        try:
+            self.run_cbq_query(query=delete_stats, server=self.master)
+        except Exception as e:
+            self.log.error("Update statistics error: {0}".format(e))
+
+        # Process bucket scopes and collections
+        query_ksp = f'select `scope`, name from system:keyspaces where `bucket` = "{bucket}"'
+        keyspaces = self.run_cbq_query(query=query_ksp, server=self.master)
+        for keyspace in keyspaces['results']:
+            scope = keyspace['scope']
+            collection = keyspace['name']
+            delete_stats = f'update statistics for `{bucket}`.{scope}.{collection} delete all'
+            try:
+                self.run_cbq_query(query=delete_stats, server=self.master)
+            except Exception as e:
+                self.log.error("Update statistics error: {0}".format(e))
+
 ##############################################################################################
 #
 #   tuq_xdcr.py helpers
