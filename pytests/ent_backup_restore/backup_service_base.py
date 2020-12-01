@@ -39,7 +39,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         TestInputSingleton.input.clusters[0].sort(key = lambda server: (ServerUtil(server).get_free_memory(), server.ip))
 
         # Configure the master server based on the sorted list of clusters
-        self.master = self.input.clusters[0][0]
+        self.master = next((server for server in self.servers if server.ip == self.input.clusters[0][0].ip))
 
         # Rest API Configuration
         self.configuration = Configuration()
