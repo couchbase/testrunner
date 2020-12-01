@@ -119,6 +119,8 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
             self.delete_scope_cluster_host()
         else:
             self.delete_collection_cluster_host()
+        rest_bk = RestConnection(self.backupset.cluster_host)
+        bk_storage_mode = rest_bk.get_index_settings()["indexer.settings.storage_mode"]
 
         self.backup_create_validate()
         for i in range(1, self.backupset.number_of_backups + 1):
@@ -168,6 +170,9 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
                     rest = RestConnection(self.backupset.restore_cluster_host)
                     rest.force_eject_node()
                     rest.init_node()
+                    rest.set_indexer_storage_mode(username='Administrator',
+                                      password='password',
+                                      storageMode=bk_storage_mode)
                 self.log.info("Done reset cluster")
             self.sleep(10)
 
