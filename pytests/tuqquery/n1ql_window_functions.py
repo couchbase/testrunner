@@ -945,8 +945,8 @@ class WindowFunctionsTest(QueryTests):
             for operand in self.union_intersect_except:
                 for option in options:
                     query = "select decimal_field, " + self._construct_window_function_call(
-                        v) + "  as summa from {0} " + operand + " " + option + \
-                            " select int_field, int_field as summa from {0}"
+                        v) + "  as summa from {0} ".format(self.query_bucket) + operand + " " + option + \
+                            " select int_field, int_field as summa from {0}".format(self.query_bucket)
                     lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
                     test_dict["%d-default" % count] = {"indexes": self.indexes,
                                                        "pre_queries": [],
@@ -1641,7 +1641,7 @@ class WindowFunctionsTest(QueryTests):
 
     def test_array_agg(self):
         query = "select distinct(char_field), array_agg(decimal_field) over (partition by char_field) as " \
-                "agg from {0}".format(self.query_bucket)
+                "agg from {0} where decimal_field is not null".format(self.query_bucket)
         result = self.run_cbq_query(query)
         db_dict = {}
         for res in result['results']:
@@ -1655,7 +1655,10 @@ class WindowFunctionsTest(QueryTests):
             test_dict[alpha] = test_result['results'][0]
 
         for alpha in self.alphabet:
-            db_value = db_dict[alpha]
+            if alpha in db_dict.keys():
+                db_value = db_dict[alpha]
+            else:
+                db_value = None
             test_value = test_dict[alpha]['$1']
             self.assertEqual(db_value, test_value,
                              'Test failed: window value ::' + str(db_value) + ':: test_value ::' + str(
@@ -1875,7 +1878,7 @@ class WindowFunctionsTest(QueryTests):
     '''
 
     def test_stddev(self):
-        query = "select distinct(char_field), stddev(decimal_field) over (partition by char_field) as agg " \
+        query = "select distinct(char_field), round(stddev(decimal_field) over (partition by char_field),10) as agg " \
                 "from {0}".format(self.query_bucket)
         result = self.run_cbq_query(query)
         db_dict = {}
@@ -1884,7 +1887,7 @@ class WindowFunctionsTest(QueryTests):
             db_dict[char_key] = res['agg']
         test_dict = {}
         for alpha in self.alphabet:
-            test_query = "select stddev(decimal_field) from {0} where char_field='{1}'".format(self.query_bucket, alpha)
+            test_query = "select round(stddev(decimal_field),10) from {0} where char_field='{1}'".format(self.query_bucket, alpha)
             test_result = self.run_cbq_query(test_query)
             test_dict[alpha] = test_result['results'][0]
 
@@ -1901,7 +1904,7 @@ class WindowFunctionsTest(QueryTests):
     '''
 
     def test_stddev_samp(self):
-        query = "select distinct(char_field), stddev_samp(decimal_field) over (partition by char_field) as " \
+        query = "select distinct(char_field), round(stddev_samp(decimal_field) over (partition by char_field), 10) as " \
                 "agg from {0}".format(self.query_bucket)
         result = self.run_cbq_query(query)
         db_dict = {}
@@ -1910,7 +1913,7 @@ class WindowFunctionsTest(QueryTests):
             db_dict[char_key] = res['agg']
         test_dict = {}
         for alpha in self.alphabet:
-            test_query = "select stddev_samp(decimal_field) from {0} where char_field='{1}'".format(self.query_bucket,
+            test_query = "select round(stddev_samp(decimal_field), 10) from {0} where char_field='{1}'".format(self.query_bucket,
                                                                                                     alpha)
             test_result = self.run_cbq_query(test_query)
             test_dict[alpha] = test_result['results'][0]
@@ -1928,7 +1931,7 @@ class WindowFunctionsTest(QueryTests):
     '''
 
     def test_stddev_pop(self):
-        query = "select distinct(char_field), stddev_pop(decimal_field) over (partition by char_field) as " \
+        query = "select distinct(char_field), round(stddev_pop(decimal_field) over (partition by char_field), 10) as " \
                 "agg from {0}".format(self.query_bucket)
         result = self.run_cbq_query(query)
         db_dict = {}
@@ -1937,7 +1940,7 @@ class WindowFunctionsTest(QueryTests):
             db_dict[char_key] = res['agg']
         test_dict = {}
         for alpha in self.alphabet:
-            test_query = "select stddev_pop(decimal_field) from {0} where char_field='{1}'".format(self.query_bucket,
+            test_query = "select round(stddev_pop(decimal_field),10) from {0} where char_field='{1}'".format(self.query_bucket,
                                                                                                    alpha)
             test_result = self.run_cbq_query(test_query)
             test_dict[alpha] = test_result['results'][0]
@@ -1955,7 +1958,7 @@ class WindowFunctionsTest(QueryTests):
     '''
 
     def test_variance(self):
-        query = "select distinct(char_field), variance(decimal_field) over (partition by char_field) as agg" \
+        query = "select distinct(char_field), round(variance(decimal_field) over (partition by char_field), 7) as agg" \
                 " from {0}".format(self.query_bucket)
         result = self.run_cbq_query(query)
         db_dict = {}
@@ -1964,7 +1967,7 @@ class WindowFunctionsTest(QueryTests):
             db_dict[char_key] = res['agg']
         test_dict = {}
         for alpha in self.alphabet:
-            test_query = "select variance(decimal_field) from {0} where char_field='{1}'".format(self.query_bucket,
+            test_query = "select round(variance(decimal_field),7) from {0} where char_field='{1}'".format(self.query_bucket,
                                                                                                  alpha)
             test_result = self.run_cbq_query(test_query)
             test_dict[alpha] = test_result['results'][0]
@@ -1982,7 +1985,7 @@ class WindowFunctionsTest(QueryTests):
     '''
 
     def test_var_samp(self):
-        query = "select distinct(char_field), var_samp(decimal_field) over (partition by char_field) as" \
+        query = "select distinct(char_field), round(var_samp(decimal_field) over (partition by char_field), 7) as" \
                 " agg from {0}".format(self.query_bucket)
         result = self.run_cbq_query(query)
         db_dict = {}
@@ -1991,7 +1994,7 @@ class WindowFunctionsTest(QueryTests):
             db_dict[char_key] = res['agg']
         test_dict = {}
         for alpha in self.alphabet:
-            test_query = "select var_samp(decimal_field) from {0} where char_field='{1}'".format(self.query_bucket,
+            test_query = "select round(var_samp(decimal_field), 7) from {0} where char_field='{1}'".format(self.query_bucket,
                                                                                                  alpha)
             test_result = self.run_cbq_query(test_query)
             test_dict[alpha] = test_result['results'][0]
@@ -2009,7 +2012,7 @@ class WindowFunctionsTest(QueryTests):
     '''
 
     def test_var_pop(self):
-        query = "select distinct(char_field), var_pop(decimal_field) over (partition by char_field) as agg " \
+        query = "select distinct(char_field), round(var_pop(decimal_field) over (partition by char_field), 7) as agg " \
                 "from {0}".format(self.query_bucket)
         result = self.run_cbq_query(query)
         db_dict = {}
@@ -2018,7 +2021,7 @@ class WindowFunctionsTest(QueryTests):
             db_dict[char_key] = res['agg']
         test_dict = {}
         for alpha in self.alphabet:
-            test_query = "select var_pop(decimal_field) from {0} where char_field='{1}'".format(self.query_bucket,
+            test_query = "select round(var_pop(decimal_field),7) from {0} where char_field='{1}'".format(self.query_bucket,
                                                                                                 alpha)
             test_result = self.run_cbq_query(test_query)
             test_dict[alpha] = test_result['results'][0]
@@ -2043,16 +2046,16 @@ class WindowFunctionsTest(QueryTests):
             cmd = ("{3} -u {0}:{1} http://{2}:8093/query/service -d "
                    "statement='prepare prepared_" + v['name'] + " from select decimal_field, " +
                    self._construct_window_function_call(v) +
-                   "  as wf_result from {0} where char_field in $1 order by "
-                   "char_field'").format('Administrator', 'password', self.master.ip, self.curl_path)
+                   "  as wf_result from {4} where char_field in $1 order by "
+                   "char_field'").format('Administrator', 'password', self.master.ip, self.curl_path, self.query_bucket)
             shell.execute_command(cmd)
 
         for k, v in self.aggregate_functions.items():
             cmd = ("{3} -u {0}:{1} http://{2}:8093/query/service -d "
                    "statement='prepare prepared_" + v['name'] +
                    " from select decimal_field, " + self._construct_window_function_call(v) +
-                   "  as wf_result from {0} where char_field in $1 order by "
-                   "char_field'").format('Administrator', 'password', self.master.ip, self.curl_path)
+                   "  as wf_result from {4} where char_field in $1 order by "
+                   "char_field'").format('Administrator', 'password', self.master.ip, self.curl_path, self.query_bucket)
             shell.execute_command(cmd)
 
         # -------------- execute prepareds -----------------------
