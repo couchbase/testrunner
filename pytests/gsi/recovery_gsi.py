@@ -149,6 +149,101 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.log.info("Some indexes did not process mutations on time")
 
+    def test_recovery_projector_crash(self):
+        self.index_create_task_manager = TaskManager(
+            "index_create_task_manager")
+        self.index_create_task_manager.start()
+        self.sdk_loader_manager = TaskManager(
+            "sdk_loader_manager")
+        self.sdk_loader_manager.start()
+
+        self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
+        self.run_tasks = True
+
+        index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
+        for task in index_create_tasks:
+            task.result()
+
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 3000})
+
+        self._kill_all_processes_index(self.index_nodes[0])
+
+        self.load_docs(self.start_doc)
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.log.info("some indexes did not process mutations on time")
+
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 1200000})
+
+        self._kill_all_processes_index(self.index_nodes[0])
+
+        self.sleep(10)
+
+        load_tasks = self.async_load_docs(self.num_items_in_collection, self.num_items_in_collection * 2)
+
+        data_nodes = self.get_kv_nodes()
+        remote = RemoteMachineShellConnection(data_nodes[1])
+        remote.terminate_process(process_name="projector")
+        self.sleep(1)
+        if not self.check_index_recovered_snapshot(self.index_ops_obj.get_create_index_list(), self.index_nodes[0]):
+            self.fail("Some indexes did not recover from snapshot")
+        self.sleep(2)
+
+        for task in load_tasks:
+            task.result()
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.log.info("some indexes did not process mutations on time")
+
+    def test_recovery_memcached_crash(self):
+        self.index_create_task_manager = TaskManager(
+            "index_create_task_manager")
+        self.index_create_task_manager.start()
+        self.sdk_loader_manager = TaskManager(
+            "sdk_loader_manager")
+        self.sdk_loader_manager.start()
+
+        self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
+        self.run_tasks = True
+
+        index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
+        for task in index_create_tasks:
+            task.result()
+
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 3000})
+
+        self._kill_all_processes_index(self.index_nodes[0])
+
+        self.load_docs(self.start_doc)
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.log.info("some indexes did not process mutations on time")
+
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 1200000})
+
+        self._kill_all_processes_index(self.index_nodes[0])
+
+        self.sleep(10)
+        data_nodes = self.get_kv_nodes()
+        self.block_incoming_network_from_node(self.index_nodes[0], data_nodes[1])
+        self.load_docs(self.num_items_in_collection)
+        self.resume_blocked_incoming_network_from_node(self.index_nodes[0], data_nodes[1])
+
+        remote = RemoteMachineShellConnection(data_nodes[1])
+        remote.kill_memcached()
+        self.sleep(1)
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.log.info("some indexes did not process mutations on time")
+
 class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def setUp(self):

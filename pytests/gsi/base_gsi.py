@@ -146,7 +146,15 @@ class BaseSecondaryIndexingTests(QueryTests):
         return index_create_tasks
 
     def load_docs(self, start_doc):
+        load_tasks = self.async_load_docs(start_doc)
+
+        for task in load_tasks:
+            task.result()
+
+    def async_load_docs(self, start_doc, num_ops=None):
         load_tasks = []
+        if not num_ops:
+            num_ops = self.num_items_in_collection
         sdk_data_loader = SDKDataLoader(start_seq_num=start_doc, num_ops=self.num_items_in_collection,
                                         percent_create=self.percent_create,
                                         percent_update=self.percent_update, percent_delete=self.percent_delete,
@@ -158,8 +166,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.sdk_loader_manager.schedule(_task)
             load_tasks.append(_task)
 
-        for task in load_tasks:
-            task.result()
+        return load_tasks
 
     def async_create_index(self, bucket, query_definition, deploy_node_info=None, desc=None):
         index_where_clause = None
@@ -827,7 +834,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 self.log.info("Index: {0}".format(index_name))
                 self.log.info("number of docs pending: {0}".format(index_val["num_docs_pending"]))
                 self.log.info("number of docs queued: {0}".format(index_val["num_docs_queued"]))
-                if index_val["num_docs_pending"] and index_val["num_docs_queued"]:
+                if index_val["num_docs_pending"] or index_val["num_docs_queued"]:
                     return False
         return True
 
