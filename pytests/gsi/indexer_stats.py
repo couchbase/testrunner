@@ -13,7 +13,7 @@ import json
 from .base_gsi import BaseSecondaryIndexingTests
 from lib.couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.documentgenerator import SDKDataLoader
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 from functools import reduce
 
 
@@ -113,7 +113,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         self.sleep(30, "Wait for index scan to complete")
         self.buckets = self.rest.get_buckets()
         self.index_status = self.rest.get_indexer_metadata()
-        self.all_stats = self.rest.get_all_index_stats()
+        self.all_master_stats = self.rest.get_all_index_stats()
         self.consumer_filters = {"planner": {
             "indexer_level_stats": ["memory_quota", "memory_used",
                                     "memory_used_storage", "uptime",
@@ -154,7 +154,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         self.index_stats_keyset = set()
         self.indexer_stats_keyset = set()
         self.bucket_stats_keyset = set()
-        for key in self.all_stats.keys():
+        for key in self.all_master_stats.keys():
             ref = key.split(":")
             ref_len = len(ref)
             stat = ref[-1]
@@ -276,7 +276,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         3. Test index filter incrementally reaches all indexes
            which is equal to /stats response
         """
-        all_stats_keys = set(self.all_stats.keys())
+        all_stats_keys = set(self.all_master_stats.keys())
         indexes = []
         instance_ids = []
         filtered_stats_keys = None
@@ -341,10 +341,10 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         index_stats_keys = set(
             [key for key in index_stats_keys if len(key.split(":")) >= 3])
         incorrect_index_keys = set(
-            [key for key in self.all_stats.keys()
+            [key for key in self.all_master_stats.keys()
                 if not key.startswith(namespace)])
         correct_index_keys = set(
-            [key for key in self.all_stats.keys()
+            [key for key in self.all_master_stats.keys()
                 if key.startswith(namespace) and
                 len(key.split(":")) == namespace_slugs])
         self.assertFalse(index_stats_keys.issubset(incorrect_index_keys))
@@ -360,7 +360,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         """
         index1 = self.index_status['status'][0]
         index2 = self.index_status['status'][1]
-        all_stats_keys = set(self.all_stats.keys())
+        all_stats_keys = set(self.all_master_stats.keys())
         index_stats_keys = set(self.rest.get_all_index_stats(inst_id_filter={
             "instances": [index1['instId'], str(index2['instId'])]
         }).keys())
@@ -380,7 +380,8 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
             "instances": [1]
         }).keys())
         bucket_level_stats = set(
-            [key for key in self.all_stats if len(key.split(":")) == 2 and not
+            [key for key in self.all_master_stats
+                if len(key.split(":")) == 2 and not
              key.split(":")[0].isdigit()])
         indexer_level_stats = self.indexer_stats_keyset.union(
             bucket_level_stats)
@@ -394,7 +395,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         """
         Every stats returned by /stats with consumer filter is subset of /stats
         """
-        all_stats_keys = set(self.all_stats.keys())
+        all_stats_keys = set(self.all_master_stats.keys())
         for consumer_filter in self.consumer_filters.keys():
             consumer_filter_stats_keys = set(self.rest.get_all_index_stats(
                 consumer_filter=consumer_filter).keys())
@@ -806,3 +807,207 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
                                 self.fail(msg="{0} is redundant".format(
                                     external_api_stats_key_set))
                             index_found = True
+
+    def test_stats_with_index_replica(self):
+        indexes = self.rest.get_indexer_metadata()['status']
+        for index in indexes:
+            query_def = QueryDefinition(index['name'])
+            namespace = "{0}.{1}.{2}".format(
+                index['bucket'], index['scope'],
+                index['collection'])\
+                if index['scope'] != "_default"\
+                and index['collection'] != "_default"\
+                else f"{index['bucket']}"
+            query = query_def.generate_index_drop_query(namespace=namespace)
+            self.run_cbq_query(query)
+        indexer_nodes = self.get_nodes_from_services_map(
+            service_type="index", get_all_nodes=True)
+        if self.num_index_replicas == 0 or\
+                self.num_index_replicas >= len(indexer_nodes):
+            self.num_index_replicas = len(indexer_nodes) - 1
+        replica_index = QueryDefinition(
+            "replica_index",
+            index_fields=["firstName"])
+        bucket = self.buckets[0].name
+        query = replica_index.generate_index_create_query(
+            namespace=f"default:{bucket}",
+            deploy_node_info=[
+                idx.ip + ":" + idx.port
+                for idx in indexer_nodes],
+            defer_build=self.defer_build,
+            num_replica=self.num_index_replicas
+        )
+        self.run_cbq_query(query)
+        indexer_stats = self.rest.get_indexer_metadata()
+        replica_indexes = list(filter(
+            lambda index: index['name'].startswith(
+                replica_index.index_name), indexer_stats['status']))
+        self.assertTrue(
+            len(replica_indexes) == self.num_index_replicas + 1)
+        replica_index_ids = list(
+            map(lambda index: index["instId"], replica_indexes))
+        instance_ids = set()
+        rest_connections = [RestConnection(node) for node in indexer_nodes]
+        for node_id, rest in enumerate(rest_connections):
+            all_stats = rest.get_all_index_stats(
+                inst_id_filter=replica_index_ids)
+            instance_ids.update(
+                set(map(lambda stat: int(stat.split(":")[0]),
+                        list(filter(lambda stat: stat.split(":")[0].isdigit(),
+                                    all_stats.keys())))))
+            self.assertEquals(len(instance_ids), node_id + 1)
+        self.assertEquals(instance_ids, set(replica_index_ids))
+
+    def test_stats_with_partition_index(self):
+        indexes = self.rest.get_indexer_metadata()['status']
+        for index in indexes:
+            query_def = QueryDefinition(index['name'])
+            namespace = "{0}.{1}.{2}".format(
+                index['bucket'], index['scope'],
+                index['collection'])\
+                if index['scope'] != "_default"\
+                and index['collection'] != "_default"\
+                else f"{index['bucket']}"
+            query = query_def.generate_index_drop_query(namespace=namespace)
+            self.run_cbq_query(query)
+        indexer_nodes = self.get_nodes_from_services_map(
+            service_type="index", get_all_nodes=True)
+        rest_connections = [RestConnection(node) for node in indexer_nodes]
+        partition_fields = ['meta().id']
+        partition_index = QueryDefinition(
+            "partition_index",
+            index_fields=["firstName"])
+        bucket = self.buckets[0].name
+        query = partition_index.generate_index_create_query(
+            namespace=f"default:{bucket}",
+            deploy_node_info=[
+                idx.ip + ":" + idx.port
+                for idx in indexer_nodes],
+            defer_build=self.defer_build,
+            partition_by_fields=partition_fields
+        )
+        self.run_cbq_query(query)
+        indexer_stats = self.rest.get_indexer_metadata()
+        partition_indexes = list(filter(
+            lambda index: index['name'].startswith(
+                partition_index.index_name), indexer_stats['status']))
+        partition_index_ids = list(
+            map(lambda index: index["instId"], partition_indexes))
+        instance_ids = set()
+        for node_id, rest in enumerate(rest_connections):
+            all_stats = rest.get_all_index_stats(
+                inst_id_filter=partition_index_ids)
+            instance_ids.update(
+                set(map(lambda stat: int(stat.split(":")[0]),
+                        list(filter(lambda stat: stat.split(":")[0].isdigit(),
+                                    all_stats.keys())))))
+            self.assertEquals(len(instance_ids), 1)
+        self.assertEquals(instance_ids, set(partition_index_ids))
+
+    def test_stats_with_error_index(self):
+        doc = {"indexer.scheduleCreateRetries": 1}
+        self.rest.set_index_settings(doc)
+        indexer_nodes = self.get_nodes_from_services_map(
+            service_type="index", get_all_nodes=True)
+        if len(indexer_nodes) < 2:
+            self.fail("need atleast 2 indexer nodes")
+        indexer_nodes = indexer_nodes[:2]
+        indexes = self.rest.get_indexer_metadata()['status']
+        for index in indexes:
+            query_def = QueryDefinition(index['name'])
+            namespace = "{0}.{1}.{2}".format(
+                index['bucket'], index['scope'],
+                index['collection'])\
+                if index['scope'] != "_default"\
+                and index['collection'] != "_default"\
+                else f"{index['bucket']}"
+            query = query_def.generate_index_drop_query(namespace=namespace)
+            self.run_cbq_query(query)
+        if self.num_index_replicas == 0 or\
+                self.num_index_replicas >= len(indexer_nodes):
+            self.num_index_replicas = len(indexer_nodes) - 1
+        replica_index = QueryDefinition(
+            "replica_index",
+            index_fields=["firstName"])
+        bucket = self.buckets[0].name
+        query = replica_index.generate_index_create_query(
+            namespace=f"default:{bucket}",
+            deploy_node_info=[
+                idx.ip + ":" + idx.port
+                for idx in indexer_nodes],
+            defer_build=self.defer_build,
+            num_replica=self.num_index_replicas
+        )
+        self.run_cbq_query(query)
+        self.block_incoming_network_from_node(
+            indexer_nodes[0], indexer_nodes[1])
+        self.sleep(10)
+        rest_connections = [RestConnection(node) for node in indexer_nodes]
+        for rest in rest_connections:
+            if rest.ip == self.rest.ip:
+                doc = {"indexer.scheduleCreateRetries": 1}
+                rest.set_index_settings(doc)
+                break
+        indexer_stats_1 = rest_connections[0].get_indexer_metadata()
+        replica_indexes_1 = list(filter(
+            lambda index: index['name'].startswith(
+                replica_index.index_name), indexer_stats_1['status']))
+        self.assertEquals(
+            len(replica_indexes_1), self.num_index_replicas + 1)
+        indexer_stats_2 = rest_connections[1].get_indexer_metadata()
+        replica_indexes_2 = list(filter(
+            lambda index: index['name'].startswith(
+                replica_index.index_name), indexer_stats_2['status']))
+        self.assertEquals(
+            len(replica_indexes_2), self.num_index_replicas + 1)
+        replica_index_ids_1 = list(
+            map(lambda index: index["instId"], replica_indexes_1))
+        replica_index_ids_2 = list(
+            map(lambda index: index["instId"], replica_indexes_2))
+        self.assertEqual(set(replica_index_ids_1), set(replica_index_ids_2))
+        instance_ids = set()
+        for node_id, rest in enumerate(rest_connections):
+            all_stats = rest.get_all_index_stats(
+                inst_id_filter=replica_index_ids_1)
+            instance_ids.update(
+                set(map(lambda stat: int(stat.split(":")[0]),
+                        list(filter(lambda stat: stat.split(":")[0].isdigit(),
+                                    all_stats.keys())))))
+            self.assertEquals(len(instance_ids), node_id + 1)
+        self.assertEquals(instance_ids, set(replica_index_ids_1))
+        self.resume_blocked_incoming_network_from_node(
+            indexer_nodes[0], indexer_nodes[1])
+        self.sleep(10)
+
+    def test_stats_after_rebalance(self):
+        indexer_nodes = self.get_nodes_from_services_map(
+            service_type="index", get_all_nodes=True)
+        if len(indexer_nodes) < 2:
+            self.fail("need atleast 2 indexer nodes")
+        rest_connections = [RestConnection(node) for node in indexer_nodes]
+        for rest in rest_connections:
+            instance_ids = []
+            for index in self.index_status['status']:
+                if rest.ip + ":" + rest.port in index['hosts']:
+                    instance_ids.append(index['instId'])
+            stats = rest.get_all_index_stats(inst_id_filter=instance_ids)
+            self.assertNotEquals(stats, {})
+            node_inst_ids = set(
+                [int(stat.split(":")[0]) for stat in stats.keys()
+                 if stat.split(":")[0].isdigit()])
+            self.assertEquals(set(instance_ids), node_inst_ids)
+        out_nodes = [
+            node for node in indexer_nodes if self.master.ip != node.ip]
+        rebalance = self.cluster.async_rebalance(
+            self.servers[:self.nodes_init], [], out_nodes)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+        instance_ids = [
+            index['instId'] for index in self.index_status['status']]
+        stats = self.rest.get_all_index_stats(inst_id_filter=instance_ids)
+        self.assertNotEquals(stats, {})
+        node_inst_ids = set([int(stat.split(":")[0]) for stat in stats.keys()
+                            if stat.split(":")[0].isdigit()])
+        self.assertEquals(set(instance_ids), node_inst_ids)
