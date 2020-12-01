@@ -133,8 +133,8 @@ class XDCRUpgradeCollectionsTests(NewUpgradeBaseTest):
         des_master = self.servers[self.nodes_init]
         src_cbver = RestConnection(self.master).get_nodes_version()
         des_cbver = RestConnection(des_master).get_nodes_version()
-        src_items = json.loads(RestConnection(self.master).get_buckets_itemCount())
-        des_items = json.loads(RestConnection(des_master).get_buckets_itemCount())
+        src_items = RestConnection(self.master).get_buckets_itemCount()
+        des_items = RestConnection(des_master).get_buckets_itemCount()
         if (src_cbver[:3] < "7.0" and des_cbver[:3] >= "7.0"):
             des_items = self.get_col_item_count(des_master, "default", "_default",
                                                      "_default", self.des_stat_col)
