@@ -332,31 +332,12 @@ class BaseTestCase(unittest.TestCase):
             if self.input.param("port", None):
                 self.port = str(self.input.param("port", None))
 
-            # Rebalance cluster[0] if this is a backup service test case.
-            if self.input.param("backup_service_test", False):
-                # Skip testrunner's rebalance procedure
+            # Perform a custom rebalance by setting input param `custom_rebalance` to True
+            # and implement the make_cluster method in a child class. This works by setting
+            # skip_rebalance to True and then calling your custom rebalance method.
+            if self.input.param("custom_rebalance", False):
                 self.input.test_params["skip_rebalance"] = True
-
-                rebalance_required, rest_conn = False, RestConnection(self.input.clusters[0][0])
-
-                # Fetch all the nodes
-                nodes = rest_conn.get_nodes(get_all_nodes=True)
-                # If any node has been failed-over, add back the node and rebalance
-                for node in nodes:
-                    if node.has_failed_over:
-                        rest_conn.set_recovery_type(node.id, 'full')
-                        rest_conn.add_back_node(node.id)
-
-                if any(node.has_failed_over for node in nodes):
-                    Cluster().rebalance(self.input.clusters[0], [], [], services=[server.services for server in self.servers])
-
-                nodes_ips_and_ports = set((node.ip, node.port) for node in nodes)
-                # If this is the first test or nodes are missing from cluster[0] then add missing nodes and rebalance cluster[0]
-                if len(nodes) < len(self.input.clusters[0]):
-                    # Nodes which are currently not added
-                    servers_to_add = [server for server in self.input.clusters[0][1:] if (server.ip, server.port) not in nodes_ips_and_ports]
-                    # Provision node in cluster[0] into a cluster
-                    Cluster().rebalance(self.input.clusters[0], servers_to_add, [], services=[server.services for server in self.servers])
+                self.custom_rebalance()
 
             try:
                 if (str(self.__class__).find('rebalanceout.RebalanceOutTests') != -1) or \
@@ -466,6 +447,13 @@ class BaseTestCase(unittest.TestCase):
             traceback.print_exc()
             self.cluster.shutdown(force=True)
             self.fail(e)
+
+    def custom_rebalance(self):
+        """ Override this method to perform a custom rebalance
+
+        To skip testrunner's default rebalance, implement this method in a child class.
+        """
+        raise NotImplementedError("Please Implement this method")
 
     def print_cluster_stats(self):
         cluster_stats = RestConnection(self.master).get_cluster_stats()

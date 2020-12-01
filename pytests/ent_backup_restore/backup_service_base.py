@@ -84,8 +84,10 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         1. Runs preamble.
         """
-        # Indicate that this is a backup service test
-        TestInputSingleton.input.test_params["backup_service_test"] = True
+        # Set the custom_rebalance flag for every backup service test
+        # in order for the basetest case to call the custom_rebalance
+        # procedure.
+        TestInputSingleton.input.test_params["custom_rebalance"] = True
 
         # Skip the more general clean up process that test runner does at
         # the end of each which includes tearing down the cluster by
@@ -128,6 +130,36 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         if self.input.param('node_to_node_encryption', False):
             self.assertTrue(self.node_to_node_encryption.enable())
+
+    def custom_rebalance(self):
+        """Form cluster[0] into a cluster"""
+        # Skip testrunner's rebalance procedure
+        rebalance_required, rest_conn = False, RestConnection(self.input.clusters[0][0])
+
+        # Fetch all the nodes
+        nodes = rest_conn.get_nodes(get_all_nodes=True)
+        # If any node has been failed-over, add back the node and rebalance
+        for node in nodes:
+            if node.has_failed_over:
+                rest_conn.set_recovery_type(node.id, 'full')
+                rest_conn.add_back_node(node.id)
+
+        if any(node.has_failed_over for node in nodes):
+            Cluster().rebalance(self.input.clusters[0], [], [], services=[server.services for server in self.servers])
+
+        # If node 1 exists in isolation and nodes2 and node3 have already been added into their own cluster, eject node3 from node2
+        if len(nodes) == 1 and len(RestConnection(self.input.clusters[0][1]).get_nodes(get_all_nodes=True)) > 1:
+            # Break the second cluster apart
+            Cluster().rebalance(self.input.clusters[0][1:], [], self.input.clusters[0][2:3], services=[server.services for server in self.servers])
+
+        nodes = rest_conn.get_nodes(get_all_nodes=True)
+        nodes_ips_and_ports = set((node.ip, node.port) for node in nodes)
+        # If this is the first test or nodes are missing from cluster[0] then add missing nodes and rebalance cluster[0]
+        if len(nodes) < len(self.input.clusters[0]):
+            # Nodes which are currently not added
+            servers_to_add = [server for server in self.input.clusters[0][1:] if (server.ip, server.port) not in nodes_ips_and_ports]
+            # Provision node in cluster[0] into a cluster
+            Cluster().rebalance(self.input.clusters[0], servers_to_add, [], services=[server.services for server in self.servers])
 
     def configure_host(self, ip, use_https=False):
         """ Modify the target to which http requests are made to
