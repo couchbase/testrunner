@@ -2611,6 +2611,8 @@ class QueryTests(BaseTestCase):
 
     def curl_with_roles(self, query):
         shell = RemoteMachineShellConnection(self.master)
+        if '%' in query:
+            query = query.replace("%", "%25")
         cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement={3}'". \
             format(self.users[0]['id'], self.users[0]['password'], self.master.ip, query, self.curl_path)
         output, error = shell.execute_command(cmd)
@@ -2624,6 +2626,7 @@ class QueryTests(BaseTestCase):
             return error
 
     def system_catalog_helper_select(self, test, role=""):
+        temp_name = self.bucket_name
         res = self.curl_with_roles('select * from system:datastores')
         self.assertTrue(res['metrics']['resultCount'] == 1)
         res = self.curl_with_roles('select * from system:namespaces')
@@ -2692,7 +2695,7 @@ class QueryTests(BaseTestCase):
                       "query_select(standard_bucket0)","select({0})".format(self.bucket_name), "query_select({0})".format(self.bucket_name),"select({0})".format(self.rbac_context), "query_select({0})".format(self.rbac_context),"select(`{0}`)".format(self.bucket_name), "query_select(`{0}`)".format(self.bucket_name)]:
             self.assertTrue(str(res).find("'code': 13014") != -1)
         elif role in ["insert(default)", "query_insert(default)", "query_update(default)", "query_delete(default)","insert({0})".format(self.bucket_name), "query_insert({0})".format(self.bucket_name), "query_update({0})".format(self.bucket_name), "query_delete({0})".format(self.bucket_name),"insert(`{0}`)".format(self.bucket_name), "query_insert(`{0}`)".format(self.bucket_name), "query_update(`{0}`)".format(self.bucket_name), "query_delete(`{0}`)".format(self.bucket_name)]:
-            self.assertTrue(res['status'] == 'fatal')
+            self.assertTrue(res['status'] == 'fatal' or res['status'] == 'errors' )
         else:
             self.assertTrue(res['status'] == 'success')
 
@@ -2719,9 +2722,11 @@ class QueryTests(BaseTestCase):
         if role not in ["ro_admin", "replication_admin", "query_insert(default)", "query_delete(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name),"query_insert(`{0}`)".format(self.bucket_name),"query_update(`{0}`)".format(self.bucket_name),"query_delete(`{0}`)".format(self.bucket_name),
                         "query_update(default)", "bucket_full_access(default)", "query_system_catalog",
                         "views_admin(default)"]:
-            self.query = "prepare `st1{0}` from select * from {0} union select * from {0} union select * from {0}".format(self.bucket_name)
+            if "`" in self.bucket_name:
+                temp_name = self.bucket_name.split("`")[1]
+            self.query = "prepare `st1{0}` from select * from {1} union select * from {1} union select * from {1}".format(temp_name,self.bucket_name)
             res = self.curl_with_roles(self.query)
-            self.query = 'execute `st1{0}`'.format(self.bucket_name)
+            self.query = 'execute `st1{0}`'.format(temp_name)
             res = self.curl_with_roles(self.query)
             if role in ["bucket_admin(standard_bucket0)", "views_admin(standard_bucket0)", "replication_admin"]:
                 self.assertTrue(str(res).find("'code': 4040") != -1)
@@ -2731,8 +2736,8 @@ class QueryTests(BaseTestCase):
                 self.assertTrue(res['status'] == 'success')
 
             if role not in ["query_insert(default)", "query_delete(default)", "query_update(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name),"query_insert(`{0}`)".format(self.bucket_name),"query_update(`{0}`)".format(self.bucket_name),"query_delete(`{0}`)".format(self.bucket_name)]:
-                self.query = "prepare `st2{0}` from select * from {0} union select * from " \
-                             "standard_bucket0 union select * from {0}".format(self.bucket_name)
+                self.query = "prepare `st2{0}` from select * from {1} union select * from " \
+                             "standard_bucket0 union select * from {1}".format(temp_name, self.bucket_name)
                 res = self.curl_with_roles(self.query)
 
                 if role in ["bucket_admin(standard_bucket0)", "views_admin(standard_bucket0)",
@@ -2742,7 +2747,7 @@ class QueryTests(BaseTestCase):
                 else:
                     self.assertTrue(res['metrics']['resultCount'] > 0)
 
-                self.query = 'execute `st2{0}`'
+                self.query = 'execute `st2{0}`'.format(temp_name)
                 res = self.curl_with_roles(self.query)
                 if role in ["bucket_admin(standard_bucket0)", "views_admin(standard_bucket0)", "views_admin(default)",
                             "views_admin", "bucket_admin(default)", "replication_admin", "query_system_catalog",

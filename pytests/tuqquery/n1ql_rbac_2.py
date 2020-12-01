@@ -36,9 +36,12 @@ class RbacN1QL(QueryTests):
             except Exception as e:
                 self.log.info(str(e))
         if self.bucket_name != "default" and self.bucket_name != "bucket0" and self.bucket_name != "default:default.test.test1":
-            self.rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=100)
+            temp_name = self.bucket_name
+            if "`" in self.bucket_name:
+                temp_name = self.bucket_name.split("`")[1]
+            self.rest.create_bucket(bucket=temp_name, ramQuotaMB=100)
             self.query_bucket = self.bucket_name
-            self.run_cbq_query(query="CREATE PRIMARY INDEX ON `{0}`".format(self.bucket_name))
+            self.run_cbq_query(query="CREATE PRIMARY INDEX ON {0}".format(self.bucket_name))
         elif self.bucket_name == "default:default.test.test1":
             self.query_bucket = self.bucket_name
         else:
@@ -288,9 +291,11 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=CREATE INDEX `age-index` ON `%s`(age) USING GSI WITH {\"nodes\":\"%s\"}'" % \
+              "'statement=CREATE INDEX `age-index` ON %s(age) USING GSI WITH {\"nodes\":\"%s\"}'" % \
               (self.curl_path, self.master.rest_username, self.master.rest_password,
                self.master.ip, self.query_bucket, self.master.ip + ":" + self.master.port)
+        if '%' in cmd:
+            cmd = cmd.replace('%', '%25')
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
         if "views_admin" in self.roles[0]['roles']:
@@ -304,9 +309,11 @@ class RbacN1QL(QueryTests):
                             format(self.query_bucket, self.users[0]['id']))
             self.log.info("Create Query executed successfully")
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=ALTER INDEX `%s`.`age-index` WITH {\"action\":\"move\", \"nodes\":\"%s\"}'" % \
+              "'statement=ALTER INDEX %s.`age-index` WITH {\"action\":\"move\", \"nodes\":\"%s\"}'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'],
                self.master.ip, self.query_bucket, self.servers[1].ip + ":" + self.servers[1].port)
+        if '%' in cmd:
+            cmd = cmd.replace('%', '%25')
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
         valid_roles = ["admin", "bucket_admin", "views_admin", "query_manage_index"]
@@ -631,7 +638,7 @@ class RbacN1QL(QueryTests):
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
         self.assertTrue(any(
-            "User does not have credentials to run UPDATE queries on the default bucket" in line for line in output))
+            "User does not have credentials to run UPDATE queries" in line for line in output))
         self.log.info("Query failed as expected")
 
     def test_grant_incorrect_user(self):
@@ -755,10 +762,10 @@ class RbacN1QL(QueryTests):
                self.query_bucket)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("User does not have credentials to run SELECT queries on the default bucket."
+        self.assertTrue(any("User does not have credentials to run SELECT queries"
                             in line for line in output),
-                        "Able to insert into {0} as user {1} - not expected".
-                        format(self.query_bucket, self.users[0]['id']))
+                        "Able to insert into {0} as user {1} - not expected OR error message is not as expected {2}".
+                        format(self.query_bucket, self.users[0]['id']), output)
         self.log.info("Query failed as expected")
 
     def test_update_nested_with_select_with_no_access(self):
@@ -790,10 +797,10 @@ class RbacN1QL(QueryTests):
                    self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("User does not have credentials to run SELECT queries on the default bucket"
+        self.assertTrue(any("User does not have credentials to run SELECT queries"
                             in line for line in output),
-                        "Able to insert into {0} as user {1} - not expected".
-                        format(self.query_bucket, self.users[0]['id']))
+                        "Able to insert into {0} as user {1} - not expected OR error message is not expected {2}".
+                        format(self.query_bucket, self.users[0]['id']), output)
         self.log.info("Query failed as expected")
 
     def test_insert_nested_with_select_with_full_access_and_diff_buckets(self):
@@ -803,10 +810,9 @@ class RbacN1QL(QueryTests):
         self.grant_role(role="query_select(bucket0)")
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=INSERT INTO `%s` (KEY UUID(), VALUE _name)" \
-              " SELECT _name FROM `%s` _name WHERE age > 10'" % \
-              (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name,
-               self.query_bucket)
+              "'statement=INSERT INTO default:`%s`._default._default (KEY UUID(), VALUE _name)" \
+              " SELECT _name FROM default:`bucket0`._default._default _name WHERE age > 10'" % \
+              (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
         self.assertTrue(any("success" in line for line in output),
@@ -820,16 +826,15 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=INSERT INTO `%s` (KEY UUID(), VALUE _name)" \
-              " SELECT _name FROM `%s` _name WHERE age > 10'" % \
-              (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name,
-               self.query_bucket)
+              "'statement=INSERT INTO default:`%s`._default._default (KEY UUID(), VALUE _name)" \
+              " SELECT _name FROM default:`bucket0`._default._default _name WHERE age > 10'" % \
+              (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("User does not have credentials to run SELECT queries on the bucket0 bucket."
+        self.assertTrue(any("User does not have credentials to run SELECT queries"
                             in line for line in output),
-                        "Able to select from {0} as user {1} - not expected".
-                        format(self.buckets[1].name, self.users[0]['id']))
+                        "Able to select from {0} as user {1} - not expected or error message is not as expected {2}".
+                        format(self.buckets[1].name, self.users[0]['id']),output)
         self.log.info("Query failed as expected")
 
     def test_upsert_nested_with_select_with_full_access_and_diff_buckets(self):
@@ -875,10 +880,9 @@ class RbacN1QL(QueryTests):
         self.grant_role(role="query_select(bucket0)")
         shell = RemoteMachineShellConnection(self.master)
         new_name = "employee-14-2"
-        cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=UPDATE `{3}` a set name = '{4}' WHERE name IN (SELECT name FROM `{5}` WHERE age > 10)'". \
-            format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, new_name,
-                   self.query_bucket, self.curl_path)
+        cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
+              "'statement=UPDATE `{3}` a set name = '{4}' WHERE name IN (SELECT name FROM default:`bucket0`._default._default WHERE age > 10)'". \
+            format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, new_name, self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
         self.assertTrue(any("success" in line for line in output),
@@ -892,16 +896,15 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         new_name = "employee-14-2"
-        cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=UPDATE `{3}` a set name = '{4}' WHERE name IN (SELECT name FROM `{5}` WHERE age > 10)'". \
-            format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, new_name,
-                   self.query_bucket, self.curl_path)
+        cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
+              "'statement=UPDATE `{3}` a set name = '{4}' WHERE name IN (SELECT name FROM default:`bucket0`._default._default WHERE age > 10)'". \
+            format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, new_name, self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("User does not have credentials to run SELECT queries on the bucket0 bucket."
+        self.assertTrue(any("User does not have credentials to run SELECT queries"
                             in line for line in output),
-                        "Able to select from {0} as user {1} - not expected".
-                        format(self.buckets[1].name, self.users[0]['id']))
+                        "Able to select from {0} as user {1} - not expected or error message is not as expected {2}".
+                        format(self.buckets[1].name, self.users[0]['id']),output)
         self.log.info("Query failed as expected")
 
     def test_delete_nested_with_select_with_full_access_and_diff_buckets(self):
@@ -910,10 +913,9 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         self.grant_role(role="query_select(bucket0)")
         shell = RemoteMachineShellConnection(self.master)
-        cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=DELETE FROM `{3}` a WHERE name IN (SELECT name FROM `{4}` WHERE age > 10)'". \
-            format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name,
-                   self.query_bucket, self.curl_path)
+        cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d " \
+              "'statement=DELETE FROM `{3}` a WHERE name IN (SELECT name FROM default:`bucket0`._default._default WHERE age > 10)'". \
+            format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
         self.assertTrue(any("success" in line for line in output),
@@ -926,16 +928,15 @@ class RbacN1QL(QueryTests):
         #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
-        cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=DELETE FROM `{3}` a WHERE name IN (SELECT name FROM `{4}` WHERE age > 10)'". \
-            format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name,
-                   self.query_bucket, self.curl_path)
+        cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d " \
+              "'statement=DELETE FROM `{3}` a WHERE name IN (SELECT name FROM default:`bucket0`._default._default WHERE age > 10)'". \
+            format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("User does not have credentials to run SELECT queries on the bucket0 bucket"
+        self.assertTrue(any("User does not have credentials to run SELECT queries"
                             in line for line in output),
-                        "Able to select from {0} as user {1} - not expected".
-                        format(self.buckets[1].name, self.users[0]['id']))
+                        "Able to select from {0} as user {1} - not expected or error message is not as expected".
+                        format(self.buckets[1].name, self.users[0]['id']),output)
         self.log.info("Query failed as expected")
 
     # select,insert,delete,updaete,drop system catalog tables.
