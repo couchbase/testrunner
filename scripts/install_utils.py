@@ -18,6 +18,7 @@ logging.config.fileConfig("scripts.logging.conf")
 log = logging.getLogger()
 
 NodeHelpers = []
+
 # Default params
 params = {
     "version": None,
@@ -441,6 +442,9 @@ def _parse_user_input():
     else:
         params["servers"] = userinput.servers
 
+    if userinput.elastic:
+        params["elastic"] = userinput.elastic
+
     # Validate and extract remaining params
     for key, value in list(userinput.test_params.items()):
         if key == "debug_logs":
@@ -492,11 +496,10 @@ def _parse_user_input():
 
     return params
 
-
-def __check_servers_reachable():
+def __check_servers_reachable(servers, errmesgprefix, sucmesgprefix):
     reachable = []
     unreachable = []
-    for server in params["servers"]:
+    for server in servers:
         try:
             RemoteMachineShellConnection(server, exit_on_failure=False)
             reachable.append(server.ip)
@@ -507,17 +510,22 @@ def __check_servers_reachable():
     if len(unreachable) > 0:
         log.info("-" * 100)
         for _ in unreachable:
-            log.error("INSTALL FAILED ON: \t{0}".format(_))
+            log.error("{0} \t{1}".format(errmesgprefix, _))
         log.info("-" * 100)
         for _ in reachable:
             # Marking this node as "completed" so it is not moved to failedInstall state
-            log.info("INSTALL COMPLETED ON: \t{0}".format(_))
+            log.info("{0} \t{1}".format(sucmesgprefix, _))
         log.info("-" * 100)
         sys.exit(1)
 
 
 def _params_validation():
-    __check_servers_reachable()
+    logging.debug(params)
+    __check_servers_reachable(servers=params["servers"], errmesgprefix="INSTALL FAILED ON:",
+                              sucmesgprefix="INSTALL COMPLETED ON:")
+    if "elastic" in params:
+        __check_servers_reachable([params["elastic"]], "UNREACHABLE ELASTIC ADDITIONAL SERVER: ",
+                                  "REACHABLE ELASTIC ADDITIONAL SERVER: ")
 
     # Create 1 NodeHelper instance per VM
     for server in params["servers"]:
@@ -536,7 +544,6 @@ def _params_validation():
     else:
         for node in NodeHelpers:
             _check_version_compatibility(node)
-
 
 # TODO: check if cb version is compatible with os
 def _check_version_compatibility(node):
