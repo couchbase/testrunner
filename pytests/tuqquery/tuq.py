@@ -80,7 +80,7 @@ class QueryTests(BaseTestCase):
             self.test_buckets = None
         self.sample_bucket = self.input.param('sample_bucket', None)
         self.sample_bucket_index = self.input.param('sample_bucket_index', None)
-        self.users = self.input.param("users", None)
+        self.users = self.input.param("users", {})
 
         self.use_rest = self.input.param("use_rest", True)
         self.hint_index = self.input.param("hint", None)
@@ -343,8 +343,6 @@ class QueryTests(BaseTestCase):
                           end=1000):
         # Load Emp Dataset
         self.cluster.bucket_flush(self.master)
-        # Adding sleep after flushing buckets (see CBQE-5838)
-        self.sleep(210)
 
         if end > 0:
             self._kv_gen = JsonDocGenerator("emp_",
@@ -375,10 +373,6 @@ class QueryTests(BaseTestCase):
 
     def _load_wiki_dataset(self, op_type="create", expiration=0, start=0,
                            end=1000):
-        # Load Emp Dataset
-        # self.cluster.bucket_flush(self.master)
-        # Adding sleep after flushing buckets (see CBQE-5838)
-        self.sleep(210)
 
         if end > 0:
             self._kv_gen = WikiJSONGenerator("wiki_",
@@ -476,17 +470,18 @@ class QueryTests(BaseTestCase):
                 "FTS indexing did not complete. FTS index count : {0}, Bucket count : {1}".format(indexed_doc_count,
                                                                                                   doc_count))
 
-    def _load_test_buckets(self):
+    def _load_test_buckets(self, create_index=True):
         if self.get_bucket_from_name("beer-sample") is None:
             self.rest.load_sample("beer-sample")
             self.wait_for_buckets_status({"beer-sample": "healthy"}, 5, 120)
             self.wait_for_bucket_docs({"beer-sample": 7303}, 5, 120)
 
-        if not self.is_index_present("beer-sample", "beer_sample_code_idx"):
-            self.run_cbq_query("create index beer_sample_code_idx on `beer-sample` (`beer-sample`.code)")
-        if not self.is_index_present("beer-sample", "beer_sample_brewery_id_idx"):
-            self.run_cbq_query("create index beer_sample_brewery_id_idx on `beer-sample` (`beer-sample`.brewery_id)")
-        self.wait_for_all_indexes_online()
+        if create_index:
+            if not self.is_index_present("beer-sample", "beer_sample_code_idx"):
+                self.run_cbq_query("create index beer_sample_code_idx on `beer-sample` (`beer-sample`.code)")
+            if not self.is_index_present("beer-sample", "beer_sample_brewery_id_idx"):
+                self.run_cbq_query("create index beer_sample_brewery_id_idx on `beer-sample` (`beer-sample`.brewery_id)")
+            self.wait_for_all_indexes_online()
 
     def _create_user(self, user, bucket_name='default'):
         user_to_create = None

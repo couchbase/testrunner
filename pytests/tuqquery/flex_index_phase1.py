@@ -581,7 +581,7 @@ class FlexIndexTests(QueryTests):
         self.cbcluster.delete_all_fts_indexes()
 
     def test_rbac_flex(self):
-        self._load_test_buckets()
+        self._load_test_buckets(create_index=False)
         user = self.input.param("user", '')
         if user == '':
             raise Exception("Invalid test configuration! User name should not be empty.")
@@ -600,7 +600,7 @@ class FlexIndexTests(QueryTests):
         self.cbcluster.delete_all_fts_indexes()
 
     def test_rbac_flex_not_granted_n1ql(self):
-        self._load_test_buckets()
+        self._load_test_buckets(create_index=False)
         user = self.input.param("user", '')
         if user == '':
             raise Exception("Invalid test configuration! User name should not be empty.")
