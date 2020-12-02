@@ -81,7 +81,7 @@ class SDKClient(object):
             self.cluster = Cluster(str(self.connection_string),
                                        ClusterOptions(PasswordAuthenticator(self.username, self.password)))
             self.cb = self.cluster.bucket(self.bucket)
-            #self.default_collection = self.cb.default_collection()
+            self.default_collection = self.cb.default_collection()
         except BucketNotFoundException:
             raise
         except AuthenticationException:
@@ -647,8 +647,8 @@ class SDKClient(object):
             else:
                 rv = self.default_collection.get(key, ttl=ttl, quiet=quiet, replica=replica, no_format=no_format)
             return self.__translate_get(rv)
-        except CouchbaseException as e:
-            self.get(key, ttl=0, quiet=True, replica=False, no_format=False, scope=scope, collection=scope)
+        except CouchbaseException:
+            self.get(key, ttl=0, quiet=True, replica=False, no_format=False, scope=scope, collection=collection)
 
     def rget(self, key, replica_index=None, quiet=True, scope=None, collection=None):
         try:

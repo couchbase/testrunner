@@ -230,14 +230,18 @@ class Lww(XDCRNewBaseTest):
         return vbucket_id
 
     def check_kv_exists_in_doc(self, kv, conn, doc_id="lww-0", scope="scope_1", collection="collection_1"):
-        flag, cas, kvs = conn.get(doc_id, scope=scope, collection=collection)
-        if not kvs:
-            self.log.info("Cannot retrieve doc {0} from scope {1}, collection {2}"
-                      .format(doc_id, scope, collection))
-            return False
-        for item in kvs.items():
-            if kv == item:
-                return True
+        try:
+            flag, cas, kvs = conn.get(doc_id, scope=scope, collection=collection)
+            if not kvs:
+                self.log.info("Cannot retrieve doc {0} from scope {1}, collection {2}"
+                              .format(doc_id, scope, collection))
+                return False
+            for item in kvs.items():
+                if kv == item:
+                    return True
+        except Exception as ex:
+            self.log.error("Exception thrown while retrieving doc {0} from scope {1}, collection {2} \n {3}"
+                           .format(doc_id, scope, collection, ex))
         return False
 
     def test_lww_enable(self):
