@@ -1348,7 +1348,9 @@ class ImportExportTests(CliBaseTest):
                                                              + export_file_name)
 
                     exports = export_file.read().splitlines()
-                    for x in range(len(exports)):
+                    for x in range(0, len(exports)):
+                        k = json.loads(exports[x])
+                        exports[x] = '{"name":"' + k["name"]+ '","age":' + str(k["age"]) + ',"index":"' + k["index"] + '","body":"' + k["body"]+ '"}'
                         tmp = exports[x].split(",")
                         """ add leading zero to name value
                             like pymc39 to pymc039
@@ -1372,10 +1374,16 @@ class ImportExportTests(CliBaseTest):
                         not_in_samples = [x for x in exports if x not in e]
                         print "\n data in exports not in samples  ", not_in_samples
                     count = 0
+                    error_count = 0
                     self.log.info("Compare data with sample data")
-                    for x in exports:
-                        if x in samples:
+                    for x in range(0, len(exports)):
+                        if exports[x] in samples:
                             count += 1
+                        else:
+                            print "\n data not in samples: ", exports[x]
+                            error_count += 1
+                        if error_count == 10:
+                            break
                     if count != len(samples):
                         self.fail("export and sample json count does not match")
                     elif not self.dgm_run:
