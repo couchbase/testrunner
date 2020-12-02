@@ -765,7 +765,7 @@ class RbacN1QL(QueryTests):
         self.assertTrue(any("User does not have credentials to run SELECT queries"
                             in line for line in output),
                         "Able to insert into {0} as user {1} - not expected OR error message is not as expected {2}".
-                        format(self.query_bucket, self.users[0]['id']), output)
+                        format(self.query_bucket, self.users[0]['id'], output))
         self.log.info("Query failed as expected")
 
     def test_update_nested_with_select_with_no_access(self):
@@ -800,7 +800,7 @@ class RbacN1QL(QueryTests):
         self.assertTrue(any("User does not have credentials to run SELECT queries"
                             in line for line in output),
                         "Able to insert into {0} as user {1} - not expected OR error message is not expected {2}".
-                        format(self.query_bucket, self.users[0]['id']), output)
+                        format(self.query_bucket, self.users[0]['id'], output))
         self.log.info("Query failed as expected")
 
     def test_insert_nested_with_select_with_full_access_and_diff_buckets(self):
@@ -834,7 +834,7 @@ class RbacN1QL(QueryTests):
         self.assertTrue(any("User does not have credentials to run SELECT queries"
                             in line for line in output),
                         "Able to select from {0} as user {1} - not expected or error message is not as expected {2}".
-                        format(self.buckets[1].name, self.users[0]['id']),output)
+                        format(self.buckets[1].name, self.users[0]['id'],output))
         self.log.info("Query failed as expected")
 
     def test_upsert_nested_with_select_with_full_access_and_diff_buckets(self):
@@ -904,7 +904,7 @@ class RbacN1QL(QueryTests):
         self.assertTrue(any("User does not have credentials to run SELECT queries"
                             in line for line in output),
                         "Able to select from {0} as user {1} - not expected or error message is not as expected {2}".
-                        format(self.buckets[1].name, self.users[0]['id']),output)
+                        format(self.buckets[1].name, self.users[0]['id'],output))
         self.log.info("Query failed as expected")
 
     def test_delete_nested_with_select_with_full_access_and_diff_buckets(self):
@@ -935,8 +935,8 @@ class RbacN1QL(QueryTests):
         shell.log_command_output(output, error)
         self.assertTrue(any("User does not have credentials to run SELECT queries"
                             in line for line in output),
-                        "Able to select from {0} as user {1} - not expected or error message is not as expected".
-                        format(self.buckets[1].name, self.users[0]['id']),output)
+                        "Able to select from {0} as user {1} - not expected or error message is not as expected {2}".
+                        format(self.buckets[1].name, self.users[0]['id'], output))
         self.log.info("Query failed as expected")
 
     # select,insert,delete,updaete,drop system catalog tables.

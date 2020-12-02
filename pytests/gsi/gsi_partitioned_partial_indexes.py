@@ -27,7 +27,8 @@ class GSIPartialPartitioningTests(GSIIndexPartitioningTests):
             time.sleep(1)
 
         self.wait_until_indexes_online()
-        list_of_indexes = self.n1ql_helper.run_cbq_query(query="select raw name from system:indexes")
+        # Only need to delete the indexes on the main travel-sample bucket, we do not care about the other indexes
+        list_of_indexes = self.n1ql_helper.run_cbq_query(query="select raw name from system:indexes where keyspace_id = 'travel-sample'")
 
         for index in list_of_indexes['results']:
             if index == "#primary":
@@ -51,8 +52,15 @@ class GSIPartialPartitioningTests(GSIIndexPartitioningTests):
 
     # Create an index and verify the replicas
     def _create_index_query(self, index_statement='', index_name=''):
-        self.n1ql_helper.run_cbq_query(query=index_statement, server=self.n1ql_node)
-        self.sleep(10)
+        try:
+            self.n1ql_helper.run_cbq_query(query=index_statement, server=self.n1ql_node)
+        except Exception as ex:
+            self.log.info(str(ex))
+            self.fail("index creation failed with error : {0}".format(str(ex)))
+
+        self.assertTrue(self.verify_index_in_index_map(index_name),
+                        "Index did not appear in the index map after 10 minutes")
+        self.assertTrue(self.wait_until_specific_index_online(index_name), "Index never finished building")
         index_map = self.get_index_map()
         self.log.info(index_map)
         self.n1ql_helper.verify_replica_indexes([index_name], index_map, self.num_index_replicas)
