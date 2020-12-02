@@ -497,6 +497,8 @@ def _parse_user_input():
             params["fts_quota"] = int(value)
         if key == "fts_query_limit" and int(value) > 0:
             params["fts_query_limit"] = int(value)
+        if key == "variant":
+            params["variant"] = value
 
     if not params["version"] and not params["url"]:
         print_result_and_exit("Need valid build version or url to proceed")
@@ -738,9 +740,10 @@ def __get_build_binary_name(node):
     # couchbase-server-enterprise-6.5.0-4557-oel7.x86_64.rpm
     # couchbase-server-enterprise-6.5.0-4557-amzn2.x86_64.rpm
     if node.get_os() in install_constants.X86:
-        return "{0}-{1}-{2}.{3}.{4}".format(params["cb_edition"],
+        return "{0}-{1}-{2}{3}.{4}.{5}".format(params["cb_edition"],
                                             params["version"],
                                             node.get_os(),
+                                            "-" + params["variant"] if "variant" in params else "",
                                             node.info.architecture_type,
                                             node.info.deliverable_type)
 
