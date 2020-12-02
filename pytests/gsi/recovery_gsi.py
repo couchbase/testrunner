@@ -57,6 +57,15 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": self.moi_snapshot_interval})
 
         self.disk_location = RestConnection(self.index_nodes[0]).get_index_path()
+        self.index_create_task_manager = TaskManager(
+            "index_create_task_manager")
+        self.index_create_task_manager.start()
+        self.sdk_loader_manager = TaskManager(
+            "sdk_loader_manager")
+        self.sdk_loader_manager.start()
+
+        self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
+        self.run_tasks = True
 
         self.log.info("==============  PlasmaCollectionsTests setup has completed ==============")
 
@@ -72,15 +81,6 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         pass
 
     def test_recovery_disk_snapshot(self):
-        self.index_create_task_manager = TaskManager(
-            "index_create_task_manager")
-        self.index_create_task_manager.start()
-        self.sdk_loader_manager = TaskManager(
-            "sdk_loader_manager")
-        self.sdk_loader_manager.start()
-
-        self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
-        self.run_tasks = True
 
         index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
         for task in index_create_tasks:
@@ -115,15 +115,6 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self.fail("Some indexes did not recover from snapshot")
 
     def test_recovery_no_disk_snapshot(self):
-        self.index_create_task_manager = TaskManager(
-            "index_create_task_manager")
-        self.index_create_task_manager.start()
-        self.sdk_loader_manager = TaskManager(
-            "sdk_loader_manager")
-        self.sdk_loader_manager.start()
-
-        self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
-        self.run_tasks = True
 
         for index_node in self.index_nodes:
             rest = RestConnection(index_node)
@@ -149,16 +140,115 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.log.info("Some indexes did not process mutations on time")
 
-    def test_recovery_projector_crash(self):
-        self.index_create_task_manager = TaskManager(
-            "index_create_task_manager")
-        self.index_create_task_manager.start()
-        self.sdk_loader_manager = TaskManager(
-            "sdk_loader_manager")
-        self.sdk_loader_manager.start()
+    def test_recover_index_from_in_memory_snapshot(self):
 
-        self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
-        self.run_tasks = True
+        index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
+        for task in index_create_tasks:
+            task.result()
+
+        self.load_docs(self.start_doc)
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.log.info("some indexes did not process mutations on time")
+
+        bucket_name = self.buckets[0].name
+        # Blocking node B firewall
+        data_nodes = self.get_kv_nodes()
+        self.assertTrue(len(data_nodes) >= 3, "Can't run this with less than 3 KV nodes")
+        node_b, node_c = (None, None)
+        for node in data_nodes:
+            if node.ip == self.master.ip:
+                continue
+            if not node_b:
+                node_b = node
+            else:
+                node_c = node
+                break
+        # get num_rollback stats before triggering in-memory recovery
+        conn = RestConnection(self.master)
+        num_rollback_before_recovery = conn.get_num_rollback_stat(bucket=bucket_name)
+        try:
+            self.block_incoming_network_from_node(node_b, node_c)
+
+            # killing Memcached on Node B
+            remote_client = RemoteMachineShellConnection(node_b)
+            remote_client.kill_memcached()
+            remote_client.disconnect()
+
+            # Failing over Node B
+            self.cluster.failover(servers=self.servers, failover_nodes=[node_b])
+        finally:
+            # resume the communication between node B and node C
+            self.resume_blocked_incoming_network_from_node(node_b, node_c)
+        # get num_rollback stats after in-memory recovery of indexes
+        num_rollback_after_recovery = conn.get_num_rollback_stat(bucket=bucket_name)
+        self.assertEqual(num_rollback_before_recovery, num_rollback_after_recovery,
+                         "Recovery didn't happen from in-memory snapshot")
+        self.log.info("Node has recovered from in-memory snapshots")
+        # Loading few more docs so that indexer will index updated as well as new docs
+        self.load_docs(self.num_items_in_collection)
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.log.info("some indexes did not process mutations on time")
+
+        indexes_not_recovered = self.check_if_index_recovered(self.index_ops_obj.get_create_index_list())
+        if indexes_not_recovered:
+            self.index_ops_obj.update_errors(f'Some Indexes not recovered {indexes_not_recovered}')
+            self.log.info(f'Some Indexes not recovered {indexes_not_recovered}')
+
+    def test_restart_timestamp_calculation_for_rollback(self):
+        data_nodes = self.get_kv_nodes()
+        self.assertTrue(len(data_nodes) >= 3, "Can't run this with less than 3 KV nodes")
+        index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
+        for task in index_create_tasks:
+            task.result()
+
+        self.load_docs(self.start_doc)
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.log.info("some indexes did not process mutations on time")
+
+        indexes_not_recovered = self.check_if_index_recovered(self.index_ops_obj.get_create_index_list())
+        if indexes_not_recovered:
+            self.index_ops_obj.update_errors(f'Some Indexes not recovered {indexes_not_recovered}')
+            self.log.info(f'Some Indexes not recovered {indexes_not_recovered}')
+
+        data_nodes = self.get_kv_nodes()
+        node_b, node_c = (None, None)
+        for node in data_nodes:
+            if node.ip == self.master.ip:
+                continue
+            if not node_b:
+                node_b = node
+            else:
+                node_c = node
+                break
+
+        try:
+            # Blocking communication between Node B and Node C
+            self.block_incoming_network_from_node(node_b, node_c)
+
+            # Mutating docs so that replica on Node C don't see changes on Node B
+            self.load_docs(self.num_items_in_collection)
+
+            # killing Memcached on Node B
+            remote_client = RemoteMachineShellConnection(node_b)
+            remote_client.kill_memcached()
+            remote_client.disconnect()
+
+            # Failing over Node B
+            self.cluster.failover(servers=self.servers, failover_nodes=[node_b])
+            self.sleep(timeout=10, message="Allowing indexer to rollback")
+
+            # Validating that indexer has indexed item after rollback and catch up with items in bucket
+            indexes_not_recovered = self.check_if_index_recovered(self.index_ops_obj.get_create_index_list())
+            if indexes_not_recovered:
+                self.index_ops_obj.update_errors(f'Some Indexes not recovered {indexes_not_recovered}')
+                self.log.info(f'Some Indexes not recovered {indexes_not_recovered}')
+        finally:
+            self.resume_blocked_incoming_network_from_node(node_b, node_c)
+
+    def test_recovery_projector_crash(self):
 
         index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
         for task in index_create_tasks:
@@ -200,15 +290,6 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self.log.info("some indexes did not process mutations on time")
 
     def test_recovery_memcached_crash(self):
-        self.index_create_task_manager = TaskManager(
-            "index_create_task_manager")
-        self.index_create_task_manager.start()
-        self.sdk_loader_manager = TaskManager(
-            "sdk_loader_manager")
-        self.sdk_loader_manager.start()
-
-        self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
-        self.run_tasks = True
 
         index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
         for task in index_create_tasks:

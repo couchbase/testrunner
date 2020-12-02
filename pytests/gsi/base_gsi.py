@@ -951,6 +951,16 @@ class BaseSecondaryIndexingTests(QueryTests):
             all_nodes_mutation_processed = all_nodes_mutation_processed and mutation_processed
         return all_nodes_mutation_processed
 
+    def check_if_index_recovered(self, index_list):
+        indexes_not_recovered = []
+        for index in index_list:
+            recovered, index_count, collection_itemcount = self._verify_collection_count_with_index_count(index["query_def"])
+            if not recovered:
+                error_map = {"index_name": index["name"], "index_count": index_count, "bucket_count": collection_itemcount}
+                indexes_not_recovered.append(error_map)
+        if not indexes_not_recovered:
+            self.log.info("All indexes recovered")
+
     def _verify_collection_count_with_index_count(self, query_def):
         recovered = False
         index_name = query_def.index_name
