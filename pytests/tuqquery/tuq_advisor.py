@@ -536,7 +536,7 @@ class QueryAdvisorTests(QueryTests):
         try:
             start = self.run_cbq_query(query="SELECT ADVISOR({'action':'start', 'duration':'40m'})", server=self.master)
             session = start['results'][0]['$1']['session']
-            results = self.run_cbq_query(query=query1, username=user_id, password=user_pwd, server=self.master)
+            results = self.run_cbq_query(query=query1, server=self.master)
             stop = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'stop', 'session':'{session}'}}) as Stop", server=self.master)
             get = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'get', 'session':'{session}'}}) as Get", server=self.master)
             # Check advise
@@ -782,13 +782,62 @@ class QueryAdvisorTests(QueryTests):
             self.fail()
            
     def test_session_collection(self):
-        pass
+        advise_index1 = "CREATE INDEX adv_lower_city_country ON `default`:`travel-sample`.`inventory`.`airport`(lower(`city`),`country`)"
+        advise_index2 = "CREATE INDEX adv_country_lower_city ON `default`:`travel-sample`.`inventory`.`airport`(`country`,lower(`city`))"
+        query1=f'SELECT airportname FROM `{self.bucket_name}`.inventory.airport WHERE lower(city) = "lyon" AND country = "France"'
+        try:
+            start = self.run_cbq_query(query="SELECT ADVISOR({'action':'start', 'duration':'40m'})", server=self.master)
+            session = start['results'][0]['$1']['session']
+            results = self.run_cbq_query(query=query1, server=self.master)
+            stop = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'stop', 'session':'{session}'}}) as Stop", server=self.master)
+            get = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'get', 'session':'{session}'}}) as Get", server=self.master)
+            # Check advise
+            for index in get['results'][0]['Get'][0][0]['recommended_indexes']:
+                self.assertTrue(index['index'] == advise_index1 or index['index'] == advise_index2)
+                self.assertEqual(index['statements'][0]['statement'], query1)
+        except Exception as e:
+            self.log.error(f"Advisor session failed: {e}")
+            self.fail()
 
     def test_session_collection_context(self):
-        pass
+        advise_index1 = "CREATE INDEX adv_lower_city_country ON `default`:`travel-sample`.`inventory`.`airport`(lower(`city`),`country`)"
+        advise_index2 = "CREATE INDEX adv_country_lower_city ON `default`:`travel-sample`.`inventory`.`airport`(`country`,lower(`city`))"
+        query1='SELECT airportname FROM airport WHERE lower(city) = "lyon" AND country = "France"'
+        query_contexts = ["", f"default:`{self.bucket_name}`.inventory", f"default:`{self.bucket_name}`._default"]
+        for context in query_contexts:
+            try:
+                start = self.run_cbq_query(query="SELECT ADVISOR({'action':'start', 'duration':'40m'})", query_context=context, server=self.master)
+                session = start['results'][0]['$1']['session']
+                # Run query in bucket.collection context
+                results = self.run_cbq_query(query=query1, query_context=f"default:`{self.bucket_name}`.inventory", server=self.master)
+                stop = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'stop', 'session':'{session}'}}) as Stop", query_context=context, server=self.master)
+                get = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'get', 'session':'{session}'}}) as Get", query_context=context, server=self.master)
+                # Check advise
+                for index in get['results'][0]['Get'][0][0]['recommended_indexes']:
+                    self.assertTrue(index['index'] == advise_index1 or index['index'] == advise_index2)
+                    self.assertEqual(index['statements'][0]['statement'], query1)
+            except Exception as e:
+                self.log.error(f"Advisor session failed: {e}")
+                self.fail()
 
     def test_session_collection_join(self):
-        pass
+        advise_index1 = "CREATE INDEX adv_country_city ON `default`:`travel-sample`.`inventory`.`landmark`(`country`,`city`)"
+        advise_index2 = "CREATE INDEX adv_city_country ON `default`:`travel-sample`.`inventory`.`landmark`(`city`,`country`)"
+        query1="SELECT DISTINCT MIN(aport.airportname) AS Airport_Name, MIN(lmark.name) AS Landmark_Name, MIN(aport.tz) AS Landmark_Time FROM `travel-sample`.inventory.landmark aport LEFT JOIN `travel-sample`.inventory.landmark lmark ON aport.city = lmark.city AND lmark.country = 'United States' GROUP BY lmark.name ORDER BY lmark.name LIMIT 3"
+        try:
+            start = self.run_cbq_query(query="SELECT ADVISOR({'action':'start', 'duration':'40m'})", server=self.master)
+            session = start['results'][0]['$1']['session']
+            # Run query in bucket.collection context
+            results = self.run_cbq_query(query=query1, query_context=f"default:`{self.bucket_name}`.inventory", server=self.master)
+            stop = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'stop', 'session':'{session}'}}) as Stop", server=self.master)
+            get = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'get', 'session':'{session}'}}) as Get", server=self.master)
+            # Check advise
+            for index in get['results'][0]['Get'][0][0]['recommended_indexes']:
+                self.assertTrue(index['index'] == advise_index1 or index['index'] == advise_index2)
+                self.assertEqual(index['statements'][0]['statement'], query1)
+        except Exception as e:
+            self.log.error(f"Advisor session failed: {e}")
+            self.fail()
 
     def test_session_negative_authorization(self):
         self.users = [{"id": "jackDoe", "name": "Jack Downing", "password": "password1"}]
