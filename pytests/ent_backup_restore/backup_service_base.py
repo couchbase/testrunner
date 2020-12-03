@@ -148,7 +148,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             Cluster().rebalance(self.input.clusters[0], [], [], services=[server.services for server in self.servers])
 
         # If node 1 exists in isolation and nodes2 and node3 have already been added into their own cluster, eject node3 from node2
-        if len(nodes) == 1 and len(RestConnection(self.input.clusters[0][1]).get_nodes(get_all_nodes=True)) > 1:
+        if len(nodes) == 1 and len(self.input.clusters[0]) > 1 and len(RestConnection(self.input.clusters[0][1]).get_nodes(get_all_nodes=True)) > 1:
             # Break the second cluster apart
             Cluster().rebalance(self.input.clusters[0][1:], [], self.input.clusters[0][2:3], services=[server.services for server in self.servers])
 
