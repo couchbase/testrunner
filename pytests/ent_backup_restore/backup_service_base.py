@@ -1,5 +1,6 @@
 import os
 import re
+import math
 import json
 import shlex
 import random
@@ -131,6 +132,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         if self.input.param('node_to_node_encryption', False):
             self.assertTrue(self.node_to_node_encryption.enable())
 
+        if self.input.param('dgm_run', False):
+            self.on_dgm_run()
+
     def custom_rebalance(self):
         """Form cluster[0] into a cluster"""
         # Skip testrunner's rebalance procedure
@@ -171,6 +175,14 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # by the CA's public key so we can just omit that process.
         if use_https:
             self.configuration.verify_ssl = False
+
+    def on_dgm_run(self, no_of_documents_above_threshold=100):
+        """ Configure the number of items to enter the disk greater than memory state in at least 1 node
+
+        Args:
+            no_of_documents_above_threshold (int): The number of additional documents above the threshold
+        """
+        self.num_items = DGMUtil.calculate_dgm_threshold(self.quota, len(self.input.clusters[0]), self.value_size) + no_of_documents_above_threshold
 
     def mkdir(self, directory):
         """ Creates a directory
@@ -1451,3 +1463,17 @@ class Crypto:
         self.clean(garbage)
 
         return "\n".join(output)
+
+class DGMUtil:
+
+    def calculate_dgm_threshold(bucket_size, no_of_nodes_in_cluster, document_size):
+        """ Calculates the number of items required to hit the disk greater than memory state
+
+        If this threshold is crossed, then at least 1 of the nodes will be in the dgm state.
+
+        Args:
+            bucket_size (int): The bucket size in MB (megabytes).
+            no_of_nodes_in_cluster (int): The number of nodes in the cluster.
+            document_size (int): The document size in bytes.
+        """
+        return math.ceil((no_of_nodes_in_cluster * bucket_size * 10**6) / (document_size))
