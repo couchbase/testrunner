@@ -1320,27 +1320,25 @@ class BaseSecondaryIndexingTests(QueryTests):
         seen = False
         next_time = init_time
         timed_out = False
-        while not check:
+        while not check or not timed_out:
             index_status = rest.get_index_status()
             log.info(index_status)
             for index_info in list(index_status.values()):
+                if seen:
+                    break
                 for idx_name in list(index_info.keys()):
                     if idx_name == index_name:
                         seen = True
-                        check = True
                         break
                     else:
                         check = False
                         time.sleep(1)
                         next_time = time.time()
-                        break
             if seen:
                 check = True
             if next_time - init_time > timeout:
                 timed_out = True
-                check = next_time - init_time > timeout
-        if timed_out:
-            check = False
+                check = False
         return check
 
     def get_dgm_for_plasma(self, indexer_nodes=None, memory_quota=256):
