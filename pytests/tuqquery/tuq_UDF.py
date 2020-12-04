@@ -179,7 +179,17 @@ class QueryUDFTests(QueryTests):
         finally:
             try:
                 if self.analytics:
-                    self.run_cbq_query("DROP ANALYTICS FUNCTION celsius")
+                    if self.named_params:
+                        if self.special_chars:
+                            self.run_cbq_query(
+                                "DROP ANALYTICS FUNCTION celsius(deg_)")
+                        else:
+                            self.run_cbq_query(
+                                "DROP ANALYTICS FUNCTION celsius(degrees) ")
+                    elif self.no_params:
+                        self.run_cbq_query("DROP ANALYTICS FUNCTION celsius()")
+                    else:
+                        self.run_cbq_query("DROP ANALYTICS FUNCTION celsius(...) ")
                 else:
                     self.run_cbq_query("DROP FUNCTION celsius")
             except Exception as e:
@@ -217,9 +227,9 @@ class QueryUDFTests(QueryTests):
             try:
                 if self.analytics:
                     if self.special_chars:
-                        results = self.run_cbq_query("DROP ANALYTICS FUNCTION `c%.-_`")
+                        self.run_cbq_query("DROP ANALYTICS FUNCTION `c%.-_`(param1)")
                     else:
-                        results = self.run_cbq_query("DROP ANALYTICS FUNCTION cels")
+                        self.run_cbq_query("DROP ANALYTICS FUNCTION cels(param1)")
                 else:
                     if self.special_chars:
                         results = self.run_cbq_query("DROP FUNCTION `c%.-_`")
@@ -248,9 +258,9 @@ class QueryUDFTests(QueryTests):
             try:
                 if self.analytics:
                     if self.special_chars:
-                        self.run_cbq_query("DROP ANALYTICS FUNCTION `c%.-_`")
+                        self.run_cbq_query("DROP ANALYTICS FUNCTION `c%.-_`(param1)")
                     else:
-                        self.run_cbq_query("DROP ANALYTICS FUNCTION cels")
+                        self.run_cbq_query("DROP ANALYTICS FUNCTION cels(param1)")
                 else:
                     if self.special_chars:
                         self.run_cbq_query("DROP FUNCTION `c%.-_`")
@@ -319,7 +329,7 @@ class QueryUDFTests(QueryTests):
         finally:
             try:
                 if self.analytics:
-                    self.run_cbq_query("DROP ANALYTICS FUNCTION collection1.celsius".format(self.scope))
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION collection1.celsius(degrees)")
                 else:
                     self.run_cbq_query("DROP FUNCTION default:default.{0}.celsius".format(self.scope))
             except Exception as e:
@@ -360,7 +370,7 @@ class QueryUDFTests(QueryTests):
         finally:
             try:
                 if self.analytics:
-                    self.run_cbq_query("DROP ANALYTICS FUNCTION func1")
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func1(nameval)")
                 else:
                     self.run_cbq_query("DROP FUNCTION func1")
             except Exception as e:
@@ -397,10 +407,8 @@ class QueryUDFTests(QueryTests):
         finally:
             try:
                 if self.analytics:
-                    self.run_cbq_query("DROP ANALYTICS FUNCTION func1")
-                    self.run_cbq_query("DROP ANALYTICS FUNCTION func2")
-                    self.run_cbq_query("DROP ANALYTICS FUNCTION func3")
-                    self.run_cbq_query("DROP ANALYTICS FUNCTION func4")
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func2(degrees)")
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func4(nameval)")
                 else:
                     self.delete_library("strings")
                     self.run_cbq_query("DROP FUNCTION func1")
@@ -466,8 +474,8 @@ class QueryUDFTests(QueryTests):
         finally:
             try:
                 if self.analytics:
-                    self.run_cbq_query("DROP ANALYTICS FUNCTION func4")
-                    self.run_cbq_query("DROP ANALYTICS FUNCTION func5")
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func4(doctype)")
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func5(doctype)")
                 else:
                     self.run_cbq_query("DROP FUNCTION func4")
                     self.run_cbq_query("DROP FUNCTION func5")
@@ -551,7 +559,7 @@ class QueryUDFTests(QueryTests):
         finally:
             try:
                 if self.analytics:
-                    self.run_cbq_query("DROP ANALYTICS FUNCTION func1")
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func1(degree)")
                 else:
                     self.run_cbq_query("DROP FUNCTION func1")
             except Exception as e:
@@ -649,14 +657,14 @@ class QueryUDFTests(QueryTests):
         finally:
             try:
                 if self.analytics:
-                    self.run_cbq_query("DROP ANALYTICS FUNCTION celsius")
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION celsius(degrees)")
                 else:
                     self.run_cbq_query("DROP FUNCTION celsius")
             except Exception as e:
                 self.log.error(str(e))
             try:
                 if self.analytics:
-                    self.run_cbq_query("DROP ANALYTICS FUNCTION invert")
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION invert(param1)")
                 else:
                     self.run_cbq_query("DROP FUNCTION invert")
             except Exception as e:
@@ -703,7 +711,7 @@ class QueryUDFTests(QueryTests):
         finally:
             try:
                 if self.analytics:
-                    self.run_cbq_query("DROP ANALYTICS FUNCTION func1")
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func1(degrees)")
                 else:
                     self.run_cbq_query("DROP FUNCTION func1")
             except Exception as e:
@@ -931,6 +939,23 @@ class QueryUDFTests(QueryTests):
             except Exception as e:
                 self.log.error(str(e))
 
+    def test_javascript_infinite_loop(self):
+        string_functions = '[{"name" : "multiplier","code" : "function multiplier(a,b) { do{ a = a; } while(a > b) return a; }"}]'
+        function_names = ["adder"]
+        string_function_names = ["multiplier"]
+        created = self.create_library("strings", string_functions, string_function_names)
+
+        try:
+            self.run_cbq_query(query='CREATE FUNCTION func2(a,b) LANGUAGE JAVASCRIPT AS "multiplier" AT "strings"', query_params={'timeout':"10s"})
+            results = self.run_cbq_query(query="EXECUTE FUNCTION func2(2,1)")
+        except Exception as e:
+            self.log.error(str(e))
+        finally:
+            try:
+                self.delete_library("strings")
+                self.run_cbq_query("DROP FUNCTION func2")
+            except Exception as e:
+                self.log.error(str(e))
     def test_javascript_function_syntax_scope(self):
         try:
             functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
@@ -1212,7 +1237,7 @@ class QueryUDFTests(QueryTests):
         finally:
             try:
                 if self.analytics:
-                    self.run_cbq_query("DROP ANALYTICS FUNCTION func1")
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func1(degrees)")
                 else:
                     self.delete_library("math")
                     self.run_cbq_query("DROP FUNCTION func1")
@@ -1243,7 +1268,7 @@ class QueryUDFTests(QueryTests):
         finally:
             try:
                 if self.analytics:
-                    self.run_cbq_query("DROP ANALYTICS FUNCTION func2")
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func2(degrees)")
                 else:
                     self.delete_library("math")
                     self.run_cbq_query("DROP FUNCTION func1")
@@ -1275,7 +1300,7 @@ class QueryUDFTests(QueryTests):
         finally:
             try:
                 if self.analytics:
-                    self.run_cbq_query("DROP ANALYTICS FUNCTION func2")
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION func2(degrees)")
                 else:
                     self.delete_library("math")
                     self.run_cbq_query("DROP FUNCTION func1")
@@ -1337,6 +1362,32 @@ class QueryUDFTests(QueryTests):
             except Exception as e:
                 self.log.error(str(e))
 
+    def test_advise_udf(self):
+        string_functions = '[{"name" : "concater","code" : "function concater(a,b) { var text = \\"\\"; var x; for (x in a) {if (x = b) { return x; }} return \\"n\\"; }"}]'
+        functions = '[{"name" : "comparator","code" : "function comparator(a, b) {if (a > b) { return \\"old hotel\\"; } else { return \\"new hotel\\" }}"}]'
+        function_names = ["comparator"]
+        function_names2 = ["concater","comparator"]
+        created = self.create_library("strings", functions, function_names)
+        created2 = self.create_library("strings",string_functions,function_names2)
+        try:
+            self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "comparator" AT "strings"')
+            self.run_cbq_query("CREATE FUNCTION func2(degrees) LANGUAGE INLINE AS (degrees - 32) ")
+            self.run_cbq_query(query='CREATE FUNCTION func3(a,b) LANGUAGE JAVASCRIPT AS "concater" AT "strings"')
+            self.run_cbq_query("CREATE OR REPLACE FUNCTION func4(nameval) {{ (select * from default:default.{0}.{1} where name = nameval) }}".format(self.scope,self.collections[0]))
+
+            results2 = self.run_cbq_query(
+                "ADVISE SELECT name FROM default:default.test.test1 LET maximum_no = func2(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END GROUP BY name LETTING letter = func3('old hotel','o') HAVING name > letter")
+            self.assertTrue('CREATE INDEX adv_DISTINCT_numbers ON `default`:`default`.`test`.`test1`(DISTINCT ARRAY `v` FOR v in `numbers` END)' in str(results2['results']), "Wrong index was advised, check advise output {0}".format(results2))
+        finally:
+            try:
+                self.delete_library("strings")
+                self.run_cbq_query("DROP FUNCTION func1")
+                self.run_cbq_query("DROP FUNCTION func2")
+                self.run_cbq_query("DROP FUNCTION func3")
+                self.run_cbq_query("DROP FUNCTION func4")
+            except Exception as e:
+                self.log.error(str(e))
+
     def test_udf_prepareds(self):
         try:
             self.run_cbq_query(
@@ -1374,7 +1425,7 @@ class QueryUDFTests(QueryTests):
                                                    {'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}]])
             self.run_cbq_query("CREATE OR REPLACE FUNCTION func1(...) {args[0]}")
             results = self.run_cbq_query("EXECUTE p1")
-            self.assertEqual(results['results'], [{'name': 'old hotel'}])
+            self.assertEqual(results['results'], ['old hotel'])
         except Exception as e:
             self.log.error(str(e))
             self.fail()
