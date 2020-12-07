@@ -523,6 +523,10 @@ class QueryAdvisorTests(QueryTests):
                 for statement in index['statements']:
                     self.assertEqual(statement['statement'], query1)
                     self.assertEqual(statement['run_count'], 5)
+            # Purge and list session
+            purge = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'purge', 'session':'{session}'}}) as Get", server=self.master)
+            list_all = self.run_cbq_query(query="SELECT ADVISOR({'action':'list', 'status': 'all'}) as List", server=self.master)
+            self.assertEqual(list_all['results'][0]['List'],[])
         except Exception as e:
             self.log.error("Advisor session failed: {0}".format(e))
             self.fail()
@@ -985,36 +989,87 @@ class QueryAdvisorTests(QueryTests):
             self.fail()
 
     def test_session_kill_index(self):
-        pass
+        advise_index1 = "CREATE INDEX adv_country_lower_city_type ON `travel-sample`(`country`,lower((`city`))) WHERE `type` = 'airport'"
+        advise_index2 = "CREATE INDEX adv_lower_city_country_type ON `travel-sample`(lower((`city`)),`country`) WHERE `type` = 'airport'"
+        query1 = f'SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
+        node1 = self.servers[0]
+        node2 = self.servers[1]
+        try:
+            # Start session on node1
+            start = self.run_cbq_query(query="SELECT ADVISOR({'action':'start', 'duration':'40m'})", server=node1)
+            session = start['results'][0]['$1']['session']
+            # Run query on node1
+            results = self.run_cbq_query(query=query1, server=node1)
+            # Kill index service on node1
+            remote_client = RemoteMachineShellConnection(node1)
+            remote_client.terminate_process(process_name="indexer")
+            self.sleep(3)
+            # Stop session on node2
+            stop = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'stop', 'session':'{session}'}}) as Stop", server=node2)
+            # Get session on node1
+            self.sleep(1)
+            get = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'get', 'session':'{session}'}}) as Get", server=node1)
+            # Check advise
+            for index in get['results'][0]['Get'][0][0]['recommended_indexes']:
+                self.assertTrue(index['index'] == advise_index1 or index['index'] == advise_index2)
+                self.assertEqual(index['statements'][0]['statement'], query1)
+                self.assertEqual(index['statements'][0]['run_count'], 1)
+        except Exception as e:
+            self.log.error(f"Advisor session failed: {e}")
+            self.fail()
 
     def test_session_kill_n1ql(self):
-        pass
+        advise_index1 = "CREATE INDEX adv_country_lower_city_type ON `travel-sample`(`country`,lower((`city`))) WHERE `type` = 'airport'"
+        advise_index2 = "CREATE INDEX adv_lower_city_country_type ON `travel-sample`(lower((`city`)),`country`) WHERE `type` = 'airport'"
+        query1 = f'SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
+        node1 = self.servers[0]
+        node2 = self.servers[1]
+        try:
+            # Start session on node1
+            start = self.run_cbq_query(query="SELECT ADVISOR({'action':'start', 'duration':'40m'})", server=node1)
+            session = start['results'][0]['$1']['session']
+            # Run query on node1
+            results = self.run_cbq_query(query=query1, server=node1)
+            # Kill n1ql service on node1
+            remote_client = RemoteMachineShellConnection(node1)
+            remote_client.terminate_process(process_name="cbq-engine")
+            self.sleep(3)
+            # Stop session on node2
+            stop = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'stop', 'session':'{session}'}}) as Stop", server=node2)
+            # List session on node1 and node2
+            self.sleep(1)
+            list_node1 = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'list'}}) as List", server=node1)
+            list_node2 = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'list'}}) as List", server=node2)
+            # Check advise
+            self.assertEqual(list_node1['results'][0]['List'], [])
+            self.assertEqual(list_node2['results'][0]['List'], [])
+        except Exception as e:
+            self.log.error(f"Advisor session failed: {e}")
+            self.fail()
 
     def test_session_multi_node(self):
-        pass
-
-
-
-
-        
-
-
-
-
-
-
-
-
-
-
-
-
-            
-
-
-
-
-
-        
-
-
+        advise_index1 = "CREATE INDEX adv_country_lower_city_type ON `travel-sample`(`country`,lower((`city`))) WHERE `type` = 'airport'"
+        advise_index2 = "CREATE INDEX adv_lower_city_country_type ON `travel-sample`(lower((`city`)),`country`) WHERE `type` = 'airport'"
+        query1 = f'SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
+        node1 = self.servers[0]
+        node2 = self.servers[1]
+        try:
+            # Start session on node1
+            start = self.run_cbq_query(query="SELECT ADVISOR({'action':'start', 'duration':'40m'})", server=node1)
+            session = start['results'][0]['$1']['session']
+            # Run query on node2
+            results = self.run_cbq_query(query=query1, server=node2)
+            # Run query on node1
+            results = self.run_cbq_query(query=query1, server=node1)
+            # Stop session on node1
+            stop = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'stop', 'session':'{session}'}}) as Stop", server=node1)
+            # Get session on node2
+            get = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'get', 'session':'{session}'}}) as Get", server=node2)
+            # Check advise
+            for index in get['results'][0]['Get'][0][0]['recommended_indexes']:
+                self.assertTrue(index['index'] == advise_index1 or index['index'] == advise_index2)
+                self.assertEqual(index['statements'][0]['statement'], query1)
+                self.assertEqual(index['statements'][0]['run_count'], 2)
+        except Exception as e:
+            self.log.error(f"Advisor session failed: {e}")
+            self.fail()
