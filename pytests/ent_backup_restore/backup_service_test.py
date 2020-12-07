@@ -2748,7 +2748,7 @@ class BackupServiceTest(BackupServiceBase):
             full_backup (bool): Take a full backup.
         """
         repo_name, full_backup, bucket_name = "full_name", self.input.param("full_backup", True), "default"
-        no_of_scopes, no_of_collections, no_of_items = self.input.param("no_of_scopes", 5), self.input.param("no_of_collection", 5), 100
+        no_of_scopes, no_of_collections, no_of_items = self.input.param("no_of_scopes", 5), self.input.param("no_of_collections", 5), self.input.param("items", 100)
         remote_connection = RemoteMachineShellConnection(self.backupset.cluster_host)
 
         # Create a repository with a default plan
@@ -2757,9 +2757,9 @@ class BackupServiceTest(BackupServiceBase):
         # Create scopes and collections
         ids = self.create_variable_no_of_collections_and_scopes(self.backupset.cluster_host, bucket_name, no_of_scopes, no_of_collections)
 
-        # Populate each collection with documents
-        for collection_id in ids:
-            remote_connection.execute_cbworkloadgen(self.backupset.cluster_host.rest_username, self.backupset.cluster_host.rest_password, no_of_items, "1", bucket_name, 3, f"-j -c {collection_id}")
+        # Populate each collection with documents and prefix each document key with its collection id
+        for key in ids:
+            remote_connection.execute_cbworkloadgen(self.backupset.cluster_host.rest_username, self.backupset.cluster_host.rest_password, no_of_items, "1", bucket_name, 3, f"-j -c {ids[key]} --prefix={ids[key]}-pymc")
 
         self.sleep(30)
 
@@ -2774,11 +2774,13 @@ class BackupServiceTest(BackupServiceBase):
         # Perform a one off backup
         self.take_one_off_backup("active", repo_name, full_backup, 20, 20)
 
-        # Delete contents of the bucket
-        self.flush_all_buckets()
+        # Drop all buckets
+        self.drop_all_buckets()
 
         # Perform a one off restore
-        self.take_one_off_restore("active", repo_name, 20, 5, self.backupset.cluster_host)
+        self.take_one_off_restore("active", repo_name, 20, 20, self.backupset.cluster_host)
+
+        self.sleep(120)
 
         # Check the documents were successfully restored
         data_after_restore = remote_connection.execute_cbexport(self.backupset.cluster_host, bucket_name, "scope", "collection")
@@ -2787,8 +2789,11 @@ class BackupServiceTest(BackupServiceBase):
 
         data_after_restore_dict = {document_key_function(document): document for document in data_after_restore}
 
+        # Predict the body of each document
         for scope_no, collection_no, item_no in itertools.product(range(no_of_scopes), range(no_of_collections), range(no_of_items)):
-            document = data_after_restore_dict[(f"scope{scope_no}", f"collection{collection_no}", f"pymc{item_no}")]
+            scope_name, collection_name = f"scope{scope_no}", f"collection{collection_no}"
+            collection_id = ids[(scope_name, collection_name)]
+            document = data_after_restore_dict[(scope_name, collection_name, f"{collection_id}-pymc{item_no}")]
             self.assertEqual(document['index'], str(item_no))
             self.assertEqual(document['body'], "000")
 
@@ -2796,7 +2801,7 @@ class BackupServiceTest(BackupServiceBase):
         """ Test merging and restoring with collections
         """
         repo_name, full_backup, bucket_name, no_of_backups = "full_name", self.input.param("full_backup", True), "default", 2
-        no_of_scopes, no_of_collections, no_of_items = self.input.param("no_of_scopes", 5), self.input.param("no_of_collection", 5), 100
+        no_of_scopes, no_of_collections, no_of_items = self.input.param("no_of_scopes", 5), self.input.param("no_of_collections", 5), self.input.param("items", 100)
         remote_connection = RemoteMachineShellConnection(self.backupset.cluster_host)
 
         # Create a repository with a default plan
@@ -2807,8 +2812,8 @@ class BackupServiceTest(BackupServiceBase):
 
         # Take n one off backups
         def provisioning_function(i):
-            for collection_id in ids:
-                remote_connection.execute_cbworkloadgen(self.backupset.cluster_host.rest_username, self.backupset.cluster_host.rest_password, no_of_items, "1", bucket_name, 2 + i, f"-j -c {collection_id}")
+            for key in ids:
+                remote_connection.execute_cbworkloadgen(self.backupset.cluster_host.rest_username, self.backupset.cluster_host.rest_password, no_of_items, "1", bucket_name, 2 + i, f"-j -c {ids[key]} --prefix={ids[key]}-pymc")
 
         self.take_n_one_off_backups("active", repo_name, None, no_of_backups, doc_load_sleep=30, data_provisioning_function=provisioning_function)
 
@@ -2829,11 +2834,13 @@ class BackupServiceTest(BackupServiceBase):
         data.sort(key=document_key_function)
         self.assertEqual(len(data), no_of_collections * no_of_scopes * no_of_items)
 
-        # Delete contents of the bucket
-        self.flush_all_buckets()
+        # Drop all buckets
+        self.drop_all_buckets()
 
         # Perform a one off restore
         self.take_one_off_restore("active", repo_name, 20, 5, self.backupset.cluster_host)
+
+        self.sleep(120)
 
         # Check the documents were successfully restored
         data_after_restore = remote_connection.execute_cbexport(self.backupset.cluster_host, bucket_name, "scope", "collection")
@@ -2843,9 +2850,12 @@ class BackupServiceTest(BackupServiceBase):
         data_after_restore_dict = {document_key_function(document): document for document in data_after_restore}
 
         for scope_no, collection_no, item_no in itertools.product(range(no_of_scopes), range(no_of_collections), range(no_of_items)):
-            document = data_after_restore_dict[(f"scope{scope_no}", f"collection{collection_no}", f"pymc{item_no}")]
+            scope_name, collection_name = f"scope{scope_no}", f"collection{collection_no}"
+            collection_id = ids[(scope_name, collection_name)]
+            document = data_after_restore_dict[(scope_name, collection_name, f"{collection_id}-pymc{item_no}")]
             self.assertEqual(document['index'], str(item_no))
             self.assertEqual(document['body'], "0" * (1 + no_of_backups))
+
     # Test logs
 
     def test_logs_can_be_collected(self):

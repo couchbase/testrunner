@@ -500,9 +500,10 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             target = self.backupset.cluster_host
 
         # Specify restore target
-        body = Body1(target=f"{target.ip}:{target.port}", user=target.rest_username, password=target.rest_password)
+        body = Body1(target=f"{target.ip}:{target.port}", user=target.rest_username, password=target.rest_password, auto_create_buckets=True)
         # Take one off restore
         task_name = self.repository_api.cluster_self_repository_state_id_restore_post(state, repo_name, body=body).task_name
+
         # Check the task completed successfully
         self.assertTrue(self.wait_for_backup_task(state, repo_name, retries, sleep_time, task_name=task_name))
 
@@ -518,6 +519,13 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         # Add repositories and tie default plan to repository
         self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+
+    def drop_all_buckets(self, retries=10, sleep=30):
+        """ Drop all buckets
+        """
+        rest_connection = RestConnection(self.master)
+        for bucket in self.buckets:
+            rest_connection.delete_bucket(bucket, retries, sleep)
 
     def flush_all_buckets(self):
         """ Flush all buckets to empty cluster of documents
@@ -545,7 +553,10 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         return rest_conn.get_collection_uid(bucket_name, scope_name, collection_name)
 
     def create_variable_no_of_collections_and_scopes(self, cluster_host, bucket_name, no_of_scopes, no_of_collections):
-        """ Create `no_of_collections` in each `no_of_scopes` scopes in `bucket_name`
+        """ Create `no_of_collections` in each `no_of_scopes` scopes in `bucket_name
+
+        Returns:
+            (dict): Returns a dictionary mapping a tuple (scope_name, collection_name) to its collection id.
         """
         rest_conn = RestConnection(cluster_host)
 
@@ -562,7 +573,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         rest_conn.put_collection_scope_manifest(bucket_name, manifest)
 
         # Return a list of all the collection ids
-        return [rest_conn.get_collection_uid(bucket_name, f"scope{i}", f"collection{j}") for i in range(no_of_scopes) for j in range(no_of_collections)]
+        return {(f"scope{i}", f"collection{j}"): rest_conn.get_collection_uid(bucket_name, f"scope{i}", f"collection{j}") for i in range(no_of_scopes) for j in range(no_of_collections)}
 
     def get_hidden_repo_name(self, repo_name):
         """ Get the hidden repo name for `repo_name`
