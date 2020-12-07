@@ -72,11 +72,13 @@ def get_ssh_password(iniFile):
 def rreplace(str, pattern, num_replacements):
     return str.rsplit(pattern, num_replacements)[0]
 
-def get_available_servers_count(options=None, is_addl_pool=False, os_version=""):
+def get_available_servers_count(options=None, is_addl_pool=False, os_version="", pool_id=None):
     # this bit is Docker/VM dependent
     getAvailUrl = 'http://' + SERVER_MANAGER + '/getavailablecount/'
 
-    pool_id = options.addPoolId if is_addl_pool == True else options.poolId
+    if is_addl_pool:
+        pool_id = options.addPoolId
+    
     if options.serverType.lower() == 'docker':
         # may want to add OS at some point
         getAvailUrl = getAvailUrl + 'docker?os={0}&poolId={1}'.format(os_version, pool_id)
@@ -101,8 +103,9 @@ def get_available_servers_count(options=None, is_addl_pool=False, os_version="")
         count = int(content)
     return count
 
-def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool=False, os_version=""):
-    pool_id = options.addPoolId if is_addl_pool == True else options.poolId
+def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool=False, os_version="", pool_id=None):
+    if is_addl_pool:
+        pool_id = options.addPoolId
 
     if options.serverType.lower() == 'docker':
         getServerURL = 'http://' + SERVER_MANAGER + '/getdockers/{0}?count={1}&os={2}&poolId={3}'. \
@@ -246,6 +249,9 @@ def main():
         SSH_POLL_INTERVAL=int(options.SSH_POLL_INTERVAL)
     if options.SSH_NUM_RETRIES:
         SSH_NUM_RETRIES=int(options.SSH_NUM_RETRIES)
+
+    if options.poolId:
+        options.poolId = options.poolId.split(",")
 
     # What do we do with any reported parameters?
     # 1. Append them to the extra (testrunner) parameters
@@ -510,22 +516,31 @@ def main():
                 job_index += 1
                 continue
             # this bit is Docker/VM dependent
-            serverCount = get_available_servers_count(options=options, os_version=options.os)
-            print("Server count={}".format(serverCount))
-            if serverCount and serverCount > 0:
-                # see if we can match a test
-                print((time.asctime(time.localtime(time.time())), 'there are', serverCount, ' servers available'))
 
-                haveTestToLaunch = False
-                i = 0
-                while not haveTestToLaunch and i < len(testsToLaunch):
-                    if testsToLaunch[i]['serverCount'] <= serverCount:
-                        if testsToLaunch[i]['addPoolServerCount']:
+            # see if we can match a test
+            haveTestToLaunch = False
+            i = 0
+            pool_to_use = options.poolId[0]
+
+            for pool_id in options.poolId:
+
+                serverCount = get_available_servers_count(options=options, os_version=options.os, pool_id=pool_id)
+                print("Server count={}".format(serverCount))
+
+                if not serverCount or serverCount == 0:
+                    continue
+
+                print((time.asctime(time.localtime(time.time())), 'there are', serverCount, ' servers available in ', pool_id, ' pool'))
+
+                test_index = 0
+                while not haveTestToLaunch and test_index < len(testsToLaunch):
+                    if testsToLaunch[test_index]['serverCount'] <= serverCount:
+                        if testsToLaunch[test_index]['addPoolServerCount']:
                             addlServersCount = get_available_servers_count(options=options, is_addl_pool=True, os_version=addPoolServer_os)
                             if addlServersCount == 0:
                                 print(time.asctime(time.localtime(time.time())), 'no {0} VMs at this time'.format(
                                     options.addPoolId))
-                                i = i + 1
+                                test_index = test_index + 1
                             else:
                                 print(time.asctime(
                                     time.localtime(time.time())), "there are {0} {1} servers available".format(
@@ -534,197 +549,207 @@ def main():
                         else:
                             haveTestToLaunch = True
                     else:
-                        i = i + 1
+                        test_index = test_index + 1
+                i = test_index
+                pool_to_use = pool_id
 
                 if haveTestToLaunch:
-                    print("\n\n *** Dispatching job#{} of {} with {} servers (total={}) and {} "
-                          "additional "
-                          "servers(total={}) :  {}-{} with {}\n".format(job_index, total_jobs_count,
-                                                                        testsToLaunch[i][
-                                                                            'serverCount'],
-                                                                        total_servers_being_used,
-                                                                        testsToLaunch[i][
-                                                                            'addPoolServerCount'],
-                                                                        total_addl_servers_being_used,
-                                                                        testsToLaunch[i][
-                                                                            'component'],
-                                                                        testsToLaunch[i][
-                                                                            'subcomponent'],
-                                                                        testsToLaunch[i][
-                                                                            'framework'], ))
-                    # build the dashboard descriptor
-                    dashboardDescriptor = urllib.parse.quote(testsToLaunch[i]['subcomponent'])
-                    if options.dashboardReportedParameters is not None:
-                        for o in options.dashboardReportedParameters.split(','):
-                            dashboardDescriptor += '_' + o.split('=')[1]
+                    break
 
-                    # and this is the Jenkins descriptor
-                    descriptor = urllib.parse.quote(
-                        testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] +
-                        '-' + time.strftime('%b-%d-%X') + '-' + options.version)
+            if haveTestToLaunch:
+                print("\n\n *** Dispatching job#{} of {} with {} servers (total={}) and {} "
+                        "additional "
+                        "servers(total={}) :  {}-{} with {}\n".format(job_index, total_jobs_count,
+                                                                    testsToLaunch[i][
+                                                                        'serverCount'],
+                                                                    total_servers_being_used,
+                                                                    testsToLaunch[i][
+                                                                        'addPoolServerCount'],
+                                                                    total_addl_servers_being_used,
+                                                                    testsToLaunch[i][
+                                                                        'component'],
+                                                                    testsToLaunch[i][
+                                                                        'subcomponent'],
+                                                                    testsToLaunch[i][
+                                                                        'framework'], ))
 
-                    # grab the server resources
-                    # this bit is Docker/VM dependent
-                    servers = []
-                    unreachable_servers = []
-                    how_many = testsToLaunch[i]['serverCount'] - len(servers)
-                    if options.check_vm == "True":
-                        while how_many > 0:
-                            unchecked_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i],
-                                                        how_many=how_many, os_version=options.os)
-                            checked_servers, bad_servers = check_servers_via_ssh(servers=unchecked_servers,
-                                                                             test=testsToLaunch[i])
-                            for ss in checked_servers:
-                                servers.append(ss)
-                            for ss in bad_servers:
-                                unreachable_servers.append(ss)
-                            how_many = testsToLaunch[i]['serverCount'] - len(servers)
-
-                    else:
-                        servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i],
-                                              how_many=how_many, os_version=options.os)
-                        how_many = testsToLaunch[i]['serverCount'] - len(servers)
-
-                    if options.serverType.lower() != 'docker':
-                        # sometimes there could be a race, before a dispatcher process acquires vms,
-                        # another waiting dispatcher process could grab them, resulting in lesser vms
-                        # for the second dispatcher process
-                        if len(servers) != testsToLaunch[i]['serverCount']:
-                            print("Received servers count does not match the expected test server count!")
-                            release_servers(descriptor)
-                            continue
-
-                    # get additional pool servers as needed
-                    addl_servers = []
-                    if testsToLaunch[i]['addPoolServerCount']:
-                        how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
-                        addl_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i], how_many=how_many_addl, is_addl_pool=True, os_version=addPoolServer_os)
-                        how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
-                        if len(addl_servers) != testsToLaunch[i]['addPoolServerCount']:
-                            print(
-                                "Received additional servers count does not match the expected "
-                                "test additional servers count!")
-                            release_servers(descriptor)
-                            continue
-
-                    # and send the request to the test executor
-
-                    # figure out the parameters, there are test suite specific, and added at dispatch time
-                    if  runTimeTestRunnerParameters is None:
-                        parameters = testsToLaunch[i]['parameters']
-                    else:
-                        if testsToLaunch[i]['parameters'] == 'None':
-                            parameters = runTimeTestRunnerParameters
-                        else:
-                            parameters = testsToLaunch[i]['parameters'] + ',' + runTimeTestRunnerParameters
-
-                    url = launchString.format(options.version,
-                                              testsToLaunch[i]['confFile'],
-                                              descriptor,
-                                              testsToLaunch[i]['component'],
-                                              dashboardDescriptor,
-                                              testsToLaunch[i]['iniFile'],
-                                              urllib.parse.quote(parameters),
-                                              options.os,
-                                              testsToLaunch[i]['initNodes'],
-                                              testsToLaunch[i]['installParameters'],
-                                              options.branch,
-                                              testsToLaunch[i]['slave'],
-                                              urllib.parse.quote(testsToLaunch[i]['owner']),
-                                              urllib.parse.quote(
-                                                  testsToLaunch[i]['mailing_list']),
-                                              testsToLaunch[i]['mode'],
-                                              testsToLaunch[i]['timeLimit'])
-                    url = url + '&dispatcher_params=' + \
-                                   urllib.parse.urlencode({"parameters":
-                                                 currentExecutorParams})
-
-
-                    if options.serverType.lower() != 'docker':
-                        servers_str = json.dumps(servers).replace(' ','').replace('[','', 1)
-                        servers_str = rreplace(servers_str, ']', 1)
-                        url = url + '&servers=' + urllib.parse.quote(servers_str)
-
-                        if testsToLaunch[i]['addPoolServerCount']:
-                            addPoolServers = json.dumps(addl_servers).replace(' ','').replace('[','', 1)
-                            addPoolServers = rreplace(addPoolServers, ']', 1)
-                            url = url + '&addPoolServerId=' +\
-                                    options.addPoolId +\
-                                    '&addPoolServers=' +\
-                                    urllib.parse.quote(addPoolServers)
-
-                    if len(unreachable_servers) > 0:
-                        print("The following VM(s) are unreachable for ssh connection:")
-                        for s in unreachable_servers:
-                            response, content = httplib2.Http(timeout=TIMEOUT).request('http://' + SERVER_MANAGER + '/releaseip/' + s + '/ssh_failed', 'GET')
-                            print(s)
-
-                    # optional add [-docker] [-Jenkins extension]
-                    launchStringBaseF = launchStringBase
-                    if options.serverType.lower() == 'docker':
-                        launchStringBaseF = launchStringBase + '-docker'
-                    if options.test:
-                        launchStringBaseF = launchStringBase + '-test'
-                    #     if options.framework.lower() == "jython":
-                    framework = testsToLaunch[i]['framework']
-                    if framework != 'testrunner':
-                        launchStringBaseF = launchStringBaseF + "-" + framework
-                    elif options.jenkins is not None:
-                        launchStringBaseF = launchStringBaseF + '-' + options.jenkins
-                    url = launchStringBaseF + url
-
-                    if options.job_params:
-                        url = update_url_with_job_params(url, options.job_params)
-                    print('\n', time.asctime( time.localtime(time.time()) ), 'launching ', url)
-                    dispatch_job = True
-                    if not options.fresh_run:
-                        dispatch_job = \
-                            find_rerun_job.should_dispatch_job(
-                                options.os, testsToLaunch[i][
-                                    'component'], dashboardDescriptor
-                                , options.version)
-
-                    if options.noLaunch or not dispatch_job:
-                        # free the VMs
-                        time.sleep(3)
-                        if options.serverType.lower() == 'docker':
-                            #Docker gets only a single sever from
-                            # get_server. Not hard coding the server
-                            # we get, which as of now is constant,
-                            # but might change in the future.
-                            ipaddr = servers[0]
-                            response, content = httplib2.Http(
-                                timeout=TIMEOUT). \
-                                request(
-                                'http://' + SERVER_MANAGER +
-                                '/releasedockers/' + descriptor +
-                                '?ipaddr=' + ipaddr,
-                                'GET')
-                            print(
-                            'the release response', response, content)
-                        else:
-                            release_servers(descriptor)
-                    else:
-                        response, content = httplib2.Http(timeout=TIMEOUT).request(url, 'GET')
-                        print("Response is: {0}".format(str(response)))
-                        print("Content is: {0}".format(str(content)))
-
-                    total_servers_being_used += testsToLaunch[0]['serverCount']
-                    total_addl_servers_being_used += testsToLaunch[0]['addPoolServerCount']
+                if options.noLaunch:
                     job_index += 1
                     testsToLaunch.pop(i)
-                    summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
-                    if options.noLaunch:
-                        pass # no sleeping necessary
-                    elif options.serverType.lower() == 'docker':
-                        time.sleep(240)     # this is due to the docker port allocation race
-                    else:
-                        time.sleep(30)
+                    continue
+
+                # build the dashboard descriptor
+                dashboardDescriptor = urllib.parse.quote(testsToLaunch[i]['subcomponent'])
+                if options.dashboardReportedParameters is not None:
+                    for o in options.dashboardReportedParameters.split(','):
+                        dashboardDescriptor += '_' + o.split('=')[1]
+
+                # and this is the Jenkins descriptor
+                descriptor = urllib.parse.quote(
+                    testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] +
+                    '-' + time.strftime('%b-%d-%X') + '-' + options.version)
+
+                # grab the server resources
+                # this bit is Docker/VM dependent
+                servers = []
+                unreachable_servers = []
+                how_many = testsToLaunch[i]['serverCount'] - len(servers)
+                if options.check_vm == "True":
+                    while how_many > 0:
+                        unchecked_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i],
+                                                    how_many=how_many, os_version=options.os, pool_id=pool_to_use)
+                        checked_servers, bad_servers = check_servers_via_ssh(servers=unchecked_servers,
+                                                                            test=testsToLaunch[i])
+                        for ss in checked_servers:
+                            servers.append(ss)
+                        for ss in bad_servers:
+                            unreachable_servers.append(ss)
+                        how_many = testsToLaunch[i]['serverCount'] - len(servers)
 
                 else:
-                    print('not enough servers at this time')
-                    time.sleep(POLL_INTERVAL)
-            # endif checking for servers
+                    servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i],
+                                            how_many=how_many, os_version=options.os, pool_id=pool_to_use)
+                    how_many = testsToLaunch[i]['serverCount'] - len(servers)
+
+                if options.serverType.lower() != 'docker':
+                    # sometimes there could be a race, before a dispatcher process acquires vms,
+                    # another waiting dispatcher process could grab them, resulting in lesser vms
+                    # for the second dispatcher process
+                    if len(servers) != testsToLaunch[i]['serverCount']:
+                        print("Received servers count does not match the expected test server count!")
+                        release_servers(descriptor)
+                        continue
+
+                # get additional pool servers as needed
+                addl_servers = []
+                if testsToLaunch[i]['addPoolServerCount']:
+                    how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
+                    addl_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i], how_many=how_many_addl, is_addl_pool=True, os_version=addPoolServer_os)
+                    how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
+                    if len(addl_servers) != testsToLaunch[i]['addPoolServerCount']:
+                        print(
+                            "Received additional servers count does not match the expected "
+                            "test additional servers count!")
+                        release_servers(descriptor)
+                        continue
+
+                # and send the request to the test executor
+
+                # figure out the parameters, there are test suite specific, and added at dispatch time
+                if  runTimeTestRunnerParameters is None:
+                    parameters = testsToLaunch[i]['parameters']
+                else:
+                    if testsToLaunch[i]['parameters'] == 'None':
+                        parameters = runTimeTestRunnerParameters
+                    else:
+                        parameters = testsToLaunch[i]['parameters'] + ',' + runTimeTestRunnerParameters
+
+                url = launchString.format(options.version,
+                                            testsToLaunch[i]['confFile'],
+                                            descriptor,
+                                            testsToLaunch[i]['component'],
+                                            dashboardDescriptor,
+                                            testsToLaunch[i]['iniFile'],
+                                            urllib.parse.quote(parameters),
+                                            options.os,
+                                            testsToLaunch[i]['initNodes'],
+                                            testsToLaunch[i]['installParameters'],
+                                            options.branch,
+                                            testsToLaunch[i]['slave'],
+                                            urllib.parse.quote(testsToLaunch[i]['owner']),
+                                            urllib.parse.quote(
+                                                testsToLaunch[i]['mailing_list']),
+                                            testsToLaunch[i]['mode'],
+                                            testsToLaunch[i]['timeLimit'])
+                url = url + '&dispatcher_params=' + \
+                                urllib.parse.urlencode({"parameters":
+                                                currentExecutorParams})
+
+
+                if options.serverType.lower() != 'docker':
+                    servers_str = json.dumps(servers).replace(' ','').replace('[','', 1)
+                    servers_str = rreplace(servers_str, ']', 1)
+                    url = url + '&servers=' + urllib.parse.quote(servers_str)
+
+                    if testsToLaunch[i]['addPoolServerCount']:
+                        addPoolServers = json.dumps(addl_servers).replace(' ','').replace('[','', 1)
+                        addPoolServers = rreplace(addPoolServers, ']', 1)
+                        url = url + '&addPoolServerId=' +\
+                                options.addPoolId +\
+                                '&addPoolServers=' +\
+                                urllib.parse.quote(addPoolServers)
+
+                if len(unreachable_servers) > 0:
+                    print("The following VM(s) are unreachable for ssh connection:")
+                    for s in unreachable_servers:
+                        response, content = httplib2.Http(timeout=TIMEOUT).request('http://' + SERVER_MANAGER + '/releaseip/' + s + '/ssh_failed', 'GET')
+                        print(s)
+
+                # optional add [-docker] [-Jenkins extension]
+                launchStringBaseF = launchStringBase
+                if options.serverType.lower() == 'docker':
+                    launchStringBaseF = launchStringBase + '-docker'
+                if options.test:
+                    launchStringBaseF = launchStringBase + '-test'
+                #     if options.framework.lower() == "jython":
+                framework = testsToLaunch[i]['framework']
+                if framework != 'testrunner':
+                    launchStringBaseF = launchStringBaseF + "-" + framework
+                elif options.jenkins is not None:
+                    launchStringBaseF = launchStringBaseF + '-' + options.jenkins
+                url = launchStringBaseF + url
+
+                if options.job_params:
+                    url = update_url_with_job_params(url, options.job_params)
+                print('\n', time.asctime( time.localtime(time.time()) ), 'launching ', url)
+                dispatch_job = True
+                if not options.fresh_run:
+                    dispatch_job = \
+                        find_rerun_job.should_dispatch_job(
+                            options.os, testsToLaunch[i][
+                                'component'], dashboardDescriptor
+                            , options.version)
+
+                if options.noLaunch or not dispatch_job:
+                    # free the VMs
+                    time.sleep(3)
+                    if options.serverType.lower() == 'docker':
+                        #Docker gets only a single sever from
+                        # get_server. Not hard coding the server
+                        # we get, which as of now is constant,
+                        # but might change in the future.
+                        ipaddr = servers[0]
+                        response, content = httplib2.Http(
+                            timeout=TIMEOUT). \
+                            request(
+                            'http://' + SERVER_MANAGER +
+                            '/releasedockers/' + descriptor +
+                            '?ipaddr=' + ipaddr,
+                            'GET')
+                        print(
+                        'the release response', response, content)
+                    else:
+                        release_servers(descriptor)
+                else:
+                    response, content = httplib2.Http(timeout=TIMEOUT).request(url, 'GET')
+                    print("Response is: {0}".format(str(response)))
+                    print("Content is: {0}".format(str(content)))
+
+                total_servers_being_used += testsToLaunch[0]['serverCount']
+                total_addl_servers_being_used += testsToLaunch[0]['addPoolServerCount']
+                job_index += 1
+                testsToLaunch.pop(i)
+                summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
+                if options.noLaunch:
+                    pass # no sleeping necessary
+                elif options.serverType.lower() == 'docker':
+                    time.sleep(240)     # this is due to the docker port allocation race
+                else:
+                    time.sleep(30)
+
+            else:
+                print('not enough servers at this time')
+                time.sleep(POLL_INTERVAL)
 
         except Exception as e:
             print('have an exception')
