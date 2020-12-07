@@ -4,11 +4,13 @@ import random
 import datetime
 import itertools
 import threading
+from multiprocessing import Pool
 
 from ent_backup_restore.backup_service_base import BackupServiceBase, HistoryFile, MultipleRemoteShellConnections
 from lib.couchbase_helper.time_helper import TimeUtil
 from ent_backup_restore.backup_service_base import Prometheus, FailoverServer, ScheduleTest, Time, DocumentUtil
 from ent_backup_restore.backup_service_base import Collector, File
+from ent_backup_restore.backup_service_base import HttpConfigurationFactory
 from membase.api.rest_client import RestConnection
 from lib.backup_service_client.models.task_template import TaskTemplate
 from lib.backup_service_client.models.task_template_schedule import TaskTemplateSchedule
@@ -24,6 +26,8 @@ from lib.backup_service_client.models.body6 import Body6
 from lib.backup_service_client.models.plan import Plan
 from lib.backup_service_client.models.service_configuration import ServiceConfiguration
 from lib.backup_service_client.api_client import ApiClient
+from lib.backup_service_client.api.plan_api import PlanApi
+from lib.backup_service_client.api.active_repository_api import ActiveRepositoryApi
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from couchbase_helper.cluster import Cluster
@@ -350,6 +354,39 @@ class BackupServiceTest(BackupServiceBase):
 
         # Add plan with the same name and expect it to succeed.
         self.plan_api.plan_name_post(plan_name)
+
+    def test_creating_plan_simultaneously_on_two_nodes(self):
+        """ Test consistent metadata by creating a plan on two nodes simultaneously and expecting one of the operations failing.
+
+        Test consistent metadata by testing that creating a plan on two nodes simultaneously and expecting one of the operations to fail.
+        """
+        # Create a plan
+        plan_name = "my_plan"
+
+        # Define distinct schedules
+        schedules = []
+        schedules.append(TaskTemplateSchedule(job_type="BACKUP", frequency=1, period="HOURS", time="15:00", start_now=False))
+        schedules.append(TaskTemplateSchedule(job_type="BACKUP", frequency=2, period="DAYS", time="16:00", start_now=False))
+
+        # Make create_plan global so it works with multiprocessing.Pool
+        global create_plan
+
+        def create_plan(target_schedule):
+            """Create a plan on the specified server"""
+            target, schedule = target_schedule
+
+            # Rest API Configuration
+            configuration = HttpConfigurationFactory(target).create_configuration()
+
+            _, status, _, response_data = PlanApi(ApiClient(configuration)).plan_name_post_with_http_info(plan_name, body=Plan(name=plan_name,tasks=[TaskTemplate(name=f"my_task{target.ip.split('.')[-1]}", task_type="BACKUP", schedule=schedule)]))
+            return status
+
+        # Create repos on two different servers simultaneously
+        with Pool(2) as p:
+            result = p.map(create_plan, zip(self.input.clusters[0][:2], schedules))
+
+        # Expect that the operation didn't succeed on both servers
+        self.assertNotEqual(result, [200, 200])
 
     # Backup Repository Testing
 
@@ -1282,6 +1319,34 @@ class BackupServiceTest(BackupServiceBase):
             self.assertEqual(health_issue, repository_health.health_issue)
 
             self.delete_all_repositories()
+
+    def test_creating_repo_simultaneously_on_two_nodes(self):
+        """ Test consistent metadata by creating a repo on two nodes simultaneously and expecting one of the operations failing.
+
+        Test consistent metadata by testing that creating a plan on two nodes simultaneously and expecting one of the operations to fail.
+        """
+        repo_name = "my_repo"
+
+        # Make create_repo global so it works with multiprocessing.Pool
+        global create_repo
+
+        def create_repo(target):
+            """Create a plan on the specified server"""
+
+            # Rest API Configuration
+            configuration = HttpConfigurationFactory(target).create_configuration()
+
+            # Add repositories and tie plan to repository
+            _, status, _, response_data = ActiveRepositoryApi(ApiClient(configuration)).cluster_self_repository_active_id_post_with_http_info(repo_name, body=Body2(plan=self.default_plans[0], archive=f"{self.backupset.directory}/{target.ip}"))
+
+            return status
+
+        # Create plans on two different servers simultaneously
+        with Pool(2) as p:
+            result = p.map(create_repo, self.input.clusters[0][:2])
+
+        # Expect that the operation didn't succeed on both servers
+        self.assertNotEqual(result, [200, 200])
 
     # Examine / Info
 

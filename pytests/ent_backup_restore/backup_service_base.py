@@ -50,11 +50,13 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         self.use_https = self.input.param('use_https', False)
 
+        # Select a configuration factory which creates Configuration objects that communicate over http or https
+        self.configuration_factory = HttpsConfigurationFactory(self.master) if self.use_https else HttpConfigurationFactory(self.master)
+
         # Rest API Configuration
-        self.configuration = Configuration()
-        self.configure_host(self.master.ip, use_https=self.use_https)
-        self.configuration.username = self.master.rest_username
-        self.configuration.password = self.master.rest_password
+        self.configuration = self.configuration_factory.create_configuration()
+
+        # Create Api Client
         self.api_client = ApiClient(self.configuration)
 
         # Rest API Sub-APIs
@@ -164,17 +166,6 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             servers_to_add = [server for server in self.input.clusters[0][1:] if (server.ip, server.port) not in nodes_ips_and_ports]
             # Provision node in cluster[0] into a cluster
             Cluster().rebalance(self.input.clusters[0], servers_to_add, [], services=[server.services for server in self.servers])
-
-    def configure_host(self, ip, use_https=False):
-        """ Modify the target to which http requests are made to
-        """
-        self.configuration.host = f"http{'s' if use_https else ''}://{self.master.ip}:{18091 if use_https else 8091}/_p/backup/api/v1"
-
-        # The certificate used by default is self-signed, so we cannot verify
-        # it's integrity by going to a trusted CA and checking if it's signed
-        # by the CA's public key so we can just omit that process.
-        if use_https:
-            self.configuration.verify_ssl = False
 
     def on_dgm_run(self, no_of_documents_above_threshold=100):
         """ Configure the number of items to enter the disk greater than memory state in at least 1 node
@@ -1488,3 +1479,48 @@ class DGMUtil:
             document_size (int): The document size in bytes.
         """
         return math.ceil((no_of_nodes_in_cluster * bucket_size * 10**6) / (document_size))
+
+class AbstractConfigurationFactory(abc.ABC):
+
+    def __init__(self, server):
+        self.server = server
+
+    def create_configuration_common(self):
+        """ Creates a configuration and sets its credentials
+        """
+        configuration = Configuration()
+
+        configuration.username = self.server.rest_username
+        configuration.password = self.server.rest_password
+
+        return configuration
+
+    def create_configuration(self):
+        """ Creates a Configuration object
+        """
+        raise NotImplementedError("Please Implement this method")
+
+class HttpConfigurationFactory(AbstractConfigurationFactory):
+
+    def create_configuration(self):
+        """ Creates a http configuration object.
+        """
+        configuration = self.create_configuration_common()
+
+        configuration.host = f"http://{self.server.ip}:8091/_p/backup/api/v1"
+
+        return configuration
+
+class HttpsConfigurationFactory(AbstractConfigurationFactory):
+
+    def create_configuration(self):
+        """ Creates a https configuration object.
+        """
+        configuration = self.create_configuration_common()
+
+        # The certificate used by default is self-signed, so we cannot verify
+        # it's integrity by going to a trusted CA and checking if it's signed
+        # by the CA's public key so we can just omit that process.
+        configuration.host, configuration.verify_ssl = f"https://{self.server.ip}:18091/_p/backup/api/v1", False
+
+        return configuration
