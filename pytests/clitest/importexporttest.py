@@ -1243,8 +1243,6 @@ class ImportExportTests(CliBaseTest):
 
     def _verify_import_data(self, options):
         self.buckets = RestConnection(self.master).get_buckets()
-        for bucket in self.buckets:
-            keys = RestConnection(self.master).get_active_key_count(bucket.name)
         skip_lines = 0
         if self.import_file and self.import_file.startswith("csv"):
             skip_lines = 1
@@ -1264,12 +1262,17 @@ class ImportExportTests(CliBaseTest):
         if self.limit_rows:
             data_import = int(self.limit_rows)
             limit_lines = int(self.limit_rows)
+        for bucket in self.buckets:
+            keys = RestConnection(self.master).get_active_key_count(bucket.name)
+            if int(keys) < data_import:
+                self.sleep(10)
+                keys = RestConnection(self.master).get_active_key_count(bucket.name)
         if self.dgm_run:
             keys = int(keys) - int(self.pre_imex_ops_keys)
 
         if not self.json_invalid_errors:
-            print(("Total docs in bucket: ", keys))
-            print(("Docs need to import: ", data_import))
+            print("Total docs in bucket: ", keys)
+            print("Docs need to import: ", data_import)
 
         if data_import != int(keys):
             if self.skip_docs:
