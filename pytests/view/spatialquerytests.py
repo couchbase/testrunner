@@ -900,7 +900,7 @@ class RunQueriesThread(threading.Thread):
             else:
                 results = json.dumps(self._last_results)
             self.log.error("Last query result:\n\n{0}\n\n"\
-                               .format(results, sort_keys=True)))
+                               .format(results, sort_keys=True))
             self.test_results.addFailure(self.helper.testcase, sys.exc_info())
 
     def _run_queries(self):
