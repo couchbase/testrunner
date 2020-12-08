@@ -98,4 +98,28 @@ class CollectionsStats(object):
                     count += id_counts[id]
         return count
 
+    def get_collection_item_count_cumulative(self, bucket, scope, collection, node=None):
+        count = 0
+        if not node:
+            nodes = [self.node]
+        elif isinstance(node, list):
+            nodes = node
+        else:
+            nodes = [node]
+        for node in nodes:
+            cbstats, _ = RemoteMachineShellConnection(node).execute_cbstats(bucket, "collections",
+                                                                            cbadmin_user="Administrator")
+            collection_id = self.get_collection_id(bucket, scope, collection, cbstats)
+            scope_id = self.get_scope_id(bucket, scope, cbstats)
+            id_counts = {}
+            for stat in cbstats:
+                if ":items:" in stat:
+                    stat = stat.replace(' ', '')
+                    id_count = stat.split(":items:")
+                    id_counts[id_count[0].strip()] = int(id_count[1])
+
+            for id in id_counts.keys():
+                if id == f'{scope_id}:{collection_id}':
+                    count += id_counts[id]
+        return count
 

@@ -23,9 +23,9 @@ class IndexManagementAPI(FTSBaseTest):
 
     def test_ingest_control(self):
         self.load_data()
-        collection_index, _type = self.define_index_parameters_collection_related()
+        collection_index, _type, index_scope, index_collections = self.define_index_parameters_collection_related()
         fts_index = self._cb_cluster.create_fts_index(name=self.sample_index_name, source_name="default",
-                                                      collection_index=collection_index, _type=_type)
+                                                      collection_index=collection_index, _type=_type, scope=index_scope, collections=index_collections)
         self.sleep(5)
         self.fts_rest.stop_fts_index_update(fts_index.name)
 
@@ -55,9 +55,9 @@ class IndexManagementAPI(FTSBaseTest):
 
     def test_planfreeze_control(self):
         self.load_data()
-        collection_index, _type = self.define_index_parameters_collection_related()
+        collection_index, _type, index_scope, index_collections = self.define_index_parameters_collection_related()
         fts_index = self._cb_cluster.create_fts_index(name=self.sample_index_name, source_name="default",
-                                                      collection_index=collection_index, _type=_type)
+                                                      collection_index=collection_index, _type=_type, scope=index_scope, collections=index_collections)
         self.sleep(20)
         self.fts_rest.freeze_fts_index_partitions(fts_index.name)
         self.wait_for_indexing_complete()
@@ -97,9 +97,9 @@ class IndexManagementAPI(FTSBaseTest):
 
     def test_query_control(self):
         self.load_data()
-        collection_index, _type = self.define_index_parameters_collection_related()
+        collection_index, _type, index_scope, index_collections = self.define_index_parameters_collection_related()
         fts_index = self._cb_cluster.create_fts_index(name=self.sample_index_name, source_name="default",
-                                                      collection_index=collection_index, _type=_type)
+                                                      collection_index=collection_index, _type=_type, scope=index_scope, collections=index_collections)
         self.wait_for_indexing_complete()
         self.fts_rest.disable_querying_on_fts_index(fts_index.name)
         self.sleep(5)
@@ -132,15 +132,18 @@ class IndexManagementAPI(FTSBaseTest):
 
     def test_query_control_n1fty(self):
         self.load_data()
-        collection_index, _type = self.define_index_parameters_collection_related()
+        collection_index, _type, index_scope, index_collections = self.define_index_parameters_collection_related()
         fts_index_1 = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
             index_name="default_index_1",
-            collection_index=collection_index, _type=_type)
+            collection_index=collection_index, _type=_type,
+            scope=index_scope,
+            collections=index_collections)
         fts_index_2 = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
             index_name="default_index_2",
-            collection_index=collection_index, _type=_type)
+            collection_index=collection_index, _type=_type,
+            scope=index_scope, collections=index_collections)
         self.wait_for_indexing_complete()
         self.fts_rest.disable_querying_on_fts_index(fts_index_1.name)
         self.sleep(5)
@@ -149,9 +152,9 @@ class IndexManagementAPI(FTSBaseTest):
 
     def test_index_plan_update_disallow_query(self):
         self.load_data()
-        collection_index, _type = self.define_index_parameters_collection_related()
+        collection_index, _type, index_scope, index_collections = self.define_index_parameters_collection_related()
         fts_index = self._cb_cluster.create_fts_index(name=self.sample_index_name, source_name="default",
-                                                      collection_index=collection_index, _type=_type)
+                                                      collection_index=collection_index, _type=_type, scope=index_scope, collections=index_collections)
         self.sleep(3)
         self.fts_rest.disable_querying_on_fts_index(fts_index.name)
         self.wait_for_indexing_complete()

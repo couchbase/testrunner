@@ -25,6 +25,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from TestInput import TestInputSingleton
 from lib.couchbase_helper.documentgenerator import GeoSpatialDataLoader, WikiJSONGenerator
+from lib.collection.collections_stats import CollectionsStats
 from lib.memcached.helper.data_helper import KVStoreAwareSmartClient
 from scripts.collect_server_info import cbcollectRunner
 from couchbase_helper.documentgenerator import *
@@ -757,7 +758,7 @@ class FTSIndex:
     def __init__(self, cluster, name, source_type='couchbase',
                  source_name=None, index_type='fulltext-index', index_params=None,
                  plan_params=None, source_params=None, source_uuid=None, dataset=None, index_storage_type=None,
-                 type_mapping=None, collection_index=False):
+                 type_mapping=None, collection_index=False, scope=None, collections=None):
 
         """
          @param name : name of index/alias
@@ -785,6 +786,9 @@ class FTSIndex:
         self._source_name = source_name
         self._one_time = False
         self.index_type = index_type
+        self.collection_index = collection_index
+        self.scope = scope
+        self.collections = collections
         if not index_storage_type:
             self.index_storage_type = TestInputSingleton.input.param("index_type", None)
         else:
@@ -1329,6 +1333,9 @@ class FTSIndex:
 
     def get_src_bucket_doc_count(self):
         return self.__cluster.get_doc_count_in_bucket(self.source_bucket)
+
+    def get_src_collections_doc_count(self):
+        return self.__cluster.get_doc_count_in_collections(self.source_bucket, self.scope, self.collections)
 
     def get_uuid(self):
         rest = RestConnection(self.__cluster.get_random_fts_node())
@@ -1977,6 +1984,7 @@ class CouchbaseCluster:
         self._kv_gen = {}
         self.__indexes = []
         self.__fts_nodes = []
+        self.__kv_nodes = []
         self.__non_fts_nodes = []
         # to avoid querying certain nodes that undergo crash/reboot scenarios
         self.__bypass_fts_nodes = []
@@ -2030,9 +2038,17 @@ class CouchbaseCluster:
                 if "n1ql" in services:
                     self.__n1ql_nodes.append(node)
 
+                if "kv" in services:
+                    if node not in self.__kv_nodes:
+                        self.__kv_nodes.append(node)
+
     def get_fts_nodes(self):
         self.__separate_nodes_on_services()
         return self.__fts_nodes
+
+    def get_kv_nodes(self):
+        self.__separate_nodes_on_services()
+        return self.__kv_nodes
 
     def get_num_fts_nodes(self):
         return len(self.get_fts_nodes())
@@ -2426,7 +2442,7 @@ class CouchbaseCluster:
     def create_fts_index(self, name, source_type='couchbase',
                          source_name=None, index_type='fulltext-index',
                          index_params=None, plan_params=None,
-                         source_params=None, source_uuid=None, collection_index=False, _type=None, analyzer="standard"):
+                         source_params=None, source_uuid=None, collection_index=False, _type=None, analyzer="standard", scope=None, collections=None):
         """Create fts index/alias
         @param node: Node on which index is created
         @param name: name of the index/alias
@@ -2459,7 +2475,9 @@ class CouchbaseCluster:
             source_params,
             source_uuid,
             type_mapping=_type,
-            collection_index=collection_index
+            collection_index=collection_index,
+            scope=scope,
+            collections=collections
         )
         if collection_index:
             if not index.custom_map:
@@ -2591,6 +2609,13 @@ class CouchbaseCluster:
 
     def get_doc_count_in_bucket(self, bucket):
         return RestConnection(self.__master_node).get_active_key_count(bucket)
+
+    def get_doc_count_in_collections(self, bucket, scope, collections):
+        stat = CollectionsStats(self.__master_node)
+        count = 0
+        for c in collections:
+            count = count + stat.get_collection_item_count_cumulative(bucket, scope, c, self.get_kv_nodes())
+        return count
 
     def delete_bucket(self, bucket_name):
         """Delete bucket with given name
@@ -4262,38 +4287,41 @@ class FTSBaseTest(unittest.TestCase):
 
     def wait_for_indexing_complete_simple(self, item_count=0, index=None):
         retry = self._input.param("index_retry", 20)
-        for index in self._cb_cluster.get_indexes():
-            if index.index_type == "fulltext-alias":
-                return
-            retry_count = retry
-            prev_count = 0
-            while retry_count > 0:
-                fail = False
-                try:
-                    index_doc_count = index.get_indexed_doc_count()
-                    if item_count and index_doc_count > item_count:
-                        return
+        if index.index_type == "fulltext-alias":
+            return
+        retry_count = retry
+        prev_count = 0
+        while retry_count > 0:
+            fail = False
+            try:
+                index_doc_count = index.get_indexed_doc_count()
+                self.log.info(f"Expected docs count = {item_count}, "
+                              f"docs in FTS index '{index.name}': {index_doc_count}")
 
-                    if item_count == index_doc_count:
-                        return
+                if item_count and index_doc_count > item_count:
+                    return
 
-                    if prev_count < index_doc_count or prev_count > index_doc_count:
-                        prev_count = index_doc_count
-                        retry_count = retry
-                    else:
-                        retry_count -= 1
-                except Exception as e:
-                    self.log.info(e)
-                    if fail:
-                        self.fail(e)
+                if item_count == index_doc_count:
+                    return
+
+                if prev_count < index_doc_count or prev_count > index_doc_count:
+                    prev_count = index_doc_count
+                    retry_count = retry
+                else:
                     retry_count -= 1
-                time.sleep(6)
+            except Exception as e:
+                self.log.info(e)
+                if fail:
+                    self.fail(e)
+                retry_count -= 1
+            time.sleep(6)
 
     def wait_for_indexing_complete(self, item_count=None, es_index="es_index"):
         """
         Wait for index_count for any index to stabilize or reach the
         index count specified by item_count
         """
+
         retry = self._input.param("index_retry", 20)
         for index in self._cb_cluster.get_indexes():
             if index.index_type == "fulltext-alias":
@@ -4305,36 +4333,32 @@ class FTSBaseTest(unittest.TestCase):
                 fail = False
                 try:
                     index_doc_count = index.get_indexed_doc_count()
-                    bucket_doc_count = index.get_src_bucket_doc_count()
+
+                    if index.collections:
+                        container_doc_count = index.get_src_collections_doc_count()
+                    else:
+                        container_doc_count = index.get_src_bucket_doc_count()
+
                     if not self.compare_es:
-                        self.log.info("Docs in bucket = %s, docs in FTS index '%s': %s"
-                                      % (bucket_doc_count,
-                                         index.name,
-                                         index_doc_count))
+                        self.log.info(f"Docs in bucket = {container_doc_count}, "
+                                      f"docs in FTS index '{index.name}': {index_doc_count}")
                         if retry_count == 1:
                             fail = True
-                            self.fail("FTS index count not matching bucket count even after 20 tries: "
-                                      "Docs in bucket = %s, docs in FTS index '%s': %s" % (bucket_doc_count,
-                                                                                           index.name,
-                                                                                           index_doc_count))
+                            self.fail(f"FTS index count not matching bucket count even after {retry} tries: "
+                                      f"Docs in bucket = {container_doc_count}, "
+                                      f"docs in FTS index '{index.name}': {index_doc_count}")
                     else:
                         self.es.update_index(es_index)
                         es_index_count = self.es.get_index_count(es_index)
-                        self.log.info("Docs in bucket = %s, docs in FTS index '%s':"
-                                      " %s, docs in ES index: %s "
-                                      % (bucket_doc_count,
-                                         index.name,
-                                         index_doc_count,
-                                         es_index_count))
+                        self.log.info(f"Docs in bucket = {container_doc_count}, docs in FTS index '{index.name}':"
+                                      f" {index_doc_count}, docs in ES index: {es_index_count} ")
                         if retry_count == 1:
                             fail = True
-                            self.fail("FTS/ES index count not matching bucket count even after 20 tries: "
-                                      "Docs in bucket = %s, docs in FTS index '%s': %s, docs in ES index: %s "
-                                      % (bucket_doc_count,
-                                         index.name,
-                                         index_doc_count,
-                                         es_index_count))
-                    if bucket_doc_count == 0:
+                            self.fail(f"FTS/ES index count not matching bucket count even after {retry} tries: "
+                                      f"Docs in bucket = {container_doc_count}, "
+                                      f"docs in FTS index '{index.name}': {index_doc_count}, "
+                                      f"docs in ES index: {es_index_count}")
+                    if container_doc_count == 0:
                         if item_count and item_count != 0:
                             self.sleep(5,
                                        "looks like docs haven't been loaded yet...")
@@ -4344,18 +4368,17 @@ class FTSBaseTest(unittest.TestCase):
                     if item_count and index_doc_count > item_count:
                         break
 
-                    if bucket_doc_count == index_doc_count:
+                    if container_doc_count == index_doc_count:
                         if self.compare_es:
-                            if bucket_doc_count == es_index_count:
+                            if container_doc_count == es_index_count:
                                 break
                             elif retry_count == 1:
                                 fail = True
                                 self.fail(
-                                    "ES index count not matching with bucket_doc_count. Docs in bucket = %s, docs "
-                                    "in FTS index '%s': %s, docs in ES index: %s " % (
-                                        bucket_doc_count, index.name,
-                                        index_doc_count,
-                                        es_index_count))
+                                    f"ES index count not matching with bucket_doc_count. "
+                                    f"Docs in bucket = {container_doc_count}, docs "
+                                    f"in FTS index '{index.name}': {index_doc_count}, "
+                                    f"docs in ES index: {es_index_count} ")
                         else:
                             break
 
@@ -4377,7 +4400,7 @@ class FTSBaseTest(unittest.TestCase):
                 while True and retry_count:
                     num_mutations_to_index = index.get_num_mutations_to_index()
                     if num_mutations_to_index > 0:
-                        self.sleep(5, "num_mutations_to_index: {0} > 0".format(num_mutations_to_index))
+                        self.sleep(5, f"num_mutations_to_index: {num_mutations_to_index} > 0")
                         retry_count -= 1
                     else:
                         break
@@ -4598,7 +4621,7 @@ class FTSBaseTest(unittest.TestCase):
             return index.fts_queries
 
     def create_index(self, bucket, index_name, index_params=None,
-                     plan_params=None, collection_index=False, _type=None, analyzer="standard"):
+                     plan_params=None, collection_index=False, _type=None, analyzer="standard", scope=None, collections=None):
         """
         Creates a default index given bucket, index_name and plan_params
         """
@@ -4614,7 +4637,9 @@ class FTSBaseTest(unittest.TestCase):
             plan_params=plan_params,
             collection_index=collection_index,
             _type=_type,
-            analyzer=analyzer)
+            analyzer=analyzer,
+            scope=scope,
+            collections=collections)
         self.is_index_partitioned_balanced(index)
         return index
 
@@ -4624,25 +4649,32 @@ class FTSBaseTest(unittest.TestCase):
         'n' is defined by 'index_per_bucket' test param.
         """
         for bucket in self._cb_cluster.get_buckets():
-            collection_index, tp = self.define_index_parameters_collection_related()
+            collection_index, tp, index_scope, index_collections = self.define_index_parameters_collection_related()
             for count in range(self.index_per_bucket):
                 self.create_index(
                     bucket,
                     f"{bucket.name}_index_{count + 1}",
-                    plan_params=plan_params, _type=tp, collection_index=collection_index)
+                    plan_params=plan_params, _type=tp, collection_index=collection_index,
+                    scope=index_scope, collections=index_collections)
 
     def define_index_parameters_collection_related(self):
         collection_index = self.container_type == 'collection'
         if self.container_type == 'bucket':
             _type = self.dataset
+            index_scope = None
+            index_collections = None
         else:
+            index_scope = self.scope
+            index_collections = []
             if type(self.collection) is list:
                 _type = []
                 for c in self.collection:
                     _type.append(f"{self.scope}.{c}")
+                    index_collections.append(c)
             else:
                 _type = f"{self.scope}.{self.collection}"
-        return collection_index, _type
+                index_collections.append(self.collection)
+        return collection_index, _type, index_scope, index_collections
 
 
     def create_alias(self, target_indexes, name=None, alias_def=None):
@@ -4670,19 +4702,23 @@ class FTSBaseTest(unittest.TestCase):
         index_name_count_map = {}
         for index in self._cb_cluster.get_indexes():
             docs_indexed = index.get_indexed_doc_count()
-            bucket_count = self._cb_cluster.get_doc_count_in_bucket(
-                index.source_bucket)
+
+            if index.collections:
+                container_doc_count = index.get_src_collections_doc_count()
+            else:
+                container_doc_count = index.get_src_bucket_doc_count()
+
             self.log.info("Docs in index {0}={1}, bucket docs={2}".
-                          format(index.name, docs_indexed, bucket_count))
+                          format(index.name, docs_indexed, container_doc_count))
             if must_equal and docs_indexed != int(must_equal):
                 self.fail("Number of docs indexed is not %s" % must_equal)
             if docs_indexed == 0 and not zero_rows_ok:
                 self.fail("No docs were indexed for index %s" % index.name)
             if equal_bucket_doc_count:
 
-                if docs_indexed != bucket_count:
+                if docs_indexed != container_doc_count:
                     self.fail("Bucket doc count = %s, index doc count=%s" %
-                              (bucket_count, docs_indexed))
+                              (container_doc_count, docs_indexed))
             index_name_count_map[index.name] = docs_indexed
         return index_name_count_map
 
@@ -4694,12 +4730,15 @@ class FTSBaseTest(unittest.TestCase):
         for index in self._cb_cluster.get_indexes():
             if index.name == name:
                 docs_indexed = index.get_indexed_doc_count()
-                bucket_count = self._cb_cluster.get_doc_count_in_bucket(
-                    index.source_bucket)
+
+                if index.collections:
+                    container_doc_count = index.get_src_collections_doc_count()
+                else:
+                    container_doc_count = index.get_src_bucket_doc_count()
 
                 self.log.info("Docs in index {0}={1}, bucket docs={2}".
-                              format(index.name, docs_indexed, bucket_count))
-                if docs_indexed != bucket_count:
+                              format(index.name, docs_indexed, container_doc_count))
+                if docs_indexed != container_doc_count:
                     return False
                 else:
                     return True

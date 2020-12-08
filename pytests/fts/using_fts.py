@@ -32,10 +32,11 @@ class USINGFTS(FTSBaseTest):
             self.n1ql_helper.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.test.collection2",
                                            server=self.master)
 
-        collection_index, type = self.define_index_parameters_collection_related()
+        collection_index, type, index_scope, index_collections = self.define_index_parameters_collection_related()
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
-            index_name="custom_index", collection_index=collection_index, _type=type, analyzer="keyword")
+            index_name="custom_index", collection_index=collection_index, _type=type, analyzer="keyword",
+            scope=index_scope, collections=index_collections)
         self.wait_for_indexing_complete()
         if self.using_fts_and_gsi:
             query = "select * from default:default.test.collection1 USE INDEX (USING GSI,USING FTS) where dept = 'Sales'"
@@ -79,10 +80,11 @@ class USINGFTS(FTSBaseTest):
             self.n1ql_helper.run_cbq_query(query="CREATE PRIMARY INDEX ON collection2", server=self.master,
                                            query_context="default:default.test")
 
-        collection_index, type = self.define_index_parameters_collection_related()
+        collection_index, type, index_scope, index_collections = self.define_index_parameters_collection_related()
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
-            index_name="custom_index", collection_index=collection_index, _type=type, analyzer="keyword")
+            index_name="custom_index", collection_index=collection_index, _type=type, analyzer="keyword",
+            scope=index_scope, collections=index_collections)
         self.wait_for_indexing_complete()
         if self.using_fts_and_gsi:
             query = "select * from collection1 USE INDEX (USING GSI,USING FTS) where dept = 'Sales'"
