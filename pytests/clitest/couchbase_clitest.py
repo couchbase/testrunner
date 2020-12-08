@@ -1206,7 +1206,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         stdout, _, _ = cli.setting_notification(enable)
 
         if not expect_error:
-            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Notification settings updated"),
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Software notification settings updated"),
                             "Expected command to succeed")
             if enable == 1:
                 self.assertTrue(self.verifyNotificationsEnabled(server), "Notification not enabled")
