@@ -458,12 +458,32 @@ class BackupServiceTest(BackupServiceBase):
             ("my_repo",  Body2(plan=plan_name, archive=self.backupset.directory, bucket_name="Bad")), # Non existing bucket name
         ]
 
+        # Add invalid repositories
+        for repo_name, body in invalid_repositories:
+            # Add invalid repository and expect it to fail
+            self.assertTrue(self.active_repository_api.cluster_self_repository_active_id_post_with_http_info(repo_name, body=body)[1] in [400, 404], f"An invalid repository configuration was added {repo_name, body}.")
+            # Delete repositories
+            self.delete_all_repositories()
+
+    def test_invalid_cloud_repository(self):
+        """ Test a user cannot add an invalid cloud repository.
+
+        A user cannot Add/Update a repository containing invalid fields.
+
+        Params:
+            objstore_provider (bool): If true, creates a cloud repository otherwise creates a filesystem repository.
+
+        1. Define a selection of invalid repositories.
+        2. Add the repository and check if the operation fails.
+        """
         # This test requires an objstore_provider for Cloud testing
         self.assertIsNotNone(self.objstore_provider)
 
-        provider = self.objstore_provider
+        plan_name, provider = random.choice(self.default_plans), self.objstore_provider
+
         id_, key, region, staging_directory, endpoint = provider.access_key_id, provider.secret_access_key, provider.region, provider.staging_directory, provider.endpoint
 
+        # Note cannot test invalid credentials as LocalStack accepts any credentials
         invalid_bodies = \
         [
             Body2(plan=plan_name, archive=self.get_archive(prefix="bad://"), cloud_staging_dir=staging_directory, cloud_credentials_id=id_, cloud_credentials_key=key, cloud_credentials_region=region, cloud_endpoint=endpoint), # Non-existant prefix
@@ -474,10 +494,10 @@ class BackupServiceTest(BackupServiceBase):
             Body2(plan=plan_name, archive=self.get_archive(), cloud_staging_dir=staging_directory, cloud_credentials_id=id_, cloud_credentials_key=key, cloud_credentials_region=None, cloud_endpoint=endpoint), # Missing region
         ]
 
-        # Note cannot test invalid credentials as LocalStack accepts any credentials
         for invalid_body in invalid_bodies:
             invalid_body.cloud_force_path_style = True
-            invalid_repositories.append(("my_repo", invalid_body)) # Non existing schema prefix
+
+        invalid_repositories = [("my_repo", invalid_body) for invalid_body in invalid_bodies]
 
         # Add invalid repositories
         for repo_name, body in invalid_repositories:
@@ -486,7 +506,6 @@ class BackupServiceTest(BackupServiceBase):
             # Delete repositories
             self.delete_all_repositories()
 
-
     def test_valid_repository(self):
         """ Test a user can add a valid repository.
 
@@ -494,7 +513,6 @@ class BackupServiceTest(BackupServiceBase):
 
         Params:
             sasl_buckets (int): The number of buckets to create.
-            objstore_provider (bool): If true, creates a cloud repository otherwise creates a filesystem repository.
 
         1. Define a selection of valid repositories.
         2. Add the repository and check if the operation succeeds.
@@ -512,10 +530,32 @@ class BackupServiceTest(BackupServiceBase):
             ("my_repo", Body2(plan=plan_name, archive=self.backupset.directory, bucket_name=bucket_name)), # A repo with a bucket name
         ]
 
+        # Add valid repositories
+        for repo_name, body in valid_repositories:
+            # Add invalid repository and expect it to fail
+            self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_post_with_http_info(repo_name, body=body)[1], 200, f"A valid repository configuration could not be added {repo_name, body}.")
+            # Delete repositories
+            self.delete_all_repositories()
+
+    def test_valid_cloud_repository(self):
+        """ Test a user can add a valid cloud repository
+
+        A user can Add/Update a cloud repository containing valid fields.
+
+        Params:
+            sasl_buckets (int): The number of buckets to create.
+            objstore_provider (bool): If true, creates a cloud repository otherwise creates a filesystem repository.
+
+        1. Define a selection of valid repositories.
+        2. Add the repository and check if the operation succeeds.
+        """
+        if len(self.buckets) < 1:
+            self.fail("At least 1 bucket is required for this test, set test param sasl_buckets=1")
+
         # This test requires an objstore_provider for Cloud testing
         self.assertIsNotNone(self.objstore_provider)
 
-        provider = self.objstore_provider
+        plan_name, bucket_name, provider = random.choice(self.default_plans), random.choice(self.buckets).name, self.objstore_provider
 
         def get_archive(prefix=provider.schema_prefix(), bucket=provider.bucket, path="my_archive"):
             """ Returns a cloud archive path
@@ -524,7 +564,6 @@ class BackupServiceTest(BackupServiceBase):
 
         id_, key, region, staging_directory, endpoint = provider.access_key_id, provider.secret_access_key, provider.region, provider.staging_directory, provider.endpoint
 
-        # TODO: create staging directory with correct permissions
         # TODO: LocalStack cannot mock cloud_force_path_style=False
         valid_bodies = \
         [
@@ -533,14 +572,12 @@ class BackupServiceTest(BackupServiceBase):
             Body2(plan=plan_name, archive=self.get_archive(), cloud_staging_dir=staging_directory, cloud_credentials_id=id_, cloud_credentials_key=key, cloud_credentials_region=region, cloud_endpoint=endpoint, bucket_name=bucket_name, cloud_force_path_style=True), # A repo in the cloud with a bucket
         ]
 
-        for valid_body in valid_bodies:
-            valid_repositories.append(("my_repo", valid_body)) # Non existing schema prefix
+        valid_repositories = [("my_repo", valid_body) for valid_body in valid_bodies]
 
-        # Add invalid repositories
+        # Add valid repositories
         for repo_name, body in valid_repositories:
             # Add invalid repository and expect it to fail
             self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_post_with_http_info(repo_name, body=body)[1], 200, f"A valid repository configuration could not be added {repo_name, body}.")
-
             # Delete repositories
             self.delete_all_repositories()
 
