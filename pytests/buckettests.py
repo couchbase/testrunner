@@ -29,7 +29,7 @@ class CreateBucketTests(BaseTestCase):
         self.node_version = self.rest.get_nodes_version()
         self.total_items_travel_sample = 31569
         if self.node_version[:5] in COUCHBASE_FROM_WATSON:
-            self.total_items_travel_sample = 31591
+            self.total_items_travel_sample = 63182
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()

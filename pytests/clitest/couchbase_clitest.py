@@ -2658,7 +2658,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                     if out and len(out) > 1:
                         self.log.info("Check content of backup dir of bucket %s: %s"
                                                                % (bucket.name, out))
-                        self.assertEqual(out, backup_folder_content)
+                        for ele in out:
+                            if ele not in backup_folder_content:
+                                self.fail("Extra file/folder in backup repo: %s" % ele)
                     else:
                         self.fail("Missing backup dir or files in backup bucket %s"
                                                                      % bucket.name)
@@ -2703,7 +2705,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                     "_rebalance_progress_status", "get_nodes_version", "get_alerts_settings"]
             for i in range(10):
                 server = copy.deepcopy(self.servers[0])
-                chars = string.letters + string.digits
+                chars = string.ascii_letters + string.digits
                 new_password = ''.join((random.choice(chars)) for x in range(random.randint(6, 30)))
                 options = '--new-password "%s"' % new_password
                 output, _ = remote_client.execute_command("{0} {1}".format(cli_command,
