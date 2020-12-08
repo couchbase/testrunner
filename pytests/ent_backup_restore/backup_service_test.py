@@ -92,14 +92,14 @@ class BackupServiceTest(BackupServiceBase):
         # Invalid Tasks
         invalid_tasks = \
         [
-            TaskTemplate(name="my_task!", task_type="BACKUP",  schedule=generic_backup_schedule, options=None, full_backup=None), # Special character in name
-            TaskTemplate(name="my_task", task_type="BAD", schedule=generic_backup_schedule, options=None, full_backup=None), # Non-existing task type
-            TaskTemplate(name="my_task", task_type="", schedule=generic_backup_schedule, options=None, full_backup=None), # Empty task type
-            TaskTemplate(name="my_task", task_type=None, schedule=generic_backup_schedule, options=None, full_backup=None), # Missing task type
-            TaskTemplate(name="", task_type="BACKUP", schedule=generic_backup_schedule, options=None, full_backup=None), # Name is empty
-            TaskTemplate(name=None, task_type="BACKUP", schedule=generic_backup_schedule, options=None, full_backup=None), # Name is missing
+            TaskTemplate(name="my_task!", task_type="BACKUP",  schedule=generic_backup_schedule, merge_options=None, full_backup=None), # Special character in name
+            TaskTemplate(name="my_task", task_type="BAD", schedule=generic_backup_schedule, merge_options=None, full_backup=None), # Non-existing task type
+            TaskTemplate(name="my_task", task_type="", schedule=generic_backup_schedule, merge_options=None, full_backup=None), # Empty task type
+            TaskTemplate(name="my_task", task_type=None, schedule=generic_backup_schedule, merge_options=None, full_backup=None), # Missing task type
+            TaskTemplate(name="", task_type="BACKUP", schedule=generic_backup_schedule, merge_options=None, full_backup=None), # Name is empty
+            TaskTemplate(name=None, task_type="BACKUP", schedule=generic_backup_schedule, merge_options=None, full_backup=None), # Name is missing
             TaskTemplate(name="my_task", task_type="BACKUP", schedule=None), # Missing schedule
-            TaskTemplate(name="my_task", task_type="BACKUP", schedule=generic_backup_schedule, options=None, full_backup="Bad"), # Full backup is not a bool
+            TaskTemplate(name="my_task", task_type="BACKUP", schedule=generic_backup_schedule, merge_options=None, full_backup="Bad"), # Full backup is not a bool
         ]
 
         # Add invalid Tasks and expect them to fail
@@ -173,11 +173,11 @@ class BackupServiceTest(BackupServiceBase):
         # Valid Tasks
         valid_tasks = \
         [
-            TaskTemplate(name="my_task", task_type="BACKUP",  schedule=generic_backup_schedule, options=None, full_backup=None), # A task with a name
-            TaskTemplate(name="a", task_type="BACKUP", schedule=generic_backup_schedule, options=None, full_backup=None), # Name length equal to 1
-            TaskTemplate(name="a" * 50, task_type="BACKUP", schedule=generic_backup_schedule, options=None, full_backup=None), # Name length equal to 50
-            TaskTemplate(name="my_task", task_type="BACKUP", schedule=generic_backup_schedule, options=None, full_backup=True), # Specify full back = True
-            TaskTemplate(name="my_task", task_type="BACKUP", schedule=generic_backup_schedule, options=None, full_backup=False), # Specify full back = False
+            TaskTemplate(name="my_task", task_type="BACKUP",  schedule=generic_backup_schedule, merge_options=None, full_backup=None), # A task with a name
+            TaskTemplate(name="a", task_type="BACKUP", schedule=generic_backup_schedule, merge_options=None, full_backup=None), # Name length equal to 1
+            TaskTemplate(name="a" * 50, task_type="BACKUP", schedule=generic_backup_schedule, merge_options=None, full_backup=None), # Name length equal to 50
+            TaskTemplate(name="my_task", task_type="BACKUP", schedule=generic_backup_schedule, merge_options=None, full_backup=True), # Specify full back = True
+            TaskTemplate(name="my_task", task_type="BACKUP", schedule=generic_backup_schedule, merge_options=None, full_backup=False), # Specify full back = False
         ]
 
         # Add valid Tasks and expect them to succeed
@@ -268,7 +268,7 @@ class BackupServiceTest(BackupServiceBase):
         generic_backup_schedule = TaskTemplateSchedule(job_type="BACKUP", frequency=1, period="HOURS", time="22:00", start_now=False)
 
         def get_task(i):
-            return TaskTemplate(name=f"my_task{i}", task_type="BACKUP", schedule=generic_backup_schedule, options=None, full_backup=None)
+            return TaskTemplate(name=f"my_task{i}", task_type="BACKUP", schedule=generic_backup_schedule, merge_options=None, full_backup=None)
 
         # Add 0, 1 and 14 Tasks in a Plan and expect it to succeed.
         for no_of_tasks in [0, 1, 14]:
@@ -315,7 +315,7 @@ class BackupServiceTest(BackupServiceBase):
         generic_backup_schedule = TaskTemplateSchedule(job_type="BACKUP", frequency=1, period="HOURS", time="22:00", start_now=False)
 
         def get_task(i):
-            return TaskTemplate(name=f"my_task{i}", task_type="BACKUP", schedule=generic_backup_schedule, options=None, full_backup=None)
+            return TaskTemplate(name=f"my_task{i}", task_type="BACKUP", schedule=generic_backup_schedule, merge_options=None, full_backup=None)
 
         no_of_plans, no_of_tasks = 100, 14
 
