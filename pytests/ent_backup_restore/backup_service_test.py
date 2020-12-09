@@ -693,7 +693,7 @@ class BackupServiceTest(BackupServiceBase):
         body = Body6(id=repo_name, archive=self.backupset.directory, repo=self.backupset.name)
 
         # Import repository
-        self.assertEqual(self.import_api.cluster_self_repository_import_post_with_http_info(body=body)[1], 400)
+        self.assertEqual(self.import_api.cluster_self_repository_import_post_with_http_info(body=body)[1], 500)
 
     def test_importing_read_only_repository(self):
         """ Test a user can import a read only repository.
@@ -710,7 +710,7 @@ class BackupServiceTest(BackupServiceBase):
         body = Body6(id="my_repo", archive=self.backupset.directory, repo=self.backupset.name)
 
         # Import repository
-        self.assertEqual(self.import_api.cluster_self_repository_import_post_with_http_info(body=body)[1], 400)
+        self.assertEqual(self.import_api.cluster_self_repository_import_post_with_http_info(body=body)[1], 500)
 
     def test_one_off_backup(self):
         """ Test one off backup
