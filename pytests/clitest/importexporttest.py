@@ -1263,6 +1263,8 @@ class ImportExportTests(CliBaseTest):
             data_import = int(self.limit_rows)
             limit_lines = int(self.limit_rows)
         for bucket in self.buckets:
+            if int(self.active_resident_threshold) < 60:
+                self.sleep(15, "wait for all keys loaded to bucket")
             keys = RestConnection(self.master).get_active_key_count(bucket.name)
             if int(keys) < data_import:
                 self.sleep(10)
@@ -1283,7 +1285,7 @@ class ImportExportTests(CliBaseTest):
                 self.fail("Import failed to limit %s rows" % self.limit_rows)
             if self.skip_rows:
                 self.fail("Import failed to skip %s rows" % self.limit_rows)
-            else:
+            elif int(self.active_resident_threshold) == 100:
                 self.fail("Import data does not match with bucket data")
 
         if self.verify_data:
