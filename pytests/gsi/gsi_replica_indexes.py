@@ -3403,9 +3403,10 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         command = "{0}{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error and not [x for x in output if 'Backup successfully completed' in x]:
+        if error and not [x for x in output if 'Backup successfully completed' in x or 'Backup completed successfully' in x]:
             self.fail("cbbackupmgr backup failed")
-        elif not [x for x in output if 'Backup successfully completed' in x]:
+        elif not [x for x in output if 'Backup successfully completed' in x or 'Backup completed successfully' in x]:
+            self.log.error(output)
             raise Exception("cbbackupmgr backup failed")
 
     def _create_restore(self, server, username="Administrator",
