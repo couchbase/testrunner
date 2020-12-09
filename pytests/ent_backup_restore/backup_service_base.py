@@ -756,7 +756,6 @@ class Time:
     def reset(self):
         """ Resets system back to the time on the hwclock.
         """
-        self.set_timezone("UTC")
         self.remote_connection.execute_command("hwclock --hctosys")
 
     def change_system_time(self, time_change):
@@ -770,7 +769,7 @@ class Time:
     def get_system_time(self):
         """ Get system time
         """
-        return datetime.datetime.utcfromtimestamp(min(int(output[0]) for output, error in self.remote_connection.execute_command("date +%s") if output)).replace(tzinfo=datetime.timezone.utc)
+        return min(TimeUtil.rfc3339nano_to_datetime(output[0]) for output, error in self.remote_connection.execute_command("date --rfc-3339=seconds | sed 's/ /T/'") if output)
 
     def set_timezone(self, timezone):
         """ Set the timezone
