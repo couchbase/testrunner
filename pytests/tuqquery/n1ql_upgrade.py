@@ -424,14 +424,22 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         query="select curl(" + url + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
+        # self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
+        self.assertEqual(actual_curl['results'][0]['$1']['expand'], expected_curl['expand'])
+        self.assertEqual(actual_curl['results'][0]['$1']['id'], expected_curl['id'])
+        self.assertEqual(actual_curl['results'][0]['$1']['self'], expected_curl['self'])
+        self.assertEqual(actual_curl['results'][0]['$1']['key'], expected_curl['key'])
 
         self.rest.create_whitelist(self.master, {"all_access": True,
                                                  "allowed_urls": None,
                                                  "disallowed_urls": None})
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
+        # self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
+        self.assertEqual(actual_curl['results'][0]['$1']['expand'], expected_curl['expand'])
+        self.assertEqual(actual_curl['results'][0]['$1']['id'], expected_curl['id'])
+        self.assertEqual(actual_curl['results'][0]['$1']['self'], expected_curl['self'])
+        self.assertEqual(actual_curl['results'][0]['$1']['key'], expected_curl['key'])
 
     # test_allowed_url from tuq_curl_whitelist.py
     def run_test_allowed_url(self):
@@ -575,7 +583,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             expectedResults = {'node':'%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'SELECT statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'SELECT * FROM default LIMIT 100',
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
                                'description': 'A N1QL SELECT statement was executed'}
         elif query_type == 'insert':
             if self.filter:
@@ -588,7 +596,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                                'statement': 'INSERT INTO default ( KEY, VALUE ) VALUES ("1",{ "order_id": "1", "type": '
                                             '"order", "customer_id":"24601", "total_price": 30.3, "lineitems": '
                                             '[ "11", "12", "13" ] })',
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
                                'description': 'A N1QL INSERT statement was executed'}
 
         if query_type == 'delete':
@@ -782,8 +790,9 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         return self.get_values_for_compare('meta().id')
 
     def get_values_for_compare(self, field):
-        query_response = self.run_cbq_query("SELECT " + field + " FROM default")
-        docs = sorted(query_response['results'])
+        query_id = f'SELECT {field} FROM default'
+        query_response = self.run_cbq_query(query=query_id)
+        docs = sorted(query_response['results'], key=lambda item: item.get("id"))
         return docs
 
     def run_xattrs_query(self, query, index_statement, xattr_name, index_name, bucket_name, xattr_data=[], compare_fields=[], primary_compare=True, deleted_compare=False, with_retain=False, xattr_type="system", with_aggs=False, delete_leading=False):
@@ -826,7 +835,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     self.assertTrue(docs == {"deleted": False})
         else:
             self.log.info("Compare: " + str(compare[0:5]))
-            self.assertTrue(sorted(docs_1) == sorted(compare))
+            self.assertTrue(sorted(docs_1, key=lambda item: item.get(xattr_name)) == sorted(compare, key=lambda item: item.get(xattr_name)))
 
         if deleted_compare:
             meta_ids = self.get_meta_ids()
@@ -859,12 +868,12 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.assertTrue(len(docs_1)-10 == len(compare_docs))
                 if delete_leading:
                     self.assertTrue(len(docs_2) == len(compare_docs))
-                    self.assertTrue(sorted(docs_2) == sorted(compare_docs))
+                    self.assertTrue(sorted(docs_2, key=lambda item: item.get(xattr_name)) == sorted(compare_docs, key=lambda item: item.get(xattr_name)))
                 else:
                     self.assertTrue(len(docs_2)-10 == len(compare_docs))
-                    self.assertTrue(sorted(docs_1) == sorted(docs_2))
+                    self.assertTrue(sorted(docs_1, key=lambda item: item.get(xattr_name)) == sorted(docs_2, key=lambda item: item.get(xattr_name)))
             else:
-                self.assertTrue(sorted(docs_2) == sorted(compare_docs))
+                self.assertTrue(sorted(docs_2, key=lambda item: item.get(xattr_name)) == sorted(compare_docs, key=lambda item: item.get(xattr_name)))
                 if not with_aggs:
                     self.assertTrue(len(docs_1)-10 == len(docs_2))
 
@@ -883,10 +892,10 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
             if delete_leading or xattr_type == 'user':
                 self.assertTrue(len(docs_3) == len(compare_docs))
-                self.assertTrue(sorted(docs_3) == sorted(compare_docs))
+                self.assertTrue(sorted(docs_3, key=lambda item: item.get(xattr_name)) == sorted(compare_docs, key=lambda item: item.get(xattr_name)))
             else:
                 self.assertTrue(len(docs_3)-10 == len(compare_docs))
-                self.assertTrue(sorted(docs_2) == sorted(docs_3))
+                self.assertTrue(sorted(docs_2, key=lambda item: item.get(xattr_name)) == sorted(docs_3, key=lambda item: item.get(xattr_name)))
 
             self.run_cbq_query("DROP INDEX default." + index_name)
 

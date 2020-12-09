@@ -3698,8 +3698,17 @@ class QueryTests(BaseTestCase):
 
     def run_common_body(self, index_list, queries_to_run):
         try:
+            max_retry=5
             for idx in index_list:
-                self.run_cbq_query(query=idx[0])
+                for retry in range(1,max_retry+1):
+                    try:
+                        self.run_cbq_query(query=idx[0])
+                        break
+                    except CBQError as ex:
+                        if retry == max_retry:
+                            self.log.error(f"Failed to create index: {ex}")
+                        self.log.info(f"Attempt {retry} of {max_retry} failed. Trying again.")
+                        self.sleep(2)
 
             for query in queries_to_run:
                 query_results = self.run_cbq_query(query=query[0])
