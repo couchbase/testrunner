@@ -295,7 +295,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
                 indexes[-1]) or key.startswith(str(instance_ids[-1])),
                 all_stats_keys)
             current_index_all_stats_keys = set(current_index_all_stats_keys)
-            self.assertEquals(
+            self.assertEqual(
                 current_index_all_stats_keys.union(
                     empty_inst_filter_stats_keys), filtered_stats_keys,
                 msg="test_filtered_stats_membership: reverse_check failed on\
@@ -855,8 +855,8 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
                 set(map(lambda stat: int(stat.split(":")[0]),
                         list(filter(lambda stat: stat.split(":")[0].isdigit(),
                                     all_stats.keys())))))
-            self.assertEquals(len(instance_ids), node_id + 1)
-        self.assertEquals(instance_ids, set(replica_index_ids))
+            self.assertEqual(len(instance_ids), node_id + 1)
+        self.assertEqual(instance_ids, set(replica_index_ids))
 
     def test_stats_with_partition_index(self):
         indexes = self.rest.get_indexer_metadata()['status']
@@ -901,8 +901,8 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
                 set(map(lambda stat: int(stat.split(":")[0]),
                         list(filter(lambda stat: stat.split(":")[0].isdigit(),
                                     all_stats.keys())))))
-            self.assertEquals(len(instance_ids), 1)
-        self.assertEquals(instance_ids, set(partition_index_ids))
+            self.assertEqual(len(instance_ids), 1)
+        self.assertEqual(instance_ids, set(partition_index_ids))
 
     def test_stats_with_error_index(self):
         doc = {"indexer.scheduleCreateRetries": 1}
@@ -952,19 +952,23 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         replica_indexes_1 = list(filter(
             lambda index: index['name'].startswith(
                 replica_index.index_name), indexer_stats_1['status']))
-        self.assertEquals(
-            len(replica_indexes_1), self.num_index_replicas + 1)
+        msg = f"{replica_indexes_1}"
+        self.assertEqual(
+            len(replica_indexes_1), self.num_index_replicas + 1, msg=msg)
         indexer_stats_2 = rest_connections[1].get_indexer_metadata()
         replica_indexes_2 = list(filter(
             lambda index: index['name'].startswith(
                 replica_index.index_name), indexer_stats_2['status']))
-        self.assertEquals(
+        msg = f"{replica_indexes_2}"
+        self.assertEqual(
             len(replica_indexes_2), self.num_index_replicas + 1)
         replica_index_ids_1 = list(
             map(lambda index: index["instId"], replica_indexes_1))
         replica_index_ids_2 = list(
             map(lambda index: index["instId"], replica_indexes_2))
-        self.assertEqual(set(replica_index_ids_1), set(replica_index_ids_2))
+        msg = f"{replica_index_ids_1}"
+        self.assertEqual(set(replica_index_ids_1), set(replica_index_ids_2),
+                         msg=msg)
         instance_ids = set()
         for node_id, rest in enumerate(rest_connections):
             all_stats = rest.get_all_index_stats(
@@ -973,8 +977,10 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
                 set(map(lambda stat: int(stat.split(":")[0]),
                         list(filter(lambda stat: stat.split(":")[0].isdigit(),
                                     all_stats.keys())))))
-            self.assertEquals(len(instance_ids), node_id + 1)
-        self.assertEquals(instance_ids, set(replica_index_ids_1))
+            msg = f"{instance_ids}"
+            self.assertEqual(len(instance_ids), node_id + 1, msg=msg)
+        msg = f"{instance_ids}"
+        self.assertEqual(instance_ids, set(replica_index_ids_1), msg=msg)
         self.resume_blocked_incoming_network_from_node(
             indexer_nodes[0], indexer_nodes[1])
         self.sleep(10)
@@ -995,7 +1001,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
             node_inst_ids = set(
                 [int(stat.split(":")[0]) for stat in stats.keys()
                  if stat.split(":")[0].isdigit()])
-            self.assertEquals(set(instance_ids), node_inst_ids)
+            self.assertEqual(set(instance_ids), node_inst_ids)
         out_nodes = [
             node for node in indexer_nodes if self.master.ip != node.ip]
         rebalance = self.cluster.async_rebalance(
@@ -1010,4 +1016,4 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         self.assertNotEquals(stats, {})
         node_inst_ids = set([int(stat.split(":")[0]) for stat in stats.keys()
                             if stat.split(":")[0].isdigit()])
-        self.assertEquals(set(instance_ids), node_inst_ids)
+        self.assertEqual(set(instance_ids), node_inst_ids)
