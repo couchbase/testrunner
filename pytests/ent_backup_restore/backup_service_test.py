@@ -814,7 +814,7 @@ class BackupServiceTest(BackupServiceBase):
 
         task_name = self.active_repository_api.cluster_self_repository_active_id_merge_post(repo_name, body=Body5(start=backups[0], end=backups[no_of_backups - subtrahend_for_no_of_backups - 1], data_range="")).task_name
 
-        self.assertTrue(self.wait_for_backup_task("active", repo_name, 20, 20, task_name=task_name))
+        self.assertTrue(self.wait_for_backup_task("active", repo_name, 20, 40, task_name=task_name))
 
         backup_name = self.map_task_to_backup("active", repo_name, task_name)
 
