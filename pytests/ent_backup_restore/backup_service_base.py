@@ -39,11 +39,13 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         2. Configures Rest API Sub-APIs.
         3. Backup Service Constants.
         """
-        # Sort the available clusters by total memory in ascending order (if the total memory is the same, sort by ip)
-        TestInputSingleton.input.clusters[0].sort(key = lambda server: (ServerUtil(server).get_free_memory(), server.ip))
+        # Set 'skip_server_sort' to avoid sorting the first cluster in the ini file by total memory
+        if not self.input.param("skip_server_sort", False):
+            # Sort the available clusters by total memory in ascending order (if the total memory is the same, sort by ip)
+            self.input.clusters[0].sort(key = lambda server: (ServerUtil(server).get_free_memory(), server.ip))
 
-        # Configure the master server based on the sorted list of clusters
-        self.master = next((server for server in self.servers if server.ip == self.input.clusters[0][0].ip))
+            # Configure the master server based on the sorted list of clusters
+            self.master = next((server for server in self.servers if server.ip == self.input.clusters[0][0].ip))
 
         # Node to node encryption
         self.node_to_node_encryption = NodeToNodeEncryption(self.input.clusters[0][0])
@@ -87,17 +89,20 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         1. Runs preamble.
         """
-        # Set the custom_rebalance flag for every backup service test
-        # in order for the basetest case to call the custom_rebalance
-        # procedure.
-        TestInputSingleton.input.test_params["custom_rebalance"] = True
+        self.input = TestInputSingleton.input
 
-        # Skip the more general clean up process that test runner does at
-        # the end of each which includes tearing down the cluster by
-        # ejecting nodes, rebalancing and using diag eval to 'reset'
-        # the cluster.
-        TestInputSingleton.input.test_params["skip_cleanup"] = True
+        # Set 'default_setup' to avoid the custom_rebalance and skipping of the cleanup
+        if not self.input.param("default_setup", False):
+            # Set the custom_rebalance flag for every backup service test
+            # in order for the basetest case to call the custom_rebalance
+            # procedure.
+            self.input.test_params["custom_rebalance"] = True
 
+            # Skip the more general clean up process that test runner does at
+            # the end of each which includes tearing down the cluster by
+            # ejecting nodes, rebalancing and using diag eval to 'reset'
+            # the cluster.
+            self.input.test_params["skip_cleanup"] = True
 
         super().setUp()
         self.preamble()
@@ -712,9 +717,12 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # Delete buckets before rebalance
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
 
+        # Set 'default_cleanup' to perform testrunner's default tear down process.
+        self.default_cleanup = self.input.param("default_cleanup", False)
+
         # Call EnterpriseBackupRestoreBase's to delete archives/repositories and temporary directories
         # skipping any node ejection and rebalances
-        self.clean_up(self.input.clusters[1][0], skip_eject_and_rebalance=not self.input.param("last_test", False))
+        self.clean_up(self.input.clusters[1][0], skip_eject_and_rebalance=not self.default_cleanup)
 
         # Kill asynchronous tasks which are still running
         self.cluster.shutdown(force=True)
@@ -722,9 +730,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # Start the vboxadd-service again
         self.multiple_remote_shell_connections.execute_command("sudo service vboxadd-service start")
 
-        # If this is the last test, we want to tear down the cluster we provisioned on the first test
-        # Note a test must mark it is the last test by supplying setting `last_test` as a test param
-        if self.input.param("last_test", False):
+        if self.default_cleanup:
             super().tearDown()
 
 class ServerUtil:
