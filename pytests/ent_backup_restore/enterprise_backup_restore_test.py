@@ -495,7 +495,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         output, error = self.backup_cluster()
-        if output and not self._check_output("Backup successfully completed", output):
+        if output and not self._check_output("Backup completed successfully", output):
             self.fail("Failed to run with password env %s " % output)
         self.backup_cluster_validate(skip_backup=True)
         self.backup_list()
@@ -1074,12 +1074,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = self.backup_cluster()
         if self.backupset.secure_conn:
             if self.backupset.bk_no_cert:
-                if self._check_output("Backup successfully completed", output):
+                if self._check_output("Backup completed successfully", output):
                     self.fail("Taking cluster backup failed.")
                 elif self._check_output("Error", output):
                     verify_data = False
             else:
-                if not self._check_output("Backup successfully completed", output):
+                if not self._check_output("Backup completed successfully", output):
                     self.fail("Taking cluster backup failed.")
 
         if verify_data:
@@ -1197,7 +1197,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                           .format(self.cluster_new_user,
                              self.cluster_new_role))
             output, error = self.backup_cluster()
-            success_msg = 'Backup successfully completed'
+            success_msg = 'Backup completed successfully'
             fail_msg = ["Error backing up cluster:"]
             for bucket in self.buckets:
                 fail_msg.append('Backed up bucket "{0}" failed'.format(bucket.name))
@@ -1654,7 +1654,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = conn.execute_command("dd if=/dev/zero of=/cbqe3043/file bs=256M count=50")
         conn.log_command_output(output, error)
         output, error = self.backup_cluster()
-        while self._check_output("Backup successfully completed", output):
+        while self._check_output("Backup completed successfully", output):
             gen = BlobGenerator("ent-backup{0}{0}".format(randint(1, 10000)), "ent-backup-",
                                  self.value_size, end=self.num_items)
             self._load_all_buckets(self.master, gen, "create", 0)
@@ -1715,7 +1715,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn.kill_erlang()
         conn.start_couchbase()
         output = backup_result.result(timeout=200)
-        self.assertTrue(self._check_output("Backup successfully completed", output),
+        self.assertTrue(self._check_output("Backup completed successfully", output),
                         "Backup failed with erlang crash and restart within 180 seconds")
         self.log.info("Backup succeeded with erlang crash and restart within 180 seconds")
         conn.disconnect()
@@ -1742,7 +1742,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn.start_couchbase()
         conn.disconnect()
         output = backup_result.result(timeout=200)
-        self.assertTrue(self._check_output("Backup successfully completed", output),
+        self.assertTrue(self._check_output("Backup completed successfully", output),
                         "Backup failed with couchbase stop and start within 180 seconds")
         self.log.info("Backup succeeded with couchbase stop and start within 180 seconds")
 
@@ -1768,7 +1768,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn.unpause_memcached()
         conn.disconnect()
         output = backup_result.result(timeout=200)
-        self.assertTrue(self._check_output("Backup successfully completed", output),
+        self.assertTrue(self._check_output("Backup completed successfully", output),
                         "Backup failed with memcached crash and restart within 180 seconds")
         self.log.info("Backup succeeded with memcached crash and restart within 180 seconds")
 
@@ -2259,7 +2259,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn.disconnect()
         self.sleep(30)
         output, error = self.backup_cluster()
-        if error or not self._check_output("Backup successfully completed", output):
+        if error or not self._check_output("Backup completed successfully", output):
             self.fail("Taking cluster backup failed.")
         status, output, message = self.backup_list()
         if not status:
@@ -4322,7 +4322,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.sleep(2)
 
         output = backup_result.result(timeout=200)
-        self.assertTrue(self._check_output("Backup successfully completed", output),
+        self.assertTrue(self._check_output("Backup completed successfully", output),
                         "Backup failed with concurrent info")
 
         # Test with merge

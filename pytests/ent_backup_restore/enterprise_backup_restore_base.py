@@ -553,7 +553,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
         """ Print out of cbbackupmgr from 6.5 is different with older version """
         self.cbbkmgr_version = "6.5"
-        self.bk_printout = "Backup successfully completed".split(",")
+        self.bk_printout = "Backup completed successfully".split(",")
         if RestHelper(RestConnection(self.backupset.backup_host)).is_ns_server_running():
             self.cbbkmgr_version = RestConnection(self.backupset.backup_host).get_nodes_version()
 
@@ -1260,7 +1260,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.log.info("\nOutput from backup cluster: {0} ".format(output))
             else:
                 self.fail("No output printout.")
-        self.assertTrue(self._check_output("Backup successfully completed", output),
+        self.assertTrue(self._check_output("Backup completed successfully", output),
                         "Backup failed with memcached crash and restart within 180 seconds")
         self.log.info("Backup succeeded with memcached crash and restart within 180 seconds")
         self.sleep(20)
@@ -1318,7 +1318,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 cb_version=self.cb_version,
                 num_shards=num_shards)
             output = backup_result.result(timeout=300)
-        self.assertTrue(self._check_output("Backup successfully completed", output),
+        self.assertTrue(self._check_output("Backup completed successfully", output),
                         "Backup failed with erlang crash and restart within 180 seconds")
         self.log.info("Backup succeeded with erlang crash and restart within 180 seconds")
         self.sleep(30)
@@ -1376,7 +1376,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 cb_version=self.cb_version,
                 num_shards=num_shards)
             output = backup_result.result(timeout=300)
-        self.assertTrue(self._check_output("Backup successfully completed", output),
+        self.assertTrue(self._check_output("Backup completed successfully", output),
                        "Backup failed with couchbase stop and start within 180 seconds")
 
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
@@ -1451,7 +1451,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 return
             else:
                 output, error = self.backup_cluster()
-                if error or not self._check_output("Backup successfully completed", output):
+                if error or not self._check_output("Backup completed successfully", output):
                     self.fail("Taking cluster backup failed.")
             status, output, message = self.backup_list()
             if not status:
