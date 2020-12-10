@@ -208,9 +208,10 @@ class BaseTestCase(unittest.TestCase):
             self.upgrade_addr_family = self.input.param("upgrade_addr_family",None)
 
 
-            if self.skip_setup_cleanup:
+            if self.skip_setup_cleanup or self.skip_bucket_setup:
                 self.buckets = RestConnection(self.master).get_buckets()
-                return
+                if self.skip_setup_cleanup:
+                    return
             if not self.skip_init_check_cbserver:
                 self.cb_version = None
                 if RestHelper(RestConnection(self.master)).is_ns_server_running():
