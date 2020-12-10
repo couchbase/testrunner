@@ -1710,7 +1710,7 @@ class XattrEnterpriseBackupRestoreTest(SubdocBaseTest):
             "/opt/couchbase/bin/cbbackupmgr backup --archive /tmp/backups --repo example "
             "--cluster couchbase://127.0.0.1 --username Administrator --password password %s" % self.backup_extra_params)
         self.log.info(output)
-        self.assertEqual('Backup successfully completed', output[1])
+        self.assertEqual('Backup completed successfully', output[1])
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         imp_rest = RestConnection(self.master)
         info = imp_rest.get_nodes_self()
