@@ -403,18 +403,26 @@ def get_node_helper(ip):
     return None
 
 
-def print_result_and_exit(err=None):
+def print_result_and_exit(err=None, install_started=True):
     if err:
         log.error(err)
     success = []
     fail = []
+    install_not_started = []
     for server in params["servers"]:
         node = get_node_helper(server.ip)
+
         if not node or not node.install_success:
-            fail.append(server.ip)
+            if install_started:
+                fail.append(server.ip)
+            else:
+                install_not_started.append(server.ip)
 
         elif node.install_success:
             success.append(server.ip)
+    log.info("-" * 100)
+    for _ in install_not_started:
+        log.error("INSTALL NOT STARTED ON: \t{0}".format(_))
     log.info("-" * 100)
     for _ in fail:
         log.error("INSTALL FAILED ON: \t{0}".format(_))
@@ -422,7 +430,7 @@ def print_result_and_exit(err=None):
     for _ in success:
         log.info("INSTALL COMPLETED ON: \t{0}".format(_))
     log.info("-" * 100)
-    if len(fail) > 0:
+    if len(fail) > 0 or len(install_not_started) > 0:
         sys.exit(1)
 
 
@@ -639,7 +647,7 @@ def _download_build():
         _copy_to_nodes(NodeHelpers[0].build.path, NodeHelpers[0].build.path)
         for node in NodeHelpers:
             if not check_file_exists(node, node.build.path) or not check_file_size(node):
-                print_result_and_exit("Unable to copy build to {}, exiting".format(node.build.path))
+                print_result_and_exit("Unable to copy build to {}, exiting".format(node.build.path), install_started=False)
     else:
         for node in NodeHelpers:
             build_url = node.build.url
@@ -673,7 +681,7 @@ def check_and_retry_download_binary_local(node):
             time.sleep(duration)
     else:
         print_result_and_exit("Unable to download build in {0}s on {1}, exiting".format(timeout,
-                                                                                        node.build.path))
+                                                                                        node.build.path), install_started=False)
 
 def check_file_exists(node, filepath):
     output, _ = node.shell.execute_command("ls -lh {0}".format(filepath), debug=params["debug_logs"])
@@ -717,7 +725,7 @@ def check_and_retry_download_binary(cmd, node):
             log.warning("Unable to download build: {0}, retrying..".format(e))
             time.sleep(duration)
     else:
-        print_result_and_exit("Unable to download build in {0}s on {1}, exiting".format(timeout, node.ip))
+        print_result_and_exit("Unable to download build in {0}s on {1}, exiting".format(timeout, node.ip), install_started=False)
 
 
 def __get_download_dir(node):
