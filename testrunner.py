@@ -647,7 +647,7 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
         if "get-coredumps" in TestInputSingleton.input.test_params:
             if TestInputSingleton.input.param("get-coredumps", True):
                 clear_old_core_dumps(TestInputSingleton.input, logs_folder)
-        if case_number == 1 and "upgrade" not in name:
+        if case_number == 1 and "upgrade" not in name and "xdcr" not in name:
             before_suite_name = "%s.%s" % (name[:name.rfind('.')], BEFORE_SUITE)
             try:
                 print(("Run before suite setup for %s" % name))
