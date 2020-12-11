@@ -32,10 +32,7 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
         try:
             self.src_rest.set_xdcr_param('default', 'default', 'collectionsMigrationMode', "true")
         except Exception as e:
-            if "Unable to set replication setting collectionsMigrationMode=true" in str(e):
-                self.log.info("Migration with implicit mapping failed as expected")
-        else:
-            self.fail("Migration with implicit mapping did not fail as expected")
+            self.fail(str(e))
 
     def test_migration_empty_mapping(self):
         try:
@@ -44,7 +41,10 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                                "colMappingRules": "{}"}
             self.src_rest.set_xdcr_params('default', 'default', setting_val_map)
         except Exception as e:
-            self.fail(str(e))
+            if "Migration and Explicit mapping cannot both be active" in str(e):
+                self.log.info("Migration with explicit mapping failed as expected")
+        else:
+            self.fail("Migration with explicit mapping did not fail as expected")
 
     def test_migration_adv_filter(self):
         try:

@@ -9,12 +9,6 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
     NEW_SCOPE = "new_scope"
     NEW_COLLECTION = "new_collection"
 
-    def setUp(self):
-        XDCRNewBaseTest.setUp(self)
-
-    def tearDown(self):
-        XDCRNewBaseTest.tearDown(self)
-
     def get_cluster_objects_for_input(self, input):
         """returns a list of cluster objects for input. 'input' is a string
            containing names of clusters separated by ':'
@@ -35,6 +29,7 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
         explicit_mapping = self._input.param("explicit_mapping", None)
         migration_mode = self._input.param("migration_mode", None)
         mirroring_mode = self._input.param("mirroring_mode", None)
+        oso_mode = self._input.param("oso_mode", None)
         new_scope = self._input.param("new_scope", None)
         new_collection = self._input.param("new_collection", None)
         scope_name = self._input.param("scope_name", self.NEW_SCOPE)
@@ -42,6 +37,8 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
         new_scope_collection = self._input.param("new_scope_collection", None)
         drop_recreate_scope = self._input.param("drop_recreate_scope", None)
         drop_recreate_collection = self._input.param("drop_recreate_collection", None)
+        consistent_metadata = self._input.param("consistent_metadata", None)
+        scalable_stats = self._input.param("scalable_stats", None)
         initial_xdcr = self._input.param("initial_xdcr", random.choice([True, False]))
 
         try:
@@ -50,7 +47,7 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
             else:
                 self.setup_xdcr_and_load()
         except Exception as e:
-            self.fail(str(e))
+            self.fail(e)
 
         if drop_default_scope:
             for cluster in self.get_cluster_objects_for_input(drop_default_scope):
@@ -161,6 +158,66 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                 if True in cluster.get_xdcr_param("collectionsMirroringMode"):
                     self.fail("collectionsMirroringMode is true, expected to be false by default")
                 self.log.info("collectionsMirroringMode is false as expected")
+
+        if oso_mode:
+            for cluster in self.get_cluster_objects_for_input(mirroring_mode):
+                if True in cluster.get_xdcr_param("collectionsOSOMode"):
+                    self.log.info("collectionsOSOMode is true as expected")
+                self.fail("collectionsOSOMode is false, expected to be true by default")
+
+        if consistent_metadata:
+            self._wait_for_replication_to_catchup()
+            src_cluster = self.get_cluster_objects_for_input(consistent_metadata)[0]
+            src_rest = RestConnection(src_cluster.get_master_node())
+            for remote_cluster_ref in src_cluster.get_remote_clusters():
+                for repl in remote_cluster_ref.get_replications():
+                    post_load_data_replicated = src_rest.get_repl_stat(
+                        repl_id=repl.get_repl_id(),
+                        src_bkt=repl.get_src_bucket().name,
+                        stat="data_replicated")
+                    for per_node_samples in post_load_data_replicated:
+                        if (sum(per_node_samples)) > 0:
+                            self.log.info("After loading bucket {0}:{1}, data_replicated samples are uniform: {2}"
+                                          .format(src_cluster.get_master_node().ip, repl.get_src_bucket().name,
+                                                  post_load_data_replicated))
+                        else:
+                            self.fail("After loading bucket {0}:{1}, data_replicated samples are not uniform: {2}"
+                                      .format(src_cluster.get_master_node().ip, repl.get_src_bucket().name,
+                                              post_load_data_replicated))
+
+                    repl.pause(verify=True)
+                    self.sleep(10)
+                    repl.resume(verify=True)
+                    post_pause_resume_data_replicated = src_rest.get_repl_stat(
+                        repl_id=repl.get_repl_id(),
+                        src_bkt=repl.get_src_bucket().name,
+                        stat="data_replicated")
+                    for per_node_samples in post_pause_resume_data_replicated:
+                        if 0 in per_node_samples:
+                            self.log.info("After pause-resume replication with src bucket {0}:{1}, "
+                                          "data_replicated is getting reset to 0: {2}"
+                                          .format(src_cluster.get_master_node().ip, repl.get_src_bucket().name,
+                                                  post_pause_resume_data_replicated))
+                        else:
+                            self.fail("After pause-resume replication with src bucket {0}:{1}, "
+                                      "data_replicated is not getting reset to 0: {2}"
+                                      .format(src_cluster.get_master_node().ip, repl.get_src_bucket().name,
+                                              post_pause_resume_data_replicated))
+
+                    self.src_cluster.rebalance_out()
+                    post_rebalance_data_replicated = src_rest.get_repl_stat(
+                        repl_id=repl.get_repl_id(),
+                        src_bkt=repl.get_src_bucket().name,
+                        stat="data_replicated")
+                    for per_node_samples in post_rebalance_data_replicated:
+                        if sum(per_node_samples) == 0:
+                            self.log.info("After rebalance out on src cluster, "
+                                          "data_replicated is reset to 0 as expected : {0}"
+                                          .format(post_rebalance_data_replicated))
+                        else:
+                            self.fail("After rebalance out on src cluster, "
+                                      "data_replicated is not reset to 0 as expected : {0}"
+                                      .format(post_rebalance_data_replicated))
 
         for task in tasks:
             if task:

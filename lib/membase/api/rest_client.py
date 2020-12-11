@@ -1309,15 +1309,16 @@ class RestConnection(object):
             elif self.check_node_versions("5.0") and RestConnection(remote).check_node_versions("5.0"):
                 param_map['encryptionType'] = encryptionType
         params = urllib.parse.urlencode(param_map)
-        status, content, _ = self._http_request(api, 'POST', params)
-        # sample response :
-        # [{"name":"two","uri":"/pools/default/remoteClusters/two","validateURI":"/pools/default/remoteClusters/two?just_validate=1","hostname":"127.0.0.1:9002","username":"Administrator"}]
-        if status:
+        retries = 5
+        while retries:
+            status, content, _ = self._http_request(api, 'POST', params)
+            # sample response :
+            # [{"name":"two","uri":"/pools/default/remoteClusters/two","validateURI":"/pools/default/remoteClusters/two?just_validate=1","hostname":"127.0.0.1:9002","username":"Administrator"}]
             remoteCluster = json.loads(content)
-        else:
-            log.error("/remoteCluster failed : status:{0},content:{1}".format(status, content))
-            raise Exception("remoteCluster API '{0} remote cluster' failed".format(op))
-        return remoteCluster
+            if status or "Duplicate cluster" in remoteCluster["_"]:
+                return remoteCluster
+            retries -= 1
+        raise Exception("remoteCluster API '{0} remote cluster' failed".format(op))
 
     def add_remote_cluster(self, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate='',
                            encryptionType="full"):
@@ -3153,6 +3154,23 @@ class RestConnection(object):
         chkpt_doc_string = repl_ckpt_list['/ckpt/%s/0' % repl_id].replace('"', '\"')
         chkpt_dict = json.loads(chkpt_doc_string)
         return chkpt_dict['checkpoints'][0]
+
+    def get_repl_stat(self, repl_id, src_bkt="default", stat="data_replicated", timestamp=None):
+        repl_id = repl_id.replace('/', '%2F')
+        api = self.baseUrl + "pools/default/buckets/" + src_bkt + "/stats/replications%2F" \
+              + repl_id + "%2F" + stat
+        if timestamp:
+            api += "?haveTStamp=" + timestamp
+        status, content, header = self._http_request(api)
+        if not status:
+            raise XDCRException("Unable to retrieve {0} stat for replication {1}".
+                                format(stat, repl_id))
+        repl_stat = json.loads(content)
+        samples = []
+        for node in self.get_nodes():
+            items = repl_stat["nodeStats"]["{0}:8091".format(node.ip)]
+            samples.append(items)
+        return samples
 
     """ Start of FTS rest apis"""
 

@@ -2541,7 +2541,7 @@ class VerifyCollectionDocCountTask(Task):
                     src_count = self.src_conn.get_scope_item_count(self.bucket, src_scope,
                                                                    self.src.get_nodes(), self.src_stats)
 
-                if map_exp[1].lower() == "null":
+                if map_exp[1] and map_exp[1].lower() == "null":
                     self.log.info("{} mapped to null, skipping doc count verification"
                                   .format())
                     dest_scope = "null"
