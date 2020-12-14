@@ -8,6 +8,9 @@ import uuid
 sys.path = [".", "lib"] + sys.path
 from remote.remote_util import RemoteMachineShellConnection
 import TestInput
+from paramiko.buffered_pipe import PipeTimeout
+import time
+import os
 
 def usage(error=None):
     print("""\
@@ -34,7 +37,17 @@ class CommandRunner(object):
         self.command = command
 
     def run(self):
-        remote_client = RemoteMachineShellConnection(self.server)
+        retries = int(os.environ["ssh_timeout_retries"]) if "ssh_timeout_retries" in os.environ else 3
+        while True:
+            try:
+                remote_client = RemoteMachineShellConnection(self.server)
+                break
+            except PipeTimeout as e:
+                if retries == 0:
+                    raise e
+                retries -= 1
+                print("Error creating shell connection, retrying in 5 seconds")
+                time.sleep(5)
         output, error = remote_client.execute_command(self.command)
         print(self.server.ip)
         print("\n".join(output))
