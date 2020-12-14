@@ -1255,12 +1255,12 @@ class ImportExportTests(CliBaseTest):
                     bucket_data[0] = bucket_data[0].replace("[", "")
                     bucket_data[len(bucket_data) - 1] = \
                     bucket_data[len(bucket_data) - 1].replace("]", "")
-                if self.debug_logs:
-                    print "\nsource data  \n", src_data[:20]
-                    print "\nbucket data  \n", bucket_data[:20]
                 for x in range(0, len(bucket_data)):
                     k = json.loads(bucket_data[x])
-                    bucket_data[x] = '{"name":"' + k["name"]+ '","age":' + str(k["age"]) + ',"index":"' + str(k["index"]) + '","body":"' + k["body"]+ '"}'
+                    bucket_data[x] = '{"name":"' + k["name"]+ '","age":' + str(k["age"]) + ',"index":' + str(k["index"]) + ',"body":"' + k["body"]+ '"}'
+                if self.debug_logs:
+                    print "\nsource data  \n", sorted(src_data)[:20]
+                    print "\nbucket data  \n", sorted(bucket_data)[:20]
                 self.log.info("Compare source data and bucket data")
                 if sorted(src_data) == sorted(bucket_data):
                     self.log.info("Import data match bucket data")
