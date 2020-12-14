@@ -1240,6 +1240,9 @@ class ImportExportTests(CliBaseTest):
             src_data = [x.rstrip(",") for x in src_data]
             src_data[0] = src_data[0].replace("[", "")
             src_data[len(src_data)-1] = src_data[len(src_data)-1].replace("]", "")
+            index_type = ""
+            if src_data and '"index":"' in src_data[0]:
+                index_type = '"'
 
             if self.imex_type == "json":
                 self.log.info("Copy bucket data from remote to local")
@@ -1257,7 +1260,7 @@ class ImportExportTests(CliBaseTest):
                     bucket_data[len(bucket_data) - 1].replace("]", "")
                 for x in range(0, len(bucket_data)):
                     k = json.loads(bucket_data[x])
-                    bucket_data[x] = '{"name":"' + k["name"]+ '","age":' + str(k["age"]) + ',"index":' + str(k["index"]) + ',"body":"' + k["body"]+ '"}'
+                    bucket_data[x] = '{"name":"' + k["name"]+ '","age":' + str(k["age"]) + ',"index":%s' % index_type + str(k["index"]) + '%s,"body":"' % index_type + k["body"]+ '"}'
                 if self.debug_logs:
                     print "\nsource data  \n", sorted(src_data)[:20]
                     print "\nbucket data  \n", sorted(bucket_data)[:20]
