@@ -171,7 +171,7 @@ class EventingBucket(EventingBaseTest):
         # push the source bucket to dgm
         self.push_to_dgm(self.src_bucket_name, 50)
         body = self.create_save_function_body(self.function_name, self.handler_code,
-                                              dcp_stream_boundary="from_now",src_binding=True)
+                                              dcp_stream_boundary="from_now")
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
@@ -260,7 +260,10 @@ class EventingBucket(EventingBaseTest):
 
     def test_bucket_compaction_when_eventing_is_processing_mutations(self):
         gen_load_copy = copy.deepcopy(self.gens_load)
-        body = self.create_save_function_body(self.function_name, self.handler_code,src_binding=True)
+        if self.is_sbm:
+            body = self.create_save_function_body(self.function_name, self.handler_code)
+        else:
+            body = self.create_save_function_body(self.function_name, self.handler_code, src_binding=True)
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
