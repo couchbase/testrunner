@@ -3645,10 +3645,13 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                           self.servers[1].ip, services=['index','fts'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
         rebalance.result()
+        storage_mode = rest_src.get_index_settings()["indexer.settings.storage_mode"]
+        self.log.info("storage mode of this cluster is {0} ".format(storage_mode))
 
-        cmd = "cbindex -type create -bucket default -using plasma -index " \
+        cmd = "cbindex -type create -bucket default -using {2} -index " \
               "age_idx -fields=age -auth {0}:{1}".format(self.servers[0].rest_username,
-                                                         self.servers[0].rest_password,)
+                                                         self.servers[0].rest_password,
+                                                         storage_mode)
         remote_client = RemoteMachineShellConnection(
             self.backupset.cluster_host)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
@@ -3664,9 +3667,10 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                     self.fail("GSI index cannot be created")
             else:
                 self.fail("GSI index cannot be created")
-        cmd = "cbindex -type create -bucket default -using plasma -index " \
+        cmd = "cbindex -type create -bucket default -using {2} -index " \
               "name_idx -fields=name -auth {0}:{1}".format(self.servers[0].rest_username,
-                                                           self.servers[0].rest_password,)
+                                                           self.servers[0].rest_password,
+                                                           storage_mode)
         remote_client.disconnect()
         remote_client = RemoteMachineShellConnection(
             self.backupset.cluster_host)
