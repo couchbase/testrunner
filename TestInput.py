@@ -103,6 +103,7 @@ class TestInputServer(object):
         self.cli_path = ''
         self.data_path = ''
         self.index_path = ''
+        self.cbas_path = ''
         self.n1ql_port = ''
         self.index_port = ''
         self.fts_port = ''
@@ -310,6 +311,8 @@ class TestInputParser():
                     server.data_path = global_properties['data_path']
                 if server.index_path == '' and 'index_path' in global_properties:
                     server.index_path = global_properties['index_path']
+                if server.cbas_path == '' and 'cbas_path' in global_properties:
+                    server.cbas_path = global_properties['cbas_path']
                 if server.services == '' and 'services' in global_properties:
                     server.services = global_properties['services']
                 if server.n1ql_port == '' and 'n1ql_port' in global_properties:

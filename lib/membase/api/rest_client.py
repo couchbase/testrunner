@@ -1,6 +1,8 @@
 import base64
 import json
 import urllib.request, urllib.parse, urllib.error
+from urllib3._collections import HTTPHeaderDict
+
 from . import httplib2
 import logger
 import traceback
@@ -1943,7 +1945,7 @@ class RestConnection(object):
             else:
                 all_index_stats = json.loads(content)
         return all_index_stats
-    
+
     def get_index_official_stats(self, timeout=120, index_map=None, bucket="", scope="", collection=""):
         api = self.index_baseUrl + 'api/v1/stats'
         if bucket:
@@ -2962,16 +2964,25 @@ class RestConnection(object):
             log.error("Rebalance is not stopped due to {0}".format(content))
         return status
 
-    def set_data_path(self, data_path=None, index_path=None):
-        api = self.baseUrl + '/nodes/self/controller/settings'
-        paths = {}
+    def set_data_path(self, data_path=None, index_path=None, cbas_path=None):
+        end_point = '/nodes/self/controller/settings'
+        api = self.baseUrl + end_point
+        paths = HTTPHeaderDict()
+        set_path = False
         if data_path:
-            paths['path'] = data_path
+            set_path = True
+            paths.add('path', data_path)
         if index_path:
-            paths['index_path'] = index_path
-        if paths:
+            set_path = True
+            paths.add('index_path', index_path)
+        if cbas_path:
+            set_path = True
+            import ast
+            for cbas in ast.literal_eval(cbas_path):
+                paths.add('cbas_path', cbas)
+        if set_path:
             params = urllib.parse.urlencode(paths)
-            log.info('/nodes/self/controller/settings params : {0}'.format(params))
+            log.info('%s : %s' % (end_point, params))
             status, content, header = self._http_request(api, 'POST', params)
             if status:
                 log.info("Setting data_path: {0}: status {1}".format(data_path, status))
@@ -4375,7 +4386,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         log.info ("Status of executeValidateCredentials command - {0}".format(status))
         return status, json.loads(content)
-    
+
     '''MadHatter LDAP Group Support'''
 
     ''' 
@@ -4779,7 +4790,7 @@ class RestConnection(object):
         if not status:
             raise Exception(content)
         return json.loads(content)
-    
+
     '''
     Add External User
     '''

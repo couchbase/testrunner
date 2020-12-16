@@ -338,11 +338,15 @@ class NodeHelper:
 
                 self.rest = RestConnection(self.node)
                 # Make sure that data_path and index_path are writable by couchbase user
-                for path in set([_f for _f in [self.node.data_path, self.node.index_path] if _f]):
-                    for cmd in ("rm -rf {0}/*".format(path),
-                                "chown -R couchbase:couchbase {0}".format(path)):
+                for path in set([_f for _f in [self.node.data_path,
+                                               self.node.index_path,
+                                               self.node.cbas_path] if _f]):
+                    for cmd in ("rm -rf %s/*" % path,
+                                "chown -R couchbase:couchbase %s" % path):
                         self.shell.execute_command(cmd)
-                self.rest.set_data_path(data_path=self.node.data_path, index_path=self.node.index_path)
+                self.rest.set_data_path(data_path=self.node.data_path,
+                                        index_path=self.node.index_path,
+                                        cbas_path=self.node.cbas_path)
                 self.allocate_memory_quotas()
                 self.rest.init_node_services(hostname=None,
                                              username=self.node.rest_username,
