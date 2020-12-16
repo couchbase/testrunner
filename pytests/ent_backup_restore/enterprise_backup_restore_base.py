@@ -2158,6 +2158,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         redacted_logs, _ = shell.execute_command(
                             "ls " + redacted_logs_path)
                         for log_file in redacted_logs:
+                            _, check_dir = shell.execute_command("cat %s%s" % (redacted_logs_path,
+                                                                               log_file))
+                            if self._check_output("Is a directory", check_dir):
+                                continue
+
                             self._validate_log_redaction_hashing(
                                 unredacted_logs_path + log_file,
                                 redacted_logs_path + log_file,
