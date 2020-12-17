@@ -1879,6 +1879,14 @@ class QueryTests(BaseTestCase):
             return None
         return s
 
+    def process_CBQE(self, s):
+        '''
+        return json object {'code':12345, 'msg':'error message'}
+        '''
+        content = str(s).split("ERROR:")[1].replace("'",'"').replace("None","null")
+        json_parsed = json.loads(content)
+        return json_parsed['errors'][0]
+
     ##############################################################################################
     #
     #   tuq_sanity.py helpers

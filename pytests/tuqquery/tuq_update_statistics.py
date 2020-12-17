@@ -14,6 +14,7 @@ class QueryUpdateStatsTests(QueryTests):
         self.opt_keyspace = self.input.param("opt_keyspace", "")
         self.scope = self.input.param("scope", "_default")
         self.collection = self.input.param("collection", "_default")
+        self.resolution = self.input.param("resolution", 1)
 
         # Set update statistics vs analyze syntax
         if self.analyze:
@@ -159,13 +160,16 @@ class QueryUpdateStatsTests(QueryTests):
             self.fail()
 
     def test_update_stats_timeout(self):
-        error = "Update Statistics timeout (2 seconds) exceeded"
+        error_code = 5360
+        error_message = "Update Statistics timeout (2 seconds) exceeded"
         update_stats = f"UPDATE STATISTICS `{self.bucket_name}`(city, country) WITH {{'update_statistics_timeout':2}}"
         try:
             stats = self.run_cbq_query(query=update_stats)
             self.fail(f"Update statistics dit not time-out. Expected error is {error}")
         except CBQError as ex:
-            self.assertTrue(str(ex).find(error) > 0)
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], error_code)
+            self.assertEqual(error['msg'], error_message)
 
     def test_update_stats_index(self):
         histogram_expected = [
@@ -386,8 +390,71 @@ class QueryUpdateStatsTests(QueryTests):
             except CBQError as ex:
                 self.assertTrue(str(ex).find(error) > 0)
 
+    def test_sys_bucket_100mb(self):
+        # Update stats in order to create N1QL_SYSTEM_BUCKET
+        self.run_cbq_query(query="UPDATE STATISTICS `travel-sample`(city) WITH {'update_statistics_timeout':240}")
+        # Check N1QL_SYSTEM_BUCKET memory quota
+        system_bucket = self.rest.get_bucket_json(bucket="N1QL_SYSTEM_BUCKET")
+        system_stats = self.rest.fetch_system_stats()
+        num_nodes = len(system_stats['nodes'])
+        self.assertEqual(system_bucket['quota']['ram'], 100*1024*1024*num_nodes)
 
+    def test_update_stats_quota_full(self):
+        error = "Error while creating system bucket N1QL_SYSTEM_BUCKET - cause: [ramQuotaMB:RAM quota specified is too large to be provisioned into this cluster.]"
+        histogram_query = "SELECT `bucket`, `scope`, `collection`, `histogramKey` FROM `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'"
+        histogram_expected = [
+            {"bucket": "travel-sample", "collection": "_default", "histogramKey": "city", "scope": "_default"}
+        ]
+        system_stats = self.rest.fetch_system_stats()
+        num_nodes = len(system_stats['nodes'])
+        quota_total = system_stats['storageTotals']['ram']['quotaTotal']
+        quota_used = system_stats['storageTotals']['ram']['quotaUsed']
+        quota_remaining = (quota_total - quota_used) // 1024 // 1024
+        # create big bucket to fill up quota
+        self.rest.create_bucket(bucket="bigbucket",ramQuotaMB=quota_remaining//num_nodes)
+        # update statistics should fail since there is no more quota
+        try:
+            self.run_cbq_query(query="UPDATE STATISTICS `travel-sample`(city)")
+            self.fail(f"Query did not fail as expected with error: {error}")
+        except CBQError as ex:
+            self.assertTrue(str(ex).find(error) > 0)
+        # update bucket quota
+        self.rest.change_bucket_props(bucket="bigbucket", ramQuotaMB=100)
+        try:
+            self.run_cbq_query(query="UPDATE STATISTICS `travel-sample`(city)")
+            # check stats
+            histogram = self.run_cbq_query(query=histogram_query)
+            self.assertEqual(histogram['results'],histogram_expected)
+        except Exception as e:
+            self.log.error(f"Update statistics failed: {e}")
+            self.fail()
 
-
+    def test_update_stats_resolution(self):
+        error_message = f"Invalid resolution ({'%6f' % self.resolution})specified, resolution must be between 0.02 and 5.0"
+        error_code = 5360
+        field = "city"
+        distribution_query = f"with distribution as (select meta().distributions.{field} from system:dictionary where `bucket` = \"travel-sample\" and `scope` = \"{self.scope}\" and `keyspace` = \"{self.collection}\") select distribution[0].{field}.resolution"
+        update_stats = f"{self.UPDATE_STATISTICS} {self.keyspace}({field}) WITH {{'resolution':{self.resolution}}}"
+        if self.resolution >= 0.02 and self.resolution <= 5:
+            # Valid values for resolution
+            try:
+                # run stats
+                self.run_cbq_query(query=update_stats)
+                # check resolution
+                self.sleep(2)
+                distribution = self.run_cbq_query(query=distribution_query)
+                self.assertEqual(distribution['results'][0]['resolution'], self.resolution)
+            except Exception as e:
+                self.log.error(f"Update statistics failed: {e}")
+                self.fail()
+        else:
+            # Out of range values for resolution
+            try:
+                self.run_cbq_query(query=update_stats)
+                self.fail(f"Query did not fail as expected with error: {error_message}")
+            except CBQError as ex:
+                error = self.process_CBQE(ex)
+                self.assertEqual(error['code'], error_code)
+                self.assertEqual(error['msg'], error_message)
 
 
