@@ -227,6 +227,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.add_node_services = self.input.param("add-node-services", "kv")
         self.backupset.backup_compressed = \
                                       self.input.param("backup-conpressed", False)
+
+        """ Get cb version of cbm client from bkrs client server """
+        self.backupset.current_bkrs_client_version = \
+                        self._get_current_bkrs_client_version()
         self.backups = []
         self.validation_helper = BackupRestoreValidations(self.backupset,
                                                           self.cluster_to_backup,
@@ -315,6 +319,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             sysinfo = remote_client.get_windows_system_info()
             numprocs = sysinfo['Processor(s)'].split(' ')
             return numprocs[0]
+
+    def _get_current_bkrs_client_version(self):
+        self.backupset.current_bkrs_client_version = \
+                        RestConnection(self.backupset.backup_host).get_nodes_version()
+        self.backupset.current_bkrs_client_version = \
+                   "-".join(self.backupset.current_bkrs_client_version.split('-')[:2])
+        return self.backupset.current_bkrs_client_version
+
 
     def backup_reset_clusters(self, servers):
         BucketOperationHelper.delete_all_buckets_or_assert(servers, self)
