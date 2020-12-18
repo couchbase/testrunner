@@ -1033,6 +1033,8 @@ class EventingBaseTest(QueryHelperTests):
                                          timeout_secs=300,exp=expiry)
         if wait_for_loading:
             task.result()
+        else:
+            return task
 
     def create_function_with_collection(self, appname, appcode,
                                  dcp_stream_boundary="everything",src_namespace="src_bucket._default._default",

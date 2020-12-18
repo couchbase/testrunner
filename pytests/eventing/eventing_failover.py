@@ -62,6 +62,10 @@ class EventingFailover(EventingBaseTest):
                                       full_docs_list=self.full_docs_list, log=self.log, input=self.input,
                                       master=self.master, use_rest=True)
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        if self.non_default_collection:
+            self.create_scope_collection(bucket=self.src_bucket_name,scope=self.src_bucket_name,collection=self.src_bucket_name)
+            self.create_scope_collection(bucket=self.metadata_bucket_name,scope=self.metadata_bucket_name,collection=self.metadata_bucket_name)
+            self.create_scope_collection(bucket=self.dst_bucket_name,scope=self.dst_bucket_name,collection=self.dst_bucket_name)
 
 
     def tearDown(self):
@@ -82,19 +86,21 @@ class EventingFailover(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if self.non_default_collection:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                         wait_for_loading=False)
+        else:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                         wait_for_loading=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         self.wait_for_failover()
         task.result()
         fail_over_task.result()
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True,
-                                         expected_duplicate=True)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs,expected_duplicate=True)
         else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,
-                                         expected_duplicate=True)
+            self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs,expected_duplicate=True)
         self.undeploy_and_delete_function(body)
 
     def test_vb_shuffle_during_failover_add_back(self):
@@ -102,19 +108,21 @@ class EventingFailover(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if self.non_default_collection:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                         wait_for_loading=False)
+        else:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                         wait_for_loading=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         self.wait_for_failover()
         fail_over_task.result()
         task.result()
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True,
-                                         expected_duplicate=True)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs,expected_duplicate=True)
         else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,
-                                         expected_duplicate=True)
+            self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs,expected_duplicate=True)
         # do a recovery and rebalance
         self.rest.set_recovery_type('ns_1@' + eventing_server[1].ip, "full")
         self.rest.add_back_node('ns_1@' + eventing_server[1].ip)
@@ -125,8 +133,12 @@ class EventingFailover(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if self.non_default_collection:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                         wait_for_loading=False)
+        else:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                         wait_for_loading=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         fail_over_task.result()
@@ -135,12 +147,10 @@ class EventingFailover(EventingBaseTest):
         self.rest.add_back_node('ns_1@' + eventing_server[1].ip)
         rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
         task.result()
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True,
-                                         expected_duplicate=True)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs,expected_duplicate=True)
         else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,
-                                         expected_duplicate=True)
+            self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs,expected_duplicate=True)
         self.undeploy_and_delete_function(body)
 
 
@@ -149,8 +159,12 @@ class EventingFailover(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if self.non_default_collection:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                         wait_for_loading=False)
+        else:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                         wait_for_loading=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         body1 = self.create_save_function_body(self.function_name+"1", self.handler_code)
@@ -164,11 +178,19 @@ class EventingFailover(EventingBaseTest):
         fail_over_task.result()
         task.result()
         if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True,
-                                         expected_duplicate=True)
+            if self.non_default_collection:
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket",
+                                                  self.docs_per_day * self.num_docs * 2,expected_duplicate=True)
+            else:
+                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs * 2,
+                                                  expected_duplicate=True)
         else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,
-                                         expected_duplicate=True)
+            if self.non_default_collection:
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs,
+                                                  expected_duplicate=True)
+            else:
+                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs,
+                                                  expected_duplicate=True)
         self.undeploy_and_delete_function(body)
 
     def test_lifecycle_and_failover(self):
@@ -209,8 +231,12 @@ class EventingFailover(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if self.non_default_collection:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                         wait_for_loading=False)
+        else:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                         wait_for_loading=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         self.wait_for_failover()
@@ -220,11 +246,19 @@ class EventingFailover(EventingBaseTest):
         fail_over_task2.result()
         task.result()
         if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True,
-                                         expected_duplicate=True)
+            if self.non_default_collection:
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket",
+                                                  self.docs_per_day * self.num_docs * 2,expected_duplicate=True)
+            else:
+                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs * 2,
+                                                  expected_duplicate=True)
         else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,
-                                         expected_duplicate=True)
+            if self.non_default_collection:
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs,
+                                                  expected_duplicate=True)
+            else:
+                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs,
+                                                  expected_duplicate=True)
         self.undeploy_and_delete_function(body)
 
     def test_multiple_eventing_failover(self):
@@ -232,8 +266,12 @@ class EventingFailover(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if self.non_default_collection:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                         wait_for_loading=False)
+        else:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                         wait_for_loading=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         fail_over_task2 = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[2]],
@@ -243,11 +281,19 @@ class EventingFailover(EventingBaseTest):
         fail_over_task2.result()
         task.result()
         if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True,
-                                         expected_duplicate=True)
+            if self.non_default_collection:
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket",
+                                                  self.docs_per_day * self.num_docs * 2,expected_duplicate=True)
+            else:
+                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs * 2,
+                                                  expected_duplicate=True)
         else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,
-                                         expected_duplicate=True)
+            if self.non_default_collection:
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs,
+                                                  expected_duplicate=True)
+            else:
+                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs,
+                                                  expected_duplicate=True)
         self.undeploy_and_delete_function(body)
 
 
@@ -283,8 +329,12 @@ class EventingFailover(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if self.non_default_collection:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                         wait_for_loading=False)
+        else:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                         wait_for_loading=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         self.wait_for_failover()
@@ -297,8 +347,12 @@ class EventingFailover(EventingBaseTest):
                 self.fail("Error missmatch {}".format(e))
         fail_over_task.result()
         task.result()
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,
-                                     expected_duplicate=True)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs,
+                                              expected_duplicate=True)
+        else:
+            self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs,
+                                              expected_duplicate=True)
         self.undeploy_and_delete_function(body)
 
     def test_failover_rebalance_out(self):
@@ -306,8 +360,12 @@ class EventingFailover(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if self.non_default_collection:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                         wait_for_loading=False)
+        else:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                         wait_for_loading=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         fail_over_task.result()
@@ -316,8 +374,12 @@ class EventingFailover(EventingBaseTest):
             pass
         rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
         task.result()
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,
-                                     expected_duplicate=True)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs,
+                                              expected_duplicate=True)
+        else:
+            self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs,
+                                              expected_duplicate=True)
         self.undeploy_and_delete_function(body)
 
     def test_failover_with_multiple_handlers_pause(self):
@@ -357,8 +419,12 @@ class EventingFailover(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if self.non_default_collection:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                         wait_for_loading=False)
+        else:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                         wait_for_loading=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         try:

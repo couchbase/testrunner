@@ -615,8 +615,12 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
         # load some data
-        self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                         self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                         wait_for_loading=False)
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                         wait_for_loading=False)
         kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         remote = RemoteMachineShellConnection(kv_node[1])
@@ -639,8 +643,10 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         try:
-            self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
-                                         timeout=240)
+            if self.non_default_collection:
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", stats_src["curr_items"])
+            else:
+                self.verify_doc_count_collections("src_bucket._default._default", stats_src["curr_items"])
         except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a failover
@@ -649,8 +655,12 @@ class EventingRebalance(EventingBaseTest):
             self.pause_function(body)
         try:
             # delete json documents
-            self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size, op_type='delete')
+            if self.non_default_collection:
+                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                             is_delete=True, wait_for_loading=False)
+            else:
+                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                             is_delete=True, wait_for_loading=False)
         except Exception as ex:
             log.info(str(ex))
             pass
@@ -659,7 +669,10 @@ class EventingRebalance(EventingBaseTest):
         try:
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after failover/recovery/rebalance goes through successfully
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
+            if self.non_default_collection:
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", 0)
+            else:
+                self.verify_doc_count_collections("src_bucket._default._default", 0)
         except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a delete as Onupdate would have extra mutations in destination
@@ -676,8 +689,12 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
         # load some data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if self.non_default_collection:
+            task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                         wait_for_loading=False)
+        else:
+            task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                         wait_for_loading=False)
         # fail over the kv node
         if failover_type == "hard":
             fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[kv_server], graceful=False)
@@ -689,7 +706,7 @@ class EventingRebalance(EventingBaseTest):
         self.rest.set_recovery_type('ns_1@' + kv_server.ip, recovery_type)
         self.rest.add_back_node('ns_1@' + kv_server.ip)
         rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
-        #task.result()
+        task.result()
         if rebalance:
             result = self.rest.monitorRebalance()
             msg = "successfully rebalanced cluster {0}"
@@ -701,8 +718,10 @@ class EventingRebalance(EventingBaseTest):
         try:
             stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
             if not self.is_sbm:
-                self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
-                                         timeout=240)
+                if self.non_default_collection:
+                    self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", stats_src["curr_items"])
+                else:
+                    self.verify_doc_count_collections("src_bucket._default._default", stats_src["curr_items"])
         except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a failover
@@ -711,8 +730,12 @@ class EventingRebalance(EventingBaseTest):
             self.pause_function(body)
         try:
             # delete json documents
-            self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size, op_type='delete')
+            if self.non_default_collection:
+                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                             is_delete=True, wait_for_loading=False)
+            else:
+                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                             is_delete=True, wait_for_loading=False)
         except:
             pass
         if self.pause_resume:
@@ -721,7 +744,10 @@ class EventingRebalance(EventingBaseTest):
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after failover/recovery/rebalance goes through successfully
             if not self.is_sbm:
-                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
+                if self.non_default_collection:
+                    self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", 0)
+                else:
+                    self.verify_doc_count_collections("src_bucket._default._default", 0)
         except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a delete as Onupdate would have extra mutations in destination
@@ -729,15 +755,18 @@ class EventingRebalance(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_eventing_failover_and_recovery_and_rebalance(self):
-        gen_load_del = copy.deepcopy(self.gens_load)
         eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
         # load some data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if self.non_default_collection:
+            task= self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                         wait_for_loading=False)
+        else:
+            task= self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                         wait_for_loading=False)
         # fail over the kv node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         fail_over_task.result()
@@ -761,8 +790,10 @@ class EventingRebalance(EventingBaseTest):
             # This is required to ensure eventing works after rebalance goes through successfully
             stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
             if not self.is_sbm:
-                self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
-                                         timeout=240)
+                if self.non_default_collection:
+                    self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", stats_src["curr_items"])
+                else:
+                    self.verify_doc_count_collections("src_bucket._default._default", stats_src["curr_items"])
         except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a failover
@@ -771,8 +802,12 @@ class EventingRebalance(EventingBaseTest):
             self.pause_function(body)
         try:
             # delete json documents
-            self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size, op_type='delete')
+            if self.non_default_collection:
+                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                             is_delete=True, wait_for_loading=False)
+            else:
+                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                             is_delete=True, wait_for_loading=False)
         except:
             pass
         if self.pause_resume:
@@ -781,7 +816,10 @@ class EventingRebalance(EventingBaseTest):
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after failover/recovery/rebalance goes through successfully
             if not self.is_sbm:
-                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
+                if self.non_default_collection:
+                    self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", 0)
+                else:
+                    self.verify_doc_count_collections("src_bucket._default._default", 0)
         except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a delete as Onupdate would have extra mutations in destination
@@ -1386,7 +1424,6 @@ class EventingRebalance(EventingBaseTest):
         self.server_failed_over = self.input.param("server_failed_over")
         self.server_out = self.input.param("server_out")
         self.services_in = self.input.param("services_in")
-        gen_load_del = copy.deepcopy(self.gens_load)
         server_failed_over = self.servers[self.server_failed_over]
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
@@ -1394,8 +1431,12 @@ class EventingRebalance(EventingBaseTest):
             self.pause_function(body)
         try:
             # load some data
-            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+            if self.non_default_collection:
+                task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                             wait_for_loading=False)
+            else:
+                task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                             wait_for_loading=False)
         except:
             pass
         # failover a node
@@ -1424,23 +1465,32 @@ class EventingRebalance(EventingBaseTest):
             stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
             # Wait for eventing to catch up with all the update mutations and verify results after rebalance
             if not self.is_sbm:
-                self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
-                                         timeout=240)
+                if self.non_default_collection:
+                    self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", stats_src["curr_items"])
+                else:
+                    self.verify_doc_count_collections("src_bucket._default._default", stats_src["curr_items"])
         except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a failover
             pass
         try:
             # delete json documents
-            self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size, op_type='delete')
+            if self.non_default_collection:
+                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                             is_delete=True, wait_for_loading=False)
+            else:
+                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                             is_delete=True, wait_for_loading=False)
         except:
             pass
         try:
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after rebalance goes through successfully
             if not self.is_sbm:
-                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
+                if self.non_default_collection:
+                    self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", 0)
+                else:
+                    self.verify_doc_count_collections("src_bucket._default._default", 0)
         except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a delete as Onupdate would have extra mutations in destination
