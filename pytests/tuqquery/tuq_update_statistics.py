@@ -15,6 +15,8 @@ class QueryUpdateStatsTests(QueryTests):
         self.scope = self.input.param("scope", "_default")
         self.collection = self.input.param("collection", "_default")
         self.resolution = self.input.param("resolution", 1)
+        self.sample_size = self.input.param("sample_size", 0)
+        self.process = self.input.param("process","indexer")
 
         # Set update statistics vs analyze syntax
         if self.analyze:
@@ -457,4 +459,85 @@ class QueryUpdateStatsTests(QueryTests):
                 self.assertEqual(error['code'], error_code)
                 self.assertEqual(error['msg'], error_message)
 
+    def test_update_stats_sample(self):
+        field = "city"
+        distribution_query = f"with distribution as (select meta().distributions.{field} from system:dictionary where `bucket` = \"travel-sample\" and `scope` = \"{self.scope}\" and `keyspace` = \"{self.collection}\") select distribution[0].{field}.sampleSize"
+        update_stats = f"{self.UPDATE_STATISTICS} {self.keyspace}({field}) WITH {{'sample_size':{self.sample_size}}}"
+        if self.scope == '_default' and self.collection == '_default':
+            min_size, max_size = 11507, 31591
+        else:
+            min_size, max_size = 1968, 1968
+        try:
+            # run stats
+            self.run_cbq_query(query=update_stats)
+            # check resolution
+            self.sleep(2)
+            distribution = self.run_cbq_query(query=distribution_query)
+            if self.sample_size >= min_size and self.sample_size <=max_size:
+                self.assertEqual(distribution['results'][0]['sampleSize'], self.sample_size)
+            elif self.sample_size >= max_size:
+                self.assertEqual(distribution['results'][0]['sampleSize'], max_size)
+            else:
+                self.assertEqual(distribution['results'][0]['sampleSize'], min_size)
+        except Exception as e:
+            self.log.error(f"Update statistics failed: {e}")
+            self.fail()
+
+    def run_update_stats(self, query, server):
+        try:
+            results = self.run_cbq_query(query=query,server=server)
+        except Exception as e:
+            self.log.error(f"Update statistics failed: {e}")
+
+    def test_kill_service(self):
+        node1 = self.servers[0]
+        update_stats = "UPDATE STATISTICS FOR `travel-sample` INDEX ((select raw name from system:indexes where state = 'online' and keyspace_id = 'travel-sample')) WITH {'update_statistics_timeout':240}"
+        th = threading.Thread(target=self.run_update_stats,args=(update_stats, node1))
+        remote_client = RemoteMachineShellConnection(node1)
+        # Spawn update statistics in a thread
+        th.start()
+        # Kill indexer
+        self.sleep(1)
+        self.log.info(f"Kill process: {self.process} ...")
+        remote_client.terminate_process(process_name=self.process, force=True)
+        th.join()
+        self.sleep(3)
+        try:
+            self.run_cbq_query(query=update_stats, server=node1)
+        except Exception as e:
+            self.log.error(f"Update statistics failed: {e}")
+            self.fail()
+
+    def test_drop_bucket(self):
+        histogram_query = "SELECT `bucket`, `scope`, `collection`, `histogramKey` FROM `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'"
+        histogram_expected = [
+            {"bucket": "travel-sample", "collection": "_default", "histogramKey": "city", "scope": "_default"}
+        ]
+        update_stats = "UPDATE STATISTICS `travel-sample`(city) WITH {'update_statistics_timeout':600}"
+        try:
+            stats = self.run_cbq_query(query=update_stats, query_params={'timeout':'600s'})
+            # drop and recreate bucket
+            self.log.info("Drop travel-sample bucket")
+            self.delete_bucket("travel-sample")
+            self.sleep(2)
+            self.log.info("Recreate travel-sample bucket")
+            self.rest.load_sample("travel-sample")
+            init_time = time.time()
+            while True:
+                next_time = time.time()
+                query_response = self.run_cbq_query("SELECT COUNT(*) FROM `" + self.bucket_name + "`")
+                self.log.info(f"{self.bucket_name}+ count: {query_response['results'][0]['$1']}")
+                if query_response['results'][0]['$1'] == 31591:
+                    break
+                if next_time - init_time > 600:
+                    break
+                time.sleep(2)
+            # update stats after drop sytem bucket
+            stats = self.run_cbq_query(query=update_stats)
+            # check stats
+            histogram = self.run_cbq_query(query=histogram_query)
+            self.assertEqual(histogram['results'],histogram_expected)
+        except Exception as e:
+            self.log.error(f"Update statistics failed: {e}")
+            self.fail()
 
