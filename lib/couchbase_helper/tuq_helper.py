@@ -240,7 +240,7 @@ class N1QLHelper():
             return False
 
     def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False,
-                      scan_consistency=None, scan_vector=None, verbose=True, timeout=None, rest_timeout=None, query_context=None):
+                      scan_consistency=None, scan_vector=None, verbose=True, timeout=None, rest_timeout=None, query_context=None,txnid=None,txtimeout=None):
         if query is None:
             query = self.query
         if server is None:
@@ -269,6 +269,10 @@ class N1QLHelper():
         result = ""
         if self.use_rest:
             query_params = {}
+            if txtimeout:
+                query_params['txtimeout'] = txtimeout
+            if txnid:
+                query_params['txid'] = ''"{0}"''.format(txnid)
             if scan_consistency:
                 query_params['scan_consistency']= scan_consistency
             if scan_vector:
@@ -294,19 +298,23 @@ class N1QLHelper():
             except Exception as ex:
                 self.log.error(f"CANNOT LOAD QUERY RESULT IN JSON: {ex}" )
                 self.log.error("INCORRECT DOCUMENT IS: " + str(output))
-        if isinstance(result, str) or 'errors' in result:
-            error_result = str(result)
-            length_display = len(error_result)
-            if length_display > 500:
-                error_result = error_result[:500]
-            raise CBQError(error_result, server.ip)
+        try:
+            if isinstance(result, str) or 'errors' in result:
+                error_result = str(result)
+                length_display = len(error_result)
+                if length_display > 500:
+                    error_result = error_result[:500]
+                raise CBQError(error_result, server.ip)
+        except Exception as e:
+            self.log.error(str(e))
+            self.log.info(result)
         self.log.info(f"TOTAL ELAPSED TIME: {result['metrics']['elapsedTime']}")
         return result
 
-    def wait_for_all_indexes_online(self):
+    def wait_for_all_indexes_online(self,verbose=True):
         cur_indexes = self.get_parsed_indexes()
         for index in cur_indexes:
-            self._wait_for_index_online(index['bucket'], index['name'])
+            self._wait_for_index_online(index['bucket'], index['name'],verbose=verbose)
 
     def get_parsed_indexes(self):
         query_response = self.run_cbq_query("SELECT * FROM system:indexes where bucket_id is missing and name not like 'default%'")
@@ -336,12 +344,12 @@ class N1QLHelper():
                             'is_primary': i['indexes'].get('is_primary', False)} for i in query_response['results']]
         return current_indexes
 
-    def _wait_for_index_online(self, bucket, index_name, timeout=300, poll_interval=1):
+    def _wait_for_index_online(self, bucket, index_name, timeout=300, poll_interval=1, verbose=True):
         end_time = time.time() + timeout
         res = {}
         while time.time() < end_time:
             query = "SELECT * FROM system:indexes where name='%s'" % index_name
-            res = self.run_cbq_query(query)
+            res = self.run_cbq_query(query,verbose=verbose)
             for item in res['results']:
                 if 'keyspace_id' not in item['indexes']:
                     self.log.error(item)

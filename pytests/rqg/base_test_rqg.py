@@ -22,7 +22,9 @@ from membase.api.exception import CBQError
 from fts.random_query_generator.rand_query_gen import FTSFlexQueryGenerator
 from pytests.fts.fts_base import FTSIndex
 from pytests.fts.random_query_generator.rand_query_gen import DATASET
+from deepdiff import DeepDiff
 from pytests.fts.fts_base import CouchbaseCluster
+import uuid
 
 class BaseRQGTests(BaseTestCase):
     def setUp(self):
@@ -65,6 +67,8 @@ class BaseRQGTests(BaseTestCase):
             self.password_cluster = self.input.param("password_cluster", "password")
             self.generate_input_only = self.input.param("generate_input_only", False)
             self.using_gsi = self.input.param("using_gsi", True)
+            self.use_txns = self.input.param("use_txns", False)
+            self.num_txns = self.input.param("num_txns", 1)
             self.reset_database = self.input.param("reset_database", True)
             self.create_primary_index = self.input.param("create_primary_index", False)
             self.create_secondary_indexes = self.input.param("create_secondary_indexes", False)
@@ -224,11 +228,20 @@ class BaseRQGTests(BaseTestCase):
             # Get Data Map
             table_list = self.client._get_table_list()
             table_map = self.client._get_values_with_type_for_fields_in_table()
+            if self.use_txns:
+                failures = {}
+                passes = 0
+                fails = 0
+                update_query_template_list = []
+                delete_query_template_list = []
+                select_query_template_list = []
             i = 1
             for table_name in table_list:
                 if self.use_fts:
                     fts_index = self.create_fts_index(name="default_index" + str(i), source_name=self.database+"_"+table_name)
                     i = i + 1
+                if self.use_txns:
+                    results = self.n1ql_helper.run_cbq_query(query="CREATE PRIMARY INDEX ON {0}".format(self.database + "_" + table_name))
             if self.remove_alias:
                 table_map = self.remove_aliases_from_table_map(table_map)
 
@@ -236,8 +249,21 @@ class BaseRQGTests(BaseTestCase):
                 table_list.remove("copy_simple_table")
 
             query_template_list = self.extract_query_templates()
+            if self.use_txns:
+                for query in query_template_list:
+                    if "fields_asc_desc" in query[0]:
+                        select_query_template_list.append(query[1])
+                    elif "update" in query[0]:
+                        update_query_template_list.append(query[1])
+                    elif "delete" in query[0]:
+                        delete_query_template_list.append(query[1])
+
+                random.shuffle(select_query_template_list)
+                random.shuffle(update_query_template_list)
+                random.shuffle(delete_query_template_list)
             # Generate the query batches based on the given template file and the concurrency count
-            batches = self.generate_batches(table_list, query_template_list)
+            else:
+                batches = self.generate_batches(table_list, query_template_list)
 
             result_queue = queue.Queue()
             failure_queue = queue.Queue()
@@ -249,13 +275,127 @@ class BaseRQGTests(BaseTestCase):
                 for table_name in table_list:
                     if len(batches[table_name]) > 0:
                         self._crud_ops_worker(batches[table_name], table_name, table_map, result_queue, failure_queue)
-                        #t = threading.Thread(target=self._crud_ops_worker, args=(
-                        #batches[table_name], table_name, table_map, result_queue, failure_queue))
-                        #t.daemon = True
-                        #t.start()
-                        #thread_list.append(t)
-                #for t in thread_list:
-                    #t.join()
+            elif self.use_txns:
+                for x in range(0, self.num_txns):
+                    rollback_exists = False
+                    savepoints = []
+                    txn_queries = []
+                    savepoint = 0
+                    test_batch = []
+                    rollback_point = 0
+
+                    select_batches = self.generate_batches(table_list, select_query_template_list)
+                    update_batches = self.generate_batches(table_list, update_query_template_list)
+                    delete_batches = self.generate_batches(table_list, delete_query_template_list)
+
+                    i = 0
+                    self.log.info("-----------------------------------------------------------------STARTING TRANSACTION txn {0}-----------------------------------------------------------------".format(x))
+                    results = self.n1ql_helper.run_cbq_query(query="START TRANSACTION", txtimeout="4m")
+                    txn_id = results['results'][0]['txid']
+                    self.log.info("TXN ID {0}".format(txn_id))
+                    txn_queries.append("START TRANSACTION")
+                    while not (select_batches.empty() and update_batches.empty() and delete_batches.empty()):
+                        # Split up the batches and send them to the worker threads
+                        try:
+                            select_batch = select_batches.get(False)
+                            update_batch = update_batches.get(False)
+                            delete_batch = delete_batches.get(False)
+                        except Exception as ex:
+                            self.log.error(str(ex))
+                            break
+                        random.seed(uuid.uuid4())
+                        percentage = random.randint(1, 100)
+                        if percentage <= 50:
+                            query_type = random.choice(['select','select','select','select','select','select','update','update','delete'])
+                            if query_type == 'select':
+                                test_batch = select_batch
+                            elif query_type == 'update':
+                                test_batch = update_batch
+                                self.crud_type = "update"
+                            elif query_type == 'delete':
+                                test_batch = delete_batch
+                                self.crud_type = "delete"
+                            test_query_template_list = [test_data[list(test_data.keys())[0]] for test_data in test_batch]
+                            table_name_description_map = {'simple_table': table_map['simple_table']}
+                            # create strings for queries and indexes but doesnt send indexes to Couchbase
+                            if query_type == 'update' or query_type == 'delete':
+                                sql_n1ql_index_map_list = self.convert_crud_ops_query(table_name, test_query_template_list, table_name_description_map)
+                            else:
+                                sql_n1ql_index_map_list = self.client._convert_template_query_info(table_map=table_name_description_map,
+                                                                                               n1ql_queries=test_query_template_list,
+                                                                                               define_gsi_index=self.use_secondary_index,
+                                                                                               aggregate_pushdown=self.aggregate_pushdown,
+                                                                                               partitioned_indexes=self.partitioned_indexes,
+                                                                                               ansi_joins=self.ansi_joins,
+                                                                                               with_let=self.with_let)
+
+                            for sql_n1ql_index_map in sql_n1ql_index_map_list:
+                                if not query_type == 'select':
+                                    sql_n1ql_index_map["n1ql_query"] = sql_n1ql_index_map['n1ql_query'].replace("simple_table",
+                                                                                                    self.database + "_" + "simple_table")
+                                    if query_type == 'delete':
+                                        sql_n1ql_index_map['n1ql_query'] = sql_n1ql_index_map['n1ql_query'].split(";")[0] + " LIMIT 10;" + sql_n1ql_index_map['n1ql_query'].split(";")[1]
+                                        sql_n1ql_index_map['sql_query'] = sql_n1ql_index_map['sql_query'].split(";")[0] + " LIMIT 10;" + sql_n1ql_index_map['sql_query'].split(";")[1]
+
+                                else:
+                                    sql_n1ql_index_map["n1ql"] = sql_n1ql_index_map['n1ql'].replace("simple_table", self.database+"_"+"simple_table")
+                            # build indexes
+                            if self.use_secondary_index:
+                                self._generate_secondary_indexes_in_batches(sql_n1ql_index_map_list)
+                            for test_case_input in sql_n1ql_index_map_list:
+                                # if self.use_advisor:
+                                #     self.create_secondary_index(n1ql_query=test_case_input['n1ql'])
+                                if not query_type == 'select':
+                                    self.n1ql_helper.run_cbq_query(query=test_case_input['n1ql_query'], txnid=txn_id)
+                                    txn_queries.append(test_case_input['sql_query'])
+                                else:
+                                    self.n1ql_helper.run_cbq_query(query=test_case_input['n1ql'], txnid=txn_id)
+                                    txn_queries.append(test_case_input['sql'])
+                            percentage2 = random.randint(1, 100)
+                            if percentage2 <= 10:
+                                savepoint = i
+                                self.log.info("CREATING SAVEPOINT s{0}".format(savepoint))
+                                results = self.n1ql_helper.run_cbq_query(query="SAVEPOINT s{0}".format(savepoint), txnid=txn_id)
+                                txn_queries.append("SAVEPOINT s{0}".format(savepoint))
+                                savepoints.append("s{0}".format(savepoint))
+                                i = i + 1
+                        if savepoints:
+                            percentage3 = random.randint(1, 100)
+                            if percentage3 <= 10:
+                                rollback_point = random.randint(0, savepoint)
+                                for txns in txn_queries:
+                                    if "ROLLBACK" in txns:
+                                        rollback_exists = True
+                                        break
+                                if not rollback_exists:
+                                    self.log.info("ROLLING BACK")
+                                    results = self.n1ql_helper.run_cbq_query(query="ROLLBACK", txnid=txn_id)
+                                    txn_queries.append("ROLLBACK")
+
+                    self.log.info("-----------------------------------------------------------------COMMITING TRANSACTION {0}-----------------------------------------------------------------".format(x))
+                    results = self.n1ql_helper.run_cbq_query(query="COMMIT TRANSACTION", txnid=txn_id)
+                    self.log.info("txn {0} : {1}".format(x, txn_queries))
+                    txn_queries.append("COMMIT")
+
+                    client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id,
+                                                password=self.password)
+                    cursor = client.mysql_connector_client.cursor(buffered=True)
+                    for sql_query in txn_queries:
+                        cursor.execute(sql_query)
+                    client.mysql_connector_client.commit()
+
+                    n1ql_result = self.n1ql_helper.run_cbq_query('select bool_field1,char_field1,datetime_field1,decimal_field1,int_field1,primary_key_id,varchar_field1 FROM {0}'.format(self.database+"_"+"simple_table"))
+                    columns, rows = client._execute_query(query='SELECT * FROM simple_table')
+                    sql_result = client._gen_json_from_results(columns, rows)
+                    client._close_connection()
+                    diffs = DeepDiff(sql_result, n1ql_result['results'], ignore_order=True,
+                                     ignore_numeric_type_changes=True)
+                    if diffs:
+                        txn_no = 'txn {0}'.format(x)
+                        failures[txn_no] = (diffs, txn_queries)
+                        fails += 1
+                    else:
+                        passes += 1
             else:
                 while not batches.empty():
                     # Split up the batches and send them to the worker threads
@@ -272,18 +412,17 @@ class BaseRQGTests(BaseTestCase):
                     # Create threads based on number of tables (each table has its own thread)
                     self._rqg_worker(table_name, table_map, input_queue, result_queue,
                                                failure_queue)
-                    #t = threading.Thread(target=self._rqg_worker,
-                    #                     args=(table_name, table_map, input_queue, result_queue,
-                    #                           failure_queue))
-                    #t.daemon = True
-                    #t.start()
-                    #thread_list.append(t)
-                #for t in thread_list:
-                #    if(t.is_alive()):
-                #        t.join()
-
-            # Analyze the results for the failure and assert on the run
-            self.analyze_test(result_queue, failure_queue)
+            if not self.use_txns:
+                # Analyze the results for the failure and assert on the run
+                self.analyze_test(result_queue, failure_queue)
+            else:
+                self.log.info("Txns Passed: {0} Txn Failed: {1}".format(passes, fails))
+                if not fails == 0:
+                    self.log.error("Failures were seen, the number of documents in the bucket is not the same in mysql and n1ql after transactions!")
+                    for failure in failures:
+                        self.log.info("----------------------------------------------------------------{0}-----------------------------------------------------------------------------".format(failure))
+                        self.log.info("diffs: {0}  txn: {1}".format(failures[failure][0], failure))
+                    self.fail()
         except Exception as ex:
             traceback.print_exc()
             self.log.info(ex)
@@ -374,11 +513,18 @@ class BaseRQGTests(BaseTestCase):
                 for index_statement_array in advise_result["results"][0]["advice"]["adviseinfo"]["recommended_indexes"]["indexes"]:
                     index_statement = index_statement_array["index_statement"]
                     if index_statement != "":
-                        self.n1ql_helper.wait_for_all_indexes_online()
+                        if self.use_txns:
+                            self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
+                        else:
+                            self.n1ql_helper.wait_for_all_indexes_online()
                         try:
                             prepared_index_statement = self.translate_index_statement(index_statement)
-                            self.n1ql_helper.run_cbq_query(prepared_index_statement)
-                            self.n1ql_helper.wait_for_all_indexes_online()
+                            if self.use_txns:
+                                self.n1ql_helper.run_cbq_query(prepared_index_statement)
+                                self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
+                            else:
+                                self.n1ql_helper.run_cbq_query(prepared_index_statement)
+                                self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
                         except CBQError as ex:
                             if "already exists" in str(ex):
                                 continue
@@ -388,11 +534,18 @@ class BaseRQGTests(BaseTestCase):
                 for index_statement_array in advise_result["results"][0]["advice"]["adviseinfo"]["recommended_indexes"]["covering_indexes"]:
                     index_statement = index_statement_array["index_statement"]
                     if index_statement != "":
-                        self.n1ql_helper.wait_for_all_indexes_online()
+                        if self.use_txns:
+                            self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
+                        else:
+                            self.n1ql_helper.wait_for_all_indexes_online()
                         try:
                             prepared_index_statement = self.translate_index_statement(index_statement)
-                            self.n1ql_helper.run_cbq_query(prepared_index_statement)
-                            self.n1ql_helper.wait_for_all_indexes_online()
+                            if self.use_txns:
+                                self.n1ql_helper.run_cbq_query(prepared_index_statement)
+                                self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
+                            else:
+                                self.n1ql_helper.run_cbq_query(prepared_index_statement)
+                                self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
                         except CBQError as ex:
                             if "already exists" in str(ex):
                                 continue
@@ -518,8 +671,10 @@ class BaseRQGTests(BaseTestCase):
             with open(file_path) as f:
                 cur_queries_list = f.readlines()
             for q in cur_queries_list:
-                query_template_list.append(q)
-
+                if self.use_txns:
+                    query_template_list.append((file_path,q))
+                else:
+                    query_template_list.append(q)
         if self.total_queries is None:
             self.total_queries = len(query_template_list)
         return query_template_list
