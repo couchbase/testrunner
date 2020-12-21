@@ -449,18 +449,18 @@ def _parse_user_input():
         (opts, args) = getopt.getopt(sys.argv[1:], 'hi:p:', [])
         for o, a in opts:
             if o == "-h":
-                print_result_and_exit(install_constants.USAGE)
+                print_result_and_exit(install_constants.USAGE, install_started=False)
         if len(sys.argv) <= 1:
-            print_result_and_exit(install_constants.USAGE)
+            print_result_and_exit(install_constants.USAGE, install_started=False)
         userinput = TestInput.TestInputParser.get_test_input(sys.argv)
     except IndexError:
-        print_result_and_exit(install_constants.USAGE)
+        print_result_and_exit(install_constants.USAGE, install_started=False)
     except getopt.GetoptError as err:
-        print_result_and_exit(str(err))
+        print_result_and_exit(str(err), install_started=False)
 
     # Mandatory params
     if not userinput.servers:
-        print_result_and_exit("No servers specified. Please use the -i parameter." + "\n" + install_constants.USAGE)
+        print_result_and_exit("No servers specified. Please use the -i parameter." + "\n" + install_constants.USAGE, install_started=False)
     else:
         params["servers"] = userinput.servers
 
@@ -503,7 +503,7 @@ def _parse_user_input():
                     if re.match('\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', server.ip):
                         print_result_and_exit(
                             "Cannot enable IPv6 on an IPv4 machine: {0}. Please run without enable_ipv6=True.".format(
-                                server.ip))
+                                server.ip), install_started=False)
                 params["enable_ipv6"] = True
         if key == "fts_quota" and int(value) >= 256:
             params["fts_quota"] = int(value)
@@ -513,7 +513,7 @@ def _parse_user_input():
             params["variant"] = value
 
     if not params["version"] and not params["url"]:
-        print_result_and_exit("Need valid build version or url to proceed")
+        print_result_and_exit("Need valid build version or url to proceed", install_started=False)
 
     return params
 
@@ -552,7 +552,7 @@ def _params_validation():
     node_os = []
     for node in NodeHelpers:
         if node.get_os() not in install_constants.SUPPORTED_OS:
-            print_result_and_exit("Install on {0} OS is not supported".format(node.get_os()))
+            print_result_and_exit("Install on {0} OS is not supported".format(node.get_os()), install_started=False)
         else:
             node_os.append(node.get_os())
     if len(set(node_os)) == 1:
@@ -579,14 +579,14 @@ def pre_install_steps():
                     filepath = __get_download_dir(node) + build_binary
                     node.build = build(build_binary, build_url, filepath)
             else:
-                print_result_and_exit("URL {0} is not live. Exiting.".format(params["url"]))
+                print_result_and_exit("URL {0} is not live. Exiting.".format(params["url"]), install_started=False)
         else:
             for node in NodeHelpers:
                 build_binary = __get_build_binary_name(node)
                 build_url = __get_build_url(node, build_binary)
                 if not build_url:
                     print_result_and_exit(
-                        "Build is not present in latestbuilds or release repos, please check {0}".format(build_binary))
+                        "Build is not present in latestbuilds or release repos, please check {0}".format(build_binary), install_started=False)
                 filepath = __get_download_dir(node) + build_binary
                 node.build = build(build_binary, build_url, filepath)
         _download_build()
