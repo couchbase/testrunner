@@ -5706,7 +5706,7 @@ class RestParser(object):
         for key in list(parsed.keys()):
             tokens = key.split(":")
             val = parsed[key]
-            if len(tokens) == 3 and 'MAINT_STREAM' not in tokens[0]:
+            if len(tokens) == 3 and 'MAINT_STREAM' not in tokens[0] and 'INIT_STREAM' not in tokens[0]:
                 bucket = tokens[0]
                 index_name = tokens[1]
                 stats_name = tokens[2]
@@ -5723,7 +5723,7 @@ class RestParser(object):
         for key in list(parsed.keys()):
             tokens = key.split(":")
             val = parsed[key]
-            if len(tokens) == 3:
+            if len(tokens) == 3 and 'MAINT_STREAM' not in tokens[0] and 'INIT_STREAM' not in tokens[0]:
                 bucket = tokens[0]
                 index_name = tokens[1]
                 stats_name = tokens[2]
@@ -5732,7 +5732,7 @@ class RestParser(object):
                 if index_name not in list(index_map[bucket].keys()):
                     index_map[bucket][index_name] = {}
                 index_map[bucket][index_name][stats_name] = val
-            elif len(tokens) == 5:
+            elif len(tokens) == 5 and 'MAINT_STREAM' not in tokens[0] and 'INIT_STREAM' not in tokens[0]:
                 bucket = tokens[0]
                 scope_name = tokens[1]
                 collection_name = tokens[2]

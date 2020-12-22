@@ -102,22 +102,34 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                                 server=self.n1ql_node)
             self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
 
-    def _prepare_collection_for_indexing(self, num_scopes=1, num_collections=1):
-        self.keyspace = []
+    def _prepare_collection_for_indexing(self, num_scopes=1, num_collections=1, scope_prefix=None,
+                                         collection_prefix=None, test_bucket=None):
+        if not collection_prefix:
+            collection_prefix = self.collection_prefix
+        if not scope_prefix:
+            scope_prefix = self.scope_prefix
+        if not test_bucket:
+            test_bucket = self.test_bucket
         self.cli_rest.create_scope_collection_count(scope_num=num_scopes, collection_num=num_collections,
-                                                    scope_prefix=self.scope_prefix,
-                                                    collection_prefix=self.collection_prefix,
-                                                    bucket=self.test_bucket)
-        self.scopes = self.cli_rest.get_bucket_scopes(bucket=self.test_bucket)
-        self.collections = list(set(self.cli_rest.get_bucket_collections(bucket=self.test_bucket)))
-        self.scopes.remove('_default')
-        self.collections.remove('_default')
-        self.sleep(5)
-        for s_item in self.scopes:
-            for c_item in self.collections:
-                self.keyspace.append(f'default:{self.test_bucket}.{s_item}.{c_item}')
+                                                    scope_prefix=scope_prefix,
+                                                    collection_prefix=collection_prefix,
+                                                    bucket=test_bucket)
+        self.update_keyspace_list(test_bucket)
 
-    def create_indexes(self, num=0, defer_build=False, itr=0, expected_failure=None):
+    def update_keyspace_list(self, bucket, default=False):
+        #initialize self.keyspace before using this method
+        self.keyspace = []
+        scopes = self.cli_rest.get_bucket_scopes(bucket=bucket)
+        if not default:
+            scopes.remove('_default')
+        for s_item in scopes:
+            collections = self.cli_rest.get_scope_collections(bucket=bucket, scope=s_item)
+            for c_item in collections:
+                self.keyspace.append(f'default:{bucket}.{s_item}.{c_item}')
+        self.keyspace = list(set(self.keyspace))
+
+    def create_indexes(self, num=0, defer_build=False, itr=0, expected_failure=[], index_name_prefix="idx_",
+                       query_def_group="plasma_test"):
         query_definition_generator = SQLDefinitionGenerator()
         index_create_tasks = []
         self.log.info(threading.currentThread().getName() + " Started")
@@ -130,7 +142,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 collection_name = collection_keyspace.split('.')[-1]
                 scope_name = collection_keyspace.split('.')[-2]
                 query_definitions = query_definition_generator. \
-                    generate_employee_data_query_definitions(index_name_prefix='idx_' +
+                    generate_employee_data_query_definitions(index_name_prefix=index_name_prefix +
                                                                                scope_name + "_"
                                                                                + collection_name,
                                                              keyspace=collection_keyspace)
@@ -138,7 +150,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 index_create_task = ConcurrentIndexCreateTask(server, self.test_bucket, scope_name,
                                                               collection_name, query_definitions,
                                                               self.index_ops_obj, self.n1ql_helper, num_indexes_collection, defer_build,
-                                                              itr, expected_failure)
+                                                              itr, expected_failure, query_def_group)
                 self.index_create_task_manager.schedule(index_create_task)
                 index_create_tasks.append(index_create_task)
         self.log.info(threading.currentThread().getName() + " Completed")
@@ -937,7 +949,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         count = 0
         all_nodes_mutation_processed = True
         for index_node in index_nodes:
-            while not self._verify_items_count_collections(index_node) and count < 15:
+            while not self._verify_items_count_collections(index_node) and count < 90:
                 self.log.info("All Items Yet to be Indexed...")
                 self.sleep(10)
                 count += 1

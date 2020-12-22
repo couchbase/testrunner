@@ -46,7 +46,9 @@ class CollectionsRest(object):
         try:
             for s in range(1, scope_num + 1):
                 scope = scope_prefix + '_' + str(s)
-                self.create_scope(bucket, scope)
+                current_scopes = self.get_bucket_scopes(bucket=bucket)
+                if scope not in current_scopes:
+                    self.create_scope(bucket, scope)
                 for c in range(1, collection_num + 1):
                     self.create_collection(bucket, scope, collection_prefix + '_' + str(c), params)
         except Exception as e:

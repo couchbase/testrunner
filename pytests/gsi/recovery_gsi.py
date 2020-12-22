@@ -23,6 +23,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.num_scopes = self.input.param("num_scopes", 2)
         self.num_collections = self.input.param("num_collections", 2)
         self.num_pre_indexes = self.input.param("num_pre_indexes", 4)
+        self.oso_indexes = self.input.param("oso_indexes", 200)
         self.test_timeout = self.input.param("test_timeout", 60)
         self.test_bucket = self.input.param('test_bucket', 'test_bucket')
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
@@ -39,6 +40,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.batch_size = self.input.param("batch_size", 50000)
         self.batch_size = self.input.param("batch_size", 100000)
         self.start_doc = self.input.param("start_doc", 1)
+        self.enable_oso = self.input.param("enable_oso", False)
         self.num_items_in_collection = self.input.param("num_items_in_collection", 10000)
         self.percent_create = self.input.param("percent_create", 100)
         self.percent_update = self.input.param("percent_update", 0)
@@ -64,8 +66,12 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             "sdk_loader_manager")
         self.sdk_loader_manager.start()
 
+        self.keyspace = []
         self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
         self.run_tasks = True
+        self.targetProcess = self.input.param("targetProcess", 'memcached')
+        self.data_nodes = self.get_kv_nodes()
+        self.sleep_time = self.input.param("sleep_time", 1)
 
         self.log.info("==============  PlasmaCollectionsTests setup has completed ==============")
 
@@ -81,6 +87,11 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         pass
 
     def test_recovery_disk_snapshot(self):
+
+        if self.enable_oso:
+            for index_node in self.index_nodes:
+                rest = RestConnection(index_node)
+                rest.set_index_settings({"indexer.build.enableOSO": True})
 
         index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
         for task in index_create_tasks:
@@ -323,7 +334,275 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.sleep(1)
 
         if not self.wait_for_mutation_processing(self.index_nodes):
-            self.log.info("some indexes did not process mutations on time")
+            self.log.info("some indexes did     not process mutations on time")
+
+    # OSO Cases
+
+    def test_basic_oso_feature(self):
+
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.build.enableOSO": False})
+
+        self.load_docs(self.start_doc)
+
+        index_create_tasks = self.create_indexes(num=self.num_pre_indexes, query_def_group="unique")
+        for task in index_create_tasks:
+            task.result()
+
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.build.enableOSO": True})
+
+        self._prepare_collection_for_indexing(num_scopes=2, num_collections=3, scope_prefix="oso_scope",
+                                              collection_prefix="oso_collection")
+
+        self.load_docs(self.num_items_in_collection)
+
+        # there are 8 unique indexes to create so total indexes to num_collections * 8
+        index_create_tasks = self.create_indexes(num=self.oso_indexes, index_name_prefix="oso_index",
+                                                 query_def_group="unique")
+        for task in index_create_tasks:
+            task.result()
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.fail("some indexes did not process mutations on time")
+
+        self.scan_indexes(self.index_ops_obj.get_create_index_list())
+
+    def scan_indexes(self, query_def_list):
+        for index_to_scan in query_def_list:
+            self.log.info(f'Processing index: {index_to_scan["name"]}')
+            query_def = index_to_scan["query_def"]
+            query = query_def.generate_query(bucket=query_def.keyspace)
+            try:
+                self.run_cbq_query(query=query, server=self.n1ql_nodes[0], scan_consistency="request_plus")
+            except Exception as err:
+                self.fail(f'{query} failed with {err}')
+
+    def test_basic_oso_feature_mutations(self):
+
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.build.enableOSO": True})
+
+        self._prepare_collection_for_indexing(num_scopes=2, num_collections=5, scope_prefix="oso_scope",
+                                              collection_prefix="oso_collection")
+
+        self.load_docs(self.start_doc)
+
+        index_create_tasks = self.create_indexes(num=112, query_def_group="unique")
+        for task in index_create_tasks:
+            task.result()
+
+        self.load_docs(self.num_items_in_collection)
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.fail("some indexes did not process mutations on time")
+
+        self.scan_indexes(self.index_ops_obj.get_create_index_list())
+
+    def test_basic_oso_feature_mutations_in_parallel(self):
+
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.build.enableOSO": True})
+
+        self._prepare_collection_for_indexing(num_scopes=2, num_collections=5, scope_prefix="oso_scope",
+                                              collection_prefix="oso_collection")
+
+        self.load_docs(self.start_doc)
+
+        index_create_tasks = self.create_indexes(num=self.num_pre_indexes, query_def_group="unique")
+        for task in index_create_tasks:
+            task.result()
+
+        load_tasks = self.async_load_docs(self.num_items_in_collection)
+
+        index_create_tasks = self.create_indexes(num=112, index_name_prefix="oso_index",
+                                                 query_def_group="unique")
+        for task in index_create_tasks:
+            task.result()
+
+        for task in load_tasks:
+            task.result()
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.fail("some indexes did not process mutations on time")
+
+        self.scan_indexes(self.index_ops_obj.get_create_index_list())
+
+    def test_oso_drop_collection(self):
+
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.build.enableOSO": True})
+
+        self._prepare_collection_for_indexing(num_scopes=1, num_collections=2, scope_prefix="oso_scope",
+                                              collection_prefix="oso_collection")
+
+        self.load_docs(self.start_doc)
+        #50
+        index_create_tasks = self.create_indexes(num=50, query_def_group="unique")
+        for task in index_create_tasks:
+            task.result()
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.fail("some indexes did not process mutations on time")
+
+        status = self.cli_rest.delete_collection(bucket=self.test_bucket, scope='oso_scope_1', collection='oso_collection_1')
+
+        if not status:
+            self.fail("Drop collection failed")
+
+        self.update_keyspace_list(bucket=self.test_bucket)
+        #40
+        index_create_tasks = self.create_indexes(num=40, index_name_prefix="oso_index_after_drop",
+                                                 query_def_group="unique")
+        for task in index_create_tasks:
+            task.result()
+
+        self._prepare_collection_for_indexing(num_scopes=1, num_collections=1, scope_prefix="oso_scope",
+                                              collection_prefix="oso_collection")
+        #50
+        index_create_tasks = self.create_indexes(num=50, index_name_prefix="oso_index_after_recreate_collection",
+                                                 query_def_group="unique")
+        for task in index_create_tasks:
+            task.result()
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.fail("some indexes did not process mutations on time")
+
+        self.scan_indexes(self.index_ops_obj.get_create_index_list())
+
+    def test_oso_server_crash_while_building(self):
+
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 1000})
+
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.build.enableOSO": True})
+
+        self._prepare_collection_for_indexing(num_scopes=1, num_collections=2, scope_prefix="oso_scope",
+                                              collection_prefix="oso_collection")
+
+        self.load_docs(self.start_doc)
+        #50
+        index_create_tasks = self.create_indexes(num=50, query_def_group="unique", defer_build=True)
+
+        for task in index_create_tasks:
+            task.result()
+
+        self.build_indexes()
+
+        self.sleep(2)
+
+        if self.targetProcess == "memcached":
+            remote = RemoteMachineShellConnection(self.data_nodes[1])
+            remote.kill_memcached()
+        elif self.targetProcess == "projector":
+            remote = RemoteMachineShellConnection(self.data_nodes[1])
+            remote.terminate_process(process_name=self.targetProcess)
+        else:
+            remote = RemoteMachineShellConnection(self.index_nodes[0])
+            remote.terminate_process(process_name=self.targetProcess)
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.fail("some indexes did not process mutations on time")
+
+        self.scan_indexes(self.index_ops_obj.get_defer_index_list())
+
+    def test_oso_rebalance_in_kv_node_while_building(self):
+
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 1000})
+
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.build.enableOSO": True})
+
+        self._prepare_collection_for_indexing(num_scopes=1, num_collections=2, scope_prefix="oso_scope",
+                                              collection_prefix="oso_collection")
+
+        self.load_docs(self.start_doc)
+        #50
+        index_create_tasks = self.create_indexes(num=50, query_def_group="unique", defer_build=True)
+
+        for task in index_create_tasks:
+            task.result()
+
+        self.build_indexes()
+
+        self.sleep(2)
+
+        rebalance = self.cluster.async_rebalance(
+            self.servers[:self.nodes_init],
+            [self.nodes_init],
+            [], services=["kv"])
+        rebalance.result()
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.fail("some indexes did not process mutations on time")
+
+        self.scan_indexes(self.index_ops_obj.get_create_index_list())
+
+    def test_oso_rebalance_in_indexer_node_while_building(self):
+
+        self.retry_time = self.input.param("retry_time", 10)
+        self.num_retries = self.input.param("num_retries", 3)
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 1000})
+
+        body = {"enabled": "true", "afterTimePeriod": self.retry_time , "maxAttempts" : self.num_retries}
+        rest = RestConnection(self.master)
+        rest.set_retry_rebalance_settings(body)
+
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.build.enableOSO": True})
+
+        self._prepare_collection_for_indexing(num_scopes=1, num_collections=1, scope_prefix="oso_scope",
+                                              collection_prefix="oso_collection")
+
+        self.load_docs(self.start_doc)
+        #50
+        index_create_tasks = self.create_indexes(num=50, query_def_group="unique", defer_build=True)
+
+        for task in index_create_tasks:
+            task.result()
+
+        self.build_indexes()
+        try:
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init],
+                [self.servers[self.nodes_init]],
+                [], services=["index"])
+
+            self.sleep(3)
+            self._kill_all_processes_index(self.index_nodes[0])
+            rebalance.result()
+        except Exception as ex:
+            if "Rebalance failed" not in str(ex):
+                self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
+        self.check_retry_rebalance_succeeded()
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.fail("some indexes did not process mutations on time")
+
+        self.scan_indexes(self.index_ops_obj.get_create_index_list())
+
+    def build_indexes(self):
+        for ks in self.keyspace:
+            query = f"build index on {ks} (( select raw name from system:all_indexes where `namespace_id` || ':' || `bucket_id` || '.' || `scope_id` || '.' || `keyspace_id` = '{ks}' and state = 'deferred'))"
+
+            try:
+                self.run_cbq_query(query=query, server=self.n1ql_nodes[0])
+            except Exception as err:
+                self.fail(f'{query} failed with {err}')
 
 class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 

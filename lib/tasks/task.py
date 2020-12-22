@@ -472,7 +472,8 @@ class CollectionCreateTask(Task):
 
 class ConcurrentIndexCreateTask(Task):
     def __init__(self, server, bucket, scope, collection, query_definitions=None, IndexTrackingObject=None,
-                 n1ql_helper=None, num_indexes=1, defer_build="", itr=0, expected_failure=None):
+                 n1ql_helper=None, num_indexes=1, defer_build="", itr=0, expected_failure=[],
+                 query_def_group="plasma_test"):
         Task.__init__(self, "collection_create_task")
         self.server = server
         self.bucket_name = bucket
@@ -486,8 +487,7 @@ class ConcurrentIndexCreateTask(Task):
         self.defer_build = defer_build
         self.itr = itr
         self.expected_failure = expected_failure
-        if not self.expected_failure:
-            self.expected_failure = []
+        self.query_def_group = query_def_group
 
     def execute(self, task_manager):
         try:
@@ -502,7 +502,7 @@ class ConcurrentIndexCreateTask(Task):
                 for query_def in self.query_definitions:
                     if itr >= (self.num_indexes + self.itr):
                         break
-                    if "plasma_test" in query_def.groups:
+                    if self.query_def_group in query_def.groups:
                         query_def_copy = copy.deepcopy(query_def)
                         index_name = query_def_copy.get_index_name()
                         index_name = index_name + str(itr)
@@ -510,11 +510,14 @@ class ConcurrentIndexCreateTask(Task):
                         if self.defer_build == "":
                             defer_build = random.choice([True, False])
                         else:
-                            defer_build = None
+                            defer_build = self.defer_build
                         index_meta = {"name": query_def_copy.get_index_name(), "query_def": query_def_copy,
                                       "defer_build": defer_build}
-                        query = query_def_copy.generate_index_create_query(use_gsi_for_secondary=True, gsi_type="plasma",
-                                                                      defer_build=defer_build)
+                        if "primary" in query_def.groups:
+                            query = query_def_copy.generate_primary_index_create_query(defer_build=defer_build)
+                        else:
+                            query = query_def_copy.generate_index_create_query(use_gsi_for_secondary=True, gsi_type="plasma",
+                                                                          defer_build=defer_build)
                         try:
                             # create index
                             self.n1ql_helper.run_cbq_query(query=query, server=self.server)
