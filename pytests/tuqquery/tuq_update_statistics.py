@@ -541,3 +541,161 @@ class QueryUpdateStatsTests(QueryTests):
             self.log.error(f"Update statistics failed: {e}")
             self.fail()
 
+    def test_missing_field(self):
+        for field in ["fake_field", "DISTINCT (ARRAY (`v`.`day`) FOR `v` IN `fake_field` END)"]:
+            update_stats = f"{self.UPDATE_STATISTICS} {self.keyspace}({field})"
+            try:
+                self.run_cbq_query(query=update_stats)
+            except Exception as e:
+                self.log.error(f"Update statistics failed: {e}")
+                self.fail()
+    
+    def test_missing_keyspace(self):
+        error_code = 12003
+        fake_keyspaces = {
+            "`fake-bucket`": "Keyspace not found in CB datastore: default:fake-bucket - cause: No bucket named fake-bucket",
+            "`travel-sample`.inventory.`fake-collection`": "Keyspace not found in CB datastore: default:travel-sample.inventory.fake-collection"
+        }
+        for keyspace in fake_keyspaces:
+            update_stats = f"{self.UPDATE_STATISTICS} {keyspace}(city)"
+            try:
+                self.run_cbq_query(query=update_stats)
+            except CBQError as ex:
+                error = self.process_CBQE(ex)
+                self.assertEqual(error['code'], error_code)
+                self.assertEqual(error['msg'], fake_keyspaces[keyspace])
+
+    def test_multi_node(self):
+        node1 = self.servers[0]
+        node2 = self.servers[1]
+        update_stats = f"{self.UPDATE_STATISTICS} {self.keyspace}(city) WITH {{'update_statistics_timeout':600}}"
+        explain_query = f"explain select airportname from {self.keyspace} where city = 'Lyon'"
+        try:
+            explain_before = self.run_cbq_query(query=explain_query, server=node2)
+            self.assertEqual(list(explain_before['results'][0].keys()), ['plan', 'text'])
+            # run update statistics
+            self.run_cbq_query(query=update_stats, server=node1)
+            explain_after = self.run_cbq_query(query=explain_query, server=node2)
+            self.assertTrue(explain_after['results'][0]['cost'] > 0 and explain_after['results'][0]['cardinality'] > 0)
+        except Exception as e:
+            self.log.error(f"Update statistics failed: {e}")
+            self.fail()
+
+    def test_stats_query_join(self):
+        update_stats = f"{self.UPDATE_STATISTICS} `travel-sample`.inventory.airport(city) WITH {{'update_statistics_timeout':600}}"
+        explain_query = f"explain SELECT DISTINCT  MIN(aport.airportname) AS Airport__Name, MIN(lmark.name) AS Landmark_Name, MIN(aport.tz) AS Landmark_Time FROM `travel-sample`.inventory.airport aport LEFT JOIN `travel-sample`.inventory.landmark lmark ON aport.city = lmark.city WHERE lmark.country = 'United States' GROUP BY lmark.name ORDER BY lmark.name LIMIT 3"
+        try:
+            explain_before = self.run_cbq_query(query=explain_query)
+            fetch_operator = explain_before['results'][0]['plan']['~children'][0]['~children'][1] 
+            self.assertEqual(list(fetch_operator.keys()), ['#operator', 'as', 'bucket', 'keyspace', 'namespace', 'scope'])
+            # run update statistics
+            self.run_cbq_query(query=update_stats)
+            explain_after = self.run_cbq_query(query=explain_query)
+            fetch_operator = explain_after['results'][0]['plan']['~children'][0]['~children'][1]
+            self.assertTrue(fetch_operator['cost'] > 0 and fetch_operator['cardinality'] > 0)
+        except Exception as e:
+            self.log.error(f"Update statistics failed: {e}")
+            self.fail()
+
+    def test_stats_query(self):
+        update_stats = f"{self.UPDATE_STATISTICS} {self.keyspace}(city, free_internet) WITH {{'update_statistics_timeout':600}}"
+        explain_query = f"explain select name, city from {self.keyspace} where type = 'hotel' and state = 'Rhône-Alpes' and city='Chamonix-Mont-Blanc' and vacancy"
+        try:
+            explain_before = self.run_cbq_query(query=explain_query)
+            interscan_operator = explain_before['results'][0]['plan']['~children'][0]['scans'][0]
+            self.assertEqual(list(interscan_operator.keys()), ['#operator', 'index', 'index_id', 'index_projection', 'keyspace', 'namespace', 'spans', 'using'])
+            # run update statistics
+            self.run_cbq_query(query=update_stats)
+            explain_after = self.run_cbq_query(query=explain_query)
+            interscan_operator = explain_after['results'][0]['plan']['~children'][0]['scans'][0]
+            self.assertTrue(interscan_operator['cost'] > 0 and interscan_operator['cardinality'] > 0)
+            # run query
+            self.run_cbq_query(query=explain_query[8:])
+        except Exception as e:
+            self.log.error(f"Update statistics failed: {e}")
+            self.fail()
+
+    def test_update_histogram(self):
+        update_stats = f"{self.UPDATE_STATISTICS} {self.keyspace}(city)"
+        update_histogram = "update `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` set histogram = 'abcdef' where type = 'histogram'"
+        select_histogram = "select histogram from `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` WHERE type = 'histogram'"
+        select_query = f"select airportname from {self.keyspace} where type = 'airport' and city = 'Lyon' order by airportname"
+        expected_results = [
+            {"airportname": "Bron"},
+            {"airportname": "Lyon Part-Dieu Railway"},
+            {"airportname": "Saint Exupery"}
+        ]
+        try:
+            # update stats
+            self.run_cbq_query(query=update_stats)
+            # run query
+            results = self.run_cbq_query(query=select_query)
+            self.assertEqual(results['results'], expected_results)
+            # update histogram
+            self.run_cbq_query(query=update_histogram)
+            histogram = self.run_cbq_query(query=select_histogram)
+            self.assertEqual(histogram['results'], [{"histogram": "abcdef"}])
+            # run query
+            results = self.run_cbq_query(query=select_query)
+            self.assertEqual(results['results'], expected_results)
+            # update stats again and check histogram
+            self.run_cbq_query(query=update_stats)
+            histogram = self.run_cbq_query(query=select_histogram)
+            self.assertNotEqual(histogram['results'], [{"histogram": "abcdef"}])
+        except Exception as e:
+            self.log.error(f"Update statistics failed: {e}")
+            self.fail()
+
+    def test_stats_insert(self):
+        update_query_lyon = f"update {self.keyspace} set best_airport = 'yes' where type = 'airport' and city = 'Lyon'"
+        update_query_portland = f"update {self.keyspace} set best_airport = 'yes' where type = 'airport' and city = 'Portland'"
+        update_stats_city = f"{self.UPDATE_STATISTICS} {self.keyspace}(city)"
+        update_stats_best_airport = f"{self.UPDATE_STATISTICS} {self.keyspace}(best_airport)"
+        select_query_city = f"select airportname from {self.keyspace} where type = 'airport' and city = 'Lyon' order by airportname"
+        select_query_best_airport = f"select airportname from {self.keyspace} where type = 'airport' and best_airport = 'yes' order by airportname"
+        expected_results_lyon = [
+            {"airportname": "Bron"},
+            {"airportname": "Lyon Part-Dieu Railway"},
+            {"airportname": "Saint Exupery"}
+        ]
+        expected_results_best_airport = [
+            {"airportname": "Bron"},
+            {"airportname": "Lyon Part-Dieu Railway"},
+            {"airportname": "Portland Intl"},
+            {"airportname": "Portland Intl Jetport"},
+            {"airportname": "Saint Exupery"}
+        ]
+        try:
+            # update stats city
+            self.run_cbq_query(query=update_stats_city)
+            # run query on city
+            results = self.run_cbq_query(query=select_query_city)
+            self.assertEqual(results['results'], expected_results_lyon)
+            # insert data (best airport)
+            self.run_cbq_query(query=update_query_lyon)
+            # update stats city
+            self.run_cbq_query(query=update_stats_city)
+            # run query on city
+            results = self.run_cbq_query(query=select_query_city)
+            self.assertEqual(results['results'], expected_results_lyon)
+            # update stats best
+            self.run_cbq_query(query=update_stats_best_airport)
+            # run query on city
+            results = self.run_cbq_query(query=select_query_city)
+            self.assertEqual(results['results'], expected_results_lyon)
+            # run query on best
+            results = self.run_cbq_query(query=select_query_best_airport)
+            self.assertEqual(results['results'], expected_results_lyon)
+            # insert data (best airport)
+            self.run_cbq_query(query=update_query_portland)
+            # run query on best
+            results = self.run_cbq_query(query=select_query_best_airport)
+            self.assertEqual(results['results'], expected_results_best_airport)
+            # update stats best
+            self.run_cbq_query(query=update_stats_best_airport)
+            # run query on best
+            results = self.run_cbq_query(query=select_query_best_airport)
+            self.assertEqual(results['results'], expected_results_best_airport)
+        except Exception as e:
+            self.log.error(f"Update statistics failed: {e}")
+            self.fail()
