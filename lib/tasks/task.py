@@ -6346,7 +6346,7 @@ class SDKLoadDocumentsTask(Task):
                   f"-pd {self.sdk_docloader.percent_delete} -l {self.sdk_docloader.load_pattern} " \
                   f"-dsn {self.sdk_docloader.start_seq_num + start_seq_num_shift} -dpx {self.sdk_docloader.key_prefix} -dt {self.sdk_docloader.json_template} " \
                   f"-de {self.sdk_docloader.doc_expiry} -ds {self.sdk_docloader.doc_size} -ac {self.sdk_docloader.all_collections} " \
-                  f"-st {self.sdk_docloader.start} -en {self.sdk_docloader.end}"
+                  f"-st {self.sdk_docloader.start} -en {self.sdk_docloader.end} -o {self.sdk_docloader.output}"
         if self.sdk_docloader.es_compare:
             command = command + " -es true -es_host " + str(self.sdk_docloader.es_host) + " -es_port " + str(
                 self.sdk_docloader.es_port) + \
