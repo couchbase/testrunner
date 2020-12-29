@@ -1,4 +1,5 @@
 import json
+import re
 
 from .base_gsi import BaseSecondaryIndexingTests
 from membase.api.rest_client import RestConnection, RestHelper
@@ -8,6 +9,8 @@ from lib.memcached.helper.data_helper import MemcachedClientHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 from threading import Thread
 from pytests.query_tests_helper import QueryHelperTests
+from concurrent.futures import ThreadPoolExecutor
+from couchbase_helper.query_definitions import QueryDefinition
 
 
 class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
@@ -233,6 +236,184 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                                                     index_map,
                                                     self.num_index_replicas,
                                                     nodes)
+
+    def test_rebalance_of_failed_server_group(self):
+        redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
+        self.rest.set_index_settings(redistribute)
+        # Default source zone
+        zones = list(self.rest.get_zone_names().keys())
+        source_zone = zones[0]
+        self._create_server_groups()
+        num_of_docs = 10 ** 2
+        self.bucket_params = self._create_bucket_params(server=self.master, size=100,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs)
+        collection_namespace = self.namespaces[0]
+        _, keyspace = collection_namespace.split(':')
+        bucket, scope, collection = keyspace.split('.')
+        idx_prefix = 'idx'
+        index_gen_list = []
+        index_gen_query_list = []
+        regex_pattern = re.compile('.*?Index creation for index (.*?),.*')
+        index_field_list = ['age', 'city', 'country', 'title', 'firstName', 'lastName', 'streetAddress',
+                            'suffix', 'filler1']
+        index_lists = []
+        for index_fields, idx_num in zip(index_field_list, range(10)):
+            index_name = f'{idx_prefix}_{idx_num}'
+            index_gen = QueryDefinition(index_name=index_name, index_fields=[index_fields])
+            index_gen_list.append(index_gen)
+            query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
+                                                          num_replica=1)
+            index_gen_query_list.append(query)
+            index_lists.append(index_name)
+
+        tasks = []
+        err_msg1 = 'The index is scheduled for background creation'
+        err_msg2 = 'Index creation will be retried in background'
+        with ThreadPoolExecutor() as executor:
+            for count, query in enumerate(index_gen_query_list):
+                task = executor.submit(self.run_cbq_query, query=query)
+                tasks.append(task)
+
+            for task in tasks:
+                try:
+                    result = task.result()
+                    self.log.info(result)
+                except Exception as err:
+                    if err_msg1 in str(err):
+                        out = re.search(regex_pattern, str(err))
+                        index_name = out.groups()[0]
+                        self.log.info(f"{index_name} is scheduled for background")
+                    elif err_msg2 in str(err):
+                        continue
+                    else:
+                        self.fail(err)
+        self.wait_until_indexes_online()
+        index_meta_info = self.rest.get_indexer_metadata()['status']
+        self.assertEqual(len(index_meta_info), len(index_lists) * (self.num_replicas + 1))
+        index_hosts = set()
+        for index in index_meta_info:
+            host = index['hosts'][0]
+            index_hosts.add(host.split(':')[0])
+
+        index_map_before_rebalance = self.get_index_map()
+        stats_map_before_rebalance = self.get_index_stats(perNode=False)
+
+        failover_task = self.cluster.async_failover(self.servers[:self.nodes_init],
+            failover_nodes=self.servers[2:self.nodes_init], graceful=False, wait_for_pending=180)
+        failover_task.result()
+
+        # Adding new nodes to server_group_3
+        node_in = [self.servers[4], self.servers[5]]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], node_in, [],
+                                                  services=["kv,index,n1ql", "index"])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        index_map_after_rebalance = self.get_index_map()
+        stats_map_after_rebalance = self.get_index_stats(perNode=False)
+
+        try:
+            self.n1ql_helper.verify_indexes_redistributed(
+                index_map_before_rebalance,
+                index_map_after_rebalance,
+                stats_map_before_rebalance,
+                stats_map_after_rebalance,
+                [node_in],
+                [])
+        except Exception as ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.log.error(f"Error in index distribution post rebalance : {ex})")
+            else:
+                self.log.info(str(ex))
+
+    def test_rebalance_of_failed_server_group_with_partitioned_index(self):
+        redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
+        self.rest.set_index_settings(redistribute)
+        # Default source zone
+        zones = list(self.rest.get_zone_names().keys())
+        source_zone = zones[0]
+        self._create_server_groups()
+        num_of_docs = 10 ** 2
+        self.bucket_params = self._create_bucket_params(server=self.master, size=100,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs)
+        collection_namespace = self.namespaces[0]
+        _, keyspace = collection_namespace.split(':')
+        bucket, scope, collection = keyspace.split('.')
+        idx_prefix = 'idx'
+        index_gen_list = []
+        index_gen_query_list = []
+        regex_pattern = re.compile('.*?Index creation for index (.*?),.*')
+        index_field_list = ['age', 'city', 'country', 'title', 'firstName', 'lastName', 'streetAddress',
+                            'suffix', 'filler1']
+        index_lists = []
+        index_gen = QueryDefinition(index_name='partitioned_idx', index_fields=['age', 'city'],
+                                    partition_by_fields=['meta().id'])
+        partitioned_index_query = index_gen.generate_index_create_query(namespace=collection_namespace, num_replica=1)
+        index_gen_query_list.append(partitioned_index_query)
+        index_lists.append('partitioned_idx')
+        tasks = []
+        err_msg1 = 'The index is scheduled for background creation'
+        err_msg2 = 'Index creation will be retried in background'
+        with ThreadPoolExecutor() as executor:
+            for count, query in enumerate(index_gen_query_list):
+                task = executor.submit(self.run_cbq_query, query=query)
+                tasks.append(task)
+
+            for task in tasks:
+                try:
+                    result = task.result()
+                    self.log.info(result)
+                except Exception as err:
+                    if err_msg1 in str(err):
+                        out = re.search(regex_pattern, str(err))
+                        index_name = out.groups()[0]
+                        self.log.info(f"{index_name} is scheduled for background")
+                    elif err_msg2 in str(err):
+                        continue
+                    else:
+                        self.fail(err)
+        self.wait_until_indexes_online()
+        index_meta_info = self.rest.get_indexer_metadata()['status']
+        self.assertEqual(len(index_meta_info), len(index_lists) * (self.num_replicas + 1))
+
+        failover_task = self.cluster.async_failover(self.servers[:self.nodes_init],
+            failover_nodes=self.servers[2:self.nodes_init], graceful=False, wait_for_pending=180)
+        failover_task.result()
+
+        # Adding new nodes to group1
+        node_in = [self.servers[4], self.servers[5]]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], node_in, [],
+                                                  services=["kv,index,n1ql", "index"])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+        index_meta_info = index_metadata = self.rest.get_indexer_metadata()['status']
+        for index in index_meta_info:
+            hosts = index['hosts']
+            self.assertTrue(f"{self.servers[2].ip}:8091" not in hosts, f"Index stats are not correct. {index}")
+            self.assertTrue(f"{self.servers[3].ip}:8091" not in hosts, f"Index stats are not correct. {index}")
+            self.assertTrue((f"{self.servers[4].ip}:8091" in hosts) or (f"{self.servers[5].ip}:8091" in hosts),
+                            f"Index stats are not correct. {index}")
+            self.assertEqual(index['numPartition'], 8)
+
+        query = f'select count(*) from {collection_namespace}  where age > 20 and city like "%%"'
+        result = self.run_cbq_query(query=query)['results'][0]['$1']
+        self.assertNotEqual(result, 0)
+
 
     def test_create_replica_index_with_server_groups(self):
         nodes = self._get_node_list()
@@ -3183,8 +3364,6 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         return nodes
 
     def _create_server_groups(self):
-
-
         if self.server_grouping:
             server_groups = self.server_grouping.split(":")
             self.log.info("server groups : %s", server_groups)

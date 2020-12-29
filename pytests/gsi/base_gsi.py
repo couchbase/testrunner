@@ -61,6 +61,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.run_cbq_query = self.n1ql_helper.run_cbq_query
         self.num_of_docs_per_collection = self.input.param('num_of_docs_per_collection', 1000)
         self.deploy_node_info = None
+        self.server_grouping = self.input.param("server_grouping", None)
         if not self.use_rest:
             query_definition_generator = SQLDefinitionGenerator()
             if self.dataset == "default" or self.dataset == "employee":
@@ -1502,6 +1503,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         rest = RestConnection(indexer_node)
         content = rest.cluster_status()
         return int(content['indexMemoryQuota'])
+
 
 class ConCurIndexOps(BaseSecondaryIndexingTests):
     def __init__(self):
