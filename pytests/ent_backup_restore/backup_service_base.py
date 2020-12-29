@@ -1386,9 +1386,10 @@ class CryptoTester:
             connection.disconnect()
 
         # Upload the root certificate
-        rest_connection = RestConnection(self.clusters[0])
-        rest_connection.upload_cluster_ca(self.root_certificate)
-        rest_connection.reload_certificate()
+        for cluster in self.clusters:
+            rest_connection = RestConnection(cluster)
+            rest_connection.upload_cluster_ca(self.root_certificate)
+            rest_connection.reload_certificate()
 
 class Crypto:
 
