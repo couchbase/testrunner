@@ -136,6 +136,11 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         self.temporary_directories.append(self.directory_to_share)
         self.temporary_directories.append(self.backupset.directory)
 
+        self.crypto_tester = CryptoTester(self.input.clusters[0])
+
+        if self.input.param('custom_certificate', False):
+            self.crypto_tester.upload()
+
         if self.input.param('node_to_node_encryption', False):
             self.assertTrue(self.node_to_node_encryption.enable())
 
