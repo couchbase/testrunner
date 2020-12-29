@@ -5505,6 +5505,18 @@ class RestConnection(object):
         status, content, header = self._http_request(self.baseUrl + "node/controller/reloadCertificate", 'POST', headers=headers)
         return status, content
 
+    def client_cert_auth(self, state, prefixes):
+        """
+        Args:
+            state (str): Either 'enable', 'mandatory' or 'disable'.
+            prefixes (list(dict)): A list of dicts of containing the keys 'path', 'prefix' and 'delimiter'
+                e.g. {"path": .., "prefix": .., "delimiter", ..}
+        """
+        headers = self._create_capi_headers()
+        params = json.dumps({'state': state, 'prefixes': prefixes})
+        status, content, header = self._http_request(self.baseUrl + "settings/clientCertAuth", 'POST', headers=headers, params=params)
+        return status, content
+
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
         self.implementationVersion = implementationVersion

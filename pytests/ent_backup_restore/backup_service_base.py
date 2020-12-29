@@ -32,6 +32,7 @@ from lib.membase.helper.bucket_helper import BucketOperationHelper
 from couchbase_helper.cluster import Cluster
 
 class BackupServiceBase(EnterpriseBackupRestoreBase):
+
     def preamble(self):
         """ Preamble.
 
@@ -39,6 +40,12 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         2. Configures Rest API Sub-APIs.
         3. Backup Service Constants.
         """
+        # Avoid running this function more than once
+        if not hasattr(self, 'execute_once'):
+            self.execute_once = True
+        else:
+            return
+
         # Set 'skip_server_sort' to avoid sorting the first cluster in the ini file by total memory
         if not self.input.param("skip_server_sort", False):
             # Sort the available clusters by total memory in ascending order (if the total memory is the same, sort by ip)
@@ -52,8 +59,21 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         self.use_https = self.input.param('use_https', False)
 
+        self.ssl_hints = {}
+
+        # Define where the root certificate file is saved on the filesystem
+        self.ssl_hints['root_certificate_file'] = '/tmp/root_certificate'
+
+        # Define where the client private key and certificate are saved on the filesystem
+        self.ssl_hints['client_private_key_file'] = '/tmp/client_private_key'
+        self.ssl_hints['client_certificate_file'] = '/tmp/client_certificate'
+
+        # Create/Enable/Upload custom cluster certificates and client certificates
+        if self.input.param('custom_certificate', False):
+            self.load_custom_certificates()
+
         # Select a configuration factory which creates Configuration objects that communicate over http or https
-        self.configuration_factory = HttpsConfigurationFactory(self.master) if self.use_https else HttpConfigurationFactory(self.master)
+        self.configuration_factory = HttpsConfigurationFactory(self.master, hints=self.ssl_hints) if self.use_https else HttpConfigurationFactory(self.master)
 
         # Rest API Configuration
         self.configuration = self.configuration_factory.create_configuration()
@@ -136,16 +156,44 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         self.temporary_directories.append(self.directory_to_share)
         self.temporary_directories.append(self.backupset.directory)
 
-        self.crypto_tester = CryptoTester(self.input.clusters[0])
-
-        if self.input.param('custom_certificate', False):
-            self.crypto_tester.upload()
-
         if self.input.param('node_to_node_encryption', False):
             self.assertTrue(self.node_to_node_encryption.enable())
 
         if self.input.param('dgm_run', False):
             self.on_dgm_run()
+
+    def load_custom_certificates(self):
+        """ Loads custom certificates
+
+        Generates and uploads a cluster wide, per-node and client private keys and certificates.
+        """
+        # Generates a key/cert pair for each node and a cluster-wide root key/cert pair
+        self.crypto_tester = CryptoTester(self.input.clusters[0])
+
+        self.assertTrue(self.input.param("use_https", False), "The `use_https` param must be set to True")
+
+        # Provisions each node with a key/cert pair and uploads the root certificate to each node in the cluster.
+        self.crypto_tester.upload()
+
+        # Write the root certificate to a file
+        with open(self.ssl_hints['root_certificate_file'], "w") as f:
+            f.write(self.crypto_tester.get_root_certificate())
+
+        self.client_certificate_tester = ClientCertificateTester(self.input.clusters[0], ClientStrategy("san.email", "", "", self.master.rest_username), self.crypto_tester)
+
+        # Enable client certificate authentication
+        self.client_certificate_tester.client_auth_enable()
+
+        # Generate a client private key and a certificate which has been signed by the root certificate.
+        client_private_key, client_certificate = self.client_certificate_tester.create_client_pair()
+
+        # Write the client private key to a file
+        with open(self.ssl_hints['client_private_key_file'], "w") as f:
+            f.write(client_private_key)
+
+        # Write the client certificate to a file
+        with open(self.ssl_hints['client_certificate_file'], "w") as f:
+            f.write(client_certificate)
 
     def custom_rebalance(self):
         """Form cluster[0] into a cluster"""
@@ -1311,6 +1359,94 @@ class NodeToNodeEncryption:
         self.remote_connection.execute_command(f"/opt/couchbase/bin/couchbase-cli setting-security {self.common} --set --cluster-encryption-level control", debug=True)
         self.remote_connection.execute_command(f"/opt/couchbase/bin/couchbase-cli node-to-node-encryption {self.common} --disable", debug=True)
 
+class ClientStrategy:
+
+    def __init__(self, path, prefix, delimiter, username):
+        """ Defines the strategy for how the username is obtained from the client certificate.
+
+        Args:
+            path (str): Determines where the username is stored.
+            prefix (str): The portion of the username that is removed and ignored.
+            delimiter (str): The resolved username is the first element in the split on the delimiter.
+        """
+        self.prefix = prefix
+        self.username = username
+        self.delimiter = delimiter
+
+        valid_paths = ['subject.cn', 'san.dnsname', 'san.email', 'san.uri']
+
+        if path not in valid_paths:
+            raise ValueError(f"Path `{path}` is not in {valid_paths}")
+
+        self.path = path
+        self.head, self.tail = path.split('.')
+
+    def username_is_in_san(self):
+        """ Returns true if the username is fetched from the subjectAltName in the extensions
+
+        Otherwise, the username is fetched from the subject.
+        """
+        return self.head == 'san'
+
+    def get_extension(self):
+        extension = \
+        {
+            'basicConstraints': 'CA:FALSE',
+            'subjectKeyIdentifier': 'hash',
+            'authorityKeyIdentifier': 'keyid,issuer:always',
+            'extendedKeyUsage': 'clientAuth',
+            'keyUsage': 'digitalSignature'
+        }
+
+        # The capitalisation varies in a SAN for some reason
+        field = {'dnsname': 'DNS', 'uri': 'URI', 'email': 'email'}[self.tail]
+
+        if self.username_is_in_san():
+            extension['subjectAltName'] = f"{field}:{self.username}"
+
+        return extension
+
+    def get_subject(self):
+        return {} if self.username_is_in_san() else {f"{self.tail.upper()}": self.username}
+
+    def get_dictionary(self):
+        return {"path": self.path, "prefix": self.prefix, "delimiter": self.delimiter}
+
+class ClientCertificateTester:
+
+    def __init__(self, clusters, strategy, crypto_tester):
+        """
+
+        Args:
+            strategy(ClientStrategy): The client strategy determines where the username is stored.
+        """
+        self.clusters, self.crypto, self.crypto_tester, = clusters, Crypto(clusters[0]), crypto_tester
+        self.strategy = strategy
+
+        self.rest_conn = RestConnection(self.clusters[0])
+
+    def create_client_pair(self):
+        """ Creates a key and a certificate pair which has been signed by the root private key
+
+        Returns:
+            (str, str): A private key and certificate for the client
+        """
+        private_key = self.crypto.create_private_key()
+        signing_req = self.crypto.create_signing_request(private_key, self.strategy.get_subject())
+        certificate = self.crypto.sign_request(self.crypto_tester.get_root_private_key(), self.crypto_tester.get_root_certificate(), signing_req, self.strategy.get_extension())
+
+        return private_key, certificate
+
+    def client_auth_enable(self):
+        """ Enables client certificates on the clusters based on the strategy.
+        """
+        status, content = self.rest_conn.client_cert_auth('enable', [self.strategy.get_dictionary()])
+
+    def client_auth_disable(self):
+        """ Disables client certificates on the clusters.
+        """
+        status, content = self.rest_conn.client_cert_auth('disable', [])
+
 class CryptoTester:
 
     def __init__(self, clusters):
@@ -1321,17 +1457,6 @@ class CryptoTester:
         """
         # An object that creates key pairs
         self.clusters, self.crypto = clusters, Crypto(clusters[0])
-
-        # A certificate signing request requires a certificate extension which determines
-        # how the certificate will be used (e.g. for encipherment of keys).
-        self.certificate_extension = \
-        {
-            'basicConstraints': 'CA:FALSE',
-            'subjectKeyIdentifier': 'hash',
-            'authorityKeyIdentifier': 'keyid,issuer:always',
-            'extendedKeyUsage': 'serverAuth',
-            'keyUsage': 'digitalSignature,keyEncipherment'
-        }
 
         # Create all key pairs
         self.create()
@@ -1359,21 +1484,30 @@ class CryptoTester:
         """
         # Create the cluster wide key and certificate pair
         self.root_private_key = self.crypto.create_private_key()
-        self.root_certificate = self.crypto.create_root_certificate(self.root_private_key)
+        self.root_certificate = self.crypto.create_root_certificate(self.root_private_key, {'CN':'Couchbase Root CA'})
 
         self.per_node_pair = []
         # Create the per node private-key and signing request
         for server in self.clusters:
             per_node_private_key = self.crypto.create_private_key()
-            per_node_signing_req = self.crypto.create_signing_request(per_node_private_key)
+            per_node_signing_req = self.crypto.create_signing_request(per_node_private_key, {'CN':'Couchbase Server'})
             self.per_node_pair.append((per_node_private_key, per_node_signing_req))
 
         # Sign requests using the root private key to generate a per node certificate
         for i, (per_node_private_key, per_node_signing_req) in enumerate(self.per_node_pair):
-            # Configure the subjectAltName in the certificate extension - Supply the IP of the server
-            self.certificate_extension['subjectAltName'] = f"IP:{self.clusters[i].ip}"
+            # A certificate signing request requires a certificate extension which determines
+            # how the certificate will be used (e.g. for encipherment of keys).
+            certificate_extension = \
+            {
+                'basicConstraints': 'CA:FALSE',
+                'subjectKeyIdentifier': 'hash',
+                'authorityKeyIdentifier': 'keyid,issuer:always',
+                'extendedKeyUsage': 'serverAuth',
+                'keyUsage': 'digitalSignature,keyEncipherment',
+                'subjectAltName': f"IP:{self.clusters[i].ip}" # Configure the subjectAltName in the certificate extension - Supply the IP of the server
+            }
             # Sign the request root private key to obain a certificate
-            per_node_certificate = self.crypto.sign_request(self.root_private_key, self.root_certificate, per_node_signing_req, self.certificate_extension)
+            per_node_certificate = self.crypto.sign_request(self.root_private_key, self.root_certificate, per_node_signing_req, certificate_extension)
             # Replace the signing request with the certificate in our per-node data-structure
             self.per_node_pair[i] = per_node_private_key, per_node_certificate
 
@@ -1404,6 +1538,17 @@ class Crypto:
     def clean(self, files):
         self.remote_connection.execute_command(f"rm -f {' '.join(files)}")
 
+    def subject_to_string(self, subject):
+        """Returns the string version of the subject dictionary
+
+        Args:
+            subject (dict): Key value pairs to populate the subject with.
+
+        Returns:
+            str: A string that can be passed to the -subj flag of the 'openssl req' command
+        """
+        return '/' +  "/".join([f"{key}={val}" for key, val in subject.items()])
+
     def create_private_key(self):
         """Generates a private key"""
         keyfile = "/tmp/my_key.pem"
@@ -1418,7 +1563,7 @@ class Crypto:
 
         return "\n".join(output)
 
-    def create_root_certificate(self, private_key):
+    def create_root_certificate(self, private_key, subject):
         """Generates a self-signed certificate from a private key
 
         Creates a signing request and self-signs (notice the usage of the x509 flag to perform the self-sign)
@@ -1430,14 +1575,14 @@ class Crypto:
         self.clean(garbage)
 
         self.remote_connection.execute_command(f"echo '{private_key}' > /tmp/my_key.pem")
-        self.remote_connection.execute_command(f"openssl req -new -x509 -days 3650 -sha256 -key /tmp/my_key.pem -out /tmp/my_certificate.pem -subj \"/CN=Couchbase Root CA\"")
+        self.remote_connection.execute_command(f"openssl req -new -x509 -days 3650 -sha256 -key /tmp/my_key.pem -out /tmp/my_certificate.pem -subj \"{self.subject_to_string(subject)}\"")
         output, error = self.remote_connection.execute_command(f"cat /tmp/my_certificate.pem")
 
         self.clean(garbage)
 
         return "\n".join(output)
 
-    def create_signing_request(self, private_key):
+    def create_signing_request(self, private_key, subject):
         """Generate a signing request from a private key"""
         keyfile = "/tmp/my_key"
         request = "/tmp/my_certificate_signing_request.pem"
@@ -1446,7 +1591,7 @@ class Crypto:
         self.clean(garbage)
 
         self.remote_connection.execute_command(f"echo '{private_key}' > {keyfile}")
-        self.remote_connection.execute_command(f"openssl req -new -key {keyfile} -out {request} -subj \"/CN=Couchbase Server\"")
+        self.remote_connection.execute_command(f"openssl req -new -key {keyfile} -out {request} -subj \"{self.subject_to_string(subject)}\"")
         output, error = self.remote_connection.execute_command(f"cat {request}")
 
         self.clean(garbage)
@@ -1493,8 +1638,8 @@ class DGMUtil:
 
 class AbstractConfigurationFactory(abc.ABC):
 
-    def __init__(self, server):
-        self.server = server
+    def __init__(self, server, hints=None):
+        self.hints, self.server = hints, server
 
     def create_configuration_common(self):
         """ Creates a configuration and sets its credentials
@@ -1524,6 +1669,11 @@ class HttpConfigurationFactory(AbstractConfigurationFactory):
 
 class HttpsConfigurationFactory(AbstractConfigurationFactory):
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # The following keys must be set in order to enable ssl verification
+        self.have_hints_for_ssl_verification = all(key in self.hints for key in ['client_private_key_file',  'client_certificate_file', 'root_certificate_file'])
+
     def create_configuration(self):
         """ Creates a https configuration object.
         """
@@ -1532,6 +1682,14 @@ class HttpsConfigurationFactory(AbstractConfigurationFactory):
         # The certificate used by default is self-signed, so we cannot verify
         # it's integrity by going to a trusted CA and checking if it's signed
         # by the CA's public key so we can just omit that process.
-        configuration.host, configuration.verify_ssl = f"https://{self.server.ip}:18091/_p/backup/api/v1", False
+        configuration.host = f"https://{self.server.ip}:18091/_p/backup/api/v1"
+
+        if self.have_hints_for_ssl_verification:
+            configuration.key_file = self.hints['client_private_key_file']
+            configuration.cert_file = self.hints['client_certificate_file']
+            configuration.ssl_ca_cert = self.hints['root_certificate_file']
+
+        # If the hints are set, we have required certificates so we can enable verify_ssl
+        configuration.verify_ssl = self.have_hints_for_ssl_verification
 
         return configuration
