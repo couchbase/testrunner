@@ -456,6 +456,7 @@ class BackupServiceTest(BackupServiceBase):
             ("",         Body2(plan=plan_name, archive=self.backupset.directory, bucket_name=None)), # Empty repository name
             ("a"*51,     Body2(plan=plan_name, archive=self.backupset.directory, bucket_name=None)), # Long repo name
             ("my_repo",  Body2(plan=plan_name, archive=self.backupset.directory, bucket_name="Bad")), # Non existing bucket name
+            ("my_repo",  Body2(plan=plan_name, archive='a_relative_path', bucket_name=None)), # Relative path
         ]
 
         # Add invalid repositories
