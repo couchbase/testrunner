@@ -52,27 +52,28 @@ def do_install_task(task, node):
 def validate_install(version):
     log.info("-" * 100)
     for node in install_utils.NodeHelpers:
-        node.install_success = False
-        if node.rest:
-            try:
-                node_status = node.rest.cluster_status()["nodes"]
-            except:
-                continue
-            for item in node_status:
-                if version in item['version'] and item['status'] == "healthy":
-                    node.install_success = True
+        if node.install_success is None:
+            node.install_success = False
+            if node.rest:
+                try:
+                    node_status = node.rest.cluster_status()["nodes"]
+                except:
+                    continue
+                for item in node_status:
+                    if version in item['version'] and item['status'] == "healthy":
+                        node.install_success = True
 
-                if node.enable_ipv6 and not item["addressFamily"] == "inet6":
-                    node.install_success = False
+                    if node.enable_ipv6 and not item["addressFamily"] == "inet6":
+                        node.install_success = False
 
-                afamily = "Unknown"
-                if 'addressFamily' in list(item.keys()):
-                    afamily = item['addressFamily']
+                    afamily = "Unknown"
+                    if 'addressFamily' in list(item.keys()):
+                        afamily = item['addressFamily']
 
-                log.info("node:{0}\tversion:{1}\taFamily:{2}\tservices:{3}".format(item['hostname'],
-                                                                              item['version'],
-                                                                              afamily,
-                                                                              item['services']))
+                    log.info("node:{0}\tversion:{1}\taFamily:{2}\tservices:{3}".format(item['hostname'],
+                                                                                item['version'],
+                                                                                afamily,
+                                                                                item['services']))
     install_utils.print_result_and_exit()
 
 def do_install(params):

@@ -55,7 +55,7 @@ class NodeHelper:
         self.queue = None
         self.thread = None
         self.rest = None
-        self.install_success = False
+        self.install_success = None
         self.connect_ok = False
         self.shell = None
         self.info = None
@@ -180,6 +180,8 @@ class NodeHelper:
             while time.time() < start_time + timeout:
                 try:
                     o, e = self.shell.execute_command(cmd, debug=self.params["debug_logs"])
+                    if is_fatal_error(e):
+                        self.install_success = False
                     if o == ['1']:
                         break
                     self.wait_for_completion(duration, event)
@@ -779,3 +781,10 @@ def __get_build_binary_name(node):
                                             node.info.architecture_type,
                                             "unnotarized",
                                             node.info.deliverable_type)
+
+def is_fatal_error(errors):
+    for line in errors:
+        for fatal_error in install_constants.FATAL_ERRORS:
+            if fatal_error in line:
+                return True
+    return False

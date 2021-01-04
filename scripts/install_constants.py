@@ -289,3 +289,7 @@ DOWNLOAD_CMD = {
     "msi": WGET_CMD,
     "rpm": WGET_CMD
 }
+
+FATAL_ERRORS = [
+    "Another app is currently holding the yum lock"
+]
