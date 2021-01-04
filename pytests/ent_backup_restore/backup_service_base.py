@@ -1,6 +1,7 @@
 import os
 import re
 import math
+import time
 import json
 import shlex
 import random
@@ -433,6 +434,32 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
     def map_task_to_backup(self, state, repo_name, task_name):
         return self.get_task_history(state, repo_name, task_name=task_name)[0].backup
+
+    def wait_for_task(self, repo_name, task_name, timeout=200, task_scheduled_time=None, one_off=True):
+        self.log.info(f"Waiting for running one off {task_name}")
+
+        timeout = timeout + time.time()
+
+        while time.time() <= timeout:
+            repo = self.get_repository('active', repo_name)
+            running_tasks = repo.running_one_off if one_off else repo.running_tasks
+
+            if running_tasks and task_name in running_tasks:
+                self.log.info(f"Task {task_name} is running (progress: {running_tasks[task_name].node_runs[0].progress})")
+            else:
+                task_history = self.get_task_history('active', repo_name, task_name)
+
+                if len(task_history) > 0:
+                    self.log.info(f"The task {task_name} has completed successfully.")
+                    return task_history[0].status == 'done'
+                else:
+                    self.log.info(f"The task {task_name} has not started yet.")
+
+            self.sleep(1)
+
+        self.log.info(f"Task {task_name} exceeded the timeout limit.")
+
+        return False
 
     def wait_for_backup_task(self, state, repo_name, retries, sleep_time, task_name=None, task_scheduled_time=None):
         """ Wait for the latest backup Task to complete.

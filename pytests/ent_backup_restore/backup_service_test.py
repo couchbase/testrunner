@@ -747,7 +747,7 @@ class BackupServiceTest(BackupServiceBase):
         task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, body=Body4(full_backup=full_backup)).task_name
 
         # Wait until task has completed
-        self.assertTrue(self.wait_for_backup_task("active", repo_name, 20, 20, task_name=task_name))
+        self.assertTrue(self.wait_for_task(repo_name, task_name))
 
         # Configure repository name and staging directory
         if self.objstore_provider:
@@ -796,7 +796,7 @@ class BackupServiceTest(BackupServiceBase):
             task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, body=Body4(full_backup= i < 1)).task_name
 
             # Wait until task has completed
-            self.assertTrue(self.wait_for_backup_task("active", repo_name, 20, 20, task_name=task_name))
+            self.assertTrue(self.wait_for_task(repo_name, task_name))
 
             # Configure repository name and staging directory
             if self.objstore_provider:
@@ -835,7 +835,6 @@ class BackupServiceTest(BackupServiceBase):
             return BlobGenerator("ent-backup", "ent-backup-", self.value_size, start=self.num_items * start_index, end=self.num_items * (end_index + 1))
 
         for i in range(0, no_of_backups):
-
             # Load buckets with data
             self._load_all_buckets(self.master, get_blob_gen(i, i), "create", 0)
 
@@ -846,14 +845,13 @@ class BackupServiceTest(BackupServiceBase):
             task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, body=Body4(full_backup= i < 1)).task_name
 
             # Wait until task has completed
-            self.assertTrue(self.wait_for_backup_task("active", repo_name, 20, 10, task_name=task_name))
-
+            self.assertTrue(self.wait_for_task(repo_name, task_name))
 
         backups = [backup._date for backup in self.get_backups("active", repo_name)]
 
         task_name = self.active_repository_api.cluster_self_repository_active_id_merge_post(repo_name, body=Body5(start=backups[0], end=backups[no_of_backups - subtrahend_for_no_of_backups - 1], data_range="")).task_name
 
-        self.assertTrue(self.wait_for_backup_task("active", repo_name, 20, 40, task_name=task_name))
+        self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=800))
 
         backup_name = self.map_task_to_backup("active", repo_name, task_name)
 
@@ -939,7 +937,7 @@ class BackupServiceTest(BackupServiceBase):
         task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, body=Body4(full_backup=full_backup)).task_name
 
         # Wait until task has completed
-        self.assertTrue(self.wait_for_backup_task("active", repo_name, 20, 20, task_name=task_name))
+        self.assertTrue(self.wait_for_task(repo_name, task_name))
 
         # Get backup name
         backup_name = self.map_task_to_backup("active", repo_name, task_name)
@@ -963,7 +961,7 @@ class BackupServiceTest(BackupServiceBase):
         task_name = self.repository_api.cluster_self_repository_state_id_restore_post("active", repo_name, body=body).task_name
 
         # Wait until task has completed
-        self.assertTrue(self.wait_for_backup_task("active", repo_name, 20, 5))
+        self.assertTrue(self.wait_for_task(repo_name, task_name))
 
         # Check backup content equals content of cluster after restore
         self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name=backup_name, skip_stats_check=True)
