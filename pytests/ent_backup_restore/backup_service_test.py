@@ -1,4 +1,5 @@
 import re
+import time
 import json
 import random
 import datetime
@@ -2571,11 +2572,14 @@ class BackupServiceTest(BackupServiceBase):
         time_n2.change_system_time('14:00')
         time_n3.change_system_time('15:00')
 
-        self.sleep(10)
+        timeout = time.time() + 60
 
-        for alert in RestConnection(self.input.clusters[0][0]).get_alerts():
-            if "time on node" and "is not synchronized" in alert['msg']:
-                return
+        while time.time() < timeout:
+            for alert in RestConnection(self.input.clusters[0][0]).get_alerts():
+                if "time on node" and "is not synchronized" in alert['msg']:
+                    return
+
+            self.sleep(1, "Waiting for time de-sync warning")
 
         self.fail("Could not find the time de-sync warning in the alerts")
 
