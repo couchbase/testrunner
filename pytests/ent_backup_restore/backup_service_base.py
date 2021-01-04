@@ -629,13 +629,16 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         """
         return self.repository_api.cluster_self_repository_state_id_get('active', repo_name).repo
 
-    def get_leader(self):
+    def get_leader(self, clusters=None):
         """ Gets the leader from the logs
         """
+        if clusters is None:
+            clusters = self.input.clusters[0]
+
         # Obtain log entries from all nodes which contain "Setting self as leader"
         # Save entries as a list of tuples where the first element is the log time and the
         # second element is the server from where that entry was obtained
-        logs = [(TimeUtil.rfc3339nano_to_datetime(log.split("\t")[0]), server) for server in self.input.clusters[0] for log in File(server, self.log_directory).read() if "Setting self as leader" in log]
+        logs = [(TimeUtil.rfc3339nano_to_datetime(log.split("\t")[0]), server) for server in clusters for log in File(server, self.log_directory).read() if "Setting self as leader" in log]
 
         # Sort in ascending order based on log time which is the first element in tuple
         logs.sort()
