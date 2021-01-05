@@ -1018,7 +1018,7 @@ class QueryAdvisorTests(QueryTests):
             self.log.error(f"Advisor session failed: {e}")
             self.fail()
 
-    def test_session_kill_n1ql(self):
+    def test_session_kill_query(self):
         advise_index1 = "CREATE INDEX adv_country_lower_city_type ON `travel-sample`(`country`,lower((`city`))) WHERE `type` = 'airport'"
         advise_index2 = "CREATE INDEX adv_lower_city_country_type ON `travel-sample`(lower((`city`)),`country`) WHERE `type` = 'airport'"
         query1 = f'SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'

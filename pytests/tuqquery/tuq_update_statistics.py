@@ -432,7 +432,7 @@ class QueryUpdateStatsTests(QueryTests):
             self.fail()
 
     def test_update_stats_resolution(self):
-        error_message = f"Invalid resolution ({'%6f' % self.resolution})specified, resolution must be between 0.02 and 5.0"
+        error_message = f"Invalid resolution ({'%.2f' % self.resolution})specified, resolution must be between 0.02 and 5.0"
         error_code = 5360
         field = "city"
         distribution_query = f"with distribution as (select meta().distributions.{field} from system:dictionary where `bucket` = \"travel-sample\" and `scope` = \"{self.scope}\" and `keyspace` = \"{self.collection}\") select distribution[0].{field}.resolution"
