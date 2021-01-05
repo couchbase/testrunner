@@ -2751,13 +2751,13 @@ class BackupServiceTest(BackupServiceBase):
         self.take_one_off_restore("active", repo_name, 20, 5, self.backupset.cluster_host)
 
         output, error = remote_client.execute_command(f"{self.cli_command_location}cbindex -type list -auth={username}:{password}")
-        remote_client.disconnect()
 
         # Test the index was restored succesfully
         self.assertTrue(any('Index:default/_default/_default/age' in line for line in output), "The index was not restored successfully")
 
         # Delete the index
         remote_client.execute_command(f"{self.cli_command_location}cbindex -type drop -bucket default -index age --auth={username}:{password}")
+        remote_client.disconnect()
 
     def test_restoring_fts(self):
         """ Test the backup service can restore fts.
