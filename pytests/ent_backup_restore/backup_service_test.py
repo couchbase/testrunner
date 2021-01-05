@@ -1250,7 +1250,7 @@ class BackupServiceTest(BackupServiceBase):
         # Check status and warning message
         self.assertEqual(status, 500)
         self.assertEqual(data['msg'], "could not info repository")
-        self.assertIn(f"Error getting archive information", data['extras'])
+        self.assertIn(f"Error opening archive", data['extras'])
 
     def test_manually_deleting_staging_directory(self):
         """ Test manually deleting staging directory recreates staging directory.
@@ -1284,7 +1284,6 @@ class BackupServiceTest(BackupServiceBase):
             [
                 ("/etc/shadow", None, None),
                 ("/tmp/non_empty", ("couchbase", "couchbase"), "777"),
-                (self.backupset.directory, ("root", "root"), "770"),
                 ("/tmp/non_empty/just_a_file", ("couchbase", "couchbase"), "777"),
                 ("/tmp/non_accessible", ("couchbase", "couchbase"), "000"),
             ]
