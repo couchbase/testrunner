@@ -3547,8 +3547,23 @@ class FTSBaseTest(unittest.TestCase):
             "==== FTSbasetests setup is finished for test #{0} {1} ===="
                 .format(self.__case_number, self._testMethodName))
 
+    def __decode_fail(self, errors):
+        for err in errors:
+            if err[0] is self:
+                if err[1]:
+                    return err[1]
+        return None
+
     def __is_test_failed(self):
-        return ( hasattr(self, '_outcome') and len(self._outcome.errors)) \
+        test_failed = False
+        if hasattr(self, '_outcome'):
+            result = self.defaultTestResult()
+            self._feedErrorsToResult(result, self._outcome.errors)
+            error = self.__decode_fail(result.errors)
+            failure = self.__decode_fail(result.failures)
+            test_failed = error or failure
+
+        return test_failed \
                or (hasattr(self, '_exc_info')
                    and self._exc_info()[1] is not None)
 
