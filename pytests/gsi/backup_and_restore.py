@@ -10,6 +10,7 @@ __created_on__ = "17/11/20 10:00 am"
 """
 
 import random
+import time
 
 from .base_gsi import BaseSecondaryIndexingTests
 from lib.couchbase_helper.query_definitions import QueryDefinition
@@ -19,6 +20,7 @@ from lib.remote.remote_util import RemoteMachineShellConnection
 from lib import testconstants
 from lib.collection.gsi.backup_restore_utils import IndexBackupClient
 from membase.api.rest_client import RestHelper
+from concurrent.futures import ThreadPoolExecutor
 
 
 class BackupRestoreTests(BaseSecondaryIndexingTests):
@@ -61,15 +63,18 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 self.run_cbq_query(query=query)
                 self.wait_until_indexes_online(defer_build=self.defer_build)
                 scopes = self.rest.get_bucket_scopes(bucket.name)
-                self.collection_namespaces = [
+                bucket_namespaces = [
                     "default:{0}.{1}.{2}".format(
                         bucket.name, scope, collection)
                     for scope in scopes
                     for collection in
                     self.rest.get_scope_collections(bucket.name, scope)]
-                for namespace_id, namespace in enumerate(
-                        self.collection_namespaces):
+                for namespace_id, keyspace in enumerate(
+                        bucket_namespaces):
                     for idx_id in range(1, self.indexes_per_collection + 1):
+                        namespace_tokens = keyspace.split(".", 1)
+                        if namespace_tokens[1] == "_default._default":
+                            namespace = namespace_tokens[0]
                         index_name =\
                             "idx_{0}_{1}_{2}".format(
                                 bucket_id, namespace_id + 1, idx_id)
@@ -80,6 +85,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                         self.run_cbq_query(query=query)
                         self.wait_until_indexes_online(
                             defer_build=self.defer_build)
+                self.collection_namespaces.extend(bucket_namespaces)
 
     def tearDown(self):
         super(BackupRestoreTests, self).tearDown()
@@ -115,11 +121,13 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             "indexes before backup:" + str(indexer_stats_before_backup))
         self.log.info(
             "indexes after restore:" + str(indexer_stats_after_restore))
+        self.assertEqual(
+            len(indexer_stats_before_backup), len(indexer_stats_after_restore))
         for idx_before_backup, idx_after_restore in zip(
                 indexer_stats_before_backup, indexer_stats_after_restore):
-            msg = "{0} != {1}".format(idx_before_backup, idx_after_restore)
+            msg = "\n{0} \n {1}".format(idx_before_backup, idx_after_restore)
             self.assertEqual(
-                idx_before_backup['name'], idx_after_restore['name'],
+                idx_before_backup['indexName'], idx_after_restore['indexName'],
                 msg=msg)
             self.assertEqual(idx_before_backup.get('isPrimary', None),
                              idx_after_restore.get('isPrimary', None),
@@ -175,17 +183,39 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                              indexer_stats_after_restore['status'])
 
     def _drop_indexes(self, indexes):
+        timeout = time.time() + 600
         for index in indexes:
-            query_def = QueryDefinition(index['name'])
-            namespace = "default:{0}.{1}.{2}".format(
-                index['bucket'], index['scope'], index['collection'])\
-                if index['scope'] != "_default"\
-                and index['collection'] != "_default"\
-                else "default:" + index['bucket']
-            query = query_def.generate_index_drop_query(
-                namespace=namespace)
-            self.run_cbq_query(query)
-            self.sleep(5, "wait for index to drop")
+            if index['replicaId'] == 0:
+                query_def = QueryDefinition(index['name'])
+                namespace = "default:{0}.{1}.{2}".format(
+                    index['bucket'], index['scope'], index['collection'])\
+                    if index['scope'] != "_default"\
+                    and index['collection'] != "_default"\
+                    else "default:" + index['bucket']
+                query = query_def.generate_index_drop_query(
+                    namespace=namespace)
+                try:
+                    self.run_cbq_query(query)
+                except Exception as e:
+                    error_msg = e.__str__()
+                    if not "The index was scheduled for background creation.The cleanup will happen in the background" in error_msg:
+                        stats = self.rest.get_indexer_metadata()['status']
+                while time.time() < timeout:
+                    try:
+                        index_stats =\
+                            self.rest.get_indexer_metadata()['status']
+                    except KeyError as e:
+                        error_msg = e.__str__()
+                        self.log.info(error_msg)
+                        if error_msg == "'status'":
+                            break
+                    if not [idx for idx in index_stats
+                            if idx['name'] == index['name'] and
+                            idx['bucket'] == index['bucket'] and
+                            idx['scope'] == index['scope'] and
+                            idx['collection'] == index['collection']]:
+                        break
+                    self.sleep(10, "waiting for index to drop and cleanup...")
 
     def _build_indexes(self, indexes):
         indexes_dict = {}
@@ -225,7 +255,6 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     "backup failed for {0} with {1}".format(
                         scopes, backup_result[1]))
                 self._drop_indexes(indexes_before_backup)
-                self.sleep(5, "Wait for indexes to drop")
                 restore_result = backup_client.restore()
                 self.assertTrue(
                     restore_result[0],
@@ -271,7 +300,6 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     "backup failed for {0} with {1}".format(
                         collection_namespaces, backup_result[1]))
                 self._drop_indexes(indexes_before_backup)
-                self.sleep(5, "Wait for indexes to drop")
                 restore_result = backup_client.restore()
                 self.assertTrue(
                     restore_result[0],
@@ -316,7 +344,6 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     if bucket.name == index['bucket']
                     and index['scope'] in backedup_scopes]
                 self._drop_indexes(indexes_before_backup)
-                self.sleep(5, "Wait for indexes to drop")
                 restore_result = backup_client.restore()
                 self.assertTrue(
                     restore_result[0],
@@ -367,7 +394,6 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     and "{0}.{1}".format(index['scope'], index['collection'])
                     in backedup_collections]
                 self._drop_indexes(indexes_before_backup)
-                self.sleep(5, "Wait for indexes to drop")
                 restore_result = backup_client.restore()
                 self.assertTrue(
                     restore_result[0],
@@ -704,6 +730,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         if self.num_index_replicas == 0 or\
                 self.num_index_replicas >= len(self.indexer_nodes):
             self.num_index_replicas = len(self.indexer_nodes) - 1
+        self._drop_indexes(self.rest.get_indexer_metadata()['status'])
         replica_index = QueryDefinition(
             "replica_index",
             index_fields=["firstName"])
@@ -722,14 +749,12 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                                           self.use_cbbackupmgr,
                                           bucket)
         indexer_stats_before_backup = self.rest.get_indexer_metadata()
-        replica_indexes_before_backup = [
-            index for index in indexer_stats_before_backup['status']
-            if index['name'].startswith(replica_index.index_name)]
-        self.assertEqual(len(replica_indexes_before_backup), 2)
-        host = "{0}:{1}".format(self.master.ip, self.master.port)
+        replica_indexes_before_backup = indexer_stats_before_backup['status']
+        self.assertEqual(
+            len(replica_indexes_before_backup), self.num_index_replicas + 1)
         indexes_before_backup = [
             index for index in replica_indexes_before_backup
-            if host in index['hosts']]
+            if index['name'] == replica_index.index_name]
         namespaces = ["_default._default"]
         backup_result = backup_client.backup(namespaces=namespaces)
         self.assertTrue(backup_result[0], str(backup_result[1]))
@@ -749,15 +774,16 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.assertTrue(restore_result[0], str(restore_result[1]))
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
-        indexes_after_restore = [
-            index for index in self.rest.get_indexer_metadata()['status']
-            if index['name'].startswith(replica_index.index_name)]
+        indexes_after_restore = list(filter(
+            lambda idx: idx['indexName'] == replica_index.index_name,
+            self.rest.get_indexer_metadata()['status']))
         self.assertEqual(len(indexes_after_restore), 1)
         self._verify_indexes(indexes_before_backup,
                              indexes_after_restore)
+        services = ["index" for node in out_nodes]
         rebalance = self.cluster.async_rebalance(
             self.servers[:self.nodes_init], out_nodes, [],
-            services=["index"])
+            services=services)
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
@@ -1050,6 +1076,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+        self.sleep(10)
         self._drop_indexes(indexer_stats_before_backup['status'])
         rebalance = self.cluster.async_rebalance(
             self.servers[:self.nodes_init], out_nodes, [],
@@ -1059,6 +1086,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+        self.sleep(10)
         indexer_stats_after_restore = self.rest.get_indexer_metadata()
         self._verify_indexes(indexer_stats_before_backup['status'],
                              indexer_stats_after_restore['status'])
@@ -1070,6 +1098,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+        self.sleep(10)
         rebalance = self.cluster.async_rebalance(
             self.servers[:self.nodes_init], out_nodes, [],
             services=["index"])
@@ -1078,6 +1107,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+        self.sleep(10)
         rebalance = self.cluster.async_rebalance(
             self.servers[:self.nodes_init], [], out_nodes)
         restore_result = backup_client.restore()
@@ -1085,6 +1115,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+        self.sleep(10)
         indexer_stats_after_restore = self.rest.get_indexer_metadata()
         self._verify_indexes(indexer_stats_before_backup['status'],
                              indexer_stats_after_restore['status'])
@@ -1208,3 +1239,923 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         indexer_stats_after_restore = self.rest.get_indexer_metadata()
         self._verify_indexes(indexer_stats_before_backup['status'],
                              indexer_stats_after_restore['status'])
+
+    def test_backup_restore_with_both_include_exclude(self):
+        bucket = self.buckets[0].name
+        backup_client = IndexBackupClient(
+            self.master, self.use_cbbackupmgr, bucket)
+        namespaces = []
+        for namespace in self.collection_namespaces:
+            namespace_tokens = namespace.split(".")
+            if namespace_tokens[-3].split(":")[1] == bucket:
+                namespaces.append(namespace)
+        config_args = ""
+        if self.use_cbbackupmgr:
+            namespaces = ",".join(namespaces)
+            config_args = "--include-data {0} --exclude-data {1}".format(
+                namespaces, namespaces)
+        else:
+            namespaces = list(map(
+                lambda namespace: namespace.split(":")[1].split(".", 1)[1],
+                namespaces))
+            namespaces = ",".join(namespaces)
+            config_args = "?include={0}&exclude={1}".format(
+                namespaces, namespaces)
+        backup_result = backup_client.backup(config_args=config_args)
+        self.assertFalse(backup_result[0], str(backup_result[1]))
+        backup_result = backup_client.backup()
+        self.assertTrue(backup_result[0], str(backup_result[1]))
+        restore_result = backup_client.restore(restore_args=config_args)
+        self.assertFalse(restore_result[0], str(restore_result[1]))
+        restore_result = backup_client.restore()
+        self.assertTrue(restore_result[0], str(restore_result[1]))
+
+    def test_backup_restore_with_overlapping_paths(self):
+        bucket = self.buckets[0].name
+        backup_client = IndexBackupClient(
+            self.master, self.use_cbbackupmgr, bucket)
+        collection_namespaces = set(
+            map(lambda namespace: namespace.split(".", 1)[1], filter(
+                lambda namespace:
+                namespace.split(":")[1].split(".")[0] == bucket,
+                self.collection_namespaces)))
+        scope_namespaces = set(map(
+            lambda namespace: namespace.split(".")[0], collection_namespaces))
+        namespaces = []
+        namespaces.extend(list(scope_namespaces))
+        namespaces.extend(list(collection_namespaces))
+        self.log.info(namespaces)
+        backup_result = backup_client.backup(namespaces)
+        self.assertFalse(backup_result[0], str(backup_result[1]))
+        if self.use_cbbackupmgr:
+            backup_client.remove_backup()
+        backup_result = backup_client.backup(namespaces, include=False)
+        self.assertFalse(backup_result[0], str(backup_result[1]))
+        if self.use_cbbackupmgr:
+            backup_client.remove_backup()
+        backup_result = backup_client.backup()
+        self.assertTrue(backup_result[0], str(backup_result[1]))
+        mappings = list(
+            map(lambda namespace: f"{namespace}:{namespace}", namespaces))
+        restore_result = backup_client.restore(mappings)
+        self.assertFalse(restore_result[0], str(restore_result[1]))
+
+    def test_backup_with_invalid_keyspaces(self):
+        invalid_bucket = "invalid_bucket"
+        if self.use_cbbackupmgr:
+            invalid_bucket = [invalid_bucket]
+            invalid_bucket.extend(
+                list(map(lambda bucket: bucket.name, self.buckets)))
+        invalid_scope = "invalid_scope"
+        invalid_collection = "invalid_collection"
+        bucket = self.buckets[0].name
+        scope = self.rest.get_bucket_scopes(bucket)[0]
+        backup_client = IndexBackupClient(
+            self.master, self.use_cbbackupmgr, bucket)
+        invalid_backup_client = IndexBackupClient(
+            self.master, self.use_cbbackupmgr, invalid_bucket)
+        backup_result = invalid_backup_client.backup()
+        if self.use_cbbackupmgr:
+            if not [msg for msg in backup_result[1] if f"Could not backup bucket '{invalid_bucket[0]}' because it does not exist on the cluster" in msg]:
+                self.fail(str(backup_result[1]))
+            invalid_backup_client.remove_backup()
+        else:
+            self.assertTrue(backup_result[0], str(backup_result[1]))
+        backup_result = backup_client.backup([invalid_scope])
+        if self.use_cbbackupmgr:
+            namespace = "{0}.{1}".format(bucket, invalid_scope)
+            if not [msg for msg in backup_result[1] if f"Could not backup scope '{namespace}' because it does not exist on the cluster" in msg]:
+                self.fail(str(backup_result[1]))
+            backup_client.remove_backup()
+        else:
+            self.assertTrue(backup_result[0], str(backup_result[1]))
+        backup_result = backup_client.backup([invalid_scope], include=False)
+        if self.use_cbbackupmgr:
+            namespace = "{0}.{1}".format(bucket, invalid_scope)
+            if not [msg for msg in backup_result[1] if f"Excluded scope '{namespace}' does not exist on the cluster" in msg]:
+                self.fail(str(backup_result[1]))
+            backup_client.remove_backup()
+        else:
+            self.assertTrue(backup_result[0], str(backup_result[1]))
+        backup_result = backup_client.backup(
+            [f"{scope}.{invalid_collection}"])
+        if self.use_cbbackupmgr:
+            namespace = "{0}.{1}.{2}".format(bucket, scope, invalid_collection)
+            if not [msg for msg in backup_result[1] if f"Could not backup collection '{namespace}' because it does not exist on the cluster" in msg]:
+                self.fail(str(backup_result[1]))
+            backup_client.remove_backup()
+        else:
+            self.assertTrue(backup_result[0], str(backup_result[1]))
+        backup_result = backup_client.backup(
+            [f"{scope}.{invalid_collection}"], include=False)
+        if self.use_cbbackupmgr:
+            namespace = "{0}.{1}.{2}".format(bucket, scope, invalid_collection)
+            if not [msg for msg in backup_result[1] if f"Excluded collection '{namespace}' does not exist on the cluster" in msg]:
+                self.fail(str(backup_result[1]))
+            backup_client.remove_backup()
+        else:
+            self.assertTrue(backup_result[0], str(backup_result[1]))
+
+    def test_restore_with_invalid_keyspaces(self):
+        invalid_bucket = "invalid_bucket"
+        invalid_scope = "invalid_scope"
+        invalid_collection = "invalid_collection"
+        bucket = self.buckets[0].name
+        scope = self.rest.get_bucket_scopes(bucket)[0]
+        collection = self.rest.get_scope_collections(bucket, scope)[0]
+        bucket = self.buckets[0].name
+        backup_client = IndexBackupClient(
+            self.master, self.use_cbbackupmgr, bucket)
+        backup_result = backup_client.backup()
+        self.assertTrue(backup_result[0], str(backup_result[1]))
+        backup_client.set_restore_bucket(invalid_bucket)
+        restore_result = backup_client.restore()
+        self.assertFalse(restore_result[0], restore_result[1])
+        backup_client.set_restore_bucket(bucket)
+        if self.use_cbbackupmgr:
+            backup_client.remove_backup()
+        namespace = [scope]
+        backup_result = backup_client.backup(namespace)
+        self.assertTrue(backup_result[0], str(backup_result[1]))
+        mappings = ["{0}:{1}".format(scope, invalid_scope)]
+        restore_result = backup_client.restore(mappings)
+        self.assertFalse(restore_result[0], str(restore_result[1]))
+        if self.use_cbbackupmgr:
+            backup_client.remove_backup()
+        namespace = ["{0}.{1}".format(scope, collection)]
+        backup_result = backup_client.backup(namespace)
+        self.assertTrue(backup_result[0], str(backup_result[1]))
+        map_arg = "{0}.{1}".format(scope, invalid_collection)
+        mappings = ["{0}:{1}".format(namespace[0], map_arg)]
+        restore_result = backup_client.restore(mappings)
+        self.assertFalse(restore_result[0], restore_result[1])
+
+    def test_backup_restore_with_scheduled_indexes(self):
+        self._drop_indexes(self.rest.get_indexer_metadata()['status'])
+        namespace = self.collection_namespaces[0].split(".", 1)[0]
+        bucket = namespace.split(":")[1]
+        backup_client = IndexBackupClient(
+            self.master, self.use_cbbackupmgr, bucket)
+        tasks = []
+        indexes_created = []
+        indexes_before_backup = []
+        indexes = set()
+        timeout = time.time() + 60
+        scheduled_indexes_present = False
+        scheduled_indexes = []
+        while not scheduled_indexes_present and time.time() < timeout:
+            with ThreadPoolExecutor() as executor:
+                for i in range(10):
+                    try:
+                        idx_def = QueryDefinition(
+                            "idx_" + str(i), ["firstName"])
+                        query = idx_def.generate_index_create_query(
+                            namespace, defer_build=self.defer_build)
+                        task = executor.submit(
+                            self.run_cbq_query, query=query, rest_timeout=30)
+                        indexes_created.append(idx_def.index_name)
+                        tasks.append(task)
+                    except Exception as e:
+                        error_msg = e.__str__()
+                        self.log.info("Raised Exception:" + error_msg)
+                        if "The index is scheduled for background creation"\
+                                not in error_msg:
+                            raise
+            self.sleep(1, "Wait till indexes available in stats")
+            indexes_before_backup =\
+                self.rest.get_indexer_metadata()['status']
+            query = "SELECT * FROM system:indexes"
+            query_result = None
+            while time.time() < timeout\
+                    and set(indexes_created) != indexes:
+                self.sleep(1, "Wait to before running query")
+                query_result = self.run_cbq_query(query=query)
+                indexes = set(
+                    map(lambda idx: idx['indexes']['name'],
+                        query_result['results']))
+            if set(indexes_created) != indexes:
+                self.fail(
+                    "indexes created and indexes available in system:indexes are not same")
+            scheduled_indexes = list(filter(
+                lambda idx:
+                idx['indexes']['state'] == "scheduled for creation",
+                query_result['results']))
+            if scheduled_indexes:
+                scheduled_indexes_present = True
+                backup_result = backup_client.backup()
+                self.assertTrue(backup_result[0], str(backup_result[1]))
+            else:
+                self.wait_until_indexes_online(defer_build=self.defer_build)
+                self._drop_indexes(indexes_before_backup)
+        if not scheduled_indexes_present:
+            self.fail("Couldn't create scheduled indexes")
+        index_names_before_backup = set(
+            map(lambda idx: idx['name'], indexes_before_backup))
+        msg = "\nIndexes: " + str(indexes)
+        msg += "\nIndex_names_before_backup: " + str(
+            index_names_before_backup)
+        self.assertEqual(indexes, index_names_before_backup, msg)
+        for task in tasks:
+            try:
+                result = task.result()
+                self.log.info(result)
+            except Exception as e:
+                error_msg = e.__str__()
+                self.log.info("Raised Exception:" + error_msg)
+                if "Index creation will be retried in background"\
+                        not in error_msg\
+                        and "The index is scheduled for background creation"\
+                        not in error_msg\
+                        and "The index was scheduled for background creation"\
+                        not in error_msg:
+                    raise
+        self.wait_until_indexes_online(defer_build=self.defer_build)
+        self._drop_indexes(indexes_before_backup)
+        backup_client.restore()
+        self.sleep(10, "wait to complete restore")
+        indexes_after_restore = self.rest.get_indexer_metadata()['status']
+        index_names_after_restore = set(
+            map(lambda idx: idx['name'], indexes_after_restore))
+        msg = "\nIndex_names_before_backup: " + str(
+            index_names_before_backup)
+        msg += "\nIndex_names_after_restore: " + str(
+            index_names_after_restore)
+        self.assertEqual(
+            index_names_before_backup, index_names_after_restore, msg)
+        self._verify_indexes(indexes_before_backup, indexes_after_restore)
+
+    def test_backup_restore_with_scheduled_replica_indexes(self):
+        num_indexer_nodes = len(self.indexer_nodes)
+        if num_indexer_nodes < 2:
+            self.fail("Number of indexer nodes")
+        num_replica = num_indexer_nodes - 1
+        self._drop_indexes(self.rest.get_indexer_metadata()['status'])
+        namespace = self.collection_namespaces[0].split(".", 1)[0]
+        bucket = namespace.split(":")[1]
+        backup_client = IndexBackupClient(
+            self.master, self.use_cbbackupmgr, bucket)
+        tasks = []
+        indexes_created = []
+        indexes_before_backup = []
+        indexes = set()
+        timeout = time.time() + 60
+        scheduled_indexes_present = False
+        scheduled_indexes = []
+        while not scheduled_indexes_present and time.time() < timeout:
+            with ThreadPoolExecutor() as executor:
+                for i in range(10):
+                    try:
+                        idx_def = QueryDefinition(
+                            "idx_" + str(i), ["firstName"])
+                        query = idx_def.generate_index_create_query(
+                            namespace, defer_build=self.defer_build,
+                            num_replica=num_replica)
+                        task = executor.submit(
+                            self.run_cbq_query, query=query, rest_timeout=30)
+                        indexes_created.append(idx_def.index_name)
+                        tasks.append(task)
+                    except Exception as e:
+                        error_msg = e.__str__()
+                        self.log.info("Raised Exception:" + error_msg)
+                        if "The index is scheduled for background creation"\
+                                not in error_msg:
+                            raise
+            self.sleep(1, "Wait till indexes available in stats")
+            indexes = self.rest.get_indexer_metadata()['status']
+            index_names = set(map(lambda idx: idx['name'], indexes))
+            for idx in indexes_created:
+                if idx not in index_names:
+                    self.fail("Indexes created and indexes available in indexer-stats are not same")
+            scheduled_indexes = list(filter(
+                lambda idx:
+                idx['status'] == "Scheduled for Creation",
+                indexes))
+            if scheduled_indexes:
+                scheduled_indexes_present = True
+                indexes_before_backup =\
+                    self.rest.get_indexer_metadata()['status']
+                backup_result = backup_client.backup()
+                self.assertTrue(backup_result[0], str(backup_result[1]))
+            else:
+                self.wait_until_indexes_online(defer_build=self.defer_build)
+                self._drop_indexes(indexes_before_backup)
+        if not scheduled_indexes_present:
+            self.fail("Couldn't create scheduled indexes")
+        for task in tasks:
+            try:
+                result = task.result()
+                self.log.info(result)
+            except Exception as e:
+                error_msg = e.__str__()
+                self.log.info("Raised Exception:" + error_msg)
+                if "Index creation will be retried in background"\
+                        not in error_msg\
+                        and "The index is scheduled for background creation"\
+                        not in error_msg\
+                        and "The index was scheduled for background creation"\
+                        not in error_msg\
+                        and "will retry building in the background for reason: Build Already In Progress" not in error_msg:
+                    raise
+        self.wait_until_indexes_online(defer_build=self.defer_build)
+        self._drop_indexes(indexes_before_backup)
+        backup_client.restore()
+        self.sleep(10, "wait to complete restore")
+        indexes_after_restore = self.rest.get_indexer_metadata()['status']
+        indexes_before_backup = list(
+            filter(lambda idx: idx['replicaId'] == 0, indexes_before_backup))
+        indexes_after_restore = list(
+            filter(lambda idx: idx['replicaId'] == 0, indexes_after_restore))
+        msg = "\nIndex_names_before_backup: " + str(indexes_before_backup)
+        msg += "\nIndex_names_after_restore: " + str(indexes_after_restore)
+        self._verify_indexes(indexes_before_backup, indexes_after_restore)
+
+    def test_backup_restore_with_scheduled_partition_indexes(self):
+        num_indexer_nodes = len(self.indexer_nodes)
+        if num_indexer_nodes < 2:
+            self.fail("Number of indexer nodes")
+        self._drop_indexes(self.rest.get_indexer_metadata()['status'])
+        partition_fields = ['meta().id']
+        namespace = self.collection_namespaces[0].split(".", 1)[0]
+        bucket = namespace.split(":")[1]
+        backup_client = IndexBackupClient(
+            self.master, self.use_cbbackupmgr, bucket)
+        tasks = []
+        indexes_created = []
+        indexes_before_backup = []
+        indexes = set()
+        timeout = time.time() + 60
+        scheduled_indexes_present = False
+        scheduled_indexes = []
+        while not scheduled_indexes_present and time.time() < timeout:
+            with ThreadPoolExecutor() as executor:
+                for i in range(10):
+                    try:
+                        idx_def = QueryDefinition(
+                            "idx_" + str(i), ["firstName"])
+                        query = idx_def.generate_index_create_query(
+                            namespace,
+                            deploy_node_info=[
+                                node.ip + ":" + node.port
+                                for node in self.indexer_nodes],
+                            defer_build=self.defer_build,
+                            partition_by_fields=partition_fields)
+                        task = executor.submit(
+                            self.run_cbq_query, query=query, rest_timeout=30)
+                        indexes_created.append(idx_def.index_name)
+                        tasks.append(task)
+                    except Exception as e:
+                        error_msg = e.__str__()
+                        self.log.info("Raised Exception:" + error_msg)
+                        if "The index is scheduled for background creation"\
+                                not in error_msg:
+                            raise
+            self.sleep(1, "Wait till indexes available in stats")
+            indexes = self.rest.get_indexer_metadata()['status']
+            index_names = set(map(lambda idx: idx['name'], indexes))
+            for idx in indexes_created:
+                if idx not in index_names:
+                    self.fail("Indexes created and indexes available in indexer-stats are not same")
+            scheduled_indexes = list(filter(
+                lambda idx:
+                idx['status'] == "Scheduled for Creation",
+                indexes))
+            if scheduled_indexes:
+                scheduled_indexes_present = True
+                indexes_before_backup =\
+                    self.rest.get_indexer_metadata()['status']
+                backup_result = backup_client.backup()
+                self.assertTrue(backup_result[0], str(backup_result[1]))
+            else:
+                self.wait_until_indexes_online(defer_build=self.defer_build)
+                self._drop_indexes(indexes_before_backup)
+        if not scheduled_indexes_present:
+            self.fail("Couldn't create scheduled indexes")
+        for task in tasks:
+            try:
+                result = task.result()
+                self.log.info(result)
+            except Exception as e:
+                error_msg = e.__str__()
+                self.log.info("Raised Exception:" + error_msg)
+                if "Index creation will be retried in background"\
+                        not in error_msg\
+                        and "The index is scheduled for background creation"\
+                        not in error_msg\
+                        and "The index was scheduled for background creation"\
+                        not in error_msg\
+                        and "will retry building in the background for reason: Build Already In Progress" not in error_msg:
+                    raise
+        self.wait_until_indexes_online(defer_build=self.defer_build)
+        self._drop_indexes(indexes_before_backup)
+        backup_client.restore()
+        self.sleep(10, "wait to complete restore")
+        indexes_after_restore = self.rest.get_indexer_metadata()['status']
+        msg = "\nIndex_names_before_backup: " + str(indexes_before_backup)
+        msg += "\nIndex_names_after_restore: " + str(indexes_after_restore)
+        self._verify_indexes(indexes_before_backup, indexes_after_restore)
+
+    def test_backup_restore_with_duplicate_scheduled_indexes(self):
+        self._drop_indexes(self.rest.get_indexer_metadata()['status'])
+        namespace = self.collection_namespaces[0].split(".", 1)[0]
+        bucket = namespace.split(":")[1]
+        backup_client = IndexBackupClient(
+            self.master, self.use_cbbackupmgr, bucket)
+        tasks = []
+        indexes_created = []
+        indexes_before_backup = []
+        indexes = set()
+        timeout = time.time() + 60
+        scheduled_indexes_present = False
+        scheduled_indexes = []
+        while not scheduled_indexes_present and time.time() < timeout:
+            with ThreadPoolExecutor() as executor:
+                for i in range(10):
+                    try:
+                        idx_def = QueryDefinition(
+                            "idx_" + str(i), ["firstName"])
+                        query = idx_def.generate_index_create_query(
+                            namespace, defer_build=self.defer_build)
+                        task = executor.submit(
+                            self.run_cbq_query, query=query, rest_timeout=30)
+                        indexes_created.append(idx_def.index_name)
+                        tasks.append(task)
+                    except Exception as e:
+                        error_msg = e.__str__()
+                        self.log.info("Raised Exception:" + error_msg)
+                        if "The index is scheduled for background creation"\
+                                not in error_msg:
+                            raise
+            self.sleep(1, "Wait till indexes available in stats")
+            indexes = self.rest.get_indexer_metadata()['status']
+            index_names = set(map(lambda idx: idx['name'], indexes))
+            for idx in indexes_created:
+                if idx not in index_names:
+                    self.fail("Indexes created and indexes available in indexer-stats are not same")
+            scheduled_indexes = list(filter(
+                lambda idx:
+                idx['status'] == "Scheduled for Creation",
+                indexes))
+            if scheduled_indexes:
+                scheduled_indexes_present = True
+                indexes_before_backup =\
+                    self.rest.get_indexer_metadata()['status']
+                backup_result = backup_client.backup()
+                self.assertTrue(backup_result[0], str(backup_result[1]))
+            else:
+                self.wait_until_indexes_online(defer_build=self.defer_build)
+                self._drop_indexes(indexes_before_backup)
+        if not scheduled_indexes_present:
+            self.fail("Couldn't create scheduled indexes")
+        for task in tasks:
+            try:
+                result = task.result()
+                self.log.info(result)
+            except Exception as e:
+                error_msg = e.__str__()
+                self.log.info("Raised Exception:" + error_msg)
+                if "Index creation will be retried in background"\
+                        not in error_msg\
+                        and "The index is scheduled for background creation"\
+                        not in error_msg\
+                        and "The index was scheduled for background creation"\
+                        not in error_msg\
+                        and "will retry building in the background for reason: Build Already In Progress" not in error_msg:
+                    raise
+        self.wait_until_indexes_online(defer_build=self.defer_build)
+        self._drop_indexes(indexes_before_backup)
+        for i in range(10):
+            idx_def = QueryDefinition(
+                "idx_" + str(i), ["firstName"])
+            query = idx_def.generate_index_create_query(
+                namespace, defer_build=self.defer_build)
+            self.run_cbq_query(query=query)
+        backup_client.restore()
+        self.sleep(10, "wait to complete restore")
+        indexes_after_restore = self.rest.get_indexer_metadata()['status']
+        msg = "\nIndex_names_before_backup: " + str(indexes_before_backup)
+        msg += "\nIndex_names_after_restore: " + str(indexes_after_restore)
+        for idx_1, idx_2 in zip(indexes_before_backup, indexes_after_restore):
+            self.assertEqual(idx_1['name'], idx_2['name'])
+            self.assertEqual(idx_2['status'], "Ready")
+            self.assertEqual(idx_1.get('secExprs', None),
+                             idx_2.get('secExprs', None))
+            self.assertEqual(idx_1['indexType'], idx_2['indexType'])
+
+    def test_backup_restore_with_equivalent_scheduled_indexes(self):
+        self._drop_indexes(self.rest.get_indexer_metadata()['status'])
+        namespace = self.collection_namespaces[0].split(".", 1)[0]
+        bucket = namespace.split(":")[1]
+        backup_client = IndexBackupClient(
+            self.master, self.use_cbbackupmgr, bucket)
+        tasks = []
+        indexes_created = []
+        indexes_before_backup = []
+        indexes = set()
+        timeout = time.time() + 60
+        scheduled_indexes_present = False
+        scheduled_indexes = []
+        while not scheduled_indexes_present and time.time() < timeout:
+            with ThreadPoolExecutor() as executor:
+                for i in range(10):
+                    try:
+                        idx_def = QueryDefinition(
+                            "idx_" + str(i), ["firstName"])
+                        query = idx_def.generate_index_create_query(
+                            namespace, defer_build=self.defer_build)
+                        task = executor.submit(
+                            self.run_cbq_query, query=query, rest_timeout=30)
+                        indexes_created.append(idx_def.index_name)
+                        tasks.append(task)
+                    except Exception as e:
+                        error_msg = e.__str__()
+                        self.log.info("Raised Exception:" + error_msg)
+                        if "The index is scheduled for background creation"\
+                                not in error_msg:
+                            raise
+            self.sleep(1, "Wait till indexes available in stats")
+            indexes = self.rest.get_indexer_metadata()['status']
+            index_names = set(map(lambda idx: idx['name'], indexes))
+            for idx in indexes_created:
+                if idx not in index_names:
+                    self.fail("Indexes created and indexes available in indexer-stats are not same")
+            scheduled_indexes = list(filter(
+                lambda idx:
+                idx['status'] == "Scheduled for Creation",
+                indexes))
+            if scheduled_indexes:
+                scheduled_indexes_present = True
+                indexes_before_backup =\
+                    self.rest.get_indexer_metadata()['status']
+                backup_result = backup_client.backup()
+                self.assertTrue(backup_result[0], str(backup_result[1]))
+            else:
+                self.wait_until_indexes_online(defer_build=self.defer_build)
+                self._drop_indexes(indexes_before_backup)
+        if not scheduled_indexes_present:
+            self.fail("Couldn't create scheduled indexes")
+        for task in tasks:
+            try:
+                result = task.result()
+                self.log.info(result)
+            except Exception as e:
+                error_msg = e.__str__()
+                self.log.info("Raised Exception:" + error_msg)
+                if "Index creation will be retried in background"\
+                        not in error_msg\
+                        and "The index is scheduled for background creation"\
+                        not in error_msg\
+                        and "The index was scheduled for background creation"\
+                        not in error_msg\
+                        and "will retry building in the background for reason: Build Already In Progress" not in error_msg:
+                    raise
+        self.wait_until_indexes_online(defer_build=self.defer_build)
+        self._drop_indexes(indexes_before_backup)
+        for i in range(10):
+            idx_def = QueryDefinition(
+                "idx_" + str(i), ["lastName"])
+            query = idx_def.generate_index_create_query(
+                namespace, defer_build=self.defer_build)
+            self.run_cbq_query(query=query)
+        backup_client.restore()
+        self.sleep(10, "wait to complete restore")
+        indexes_after_restore = self.rest.get_indexer_metadata()['status']
+        msg = "\nIndex_names_before_backup: " + str(indexes_before_backup)
+        msg += "\nIndex_names_after_restore: " + str(indexes_after_restore)
+        num_indexes_before_backup = len(indexes_before_backup)
+        num_indexes_after_restore = len(indexes_after_restore)
+        self.assertEqual(
+            2 * num_indexes_before_backup, num_indexes_after_restore)
+
+    def test_backup_restore_with_scheduled_indexes_and_include(self):
+        self._drop_indexes(self.rest.get_indexer_metadata()['status'])
+        namespace = self.collection_namespaces[0].split(".", 1)[0]
+        bucket = namespace.split(":")[1]
+        backup_client = IndexBackupClient(
+            self.master, self.use_cbbackupmgr, bucket)
+        tasks = []
+        indexes_created = []
+        indexes_before_backup = []
+        indexes = set()
+        timeout = time.time() + 60
+        scheduled_indexes_present = False
+        scheduled_indexes = []
+        while not scheduled_indexes_present and time.time() < timeout:
+            with ThreadPoolExecutor() as executor:
+                for i in range(10):
+                    try:
+                        idx_def = QueryDefinition(
+                            "idx_" + str(i), ["firstName"])
+                        query = idx_def.generate_index_create_query(
+                            namespace, defer_build=self.defer_build)
+                        task = executor.submit(
+                            self.run_cbq_query, query=query, rest_timeout=30)
+                        indexes_created.append(idx_def.index_name)
+                        tasks.append(task)
+                    except Exception as e:
+                        error_msg = e.__str__()
+                        self.log.info("Raised Exception:" + error_msg)
+                        if "The index is scheduled for background creation"\
+                                not in error_msg:
+                            raise
+            self.sleep(1, "Wait till indexes available in stats")
+            indexes = self.rest.get_indexer_metadata()['status']
+            index_names = set(map(lambda idx: idx['name'], indexes))
+            for idx in indexes_created:
+                if idx not in index_names:
+                    self.fail("Indexes created and indexes available in indexer-stats are not same")
+            scheduled_indexes = list(filter(
+                lambda idx:
+                idx['status'] == "Scheduled for Creation",
+                indexes))
+            if scheduled_indexes:
+                scheduled_indexes_present = True
+                indexes_before_backup =\
+                    self.rest.get_indexer_metadata()['status']
+                scopes = set(map(lambda idx: idx['scope'], scheduled_indexes))
+                backup_result = backup_client.backup(namespaces=scopes)
+                self.assertTrue(backup_result[0], str(backup_result[1]))
+            else:
+                self.wait_until_indexes_online(defer_build=self.defer_build)
+                self._drop_indexes(indexes_before_backup)
+        if not scheduled_indexes_present:
+            self.fail("Couldn't create scheduled indexes")
+        for task in tasks:
+            try:
+                result = task.result()
+                self.log.info(result)
+            except Exception as e:
+                error_msg = e.__str__()
+                self.log.info("Raised Exception:" + error_msg)
+                if "Index creation will be retried in background"\
+                        not in error_msg\
+                        and "The index is scheduled for background creation"\
+                        not in error_msg\
+                        and "The index was scheduled for background creation"\
+                        not in error_msg\
+                        and "will retry building in the background for reason: Build Already In Progress" not in error_msg:
+                    raise
+        self.wait_until_indexes_online(defer_build=self.defer_build)
+        self._drop_indexes(indexes_before_backup)
+        backup_client.restore()
+        self.sleep(10, "wait to complete restore")
+        indexes_after_restore = self.rest.get_indexer_metadata()['status']
+        msg = "\nIndex_names_before_backup: " + str(indexes_before_backup)
+        msg += "\nIndex_names_after_restore: " + str(indexes_after_restore)
+        self._verify_indexes(indexes_before_backup, indexes_after_restore)
+
+    def test_backup_restore_with_scheduled_indexes_and_exclude(self):
+        self._drop_indexes(self.rest.get_indexer_metadata()['status'])
+        namespace = self.collection_namespaces[0].split(".", 1)[0]
+        bucket = namespace.split(":")[1]
+        backup_client = IndexBackupClient(
+            self.master, self.use_cbbackupmgr, bucket)
+        tasks = []
+        indexes_created = []
+        indexes_before_backup = []
+        indexes = set()
+        timeout = time.time() + 60
+        scheduled_indexes_present = False
+        scheduled_indexes = []
+        while not scheduled_indexes_present and time.time() < timeout:
+            with ThreadPoolExecutor() as executor:
+                for i in range(10):
+                    try:
+                        idx_def = QueryDefinition(
+                            "idx_" + str(i), ["firstName"])
+                        query = idx_def.generate_index_create_query(
+                            namespace, defer_build=self.defer_build)
+                        task = executor.submit(
+                            self.run_cbq_query, query=query, rest_timeout=30)
+                        indexes_created.append(idx_def.index_name)
+                        tasks.append(task)
+                    except Exception as e:
+                        error_msg = e.__str__()
+                        self.log.info("Raised Exception:" + error_msg)
+                        if "The index is scheduled for background creation"\
+                                not in error_msg:
+                            raise
+            self.sleep(1, "Wait till indexes available in stats")
+            indexes = self.rest.get_indexer_metadata()['status']
+            index_names = set(map(lambda idx: idx['name'], indexes))
+            for idx in indexes_created:
+                if idx not in index_names:
+                    self.fail("Indexes created and indexes available in indexer-stats are not same")
+            scheduled_indexes = list(filter(
+                lambda idx:
+                idx['status'] == "Scheduled for Creation",
+                indexes))
+            if scheduled_indexes:
+                scheduled_indexes_present = True
+                indexes_before_backup =\
+                    self.rest.get_indexer_metadata()['status']
+                scopes = set(map(lambda idx: idx['scope'], scheduled_indexes))
+                backup_client.backup(namespaces=scopes, include=False)
+            else:
+                self.wait_until_indexes_online(defer_build=self.defer_build)
+                self._drop_indexes(indexes_before_backup)
+        if not scheduled_indexes_present:
+            self.fail("Couldn't create scheduled indexes")
+        for task in tasks:
+            try:
+                result = task.result()
+                self.log.info(result)
+            except Exception as e:
+                error_msg = e.__str__()
+                self.log.info("Raised Exception:" + error_msg)
+                if "Index creation will be retried in background"\
+                        not in error_msg\
+                        and "The index is scheduled for background creation"\
+                        not in error_msg\
+                        and "The index was scheduled for background creation"\
+                        not in error_msg\
+                        and "will retry building in the background for reason: Build Already In Progress" not in error_msg:
+                    raise
+        self.wait_until_indexes_online(defer_build=self.defer_build)
+        self._drop_indexes(indexes_before_backup)
+        backup_client.restore()
+        self.sleep(10, "wait to complete restore")
+        indexes_after_restore = self.rest.get_indexer_metadata().get(
+            "status", None)
+        msg = "\nIndex_names_before_backup: " + str(indexes_before_backup)
+        msg += "\nIndex_names_after_restore: " + str(indexes_after_restore)
+        self.assertEqual(indexes_after_restore, None, msg=msg)
+
+    def test_backup_restore_with_scheduled_indexes_and_remap(self):
+        self._drop_indexes(self.rest.get_indexer_metadata()['status'])
+        namespace = self.collection_namespaces[0].split(".", 1)[0]
+        bucket = namespace.split(":")[1]
+        scope = self.scope_prefix
+        self.rest.create_scope(bucket, scope)
+        collection = self.collection_prefix
+        self.rest.create_collection(bucket, scope, collection)
+        namespace += f".{scope}.{collection}"
+        backup_client = IndexBackupClient(
+            self.master, self.use_cbbackupmgr, bucket)
+        tasks = []
+        indexes_created = []
+        indexes_before_backup = []
+        indexes = set()
+        timeout = time.time() + 60
+        scheduled_indexes_present = False
+        scheduled_indexes = []
+        while not scheduled_indexes_present and time.time() < timeout:
+            with ThreadPoolExecutor() as executor:
+                for i in range(10):
+                    try:
+                        idx_def = QueryDefinition(
+                            "idx_" + str(i), ["firstName"])
+                        query = idx_def.generate_index_create_query(
+                            namespace, defer_build=self.defer_build)
+                        task = executor.submit(
+                            self.run_cbq_query, query=query, rest_timeout=30)
+                        indexes_created.append(idx_def.index_name)
+                        tasks.append(task)
+                    except Exception as e:
+                        error_msg = e.__str__()
+                        self.log.info("Raised Exception:" + error_msg)
+                        if "The index is scheduled for background creation"\
+                                not in error_msg:
+                            raise
+            self.sleep(1, "Wait till indexes available in stats")
+            indexes = self.rest.get_indexer_metadata()['status']
+            index_names = set(map(lambda idx: idx['name'], indexes))
+            for idx in indexes_created:
+                if idx not in index_names:
+                    self.fail("Indexes created and indexes available in indexer-stats are not same")
+            scheduled_indexes = list(filter(
+                lambda idx:
+                idx['status'] == "Scheduled for Creation",
+                indexes))
+            if scheduled_indexes:
+                scheduled_indexes_present = True
+                scopes = set(map(lambda idx: idx['scope'], scheduled_indexes))
+                backup_result = backup_client.backup(namespaces=scopes)
+                self.assertTrue(backup_result[0], str(backup_result[1]))
+                indexes_before_backup =\
+                    self.rest.get_indexer_metadata()['status']
+            else:
+                self.wait_until_indexes_online(defer_build=self.defer_build)
+                self._drop_indexes(indexes_before_backup)
+        if not scheduled_indexes_present:
+            self.fail("Couldn't create scheduled indexes")
+        for task in tasks:
+            try:
+                result = task.result()
+                self.log.info(result)
+            except Exception as e:
+                error_msg = e.__str__()
+                self.log.info("Raised Exception:" + error_msg)
+                if "Index creation will be retried in background"\
+                        not in error_msg\
+                        and "The index is scheduled for background creation"\
+                        not in error_msg\
+                        and "The index was scheduled for background creation"\
+                        not in error_msg\
+                        and "will retry building in the background for reason: Build Already In Progress" not in error_msg:
+                    raise
+        self._drop_indexes(indexes_before_backup)
+        self.rest.delete_scope(bucket, scope)
+        remap_scope = "remap_scope"
+        self.rest.create_scope(bucket, remap_scope)
+        self.rest.create_collection(bucket, remap_scope, collection)
+        mappings = ["{0}:{1}".format(scope, remap_scope)]
+        backup_client.restore(mappings)
+        self.sleep(10, "wait to complete restore")
+        indexes_after_restore = self.rest.get_indexer_metadata()['status']
+        msg = "\nIndex_names_before_backup: " + str(indexes_before_backup)
+        msg += "\nIndex_names_after_restore: " + str(indexes_after_restore)
+        try:
+            self._verify_indexes(indexes_before_backup, indexes_after_restore)
+        except Exception as e:
+            self.log.error(e.__str__())
+            self.fail(msg)
+
+    def test_backup_restore_with_scheduled_replica_indexes_less_nodes(self):
+        num_indexer_nodes = len(self.indexer_nodes)
+        if num_indexer_nodes < 2:
+            self.fail("Number of indexer nodes")
+        num_replica = num_indexer_nodes - 1
+        self._drop_indexes(self.rest.get_indexer_metadata()['status'])
+        namespace = self.collection_namespaces[0].split(".", 1)[0]
+        bucket = namespace.split(":")[1]
+        backup_client = IndexBackupClient(
+            self.master, self.use_cbbackupmgr, bucket)
+        tasks = []
+        indexes_created = []
+        indexes_before_backup = []
+        indexes = set()
+        timeout = time.time() + 60
+        scheduled_indexes_present = False
+        scheduled_indexes = []
+        while not scheduled_indexes_present and time.time() < timeout:
+            with ThreadPoolExecutor() as executor:
+                for i in range(10):
+                    try:
+                        idx_def = QueryDefinition(
+                            "idx_" + str(i), ["firstName"])
+                        query = idx_def.generate_index_create_query(
+                            namespace, defer_build=self.defer_build,
+                            num_replica=num_replica)
+                        task = executor.submit(
+                            self.run_cbq_query, query=query, rest_timeout=30)
+                        indexes_created.append(idx_def.index_name)
+                        tasks.append(task)
+                    except Exception as e:
+                        error_msg = e.__str__()
+                        self.log.info("Raised Exception:" + error_msg)
+                        if "The index is scheduled for background creation"\
+                                not in error_msg:
+                            raise
+            self.sleep(1, "Wait till indexes available in stats")
+            indexes = self.rest.get_indexer_metadata()['status']
+            index_names = set(map(lambda idx: idx['name'], indexes))
+            for idx in indexes_created:
+                if idx not in index_names:
+                    self.fail("Indexes created and indexes available in indexer-stats are not same")
+            scheduled_indexes = list(filter(
+                lambda idx:
+                idx['status'] == "Scheduled for Creation",
+                indexes))
+            if scheduled_indexes:
+                scheduled_indexes_present = True
+                indexes_before_backup =\
+                    self.rest.get_indexer_metadata()['status']
+                backup_client.backup()
+            else:
+                self.wait_until_indexes_online(defer_build=self.defer_build)
+                self._drop_indexes(indexes_before_backup)
+        if not scheduled_indexes_present:
+            self.fail("Couldn't create scheduled indexes")
+        for task in tasks:
+            try:
+                result = task.result()
+                self.log.info(result)
+            except Exception as e:
+                error_msg = e.__str__()
+                self.log.info("Raised Exception:" + error_msg)
+                if "Index creation will be retried in background"\
+                        not in error_msg\
+                        and "The index is scheduled for background creation"\
+                        not in error_msg\
+                        and "The index was scheduled for background creation"\
+                        not in error_msg\
+                        and "will retry building in the background for reason: Build Already In Progress" not in error_msg:
+                    raise
+        self.wait_until_indexes_online(defer_build=self.defer_build)
+        indexes_before_backup = list(
+            filter(lambda idx: idx['replicaId'] == 0, indexes_before_backup))
+        self._drop_indexes(indexes_before_backup)
+        out_nodes = [
+            node for node in self.indexer_nodes if self.master.ip != node.ip]
+        rebalance = self.cluster.async_rebalance(
+            self.servers[:self.nodes_init], [], out_nodes)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(10)
+        backup_client.restore()
+        self.sleep(10, "wait to complete restore")
+        indexes_after_restore = self.rest.get_indexer_metadata()['status']
+        msg = "\nIndex_names_before_backup: " + str(indexes_before_backup)
+        msg += "\nIndex_names_after_restore: " + str(indexes_after_restore)
+        self._verify_indexes(indexes_before_backup, indexes_after_restore)

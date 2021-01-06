@@ -37,6 +37,8 @@ class IndexBackupClient(object):
                  restore_bucket=None, restore_node=None):
         self.use_cbbackupmgr = use_cbbackupmgr
         self.set_backup_node(backup_node)
+        if not self.use_cbbackupmgr and isinstance(backup_bucket, list):
+            backup_bucket = backup_bucket[0]
         if restore_node:
             self.set_restore_node(restore_node)
         else:
@@ -70,7 +72,10 @@ class IndexBackupClient(object):
                               for namespace in namespaces]
                 config_args += ",".join(namespaces)
             else:
-                config_args += self.backup_bucket
+                if isinstance(self.backup_bucket, list):
+                    config_args += ",".join(self.backup_bucket)
+                else:
+                    config_args += self.backup_bucket
         command += " {0}".format(config_args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
@@ -166,6 +171,7 @@ class IndexBackupClient(object):
         remote_client.log_command_output(output, error)
         if error:
             raise Exception("Backup not removed successfully")
+        self.is_backup_exists = False
 
     def remove_backup_repo(self):
         remote_client = RemoteMachineShellConnection(self.backup_node)
