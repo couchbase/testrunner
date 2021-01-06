@@ -55,7 +55,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.n1ql_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
         for index_node in self.index_nodes:
             rest = RestConnection(index_node)
-            rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=256)
+            rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=1000)
             rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": self.moi_snapshot_interval})
 
         self.disk_location = RestConnection(self.index_nodes[0]).get_index_path()
@@ -67,7 +67,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.sdk_loader_manager.start()
 
         self.keyspace = []
-        self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
+        self.create_scope_collections(num_scopes=self.num_scopes, num_collections=self.num_collections)
         self.run_tasks = True
         self.targetProcess = self.input.param("targetProcess", 'memcached')
         self.data_nodes = self.get_kv_nodes()
@@ -96,6 +96,9 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
         for task in index_create_tasks:
             task.result()
+
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
 
         for index_node in self.index_nodes:
             rest = RestConnection(index_node)
@@ -137,6 +140,9 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         for task in index_create_tasks:
             task.result()
 
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
+
         self.load_docs(self.start_doc)
 
         if not self.wait_for_mutation_processing(self.index_nodes):
@@ -156,6 +162,9 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
         for task in index_create_tasks:
             task.result()
+
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
 
         self.load_docs(self.start_doc)
 
@@ -214,6 +223,9 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         for task in index_create_tasks:
             task.result()
 
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
+
         self.load_docs(self.start_doc)
 
         if not self.wait_for_mutation_processing(self.index_nodes):
@@ -265,6 +277,9 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         for task in index_create_tasks:
             task.result()
 
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
+
         for index_node in self.index_nodes:
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 3000})
@@ -305,6 +320,9 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
         for task in index_create_tasks:
             task.result()
+
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
 
         for index_node in self.index_nodes:
             rest = RestConnection(index_node)
@@ -350,11 +368,14 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         for task in index_create_tasks:
             task.result()
 
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
+
         for index_node in self.index_nodes:
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.build.enableOSO": True})
 
-        self._prepare_collection_for_indexing(num_scopes=2, num_collections=3, scope_prefix="oso_scope",
+        self.create_scope_collections(num_scopes=2, num_collections=3, scope_prefix="oso_scope",
                                               collection_prefix="oso_collection")
 
         self.load_docs(self.num_items_in_collection)
@@ -364,6 +385,9 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                                                  query_def_group="unique")
         for task in index_create_tasks:
             task.result()
+
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
 
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.fail("some indexes did not process mutations on time")
@@ -386,7 +410,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.build.enableOSO": True})
 
-        self._prepare_collection_for_indexing(num_scopes=2, num_collections=5, scope_prefix="oso_scope",
+        self.create_scope_collections(num_scopes=2, num_collections=5, scope_prefix="oso_scope",
                                               collection_prefix="oso_collection")
 
         self.load_docs(self.start_doc)
@@ -394,6 +418,9 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         index_create_tasks = self.create_indexes(num=112, query_def_group="unique")
         for task in index_create_tasks:
             task.result()
+
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
 
         self.load_docs(self.num_items_in_collection)
 
@@ -408,7 +435,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.build.enableOSO": True})
 
-        self._prepare_collection_for_indexing(num_scopes=2, num_collections=5, scope_prefix="oso_scope",
+        self.create_scope_collections(num_scopes=2, num_collections=5, scope_prefix="oso_scope",
                                               collection_prefix="oso_collection")
 
         self.load_docs(self.start_doc)
@@ -417,12 +444,18 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         for task in index_create_tasks:
             task.result()
 
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
+
         load_tasks = self.async_load_docs(self.num_items_in_collection)
 
         index_create_tasks = self.create_indexes(num=112, index_name_prefix="oso_index",
                                                  query_def_group="unique")
         for task in index_create_tasks:
             task.result()
+
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
 
         for task in load_tasks:
             task.result()
@@ -438,7 +471,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.build.enableOSO": True})
 
-        self._prepare_collection_for_indexing(num_scopes=1, num_collections=2, scope_prefix="oso_scope",
+        self.create_scope_collections(num_scopes=1, num_collections=2, scope_prefix="oso_scope",
                                               collection_prefix="oso_collection")
 
         self.load_docs(self.start_doc)
@@ -446,6 +479,9 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         index_create_tasks = self.create_indexes(num=50, query_def_group="unique")
         for task in index_create_tasks:
             task.result()
+
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
 
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.fail("some indexes did not process mutations on time")
@@ -459,16 +495,23 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         #40
         index_create_tasks = self.create_indexes(num=40, index_name_prefix="oso_index_after_drop",
                                                  query_def_group="unique")
+
         for task in index_create_tasks:
             task.result()
 
-        self._prepare_collection_for_indexing(num_scopes=1, num_collections=1, scope_prefix="oso_scope",
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
+
+        self.create_scope_collections(num_scopes=1, num_collections=1, scope_prefix="oso_scope",
                                               collection_prefix="oso_collection")
         #50
         index_create_tasks = self.create_indexes(num=50, index_name_prefix="oso_index_after_recreate_collection",
                                                  query_def_group="unique")
         for task in index_create_tasks:
             task.result()
+
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
 
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.fail("some indexes did not process mutations on time")
@@ -485,7 +528,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.build.enableOSO": True})
 
-        self._prepare_collection_for_indexing(num_scopes=1, num_collections=2, scope_prefix="oso_scope",
+        self.create_scope_collections(num_scopes=1, num_collections=2, scope_prefix="oso_scope",
                                               collection_prefix="oso_collection")
 
         self.load_docs(self.start_doc)
@@ -494,6 +537,9 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
         for task in index_create_tasks:
             task.result()
+
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
 
         self.build_indexes()
 
@@ -524,7 +570,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.build.enableOSO": True})
 
-        self._prepare_collection_for_indexing(num_scopes=1, num_collections=2, scope_prefix="oso_scope",
+        self.create_scope_collections(num_scopes=1, num_collections=2, scope_prefix="oso_scope",
                                               collection_prefix="oso_collection")
 
         self.load_docs(self.start_doc)
@@ -534,13 +580,16 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         for task in index_create_tasks:
             task.result()
 
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
+
         self.build_indexes()
 
         self.sleep(2)
 
         rebalance = self.cluster.async_rebalance(
             self.servers[:self.nodes_init],
-            [self.nodes_init],
+            [self.servers[self.nodes_init]],
             [], services=["kv"])
         rebalance.result()
 
@@ -565,7 +614,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.build.enableOSO": True})
 
-        self._prepare_collection_for_indexing(num_scopes=1, num_collections=1, scope_prefix="oso_scope",
+        self.create_scope_collections(num_scopes=1, num_collections=1, scope_prefix="oso_scope",
                                               collection_prefix="oso_collection")
 
         self.load_docs(self.start_doc)
@@ -574,6 +623,9 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
         for task in index_create_tasks:
             task.result()
+
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
 
         self.build_indexes()
         try:

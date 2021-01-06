@@ -3678,7 +3678,7 @@ class RestConnection(object):
         api = self.index_baseUrl + 'stats'
         status, content, header = self._http_request(api)
         json_parsed = json.loads(content)
-        num_rollback = json_parsed["{}:num_rollbacks".format(bucket)]
+        num_rollback = json_parsed["MAINT_STREAM:{}:num_rollbacks".format(bucket)]
         return num_rollback
 
     def get_logs(self, last_n=10, contains_text=None):

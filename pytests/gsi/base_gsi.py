@@ -1,3 +1,4 @@
+import copy
 import logging
 import math
 import random
@@ -102,7 +103,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                                 server=self.n1ql_node)
             self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
 
-    def _prepare_collection_for_indexing(self, num_scopes=1, num_collections=1, scope_prefix=None,
+    def create_scope_collections(self, num_scopes=1, num_collections=1, scope_prefix=None,
                                          collection_prefix=None, test_bucket=None):
         if not collection_prefix:
             collection_prefix = self.collection_prefix
@@ -977,8 +978,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         recovered = False
         index_name = query_def.index_name
         keyspace = query_def.keyspace
-        collection_itemcount = self.n1ql_helper.get_collection_itemCount(keyspace)
-        index_count = self.n1ql_helper.get_index_count_using_index_collection(keyspace, index_name, self.n1ql_node)
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        collection_itemcount = self.n1ql_helper.get_collection_itemCount(keyspace, n1ql_node)
+        index_count = self.n1ql_helper.get_index_count_using_index_collection(keyspace, index_name, n1ql_node)
         if int(index_count) == int(collection_itemcount):
             recovered = True
             self.log.info(f'Collection item count : {collection_itemcount}, '
@@ -992,14 +994,13 @@ class BaseSecondaryIndexingTests(QueryTests):
         recovered = False
         index_name = query_def.index_name
         keyspace = query_def.keyspace
-        collection_itemcount = self.n1ql_helper.get_collection_itemCount(keyspace)
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        collection_itemcount = self.n1ql_helper.get_collection_itemCount(keyspace, n1ql_node)
 
         index_count = self._get_items_count_collections(index_node, keyspace, index_name)
-        if int(index_count) and int(index_count) < int(collection_itemcount):
-            self.log.info(f'Collection item count : {collection_itemcount}, '
-                          f'item count for index {index_name}: {index_count}')
+        if int(index_count) != -1 and int(index_count) < int(collection_itemcount):
             recovered = True
-        elif index_count == -1:
+        elif index_count == -1 or not int(index_count):
             recovered = -1
         self.log.info(f'Collection item count : {collection_itemcount}, '
                       f'item count for index {index_name}: {index_count}')
@@ -1010,21 +1011,23 @@ class BaseSecondaryIndexingTests(QueryTests):
         indexes_not_recovered = []
         stat_time = time.time()
         end_time = stat_time + max_time
+        list_of_index = copy.deepcopy(index_list)
         while time.time() < end_time:
-            if not index_list:
+            if not list_of_index:
                 break
 
-            for index in index_list:
+            for index in list_of_index:
                 snap_recovered, index_count, collection_itemcount = \
                     self._verify_index_count_less_than_collection(index_node, index["query_def"])
-                if snap_recovered == -1 :
+                if snap_recovered == -1:
                     break
                 if not snap_recovered:
                     error_map = {"index_name": index["name"], "index_count": index_count, "bucket_count": collection_itemcount}
                     indexes_not_recovered.append(error_map)
                 else:
-                    index_list.remove(index)
+                    list_of_index.remove(index)
         if indexes_not_recovered:
+            self.log.info(f'Indexes {indexes_not_recovered} not recovered')
             return False
         else:
             return True
