@@ -2102,7 +2102,7 @@ class BackupServiceTest(BackupServiceBase):
         [
             ('admin', True),
             ('ro_admin', False),
-            ('security_admin', False),
+            ('security_admin_local', False),
             ('cluster_admin', False),
             ('', False),
         ]
@@ -2118,6 +2118,9 @@ class BackupServiceTest(BackupServiceBase):
             if status == 400:
                 self.assertEqual(json.loads(response_data.data)['message'], 'Forbidden. User needs one of the following permissions')
 
+        # Restore configuration so we can tear the test down correctly
+        self.configuration.username, self.configuration.password = self.master.rest_username, self.master.rest_password
+
     def test_rbac_other_operations(self):
         """ Test if non admin roles cannot trigger a one off backup, get the task history or the list of backups
         """
@@ -2128,7 +2131,7 @@ class BackupServiceTest(BackupServiceBase):
         # Change API credentials
         self.configuration.username, self.configuration.password, rest_connection = "Mallory", "password", RestConnection(self.master)
 
-        roles = ['ro_admin', 'security_admin', 'cluster_admin', '']
+        roles = ['ro_admin', 'security_admin_local', 'cluster_admin', '']
 
         actions = \
         [
@@ -2145,6 +2148,9 @@ class BackupServiceTest(BackupServiceBase):
             for func, arg in actions:
                 status = func(*arg)[1]
                 self.assertIn(status, [403, 400])
+
+        # Restore configuration so we can tear the test down correctly
+        self.configuration.username, self.configuration.password = self.master.rest_username, self.master.rest_password
 
     # Cluster Ops
 
