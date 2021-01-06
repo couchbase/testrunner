@@ -58,6 +58,22 @@ class QueryAdvisorTests(QueryTests):
         self.log.info("==============  QueryAdvisorTests suite_tearDown has completed ==============")
         super(QueryAdvisorTests, self).suite_tearDown()
 
+    def wait_for_index_online(self, bucket, index, scope='default', collection='default'):
+        if scope == 'default' and inventory == 'default':
+            query_index = f"SELECT state FROM system:indexes where keyspace_id = '{bucket}' and name = '{index}'"
+        else:
+            query_index = f"SELECT state FROM system:indexes where bucket_id = '{bucket}' and scope_id = '{scope}' and keyspace_id = '{collection}' and name = '{index}'"
+        init_time = time.time()
+        while True:
+            next_time = time.time()
+            query_response = self.run_cbq_query(query=query_index)
+            self.log.info(f"{index} state: {query_response['results'][0]['state']}")
+            if query_response['results'][0]['state'] == 'online':
+                break
+            if next_time - init_time > 600:
+                break
+            time.sleep(2)
+
     def get_statements(self, advisor_results):
         indexes = []
         statements = []
@@ -789,6 +805,7 @@ class QueryAdvisorTests(QueryTests):
         advise_index1 = "CREATE INDEX adv_lower_city_country ON `default`:`travel-sample`.`inventory`.`airport`(lower(`city`),`country`)"
         advise_index2 = "CREATE INDEX adv_country_lower_city ON `default`:`travel-sample`.`inventory`.`airport`(`country`,lower(`city`))"
         query1=f'SELECT airportname FROM `{self.bucket_name}`.inventory.airport WHERE lower(city) = "lyon" AND country = "France"'
+        self.wait_for_index_online(bucket='travel-sample', scope='inventory', collection='airport', index='def_inventory_airport_primary')
         try:
             start = self.run_cbq_query(query="SELECT ADVISOR({'action':'start', 'duration':'40m'})", server=self.master)
             session = start['results'][0]['$1']['session']
@@ -808,6 +825,7 @@ class QueryAdvisorTests(QueryTests):
         advise_index2 = "CREATE INDEX adv_country_lower_city ON `default`:`travel-sample`.`inventory`.`airport`(`country`,lower(`city`))"
         query1='SELECT airportname FROM airport WHERE lower(city) = "lyon" AND country = "France"'
         query_contexts = ["", f"default:`{self.bucket_name}`.inventory", f"default:`{self.bucket_name}`._default"]
+        self.wait_for_index_online(bucket='travel-sample', scope='inventory', collection='airport', index='def_inventory_airport_primary')
         for context in query_contexts:
             try:
                 start = self.run_cbq_query(query="SELECT ADVISOR({'action':'start', 'duration':'40m'})", query_context=context, server=self.master)
@@ -828,6 +846,7 @@ class QueryAdvisorTests(QueryTests):
         advise_index1 = "CREATE INDEX adv_country_city ON `default`:`travel-sample`.`inventory`.`landmark`(`country`,`city`)"
         advise_index2 = "CREATE INDEX adv_city_country ON `default`:`travel-sample`.`inventory`.`landmark`(`city`,`country`)"
         query1="SELECT DISTINCT MIN(aport.airportname) AS Airport_Name, MIN(lmark.name) AS Landmark_Name, MIN(aport.tz) AS Landmark_Time FROM `travel-sample`.inventory.landmark aport LEFT JOIN `travel-sample`.inventory.landmark lmark ON aport.city = lmark.city AND lmark.country = 'United States' GROUP BY lmark.name ORDER BY lmark.name LIMIT 3"
+        self.wait_for_index_online(bucket='travel-sample', scope='inventory', collection='landmark', index='def_inventory_landmark_primary')
         try:
             start = self.run_cbq_query(query="SELECT ADVISOR({'action':'start', 'duration':'40m'})", server=self.master)
             session = start['results'][0]['$1']['session']
@@ -948,6 +967,7 @@ class QueryAdvisorTests(QueryTests):
         advise_index1 = "CREATE INDEX adv_country_city ON `default`:`travel-sample`.`inventory`.`landmark`(`country`,`city`)"
         advise_index2 = "CREATE INDEX adv_city_country ON `default`:`travel-sample`.`inventory`.`landmark`(`city`,`country`)"
         query1="SELECT DISTINCT MIN(aport.airportname) AS Airport_Name, MIN(lmark.name) AS Landmark_Name, MIN(aport.tz) AS Landmark_Time FROM `travel-sample`.inventory.landmark aport LEFT JOIN `travel-sample`.inventory.landmark lmark ON aport.city = lmark.city AND lmark.country = 'United States' GROUP BY lmark.name ORDER BY lmark.name LIMIT 3"
+        self.wait_for_index_online(bucket='travel-sample', scope='inventory', collection='landmark', index='def_inventory_landmark_primary')
         try:
             start = self.run_cbq_query(query="SELECT ADVISOR({'action':'start', 'duration':'40m'})", server=self.master)
             session = start['results'][0]['$1']['session']
@@ -970,6 +990,7 @@ class QueryAdvisorTests(QueryTests):
         advise_index1 = "CREATE INDEX adv_country_city ON `default`:`travel-sample`.`inventory`.`landmark`(`country`,`city`)"
         advise_index2 = "CREATE INDEX adv_city_country ON `default`:`travel-sample`.`inventory`.`landmark`(`city`,`country`)"
         query1="SELECT DISTINCT MIN(aport.airportname) AS Airport_Name, MIN(lmark.name) AS Landmark_Name, MIN(aport.tz) AS Landmark_Time FROM `travel-sample`.inventory.landmark aport LEFT JOIN `travel-sample`.inventory.landmark lmark ON aport.city = lmark.city AND lmark.country = 'United States' GROUP BY lmark.name ORDER BY lmark.name LIMIT 3"
+        self.wait_for_index_online(bucket='travel-sample', scope='inventory', collection='landmark', index='def_inventory_landmark_primary')
         try:
             start = self.run_cbq_query(query="SELECT ADVISOR({'action':'start', 'duration':'40m'})", server=self.master)
             session = start['results'][0]['$1']['session']
@@ -1020,7 +1041,7 @@ class QueryAdvisorTests(QueryTests):
 
     def test_session_kill_query(self):
         advise_index1 = "CREATE INDEX adv_country_lower_city_type ON `travel-sample`(`country`,lower((`city`))) WHERE `type` = 'airport'"
-        advise_index2 = "CREATE INDEX adv_lower_city_country_type ON `travel-sample`(lower((`city`)),`country`) WHERE `type` = 'airport'"
+        advise_index2 = "CREATE INDEX adv_lower_city_country_type ON `travel-sample`(lower((`city`)),`country`) WHERE `type` = 'airport'"        
         query1 = f'SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
         node1 = self.servers[0]
         node2 = self.servers[1]
