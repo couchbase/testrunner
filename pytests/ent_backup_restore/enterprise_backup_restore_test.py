@@ -3104,6 +3104,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         """
         Validates error messages for negative inputs of merge command
         """
+        # This error message is thrown when an invalid date range format is supplied to cbbackupmgr.
+        invalid_range_format_error = "Error merging data: invalid range format two indexes or two dates where start/oldest and end/latest are valid"
+
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         self.backup_create()
         cmd = "merge"
@@ -3137,8 +3140,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1} --start bbb --end end".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Error merging data: Error restoring data, `bbb` is invalid start point",
-                         "Expected error message not thrown")
+        self.assertEqual(output[0], invalid_range_format_error, "Expected error message not thrown")
         cmd = "merge --archive {0} --repo {1} --start".format(self.backupset.directory, self.backupset.name)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
@@ -3149,8 +3151,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1} --end aa".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Error merging data: Error restoring data, `aa` is invalid end point",
-                         "Expected error message not thrown")
+        self.assertEqual(output[0], invalid_range_format_error, "Expected error message not thrown")
         cmd = "merge --archive {0} --repo {1} --start {2} --end".format(self.backupset.directory,
                                                                         self.backupset.name, self.backups[0])
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
@@ -3176,15 +3177,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Error merging data: Error restoring data, `abc` is invalid start point" in output[-1],
-                        "Expected error message not thrown")
+        self.assertTrue(invalid_range_format_error in output[-1], "Expected error message not thrown")
         cmd = "merge --archive {0} --repo {1} --start {2} --end abc".format(self.backupset.directory,
                                                                             self.backupset.name, self.backups[0])
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Error merging data: Error restoring data, `abc` is invalid end point" in output[-1],
-                        "Expected error message not thrown")
+        self.assertTrue(invalid_range_format_error in output[-1], "Expected error message not thrown")
         cmd = "merge --archive {0} --repo {1} --start {2} --end {3}".format(self.backupset.directory,
                                                                             self.backupset.name,
                                                                             self.backups[1], self.backups[0])
@@ -3192,9 +3191,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         remote_client.disconnect()
-        self.assertTrue("Error merging data: start point `{0}` is after end point `{1}`".format
-                        (self.backups[1], self.backups[0]) in output[-1],
-                        "Expected error message not thrown")
+        self.assertTrue("Error merging data: invalid range start cannot be before end" in output[-1], "Expected error message not thrown")
 
     def test_backup_remove_negative_args(self):
         """
