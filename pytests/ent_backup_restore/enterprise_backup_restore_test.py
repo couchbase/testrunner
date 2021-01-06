@@ -2983,9 +2983,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue(self._check_output("Error {0} cluster: lookup abc "\
-                                           .format(part_message), output),
-                        "Expected error message not thrown")
+        self.assertTrue(self._check_output(f"Error {part_message} cluster: failed to connect to any host(s) from the connection string", output), "Expected error message not thrown")
         cmd = cmd_to_test + " --archive {0} --repo {1} --cluster http://{2}:{3} --username abc \
                               --password {4}".format(self.backupset.directory,
                                                      self.backupset.name,
