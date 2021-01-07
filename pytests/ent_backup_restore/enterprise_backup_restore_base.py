@@ -553,7 +553,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
         """ Print out of cbbackupmgr from 6.5 is different with older version """
         self.cbbkmgr_version = "6.5"
-        self.bk_printout = "Backup completed successfully".split(",")
+        self.bk_printout = ["Backup completed successfully", "Backup successfully completed"]
         if RestHelper(RestConnection(self.backupset.backup_host)).is_ns_server_running():
             self.cbbkmgr_version = RestConnection(self.backupset.backup_host).get_nodes_version()
 
