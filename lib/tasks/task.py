@@ -5431,26 +5431,62 @@ class NodesFailureTask(Task):
         self.log.info("before failure time: {}".format(time.ctime(time.time())))
         if self.failure_type == "limit_file_limits_desc":
             self._enable_disable_limit_file_limits_desc(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "induce_limit_file_limits_desc":
+            self.enable_file_limit_desc(self.current_failure_node)
+        elif self.failure_type == "disable_limit_file_limits_desc":
+            self.disable_file_limit_desc(self.current_failure_node)
         elif self.failure_type == "limit_file_limits":
             self._enable_disable_limit_file_limits(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "induce_limit_file_limits":
+            self.enable_file_limit(self.current_failure_node)
+        elif self.failure_type == "disable_limit_file_limits":
+            self.disable_file_limit(self.current_failure_node)
         elif self.failure_type == "extra_files_in_log_dir":
             self._extra_files_in_log_dir(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "induce_extra_files_in_log_dir":
+            self.add_extra_files_in_log_dir(self.current_failure_node)
+        elif self.failure_type == "disable_extra_files_in_log_dir":
+            self.remove_extra_files_in_log_dir(self.current_failure_node)
         elif self.failure_type == "empty_files_in_log_dir":
             self._empty_file_in_log_dir(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "induce_empty_files_in_log_dir":
+            self.add_empty_file_in_log_dir(self.current_failure_node)
+        elif self.failure_type == "disable_empty_files_in_log_dir":
+            self.remove_dummy_file_in_log_dir(self.current_failure_node)
         elif self.failure_type == "dummy_file_in_log_dir":
             self._dummy_file_in_log_dir(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "induce_dummy_file_in_log_dir":
+            self.add_dummy_file_in_log_dir(self.current_failure_node)
+        elif self.failure_type == "disable_dummy_file_in_log_dir":
+            self.remove_dummy_file_in_log_dir(self.current_failure_node)
         elif self.failure_type == "limit_file_size_limit":
             self._enable_disable_limit_file_size_limit(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "induce_limit_file_size_limit":
+            self.enable_file_size_limit(self.current_failure_node)
+        elif self.failure_type == "disable_limit_file_size_limit":
+            self.disable_file_size_limit(self.current_failure_node)
         elif self.failure_type == "disk_readonly":
             self._enable_disable_disk_readonly(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "induce_disk_readonly":
+            self._enable_disk_readonly(self.current_failure_node)
+        elif self.failure_type == "disable_disk_readonly":
+            self._disable_disk_readonly(self.current_failure_node)
         elif self.failure_type == "stress_ram":
             self._enable_stress_ram(self.current_failure_node, self.failure_timeout)
         elif self.failure_type == "stress_cpu":
             self._enable_stress_cpu(self.current_failure_node, self.failure_timeout)
         elif self.failure_type == "network_delay":
             self._enable_disable_network_delay(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "induce_network_delay":
+            self.enable_network_delay(self.current_failure_node)
+        elif self.failure_type == "disable_network_delay":
+            self.delete_network_rule(self.current_failure_node)
         elif self.failure_type == "net_packet_loss":
             self._enable_disable_packet_loss(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "induce_net_packet_loss":
+            self.enable_packet_loss(self.current_failure_node)
+        elif self.failure_type == "disable_net_packet_loss":
+            self.delete_network_rule(self.current_failure_node)
         elif self.failure_type == "enable_firewall":
             self._enable_disable_firewall(self.current_failure_node, self.failure_timeout)
         if self.failure_type == "induce_enable_firewall":
@@ -5593,14 +5629,10 @@ class NodesFailureTask(Task):
         time.sleep(failure_timeout)
 
     def _stop_couchbase_server(self, node):
-        node_failure_timer = self.failure_timers[self.itr]
-        time.sleep(1)
         shell = RemoteMachineShellConnection(node)
         shell.stop_couchbase()
         shell.disconnect()
         self.log.info("Stopped the couchbase server on {}".format(node))
-        node_failure_timer.result()
-        self.start_time = node_failure_timer.start_time
 
     def _start_couchbase_server(self, node):
         shell = RemoteMachineShellConnection(node)
@@ -5620,13 +5652,13 @@ class NodesFailureTask(Task):
         shell.disconnect()
         self.log.info("ram stressed for {0} sec on node {1}".format(stop_time, node))
 
-    def _enable_disk_readonly(self, node, stop_time):
+    def _enable_disk_readonly(self, node):
         shell = RemoteMachineShellConnection(node)
         shell.enable_disk_readonly(self.disk_location)
         shell.disconnect()
         self.log.info("Dir {} made readonly on node {}".format(self.disk_location, node))
 
-    def _disable_disk_readonly(self, node, stop_time):
+    def _disable_disk_readonly(self, node):
         shell = RemoteMachineShellConnection(node)
         shell.disable_disk_readonly(self.disk_location)
         shell.disconnect()
@@ -5645,13 +5677,10 @@ class NodesFailureTask(Task):
         shell.execute_command(command=command)
 
     def _stop_memcached(self, node):
-        node_failure_timer = self.failure_timers[self.itr]
         time.sleep(1)
         shell = RemoteMachineShellConnection(node)
         o, r = shell.stop_memcached()
         self.log.info("Killed memcached. {0} {1}".format(o, r))
-        node_failure_timer.result()
-        self.start_time = node_failure_timer.start_time
 
     def _start_memcached(self, node):
         shell = RemoteMachineShellConnection(node)
@@ -5711,13 +5740,13 @@ class NodesFailureTask(Task):
 
     def add_extra_files_in_log_dir(self, node):
         shell = RemoteMachineShellConnection(node)
-        output, error = shell.add_extra_files_index_log_dir(self.disk_location, self.disk_size)
+        output, error = shell.add_extra_files_index_log_dir(self.disk_location)
         if error:
             self.log.info(error)
 
     def remove_extra_files_in_log_dir(self, node):
         shell = RemoteMachineShellConnection(node)
-        output, error = shell.remove_extra_files_index_log_dir(self.disk_location, self.disk_size)
+        output, error = shell.remove_extra_files_index_log_dir(self.disk_location)
         if error:
             self.log.info(error)
 
@@ -5728,13 +5757,13 @@ class NodesFailureTask(Task):
 
     def add_dummy_file_in_log_dir(self, node):
         shell = RemoteMachineShellConnection(node)
-        output, error = shell.add_dummy_file_index_log_dir(self.disk_location, self.disk_size)
+        output, error = shell.add_dummy_file_index_log_dir(self.disk_location)
         if error:
             self.log.info(error)
 
     def remove_dummy_file_in_log_dir(self, node):
         shell = RemoteMachineShellConnection(node)
-        output, error = shell.remove_dummy_file_index_log_dir(self.disk_location, self.disk_size)
+        output, error = shell.remove_dummy_file_index_log_dir(self.disk_location)
         if error:
             self.log.info(error)
 
@@ -5745,7 +5774,7 @@ class NodesFailureTask(Task):
 
     def add_empty_file_in_log_dir(self, node):
         shell = RemoteMachineShellConnection(node)
-        output, error = shell.add_empty_file_index_log_dir(self.disk_location, self.disk_size)
+        output, error = shell.add_empty_file_index_log_dir(self.disk_location)
         if error:
             self.log.info(error)
 

@@ -159,12 +159,77 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                             "disk_full": {"failure_task": "induce_disk_full",
                                           "recover_task": "recover_disk_full_failure",
                                           "expected_failure": ["Terminate Request due to server termination",
-                                                               "Build Already In Progress", "Timeout 1ms exceeded"]},
+                                                               "Build Already In Progress", "Timeout 1ms exceeded",
+                                                               "There is no available index service that can process "
+                                                               "this request at this time",
+                                                               "Create index or Alter replica cannot proceed "
+                                                               "due to network partition, node failover or "
+                                                               "indexer failure"]},
+                            "restart_couchbase": {"failure_task": "stop_couchbase",
+                                                "recover_task": "start_couchbase",
+                                                "expected_failure": ["Terminate Request due to server termination",
+                                                                     "There is no available index service that can process "
+                                                                     "this request at this time",
+                                                                     "Build Already In Progress", "Timeout 1ms exceeded",
+                                                                     "Create index or Alter replica cannot proceed "
+                                                                     "due to network partition, node failover or "
+                                                                     "indexer failure"]},
+                            "net_packet_loss": {"failure_task": "induce_net_packet_loss",
+                                                "recover_task": "disable_net_packet_loss",
+                                                "expected_failure": []},
+                            "network_delay": {"failure_task": "induce_network_delay",
+                                                "recover_task": "disable_network_delay",
+                                                "expected_failure": []},
+                            "disk_readonly": {"failure_task": "induce_disk_readonly",
+                                                "recover_task": "disable_disk_readonly",
+                                                "expected_failure": ["Terminate Request due to server termination",
+                                                                     "There is no available index service that can process "
+                                                                     "this request at this time",
+                                                                     "Build Already In Progress", "Timeout 1ms exceeded"]},
+                            "limit_file_limits": {"failure_task": "induce_limit_file_limits",
+                                                "recover_task": "disable_limit_file_limits",
+                                                "expected_failure": []},
+                            "limit_file_size_limit": {"failure_task": "induce_limit_file_size_limit",
+                                                "recover_task": "disable_limit_file_size_limit",
+                                                "expected_failure": []},
+                            "extra_files_in_log_dir": {"failure_task": "induce_extra_files_in_log_dir",
+                                                "recover_task": "disable_extra_files_in_log_dir",
+                                                "expected_failure": []},
+                            "dummy_file_in_log_dir": {"failure_task": "induce_dummy_file_in_log_dir",
+                                                "recover_task": "disable_dummy_file_in_log_dir",
+                                                "expected_failure": []},
+                            "empty_files_in_log_dir": {"failure_task": "induce_empty_files_in_log_dir",
+                                                "recover_task": "disable_empty_files_in_log_dir",
+                                                "expected_failure": []},
                             "enable_firewall": {"failure_task": "induce_enable_firewall",
                                                 "recover_task": "disable_firewall",
                                                 "expected_failure": ["There is no available index service that can process "
                                                                      "this request at this time",
-                                                                     "Build Already In Progress", "Timeout 1ms exceeded"]}}
+                                                                     "Build Already In Progress", "Timeout 1ms exceeded",
+                                                                     "Create index or Alter replica cannot proceed "
+                                                                     "due to network partition, node failover or "
+                                                                     "indexer failure"]},
+                            "limit_file_limits_desc": {"failure_task": "induce_limit_file_limits_desc",
+                                                "recover_task": "disable_limit_file_limits_desc",
+                                                "expected_failure": []},
+                            "stress_cpu": {"failure_task": "stress_cpu",
+                                                "recover_task": None,
+                                                "expected_failure": ["Terminate Request due to server termination",
+                                                                     "There is no available index service that can process "
+                                                                     "this request at this time",
+                                                                     "Build Already In Progress", "Timeout 1ms exceeded",
+                                                                     "Create index or Alter replica cannot proceed "
+                                                                     "due to network partition, node failover or "
+                                                                     "indexer failure"]},
+                            "stress_ram": {"failure_task": "stress_ram",
+                                                "recover_task": None,
+                                                "expected_failure": ["Terminate Request due to server termination",
+                                                                     "There is no available index service that can process "
+                                                                     "this request at this time",
+                                                                     "Build Already In Progress", "Timeout 1ms exceeded",
+                                                                     "Create index or Alter replica cannot proceed "
+                                                                     "due to network partition, node failover or "
+                                                                     "indexer failure"]}}
 
         self.log.info("Setting indexer memory quota to 256 MB and other settings...")
         self.index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -397,18 +462,19 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.log.info(threading.currentThread().getName() + " Completed")
 
     def induce_schedule_system_failure(self, failure_task):
-        self.log.info(threading.currentThread().getName() + " Started")
-        self.sleep(10)
+        if failure_task:
+            self.log.info(threading.currentThread().getName() + " Started")
+            self.sleep(10)
 
-        system_failure_task = NodesFailureTask(self.master, self.index_nodes, failure_task, 300, 0, False, 3,
-                                               disk_location=self.disk_location, failure_timeout=self.failure_timeout)
-        self.system_failure_task_manager.schedule(system_failure_task)
-        try:
-            system_failure_task.result()
-        except Exception as e:
-            self.log.info("Exception: {}".format(e))
+            system_failure_task = NodesFailureTask(self.master, self.index_nodes, failure_task, 300, 0, False, 3,
+                                                   disk_location=self.disk_location, failure_timeout=self.failure_timeout)
+            self.system_failure_task_manager.schedule(system_failure_task)
+            try:
+                system_failure_task.result()
+            except Exception as e:
+                self.log.info("Exception: {}".format(e))
 
-        self.log.info(threading.currentThread().getName() + " Completed")
+            self.log.info(threading.currentThread().getName() + " Completed")
 
     def get_num_compaction_per_node_initialized(self, initial_meta_store_size):
         num_compaction_per_node = {}
@@ -526,7 +592,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
             task.join()
 
         self.wait_until_indexes_online()
-        self.sleep(5, "sleep for 5 secs before validation")
+        self.sleep(600, "sleep for 10 mins before validation")
         self.verify_index_ops_obj()
 
         self.n1ql_helper.drop_all_indexes_on_keyspace()
@@ -537,6 +603,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
 
     def test_system_failure_create_drop_indexes_simple(self):
         self.test_fail = False
+        self.concur_system_failure = self.input.param("concur_system_failure", False)
         self.errors = []
         self.index_create_task_manager = TaskManager(
             "index_create_task_manager")
@@ -566,15 +633,25 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         if not self.check_if_indexes_in_dgm():
             self.log.error("indexes not in dgm even after {}".format(self.dgm_check_timeout))
 
-        self.induce_schedule_system_failure(self.failure_map[self.system_failure]["failure_task"])
-        self.sleep(90, "sleeping for  mins for mutation processing during system failure ")
-        index_create_tasks = self.create_indexes(num=1,defer_build=False,itr=3,
+        if self.concur_system_failure:
+            system_failure_thread = threading.Thread(name="system_failure_thread",
+                                                     target=self.induce_schedule_system_failure,
+                                                     args=[self.failure_map[self.system_failure]["failure_task"]])
+            system_failure_thread.start()
+            self.sleep(20)
+        else:
+            self.induce_schedule_system_failure(self.failure_map[self.system_failure]["failure_task"])
+            self.sleep(90, "sleeping for  mins for mutation processing during system failure ")
+        index_create_tasks = self.create_indexes(num=1,defer_build=False,itr=300,
                                                  expected_failure=self.failure_map[self.system_failure]["expected_failure"])
         for task in index_create_tasks:
             task.result()
         self.sleep(60, "sleeping for 1 min after creation of indexes")
 
-        self.induce_schedule_system_failure(self.failure_map[self.system_failure]["recover_task"])
+        if self.concur_system_failure:
+            system_failure_thread.join()
+        else:
+            self.induce_schedule_system_failure(self.failure_map[self.system_failure]["recover_task"])
         self.index_ops_obj.update_stop_create_index(True)
         self.kill_loader_process()
         self.sdk_loader_manager.shutdown(True)
