@@ -613,6 +613,8 @@ class StableTopFTS(FTSBaseTest):
                                          index.index_definition)
         self.load_data()
         self.wait_for_indexing_complete()
+        print("### INDEX is created")
+        import pdb; pdb.set_trace()
         if self._update or self._delete:
             self.async_perform_update_delete(self.upd_del_fields)
             if self._update:
@@ -3561,7 +3563,7 @@ class StableTopFTS(FTSBaseTest):
             self.sleep(10)
             for j in range(1, collections_per_scope+1):
                 collection_name = "collection_"+str(j)
-                self._create_collection(bucket="default", scope=scope_name, collection=collection_name)
+                self._cb_cluster._create_collection(bucket="default", scope=scope_name, collection=collection_name, cli_client=self.cli_client)
 
                 #load data into collections
                 gen_create = SDKDataLoader(num_ops=docs_per_collection, percent_create=100, percent_update=0, percent_delete=0,
@@ -3620,7 +3622,7 @@ class StableTopFTS(FTSBaseTest):
 
         test_scope = "scope_"+str(num_scopes)
         test_collection = "test_collection"
-        self._create_collection(bucket="default", scope=test_scope, collection=test_collection)
+        self._cb_cluster._create_collection(bucket="default", scope=test_scope, collection=test_collection, cli_client=self.cli_client)
         self._fill_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=1000)
         test_index = self.create_index(self._cb_cluster.get_bucket_by_name('default'),
                                        "test_index", collection_index=True, _type=f"{test_scope}.{test_collection}",
@@ -3630,7 +3632,7 @@ class StableTopFTS(FTSBaseTest):
         multi_collections = []
         for i in range(1, 4):
             coll_name = test_collection + "_" + str(i)
-            self._create_collection(bucket="default", scope=test_scope, collection=coll_name)
+            self._cb_cluster._create_collection(bucket="default", scope=test_scope, collection=coll_name, cli_client=self.cli_client)
             self._fill_collection(bucket=bucket, scope=test_scope, collection=coll_name, num_docs=1000, start_seq_num=1000*i+1)
             multi_collections.append(coll_name)
         _type_multi = []
@@ -3653,7 +3655,7 @@ class StableTopFTS(FTSBaseTest):
             scope_name = "scope_" + str(i)
             for j in (collections_per_scope+2, additional_collections_per_scope+1):
                 collection_name = "collection_" + str(j)
-                self._create_collection(bucket="default", scope=scope_name, collection=collection_name)
+                self._cb_cluster._create_collection(bucket="default", scope=scope_name, collection=collection_name, cli_client=self.cli_client)
                 self._fill_collection(bucket=bucket, scope=scope_name, collection=collection_name)
 
         hits_after, _, _, _ = test_index.execute_query(test_query)
@@ -3684,7 +3686,7 @@ class StableTopFTS(FTSBaseTest):
 
         test_scope = "scope_"+str(num_scopes)
         test_collection = "test_collection"
-        self._create_collection(bucket="default", scope=test_scope, collection=test_collection)
+        self._cb_cluster._create_collection(bucket="default", scope=test_scope, collection=test_collection, cli_client=self.cli_client)
         self._fill_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=1000)
 
         test_index = self.create_index(self._cb_cluster.get_bucket_by_name('default'),
@@ -3695,7 +3697,7 @@ class StableTopFTS(FTSBaseTest):
         multi_collections = []
         for i in range(1, 4):
             coll_name = test_collection + "_" + str(i)
-            self._create_collection(bucket="default", scope=test_scope, collection=coll_name)
+            self._cb_cluster._create_collection(bucket="default", scope=test_scope, collection=coll_name, cli_client=self.cli_client)
             self._fill_collection(bucket=bucket, scope=test_scope, collection=coll_name, num_docs=1000, start_seq_num=1000*i+1)
             multi_collections.append(coll_name)
         _type_multi = []
@@ -3714,7 +3716,7 @@ class StableTopFTS(FTSBaseTest):
             scope_name = "scope_" + str(i)
             for j in (collections_per_scope+2, additional_collections_per_scope+1):
                 collection_name = "collection_" + str(j)
-                self._create_collection(bucket="default", scope=scope_name, collection=collection_name)
+                self._cb_cluster._create_collection(bucket="default", scope=scope_name, collection=collection_name, cli_client=self.cli_client)
                 self._fill_collection(bucket=bucket, scope=scope_name, collection=collection_name)
 
         for i in range(1, num_scopes+1):
@@ -3760,7 +3762,7 @@ class StableTopFTS(FTSBaseTest):
 
         test_scope = "scope_"+str(num_scopes)
         test_collection = "test_collection"
-        self._create_collection(bucket="default", scope=test_scope, collection=test_collection)
+        self._cb_cluster._create_collection(bucket="default", scope=test_scope, collection=test_collection, cli_client=self.cli_client)
         self._fill_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=1000, start_seq_num=1001)
 
         test_index = self.create_index(self._cb_cluster.get_bucket_by_name('default'),
@@ -3773,7 +3775,7 @@ class StableTopFTS(FTSBaseTest):
             scope_name = "scope_" + str(i)
             for j in (collections_per_scope+2, additional_collections_per_scope+1):
                 collection_name = "collection_" + str(j)
-                self._create_collection(bucket="default", scope=scope_name, collection=collection_name)
+                self._cb_cluster._create_collection(bucket="default", scope=scope_name, collection=collection_name, cli_client=self.cli_client)
                 self._fill_collection(bucket=bucket, scope=scope_name, collection=collection_name)
 
         self._fill_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=1000, start_seq_num=1)
@@ -3796,7 +3798,7 @@ class StableTopFTS(FTSBaseTest):
 
         test_scope = "scope_"+str(num_scopes)
         test_collection = "test_collection"
-        self._create_collection(bucket="default", scope=test_scope, collection=test_collection)
+        self._cb_cluster._create_collection(bucket="default", scope=test_scope, collection=test_collection, cli_client=self.cli_client)
         self._fill_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=1000)
 
         test_index = self.create_index(self._cb_cluster.get_bucket_by_name('default'),
@@ -3807,7 +3809,7 @@ class StableTopFTS(FTSBaseTest):
         multi_collections = []
         for i in range(1, 4):
             coll_name = test_collection + "_" + str(i)
-            self._create_collection(bucket="default", scope=test_scope, collection=coll_name)
+            self._cb_cluster._create_collection(bucket="default", scope=test_scope, collection=coll_name, cli_client=self.cli_client)
             self._fill_collection(bucket=bucket, scope=test_scope, collection=coll_name, num_docs=1000, start_seq_num=1000*i+1)
             multi_collections.append(coll_name)
         _type_multi = []
@@ -3827,7 +3829,7 @@ class StableTopFTS(FTSBaseTest):
             scope_name = "scope_" + str(i)
             for j in (collections_per_scope+2, additional_collections_per_scope+1):
                 collection_name = "collection_" + str(j)
-                self._create_collection(bucket="default", scope=scope_name, collection=collection_name)
+                self._cb_cluster._create_collection(bucket="default", scope=scope_name, collection=collection_name, cli_client=self.cli_client)
                 self._fill_collection(bucket=bucket, scope=scope_name, collection=collection_name)
 
         for i in range(1, num_scopes+1):
@@ -3966,7 +3968,7 @@ class StableTopFTS(FTSBaseTest):
 
         test_scope = "scope_"+str(num_scopes)
         test_collection = "test_collection"
-        self._create_collection(bucket="default", scope=test_scope, collection=test_collection)
+        self._cb_cluster._create_collection(bucket="default", scope=test_scope, collection=test_collection, cli_client=self.cli_client)
         self._fill_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=1000)
 
         test_index = self.create_index(self._cb_cluster.get_bucket_by_name('default'),
@@ -3977,7 +3979,7 @@ class StableTopFTS(FTSBaseTest):
         multi_collections = []
         for i in range(1, 4):
             coll_name = test_collection + "_" + str(i)
-            self._create_collection(bucket="default", scope=test_scope, collection=coll_name)
+            self._cb_cluster._create_collection(bucket="default", scope=test_scope, collection=coll_name, cli_client=self.cli_client)
             self._fill_collection(bucket=bucket, scope=test_scope, collection=coll_name, num_docs=1000, start_seq_num=1000*i+1)
             multi_collections.append(coll_name)
         _type_multi = []
@@ -3996,7 +3998,7 @@ class StableTopFTS(FTSBaseTest):
             scope_name = "scope_" + str(i)
             for j in (collections_per_scope+2, additional_collections_per_scope+1):
                 collection_name = "collection_" + str(j)
-                self._create_collection(bucket="default", scope=scope_name, collection=collection_name)
+                self._cb_cluster._create_collection(bucket="default", scope=scope_name, collection=collection_name, cli_client=self.cli_client)
                 self._fill_collection(bucket=bucket, scope=scope_name, collection=collection_name)
 
         for i in range(1, num_scopes+1):
@@ -4038,3 +4040,4 @@ class StableTopFTS(FTSBaseTest):
             for err in errors:
                 self.log.error(err)
             self.fail()
+

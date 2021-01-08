@@ -2364,6 +2364,62 @@ class CouchbaseCluster:
         for task in bucket_tasks:
             task.result()
 
+    def create_bucket_scope_collection_multi_structure(self, existing_buckets=None, bucket_params=None,
+                                                       data_structure=None, cli_client=None):
+        if data_structure is None:
+            data_structure = {}
+        if bucket_params is None:
+            bucket_params = {}
+        if existing_buckets is None:
+            existing_buckets = []
+        try:
+            buckets = data_structure["buckets"]
+            for bucket in buckets:
+                if bucket not in existing_buckets:
+                    self.create_standard_buckets(bucket_size=100, name=bucket["name"])
+                if "scopes" in bucket.keys():
+                    scopes = bucket["scopes"]
+                    for scope in scopes:
+                        if not scope["name"] == "_default":
+                            result = self._create_scope(bucket=bucket["name"], scope=scope["name"], cli_client=cli_client)
+                            if not result:
+                                return False, f"Scope {scope['name']} creation is failed."
+                        collections = scope["collections"]
+                        for collection in collections:
+                            result = self._create_collection(bucket=bucket["name"], scope=scope["name"],
+                                                            collection=collection["name"], cli_client=cli_client)
+                            if not result:
+                                return False, f"Collection {collection['name']} creation is failed."
+        except Exception as err:
+            return False, str(err)
+        return True, ""
+
+    def _create_collection(self, bucket=None, scope=None, collection=None, cli_client=None):
+        if scope != '_default':
+            stdout,_,_ = cli_client.get_bucket_scopes(bucket=bucket)
+            if scope not in stdout:
+                cli_client.create_scope(bucket=bucket, scope=scope)
+                time.sleep(10)
+        if collection != '_default':
+            return cli_client.create_collection(bucket=bucket, scope=scope, collection=collection)
+        else:
+            return True
+
+    def _drop_collection(self, bucket=None, scope=None, collection=None, cli_client=None):
+        cli_client.delete_collection(bucket=bucket, scope=scope, collection=collection)
+
+    def _create_scope(self, bucket=None, scope=None, cli_client=None):
+        status = False
+        if scope != '_default':
+            stdout,_,status = cli_client.get_bucket_scopes(bucket=bucket)
+            if scope not in stdout:
+                cli_client.create_scope(bucket=bucket, scope=scope)
+                time.sleep(10)
+        return status
+
+    def _drop_scope(self, bucket=None, scope=None, cli_client=None):
+        cli_client.delete_scope(bucket=bucket, scope=scope)
+
     def create_standard_buckets(
             self, bucket_size, name=None, num_buckets=1,
             port=None, num_replicas=1,
@@ -2552,6 +2608,10 @@ class CouchbaseCluster:
         """ Delete all FTSIndexes from a given node """
         for index in self.__indexes:
             index.delete()
+
+    def clean_fts_indexes_array(self):
+        """ Delete all FTSIndex objects from self.__indexes """
+        self.__indexes.clear()
 
     def run_fts_query(self, index_name, query_dict, node=None, timeout=70):
         """ Runs a query defined in query_json against an index/alias and
@@ -3807,25 +3867,13 @@ class FTSBaseTest(unittest.TestCase):
                 for bucket in self._cb_cluster.get_buckets():
                     if type(self.collection) is list:
                         for c in self.collection:
-                            self._create_collection(bucket=bucket.name, scope=self.scope, collection=c)
+                            self._cb_cluster._create_collection(bucket=bucket.name, scope=self.scope, collection=c, cli_client=self.cli_client)
                     else:
-                        self._create_collection(bucket=bucket.name, scope=self.scope, collection=self.collection)
+                        self._cb_cluster._create_collection(bucket=bucket.name, scope=self.scope, collection=self.collection, cli_client=self.cli_client)
         self._master = self._cb_cluster.get_master_node()
             
         if self.ntonencrypt == 'enable':
             self.setup_nton_encryption()
-
-    def _create_collection(self, bucket=None, scope=None, collection=None):
-        if scope != '_default':
-            stdout,_,_ = self.cli_client.get_bucket_scopes(bucket=bucket)
-            if scope not in stdout:
-                self.cli_client.create_scope(bucket=bucket, scope=scope)
-                self.sleep(10)
-        if collection != '_default':
-            self.cli_client.create_collection(bucket=bucket, scope=scope, collection=collection)
-
-    def _drop_collection(self, bucket=None, scope=None, collection=None):
-        self.cli_client.delete_collection(bucket=bucket, scope=scope, collection=collection)
 
     def _enable_diag_eval_on_non_local_hosts(self):
         """
