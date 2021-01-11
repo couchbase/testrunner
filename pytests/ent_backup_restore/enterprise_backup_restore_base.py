@@ -3,6 +3,7 @@ import os, shutil, ast, re, subprocess
 import json
 import uuid
 import random
+import queue
 import urllib.request, urllib.parse, urllib.error, datetime
 
 from boto3 import s3, resource
@@ -69,6 +70,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.cluster_flag = "--host"
         self.backupset = Backupset()
         self.cmd_ext = ""
+        self.backup_outputs = []
+        self.restore_outputs = []
+        self.backup_errors = []
+        self.restore_errors = []
+        self.create_bucket_count = 0
+        self.restore_consistent_metadata = self.input.param("restore_consistent_metadata", False)
         self.should_fail = self.input.param("should-fail", False)
         self.restore_should_fail = self.input.param("restore_should_fail", False)
         self.merge_should_fail = self.input.param("merge_should_fail", False)
@@ -160,7 +167,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         else:
             raise Exception("OS not supported.")
         self.backup_validation_files_location = "/tmp/backuprestore" + self.master.ip
-        self.backupset.backup_host = self.input.clusters[1][0]
+        if self.input.bkrs_client is not None:
+            self.backupset.backup_host = self.input.bkrs_client
+        else:
+            self.backupset.backup_host = self.input.clusters[1][0]
+
         self.backupset.directory += "_" + self.master.ip
         self.backupset.name = self.input.param("name", "backup")
         self.non_master_host = self.input.param("non-master", False)
@@ -403,6 +414,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             numprocs = sysinfo['Processor(s)'].split(' ')
             return numprocs[0]
 
+    def _get_current_bkrs_client_version(self):
+        self.backupset.current_bkrs_client_version = \
+                        RestConnection(self.backupset.backup_host).get_nodes_version()
+        self.backupset.current_bkrs_client_version = \
+                   "-".join(self.backupset.current_bkrs_client_version.split('-')[:2])
+        return self.backupset.current_bkrs_client_version
+
     def backup_reset_clusters(self, servers):
         BucketOperationHelper.delete_all_buckets_or_assert(servers, self)
         ClusterOperationHelper.cleanup_cluster(servers, master=servers[0])
@@ -456,6 +474,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-analytics"
         if self.backupset.disable_data:
             args += " --disable-data"
+        if self.backupset.current_bkrs_client_version[:3] >= "7.0":
+            if self.vbucket_filter is not None:
+                args += " --vbucket-filter {0}".format(self.vbucket_filter)
+
         if self.backupset.log_to_stdout:
             args += " --log-to-stdout"
         if self.vbucket_filter:
@@ -608,6 +630,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                        password_env, user_env)
 
         output, error = remote_client.execute_command(command)
+        self.backup_outputs.append(output)
+        self.backup_errors.append(error)
         if self.debug_logs:
             remote_client.log_command_output(output, error)
 
@@ -700,7 +724,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             password_input = "-p "
 
         version = RestConnection(self.backupset.backup_host).get_nodes_version()
-        if "4.6" <= version:
+        if "4.6" <= self.backupset.current_bkrs_client_version[:3]:
             self.cluster_flag = "--cluster"
 
         args = (
@@ -794,6 +818,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             reset_restore_cluster = False
             reset_cluster_count = 0
             for bucket in self.buckets:
+                if self.create_bucket_count > 0:
+                    break
                 bucket_name = bucket.name
                 if not rest_helper.bucket_exists(bucket_name):
                     if self.backupset.map_buckets is None:
@@ -817,7 +843,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         if not self.dgm_run and int(kv_quota) > 0:
                             bucket_size = (kv_quota * 0.7)
                     if not reset_restore_cluster and reset_cluster_count == 0:
-                        self._create_restore_cluster()
+                        if self.create_bucket_count == 0:
+                            self._create_restore_cluster()
                     self.log.info("replica in bucket {0} is {1}".format(bucket.name, replicas))
                     try:
                         rest_conn.create_bucket(bucket=bucket_name,
@@ -928,13 +955,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         command = "{3} {2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
                                                        password_env, user_env)
         output, error = shell.execute_command_raw(command)
+        self.restore_outputs.append(output)
+        self.restore_errors.append(error)
         shell.log_command_output(output, error)
         if not self.enable_firewall:
             self._verify_bucket_compression_mode(bucket_compression_mode)
 
         eventing_service_in = False
         errs_check = ["Unable to process value", "Error restoring cluster",
-                      "Expected argument for option"]
+                      "Expected argument for option",
+                      "Error restoring cluster: failed to lock archive"]
         disable_firewall = False
         if self.enable_firewall:
             rs_conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
@@ -955,7 +985,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 accepted_errs = True
                 break
 
-        if accepted_errs:
+        if accepted_errs and not self.restore_consistent_metadata:
             if not self.should_fail:
                 if not self.restore_should_fail and not eventing_service_in:
                     if not self.enable_firewall:
@@ -2954,6 +2984,10 @@ class Backupset:
         self.log_to_stdout = False
         self.auto_select_threads = False
         self.date_range = ''
+        self.bkrs_client_version = None
+        self.current_bkrs_client_version = None
+        self.bkrs_client_upgrade = False
+        self.bwc_version = None
         self.full_backup = False
         self.disable_ft_alias = False
         self.disable_analytics = False

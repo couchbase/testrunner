@@ -4521,6 +4521,49 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             client.execute_command("rm -rf {0}/backup".format(self.tmp_path))
             client.disconnect()
 
+    def test_backup_consistent_metadata(self):
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create")
+        self.backup_create_validate()
+        backup_threads = []
+        backup_thread_1 = Thread(target=self.backup_cluster)
+        backup_threads.append(backup_thread_1)
+        backup_thread_1.start()
+        backup_thread_2 = Thread(target=self.backup_cluster)
+        backup_threads.append(backup_thread_2)
+        backup_thread_2.start()
+        for backup_thread in backup_threads:
+            backup_thread.join()
+        consistent_metadata = False
+        for output in self.backup_outputs:
+            if self._check_output("Error backing up cluster: failed to lock archive", output):
+                consistent_metadata = True
+        if not consistent_metadata:
+            self.fail("Backup does not lock while running backup")
+
+    def test_restore_consistent_metadata(self):
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create")
+        self.backup_create_validate()
+        self.backup_cluster()
+        restore_threads = []
+        restore_thread_1 = Thread(target=self.backup_restore)
+        restore_threads.append(restore_thread_1)
+        restore_thread_1.start()
+        restore_thread_2 = Thread(target=self.backup_restore)
+        restore_threads.append(restore_thread_2)
+        self.create_bucket_count = 1
+        restore_thread_2.start()
+        count = 0
+        for restore_thread in restore_threads:
+            restore_thread.join()
+        consistent_metadata = False
+        for output in self.restore_outputs:
+            if self._check_output("Error restoring cluster: failed to lock archive", output):
+                consistent_metadata = True
+                break
+        if not consistent_metadata:
+            self.fail("Restore does not lock while running restore")
 
     def test_info_backup_merge_remove(self, cluster, no_of_backups):
         """ Test Scenario: Create Buckets, Load Documents, Take 'no_of_backups' backups, Merge and Remove a Bucket
