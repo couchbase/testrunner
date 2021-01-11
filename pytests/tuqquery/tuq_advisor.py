@@ -1010,8 +1010,8 @@ class QueryAdvisorTests(QueryTests):
             self.fail()
 
     def test_session_kill_index(self):
-        advise_index1 = "CREATE INDEX adv_country_lower_city_type ON `travel-sample`(`country`,lower((`city`))) WHERE `type` = 'airport'"
-        advise_index2 = "CREATE INDEX adv_lower_city_country_type ON `travel-sample`(lower((`city`)),`country`) WHERE `type` = 'airport'"
+        advise_index1 = "CREATE INDEX adv_country_lower_city_type ON `travel-sample`(`country`,lower(`city`)) WHERE `type` = 'airport'"
+        advise_index2 = "CREATE INDEX adv_lower_city_country_type ON `travel-sample`(lower(`city`),`country`) WHERE `type` = 'airport'"
         query1 = f'SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
         node1 = self.servers[0]
         node2 = self.servers[1]
@@ -1028,7 +1028,7 @@ class QueryAdvisorTests(QueryTests):
             # Stop session on node2
             stop = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'stop', 'session':'{session}'}}) as Stop", server=node2)
             # Get session on node1
-            self.sleep(1)
+            self.sleep(2)
             get = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'get', 'session':'{session}'}}) as Get", server=node1)
             # Check advise
             for index in get['results'][0]['Get'][0][0]['recommended_indexes']:
@@ -1040,8 +1040,8 @@ class QueryAdvisorTests(QueryTests):
             self.fail()
 
     def test_session_kill_query(self):
-        advise_index1 = "CREATE INDEX adv_country_lower_city_type ON `travel-sample`(`country`,lower((`city`))) WHERE `type` = 'airport'"
-        advise_index2 = "CREATE INDEX adv_lower_city_country_type ON `travel-sample`(lower((`city`)),`country`) WHERE `type` = 'airport'"        
+        advise_index1 = "CREATE INDEX adv_country_lower_city_type ON `travel-sample`(`country`,lower(`city`)) WHERE `type` = 'airport'"
+        advise_index2 = "CREATE INDEX adv_lower_city_country_type ON `travel-sample`(lower(`city`),`country`) WHERE `type` = 'airport'"        
         query1 = f'SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
         node1 = self.servers[0]
         node2 = self.servers[1]
@@ -1069,8 +1069,8 @@ class QueryAdvisorTests(QueryTests):
             self.fail()
 
     def test_session_multi_node(self):
-        advise_index1 = "CREATE INDEX adv_country_lower_city_type ON `travel-sample`(`country`,lower((`city`))) WHERE `type` = 'airport'"
-        advise_index2 = "CREATE INDEX adv_lower_city_country_type ON `travel-sample`(lower((`city`)),`country`) WHERE `type` = 'airport'"
+        advise_index1 = "CREATE INDEX adv_country_lower_city_type ON `travel-sample`(`country`,lower(`city`)) WHERE `type` = 'airport'"
+        advise_index2 = "CREATE INDEX adv_lower_city_country_type ON `travel-sample`(lower(`city`),`country`) WHERE `type` = 'airport'"
         query1 = f'SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
         node1 = self.servers[0]
         node2 = self.servers[1]
