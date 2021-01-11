@@ -298,16 +298,13 @@ class N1QLHelper():
             except Exception as ex:
                 self.log.error(f"CANNOT LOAD QUERY RESULT IN JSON: {ex}" )
                 self.log.error("INCORRECT DOCUMENT IS: " + str(output))
-        try:
-            if isinstance(result, str) or 'errors' in result:
-                error_result = str(result)
-                length_display = len(error_result)
-                if length_display > 500:
-                    error_result = error_result[:500]
-                raise CBQError(error_result, server.ip)
-        except Exception as e:
-            self.log.error(str(e))
-            self.log.info(result)
+        if isinstance(result, str) or 'errors' in result:
+            error_result = str(result)
+            length_display = len(error_result)
+            if length_display > 500:
+                error_result = error_result[:500]
+            raise CBQError(error_result, server.ip)
+
         self.log.info(f"TOTAL ELAPSED TIME: {result['metrics']['elapsedTime']}")
         return result
 
