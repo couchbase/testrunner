@@ -41,12 +41,6 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         2. Configures Rest API Sub-APIs.
         3. Backup Service Constants.
         """
-        # Avoid running this function more than once
-        if not hasattr(self, 'execute_once'):
-            self.execute_once = True
-        else:
-            return
-
         # Set 'skip_server_sort' to avoid sorting the first cluster in the ini file by total memory
         if not self.input.param("skip_server_sort", False):
             # Sort the available clusters by total memory in ascending order (if the total memory is the same, sort by ip)
