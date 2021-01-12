@@ -63,7 +63,7 @@ class QueryDefinition(object):
         if partition_by_fields:
             self.partition_by_fields = partition_by_fields
 
-        if not index_where_clause:
+        if index_where_clause is None:
             index_where_clause = self.index_where_clause
         if self.keyspace:
             namespace = self.keyspace

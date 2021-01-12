@@ -151,7 +151,7 @@ class QueryANSINestUnnestTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for query_defn in self.query_definitions:
-                create_query = query_defn.generate_index_create_query(namespace=query_bucket)
+                create_query = query_defn.generate_index_create_query(namespace=query_bucket,index_where_clause=False)
                 self.run_cbq_query(create_query)
 
 
