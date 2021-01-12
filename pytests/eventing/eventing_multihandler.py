@@ -32,6 +32,8 @@ class EventingMultiHandler(EventingBaseTest):
             self.create_n_buckets(self.dst_bucket_name,self.num_dst_buckets)
         self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                             bucket_params=bucket_params_meta)
+        self.create_scope_collection(bucket=self.metadata_bucket_name, scope=self.metadata_bucket_name,
+                                     collection=self.metadata_bucket_name)
         self.deploying=[]
         self.pausing=[]
         if "n1ql" in self.handler_code:
@@ -49,18 +51,25 @@ class EventingMultiHandler(EventingBaseTest):
         for i in range(number):
             self.cluster.create_standard_bucket(name+"_"+str(i), port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
+            self.create_scope_collection(bucket=name+"_"+str(i), scope=name+"_"+str(i),
+                                         collection=name+"_"+str(i))
+
 
     def create_n_handler(self,num_handler,num_src,num_dst,handler_code):
         src_bucket=self.src_bucket_name
         dst_bucket=self.dst_bucket_name
         for i in range(num_handler):
             self.src_bucket_name=src_bucket+"_"+str(i%num_src)
+            source_namespace=self.src_bucket_name+"."+self.src_bucket_name+"."+self.src_bucket_name
+            meta_namespace=self.metadata_bucket_name+"."+self.metadata_bucket_name+"."+self.metadata_bucket_name
+            dst_namespace=[]
             if num_dst > 0:
                 self.dst_bucket_name=dst_bucket+"_"+str(i%num_dst)
-            body = self.create_save_function_body(self.function_name+"_"+str(i),handler_code,
-                                                  worker_count=self.worker_count,deployment_status=False,processing_status=False)
-            if num_dst == 0 and not self.is_sbm :
-                del body['depcfg']['buckets'][0]
+                dst_namespace.append("dst_bucket."+self.dst_bucket_name+"."+self.dst_bucket_name+"."+self.dst_bucket_name+".rw")
+            body = self.create_function_with_collection(self.function_name+"_"+str(i),handler_code,
+                                                        src_namespace=source_namespace,meta_namespace=meta_namespace,collection_bindings=dst_namespace)
+            # if num_dst == 0 and not self.is_sbm and len(body['depcfg']['buckets']) > 0:
+            #     del body['depcfg']['buckets'][0]
             self.log.info("Creating the following handler code : {0} with {1}".format(body['appname'], body['depcfg']))
             self.log.info("\n{0}".format(body['appcode']))
             self.rest.create_function(body["appname"],body)
