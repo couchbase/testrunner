@@ -191,7 +191,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                                                 "expected_failure": []},
                             "limit_file_size_limit": {"failure_task": "induce_limit_file_size_limit",
                                                 "recover_task": "disable_limit_file_size_limit",
-                                                "expected_failure": []},
+                                                "expected_failure": ["Terminate Request due to server termination"]},
                             "extra_files_in_log_dir": {"failure_task": "induce_extra_files_in_log_dir",
                                                 "recover_task": "disable_extra_files_in_log_dir",
                                                 "expected_failure": []},
@@ -240,8 +240,9 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
             rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": self.moi_snapshot_interval})
             rest.set_index_settings({"indexer.settings.persisted_snapshot_init_build.moi.interval": self.moi_snapshot_interval})
             rest.set_index_settings({"indexer.metadata.compaction.sleepDuration": self.compact_sleep_duration})
-
+        self.reset_data_mount_point()
         self.disk_location = RestConnection(self.index_nodes[0]).get_index_path()
+        self.key_prefix=f'bigkeybigkeybigkeybigkeybigkeybigkey_{self.master.ip}_'
 
         self.log.info("==============  PlasmaCollectionsTests setup has completed ==============")
 
@@ -321,9 +322,11 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
             self.log.info(f'Expected defer build indexes {indexes_not_defer_build} '
                           f'found to be not in defer_build state')
 
-    def create_indexes(self, num=0, defer_build=False, itr=0, expected_failure=None):
+    def create_indexes(self, num=0, defer_build=False, itr=0, expected_failure=[]):
         query_definition_generator = SQLDefinitionGenerator()
         index_create_tasks = []
+        if self.system_failure in self.failure_map.keys():
+            expected_failure = self.failure_map[self.system_failure]["expected_failure"]
         self.log.info(threading.currentThread().getName() + " Started")
         if len(self.keyspace) < num:
             num_indexes_collection = math.ceil(num / len(self.keyspace))
@@ -422,7 +425,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                                         percent_update=self.percent_update, percent_delete=self.percent_delete,
                                         all_collections=self.all_collections, timeout=1800,
                                         json_template=self.dataset_template,
-                                        key_prefix="bigkeybigkeybigkeybigkeybigkeybigkeybigkeybigkeyb_")
+                                        key_prefix=self.key_prefix)
         for bucket in self.buckets:
             _task = SDKLoadDocumentsTask(self.master, bucket, sdk_data_loader)
             self.sdk_loader_manager.schedule(_task)
@@ -511,8 +514,8 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
 
     def kill_loader_process(self):
         self.log.info("killing java doc loader process")
-        os.system('pgrep -f .*java_sdk_client*')
-        os.system('pkill -f .*java_sdk_client*')
+        os.system(f'pgrep -f .*{self.key_prefix}*')
+        os.system(f'pkill -f .*{self.key_prefix}*')
 
     def test_system_failure_create_drop_indexes(self):
         self.test_fail = False

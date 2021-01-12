@@ -104,7 +104,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
 
     def create_scope_collections(self, num_scopes=1, num_collections=1, scope_prefix=None,
-                                         collection_prefix=None, test_bucket=None):
+                                 collection_prefix=None, test_bucket=None):
         if not collection_prefix:
             collection_prefix = self.collection_prefix
         if not scope_prefix:
@@ -316,6 +316,20 @@ class BaseSecondaryIndexingTests(QueryTests):
                 if index_create_info in self.memory_create_list:
                     self.memory_create_list.remove(index_create_info)
 
+    def reset_data_mount_point(self):
+        indexer_nodes = self.get_nodes_from_services_map(
+            service_type="index", get_all_nodes=True)
+        for node in indexer_nodes:
+            shell = RemoteMachineShellConnection(node)
+            shell.execute_command('umount -l /data; '
+                                  'mkdir -p /usr/disk-img; dd if=/dev/zero '
+                                  'of=/usr/disk-img/disk-quota.ext3 count=10485760; '
+                                  '/sbin/mkfs -t ext3 -q /usr/disk-img/disk-quota.ext3 -F; '
+                                  'mount -o loop,rw,usrquota,grpquota /usr/disk-img/disk-quota.ext3 /data; '
+                                  'umount -l /data; fsck.ext3 /usr/disk-img/disk-quota.ext3 -y; '
+                                  'chattr +i /data; mount -o loop,rw,usrquota,grpquota /usr/disk-img/disk-quota.ext3 '
+                                  '/data; rm -rf /data/*; chmod -R 777 /data')
+
     def get_size_of_metastore_file(self):
         indexer_nodes = self.get_nodes_from_services_map(
             service_type="index", get_all_nodes=True)
@@ -351,17 +365,17 @@ class BaseSecondaryIndexingTests(QueryTests):
         error = []
         if action == 'move':
             alter_index_query = f'ALTER INDEX {index_name} on {namespace} ' \
-                                f' WITH {{"action": "move", "nodes":{nodes}}}'
+                f'WITH {{"action": "move", "nodes":{nodes}}}'
         elif action == 'replica_count':
             alter_index_query = f'ALTER INDEX {index_name} on {namespace} ' \
-                                f' WITH {{"action":"replica_count","num_replica": {num_replicas}}}'
+                f' WITH {{"action":"replica_count","num_replica": {num_replicas}}}'
         elif action == 'drop_replica':
             alter_index_query = f'ALTER INDEX {index_name} ON {namespace} ' \
-                                f'WITH {{"action":"drop_replica","replicaId": {replica_id}}}'
+                f'WITH {{"action":"drop_replica","replicaId": {replica_id}}}'
         else:
             # Negative case consideration
             alter_index_query = f'ALTER INDEX {index_name} on {namespace} ' \
-                                ' WITH {{"action":"replica_count"}}'
+                ' WITH {{"action":"replica_count"}}'
 
         try:
             self.n1ql_helper.run_cbq_query(query=alter_index_query, server=self.n1ql_node)
@@ -844,11 +858,12 @@ class BaseSecondaryIndexingTests(QueryTests):
         for keyspace in list(index_map.keys()):
             self.log.info("Keyspace: {0}".format(keyspace))
             for index_name, index_val in index_map[keyspace].items():
-                self.log.info("Index: {0}".format(index_name))
-                self.log.info("number of docs pending: {0}".format(index_val["num_docs_pending"]))
-                self.log.info("number of docs queued: {0}".format(index_val["num_docs_queued"]))
-                if index_val["num_docs_pending"] or index_val["num_docs_queued"]:
-                    return False
+                if index_val["index_state"] != 0:
+                    self.log.info("Index: {0}".format(index_name))
+                    self.log.info("number of docs pending: {0}".format(index_val["num_docs_pending"]))
+                    self.log.info("number of docs queued: {0}".format(index_val["num_docs_queued"]))
+                    if index_val["num_docs_pending"] or index_val["num_docs_queued"]:
+                        return False
         return True
 
 
@@ -987,7 +1002,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                           f'item count for index {index_name}: {index_count}')
         else:
             self.log.error(f'Collection item count : {collection_itemcount}, '
-                          f'item count for index {index_name}: {index_count}')
+                           f'item count for index {index_name}: {index_count}')
         return recovered, index_count, collection_itemcount
 
     def _verify_index_count_less_than_collection(self, index_node, query_def):
@@ -1240,7 +1255,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         return check
 
     def check_if_indexes_in_dgm(self):
-        def check_if_indexes_in_dgm_node(node):
+        def check_if_indexes_in_dgm_node(node, indexes_in_dgm):
             indexer_rest = RestConnection(node)
             node_in_dgm = False
             content = indexer_rest.get_index_storage_stats()
@@ -1253,19 +1268,22 @@ class BaseSecondaryIndexingTests(QueryTests):
                         rr = stats["MainStore"]["resident_ratio"]
                         if rr != 0 and rr < 1.00:
                             index_in_dgm += 1
-                            self.log.info("Index : {} , resident_ratio : {}".format(key, rr))
+                            if f'{node}_{index_in_dgm}' not in indexes_in_dgm:
+                                indexes_in_dgm.append(f'{node}_{index_in_dgm}')
+                                self.log.info("Index : {} , resident_ratio : {}".format(key, rr))
                 if index_in_dgm > (tot_indexes/3):
                     node_in_dgm = True
             except IndexError as e:
                 node_in_dgm = True
             return node_in_dgm
 
+        indexes_in_dgm = []
         all_nodes_in_dgm = False
         endtime = time.time() + self.dgm_check_timeout
         while not all_nodes_in_dgm and time.time() < endtime:
             all_nodes_in_dgm = True
             for node in self.index_nodes:
-                all_nodes_in_dgm = all_nodes_in_dgm and check_if_indexes_in_dgm_node(node)
+                all_nodes_in_dgm = all_nodes_in_dgm and check_if_indexes_in_dgm_node(node, indexes_in_dgm)
 
         return all_nodes_in_dgm
 
