@@ -2931,7 +2931,7 @@ class BackupServiceTest(BackupServiceBase):
         self.assertEqual(len(backups), no_of_backups)
 
         # Take a merge
-        self.take_one_off_merge("active", repo_name, backups[0], backups[-1], 20, 20)
+        self.take_one_off_merge("active", repo_name, backups[0], backups[-1], 800)
 
         backups = [backup._date for backup in self.get_backups("active", repo_name)]
         self.assertEqual(len(backups), 1)

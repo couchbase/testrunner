@@ -524,13 +524,13 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         body.cloud_force_path_style = True
         return body
 
-    def take_one_off_merge(self, state, repo_name, start, end, retries, sleep_time):
+    def take_one_off_merge(self, state, repo_name, start, end, timeout):
         """ Take a one off merge
         """
         # Perform a one off merge
         task_name = self.active_repository_api.cluster_self_repository_active_id_merge_post(repo_name, body=Body5(start=start, end=end)).task_name
         # Wait until task is completed
-        self.assertTrue(self.wait_for_backup_task(state, repo_name, retries, sleep_time, task_name=task_name))
+        self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=timeout))
         return task_name
 
     def take_one_off_backup(self, state, repo_name, full_backup, retries, sleep_time):
@@ -1179,11 +1179,9 @@ class File:
         """ Checks if all the substrings are present in the output
         """
         for substring in substrings:
-            found = False
-            for line in output:
-                if substring in line:
-                    found = True
-            return False, substring
+            if not any(substring in line for line in output):
+                return False, substring
+
         return True, None
 
 class Collector:
