@@ -860,6 +860,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         for bucket in self.buckets:
             if self.cbbkmgr_version[:5] in COUCHBASE_FROM_MAD_HATTER:
                 self.bk_printout.append('Backed up bucket "{0}" succeeded'.format(bucket.name))
+        for bucket in self.buckets:
             if error or not self._check_output(self.bk_printout, output):
                 self.log.error("Failed to backup bucket {0}".format(bucket.name))
                 return output, error

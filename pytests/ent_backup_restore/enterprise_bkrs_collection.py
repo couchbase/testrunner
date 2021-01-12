@@ -433,6 +433,10 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
             """ Add built-in user cbadminbucket to second cluster """
             self.add_built_in_server_user(node=self.input.clusters[0][:self.nodes_init][0])
 
+            rest = RestConnection(self.backupset.restore_cluster_host)
+            rest.set_indexer_storage_mode(username='Administrator',
+                                      password='password',
+                                      storageMode="memory_optimized")
             self.backupset.start = start
             self.backupset.end = end
             self.log.info("*** start restore validation")
