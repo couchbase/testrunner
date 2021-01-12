@@ -2337,7 +2337,7 @@ class BackupServiceTest(BackupServiceBase):
     def test_complex_schedule(self):
         """ Test a complex schedule
         """
-        self.time.change_system_time(f"next friday 0800")
+        self.time.change_system_time(f"next friday 0745")
 
         # Define a complex schedule
         schedule = \
