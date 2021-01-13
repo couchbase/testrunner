@@ -12,6 +12,7 @@ from TestInput import TestInputSingleton
 from lib.couchbase_helper.time_helper import TimeUtil
 from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase
 from membase.api.rest_client import RestConnection
+from membase.helper.rebalance_helper import RebalanceHelper
 from lib.backup_service_client.models.task_template import TaskTemplate
 from lib.backup_service_client.models.task_template_schedule import TaskTemplateSchedule
 from lib.backup_service_client.models.task_template_options import TaskTemplateOptions
@@ -499,6 +500,17 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             self.sleep(sleep_time)
 
         return False
+
+    def wait_until_documents_are_persisted(self, timeout=120):
+        """ Wait until the documents are persisted to disk
+
+        The 'ep_queue_size' stat represents the disk queue size, this reaches the value 0 when all documents have been persisted to disk.
+        """
+        for bucket in self.buckets:
+            if not RebalanceHelper.wait_for_stats_on_all(self.backupset.cluster_host, bucket.name, 'ep_queue_size', 0, timeout_in_seconds=timeout):
+                return False
+
+        return True
 
     def get_archive(self, prefix=None, bucket=None, path=None):
             """ Returns a cloud archive path
