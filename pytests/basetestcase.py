@@ -487,20 +487,23 @@ class BaseTestCase(unittest.TestCase):
             if os.path.exists(f'{server.ip}_{keyword_count_before_filename}'):
                 s = open(f'{server.ip}_{keyword_count_before_filename}', 'r').read()
                 before_keyword_counts = ast.literal_eval(s)
-            if os.path.exists(f'{server.ip}_{keyword_count_after_filename}'):
-                s = open(f'{server.ip}_{keyword_count_after_filename}', 'r').read()
-                after_keyword_counts = ast.literal_eval(s)
+                os.remove(f'{server.ip}_{keyword_count_before_filename}')
+                if os.path.exists(f'{server.ip}_{keyword_count_after_filename}'):
+                    s = open(f'{server.ip}_{keyword_count_after_filename}', 'r').read()
+                    after_keyword_counts = ast.literal_eval(s)
+                    os.remove(f'{server.ip}_{keyword_count_after_filename}')
 
-            for log, keyword_count in after_keyword_counts.items():
-                if log in before_keyword_counts.keys():
-                    for keyword, count in keyword_count.items():
-                        if keyword in before_keyword_counts[log].keys():
-                            if count > before_keyword_counts[log][keyword]:
-                                keyword_count_diff[f'{server.ip}:{log}:{keyword}'] = int(count) - int(before_keyword_counts[log][keyword])
-                        else:
-                            keyword_count_diff[f'{server.ip}:{log}:{keyword}'] = count
-                else:
-                    keyword_count_diff[f'{server.ip}:{log}'] = keyword_count
+                for log, keyword_count in after_keyword_counts.items():
+                    if log in before_keyword_counts.keys():
+                        for keyword, count in keyword_count.items():
+                            if keyword in before_keyword_counts[log].keys():
+                                if count > before_keyword_counts[log][keyword]:
+                                    keyword_count_diff[f'{server.ip}:{log}:{keyword}'] = int(count) - int(before_keyword_counts[log][keyword])
+                            else:
+                                keyword_count_diff[f'{server.ip}:{log}:{keyword}'] = count
+                    else:
+                        keyword_count_diff[f'{server.ip}:{log}'] = keyword_count
+
         return keyword_count_diff
 
     def tearDown(self):

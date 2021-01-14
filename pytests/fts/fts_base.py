@@ -1,7 +1,8 @@
 """
 Base class for FTS/CBFT/Couchbase Full Text Search
 """
-
+import ast
+import os
 import unittest
 import time
 import copy
@@ -2017,6 +2018,9 @@ class CouchbaseCluster:
                 cluster_run = True
         return cluster_run
 
+    def async_log_scan(self, servers, file_prefix):
+        return self.__clusterop.async_log_scan(servers, file_prefix)
+
     def __separate_nodes_on_services(self):
         self.__fts_nodes = []
         self.__n1ql_nodes = []
@@ -2190,10 +2194,12 @@ class CouchbaseCluster:
             for index, node_service in enumerate(cluster_services):
                 if index == 0 and node_service == "kv":
                     continue
+                node_to_add = available_nodes[node_num]
                 self.__log.info("%s will be configured with services %s" % (
-                    available_nodes[node_num].ip,
+                    node_to_add.ip,
                     node_service))
-                nodes_to_add.append(available_nodes[node_num])
+                node_to_add.services = node_service
+                nodes_to_add.append(node_to_add)
                 node_services.append(node_service)
                 node_num = node_num + 1
             try:
@@ -3514,6 +3520,7 @@ class FTSBaseTest(unittest.TestCase):
         self.secret_password = self._input.param("secret_password", 'p@ssw0rd')
         self.container_type = TestInputSingleton.input.param("container_type", "bucket")
         self.scope = TestInputSingleton.input.param("scope", "scope1")
+        self.skip_log_scan = self._input.param("skip_log_scan", True)
         self.collection = str(TestInputSingleton.input.param("collection", "collection1"))
         if self.collection.startswith("["):
             self.collection = eval(self.collection)
@@ -3546,6 +3553,11 @@ class FTSBaseTest(unittest.TestCase):
         self.log.info(
             "==== FTSbasetests setup is finished for test #{0} {1} ===="
                 .format(self.__case_number, self._testMethodName))
+        if not self.skip_log_scan:
+            self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.__case_number}'
+            _tasks = self._cb_cluster.async_log_scan(self._input.servers, self.log_scan_file_prefix+"_BEFORE")
+            for _task in _tasks:
+                _task.result()
 
     def __decode_fail(self, errors):
         for err in errors:
@@ -3609,6 +3621,35 @@ class FTSBaseTest(unittest.TestCase):
                 self.log.info("Retry rebalanced fixed the rebalance failure")
                 break
 
+    def compare_logscan_keyword_count(self):
+        keyword_count_before_filename = self.log_scan_file_prefix+"_BEFORE"
+        keyword_count_after_filename = self.log_scan_file_prefix+"_AFTER"
+        keyword_count_diff = {}
+        for server in self._input.servers:
+            before_keyword_counts = {}
+            after_keyword_counts = {}
+            if os.path.exists(f'{server.ip}_{keyword_count_before_filename}'):
+                s = open(f'{server.ip}_{keyword_count_before_filename}', 'r').read()
+                before_keyword_counts = ast.literal_eval(s)
+                os.remove(f'{server.ip}_{keyword_count_before_filename}')
+                if os.path.exists(f'{server.ip}_{keyword_count_after_filename}'):
+                    s = open(f'{server.ip}_{keyword_count_after_filename}', 'r').read()
+                    after_keyword_counts = ast.literal_eval(s)
+                    os.remove(f'{server.ip}_{keyword_count_after_filename}')
+
+                for log, keyword_count in after_keyword_counts.items():
+                    if log in before_keyword_counts.keys():
+                        for keyword, count in keyword_count.items():
+                            if keyword in before_keyword_counts[log].keys():
+                                if count > before_keyword_counts[log][keyword]:
+                                    keyword_count_diff[f'{server.ip}:{log}:{keyword}'] = int(count) - int(before_keyword_counts[log][keyword])
+                            else:
+                                keyword_count_diff[f'{server.ip}:{log}:{keyword}'] = count
+                    else:
+                        keyword_count_diff[f'{server.ip}:{log}'] = keyword_count
+
+        return keyword_count_diff
+
     def tearDown(self):
         """Clusters cleanup"""
         if len(self.__report_error_list) > 0:
@@ -3648,6 +3689,15 @@ class FTSBaseTest(unittest.TestCase):
                 self.backup_pindex_data(server)
 
         try:
+            self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.__case_number}'
+            if not self.skip_log_scan:
+                _tasks = self._cb_cluster.async_log_scan(self._input.servers, self.log_scan_file_prefix+"_AFTER")
+                for _task in _tasks:
+                    _task.result()
+
+                keyword_count_diff = self.compare_logscan_keyword_count()
+                if keyword_count_diff:
+                    self.fail(f'Log scan completed, detected new occurrences of error keywords : {keyword_count_diff}')
             if self.__is_cleanup_not_needed():
                 self.log.warning("CLEANUP WAS SKIPPED")
                 return
