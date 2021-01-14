@@ -118,7 +118,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             # the end of each which includes tearing down the cluster by
             # ejecting nodes, rebalancing and using diag eval to 'reset'
             # the cluster.
-            self.input.test_params["skip_cleanup"] = True
+            self.input.test_params["skip_cleanup"] = False
 
         super().setUp()
         self.preamble()
