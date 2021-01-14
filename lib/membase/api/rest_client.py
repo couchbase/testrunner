@@ -604,7 +604,7 @@ class RestConnection(object):
         return json_parsed
 
     def create_scope(self, bucket, scope, params=None, num_retries=3):
-        api = self.baseUrl + 'pools/default/buckets/%s/collections' % (bucket)
+        api = self.baseUrl + 'pools/default/buckets/%s/scopes' % (bucket)
         body = {'name': scope}
         if params:
             body.update(params)
@@ -613,9 +613,12 @@ class RestConnection(object):
         while num_retries > 0:
             status, content, header = self._http_request(api, 'POST', params=params, headers=headers)
             log.info("{0} with params: {1}".format(api, params))
+            json_parsed = json.loads(content)
             if status:
-                json_parsed = json.loads(content)
                 log.info("Scope created {}->{} {}".format(bucket, scope, json_parsed))
+                break
+            elif header["status"] == "400":
+                log.info("Scope already exists. Skipping create {}->{} {}".format(bucket, scope, json_parsed))
                 break
             else:
                 time.sleep(10)
@@ -625,7 +628,7 @@ class RestConnection(object):
         return status
 
     def _create_single_collection(self, bucket, scope, collection, params=None):
-        api = self.baseUrl + 'pools/default/buckets/%s/collections/%s' % (bucket, scope)
+        api = self.baseUrl + 'pools/default/buckets/%s/scopes/%s/collections' % (bucket, scope)
         body = {'name': collection}
         if params:
             body.update(params)
@@ -641,9 +644,12 @@ class RestConnection(object):
         for c in collection:
             while num_retries > 0:
                 status, content, header = self._create_single_collection(bucket, scope, c, params)
+                json_parsed = json.loads(content)
                 if status:
-                    json_parsed = json.loads(content)
                     log.info("Collection created {}->{}->{} manifest:{}".format(bucket, scope, c, json_parsed))
+                    break
+                elif header["status"] == "400":
+                    log.info("Collection already exists. Skipping create {}->{}->{} manifest:{}".format(bucket, scope, c, json_parsed))
                     break
                 else:
                     time.sleep(10)
@@ -656,24 +662,28 @@ class RestConnection(object):
         """ Put collection scope manifest to bulk update collection/scopes
 
         Args:
-            ensure_manifest (bool): If set, blocks until the manifest has been applied to all nodes as the endpoint is asynchronous.
+            ensure_manifest (bool): If set, blocks until the manifest has been applied to all nodes as
+            the endpoint is asynchronous.
         """
         if isinstance(bucket, Bucket):
             bucket = bucket.name
 
         params, headers = json.dumps(manifest), self._create_capi_headers()
-        status, content, _ = self._http_request(f"{self.baseUrl}pools/default/buckets/{bucket}/collections", 'PUT', params=params, headers=headers)
+        status, content, _ = self._http_request(f"{self.baseUrl}pools/default/buckets/{bucket}/scopes", 'PUT',
+                                                params=params, headers=headers)
 
         if ensure_manifest:
             uid = json.loads(content)['uid']
-            ensure_manifest_status, manifest_content, _ = self._http_request(f"{self.baseUrl}pools/default/buckets/{bucket}/collections/@ensureManifest/{uid}", 'POST', headers=headers)
+            ensure_manifest_status, manifest_content, _ = self._http_request(
+                f"{self.baseUrl}pools/default/buckets/{bucket}/scopes/@ensureManifest/{uid}", 'POST',
+                headers=headers)
 
         return status
 
     def get_bucket_manifest(self, bucket):
         if isinstance(bucket, Bucket):
             bucket = bucket.name
-        api = '{0}{1}{2}{3}'.format(self.baseUrl, 'pools/default/buckets/', bucket, '/collections')
+        api = '{0}{1}{2}{3}'.format(self.baseUrl, 'pools/default/buckets/', bucket, '/scopes')
         status, content, header = self._http_request(api)
         if status:
             return json.loads(content)
@@ -720,10 +730,10 @@ class RestConnection(object):
             raise Exception("Cannot get collections for bucket {}-> scope{} {}".format(bucket, scope, e.message))
 
     def delete_scope(self, bucket, scope):
-        api = self.baseUrl + 'pools/default/buckets/%s/collections/%s' % (bucket, scope)
-        print(f'Executing DELETE on: {api}')
+        api = self.baseUrl + 'pools/default/buckets/%s/scopes/%s' % (bucket, scope)
         headers = self._create_headers()
         status, content, header = self._http_request(api, 'DELETE', headers=headers)
+        log.info("{0}".format(api))
         return status
 
     def get_rest_endpoint_data(self, endpoint=None, ip=None, port=None):
@@ -734,30 +744,31 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'GET', headers=headers)
         return status, content
 
-
     def delete_collection(self, bucket, scope, collection):
-        api = self.baseUrl + 'pools/default/buckets/%s/collections/%s/%s' % (bucket, scope, collection)
+        api = self.baseUrl + 'pools/default/buckets/%s/scopes/%s/collections/%s' % (bucket, scope, collection)
         headers = self._create_headers()
         status, content, header = self._http_request(api, 'DELETE', headers=headers)
         return status
 
     def get_collection(self, bucket):
-        api = self.baseUrl + 'pools/default/buckets/%s/collections' % (bucket)
+        api = self.baseUrl + 'pools/default/buckets/%s/scopes' % (bucket)
         headers = self._create_headers()
         status, content, header = self._http_request(api, 'GET', headers=headers)
         return status, content
 
     def get_collection_uid(self, bucket, scope, collection):
-        status, content = self.get_collection(bucket)
-        json_content = json.loads(content)
-        if status:
-            for sc in json_content['scopes']:
-                if sc['name'] == scope:
-                    for coll in sc['collections']:
-                        if coll['name'] == collection:
-                            return coll['uid']
-
-        return -1
+        try:
+            manifest = self.get_bucket_manifest(bucket)
+            for scopes in manifest["scopes"]:
+                if scopes['name'] == scope:
+                    for col in scopes['collections']:
+                        if col['name'] == collection:
+                            return col['uid']
+            log.error("Cannot get collection uid because {0}.{1}.{2} does not exist"
+                      .format(bucket, scope, collection))
+        except Exception as e:
+            raise Exception("Exception thrown while getting collection uid {}"
+                            .format(e.message))
 
     def run_view(self, bucket, view, name):
         api = self.capiBaseUrl + '/%s/_design/%s/_view/%s' % (bucket, view, name)
