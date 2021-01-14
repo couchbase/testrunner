@@ -3105,7 +3105,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         Validates error messages for negative inputs of merge command
         """
         # This error message is thrown when an invalid date range format is supplied to cbbackupmgr.
-        invalid_range_format_error = "Error merging data: invalid range format two indexes or two dates where start/oldest and end/latest are valid"
+        invalid_range_format_error = "Error merging data: invalid range format, expected two indexes or two dates; the keywords [start, oldest, end, latest] are also valid"
 
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         self.backup_create()
