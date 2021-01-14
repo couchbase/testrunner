@@ -373,6 +373,19 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         return False
 
+    def wait_until_http_requests_can_be_made(self, timeout=200):
+        """ Waits until a http request can be made
+        """
+        timeout = time.time() + timeout
+
+        while time.time() < timeout:
+            if self.plan_api.plan_get_with_http_info()[1] == 200:
+                return True
+
+            self.sleep(1, "Waiting until http requests can be made to the backup service")
+
+        return False
+
     def get_backups(self, state, repo_name):
         """ Returns the backups in a repository.
 

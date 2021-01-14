@@ -2052,7 +2052,7 @@ class BackupServiceTest(BackupServiceBase):
         self._load_all_buckets(self.master, BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items), "create", 0)
 
         # Sleep to ensure the bucket is populated with data
-        self.sleep(10)
+        self.assertTrue(self.wait_until_http_requests_can_be_made())
 
         # Take a one off backup using the backup service
         task_name = self.take_one_off_backup("active", repo_name, full_backup, 20, 20)
