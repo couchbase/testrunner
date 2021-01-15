@@ -231,6 +231,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.cluster_new_user:
             self.backupset.cluster_host_username = self.cluster_new_user
             self.backupset.restore_cluster_host_username = self.cluster_new_user
+        """ Get cb version of cbm client from bkrs client server """
+        if self.backupset.current_bkrs_client_version is None:
+            self.backupset.current_bkrs_client_version = \
+                        self._get_current_bkrs_client_version()
         include_buckets = self.input.param("include-buckets", "")
         include_buckets = include_buckets.split(",") if include_buckets else []
         exclude_buckets = self.input.param("exclude-buckets", "")
