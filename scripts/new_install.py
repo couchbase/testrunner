@@ -49,11 +49,14 @@ def do_install_task(task, node):
         traceback.print_exc()
 
 
-def validate_install(version):
+def validate_install(params):
     log.info("-" * 100)
     for node in install_utils.NodeHelpers:
+        version = params["version"]
         if node.install_success is None:
-            node.install_success = False
+            if params["cluster_version"]:
+                if node.ip != params["bkrs_client"].ip:
+                    version = params["cluster_version"]
             if node.rest:
                 try:
                     node_status = node.rest.cluster_status()["nodes"]
@@ -102,7 +105,7 @@ def do_install(params):
                 log.error("INSTALL TIMED OUT AFTER {0}s.VALIDATING..".format(params["timeout"]))
                 break
     if "init" in params["install_tasks"]:
-        validate_install(params["version"])
+        validate_install(params)
 
 
 def main():

@@ -33,7 +33,9 @@ params = {
     "enable_ipv6": False,
     "use_domain_names": False,
     "fts_quota": testconstants.FTS_QUOTA,
-    "fts_query_limit": 0
+    "fts_query_limit": 0,
+    "cluster_version": None,
+    "bkrs_client": None
 }
 
 
@@ -44,6 +46,7 @@ class build:
         self.path = path
         self.product = product
         self.version = params["version"]
+        self.bkrs_client = None
 
 
 class NodeHelper:
@@ -417,7 +420,6 @@ def print_result_and_exit(err=None, install_started=True):
     install_not_started = []
     for server in params["servers"]:
         node = get_node_helper(server.ip)
-
         if not node or not node.install_success:
             if install_started:
                 fail.append(server.ip)
@@ -466,6 +468,10 @@ def _parse_user_input():
     else:
         params["servers"] = userinput.servers
 
+    if userinput.bkrs_client:
+        params["bkrs_client"] = userinput.bkrs_client
+        params["servers"].append(params["bkrs_client"])
+
     # Validate and extract remaining params
     for key, value in list(userinput.test_params.items()):
         if key == "debug_logs":
@@ -513,6 +519,11 @@ def _parse_user_input():
             params["fts_query_limit"] = int(value)
         if key == "variant":
             params["variant"] = value
+        if key == "cluster_version":
+            params["cluster_version"] = value
+
+    if userinput.bkrs_client and not params["cluster_version"]:
+        print_result_and_exit("Need 'cluster_version' in params to proceed", install_started=False)
 
     if not params["version"] and not params["url"]:
         print_result_and_exit("Need valid build version or url to proceed", install_started=False)
@@ -621,24 +632,28 @@ def _copy_to_nodes(src_path, dest_path):
 
 
 def __get_build_url(node, build_binary):
+    cb_version = params["version"]
+    if params["bkrs_client"]:
+        if node.ip != params["bkrs_client"].ip:
+            cb_version = params["cluster_version"]
     if params["enable_ipv6"]:
         ipv6_url = "{0}{1}/{2}/{3}".format(
             testconstants.CB_FQDN_REPO,
-            testconstants.CB_VERSION_NAME[(params["version"]).split('-')[0][:-2]],
-            params["version"].split('-')[1],
+            testconstants.CB_VERSION_NAME[cb_version.split('-')[0][:-2]],
+            cb_version.split('-')[1],
             build_binary)
         if node.shell.is_url_live(ipv6_url, exit_if_not_live=False):
             return ipv6_url
     else:
         latestbuilds_url = "{0}{1}/{2}/{3}".format(
             testconstants.CB_REPO,
-            testconstants.CB_VERSION_NAME[(params["version"]).split('-')[0][:-2]],
-            params["version"].split('-')[1],
+            testconstants.CB_VERSION_NAME[cb_version.split('-')[0][:-2]],
+            cb_version.split('-')[1],
             build_binary)
         release_url = "{0}{1}/{2}/{3}".format(
             testconstants.CB_RELEASE_REPO,
-            testconstants.CB_VERSION_NAME[(params["version"]).split('-')[0][:-2]],
-            params["version"].split('-')[1],
+            testconstants.CB_VERSION_NAME[cb_version.split('-')[0][:-2]],
+            cb_version.split('-')[1],
             build_binary)
         if node.shell.is_url_live(latestbuilds_url, exit_if_not_live=False):
             return latestbuilds_url
@@ -753,9 +768,13 @@ def __get_build_binary_name(node):
     # couchbase-server-enterprise-6.5.0-4557-rhel8.x86_64.rpm
     # couchbase-server-enterprise-6.5.0-4557-oel7.x86_64.rpm
     # couchbase-server-enterprise-6.5.0-4557-amzn2.x86_64.rpm
+    cb_version = params["version"]
+    if params["bkrs_client"]:
+        if node.ip != params["bkrs_client"].ip:
+            cb_version = params["cluster_version"]
     if node.get_os() in install_constants.X86:
         return "{0}-{1}-{2}{3}.{4}.{5}".format(params["cb_edition"],
-                                            params["version"],
+                                            cb_version,
                                             node.get_os(),
                                             "-" + params["variant"] if "variant" in params else "",
                                             node.info.architecture_type,
@@ -768,7 +787,7 @@ def __get_build_binary_name(node):
         if "windows" in node.get_os():
             node.info.deliverable_type = "msi"
         return "{0}_{1}-{2}_{3}.{4}".format(params["cb_edition"],
-                                            params["version"],
+                                            cb_version,
                                             node.get_os(),
                                             "amd64",
                                             node.info.deliverable_type)
@@ -776,7 +795,7 @@ def __get_build_binary_name(node):
     # couchbase-server-enterprise_6.5.0-4557-macos_x86_64.dmg
     elif node.get_os() in install_constants.MACOS_VERSIONS:
         return "{0}_{1}-{2}_{3}-{4}.{5}".format(params["cb_edition"],
-                                            params["version"],
+                                            cb_version,
                                             "macos",
                                             node.info.architecture_type,
                                             "unnotarized",
