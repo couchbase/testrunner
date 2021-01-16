@@ -131,7 +131,7 @@ class QueryFilterTests(QueryTests):
         
     def test_neg_subquery(self):
         error_code = 4000
-        error_message = "subquries are not allowed in aggregate filter."
+        error_message = "Subqueries are not allowed in aggregate filter."
         filter_query = "SELECT max(geo.lat) FILTER(WHERE country = (select 'France' from system:dual)) FROM `travel-sample` WHERE type = 'landmark'"
         try:
             self.run_cbq_query(filter_query)
