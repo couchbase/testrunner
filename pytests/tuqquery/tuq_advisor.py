@@ -741,6 +741,17 @@ class QueryAdvisorTests(QueryTests):
             else:
                 self.fail("There were no errors. Error expected: {0}".format(error))
 
+    def test_negative_from(self):
+        error_code = 3256
+        error_message = "FROM clause is not allowed when Advisor function is present in projection clause."
+        advisor_query = "select ADVISOR({'action':'list'}) FROM `trave-sample` WHERE city = 'Lyon'"
+        try:
+            self.run_cbq_query(advisor_query)
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], error_code)
+            self.assertEqual(error['msg'], error_message)
+
     def run_async_query(self, query, username, password, server):
         results = self.run_cbq_query(query=query, username=username, password=password, server=server)
         # Check the query has been cancelled
