@@ -1040,7 +1040,7 @@ class EventingBaseTest(QueryHelperTests):
                                  dcp_stream_boundary="everything",src_namespace="src_bucket._default._default",
                                         meta_namespace="metadata._default._default",
                                         collection_bindings=["dst_bucket.dst_bucket._default._default.rw"],is_curl=False,
-                                        hostpath=None, validate_ssl=False):
+                                        hostpath=None, validate_ssl=False,worker_count=1):
         src_map=src_namespace.split(".")
         meta_map=meta_namespace.split(".")
         src_bucket=src_map[0]
@@ -1076,6 +1076,7 @@ class EventingBaseTest(QueryHelperTests):
         body['settings']['dcp_stream_boundary'] = dcp_stream_boundary
         body['settings']['deployment_status'] = False
         body['settings']['processing_status'] = False
+        body['settings']['worker_count'] = worker_count
         if is_curl:
             if hostpath != None:
                 body['depcfg']['curl'].append({"hostname": self.hostname+hostpath, "value": "server", "auth_type": self.auth_type,

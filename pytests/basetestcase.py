@@ -206,6 +206,7 @@ class BaseTestCase(unittest.TestCase):
             self.skip_log_scan = self.input.param("skip_log_scan", True)
             self.disable_ipv6_grub = self.input.param("disable_ipv6_grub",False)
             self.upgrade_addr_family = self.input.param("upgrade_addr_family",None)
+            self.skip_metabucket_check = False
 
 
             if self.skip_setup_cleanup or self.skip_bucket_setup:

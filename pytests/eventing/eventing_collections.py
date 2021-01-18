@@ -159,3 +159,44 @@ class EventingCollections(EventingBaseTest):
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         self.undeploy_and_delete_function(body)
+
+    def test_same_scope_multiple_handler(self):
+        self.create_n_collections(self.dst_bucket_name,self.dst_bucket_name,3)
+        for i in range(3):
+            body = self.create_function_with_collection(self.function_name+"_"+str(i), "handler_code/ABO/insert_rand.js",
+                                                        src_namespace="src_bucket.src_bucket.src_bucket",
+                                                        collection_bindings=["src_bucket.src_bucket.src_bucket.src_bucket.r",
+                                                        "dst_bucket.dst_bucket.dst_bucket.coll_"+str(i)+".rw"])
+            self.rest.create_function(body['appname'], body)
+            self.deploy_function(body)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        for i in range(3):
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.coll_"+str(i), self.docs_per_day * self.num_docs)
+        self.undeploy_delete_all_functions()
+
+    def test_same_scope_source(self):
+        self.create_n_collections(self.src_bucket_name,self.src_bucket_name,3)
+        for i in range(3):
+            body = self.create_function_with_collection(self.function_name+"_"+str(i), "handler_code/ABO/insert_rand.js",
+                                                        src_namespace="src_bucket.src_bucket.coll_"+str(i),
+                                                        collection_bindings=["src_bucket.src_bucket.src_bucket.coll_"+str(i)+".r",
+                                                        "dst_bucket.dst_bucket.dst_bucket.dst_bucket.rw"])
+            self.rest.create_function(body['appname'], body)
+            self.deploy_function(body)
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.coll_"+str(i),wait_for_loading=False)
+        self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs*3)
+        self.undeploy_delete_all_functions()
+
+    def test_same_metadata_scope(self):
+        self.create_n_collections(self.metadata_bucket_name,self.metadata_bucket_name,3)
+        for i in range(3):
+            body = self.create_function_with_collection(self.function_name+"_"+str(i), "handler_code/ABO/insert_rand.js",
+                                                        src_namespace="src_bucket.src_bucket.src_bucket",
+                                                        meta_namespace="metadata.metadata.coll_"+str(i),
+                                                        collection_bindings=["src_bucket.src_bucket.src_bucket.src_bucket.r",
+                                                        "dst_bucket.dst_bucket.dst_bucket.dst_bucket.rw"])
+            self.rest.create_function(body['appname'], body)
+            self.deploy_function(body,wait_for_bootstrap=False)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs*3)
+        self.undeploy_delete_all_functions()
