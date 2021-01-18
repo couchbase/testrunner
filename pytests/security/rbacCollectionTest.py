@@ -8,8 +8,6 @@ import fileinput
 import sys
 from subprocess import Popen, PIPE
 from basetestcase import BaseTestCase
-from couchbase.cluster import Cluster, ClusterOptions
-from couchbase_core.cluster import PasswordAuthenticator
 from sdk_client3 import SDKClient
 from collection.collections_cli_client import CollectionsCLI
 from collection.collections_rest_client import CollectionsRest
@@ -173,7 +171,7 @@ class rbacCollectionTest(BaseTestCase):
                 final_payload = "name=" + item['user'] + "&roles=" + item['role'] 
             self.log.info (final_payload)
             if self.auth_type == 'users':
-                final_payload = final_payload + + "&password=password"
+                final_payload = final_payload + "&password=password"
                 self.user_delete_username(RestConnection(self.master), 'local', item['user'])
                 status, content, header =  rbacmain(self.master, "builtin")._set_user_roles(user_name=item['user'], payload=final_payload)
             elif self.auth_type == 'InternalGroup':
