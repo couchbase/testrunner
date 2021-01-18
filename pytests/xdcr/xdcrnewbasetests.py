@@ -1389,6 +1389,7 @@ class CouchbaseCluster:
         @param bucket_priority: high/low etc.
         @param lww: conflict_resolution_type.
         """
+        tasks = []
         for i in range(num_buckets):
             name = "sasl_bucket_" + str(i + 1)
             sasl_params = self._create_bucket_params(server=self.__master_node, password='password',
@@ -1397,8 +1398,8 @@ class CouchbaseCluster:
                                                      bucket_priority=bucket_priority,
                                                      lww=lww, maxttl=maxttl,
                                                      bucket_storage=bucket_storage)
-            self.__clusterop.async_create_sasl_bucket(name=name, password='password',
-                                                      bucket_params=sasl_params)
+            tasks.append(self.__clusterop.async_create_sasl_bucket(name=name, password='password',
+                                                      bucket_params=sasl_params))
             self.__buckets.append(
                 Bucket(
                     name=name, authType="sasl", saslPassword="password",
@@ -1410,8 +1411,9 @@ class CouchbaseCluster:
                     bucket_storage=bucket_storage
                 ))
             if self.collection_support and (self.scope_num or self.collection_num):
-                CollectionsRest(self.__master_node).async_create_scope_collection(
-                    self.scope_num, self.collection_num, name)
+                tasks.append(CollectionsRest(self.__master_node).async_create_scope_collection(
+                    self.scope_num, self.collection_num, name))
+        [task for task in tasks]
 
     def create_standard_buckets(
             self, bucket_size, num_buckets=1, num_replicas=1,
@@ -1426,6 +1428,7 @@ class CouchbaseCluster:
         @param bucket_priority: high/low etc.
         @param lww: conflict_resolution_type.
         """
+        tasks = []
         for i in range(num_buckets):
             name = "standard_bucket_" + str(i + 1)
             standard_params = self._create_bucket_params(
@@ -1437,8 +1440,8 @@ class CouchbaseCluster:
                 lww=lww,
                 maxttl=maxttl,
                 bucket_storage=bucket_storage)
-            self.__clusterop.async_create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT + i,
-                                                          bucket_params=standard_params)
+            tasks.append(self.__clusterop.async_create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT + i,
+                                                          bucket_params=standard_params))
             self.__buckets.append(
                 Bucket(
                     name=name,
@@ -1454,8 +1457,9 @@ class CouchbaseCluster:
                     bucket_storage=bucket_storage
                 ))
             if self.collection_support and (self.scope_num or self.collection_num):
-                CollectionsRest(self.__master_node).async_create_scope_collection(
-                    self.scope_num, self.collection_num, name)
+                tasks.append(CollectionsRest(self.__master_node).async_create_scope_collection(
+                    self.scope_num, self.collection_num, name))
+        [task for task in tasks]
 
     def create_default_bucket(
             self, bucket_size, num_replicas=1,
@@ -1479,7 +1483,7 @@ class CouchbaseCluster:
             maxttl=maxttl,
             bucket_storage=bucket_storage)
 
-        self.__clusterop.create_default_bucket(bucket_params)
+        tasks = [self.__clusterop.create_default_bucket(bucket_params)]
         self.__buckets.append(
             Bucket(
                 name=BUCKET_NAME.DEFAULT,
@@ -1494,8 +1498,9 @@ class CouchbaseCluster:
                 bucket_storage=bucket_storage
             ))
         if self.collection_support and (self.scope_num or self.collection_num):
-            CollectionsRest(self.__master_node).async_create_scope_collection(
-                self.scope_num, self.collection_num, BUCKET_NAME.DEFAULT)
+            tasks.append(CollectionsRest(self.__master_node).async_create_scope_collection(
+                self.scope_num, self.collection_num, BUCKET_NAME.DEFAULT))
+        [task for task in tasks]
 
     def get_buckets(self):
         return self.__buckets

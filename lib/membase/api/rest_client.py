@@ -613,12 +613,12 @@ class RestConnection(object):
         while num_retries > 0:
             status, content, header = self._http_request(api, 'POST', params=params, headers=headers)
             log.info("{0} with params: {1}".format(api, params))
-            json_parsed = json.loads(content)
             if status:
+                json_parsed = json.loads(content)
                 log.info("Scope created {}->{} {}".format(bucket, scope, json_parsed))
                 break
             elif header["status"] == "400":
-                log.info("Scope already exists. Skipping create {}->{} {}".format(bucket, scope, json_parsed))
+                log.info("Scope already exists. Skipping create {}->{}".format(bucket, scope))
                 break
             else:
                 time.sleep(10)
@@ -644,12 +644,12 @@ class RestConnection(object):
         for c in collection:
             while num_retries > 0:
                 status, content, header = self._create_single_collection(bucket, scope, c, params)
-                json_parsed = json.loads(content)
                 if status:
+                    json_parsed = json.loads(content)
                     log.info("Collection created {}->{}->{} manifest:{}".format(bucket, scope, c, json_parsed))
                     break
                 elif header["status"] == "400":
-                    log.info("Collection already exists. Skipping create {}->{}->{} manifest:{}".format(bucket, scope, c, json_parsed))
+                    log.info("Collection already exists. Skipping create {}->{}-{}".format(bucket, scope, c))
                     break
                 else:
                     time.sleep(10)
