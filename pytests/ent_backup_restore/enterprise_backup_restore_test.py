@@ -1,5 +1,5 @@
 import os, re, copy, json, subprocess
-from random import randrange, randint
+from random import randrange, randint, choice
 from threading import Thread
 
 from couchbase_helper.cluster import Cluster
@@ -4596,6 +4596,179 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
         # Delete a bucket
         self.backup_remove(self.backups.pop(-2), verify_cluster_stats=False)
+
+    def test_analytics_synonyms(self):
+        """ Test analytics synonyms can be restored
+
+        Params:
+            dataverses (int): Number of dataverses to create.
+            datasets (int): Number of datasets to create.
+            synonyms (int): Number of synonyms to create.
+        """
+        class Query:
+            """ A class to execute analytics queries """
+
+            def __init__(self, server, username, password):
+                self.restconn = RestConnection(server)
+
+            def execute(self, query):
+                return self.restconn.execute_statement_on_cbas(query, None)
+
+            def get_synonyms(self):
+                synonyms = set()
+
+                for result in json.loads(self.execute("select * from Metadata.`Synonym`"))['results']:
+                    synonym = result['Synonym']
+                    synonym_name = synonym['SynonymName']
+                    synonym_target = synonym['ObjectDataverseName'] + '.' + synonym['ObjectName']
+                    synonym_dataverse = synonym['DataverseName']
+                    synonyms.add((synonym_name, synonym_target, synonym_dataverse))
+
+                return synonyms
+
+            def get_synonyms_count(self):
+                return json.loads(self.execute("select count(*) as count from Metadata.`Synonym`;"))['results'][0]['count']
+
+        class Dataset:
+
+            def __init__(self, name, bucket, clause=None):
+                self.name, self.bucket, self.clause = name, bucket, clause
+
+            def get_where_clause(self):
+                return f" WHERE {self.clause}" if self.clause else ""
+
+        class Synonym:
+
+            def __init__(self, name, target):
+                self.name, self.target = name, target
+
+        class Dataverse:
+
+            def __init__(self, name):
+                self.name = name
+                self.datasets = set()
+                self.synonyms = set()
+
+            def add_dataset(self, dataset):
+                self.datasets.add(dataset)
+
+            def add_synonym(self, synonym):
+                self.synonyms.add(synonym)
+
+            def next_dataset_name(self):
+                return f"dat_{len(self.datasets)}"
+
+            def next_synonym_name(self):
+                return f"syn_{len(self.synonyms)}"
+
+        class Analytics:
+
+            def __init__(self, query):
+                self.query, self.dataverses = query, set()
+
+            def add_dataverse(self, dataverse):
+                self.dataverses.add(dataverse)
+
+            def next_dataverse_name(self):
+                return f"dtv_{len(self.dataverses)}"
+
+            def pick_target_for_synonym(self):
+                choices =  [f"{dataverse.name}.{dataset.name}" for dataverse in self.dataverses for dataset in dataverse.datasets]
+
+                if choices:
+                    return choice(choices)
+
+                return None
+
+            def create(self):
+                # Create daterverses and datasets
+                for dataverse in self.dataverses:
+                    self.query.execute(f"CREATE dataverse {dataverse.name}")
+
+                    for dataset in dataverse.datasets:
+                        self.query.execute(f"CREATE DATASET {dataverse.name}.{dataset.name} ON {dataset.bucket}{dataset.get_where_clause()}")
+
+                # Create synonyms
+                for dataverse in self.dataverses:
+                    for synonym in dataverse.synonyms:
+                        self.query.execute(f"CREATE analytics synonym {dataverse.name}.{synonym.name} FOR {synonym.target}")
+
+            def delete(self):
+                for dataverse in self.dataverses:
+                    for dataset in dataverse.datasets:
+                        self.query.execute(f"DROP DATASET {dataverse.name}.{dataset.name}")
+
+                    for synonym in dataverse.synonyms:
+                        self.query.execute(f"DROP analytics synonym {dataverse.name}.{synonym.name}")
+
+                    self.query.execute(f"DROP dataverse {dataverse.name}")
+
+        class AnalyticsTest:
+
+            def __init__(self, backup, no_of_dataverses, no_of_datasets, no_of_synonyms, analytics_server):
+                # The base class
+                self.backup = backup
+
+                # Test parameters
+                self.no_of_dataverses, self.no_of_datasets, self.no_of_synonyms = no_of_dataverses, no_of_datasets, no_of_synonyms
+
+                # The number of synonyms that get created
+                self.no_of_synonyms_created = no_of_dataverses * no_of_synonyms
+
+                # The object thats used to run queries on the server running analytics
+                self.query = Query(analytics_server, analytics_server.rest_username, analytics_server.rest_password)
+
+                # The object that represents our current model of analytics
+                self.analytics = Analytics(self.query)
+
+            def test_analytics(self):
+                # Define the analytics model (i.e. which dataverses, datasets and synonyms are present)
+                for i in range(self.no_of_dataverses):
+                    dataverse = Dataverse(self.analytics.next_dataverse_name())
+                    self.analytics.add_dataverse(dataverse)
+
+                    for j in range(self.no_of_datasets):
+                        dataset = Dataset(dataverse.next_dataset_name(), 'default')
+                        dataverse.add_dataset(dataset)
+
+                    for j in range(self.no_of_synonyms):
+                        synonym = Synonym(dataverse.next_synonym_name(), self.analytics.pick_target_for_synonym())
+                        dataverse.add_synonym(synonym)
+
+                # Create dataverses, datasets and synonyms
+                self.analytics.create()
+                self.backup.assertEqual(self.query.get_synonyms_count(), self.no_of_synonyms_created)
+
+                # Create a repository
+                self.backup.backup_create()
+
+                # Take a backup
+                self.backup.backup_cluster()
+
+                # Delete all analytics related stuff
+                self.analytics.delete()
+                self.backup.assertEqual(self.query.get_synonyms_count(), 0)
+
+                # Perform a one off restore
+                self.backup.backup_restore()
+                synonyms = self.query.get_synonyms()
+
+                # Check synonyms have been restored
+                for dataverse in self.analytics.dataverses:
+                    for synonym in dataverse.synonyms:
+                        self.backup.assertIn((synonym.name, synonym.target, dataverse.name), synonyms)
+
+        # The server that will be reprovisioned with analytics
+        analytics_server = self.restore_cluster_host = self.servers[2]
+
+        # Add a server and provision it with analytics
+        self.add_server_with_custom_services(analytics_server, services=["cbas"])
+
+        # A little sleep for services to warmup
+        self.assertTrue(RestConnection(analytics_server).wait_until_cbas_is_ready(100))
+
+        # Run the analytics test
+        AnalyticsTest(self, self.input.param("dataverses", 5), self.input.param("datasets", 5), self.input.param("synonyms", 5), analytics_server).test_analytics()
 
     def test_info_after_backup_merge_remove(self):
         """ CBQE-5475: Test cbbackupmgr info comprehensively after performing backup, merge and remove

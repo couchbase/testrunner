@@ -1221,6 +1221,19 @@ class RestConnection(object):
             log.error("listRebalanceTokens:{0},content:{1}".format(status, content))
             raise Exception("list rebalance tokens failed")
 
+    def wait_until_cbas_is_ready(self, timeout):
+        """ Wait until a http request can be made to the analytics service """
+        timeout = time.time() + timeout
+
+        while time.time() < timeout:
+            try:
+                self.execute_statement_on_cbas("SELECT 'hello' as message", None)
+                return True
+            except ServerUnavailableException:
+                self.sleep(1, "Waiting for analytics server to be ready")
+
+        return False
+
     def execute_statement_on_cbas(self, statement, mode, pretty=True,
                                   timeout=70, client_context_id=None,
                                   username=None, password=None):

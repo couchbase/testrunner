@@ -2847,6 +2847,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     vbuckets_per_shard[bucket.name][i] = int(output[0])
         shell.disconnect()
 
+    def add_server_with_custom_services(self, server, services):
+        """ Add a server to the cluster_host and provision it with custom services
+        """
+        # Credentials to the server
+        username = server.rest_username
+        password = server.rest_password
+
+        # Add server provisioning it with `services`
+        RestConnection(self.backupset.cluster_host).add_node(username, password, server.ip, services=services)
+
+        # Rebalance
+        self.cluster.rebalance([self.backupset.cluster_host], [], [])
+
     def _create_restore_cluster(self, node_services=["kv"]):
         rest_rs = RestConnection(self.backupset.restore_cluster_host)
         rs_bucket = rest_rs.get_buckets()
