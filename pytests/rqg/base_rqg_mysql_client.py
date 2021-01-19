@@ -72,6 +72,8 @@ class BaseRQGMySQLClient(MySQLClient):
                 return None
         if "int" in str(type):
             return value
+        if "blob" in str(type) and value is not None:
+            return value.decode()
         if "long" in str(type):
             return value
         if "datetime" in str(type):
