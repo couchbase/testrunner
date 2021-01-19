@@ -3628,15 +3628,20 @@ class FTSBaseTest(unittest.TestCase):
         for server in self._input.servers:
             before_keyword_counts = {}
             after_keyword_counts = {}
+            before_file_exists = False
+            after_file_exists = False
             if os.path.exists(f'{server.ip}_{keyword_count_before_filename}'):
+                before_file_exists = True
                 s = open(f'{server.ip}_{keyword_count_before_filename}', 'r').read()
                 before_keyword_counts = ast.literal_eval(s)
                 os.remove(f'{server.ip}_{keyword_count_before_filename}')
-                if os.path.exists(f'{server.ip}_{keyword_count_after_filename}'):
-                    s = open(f'{server.ip}_{keyword_count_after_filename}', 'r').read()
-                    after_keyword_counts = ast.literal_eval(s)
-                    os.remove(f'{server.ip}_{keyword_count_after_filename}')
+            if os.path.exists(f'{server.ip}_{keyword_count_after_filename}'):
+                after_file_exists = True
+                s = open(f'{server.ip}_{keyword_count_after_filename}', 'r').read()
+                after_keyword_counts = ast.literal_eval(s)
+                os.remove(f'{server.ip}_{keyword_count_after_filename}')
 
+            if before_file_exists and after_file_exists:
                 for log, keyword_count in after_keyword_counts.items():
                     if log in before_keyword_counts.keys():
                         for keyword, count in keyword_count.items():
