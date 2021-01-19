@@ -3295,6 +3295,15 @@ class RestConnection(object):
             headers=self._create_capi_headers())
         return status
 
+    def delete_fts_index_extended_output(self, name):
+        """ delete fts index/alias """
+        api = self.fts_baseUrl + "api/index/{0}".format(name)
+        status, content, header = self._http_request(
+            api,
+            'DELETE',
+            headers=self._create_capi_headers())
+        return status, content, header
+
     def stop_fts_index_update(self, name):
         """ method to stop fts index from updating"""
         api = self.fts_baseUrl + "api/index/{0}/ingestControl/pause".format(name)

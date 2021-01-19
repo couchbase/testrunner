@@ -630,18 +630,21 @@ class StableTopFTS(FTSBaseTest):
         index = self.create_index(bucket=self._cb_cluster.get_bucket_by_name('default'),
                                   index_name="custom_index", collection_index=collection_index, _type=type,
                                   scope=index_scope, collections=index_collections)
+        num_collections = TestInputSingleton.input.param("num_collections", 1)
+
         self.load_data()
         self.wait_for_indexing_complete()
         query = {"query": "mutated:0"}
         hits,_,_,_ = index.execute_query(query)
-        self.assertEquals(hits, 1000, f"Expected hits does not match after insert. Expected - 1000, found {hits}")
+        self.assertEquals(hits, 1000*num_collections, f"Expected hits does not match after insert. Expected - {1000*num_collections}, found {hits}")
 
         self._update = True
         self.async_perform_update_delete(self.upd_del_fields)
         self.wait_for_indexing_complete()
+        self.sleep(30, "sleep additional time.")
         query = {"query": "mutated:0"}
         hits,_,_,_ = index.execute_query(query)
-        self.assertEquals(hits, 700, f"Expected hits does not match after update. Expected - 700, found {hits}")
+        self.assertEquals(hits, 700*num_collections, f"Expected hits does not match after update. Expected - {700*num_collections}, found {hits}")
 
         self._update = False
         self._delete = True
@@ -649,7 +652,7 @@ class StableTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         query = {"query": "type:emp"}
         hits,_,_,_ = index.execute_query(query)
-        self.assertEquals(hits, 700, f"Expected hits does not match after delete. Expected - 700, found {hits}")
+        self.assertEquals(hits, 700*num_collections, f"Expected hits does not match after delete. Expected - {700*num_collections}, found {hits}")
 
         self._expires = 10
         self._update = True
@@ -659,7 +662,7 @@ class StableTopFTS(FTSBaseTest):
         self.sleep(30, "Wait for docs expiration")
         query = {"query": "type:emp"}
         hits,_,_,_ = index.execute_query(query)
-        self.assertEquals(hits, 400, f"Expected hits does not match after expiration. Expected - 400, found {hits}")
+        self.assertEquals(hits, 400*num_collections, f"Expected hits does not match after expiration. Expected - {400*num_collections}, found {hits}")
 
     def test_collection_mutations_isolation(self):
         #delete unnecessary bucket
@@ -2755,6 +2758,7 @@ class StableTopFTS(FTSBaseTest):
 
         query_thread.join()
         drop_thread.join()
+        self.sleep(30, "wait for index drop")
 
         for idx in self._cb_cluster.get_indexes():
             status,dfn = rest.get_fts_index_definition(idx.name)
@@ -2773,9 +2777,9 @@ class StableTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         self._cb_cluster.run_n1ql_query(query=f"create primary index on default:default.{self.scope}.{self.collection}")
         index = self._cb_cluster.get_indexes()[0]
-        query = self._input.param(f"update default:default.{self.scope}.{self.collection} set email='mutated@gmail.com'")
+        query = f"update default:default.{self.scope}.{self.collection} set email='mutated@gmail.com'"
         import threading
-        query_thread = threading.Thread(target=self._n1ql_query_wrapper, args=(query))
+        query_thread = threading.Thread(target=self._n1ql_query_wrapper, args=[query])
         drop_thread = threading.Thread(target=self._drop_container_wrapper, args=(drop_container, drop_name))
         query_thread.daemon = True
         drop_thread.daemon = True
@@ -2784,6 +2788,7 @@ class StableTopFTS(FTSBaseTest):
 
         query_thread.join()
         drop_thread.join()
+        self.sleep(30, "wait for index drop")
 
         for idx in self._cb_cluster.get_indexes():
             status,dfn = rest.get_fts_index_definition(idx.name)
@@ -2803,7 +2808,7 @@ class StableTopFTS(FTSBaseTest):
         index = self._cb_cluster.get_indexes()[0]
 
         import threading
-        query_thread = threading.Thread(target=self._drop_index_wrapper, args=(index))
+        query_thread = threading.Thread(target=self._drop_index_wrapper, args=[index])
         drop_thread = threading.Thread(target=self._drop_container_wrapper, args=(drop_container, drop_name))
         query_thread.daemon = True
         drop_thread.daemon = True
@@ -3013,7 +3018,7 @@ class StableTopFTS(FTSBaseTest):
         try:
             index2 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
                                        "index1", collection_index=True, _type=f"{scope_name}.collection2",
-                                       scope=scope_name, collections=["collection2"])
+                                       scope=scope_name, collections=["collection2"], no_check=True)
         except Exception as e:
             print("Exceptin caught ::"+str(e)+"::")
             return
@@ -3049,7 +3054,7 @@ class StableTopFTS(FTSBaseTest):
         try:
             index2 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
                                        "index1", collection_index=True, _type="scope2.collection1",
-                                       scope="scope2", collections=["collection1"])
+                                       scope="scope2", collections=["collection1"], no_check=True)
         except Exception as e:
             print("Exceptin caught ::" + str(e) + "::")
             return

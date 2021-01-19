@@ -1222,6 +1222,16 @@ class FTSIndex:
         rest.create_fts_index(self.name, self.index_definition)
         self.__cluster.get_indexes().append(self)
 
+    def create_no_check(self, rest=None):
+        if not rest:
+            rest = RestConnection(self.__cluster.get_random_fts_node())
+        self.__log.info("Creating {0} {1} on {2}".format(
+            self.index_type,
+            self.name,
+            rest.ip))
+        rest.create_fts_index(self.name, self.index_definition)
+        self.__cluster.get_indexes().append(self)
+
     def update(self, rest=None):
         if not rest:
             rest = RestConnection(self.__cluster.get_random_fts_node())
@@ -1295,7 +1305,9 @@ class FTSIndex:
             self.index_type,
             self.name,
             rest.ip))
-        status = rest.delete_fts_index(self.name)
+        status, content, header = rest.delete_fts_index_extended_output(self.name)
+        content1 = content.decode()
+        content_json = json.loads(str(content1))
         if status:
             self.__cluster.get_indexes().remove(self)
             if not self.__cluster.are_index_files_deleted_from_disk(self.name):
@@ -1304,6 +1316,9 @@ class FTSIndex:
             else:
                 self.__log.info("Validated: all index files for {0} deleted from "
                                 "disk".format(self.name))
+        elif not status and "index not found" in content_json['error']:
+            self.__log.warning(f"The following index is found in testware cluster, but is not found in CB cluster: {self.name}. Testware cluster is cleaned up.")
+            self.__cluster.get_indexes().remove(self)
         else:
             raise FTSException("Index/alias {0} not deleted".format(self.name))
 
@@ -2448,7 +2463,7 @@ class CouchbaseCluster:
     def create_fts_index(self, name, source_type='couchbase',
                          source_name=None, index_type='fulltext-index',
                          index_params=None, plan_params=None,
-                         source_params=None, source_uuid=None, collection_index=False, _type=None, analyzer="standard", scope=None, collections=None):
+                         source_params=None, source_uuid=None, collection_index=False, _type=None, analyzer="standard", scope=None, collections=None, no_check=False):
         """Create fts index/alias
         @param node: Node on which index is created
         @param name: name of the index/alias
@@ -2499,7 +2514,10 @@ class CouchbaseCluster:
             index.index_definition['params']['doc_config'] = {}
             index.index_definition['params']['doc_config'] = doc_config
 
-        index.create()
+        if no_check:
+            index.create_no_check()
+        else:
+            index.create()
         return index
 
     def create_fts_index_wait_for_completion(self, sample_index_name_1, sample_bucket_name,
@@ -4691,7 +4709,7 @@ class FTSBaseTest(unittest.TestCase):
             return index.fts_queries
 
     def create_index(self, bucket, index_name, index_params=None,
-                     plan_params=None, collection_index=False, _type=None, analyzer="standard", scope=None, collections=None):
+                     plan_params=None, collection_index=False, _type=None, analyzer="standard", scope=None, collections=None, no_check=False):
         """
         Creates a default index given bucket, index_name and plan_params
         """
@@ -4709,7 +4727,8 @@ class FTSBaseTest(unittest.TestCase):
             _type=_type,
             analyzer=analyzer,
             scope=scope,
-            collections=collections)
+            collections=collections,
+            no_check=no_check)
         self.is_index_partitioned_balanced(index)
         return index
 
@@ -4965,7 +4984,8 @@ class FTSBaseTest(unittest.TestCase):
                                            json_template=dataset,
                                            start=start, end=start+num_items,
                                            es_compare=self.compare_es, es_host=elastic_ip, es_port=elastic_port,
-                                           es_login=elastic_username, es_password=elastic_password, key_prefix=dataset
+                                           es_login=elastic_username, es_password=elastic_password, key_prefix=dataset,
+                                           upd_del_shift=self._num_items
                                  )
 
     def populate_create_gen(self):
