@@ -206,6 +206,7 @@ class N1QLHelper():
 
     def is_index_present(self, bucket_name, index_name, fields_set=None, using=None, status="online"):
         query_response = self.run_cbq_query("SELECT * FROM system:indexes")
+        self.log.info(f'{query_response}')
         if fields_set is None and using is None:
             if status is "any":
                 desired_index = (index_name, bucket_name)

@@ -78,7 +78,6 @@ class ConCurIndexOps(BaseSecondaryIndexingTests):
                 try:
                     index = self.all_indexes_state["created"].\
                         pop(random.randrange(len(self.all_indexes_state["created"])))
-                    self.all_indexes_state["deleted"].append(index)
                 except Exception as e:
                     index = None
                 return index
@@ -100,6 +99,11 @@ class ConCurIndexOps(BaseSecondaryIndexingTests):
         with self._lock_queue:
             if index is not None:
                 self.all_indexes_state["created"].append(index)
+
+    def add_to_deleted(self, index):
+        with self._lock_queue:
+            if index is not None:
+                self.all_indexes_state["deleted"].append(index)
 
 class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
     def setUp(self):
@@ -401,8 +405,10 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                 try:
                     server = random.choice(self.n1ql_nodes)
                     self.run_cbq_query(query=drop_query, server=server)
+                    self.index_ops_obj.add_to_deleted(index_to_delete)
                 except Exception as err:
-                    if "the operation will automaticaly retry after cluster is back to normal" not in str(err):
+                    if "the operation will automaticaly retry after cluster is back to normal" not in str(err) \
+                            and "Index Not Found" not in str(err):
                         error_map = {"query": drop_query, "error": str(err)}
                         self.index_ops_obj.update_errors(error_map)
             self.sleep(drop_sleep)
