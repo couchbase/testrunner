@@ -8,30 +8,30 @@ class LogScanner(object):
         self.exclude_keywords = exclude_keywords
         self.service_log_keywords_map = {
             "all": {
-                "babysitter.log": ["exception occurred in runloop", "failover exited with reason", "Authorization.*Basic"],
-                "memcached.log": ["CRITICAL", "Authorization.*Basic"],
+                "babysitter.log": ["exception occurred in runloop", "failover exited with reason"],
+                "memcached.log": ["CRITICAL"],
                 "all": []
             },
             "cbas": {
                 "analytics_error": ["Analytics Service is temporarily unavailable",
-                                    "Failed during startup task", "ASX", "IllegalStateException", "Authorization.*Basic"]
+                                    "Failed during startup task", "ASX", "IllegalStateException"]
             },
             "eventing": {
-                "eventing.log": ["panic", "Authorization.*Basic"]
+                "eventing.log": ["panic"]
             },
             "fts": {
-                "fts.log": ["panic", "Authorization.*Basic"]
+                "fts.log": ["panic"]
             },
             "index": {
                 "indexer.log": ["panic in", "panic:", "Error parsing XATTR",
-                                "Encounter planner error", "corruption", "Authorization.*Basic"]
+                                "Encounter planner error", "corruption"]
             },
             "kv": {
-                "projector.log": ["panic", "Error parsing XATTR", "Authorization.*Basic"],
-                "*xdcr*.log": ["panic", "Authorization.*Basic"],
+                "projector.log": ["panic", "Error parsing XATTR"],
+                "*xdcr*.log": ["panic"],
             },
             "n1ql": {
-                "query.log": ["panic", "Encounter planner error", "Authorization.*Basic"]
+                "query.log": ["panic", "Encounter planner error"]
             }
         }
 
