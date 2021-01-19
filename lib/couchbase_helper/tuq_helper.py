@@ -179,6 +179,7 @@ class N1QLHelper():
             keyspace = index['keyspace']
             index_name = index['name']
             self.run_cbq_query("drop index %s ON %s" % (index_name, keyspace))
+        time.sleep(120)
         for index in current_indexes:
             bucket = index['bucket']
             index_name = index['name']

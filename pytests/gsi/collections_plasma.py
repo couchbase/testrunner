@@ -267,7 +267,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.collections = list(set(self.cli_rest.get_bucket_collections(bucket=self.test_bucket)))
         self.scopes.remove('_default')
         self.collections.remove('_default')
-        self.sleep(5)
+        self.sleep(10)
         for s_item in self.scopes:
             for c_item in self.collections:
                 self.keyspace.append(f'default:{self.test_bucket}.{s_item}.{c_item}')
