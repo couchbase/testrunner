@@ -45,7 +45,14 @@ class Transfer(object):
 
     @property
     def backup(self):
-        pat = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d*Z")
+        # Matches a modified RFC3339Nano format (with the colons changed for underscores) to match cbbackupmgr's output.
+        # Examples:
+        # 2021-01-20T09_16_13.79441759Z
+        # 2021-01-20T09_16_13.79441759+04_00
+        # 2021-01-20T09_16_13.79441759-04_00
+        # 54320-06-20t09_16_13-04_00
+        # 999-12-20t09_16_13.3Z
+        pat = re.compile(r"([0-9]+)-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])[Tt]([01][0-9]|2[0-3])_([0-5][0-9])_([0-5][0-9]|60)(\.[0-9]+)?(([Zz])|([\+|\-]([01][0-9]|2[0-3])_[0-5][0-9]))")
         if self.description:
             result = pat.search(self.description)
             if result:

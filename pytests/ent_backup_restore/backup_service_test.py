@@ -1968,6 +1968,7 @@ class BackupServiceTest(BackupServiceBase):
         for i, backup_service_backup, task, cbbackupmgr_backup in zip(range(0, no_of_backups), self.get_backups("active", repo_name), reversed(self.get_task_history("active", repo_name)), info['backups']):
             # Check the backup name between cbbackupmgr and the backup service match
             self.assertEqual(backup_service_backup._date, cbbackupmgr_backup['date'])
+
             # Check the 'Backuping up to `backup-name`' in the description of the stats matches the `backup-name` in the backup service backup
             self.assertEqual(self.map_task_to_backup("active", repo_name, task.task_name), backup_service_backup._date)
 
@@ -1995,7 +1996,7 @@ class BackupServiceTest(BackupServiceBase):
         self._load_all_buckets(self.master, BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items), "create", 0)
 
         # Sleep to ensure the bucket is populated with data
-        self.wait_until_documents_are_persisted()
+        self.assertTrue(self.wait_until_documents_are_persisted(timeout=200))
 
         # Take a one off backup using the backup service
         task_name = self.take_one_off_backup("active", repo_name, full_backup, 20, 20)
@@ -2012,6 +2013,9 @@ class BackupServiceTest(BackupServiceBase):
         self.backupset.objstore_staging_directory, old_staging_dir = self.backupset.objstore_alternative_staging_directory, self.backupset.objstore_staging_directory
         self.backup_restore()
         self.backupset.objstore_staging_directory = old_staging_dir
+
+        # Sleep to ensure the bucket is populated with data
+        self.assertTrue(self.wait_until_documents_are_persisted(timeout=200))
 
         # Delete the alt staging directory before cbriftdump
         self.rmdir(self.backupset.objstore_alternative_staging_directory)
@@ -2116,6 +2120,7 @@ class BackupServiceTest(BackupServiceBase):
             self.assertIn(status, [200] if operation_should_succeed else [403, 400])
             # Check the error message if the status is 400
             if status == 400:
+                self.info.log("Response: " + response_data.data)
                 self.assertEqual(json.loads(response_data.data)['message'], 'Forbidden. User needs one of the following permissions')
 
         # Restore configuration so we can tear the test down correctly
