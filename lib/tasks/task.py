@@ -29,7 +29,7 @@ from membase.api.exception import N1QLQueryException, DropIndexException, Create
     DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
     GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException, \
     ServerUnavailableException, BucketFlushFailed, CBRecoveryFailedException, BucketCompactionException, \
-    AutoFailoverException,NodesFailureException
+    AutoFailoverException,NodesFailureException, ServerAlreadyJoinedException
 from membase.api.rest_client import RestConnection, Bucket, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcacheConstants import ERR_NOT_FOUND, NotFoundError
@@ -780,8 +780,11 @@ class RebalanceTask(Task):
                 self.rest.add_node(master.rest_username, master.rest_password,
                                    node.hostname, node.port, services=services_for_node)
             else:
-                self.rest.add_node(master.rest_username, master.rest_password,
+                try:
+                    self.rest.add_node(master.rest_username, master.rest_password,
                                    node.ip, node.port, services=services_for_node)
+                except ServerAlreadyJoinedException:
+                    pass
 
     def start_rebalance(self, task_manager):
         nodes = self.rest.node_statuses()

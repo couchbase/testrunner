@@ -51,10 +51,10 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.user_xattr_data = []
             self.meta_ids = []
         if self.feature == "curl-whitelist":
-            self.google_error_msg = "Errorevaluatingprojection.-cause:URLendpointisntwhitelisted" \
+            self.google_error_msg = "Errorevaluatingprojection.-cause:URLendpointisntpresentincurlallowedlist" \
                                     "https://maps.googleapis.com/maps/api/geocode/json."
-            self.jira_error_msg ="Errorevaluatingprojection.-cause:URLendpointisntwhitelistedhttps://jira.atlassian." \
-                                 "com/rest/api/latest/issue/JRA-9.PleasemakesuretowhitelisttheURLontheUI."
+            self.jira_error_msg ="Errorevaluatingprojection.-cause:URLendpointisntpresentinallowedlisthttps://jira.atlassian." \
+                                 "com/rest/api/latest/issue/JRA-9.PleasemakesuretoaddtheURLtothecurlallowedlistontheUI."
             self.cbqpath = '%scbq' % self.path + " -e %s:%s -q -u %s -p %s" \
                                                  % (self.master.ip, self.n1ql_port, self.rest.username, self.rest.password)
         if self.feature == "auditing":
@@ -835,7 +835,17 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     self.assertTrue(docs == {"deleted": False})
         else:
             self.log.info("Compare: " + str(compare[0:5]))
-            self.assertTrue(sorted(docs_1, key=lambda item: item.get(xattr_name)) == sorted(compare, key=lambda item: item.get(xattr_name)))
+            key1 = list(compare[0].keys())[0]
+            if type(compare[0][key1]) == int:
+                self.assertTrue(sorted(docs_1, key=lambda item: item.get(key1)) == sorted(compare, key=lambda item: item.get(key1)))
+            else:
+                key2 = list(compare[0][key1].keys())[0]
+                if type(compare[0][key1][key2]) == int:
+                    self.assertTrue(sorted(docs_1, key=lambda item: item.get(key1).get(key2)) == sorted(compare, key=lambda item: item.get(key1).get(key2)))
+                else:
+                    key3 = list(compare[0][key1][key2].keys())[0]
+                    if type(compare[0][key1][key2][key3] == int):
+                        self.assertTrue(sorted(docs_1, key=lambda item: item.get(key1).get(key2).get(key3)) == sorted(compare, key=lambda item: item.get(key1).get(key2).get(key3)))
 
         if deleted_compare:
             meta_ids = self.get_meta_ids()
@@ -873,7 +883,18 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     self.assertTrue(len(docs_2)-10 == len(compare_docs))
                     self.assertTrue(sorted(docs_1, key=lambda item: item.get(xattr_name)) == sorted(docs_2, key=lambda item: item.get(xattr_name)))
             else:
-                self.assertTrue(sorted(docs_2, key=lambda item: item.get(xattr_name)) == sorted(compare_docs, key=lambda item: item.get(xattr_name)))
+                key1 = list(compare_docs[0].keys())[0]
+                if type(compare_docs[0][key1]) == int:
+                    self.assertTrue(sorted(docs_2, key=lambda item: item.get(key1)) == sorted(compare_docs, key=lambda item: item.get(key1)))
+                else:
+                    key2 = list(compare_docs[0][key1].keys())[0]
+                    if type(compare_docs[0][key1][key2]) == int:
+                        self.assertTrue(sorted(docs_2, key=lambda item: item.get(key1).get(key2)) == sorted(compare_docs, key=lambda item: item.get(key1).get(key2)))
+                    else:
+                        key3 = list(compare_docs[0][key1][key2].keys())[0]
+                        if type(compare_docs[0][key1][key2][key3] == int):
+                            self.assertTrue(sorted(docs_2, key=lambda item: item.get(key1).get(key2).get(key3)) == sorted(compare_docs, key=lambda item: item.get(key1).get(key2).get(key3)))
+
                 if not with_aggs:
                     self.assertTrue(len(docs_1)-10 == len(docs_2))
 
