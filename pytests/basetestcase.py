@@ -203,7 +203,7 @@ class BaseTestCase(unittest.TestCase):
             self.x509enable = self.input.param('x509enable', False)
             self.enable_secrets = self.input.param("enable_secrets", False)
             self.secret_password = self.input.param("secret_password", 'p@ssw0rd')
-            self.skip_log_scan = self.input.param("skip_log_scan", True)
+            self.skip_log_scan = self.input.param("skip_log_scan", False)
             self.disable_ipv6_grub = self.input.param("disable_ipv6_grub",False)
             self.upgrade_addr_family = self.input.param("upgrade_addr_family",None)
             self.skip_metabucket_check = False
@@ -267,6 +267,11 @@ class BaseTestCase(unittest.TestCase):
                     (str(self.__class__).find('UpgradeTests') != -1 and self.skip_init_check_cbserver) or \
                     hasattr(self, 'skip_buckets_handle') and \
                     self.skip_buckets_handle:
+                if not self.skip_log_scan:
+                    self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.case_number}'
+                    _tasks = self.cluster.async_log_scan(self.servers, self.log_scan_file_prefix+"_BEFORE")
+                    for _task in _tasks:
+                        _task.result()
                 self.log.info("any cluster operation in setup will be skipped")
                 self.primary_index_created = True
                 self.log.info("==============  basetestcase setup was finished for test #{0} {1} ==============" \

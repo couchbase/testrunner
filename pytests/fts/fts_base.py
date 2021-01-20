@@ -3520,7 +3520,7 @@ class FTSBaseTest(unittest.TestCase):
         self.secret_password = self._input.param("secret_password", 'p@ssw0rd')
         self.container_type = TestInputSingleton.input.param("container_type", "bucket")
         self.scope = TestInputSingleton.input.param("scope", "scope1")
-        self.skip_log_scan = self._input.param("skip_log_scan", True)
+        self.skip_log_scan = self._input.param("skip_log_scan", False)
         self.collection = str(TestInputSingleton.input.param("collection", "collection1"))
         if self.collection.startswith("["):
             self.collection = eval(self.collection)
