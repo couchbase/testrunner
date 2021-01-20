@@ -520,6 +520,18 @@ class BaseTestCase(unittest.TestCase):
     def tearDown(self):
         self.print_cluster_stats()
 
+        self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.case_number}'
+        collect_logs = False
+        keyword_count_diff = {}
+        if not self.skip_log_scan:
+            _tasks = self.cluster.async_log_scan(self.servers, self.log_scan_file_prefix+"_AFTER")
+            for _task in _tasks:
+                _task.result()
+
+            keyword_count_diff = self.compare_logscan_keyword_count()
+            if keyword_count_diff:
+                collect_logs = True
+
         if self.skip_setup_cleanup:
             return
         try:
@@ -536,9 +548,9 @@ class BaseTestCase(unittest.TestCase):
                 self.log.warning("CLEANUP WAS SKIPPED")
             else:
 
-                if test_failed:
+                if test_failed or collect_logs:
                     # collect logs here instead of in test runner because we have not shut things down
-                    if TestInputSingleton.param("get-cbcollect-info", False):
+                    if TestInputSingleton.input.param("get-cbcollect-info", False) or collect_logs:
                         for server in self.servers:
                             self.log.info("Collecting logs @ {0}".format(server.ip))
                             self.get_cbcollect_info(server)
@@ -590,15 +602,6 @@ class BaseTestCase(unittest.TestCase):
             # increase case_number to retry tearDown in setup for the next test
             self.case_number += 1000
         finally:
-            self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.case_number}'
-            if not self.skip_log_scan:
-                _tasks = self.cluster.async_log_scan(self.servers, self.log_scan_file_prefix+"_AFTER")
-                for _task in _tasks:
-                    _task.result()
-
-                keyword_count_diff = self.compare_logscan_keyword_count()
-                if keyword_count_diff:
-                    self.fail(f'Log scan completed, detected new occurrences of error keywords : {keyword_count_diff}')
 
             self.log.info("closing all ssh connections")
             for ins in RemoteMachineShellConnection.get_instances():
@@ -622,6 +625,8 @@ class BaseTestCase(unittest.TestCase):
             else:
                 self.reset_env_variables()
             self.cluster.shutdown(force=True)
+            if not self.skip_log_scan and keyword_count_diff:
+                self.fail(f'Log scan completed, detected new occurrences of error keywords : {keyword_count_diff}')
             self._log_finish(self)
 
     def get_index_map(self):

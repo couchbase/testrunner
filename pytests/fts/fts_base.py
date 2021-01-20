@@ -3675,11 +3675,18 @@ class FTSBaseTest(unittest.TestCase):
 
     def tearDown(self):
         """Clusters cleanup"""
-        if len(self.__report_error_list) > 0:
-            error_logger = self.check_error_count_in_fts_log()
-            if error_logger:
-                self.fail("Errors found in logs : {0}".format(error_logger))
-        
+        self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.__case_number}'
+        collect_logs = False
+        keyword_count_diff = {}
+        if not self.skip_log_scan:
+            _tasks = self._cb_cluster.async_log_scan(self._input.servers, self.log_scan_file_prefix+"_AFTER")
+            for _task in _tasks:
+                _task.result()
+
+            keyword_count_diff = self.compare_logscan_keyword_count()
+            if keyword_count_diff:
+                collect_logs = True
+
         if self.enable_secrets:
             self._setup_node_secret("")
 
@@ -3696,7 +3703,7 @@ class FTSBaseTest(unittest.TestCase):
 
         # collect logs before tearing down clusters
         if self._input.param("get-cbcollect-info", False) and \
-                self.__is_test_failed():
+                self.__is_test_failed() or collect_logs:
             for server in self._input.servers:
                 self.log.info("Collecting logs @ {0}".format(server.ip))
                 NodeHelper.collect_logs(server)
@@ -3712,15 +3719,6 @@ class FTSBaseTest(unittest.TestCase):
                 self.backup_pindex_data(server)
 
         try:
-            self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.__case_number}'
-            if not self.skip_log_scan:
-                _tasks = self._cb_cluster.async_log_scan(self._input.servers, self.log_scan_file_prefix+"_AFTER")
-                for _task in _tasks:
-                    _task.result()
-
-                keyword_count_diff = self.compare_logscan_keyword_count()
-                if keyword_count_diff:
-                    self.fail(f'Log scan completed, detected new occurrences of error keywords : {keyword_count_diff}')
             if self.__is_cleanup_not_needed():
                 self.log.warning("CLEANUP WAS SKIPPED")
                 return
@@ -3749,6 +3747,8 @@ class FTSBaseTest(unittest.TestCase):
                 #self.log.info(str(ins))
                 ins.close()
             self.__cluster_op.shutdown(force=True)
+            if not self.skip_log_scan and keyword_count_diff:
+                self.fail(f'Log scan completed, detected new occurrences of error keywords : {keyword_count_diff}')
             unittest.TestCase.tearDown(self)
 
     def __init_logger(self):
@@ -3811,16 +3811,6 @@ class FTSBaseTest(unittest.TestCase):
                     else:
                         self._create_collection(bucket=bucket.name, scope=self.scope, collection=self.collection)
         self._master = self._cb_cluster.get_master_node()
-
-        # simply append to this list, any error from log we want to fail test on
-        self.__report_error_list = []
-        if self.__fail_on_errors:
-            self.__report_error_list = ["panic:"]
-
-        # for format {ip1: {"panic": 2}}
-        self.__error_count_dict = {}
-        if len(self.__report_error_list) > 0:
-            self.__initialize_error_count_dict()
             
         if self.ntonencrypt == 'enable':
             self.setup_nton_encryption()
@@ -3988,16 +3978,6 @@ class FTSBaseTest(unittest.TestCase):
                     self.consistency_vectors = json.loads(self.consistency_vectors)
         self.ntonencrypt = self._input.param('ntonencrypt','disable')
         self.ntonencrypt_level = self._input.param('ntonencrypt_level','control')
-
-    def __initialize_error_count_dict(self):
-        """
-            initializes self.__error_count_dict with ip, error and err count
-            like {ip1: {"panic": 2}}
-        """
-        for node in self._input.servers:
-            self.__error_count_dict[node.ip] = {}
-        self.check_error_count_in_fts_log(initial=True)
-        self.log.info(self.__error_count_dict)
 
     def __cleanup_previous(self):
         self._cb_cluster.cleanup_cluster(self, cluster_shutdown=False)
@@ -4332,42 +4312,6 @@ class FTSBaseTest(unittest.TestCase):
         for line in result:
             self.log.info(line)
         shell.disconnect()
-
-    def check_error_count_in_fts_log(self, initial=False):
-        """
-        checks if new errors from self.__report_error_list
-        were found on any of the goxdcr.logs
-        """
-        error_found_logger = []
-        fts_log = NodeHelper.get_log_dir(self._input.servers[0]) + '/fts.log*'
-        for node in self._input.servers:
-            shell = RemoteMachineShellConnection(node)
-            for error in self.__report_error_list:
-                count, err = shell.execute_command(
-                    "zgrep \"{0}\" {1} | wc -l".format(error, fts_log))
-                if isinstance(count, list):
-                    count = int(count[0])
-                else:
-                    count = int(count)
-                NodeHelper._log.info(count)
-                if initial:
-                    self.__error_count_dict[node.ip][error] = count
-                else:
-                    self.log.info("Initial '{0}' count on {1} :{2}, now :{3}".
-                                  format(error,
-                                         node.ip,
-                                         self.__error_count_dict[node.ip][error],
-                                         count))
-                    if node.ip in list(self.__error_count_dict.keys()):
-                        if (count > self.__error_count_dict[node.ip][error]):
-                            error_found_logger.append("{0} found on {1}".format(error,
-                                                                                node.ip))
-                            self.print_crash_stacktrace(node, error)
-            shell.disconnect()
-        if not initial:
-            if error_found_logger:
-                self.log.error(error_found_logger)
-            return error_found_logger
 
     def sleep(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
