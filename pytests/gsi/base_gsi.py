@@ -1243,7 +1243,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
         return server_index_count
 
-    def wait_until_indexes_online(self, timeout=600, defer_build=False, check_paused_index=False):
+    def wait_until_indexes_online(self, timeout=600, defer_build=False, check_paused_index=False, schedule_index=False):
         rest = RestConnection(self.master)
         init_time = time.time()
         check = False
@@ -1262,6 +1262,13 @@ class BaseSecondaryIndexingTests(QueryTests):
                             break
                     elif check_paused_index:
                         if index_state["status"] == "Paused":
+                            check = True
+                        else:
+                            check = False
+                            time.sleep(1)
+                            break
+                    elif schedule_index:
+                        if index_state["status"] == "Ready" or index_state["status"] == "Scheduled for Creation":
                             check = True
                         else:
                             check = False
