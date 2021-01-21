@@ -532,7 +532,8 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                                               collection_prefix="oso_collection")
 
         self.load_docs(self.start_doc)
-        #50
+        self.sleep(5)
+
         index_create_tasks = self.create_indexes(num=50, query_def_group="unique", defer_build=True)
 
         for task in index_create_tasks:
@@ -555,6 +556,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             remote = RemoteMachineShellConnection(self.index_nodes[0])
             remote.terminate_process(process_name=self.targetProcess)
 
+        self.sleep(10)
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.fail("some indexes did not process mutations on time")
 
