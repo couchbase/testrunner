@@ -495,7 +495,7 @@ class SQLDefinitionGenerator:
                             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
                                                                       "ANY t IN travel_history SATISFIES t = \"India\" END ORDER BY _id"),
                             groups=["all", ARRAY, SIMPLE_ARRAY, DUPLICATE_ARRAY, ORDER_BY, EQUALS, "airlines"],
-                            index_where_clause=" travel_history IS NOT NULL "))
+                            index_where_clause=""))
         # array distinct index on strings full table scan
         #index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
         #definitions_list.append(
@@ -514,7 +514,7 @@ class SQLDefinitionGenerator:
                             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
                                                                       "ANY t IN travel_history SATISFIES t = \"India\" END ORDER BY _id"),
                             groups=["all", ARRAY, SIMPLE_INDEX, SIMPLE_ARRAY, DISTINCT_ARRAY,
-                                    ORDER_BY, EQUALS, "airlines"], index_where_clause=" travel_history IS NOT NULL "))
+                                    ORDER_BY, EQUALS, "airlines"], index_where_clause=""))
         # array duplicate index on alphanumeric
         index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
         definitions_list.append(
@@ -523,7 +523,7 @@ class SQLDefinitionGenerator:
                             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
                                                                       "ANY t IN travel_history_code SATISFIES t = \"Ind123\" END ORDER BY _id"),
                             groups=["all", ARRAY, SIMPLE_ARRAY, DUPLICATE_ARRAY, ORDER_BY, EQUALS, "airlines"],
-                            index_where_clause=" travel_history_code IS NOT NULL "))
+                            index_where_clause=""))
         # array distinct index on alphanumeric full table scan
         #index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
         #definitions_list.append(
@@ -543,7 +543,7 @@ class SQLDefinitionGenerator:
                                                                       "ANY t IN travel_history_code SATISFIES t = \"Ind123\" END ORDER BY _id"),
                             groups=["all", ARRAY, SIMPLE_INDEX, SIMPLE_ARRAY, DISTINCT_ARRAY,
                                     ORDER_BY, EQUALS, "airlines"],
-                            index_where_clause=" travel_history_code IS NOT NULL "))
+                            index_where_clause=""))
         # array duplicate index on numbers
         index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
         definitions_list.append(
@@ -552,7 +552,7 @@ class SQLDefinitionGenerator:
                             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
                                                                       "ANY t IN credit_cards SATISFIES t > 5000000 END ORDER BY _id"),
                             groups=["all", ARRAY, SIMPLE_ARRAY, DUPLICATE_ARRAY, RANGE_SCAN, ORDER_BY, "airlines"],
-                            index_where_clause=" credit_cards IS NOT NULL "))
+                            index_where_clause=""))
         # array distinct index on numbers full table scan
         #index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
         #definitions_list.append(
@@ -570,7 +570,7 @@ class SQLDefinitionGenerator:
                             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
                                                                       "ANY t IN credit_cards SATISFIES t > 5000000 END ORDER BY _id"),
                             groups=["all", ARRAY, SIMPLE_INDEX, SIMPLE_ARRAY, DISTINCT_ARRAY,
-                                    RANGE_SCAN, ORDER_BY, "airlines"], index_where_clause=" credit_cards IS NOT NULL "))
+                                    RANGE_SCAN, ORDER_BY, "airlines"], index_where_clause=""))
         # Duplcate array on boolean array
         index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
         definitions_list.append(
@@ -579,7 +579,7 @@ class SQLDefinitionGenerator:
                             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s "
                                                                       % "ANY t IN question_values SATISFIES t = True END ORDER BY _id"),
                             groups=["all", ARRAY, SIMPLE_ARRAY, DUPLICATE_ARRAY, RANGE_SCAN, ORDER_BY, "airlines"],
-                            index_where_clause=" question_values IS NOT NULL "))
+                            index_where_clause=""))
         # Distinct array on boolean array
         #index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
         #definitions_list.append(
@@ -599,7 +599,7 @@ class SQLDefinitionGenerator:
                                                                       "ANY t IN question_values SATISFIES t = True END ORDER BY _id"),
                             groups=["all", ARRAY, SIMPLE_INDEX, SIMPLE_ARRAY, DISTINCT_ARRAY,
                                     RANGE_SCAN, ORDER_BY, "airlines"],
-                            index_where_clause=" question_values IS NOT NULL "))
+                            index_where_clause=""))
         # array distinct index on mixed data type
         #index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
         #definitions_list.append(
@@ -619,7 +619,7 @@ class SQLDefinitionGenerator:
                                                                       "ANY t IN secret_combination SATISFIES t > \"a\" OR t > 1 END ORDER BY _id"),
                             groups=["all", ARRAY, SIMPLE_INDEX, SIMPLE_ARRAY, DISTINCT_ARRAY,
                                     RANGE_SCAN, ORDER_BY, OR, "airlines"],
-                            index_where_clause=" secret_combination IS NOT NULL "))
+                            index_where_clause=""))
         # array index on items if object
         index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
         definitions_list.append(
@@ -628,7 +628,7 @@ class SQLDefinitionGenerator:
                             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
                                                                       "ANY t IN booking SATISFIES t.source = \"India\" END ORDER BY _id"),
                             groups=["all", ARRAY, SIMPLE_ARRAY, DUPLICATE_ARRAY, RANGE_SCAN,
-                                    ORDER_BY, EQUALS, "airlines"], index_where_clause=" booking IS NOT NULL "))
+                                    ORDER_BY, EQUALS, "airlines"], index_where_clause=""))
         # array index on items if object
         index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
         definitions_list.append(
@@ -637,7 +637,7 @@ class SQLDefinitionGenerator:
                             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
                                                                       "ANY t IN booking SATISFIES t.source = \"India\" END ORDER BY _id"),
                             groups=["all", ARRAY, SIMPLE_ARRAY, DISTINCT_ARRAY, RANGE_SCAN,
-                                    ORDER_BY, EQUALS, "airlines"], index_where_clause=" booking IS NOT NULL "))
+                                    ORDER_BY, EQUALS, "airlines"], index_where_clause=""))
         # Composite array distinct index
         index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
         definitions_list.append(
@@ -647,7 +647,7 @@ class SQLDefinitionGenerator:
                                                                       "ANY t IN travel_history SATISFIES t = \"India\" END AND name IS NOT NULL ORDER BY _id"),
                             groups=["all", ARRAY, COMPOSITE_INDEX, DISTINCT_ARRAY, RANGE_SCAN,
                                     ORDER_BY, AND, EQUALS, "airlines"],
-                            index_where_clause=" travel_history IS NOT NULL "))
+                            index_where_clause=""))
         # Simple array on scalar
         index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
         definitions_list.append(
@@ -656,7 +656,7 @@ class SQLDefinitionGenerator:
                             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
                                                                       "ANY t IN name SATISFIES t = \"Ciara\" END ORDER BY _id"),
                             groups=["all", ARRAY, SIMPLE_ARRAY, DISTINCT_ARRAY, RANGE_SCAN,
-                                    ORDER_BY, EQUALS, "airlines"], index_where_clause=" name IS NOT NULL "))
+                                    ORDER_BY, EQUALS, "airlines"], index_where_clause=""))
         # Duplicate array Index on Array of objects
         index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
         definitions_list.append(
@@ -665,7 +665,7 @@ class SQLDefinitionGenerator:
                             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
                                                                       "ANY t IN travel_details SATISFIES t.country = \"India\" END ORDER BY _id"),
                             groups=["all", ARRAY, SIMPLE_ARRAY, DUPLICATE_ARRAY, RANGE_SCAN,
-                                    ORDER_BY, EQUALS, "airlines"], index_where_clause=" travel_details IS NOT NULL "))
+                                    ORDER_BY, EQUALS, "airlines"], index_where_clause=""))
         # Distinct array Index on Array of objects
         index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
         definitions_list.append(
@@ -675,7 +675,7 @@ class SQLDefinitionGenerator:
                                                                       "ANY t IN travel_details SATISFIES t.country = \"India\" END ORDER BY _id"),
                             groups=["all", ARRAY, SIMPLE_ARRAY, SIMPLE_INDEX, DISTINCT_ARRAY,
                                     RANGE_SCAN, ORDER_BY, EQUALS, "airlines"],
-                            index_where_clause=" travel_details IS NOT NULL "))
+                            index_where_clause=""))
         return definitions_list
 
     def filter_by_group(self, groups=None, query_definitions=None):
