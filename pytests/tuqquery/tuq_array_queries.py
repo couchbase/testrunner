@@ -74,7 +74,7 @@ class QueryArrayQueryTests(QueryTests):
         time.sleep(60)
 
         # Get the list of indexes to drop and create a fresh system
-        list_of_indexes = self.run_cbq_query(query= "select raw name from system:indexes")
+        list_of_indexes = self.run_cbq_query(query="select raw name from system:indexes where keyspace_id='travel-sample' and namespace_id='default'")
 
         for index in list_of_indexes['results']:
             if index == "#primary":
@@ -84,7 +84,7 @@ class QueryArrayQueryTests(QueryTests):
                 if index == "def_primary":
                     continue
                 else:
-                    self.run_cbq_query(query = "drop index `travel-sample`.`%s`" % index)
+                    self.run_cbq_query(query="drop index `travel-sample`.`%s`" % index)
 
         # Generate final list of queries, total number of queries is the number * ~190
         for i in range(self.num_queries):

@@ -718,10 +718,10 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(actual_result['results'] == expected_result['results'])
                 self.query = 'select join_day from {0} where meta().id ' \
                              'in ["query-testemployee10153.187782713003-0","",' \
-                             '"query-testemployee10194.855617-0"] order by meta().id'.format(query_bucket)
+                             '"query-testemployee10194.855617030253-0"] order by meta().id'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 self.query = 'select join_day from {0} use index(`#primary`) where meta().id in ' \
-                             '["query-testemployee10153.187782713003-0","","query-testemployee10194.855617-0"]' \
+                             '["query-testemployee10153.187782713003-0","","query-testemployee10194.855617030253-0"]' \
                              ' order by meta().id'.format(query_bucket)
                 expected_result = self.run_cbq_query()
                 self.assertTrue(actual_result['results'] == expected_result['results'])
@@ -1527,22 +1527,17 @@ class QueriesIndexTests(QueryTests):
             self.query = 'select meta().id from {0} where join_day between 0 and 5 and ' \
                          'join_yr = 2011'.format(query_bucket)
             actual_result = self.run_cbq_query(query_params={'profile': 'timings'})
-            self.assertTrue("covers" in str(
-                actual_result['profile']['executionTimings']['~children'][0]['~child']['~children']))
-            self.assertTrue(
-                actual_result['profile']['executionTimings']['~children'][0]['~child']['~children'][0][
-                    'index'] == idx)
+            self.assertTrue("covers" in str(actual_result['profile']['executionTimings']))
+            self.assertTrue(actual_result['profile']['executionTimings']['~child']['~children'][0]['index'] == idx)
             all_docs_list = self.generate_full_docs_list(self.gens_load)
             expected_result = [doc for doc in all_docs_list if
                                0 <= doc['join_day'] <= 5 and doc['join_yr'] == 2011]
             num_of_items = len(expected_result)
-            for i in [0, 1, 2]:
+            for i in [1, 2]:
                 self.assertTrue(
-                    actual_result['profile']['executionTimings']['~children'][0]['~child']['~children'][1][
-                        '~children'][i]['#stats']['#itemsIn'] == num_of_items)
+                    actual_result['profile']['executionTimings']['~child']['~children'][i]['#stats']['#itemsIn'] == num_of_items)
                 self.assertTrue(
-                    actual_result['profile']['executionTimings']['~children'][0]['~child']['~children'][1][
-                        '~children'][i]['#stats']['#itemsOut'] == num_of_items)
+                    actual_result['profile']['executionTimings']['~child']['~children'][i]['#stats']['#itemsOut'] == num_of_items)
 
             self.query = 'explain select meta().id from {0} where join_day between 0 and 5 and ' \
                          'join_yr != 2011'.format(query_bucket)
@@ -1554,20 +1549,16 @@ class QueriesIndexTests(QueryTests):
                          'join_yr != 2011'.format(query_bucket)
             actual_result = self.run_cbq_query(query_params={'profile': 'timings'})
             self.assertTrue("covers" in str(
-                actual_result['profile']['executionTimings']['~children'][0]['~child']['~children']))
-            self.assertTrue(
-                actual_result['profile']['executionTimings']['~children'][0]['~child']['~children'][0][
-                    'index'] == idx)
+                actual_result['profile']['executionTimings']))
+            self.assertTrue(actual_result['profile']['executionTimings']['~child']['~children'][0]['index'] == idx)
             expected_result = [doc for doc in all_docs_list if
                                0 <= doc['join_day'] <= 5 and doc['join_yr'] != 2011]
             num_of_items = len(expected_result)
-            for i in [0, 1, 2]:
+            for i in [1, 2]:
                 self.assertTrue(
-                    actual_result['profile']['executionTimings']['~children'][0]['~child']['~children'][1][
-                        '~children'][i]['#stats']['#itemsIn'] == num_of_items)
+                    actual_result['profile']['executionTimings']['~child']['~children'][i]['#stats']['#itemsIn']== num_of_items)
                 self.assertTrue(
-                    actual_result['profile']['executionTimings']['~children'][0]['~child']['~children'][1][
-                        '~children'][i]['#stats']['#itemsOut'] == num_of_items)
+                    actual_result['profile']['executionTimings']['~child']['~children'][i]['#stats']['#itemsOut'] == num_of_items)
 
             self.query = 'select meta().id from {0} where join_day between 0 and 5 and ' \
                          'join_yr != 2015 order by meta().id'.format(query_bucket)
@@ -3502,7 +3493,7 @@ class QueriesIndexTests(QueryTests):
                              "like 'query-test%'".format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertEqual(plan['~children'][1]['~child']['~children'][2]['#operator'], "Distinct")
+                self.assertEqual(plan['~children'][1]['~child']['~children'][1]['#operator'], "Distinct")
                 self.query = "SELECT DISTINCT _id, meta().id from {0} WHERE _id like 'query-test%'".format(query_bucket)
                 actual_result = self.run_cbq_query()
                 self.query = "SELECT DISTINCT _id, meta().id from {0} use index(`#primary`) WHERE _id " \
@@ -3521,7 +3512,7 @@ class QueriesIndexTests(QueryTests):
                              '"query-testemployee10317.9004497-0"'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertEqual(plan['~children'][1]['~child']['~children'][2]['#operator'], "Distinct")
+                self.assertEqual(plan['~children'][1]['~child']['~children'][1]['#operator'], "Distinct")
                 self.query = 'SELECT DISTINCT _id, meta().id from {0} WHERE _id > ' \
                              '"query-testemployee10317.9004497-0"'.format(query_bucket)
                 actual_result = self.run_cbq_query()
@@ -3535,7 +3526,7 @@ class QueriesIndexTests(QueryTests):
                              '"query-testemployee10317.9004497-2"]'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertEqual(plan['~children'][1]['~child']['~children'][2]['#operator'], "Distinct")
+                self.assertEqual(plan['~children'][1]['~child']['~children'][1]['#operator'], "Distinct")
                 self.query = 'SELECT DISTINCT _id, meta().id from {0} WHERE _id in ' \
                              '["query-testemployee10317.9004497-0","query-testemployee10317.9004497-1",' \
                              '"query-testemployee10317.9004497-2"]'.format(query_bucket)
