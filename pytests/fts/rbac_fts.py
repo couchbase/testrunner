@@ -641,12 +641,14 @@ class RbacFTS(FTSBaseTest):
                     _type=_type,
                     scope=index_scope,
                     collections=index_collections)
+                self.wait_for_indexing_complete()
                 try:
                     self.query_index_with_credentials(
                         index=index,
                         username=user['id'],
                         password=user['password'])
                 except Exception as e:
+                    self.log.error(f"Exception happened: {e}")
                     self.fail(f"The user failed to query fts index {user['id']}")
 
     def test_fts_searcher_permissions_multi_collection_index_negative(self):
@@ -665,7 +667,7 @@ class RbacFTS(FTSBaseTest):
                 collection_index, _type, index_scope, index_collections = self.define_index_parameters_collection_related()
                 index = self._cb_cluster.create_fts_index(
                     name=f'{bucket.name}_index',
-                    source_name=    bucket.name,
+                    source_name=bucket.name,
                     collection_index=collection_index,
                     _type=_type,
                     scope=index_scope,
