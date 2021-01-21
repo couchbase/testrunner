@@ -10,6 +10,8 @@ from testconstants import LOG_FILE_NAMES
 from couchbase_helper.document import View
 from testconstants import COUCHBASE_FROM_SPOCK, COUCHBASE_FROM_4DOT6
 from security.rbac_base import RbacBase
+from collection.collections_stats import CollectionsStats
+
 
 
 class CouchbaseCliTestWithCollections(CliBaseTest):
@@ -811,14 +813,16 @@ class XdcrCLITest(CliBaseTest):
                     for value in output:
                         if value.startswith("status"):
                             self.assertEqual(value.split(":")[1].strip(), "running")
+                self.stat_col = CollectionsStats(self.dest_nodes[0])
+                self.sleep(20, "wait for replication complete")
                 col_stats, _ = self.get_collection_stats()
                 if isinstance(col_stats, str):
                     col_stats = col_stats.split(",")
                 for stats in col_stats:
-                    if self.custom_collections:
+                    if self.custom_collections or self.buckets[0].name == "default":
                         load_sc_item_id = load_scope_id_src + ":" + load_collection_id_src + ":items"
                         if load_sc_item_id in stats:
-                            if self.num_items == str(stats.split(':')[-1].strip()):
+                            if self.num_items == int(stats.split(':')[-1].strip()):
                                 items_match = True                        #des_items = stats.rpartition(":")[2].strip()
 
                 options = "--delete"
@@ -830,4 +834,7 @@ class XdcrCLITest(CliBaseTest):
         role_del = ['cbadminbucket']
         RbacBase().remove_user_role(role_del, RestConnection(self.dest_nodes[0]))
         if not items_match:
-            self.fail("Items in des cluster don't match with src")
+            if self.custom_collections:
+                self.fail("Items in des cluster don't match with src")
+            else:
+                self.log.info("This is negative test which not create custom collections")
