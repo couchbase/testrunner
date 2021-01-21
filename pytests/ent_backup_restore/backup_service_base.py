@@ -544,7 +544,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         body.cloud_staging_dir = self.objstore_provider.staging_directory
         body.cloud_credentials_id = self.objstore_provider.access_key_id
         body.cloud_credentials_key = self.objstore_provider.secret_access_key
-        body.cloud_credentials_region = self.objstore_provider.region
+        body.cloud_region = self.objstore_provider.region
         body.cloud_endpoint = self.objstore_provider.endpoint
         body.cloud_force_path_style = True
         return body

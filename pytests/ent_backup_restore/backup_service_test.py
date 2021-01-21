@@ -488,12 +488,12 @@ class BackupServiceTest(BackupServiceBase):
         # Note cannot test invalid credentials as LocalStack accepts any credentials
         invalid_bodies = \
         [
-            Body2(plan=plan_name, archive=self.get_archive(prefix="bad://"), cloud_staging_dir=staging_directory, cloud_credentials_id=id_, cloud_credentials_key=key, cloud_credentials_region=region, cloud_endpoint=endpoint), # Non-existant prefix
-            Body2(plan=plan_name, archive=self.get_archive(), cloud_staging_dir=None, cloud_credentials_id=id_, cloud_credentials_key=key, cloud_credentials_region=region, cloud_endpoint=endpoint), # Missing staging directory
-            Body2(plan=plan_name, archive=self.get_archive(), cloud_staging_dir="", cloud_credentials_id=id_, cloud_credentials_key=key, cloud_credentials_region=region, cloud_endpoint=endpoint), # Empty staging directory
-            Body2(plan=plan_name, archive=self.get_archive(), cloud_staging_dir=staging_directory, cloud_credentials_id=None, cloud_credentials_key=key, cloud_credentials_region=region, cloud_endpoint=endpoint), # Missing username
-            Body2(plan=plan_name, archive=self.get_archive(), cloud_staging_dir=staging_directory, cloud_credentials_id=id_, cloud_credentials_key=None, cloud_credentials_region=region, cloud_endpoint=endpoint), # Missing password
-            Body2(plan=plan_name, archive=self.get_archive(), cloud_staging_dir=staging_directory, cloud_credentials_id=id_, cloud_credentials_key=key, cloud_credentials_region=None, cloud_endpoint=endpoint), # Missing region
+            Body2(plan=plan_name, archive=self.get_archive(prefix="bad://"), cloud_staging_dir=staging_directory, cloud_credentials_id=id_, cloud_credentials_key=key, cloud_region=region, cloud_endpoint=endpoint), # Non-existant prefix
+            Body2(plan=plan_name, archive=self.get_archive(), cloud_staging_dir=None, cloud_credentials_id=id_, cloud_credentials_key=key, cloud_region=region, cloud_endpoint=endpoint), # Missing staging directory
+            Body2(plan=plan_name, archive=self.get_archive(), cloud_staging_dir="", cloud_credentials_id=id_, cloud_credentials_key=key, cloud_region=region, cloud_endpoint=endpoint), # Empty staging directory
+            Body2(plan=plan_name, archive=self.get_archive(), cloud_staging_dir=staging_directory, cloud_credentials_id=None, cloud_credentials_key=key, cloud_region=region, cloud_endpoint=endpoint), # Missing username
+            Body2(plan=plan_name, archive=self.get_archive(), cloud_staging_dir=staging_directory, cloud_credentials_id=id_, cloud_credentials_key=None, cloud_region=region, cloud_endpoint=endpoint), # Missing password
+            Body2(plan=plan_name, archive=self.get_archive(), cloud_staging_dir=staging_directory, cloud_credentials_id=id_, cloud_credentials_key=key, cloud_region=None, cloud_endpoint=endpoint), # Missing region
         ]
 
         for invalid_body in invalid_bodies:
@@ -569,9 +569,9 @@ class BackupServiceTest(BackupServiceBase):
         # TODO: LocalStack cannot mock cloud_force_path_style=False
         valid_bodies = \
         [
-            Body2(plan=plan_name, archive=self.get_archive(), cloud_staging_dir=staging_directory, cloud_credentials_id=id_, cloud_credentials_key=key, cloud_credentials_region=region, cloud_endpoint=endpoint, cloud_force_path_style=True), # Just a repository in the cloud
-            # Body2(plan=plan_name, archive=self.get_archive(), cloud_staging_dir=staging_directory, cloud_credentials_id=id_, cloud_credentials_key=key, cloud_credentials_region=region, cloud_endpoint=endpoint, cloud_force_path_style=False), # Uncomment when the testing environment supports cloud_force_path_style=False
-            Body2(plan=plan_name, archive=self.get_archive(), cloud_staging_dir=staging_directory, cloud_credentials_id=id_, cloud_credentials_key=key, cloud_credentials_region=region, cloud_endpoint=endpoint, bucket_name=bucket_name, cloud_force_path_style=True), # A repo in the cloud with a bucket
+            Body2(plan=plan_name, archive=self.get_archive(), cloud_staging_dir=staging_directory, cloud_credentials_id=id_, cloud_credentials_key=key, cloud_region=region, cloud_endpoint=endpoint, cloud_force_path_style=True), # Just a repository in the cloud
+            # Body2(plan=plan_name, archive=self.get_archive(), cloud_staging_dir=staging_directory, cloud_credentials_id=id_, cloud_credentials_key=key, cloud_region=region, cloud_endpoint=endpoint, cloud_force_path_style=False), # Uncomment when the testing environment supports cloud_force_path_style=False
+            Body2(plan=plan_name, archive=self.get_archive(), cloud_staging_dir=staging_directory, cloud_credentials_id=id_, cloud_credentials_key=key, cloud_region=region, cloud_endpoint=endpoint, bucket_name=bucket_name, cloud_force_path_style=True), # A repo in the cloud with a bucket
         ]
 
         valid_repositories = [("my_repo", valid_body) for valid_body in valid_bodies]
