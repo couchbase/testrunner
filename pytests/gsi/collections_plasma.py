@@ -13,6 +13,7 @@ from collection.collections_stats import CollectionsStats
 import threading
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from lib.couchbase_helper.documentgenerator import SDKDataLoader
+from remote.remote_util import RemoteMachineShellConnection
 from tasks.taskmanager import TaskManager
 import math
 
@@ -154,6 +155,12 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.concur_create_indexes = self.input.param("concur_create_indexes", True)
         self.concur_build_indexes = self.input.param("concur_build_indexes", True)
         self.concur_system_failure = self.input.param("concur_system_failure", True)
+
+        self.simple_create_index = self.input.param("simple_create_index", False)
+        self.simple_drop_index = self.input.param("simple_drop_index", False)
+        self.simple_scan_index = self.input.param("simple_scan_index", False)
+        self.simple_kill_indexer = self.input.param("simple_kill_indexer", False)
+        self.simple_kill_memcached = self.input.param("simple_kill_memcached", False)
         self.num_pre_indexes = self.input.param("num_pre_indexes", 50)
         self.num_failure_iteration = self.input.param("num_failure_iteration", None)
         self.failure_map = {"disk_failure": {"failure_task": "induce_disk_failure",
@@ -238,13 +245,13 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.log.info("Setting indexer memory quota to 256 MB and other settings...")
         self.index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         self.n1ql_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
+        self.data_nodes = self.get_kv_nodes()
         for index_node in self.index_nodes:
             rest = RestConnection(index_node)
             rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=256)
             rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": self.moi_snapshot_interval})
             rest.set_index_settings({"indexer.settings.persisted_snapshot_init_build.moi.interval": self.moi_snapshot_interval})
             rest.set_index_settings({"indexer.metadata.compaction.sleepDuration": self.compact_sleep_duration})
-        self.reset_data_mount_point()
         self.disk_location = RestConnection(self.index_nodes[0]).get_index_path()
         self.key_prefix=f'bigkeybigkeybigkeybigkeybigkeybigkey_{self.master.ip}_'
 
@@ -253,6 +260,10 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
     def tearDown(self):
         self.log.info("==============  PlasmaCollectionsTests tearDown has started ==============")
         super(PlasmaCollectionsTests, self).tearDown()
+        try:
+            self.reset_data_mount_point(self.index_nodes)
+        except Exception as err:
+            self.log.info(str(err))
         self.log.info("==============  PlasmaCollectionsTests tearDown has completed ==============")
 
     def suite_tearDown(self):
@@ -393,11 +404,12 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                         self.index_ops_obj.update_errors(error_map)
         self.log.info(threading.currentThread().getName() + " Completed")
 
-    def drop_indexes(self, drop_sleep):
+    def drop_indexes(self, drop_sleep, defer_build=None):
         self.sleep(10)
         self.log.info(threading.currentThread().getName() + " Started")
         while self.run_tasks:
-            defer_build = random.choice([True, False])
+            if not defer_build:
+                defer_build = random.choice([True, False])
             index_to_delete = self.index_ops_obj.all_indexes_metadata(operation="delete", defer_build=defer_build)
             if index_to_delete:
                 query_def = index_to_delete["query_def"]
@@ -431,7 +443,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                                         percent_update=self.percent_update, percent_delete=self.percent_delete,
                                         all_collections=self.all_collections, timeout=1800,
                                         json_template=self.dataset_template,
-                                        key_prefix=self.key_prefix)
+                                        key_prefix=self.key_prefix, shuffle_docs=True)
         for bucket in self.buckets:
             _task = SDKLoadDocumentsTask(self.master, bucket, sdk_data_loader)
             self.sdk_loader_manager.schedule(_task)
@@ -651,11 +663,41 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         else:
             self.induce_schedule_system_failure(self.failure_map[self.system_failure]["failure_task"])
             self.sleep(90, "sleeping for  mins for mutation processing during system failure ")
-        index_create_tasks = self.create_indexes(num=1,defer_build=False,itr=300,
-                                                 expected_failure=self.failure_map[self.system_failure]["expected_failure"])
-        for task in index_create_tasks:
-            task.result()
-        self.sleep(60, "sleeping for 1 min after creation of indexes")
+
+        if self.simple_create_index:
+            index_create_tasks = self.create_indexes(num=1,defer_build=False,itr=300,
+                                                     expected_failure=self.failure_map[self.system_failure]["expected_failure"])
+            for task in index_create_tasks:
+                task.result()
+            self.sleep(60, "sleeping for 1 min after creation of indexes")
+
+        if self.simple_drop_index:
+            task_thread = threading.Thread(name="drop_thread",
+                                           target=self.drop_indexes,
+                                           args=(2, False))
+            task_thread.start()
+            self.sleep(15, "sleeping for 15 sec")
+            self.run_tasks = False
+            task_thread.join()
+
+        if self.simple_scan_index:
+            self.run_tasks = True
+            task_thread = threading.Thread(name="scan_thread",
+                                           target=self.scan_indexes)
+            task_thread.start()
+            self.sleep(30, "sleeping for 10 sec")
+            self.run_tasks = False
+            task_thread.join()
+
+        if self.simple_kill_indexer:
+            remote = RemoteMachineShellConnection(self.index_nodes[0])
+            remote.terminate_process(process_name="indexer")
+            self.sleep(60, "sleeping for 60 sec for indexer to come back")
+
+        if self.simple_kill_memcached:
+            remote = RemoteMachineShellConnection(self.data_nodes[1])
+            remote.kill_memcached()
+            self.sleep(60, "sleeping for 60 sec for memcached to come back")
 
         if self.concur_system_failure:
             system_failure_thread.join()

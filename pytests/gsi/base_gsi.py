@@ -316,18 +316,16 @@ class BaseSecondaryIndexingTests(QueryTests):
                 if index_create_info in self.memory_create_list:
                     self.memory_create_list.remove(index_create_info)
 
-    def reset_data_mount_point(self):
-        indexer_nodes = self.get_nodes_from_services_map(
-            service_type="index", get_all_nodes=True)
-        for node in indexer_nodes:
+    def reset_data_mount_point(self, nodes):
+        for node in nodes:
             shell = RemoteMachineShellConnection(node)
             shell.execute_command('umount -l /data; '
                                   'mkdir -p /usr/disk-img; dd if=/dev/zero '
-                                  'of=/usr/disk-img/disk-quota.ext3 count=10485760; '
-                                  '/sbin/mkfs -t ext3 -q /usr/disk-img/disk-quota.ext3 -F; '
-                                  'mount -o loop,rw,usrquota,grpquota /usr/disk-img/disk-quota.ext3 /data; '
-                                  'umount -l /data; fsck.ext3 /usr/disk-img/disk-quota.ext3 -y; '
-                                  'chattr +i /data; mount -o loop,rw,usrquota,grpquota /usr/disk-img/disk-quota.ext3 '
+                                  'of=/usr/disk-img/disk-quota.ext4 count=10485760; '
+                                  '/sbin/mkfs -t ext4 -q /usr/disk-img/disk-quota.ext4 -F; '
+                                  'mount -o loop,rw,usrquota,grpquota /usr/disk-img/disk-quota.ext4 /data; '
+                                  'umount -l /data; fsck.ext4 /usr/disk-img/disk-quota.ext4 -y; '
+                                  'chattr +i /data; mount -o loop,rw,usrquota,grpquota /usr/disk-img/disk-quota.ext4 '
                                   '/data; rm -rf /data/*; chmod -R 777 /data')
 
     def get_size_of_metastore_file(self):

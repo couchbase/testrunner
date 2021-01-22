@@ -5213,6 +5213,16 @@ class RemoteMachineShellConnection(KeepRefs):
         output, error = self.execute_command(command)
         return output, error
 
+    def mount_partition_ext4(self, location):
+        """
+        Mount a partition at the location specified
+        :param location: Mount location
+        :return: Output and error message from the mount command
+        """
+        command = "mount -o loop,rw,usrquota,grpquota /usr/disk-img/disk-quota.ext4 {0}; df -Th".format(location)
+        output, error = self.execute_command(command)
+        return output, error
+
     def add_extra_files_index_log_dir(self, location):
         command = "dd bs=1024 count=1048576 </dev/urandom > {0}/\@2i/shards/shard1/data/extrafile;" \
                   "chmod -R 777 {0}/\@2i/shards/shard1/data/extrafile;" \

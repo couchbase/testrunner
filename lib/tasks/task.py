@@ -5723,7 +5723,7 @@ class NodesFailureTask(Task):
 
     def _recover_disk(self, node):
         shell = RemoteMachineShellConnection(node)
-        o, r = shell.mount_partition(self.disk_location)
+        o, r = shell.mount_partition_ext4(self.disk_location)
         for line in o:
             if self.disk_location in line:
                 self.log.info("Mounted disk at location : {0} on {1}".format(self.disk_location, node.ip))
@@ -6378,7 +6378,7 @@ class SDKLoadDocumentsTask(Task):
                   f"-pd {self.sdk_docloader.percent_delete} -l {self.sdk_docloader.load_pattern} " \
                   f"-dsn {self.sdk_docloader.start_seq_num + start_seq_num_shift} -dpx {self.sdk_docloader.key_prefix} -dt {self.sdk_docloader.json_template} " \
                   f"-de {self.sdk_docloader.doc_expiry} -ds {self.sdk_docloader.doc_size} -ac {self.sdk_docloader.all_collections} " \
-                  f"-st {self.sdk_docloader.start+start_seq_num_shift} -en {self.sdk_docloader.end+start_seq_num_shift} -o {self.sdk_docloader.output}"
+                  f"-st {self.sdk_docloader.start+start_seq_num_shift} -en {self.sdk_docloader.end+start_seq_num_shift} -o {self.sdk_docloader.output} -sd {self.sdk_docloader.shuffle_docs}"
         if self.sdk_docloader.es_compare:
             command = command + " -es true -es_host " + str(self.sdk_docloader.es_host) + " -es_port " + str(
                 self.sdk_docloader.es_port) + \
