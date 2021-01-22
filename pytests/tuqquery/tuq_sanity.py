@@ -268,6 +268,7 @@ class QuerySanityTests(QueryTests):
         results = self.run_cbq_query(query='select meta(default:default.test.test1).expiration from default:default.test.test1')
         self.assertEqual(results['results'], [{'expiration': 0}, {'expiration': 0}, {'expiration': 0}, {'expiration': 0}])
 
+    ''' This test will concurrently create and drop collections, and then give them 5 seconds to appear in system:keyspaces, if any one collection creation/deletion fails the whole test fails '''
     def test_create_drop_collections(self):
         self.collections_helper = CollectionsN1QL(self.master)
 
@@ -325,6 +326,7 @@ class QuerySanityTests(QueryTests):
                 self.log.error("Deletion failed for collection: {0}".format(str(collection)))
             self.fail("Some collections failed to drop! Check logs for more details")
 
+    '''Create a collection and verify that within 5 seconds it is apart of system:keyspaces, print any errors that occur'''
     def run_create_collection(self, scope_name='',collection_name=''):
         retry_count = 5
         created = self.collections_helper.create_collection(bucket_name="default", scope_name=scope_name, collection_name=collection_name)
@@ -345,6 +347,7 @@ class QuerySanityTests(QueryTests):
             self.collection_names.append((scope_name, collection_name))
         return
 
+    '''Drop a collection and verify that within 5 seconds it is removed from system:keyspaces'''
     def run_drop_collection(self, scope_name='', collection_name=''):
         retry_count = 5
         deleted = self.collections_helper.delete_collection(bucket_name="default", scope_name=scope_name, collection_name=collection_name)
@@ -3408,7 +3411,6 @@ class QuerySanityTests(QueryTests):
         for query_bucket in self.query_buckets:
             query_bucket = self.get_collection_name(query_bucket)
             self.query = "select name from %s union all select email from %s" % (query_bucket, query_bucket)
-
             actual_list = self.run_cbq_query()
             actual_result = actual_list['results']
             expected_result = [{"name": doc["name"]}
@@ -3473,8 +3475,11 @@ class QuerySanityTests(QueryTests):
             expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
             self._verify_results(actual_result, expected_result)
             for index_name in created_indexes:
-                self.query = "DROP INDEX {0} ON {1} USING {2}".format(index_name, query_bucket, self.index_type)
-                self.run_cbq_query()
+                try:
+                    self.query = "DROP INDEX {0} ON {1} USING {2}".format(index_name, query_bucket, self.index_type)
+                    self.run_cbq_query()
+                except Exception as e:
+                    self.log.error("Drop index failed {0}".format(str(e)))
             self.query = "CREATE PRIMARY INDEX ON {0}".format(query_bucket)
             self.run_cbq_query()
             self.sleep(15, 'wait for index')
@@ -3808,8 +3813,11 @@ class QuerySanityTests(QueryTests):
 
             for ind in ind_list:
                 index_name = "coveringindex{0}".format(ind)
-                self.query = "DROP INDEX {0} ON {1} USING {2}".format(index_name, query_bucket, self.index_type)
-                self.run_cbq_query()
+                try:
+                    self.query = "DROP INDEX {0} ON {1} USING {2}".format(index_name, query_bucket, self.index_type)
+                    self.run_cbq_query()
+                except Exception as e:
+                    self.log.error("Drop index failed {0}".format(str(e)))
             self.query = "CREATE PRIMARY INDEX ON {0}".format(query_bucket)
             self.run_cbq_query()
             self._wait_for_index_online(bucket, '#primary')

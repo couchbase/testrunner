@@ -74,6 +74,7 @@ class QueriesOpsTests(QuerySanityTests):
                 rebalance = self.cluster.async_rebalance(self.servers[:i],
                                                          self.servers[i:i + 1], [])
                 self.test_min()
+                self.sleep(60)
                 rebalance.result()
                 self.test_min()
         finally:
@@ -92,6 +93,7 @@ class QueriesOpsTests(QuerySanityTests):
                                                          [],
                                                          self.servers[self.nodes_init - i:self.nodes_init - (i - 1)])
                 self.test_min()
+                self.sleep(60)
                 rebalance.result()
                 self.test_min()
         finally:
@@ -109,6 +111,7 @@ class QueriesOpsTests(QuerySanityTests):
                                                      self.servers[self.nodes_init:self.nodes_init + self.nodes_in],
                                                      self.servers[self.nodes_init - self.nodes_out:self.nodes_init])
             self.test_array_append()
+            self.sleep(60)
             rebalance.result()
             self.test_array_append()
         finally:
@@ -143,6 +146,7 @@ class QueriesOpsTests(QuerySanityTests):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                      [], servr_out)
             self.test_union()
+            self.sleep(60)
             rebalance.result()
             self.test_union()
         finally:
@@ -162,10 +166,12 @@ class QueriesOpsTests(QuerySanityTests):
                 nodes.extend([node for node in nodes_all
                               if node.ip == failover_node.ip and str(node.port) == failover_node.port])
             self.cluster.failover(self.servers[:self.nodes_init], servr_out)
+            self.sleep(60)
             for node in nodes:
                 RestConnection(self.master).add_back_node(node.id)
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
             self.test_union()
+            self.sleep(60)
             rebalance.result()
             self.test_union()
         finally:
@@ -184,6 +190,7 @@ class QueriesOpsTests(QuerySanityTests):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                      [], servr_out)
             self.test_union()
+            self.sleep(60)
             rebalance.result()
             self.test_union()
         finally:
