@@ -27,6 +27,7 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
         drop_default_collection = self._input.param("drop_default_collection", None)
         mapping_rules = self._input.param("mapping_rules", None)
         explicit_mapping = self._input.param("explicit_mapping", None)
+        skip_src_validation = self._input.param("skip_src_validation", False)
         migration_mode = self._input.param("migration_mode", None)
         mirroring_mode = self._input.param("mirroring_mode", None)
         oso_mode = self._input.param("oso_mode", None)
@@ -130,20 +131,20 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                                       '"_default":"_default","scope_1.collection_1":"scope_1.collection_1"',
                                       '"scope1":"scope1","scope_1.collection_1":"scope_1.collection_1"',
                                       '"nonexistent":"_default"',
-                                      '"_default.nonexistent":"scope_1.collection_1"'
+                                      '"_default.nonexistent":"scope_1.nonexistent"'
                                       ]
             for cluster in self.get_cluster_objects_for_input(mapping_rules):
+                setting_val_map = {"collectionsExplicitMapping": "true",
+                                   "colMappingRules": '{' + explicit_mapping_rules[explicit_map_index] + '}'}
+                if skip_src_validation:
+                    setting_val_map["collectionsSkipSrcValidation"] = "true"
                 try:
-                    setting_val_map = {"collectionsExplicitMapping": "true",
-                                       "colMappingRules": '{' +
-                                                          explicit_mapping_rules[explicit_map_index] +
-                                                          '}'
-                                       }
                     RestConnection(cluster.get_master_node()).set_xdcr_params("default", "default",
                                                                               setting_val_map)
                 except Exception as e:
-                    if "nonexistent" in explicit_mapping_rules[explicit_map_index]:
-                        self.log.info("Test failed as expected for nonexistent source namespace")
+                    if "namespace does not exist" in e._message and \
+                            "nonexistent" in explicit_mapping_rules[explicit_map_index]:
+                        self.log.info("Replication create failed as expected for nonexistent namespace")
                     else:
                         self.fail(str(e))
 

@@ -3114,10 +3114,10 @@ class RestConnection(object):
         replication = self.get_replication_for_buckets(src_bucket_name, dest_bucket_name)
         api = self.baseUrl[:-1] + replication['settingsURI']
         params = urllib.parse.urlencode(param_value_map)
-        status, _, _ = self._http_request(api, "POST", params)
+        status, content, _ = self._http_request(api, "POST", params)
         if not status:
-            raise XDCRException("Unable to set replication settings {0} on bucket {1} on node {2}".
-                            format(param_value_map, src_bucket_name, self.ip))
+            raise XDCRException("{0} \n Unable to set replication settings {1} on bucket {2} on node {3}".
+                            format(content, param_value_map, src_bucket_name, self.ip))
         log.info("Updated {0} on bucket '{1}' on {2}".format(param_value_map, src_bucket_name, self.ip))
 
     def set_global_xdcr_param(self, param, value):
