@@ -258,3 +258,42 @@ class EventingSettings(EventingBaseTest):
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    def test_timer_context_max_size_less_than_20b(self):
+        try:
+            body = self.create_save_function_body(self.function_name, self.handler_code)
+            body['settings']['timer_context_size']=19
+            self.rest.create_function(body['appname'], body)
+        except Exception as e:
+            self.log.info(e)
+            assert ("ERR_INVALID_CONFIG" in str(e) and "timer_context_size value can not be less than 20 bytes" in str(e) , True)
+
+    def test_timer_context_max_size_greater_than_20mb(self):
+        try:
+            body = self.create_save_function_body(self.function_name, self.handler_code)
+            body['settings']['timer_context_size']=200000000
+            self.rest.create_function(body['appname'], body)
+        except Exception as e:
+            self.log.info(e)
+            assert ("ERR_INVALID_CONFIG" in str(e) and "timer_context_size value can not be more than 20MB" in str(e), True)
+
+    def test_timer_context_max_size_less_than_handler_size(self):
+        body = self.create_save_function_body(self.function_name, "handler_code/timer_context_size.js")
+        body['settings']['timer_context_size'] = 20
+        self.rest.create_function(body['appname'], body)
+        self.deploy_function(body)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+
+
+
+
+
+
+
