@@ -2562,7 +2562,7 @@ class BackupServiceTest(BackupServiceBase):
         time_n2.change_system_time('14:00')
         time_n3.change_system_time('15:00')
 
-        timeout = time.time() + 60
+        timeout = time.time() + 200
 
         while time.time() < timeout:
             for alert in RestConnection(self.input.clusters[0][0]).get_alerts():
