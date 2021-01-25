@@ -5125,6 +5125,16 @@ class RemoteMachineShellConnection(KeepRefs):
                                                                       % os.getpid())
         os.system('kill %d' % os.getpid())
 
+    def diag_eval(self, diag_eval_command):
+        """ Executes a diag eval command
+
+        Args:
+            diag_eval_comand (str): A diag eval command e.g. "gen_server:cast(ns_cluster, leave)."
+        """
+        username = self.input.membase_settings.rest_username
+        password = self.input.membase_settings.rest_password
+        self.execute_command(f"curl -X POST localhost:{self.port}/diag/eval -d \"{diag_eval_command}\" -u {username}:{password}")
+
     def enable_diag_eval_on_non_local_hosts(self, state=True):
         """
         Enable diag/eval to be run on non-local hosts.

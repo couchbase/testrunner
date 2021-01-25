@@ -5,6 +5,7 @@ import time
 import json
 import shlex
 import random
+import logger
 import datetime
 import abc
 
@@ -28,6 +29,7 @@ from lib.backup_service_client.models.body2 import Body2
 from lib.backup_service_client.models.body3 import Body3
 from lib.backup_service_client.models.body4 import Body4
 from lib.backup_service_client.models.body5 import Body5
+from lib.backup_service_client.models.body6 import Body6
 from lib.backup_service_client.models.plan import Plan
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from lib.membase.helper.bucket_helper import BucketOperationHelper
@@ -36,19 +38,25 @@ from testconstants import CLUSTER_QUOTA_RATIO
 
 class BackupServiceBase(EnterpriseBackupRestoreBase):
 
-    def preamble(self):
+    def preamble(self, master=None):
         """ Preamble.
 
         1. Configures Rest API.
         2. Configures Rest API Sub-APIs.
         3. Backup Service Constants.
+
+        Args:
+            master(TestInputServer): Pick the main server. If not set, will pick the first server in the cluster list.
         """
         # Select the master node
         # This has to be from the list of servers as no __eq__ method has been
         # implemented for the TestInputServer object causing a comparison
         # operation to return False in the BaseTestCase which prevents the
         # master server's services from being initialised correctly.
-        self.master = next((server for server in self.servers if server.ip == self.input.clusters[0][0].ip))
+        self.master = master if master else next((server for server in self.servers if server.ip == self.input.clusters[0][0].ip))
+
+        # Configure logging
+        self.log = logger.Logger.get_logger()
 
         # Node to node encryption
         self.node_to_node_encryption = NodeToNodeEncryption(self.input.clusters[0][0])
@@ -136,9 +144,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         self.multiple_remote_shell_connections.execute_command("sudo service vboxadd-service stop")
 
         # Share archive directory
-        self.directory_to_share = "/tmp/share"
-        self.nfs_connection = NfsConnection(self.input.clusters[0][0], self.input.clusters[0], NfsShareFactory() if self.input.param("share_type", "nfs") == "nfs" else SambaShareFactory())
-        self.nfs_connection.share(self.directory_to_share, self.backupset.directory)
+        self.create_shared_folder(self.input.clusters[0][0], self.input.clusters[0])
 
         # A connection to every single machine in the cluster
         self.multiple_remote_shell_connections = MultipleRemoteShellConnections(self.input.clusters[0])
@@ -160,6 +166,35 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         if self.input.param('dgm_run', False):
             self.on_dgm_run()
+
+    def bootstrap(self, servers, backupset, objstore_provider):
+        """ Initialise the BackupServiceBase without calling the setup method
+
+        The inheritance based design used by testrunner makes object
+        composition quite difficult. By calling the bootstrap method and the
+        preamble method, you can initialise the minimal set of objects required
+        for the backup service test to function.
+        """
+        self.input = TestInputSingleton.input
+        self.servers = servers
+        self.backupset = backupset
+        self.objstore_provider = objstore_provider
+        self.cluster = Cluster()
+
+    def create_shared_folder(self, server, clients):
+        """ Mounts the shared folder
+
+        Args:
+            server (TestInputServer): The server that holds the shared folder.
+            clients (list(TestInputServer)): The servers that mount the shared folder.
+        """
+        self.directory_to_share = "/tmp/share"
+        self.nfs_connection = NfsConnection(server, clients, NfsShareFactory() if self.input.param("share_type", "nfs") == "nfs" else SambaShareFactory())
+        self.nfs_connection.share(self.directory_to_share, self.backupset.directory)
+
+    def delete_shared_folder(self):
+        """ Unmounts the shared folder """
+        self.nfs_connection.clean(self.backupset.directory)
 
     def load_custom_certificates(self):
         """ Loads custom certificates
@@ -628,6 +663,36 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
             self.take_one_off_backup(state, repo_name, i < 1, retries, sleep_time)
 
+    def import_repository(self, fs_archive, fs_repo, backup_service_repo_name="repo_name"):
+        """ Imports a repository
+
+        args:
+            fs_archive (str): The filesystem archive.
+            fs_repo (str): The repository inside the filesystem archive.
+            backup_service_repo_name (str): The
+
+        params:
+            objstore_provider (bool): If true, imports from the cloud otherwise imports from the filesystem.
+        """
+        # Change owner and group to couchbase recursively so the backup service can access the archive
+        self.chown(fs_archive)
+
+        # The body required for importing a repository
+        body = Body6(id=backup_service_repo_name, archive=fs_archive, repo=fs_repo)
+
+        # Set cloud credentials if this a cloud repository
+        if self.objstore_provider:
+            self.set_cloud_credentials(body)
+
+        # Import repository
+        self.assertEqual(self.import_api.cluster_self_repository_import_post_with_http_info(body=body)[1], 200)
+
+        # Get backups from imported repository
+        imported_backups = [backup._date for backup in self.get_backups("imported", backup_service_repo_name)]
+
+        # Check there are backups present in the imported repository
+        self.assertGreater(len(imported_backups), 0)
+
     def take_one_off_restore(self, state, repo_name, retries, sleep_time, target=None):
         """ Performs a one off restore
 
@@ -820,6 +885,13 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # A little sleep for services to warmup
         self.sleep(15)
 
+    def backup_service_cleanup(self):
+        """ Delete all repos and plans if the backup service is running
+        """
+        if self.is_backup_service_running():
+            self.delete_all_repositories()
+            self.delete_all_plans()
+
     # Clean up cbbackupmgr
     def tearDown(self):
         """ Tears down.
@@ -828,12 +900,10 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         2. Deletes all plans.
         """
         self.preamble()
-        if self.is_backup_service_running():
-            self.delete_all_repositories()
-            self.delete_all_plans()
-            # If the reset_time flag is set, reset the time during the tearDown
-            if self.input.param('reset_time', False):
-                self.time.reset()
+        self.backup_service_cleanup()
+        # If the reset_time flag is set, reset the time during the tearDown
+        if self.input.param('reset_time', False):
+            self.time.reset()
 
         # The tearDown before the setUp which means certain attributes such as the backupset do not exist
         try:
@@ -842,7 +912,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             pass
 
         try:
-            self.nfs_connection.clean(self.backupset.directory)
+            self.delete_shared_folder()
         except AttributeError:
             pass
 

@@ -6,6 +6,7 @@ from couchbase_helper.cluster import Cluster
 from membase.helper.rebalance_helper import RebalanceHelper
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase
+from ent_backup_restore.backup_service_upgrade import BackupServiceHook
 from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
 from pytests.query_tests_helper import QueryHelperTests
@@ -2363,10 +2364,19 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             2. Backup cluster and verify data and delete default bucket
             3. Upgrades cluster to upgrade_version re-reates default bucket
             4. Restores data and validates
+
+        Params:
+            backup_service_test (bool): Import repository and restore using the backup service.
         """
         upgrade_version = self.input.param("upgrade_version", "5.0.0-3330")
         if upgrade_version == "5.0.0-3330":
             self.fail("\n *** Need param 'upgrade_version=' to run")
+
+        backup_service_test = self.input.param("backup_service_test", False)
+
+        if backup_service_test:
+            backup_service_hook = BackupServiceHook(self.servers[1], self.servers, self.backupset, self.objstore_provider)
+            self.cli_command_location = "/opt/couchbase/bin"
 
         self._install(self.servers)
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
@@ -2397,6 +2407,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         """ Re-create default bucket on upgrade cluster """
         RestConnection(self.master).create_bucket(bucket='default', ramQuotaMB=512)
         self.sleep(5)
+
+        # Create a backup node and perform a backup service import repository and restore
+        if backup_service_test:
+            backup_service_hook.backup_service.replace_services(self.servers[1], ['kv,backup'])
+            backup_service_hook.backup_service.import_repository(self.backupset.directory, self.backupset.name, "my_repo")
+            backup_service_hook.backup_service.take_one_off_restore("imported", "my_repo", 20, 20)
+            backup_service_hook.cleanup()
+            return
 
         """ Only server from Spock needs build in user
             to access bucket and other tasks
