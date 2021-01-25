@@ -259,6 +259,11 @@ class BaseTestCase(unittest.TestCase):
             memcached_params['bucket_type'] = 'memcached'
             self.bucket_base_params['memcached'] = memcached_params
 
+            self.java_sdk_client = self.input.param("java_sdk_client", False)
+            if self.java_sdk_client:
+                self.log.info("Building docker image with java sdk client")
+                JavaSdkSetup()
+
             # avoid any cluster operations in setup for new upgrade
             #  & upgradeXDCR tests
             if str(self.__class__).find('newupgradetests') != -1 or \
@@ -445,11 +450,6 @@ class BaseTestCase(unittest.TestCase):
                     for _task in _tasks:
                         _task.result()
             self.print_cluster_stats()
-
-            self.java_sdk_client = self.input.param("java_sdk_client", False)
-            if self.java_sdk_client:
-                self.log.info("Building docker image with java sdk client")
-                JavaSdkSetup()
         except Exception as e:
             traceback.print_exc()
             self.cluster.shutdown(force=True)
