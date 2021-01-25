@@ -60,30 +60,30 @@ class BaseRQGMySQLClient(MySQLClient):
             data.append(map)
         return data
 
-    def _convert_to_mysql_json_compatible_val(self, value, type):
+    def _convert_to_mysql_json_compatible_val(self, value, datatype):
         if isinstance(value, float):
             return round(value, 0)
-        if "tiny" in str(type):
+        if "tiny" in str(datatype):
             if value == 0:
                 return False
             elif value == 1:
                 return True
             else:
                 return None
-        if "int" in str(type):
+        if "int" in str(datatype):
             return value
-        if "blob" in str(type) and value is not None:
+        if "blob" in str(datatype) and value is not None and type(value) is bytes:
             return value.decode()
-        if "long" in str(type):
+        if "long" in str(datatype):
             return value
-        if "datetime" in str(type):
+        if "datetime" in str(datatype):
             return str(value)
-        if ("float" in str(type)) or ("double" in str(type)):
+        if ("float" in str(datatype)) or ("double" in str(datatype)):
             if value is None:
                 return None
             else:
                 return round(value, 0)
-        if "decimal" in str(type):
+        if "decimal" in str(datatype):
             if value is None:
                 return None
             else:
