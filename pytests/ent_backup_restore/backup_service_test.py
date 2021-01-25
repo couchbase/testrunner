@@ -2639,7 +2639,7 @@ class BackupServiceTest(BackupServiceBase):
         self.sleep(60)
         failover_server.rebalance()
 
-        curr_leader = self.get_leader(clusters=[cluster for cluster in self.input.clusters[0] if cluster != curr_leader])
+        curr_leader = self.get_leader(cluster=[server for server in self.input.clusters[0] if server != curr_leader])
         self.configuration.host = f"http://{curr_leader.ip}:{8091}/_p/backup/api/v1"
 
         # Should schedule tasks at 10

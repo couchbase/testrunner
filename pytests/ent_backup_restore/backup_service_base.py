@@ -675,31 +675,25 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         """
         return self.repository_api.cluster_self_repository_state_id_get('active', repo_name).repo
 
-    def get_leader(self, clusters=None):
-        """ Gets the leader from the logs
+    def get_leader(self, cluster=None):
+        """ Gets the leader from hidden internal endpoint
         """
-        if clusters is None:
-            clusters = self.input.clusters[0]
+        if cluster is None:
+            cluster = self.input.clusters[0]
 
-        # Obtain log entries from all nodes which contain "Setting self as leader"
-        # Save entries as a list of tuples where the first element is the log time and the
-        # second element is the server from where that entry was obtained
-        logs = [(TimeUtil.rfc3339nano_to_datetime(log.split("\t")[0]), server) for server in clusters for log in File(server, self.log_directory).read() if "Setting self as leader" in log]
+        rest_conn = RestConnection(cluster[0])
 
-        # Sort in ascending order based on log time which is the first element in tuple
-        logs.sort()
+        status, content, header = rest_conn._http_request(rest_conn.baseUrl + f"_p/backup/internal/v1/leader", 'GET')
 
-        if len(logs) < 1:
-            self.fail("Could not obtain the leader from the logs")
+        self.assertTrue(status, "Didn't get a 200 http status from /internal/v1/leader endpoint")
 
-        # Make sure list is sorted in ascending order
-        for log_prev, log_next in zip(logs, logs[1:]):
-            self.assertLessEqual(log_prev[0], log_next[0], "The list is not sorted in ascending order")
+        ip = json.loads(content)['host']
 
-        # The last element in the list has the latest log time
-        log_time, leader = logs[-1]
+        for server in cluster:
+            if server.ip == ip:
+                return server
 
-        return leader
+        self.fail(f"The leader node {ip} isn't part of the cluster")
 
     def create_plan_and_repository(self, plan_name, repo_name, schedule, merge_map=None):
         """ Creates a plan with a schedule and attaches it to the repository
