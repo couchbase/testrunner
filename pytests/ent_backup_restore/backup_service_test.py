@@ -1196,8 +1196,8 @@ class BackupServiceTest(BackupServiceBase):
         _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("archived", repo_name, body=Body("test_docs-0", "default"))
         self.assertEqual(status, 200)
         data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
-        self.assertEqual(data[0]['value']['age'], 0)
-        self.assertEqual(data[1]['value']['age'], 100)
+        self.assertEqual(data[0][0]['document']['value']['age'], 0)
+        self.assertEqual(data[0][1]['document']['value']['age'], 100)
 
         # Flush all buckets to empty cluster of all documents
         rest_connection = RestConnection(self.master)
@@ -1485,8 +1485,9 @@ class BackupServiceTest(BackupServiceBase):
         _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("test_docs-0", "default"))
         self.assertEqual(status, 200)
         data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
-        self.assertEqual(data[0]['value']['age'], 0)
-        self.assertEqual(data[1]['value']['age'], 100)
+
+        self.assertEqual(data[0][0]['document']['value']['age'], 0)
+        self.assertEqual(data[0][1]['document']['value']['age'], 100)
 
     def test_bucket_names_with_fullstops(self):
         """ Test a user can examine a bucket name in the form 'a.b.c.d'
@@ -1516,8 +1517,8 @@ class BackupServiceTest(BackupServiceBase):
         _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("test_docs-0", "a\\.b\\.c\\.d"))
         self.assertEqual(status, 200)
         data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
-        self.assertEqual(data[0]['value']['age'], 0)
-        self.assertEqual(data[1]['value']['age'], 100)
+        self.assertEqual(data[0][0]['document']['value']['age'], 0)
+        self.assertEqual(data[0][1]['document']['value']['age'], 100)
 
     def test_collection_unaware_backups(self):
         """ Test collection unaware backups
@@ -1547,14 +1548,14 @@ class BackupServiceTest(BackupServiceBase):
         self.assertEqual(status, 200)
         data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
         for i in range(no_of_backups):
-            self.assertEqual(data[i]['value']['age'], i * 100)
+            self.assertEqual(data[0][i]['document']['value']['age'], i * 100)
 
         # Check user can examine collection-less backups using a data path consisting of the ._default._default suffix
         _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("test_docs-0", f"{bucket_name}.{scope_name}.{collection_name}"))
         self.assertEqual(status, 200)
         data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
         for i in range(no_of_backups):
-            self.assertEqual(data[i]['value']['age'], i * 100)
+            self.assertEqual(data[0][i]['document']['value']['age'], i * 100)
 
     def test_collection_aware_backups(self):
         """ Test collection aware backups
@@ -1591,7 +1592,7 @@ class BackupServiceTest(BackupServiceBase):
         self.assertEqual(status, 200)
         data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
         for i in range(no_of_backups):
-            self.assertEqual(data[i]['value']['body'], '0' * (i + 2))
+            self.assertEqual(data[0][i]['document']['value']['body'], '0' * (i + 2))
 
         # Check if user supplies only a bucket name to a collection aware bucket it fails
         _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("pymc0", f"{bucket_name}"))
