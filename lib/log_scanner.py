@@ -3,13 +3,31 @@ from testconstants import WIN_COUCHBASE_LOGS_PATH, LINUX_COUCHBASE_LOGS_PATH
 
 
 class LogScanner(object):
-    def __init__(self, server, exclude_keywords=None):
+    def __init__(self, server, exclude_keywords=None, skip_security_scan=True):
         self.server = server
         self.exclude_keywords = exclude_keywords
+        self.skip_security_scan = skip_security_scan
+        self.service_log_security_map = {
+            "all": {
+                "all": [
+                        # Authorization/password/key
+                        "Basic\s[a-zA-Z]\{10,\}==",
+                        "Menelaus-Auth-User:\[",
+                        "BEGIN RSA PRIVATE KEY",
+                        "(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}",
+                        # tasklist /v
+                        ".*\\(([^\\)}]|\\n)*[.*[\\\" '\\`\\(]+tasklist[\\\" '\\`\\)]+([^\\)}]|\\n)*/v.*\\)",
+                        # ps -o command
+                        ".*\\(([^\\)}]|\\n)*[.*[\\\" '\\`\\(]+ps[\\\" '\\`]+([^\\)}]|\\n)*command([^\\)}]|\\n)*\\)",
+                        ]
+            }
+        }
+
         self.service_log_keywords_map = {
             "all": {
                 "babysitter.log": ["exception occurred in runloop", "failover exited with reason"],
-                "memcached.log": ["CRITICAL"],
+                "memcached.log": ["CRITICAL", ],
+                "sanitizers.log.*": ['^'],
                 "all": []
             },
             "cbas": {
@@ -28,7 +46,7 @@ class LogScanner(object):
             },
             "kv": {
                 "projector.log": ["panic", "Error parsing XATTR"],
-                "*xdcr*.log": ["panic"],
+                "*xdcr*.log": ["panic", "non-recoverable error from xmem client. response status=KEY_ENOENT"],
             },
             "n1ql": {
                 "query.log": ["panic", "Encounter planner error"]
@@ -54,10 +72,15 @@ class LogScanner(object):
         try:
             for service in self.services:
                 for log in self.service_log_keywords_map[service].keys():
-                    for keyword in self.service_log_keywords_map[service][log]:
+                    keywords = self.service_log_keywords_map[service][log]
+                    if not self.skip_security_scan:
+                        if service in self.service_log_security_map.keys():
+                            if log in self.service_log_security_map[service].keys():
+                                keywords += self.service_log_security_map[service][log]
+                    for keyword in keywords:
                         cmd = self.cmd
                         if log == "all":
-                            cmd += "\"{0}\" {1}{2} -R".format(keyword, self.log_path, '*')
+                            cmd += "\"{0}\" {1}{2}".format(keyword, self.log_path, '*')
                         else:
                             cmd += "\"{0}\" {1}{2}".format(keyword, self.log_path, log + '*')
                         if self.exclude_keywords:
@@ -74,6 +97,6 @@ class LogScanner(object):
                                 else:
                                     log_matches_map[log][keyword] += len(matches)
         except:
-            print("WARNING: Exception in log scanner, continuing..")
+            print("WARNING: Exception in log scanner, continuing")
         self.shell.disconnect()
         return log_matches_map

@@ -6467,7 +6467,9 @@ class LogScanTask(Task):
         self.log_scan_file_name = f'{self.server.ip}_{file_prefix}'
         from lib.log_scanner import LogScanner
         exclude_keywords = TestInputSingleton.input.param("exclude_keywords", None)
-        self.log_scanner = LogScanner(server=self.server, exclude_keywords=exclude_keywords)
+        skip_security_scan = TestInputSingleton.input.param("skip_security_scan", False)
+        self.log_scanner = LogScanner(server=self.server, exclude_keywords=exclude_keywords,
+                                      skip_security_scan=skip_security_scan)
 
     def execute(self, task_manager):
         try:
