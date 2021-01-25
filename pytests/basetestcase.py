@@ -434,8 +434,8 @@ class BaseTestCase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
 
 
-            if self.ntonencrypt == 'enable' and not self.x509enable:
-                self.setup_nton_encryption()
+            #if self.ntonencrypt == 'enable' and not self.x509enable:
+            #    self.setup_nton_encryption()
 
             if self.enable_secrets:
                 self._setup_node_secret(self.secret_password)
@@ -588,8 +588,8 @@ class BaseTestCase(unittest.TestCase):
                 BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
                 ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
                 ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
-                if self.ntonencrypt == 'enable' and not self.x509enable:
-                    ntonencryptionBase().disable_nton_cluster(self.servers)
+                #if self.ntonencrypt == 'enable' and not self.x509enable:
+                #    ntonencryptionBase().disable_nton_cluster(self.servers)
                 if self.input.param("disable_ipv6_grub", False):
                     self._enable_ipv6_grub()
                 self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} ==============" \
