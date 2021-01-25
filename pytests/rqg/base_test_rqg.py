@@ -115,6 +115,7 @@ class BaseRQGTests(BaseTestCase):
             self.delta = self.input.param("delta", 0)
             self.window_function_test = self.input.param("window_function_test", False)
             self.use_fts = self.input.param("use_fts", False)
+            self.randomize = self.input.param("randomize", False)
             self.advise_server = self.input.advisor
             self.advise_buckets = ["bucket_01", "bucket_02", "bucket_03", "bucket_04", "bucket_05", "bucket_06", "bucket_07", "bucket_08", "bucket_09", "bucket_10"]
             self.advise_dict={}
@@ -226,6 +227,8 @@ class BaseRQGTests(BaseTestCase):
     def test_rqg(self):
         try:
             # Get Data Map
+            run_seed = random.seed(uuid.uuid4())
+            self.log.info("SEED: {0}".format(run_seed))
             table_list = self.client._get_table_list()
             table_map = self.client._get_values_with_type_for_fields_in_table()
             if self.use_txns:
@@ -263,6 +266,8 @@ class BaseRQGTests(BaseTestCase):
                 random.shuffle(delete_query_template_list)
             # Generate the query batches based on the given template file and the concurrency count
             else:
+                if self.randomize:
+                    random.shuffle(query_template_list)
                 batches = self.generate_batches(table_list, query_template_list)
 
             result_queue = queue.Queue()
@@ -519,6 +524,7 @@ class BaseRQGTests(BaseTestCase):
                             self.n1ql_helper.wait_for_all_indexes_online()
                         try:
                             prepared_index_statement = self.translate_index_statement(index_statement)
+                            # insert randomization logic for partitioned vs non_partitioned indexes
                             if self.use_txns:
                                 self.n1ql_helper.run_cbq_query(prepared_index_statement)
                                 self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
@@ -576,6 +582,9 @@ class BaseRQGTests(BaseTestCase):
         result_run["n1ql_query"] = n1ql_query
         result_run["sql_query"] = sql_query
         result_run["test_case_number"] = test_case_number
+
+        # create a randomized set of params to pass to run_queries_and verify, decide prepared or not, partitioned or not, and execution type
+        # store these params in a dictionary (possibly extend result_run to contain these choices
 
         if self.ansi_transform:
             result = self._run_explain_queries(n1ql_query=n1ql_query, keyword="u'outer':u'True'", present=False)
