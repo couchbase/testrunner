@@ -5,11 +5,7 @@ import urllib.request, urllib.parse, urllib.error
 import json
 import argparse
 import sys
-from string import maketrans
-import re
-import pdb
 import copy
-import os
 import paramiko
 
 
@@ -103,7 +99,7 @@ def triage(os, build, component, username, password, job_list, format, ignore_li
                  }
                 ]
     '''
-    failers = []
+    failures = []
 
     for row in cb.n1ql_query(query):
         build_id = row['server']['build_id']
@@ -131,7 +127,15 @@ def triage(os, build, component, username, password, job_list, format, ignore_li
 
         '''Load json logs for last job call'''
         logs_url = "http://qa.sc.couchbase.com/job/test_suite_executor/"+str(build_id)+"/testReport/api/json"
-        response = urllib.request.urlopen(logs_url)
+        try:
+            response = urllib.request.urlopen(logs_url)
+        except urllib.error.HTTPError as err:
+            print("The following logs URL is unreachable:")
+            print(logs_url)
+            print(f"Corresponding job name is {job_name}")
+            print(f"Corresponding jenkins build is {build_id}")
+            print(f"Corresponding CB build is {build}")
+            continue
 
         logs_data = {}
         try:
@@ -141,11 +145,11 @@ def triage(os, build, component, username, password, job_list, format, ignore_li
 
         if (str(logs_data)) == '{}':
             job_dict['fail_reasons']['no_logs']['cases'].append('no_logs_case')
-            failers.append(job_dict)
+            failures.append(job_dict)
             continue
         if (len(logs_data['suites'])) == 0:
             job_dict['fail_reasons']['no_logs']['cases'].append('no_logs_case')
-            failers.append(job_dict)
+            failures.append(job_dict)
             continue
         suites = logs_data['suites']
 
@@ -166,8 +170,9 @@ def triage(os, build, component, username, password, job_list, format, ignore_li
             for case in test_cases:
                 if case['status'] == 'FAILED':
                     case_data = dict()
-                    case_attrs = str(case['name'].encode('utf-8')).split(",")
-                    case_name = str(case_attrs[0])
+
+                    case_attrs = case['name'].split(",")
+                    case_name = case_attrs[0]
 
                     case_conf_file = ''
                     for s in case_attrs:
@@ -202,9 +207,9 @@ def triage(os, build, component, username, password, job_list, format, ignore_li
                     if problem_not_identified:
                         job_dict['fail_reasons']['all_the_rest']['cases'].append(case_data)
 
-        failers.append(job_dict)
+        failures.append(job_dict)
 
-    print_report(failers, os, build, component, fmt)
+    print_report(failures, os, build, component, fmt)
 
 def execute_restart(restart_list, dispatcher_token, os, build, component, server_pool_id, add_pool_id):
     if restart_list is None or restart_list == '':
@@ -233,8 +238,8 @@ def collect_json_params(case_attrs):
             result[key] = val
     return result
 
+
 def find_and_download_core_dump(case_cmd, job_logs):
-    #print "CASE NAME ::"+case_cmd+"::"
     case_log_started = False
     crashes_line = ''
 
@@ -254,15 +259,15 @@ def find_and_download_core_dump(case_cmd, job_logs):
     local_file_path = download_core_dump(vm_ip, logs_folder)
     return local_file_path
 
+
 def download_core_dump(vm_ip, logs_folder):
-    transport = paramiko.Transport((vm_ip, 22))
+    transport = paramiko.Transport(vm_ip, 22)
     transport.connect(username='root', password='couchbase')
     sftp = paramiko.SFTPClient.from_transport(transport)
     files = sftp.listdir(path=logs_folder)
     if files and len(files)>0:
         sftp.get(logs_folder+'/'+files[0], files[0])
     return files[0]
-
 
 
 def download_job_logs(build_id):
@@ -273,20 +278,25 @@ def download_job_logs(build_id):
         logs.append(line)
     return logs
 
+
 def extract_ini_filename(logs):
     ini_filename = ''
     for line in logs:
-        if line.startswith("the ini file is"):
-            ini_filename = line[len("the ini file is "):]
+        decoded_line = line.decode()
+        if decoded_line.startswith("the ini file is"):
+            ini_filename = decoded_line[len("the ini file is "):]
             break
     return ini_filename
+
 
 def extract_cmd_lines(logs):
     lines = []
     for line in logs:
-        if line.startswith("./testrunner"):
-            lines.append(line)
+        decoded_line = line.decode()
+        if decoded_line.startswith("./testrunner"):
+            lines.append(decoded_line)
     return lines
+
 
 def extract_cmd(case_name, json_params, lines):
     for line in lines:
@@ -318,7 +328,7 @@ def compare_json_and_cmd_params(json_params={}, cmd_params={}):
     return True
 
 
-def print_report(failers, os, build, component, fmt):
+def print_report(failures, os, build, component, fmt):
     print(("########################## GREEN BOARD REPORT FOR "+os+"   BUILD "+build+"   COMPONENT - "+component+" #################################"))
     connection_failers = []
     no_logs_failers = []
@@ -327,7 +337,7 @@ def print_report(failers, os, build, component, fmt):
     connection_jobs_container = ""
 
     print(str(n) + ". Total list of failed jobs. ")
-    for job in failers:
+    for job in failures:
         print((job['name']))
         if len(job['fail_reasons']['connection']['cases']) > 0:
             connection_failers.append(job['name'])
