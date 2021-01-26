@@ -1521,7 +1521,7 @@ class MovingTopFTS(FTSBaseTest):
         if errors:
             self.log.info("Printing missing keys:")
             for error in errors:
-                print(error)
+                self.log.info(error)
 
         if self._num_items != rest.get_active_key_count(default_bucket):
             self.fail("FATAL: Data loss detected!! Docs loaded : {0}, docs present: {1}".
@@ -1545,7 +1545,7 @@ class MovingTopFTS(FTSBaseTest):
         if errors:
             self.log.info("Printing missing keys:")
             for error in errors:
-                print(error)
+                self.log.info(error)
         if self._num_items != rest.get_active_key_count(default_bucket):
             self.fail("FATAL: Data loss detected!! Docs loaded : {0}, docs present: {1}".
                       format(self._num_items, rest.get_active_key_count(default_bucket)))
@@ -1567,7 +1567,7 @@ class MovingTopFTS(FTSBaseTest):
         if errors:
             self.log.info("Printing missing keys:")
             for error in errors:
-                print(error)
+                self.log.info(error)
         if self._num_items != rest.get_active_key_count(default_bucket):
             self.fail("FATAL: Data loss detected!! Docs loaded : {0}, docs present: {1}".
                       format(self._num_items, rest.get_active_key_count(default_bucket)))

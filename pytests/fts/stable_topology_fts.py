@@ -613,8 +613,6 @@ class StableTopFTS(FTSBaseTest):
                                          index.index_definition)
         self.load_data()
         self.wait_for_indexing_complete()
-        print("### INDEX is created")
-        import pdb; pdb.set_trace()
         if self._update or self._delete:
             self.async_perform_update_delete(self.upd_del_fields)
             if self._update:
@@ -2090,8 +2088,8 @@ class StableTopFTS(FTSBaseTest):
         for i in range(self.num_queries):
             self.log.info("Running Query no --> " + str(i))
             fts_query, es_query = FTSESQueryGenerator.construct_geo_location_query()
-            print(fts_query)
-            print(("fts_query location ---> " + str(fts_query["location"])))
+            self.log.info(fts_query)
+            self.log.info("fts_query location ---> " + str(fts_query["location"]))
             # If query has geo co-ordinates in form of an object
             if "lon" in fts_query["location"]:
                 lon = fts_query["location"]["lon"]
@@ -2130,7 +2128,7 @@ class StableTopFTS(FTSBaseTest):
             if case == 3:
                 geohash = Geohash.encode(lat, lon, precision=random.randint(3, 8))
                 location = geohash
-            print(("sort_fields_location ----> " + str(location)))
+                self.log.info("sort_fields_location ----> " + str(location))
             sort_fields = [
                 {
                     "by": "geo_distance",
@@ -3022,7 +3020,7 @@ class StableTopFTS(FTSBaseTest):
                                        "index1", collection_index=True, _type=f"{scope_name}.collection2",
                                        scope=scope_name, collections=["collection2"], no_check=True)
         except Exception as e:
-            print("Exceptin caught ::"+str(e)+"::")
+            self.log.info("Exceptin caught ::"+str(e)+"::")
             return
         self.fail(f"Successfully created 2 indexes with same name in scope {scope_name}")
 
@@ -3058,7 +3056,7 @@ class StableTopFTS(FTSBaseTest):
                                        "index1", collection_index=True, _type="scope2.collection1",
                                        scope="scope2", collections=["collection1"], no_check=True)
         except Exception as e:
-            print("Exceptin caught ::" + str(e) + "::")
+            self.log.info("Exception caught ::" + str(e) + "::")
             return
         self.fail("Failed creating 2 indexes with same name in different scopes ")
 
@@ -3323,8 +3321,8 @@ class StableTopFTS(FTSBaseTest):
 
         data_filler_thread.join()
         query_executor_thread.join()
-        print("idle results ::"+str(search_before_matches)+"::")
-        print("busy results ::"+str(self.query_result)+"::")
+        self.log.info("idle results ::"+str(search_before_matches)+"::")
+        self.log.info("busy results ::"+str(self.query_result)+"::")
         idle_ids = []
         busy_ids = []
         for match in search_before_matches:

@@ -591,16 +591,16 @@ class BackupRestore(FTSBaseTest):
 
                 if kv_type == "bucket":
                     if status:
-                        print(f"Remapping to missed bucket produces OK status. Backup type: {backup_type}. API: {api}")
+                        self.log.info(f"Remapping to missed bucket produces OK status. Backup type: {backup_type}. API: {api}")
                     self.assertFalse(status, f"Remapping to missed bucket produces OK status. Backup type: {backup_type}. API: {api}")
                 elif kv_type == "scope":
                     if status:
-                        print(f"POST request with incorrect JSON produces OK status. Backup type: {backup_type}. API: {api}")
+                        self.log.info(f"POST request with incorrect JSON produces OK status. Backup type: {backup_type}. API: {api}")
                     self.assertFalse(status, f"POST request with incorrect JSON produces OK status. Backup type: {backup_type}. API: {api}")
                     self.assertTrue(str(content).find("not found in bucket") >= 0, f"Incorrect error message for remapping to missed scope. Backup type: {backup_type}. API: {api}")
                 else:
                     if status:
-                        print(f"POST request with incorrect JSON produces OK status. Backup type: {backup_type}")
+                        self.log.info(f"POST request with incorrect JSON produces OK status. Backup type: {backup_type}")
                     self.assertFalse(status, f"POST request with incorrect JSON produces OK status. Backup type: {backup_type}")
                     self.assertTrue(str(content).find("doesn't belong to scope") >= 0, f"Incorrect error message for remapping to missed collection. Backup type: {backup_type}. API: {api}")
 
