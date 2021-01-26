@@ -147,6 +147,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.failure_timeout = self.input.param("failure_timeout", 60)
         self.failure_recover_sleep = self.input.param("failure_recover_sleep", 600)
         self.index_ops_obj = ConCurIndexOps()
+        self.sweep_interval = self.input.param("sweep_interval", 120)
         self.compact_sleep_duration = self.input.param("compact_sleep_duration", 300)
         self.moi_snapshot_interval = self.input.param("moi_snapshot_interval", 300000)
         self.dgm_check_timeout = self.input.param("dgm_check_timeout", 1800)
@@ -252,6 +253,8 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
             rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": self.moi_snapshot_interval})
             rest.set_index_settings({"indexer.settings.persisted_snapshot_init_build.moi.interval": self.moi_snapshot_interval})
             rest.set_index_settings({"indexer.metadata.compaction.sleepDuration": self.compact_sleep_duration})
+            rest.set_index_settings({"indexer.plasma.mainIndex.evictSweepInterval": self.sweep_interval})
+            rest.set_index_settings({"indexer.plasma.backIndex.evictSweepInterval": self.sweep_interval})
         self.disk_location = RestConnection(self.index_nodes[0]).get_index_path()
         self.key_prefix=f'bigkeybigkeybigkeybigkeybigkeybigkey_{self.master.ip}_'
 
