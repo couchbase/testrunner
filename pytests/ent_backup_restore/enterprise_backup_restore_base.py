@@ -533,8 +533,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
         try:
             count = int(output)
-            self.assertEqual(count - 2, expected,
-                             "Number of backup directories {0} does not match expected {1}".format(count - 2, expected))
+            self.assertEqual(count - 3, expected,
+                             "Number of backup directories {0} does not match expected {1}".format(count - 3, expected))
         except ValueError as e:
             self.fail("Could not get the number of backups in the archive due to: {0}".format(e))
 

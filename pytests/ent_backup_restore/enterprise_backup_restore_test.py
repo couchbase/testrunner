@@ -1046,7 +1046,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
             arguments = ['--obj-access-key-id', '--obj-cacert', '--obj-endpoint', '--obj-no-ssl-verify',
                              '--obj-region', '--obj-secret-access-key', '--obj-staging-dir', '--s3-force-path-style',
-                             '--s3-log-level']
+                             '--obj-log-level']
 
             if sub_command in supports_read_only:
                 arguments.append('--obj-read-only')
@@ -4075,7 +4075,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
         # Test based on actual directory names have to be dynamically created based on the directory names.
         test_ranges_positive_cases = [
-            "0,2", # valid index range
+            "1,3", # valid index range
             "10-01-2000,10-01-3000", # valid date range
         ]
 
@@ -4102,6 +4102,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.fail("Failed to remove backups")
 
             self._verify_backup_directory_count(0)
+            self._delete_repo()
 
         for test in test_range_invalid_cases:
             # create the backup repository and make three backups
@@ -4450,7 +4451,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.start = 2
         self.backupset.end = 2
         self._all_buckets_flush()
-        self.backup_restore_validate()
+        self.backup_restore_validate(seqno_compare_function=">=")
 
     def test_start_full_end_incr(self):
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
@@ -4462,7 +4463,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.start = 1
         self.backupset.end = 2
         self._all_buckets_flush()
-        self.backup_restore_validate()
+        self.backup_restore_validate(seqno_compare_function=">=")
 
     def test_start_incr_end_full(self):
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
