@@ -365,11 +365,10 @@ class EventingSanity(EventingBaseTest):
         body = self.create_save_function_body(self.function_name,"handler_code/compress.js")
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,
-                                     'src_bucket.src_bucket.src_bucket')
+        self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",is_delete=True)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, 'src_bucket.src_bucket.src_bucket')
+        self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", 0)
         self.undeploy_and_delete_function(body)
 
     def test_expired_mutation(self):
