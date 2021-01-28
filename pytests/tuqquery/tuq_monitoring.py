@@ -136,12 +136,74 @@ class QueryMonitoringTests(QueryTests):
             t51.join()
             self.run_cbq_query(query="DROP PRIMARY INDEX on default:default.test.test2")
 
+    def test_transaction_active(self):
+        queries = ['select * from default where name = "employee-9"','update default SET name = "employee-9000" where name = "employee-9"','COMMIT TRANSACTION']
+        tx_start = self.run_cbq_query(query="BEGIN WORK", txtimeout="2m")
+        txid = tx_start['results'][0]['txid']
+        for query in queries:
+            t51 = threading.Thread(name='run_second_query', target=self.run_transaction_query, args=(query, txid))
+            t51.start()
+            results = self.run_cbq_query(query="SELECT * from system:active_requests")
+            try:
+                if results['results'][0]['active_requests']['statement'] == query:
+                    self.log.info(results['results'][0]['active_requests'])
+                    self.assertEqual(results['results'][0]['active_requests']['txid'], txid)
+                    self.assertTrue('transactionRemainingTime' in results['results'][0]['active_requests'],
+                                    "Transaction Remaining Time not found in the entry! {0}".format(
+                                        str(results['results'][0]['active_requests'])))
+                    self.assertTrue('transactionElapsedTime' in results['results'][0]['active_requests'],
+                                    "Transaction Elapsed Time not found in the entry! {0}".format(
+                                        str(results['results'][0]['active_requests'])))
+                elif results['results'][1]['active_requests']['statement'] == query:
+                    self.log.info(results['results'][1]['active_requests'])
+                    self.assertEqual(results['results'][1]['active_requests']['txid'], txid)
+                    self.assertTrue('transactionRemainingTime' in results['results'][1]['active_requests'],
+                                    "Transaction Remaining Time not found in the entry! {0}".format(
+                                        str(results['results'][0]['active_requests'])))
+                    self.assertTrue('transactionElapsedTime' in results['results'][1]['active_requests'],
+                                    "Transaction Elapsed Time not found in the entry! {0}".format(
+                                        str(results['results'][1]['active_requests'])))
+                else:
+                    self.fail("Could not find the correct statement {0}".format(results))
+            finally:
+                t51.join()
+
+    def test_transaction_completed(self):
+        tx_start = self.run_cbq_query(query="BEGIN WORK", txtimeout="2m")
+        txid = tx_start['results'][0]['txid']
+        self.run_cbq_query(query='select * from default where name = "employee-9"', txnid=txid)
+        self.run_cbq_query(query='update default SET name = "employee-9000" where name = "employee-9"', txnid=txid)
+        self.run_cbq_query(query='delete from default limit 10000', txnid=txid)
+        self.run_cbq_query(query='COMMIT TRANSACTION', txnid=txid)
+
+        select_results = self.run_cbq_query(query='select * from system:completed_requests where statement = "select * from default where name = \\"employee-9\\""')
+        self.assertEqual(select_results['results'][0]['completed_requests']['txid'], txid)
+        self.assertTrue('transactionRemainingTime' in select_results['results'][0]['completed_requests'],"Transaction Remaining Time not found in the entry! {0}".format(str(select_results['results'][0]['completed_requests'])))
+        self.assertTrue('transactionElapsedTime' in select_results['results'][0]['completed_requests'],"Transaction Elapsed Time not found in the entry! {0}".format(str(select_results['results'][0]['completed_requests'])))
+
+        update_results = self.run_cbq_query(query='select * from system:completed_requests where statement = "update default SET name = \\"employee-9000\\" where name = \\"employee-9\\""')
+        self.assertEqual(update_results['results'][0]['completed_requests']['txid'], txid)
+        self.assertTrue('transactionRemainingTime' in update_results['results'][0]['completed_requests'],"Transaction Remaining Time not found in the entry! {0}".format(str(update_results['results'][0]['completed_requests'])))
+        self.assertTrue('transactionElapsedTime' in update_results['results'][0]['completed_requests'],"Transaction Elapsed Time not found in the entry! {0}".format(str(update_results['results'][0]['completed_requests'])))
+
+        delete_results = self.run_cbq_query(query='select * from system:completed_requests where statement = "delete from default limit 10000"')
+        self.assertEqual(delete_results['results'][0]['completed_requests']['txid'],txid)
+        self.assertTrue('transactionRemainingTime' in delete_results['results'][0]['completed_requests'],"Transaction Remaining Time not found in the entry! {0}".format(str(delete_results['results'][0]['completed_requests'])))
+        self.assertTrue('transactionElapsedTime' in delete_results['results'][0]['completed_requests'],"Transaction Elapsed Time not found in the entry! {0}".format(str(delete_results['results'][0]['completed_requests'])))
+
+        commit_results = self.run_cbq_query(query='select * from system:completed_requests where statement = "COMMIT TRANSACTION"')
+        self.assertEqual(commit_results['results'][0]['completed_requests']['txid'],txid)
+        self.assertFalse('transactionRemainingTime' in commit_results['results'][0]['completed_requests'],"Transaction Remaining Time found in the entry but it should not be there! {0}".format(str(commit_results['results'][0]['completed_requests'])))
+        self.assertTrue('transactionElapsedTime' in commit_results['results'][0]['completed_requests'],"Transaction Elapsed Time not found in the entry! {0}".format(str(commit_results['results'][0]['completed_requests'])))
 
     ##############################################################################################
     #
     #   Monitoring Helper Functions
     #
     ##############################################################################################
+
+    def run_transaction_query(self, query='', txid=''):
+        self.run_cbq_query(query=query, txnid=txid)
 
     def run_parallel_query(self, server):
         logging.info('parallel query is active')
