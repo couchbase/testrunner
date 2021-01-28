@@ -348,3 +348,67 @@ class QuerySubqueryTests(QueryTests):
         actual_result = self.run_cbq_query()
         plan = self.ExplainPlanHelper(actual_result)
         self.assertTrue(plan['~children'][0]['#operator'] == 'ExpressionScan')
+
+    def test_correlated_projection(self):
+        correlated_query = f"SELECT D.address[0][0].city, \
+            (SELECT raw count(email) FROM {self.query_bucket} WHERE department = 'Tester' AND address[0][0].city = D.address[0][0].city)[0] as _count \
+            FROM {self.query_bucket} D WHERE department = 'Developer' AND hobbies.hobby[0].sports[0] = 'Basketball' ORDER BY _count DESC LIMIT 5"
+        # create secondary index
+        self.run_cbq_query(f"CREATE INDEX idx_dept ON {self.query_bucket}(department)")
+        try:
+            self.run_cbq_query(correlated_query)
+        except Exception as e:
+            self.log.error(f"Correlated query failed: {e}")
+            self.fail()
+        finally:
+            self.run_cbq_query(f"DROP INDEX idx_dept ON {self.query_bucket}")
+
+    def test_correlated_where(self):
+        correlated_query = f"SELECT Distinct D.address[0][0].city FROM {self.query_bucket} D \
+            WHERE department = 'Developer' AND hobbies.hobby[0].sports[0] = 'Basketball' \
+            AND 50 < (SELECT raw count(email) FROM {self.query_bucket} WHERE department = 'Tester' AND address[0][0].city = D.address[0][0].city)[0] \
+            ORDER BY _count desc LIMIT 5"
+        # create secondary index
+        self.run_cbq_query(f"CREATE INDEX idx_dept ON {self.query_bucket}(department)")
+        try:
+            self.run_cbq_query(correlated_query)
+        except Exception as e:
+            self.log.error(f"Correlated query failed: {e}")
+            self.fail()
+        finally:
+            self.run_cbq_query(f"DROP INDEX idx_dept ON {self.query_bucket}")
+
+    def test_correlated_with(self):
+        correlated_query = f"WITH FirstJoin AS (SELECT VALUE MIN(ARRAY_MIN(join_yr)) FROM {self.query_bucket} WHERE department = 'Developer' ), \
+            TESTER AS (SELECT address FROM {self.query_bucket} WHERE department = 'Tester' and ARRAY_MIN(join_yr) = FirstJoin[0]) \
+            SELECT distinct T.address[0][0].city as city FROM TESTER T ORDER BY city"
+        # create secondary index
+        self.run_cbq_query(f"CREATE INDEX idx_dept ON {self.query_bucket}(department)")
+        try:
+            self.run_cbq_query(correlated_query)
+        except Exception as e:
+            self.log.error(f"Correlated query failed: {e}")
+            self.fail()
+        finally:
+            self.run_cbq_query(f"DROP INDEX idx_dept ON {self.query_bucket}")
+
+    def test_correlated_negative(self):
+        correlated_query = f"SELECT D.address[0][0].city, \
+            (SELECT raw count(email) FROM {self.query_bucket} WHERE department = 'Tester' AND address[0][0].city = D.address[0][0].city)[0] as _count \
+            FROM {self.query_bucket} D WHERE department = 'Developer' AND hobbies.hobby[0].sports[0] = 'Basketball' ORDER BY _count DESC LIMIT 5"
+        error_code = [5370, 5010]
+        error_message = [
+            "Unable to run subquery - cause: No secondary index available for keyspace default in correlated subquery.",
+            "Error evaluating projection. - cause: Unable to run subquery - cause: No secondary index available for keyspace default in correlated subquery."
+        ]
+        try:
+            self.run_cbq_query(query=correlated_query)
+            self.fail(f"Query did not fail as expected with error: {error_message}")
+        except CBQError as ex:
+            error = self.process_CBQE(ex, 0)
+            self.assertEqual(error['code'], error_code[0])
+            self.assertEqual(error['msg'], error_message[0])
+            error = self.process_CBQE(ex, 1)
+            self.assertEqual(error['code'], error_code[1])
+            self.assertEqual(error['msg'], error_message[1])
+

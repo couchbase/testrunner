@@ -210,6 +210,14 @@ class QueryFilterTests(QueryTests):
         filter_results = self.run_cbq_query(filter_query)
         case_results = self.run_cbq_query(case_query)
         self.assertEqual(filter_results['results'], case_results['results'])
-        
+
+    def test_filter_correlated(self):
+        filter_query = "WITH city_with_2_or_more_airport \
+                AS (SELECT value city FROM `travel-sample` \
+                    WHERE type = 'airport' AND country = 'France' \
+                    GROUP BY city HAVING count(*) > 2) \
+            SELECT count(*) filter (WHERE city in city_with_2_or_more_airport) FROM `travel-sample` WHERE type = 'hotel' AND country = 'France'"
+        filter_results = self.run_cbq_query(filter_query)
+        self.assertEqual(filter_results['results'][0]['$1'], 64)
         
 
