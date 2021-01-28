@@ -266,7 +266,7 @@ class EventingSettings(EventingBaseTest):
             self.rest.create_function(body['appname'], body)
         except Exception as e:
             self.log.info(e)
-            assert ("ERR_INVALID_CONFIG" in str(e) and "timer_context_size value can not be less than 20 bytes" in str(e) , True)
+            assert "ERR_INVALID_CONFIG" in str(e) and "timer_context_size value can not be less than 20 bytes" in str(e), True
 
     def test_timer_context_max_size_greater_than_20mb(self):
         try:
@@ -275,7 +275,7 @@ class EventingSettings(EventingBaseTest):
             self.rest.create_function(body['appname'], body)
         except Exception as e:
             self.log.info(e)
-            assert ("ERR_INVALID_CONFIG" in str(e) and "timer_context_size value can not be more than 20MB" in str(e), True)
+            assert "ERR_INVALID_CONFIG" in str(e) and "timer_context_size value can not be more than 20MB" in str(e), True
 
     def test_timer_context_max_size_less_than_handler_size(self):
         body = self.create_save_function_body(self.function_name, "handler_code/timer_context_size.js")
@@ -289,6 +289,15 @@ class EventingSettings(EventingBaseTest):
                   batch_size=self.batch_size, op_type='delete')
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    def test_timer_context_max_size_value_empty(self):
+        try:
+            body = self.create_save_function_body(self.function_name, self.handler_code)
+            body['settings']['timer_context_size']=None
+            self.rest.create_function(body['appname'], body)
+        except Exception as e:
+            self.log.info(e)
+            assert "ERR_INVALID_CONFIG" in str(e) and "timer_context_size must be a number" in str(e), True
 
 
 
