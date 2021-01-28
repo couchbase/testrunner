@@ -32,6 +32,7 @@ from lib.backup_service_client.models.plan import Plan
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from lib.membase.helper.bucket_helper import BucketOperationHelper
 from couchbase_helper.cluster import Cluster
+from testconstants import CLUSTER_QUOTA_RATIO
 
 class BackupServiceBase(EnterpriseBackupRestoreBase):
 
@@ -42,13 +43,12 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         2. Configures Rest API Sub-APIs.
         3. Backup Service Constants.
         """
-        # Set 'skip_server_sort' to avoid sorting the first cluster in the ini file by total memory
-        if not self.input.param("skip_server_sort", False):
-            # Sort the available clusters by total memory in ascending order (if the total memory is the same, sort by ip)
-            self.input.clusters[0].sort(key = lambda server: (ServerUtil(server).get_free_memory(), server.ip))
-
-            # Configure the master server based on the sorted list of clusters
-            self.master = next((server for server in self.servers if server.ip == self.input.clusters[0][0].ip))
+        # Select the master node
+        # This has to be from the list of servers as no __eq__ method has been
+        # implemented for the TestInputServer object causing a comparison
+        # operation to return False in the BaseTestCase which prevents the
+        # master server's services from being initialised correctly.
+        self.master = next((server for server in self.servers if server.ip == self.input.clusters[0][0].ip))
 
         # Node to node encryption
         self.node_to_node_encryption = NodeToNodeEncryption(self.input.clusters[0][0])
@@ -191,8 +191,41 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         with open(self.ssl_hints['client_certificate_file'], "w") as f:
             f.write(client_certificate)
 
+    def set_memory_quotas(self):
+        """ Configures the memory quotas before a rebalance
+
+        The memory quotas will be configured based on the node with the lowest available memory.
+
+        Assume the analytics service gets its own seperate node with a fixed memory quota of 1024mb.
+        Assume all other services get the minimum and equal distribute remaining memory regardless of whether that service is present on a node.
+        """
+        self.log.info("Making memory adjustments in function 'adjust_memory_quotas'")
+
+        # The smallest memory available between all the nodes in the list of servers
+        available_memory = math.floor(min(RestConnection(server).get_nodes_self().mcdMemoryReserved for server in self.servers) * CLUSTER_QUOTA_RATIO)
+        self.log.info(f"Lowest available memory: {available_memory}")
+
+        rest_connection = RestConnection(self.master)
+
+        # The services and the minimum memory each of them require
+        services, min_quota_per_service = ['memoryQuota', 'indexMemoryQuota', 'ftsMemoryQuota'], 256
+
+        # Remaining memory that can be assigned to each node
+        remaining_memory = (available_memory // len(services) - min_quota_per_service)
+        self.log.info(f"Remaining memory: {remaining_memory}")
+
+        # Allocate the minimum quota to each its service + equally distribute the remaining memory
+        for service_quota_name in services:
+            rest_connection.set_service_memoryQuota(service=service_quota_name, memoryQuota = min_quota_per_service + remaining_memory)
+
+        # Assume the analytics service is on its own seperate node, it gets allocated the minimum analytics quota
+        rest_connection.set_service_memoryQuota(service='cbasMemoryQuota', memoryQuota=1024)
+
     def custom_rebalance(self):
         """Form cluster[0] into a cluster"""
+        # Set memory quotas
+        self.set_memory_quotas()
+
         # Skip testrunner's rebalance procedure
         rebalance_required, rest_conn = False, RestConnection(self.input.clusters[0][0])
 
