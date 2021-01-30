@@ -1,7 +1,8 @@
 import json
 from optparse import OptionParser
 import configparser
-
+from collect_server_info import memInfoRunner
+from TestInput import TestInputServer
 
 # takes an ini template as input, standard out is populated with the server pool
 # need a descriptor as a parameter
@@ -24,12 +25,53 @@ def main():
 
     print('the ini file is', options.inifile)
     servers = []
+    DEFAULT_LINUX_USER = 'root'
+    DEFAULT_LINUX_PWD = 'couchbase'
+    DEFAULT_WIN_USER = 'Administrator'
+    DEFAULT_WIN_PWD = 'Membase123'
+
+    print('the given server info is', options.servers)
+
     if options.servers:
         if not options.servers.startswith('['):
             options.servers='['+options.servers+']'
         servers = json.loads(options.servers)
+        # Sort servers by total memory
+        test_servers = []
+        for server_ip in servers:
+            server = TestInputServer()
+            server.ip = server_ip
+            server.os = options.os
+            if options.os == 'windows':
+                server.ssh_username = DEFAULT_WIN_USER
+                server.ssh_password = DEFAULT_WIN_PWD
+            else:
+                if options.inifile:
+                    with open(options.inifile, 'rt') as tempfile:
+                        for line in tempfile:
+                            if line.startswith('username:'):
+                                server.ssh_username = line.split(':')[1].strip()
+                            elif line.startswith('password:'):
+                                server.ssh_password = line.split(':')[1].strip()
+                            if server.ssh_username and server.ssh_password:
+                                break
+                if not server.ssh_username:
+                    server.ssh_username = DEFAULT_LINUX_USER
+                if not server.ssh_password:
+                    server.ssh_password = DEFAULT_LINUX_PWD
+            test_servers.append(server)
+        runner = memInfoRunner(test_servers)
+        runner.run()
+        if len(runner.succ) > 0:
+            sorted_by_mem = sorted(runner.succ.items(), key=lambda item: item[1])
+            print('the servers memory info is', sorted_by_mem)
+            servers = []
+            for (k,v) in sorted_by_mem:
+                servers.append(k)
+        for (server, e) in runner.fail:
+            print("CAN'T GET MEMORY FROM {0}: {1}".format(server, e))
+            servers.append(server)
 
-    print('the server info is', options.servers)
 
     addPoolServers = []
 
@@ -62,19 +104,19 @@ def main():
 
           if options.os == 'windows':
               if 'username:root' in data[i]:
-                  data[i] = data[i].replace('root', 'Administrator')
+                  data[i] = data[i].replace('root', DEFAULT_WIN_USER)
               if 'password:couchbase' in data[i]:
-                  data[i] = data[i].replace('couchbase', 'Membase123')
+                  data[i] = data[i].replace('couchbase', DEFAULT_WIN_PWD)
 
           if 'es_ssh_username:root' in data[i]:
-              data[i] = data[i].replace('es_ssh_username:root', 'username:root')
+              data[i] = data[i].replace('es_ssh_username:root', 'username:'+DEFAULT_LINUX_USER)
           if 'es_ssh_password:couchbase' in data[i]:
-              data[i] = data[i].replace('es_ssh_password:couchbase', 'password:couchbase')
+              data[i] = data[i].replace('es_ssh_password:couchbase', 'password:'+DEFAULT_LINUX_PWD)
 
           if 'es_ssh_username:Administrator' in data[i]:
-              data[i] = data[i].replace('es_ssh_username:Administrator', 'username:root')
+              data[i] = data[i].replace('es_ssh_username:Administrator', 'username:'+DEFAULT_LINUX_USER)
           if 'es_ssh_password:Membase123' in data[i]:
-              data[i] = data[i].replace('es_ssh_password:Membase123', 'password:couchbase')
+              data[i] = data[i].replace('es_ssh_password:Membase123', 'password:'+DEFAULT_LINUX_PWD)
 
           if options.replaceValue:
               for oldnew in options.replaceValue.split(','):

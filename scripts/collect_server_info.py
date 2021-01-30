@@ -117,6 +117,41 @@ class cbcollectRunner(object):
             remote_client.execute_command("rm -f %s" % os.path.join(remote_path, file_name))
             remote_client.disconnect()
 
+class memInfoRunner(object):
+    def __init__(self, server, local=False):
+        self.server = server
+        self.local = local
+        self.succ = {}
+        self.fail = []
+
+    def _run(self, server):
+        try:
+            if not self.local:
+                from lib.remote.remote_util import RemoteMachineShellConnection
+                remote_client = RemoteMachineShellConnection(server)
+                print("Collecting memory info from %s\n" % server.ip)
+                remote_cmd = "sh -c 'if [[ \"$OSTYPE\" == \"darwin\"* ]]; then sysctl hw.memsize|grep -Eo [0-9]; " \
+                                    "else grep MemTotal /proc/meminfo|grep -Eo [0-9]; fi'"
+                output, error = remote_client.execute_command(remote_cmd)
+                print("\n".join(error))
+                remote_client.disconnect()
+        except Exception as e:
+            self.fail.append((server.ip, e))
+        else:
+            self.succ[server.ip] = "".join(output)
+
+    def run(self):
+        if isinstance(self.server, list):
+            meminfo_threads = []
+            for server in self.server:
+                meminfo_thread = Thread(target=self._run, args=(server,))
+                meminfo_thread.start()
+                meminfo_threads.append(meminfo_thread)
+            for meminfo_thread in meminfo_threads:
+                meminfo_thread.join()
+        else:
+            self._run(self.server)
+
 def main():
     local = False
     try:
