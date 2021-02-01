@@ -1892,8 +1892,8 @@ class QueryTests(BaseTestCase):
         '''
         return json object {'code':12345, 'msg':'error message'}
         '''
-        content = str(s).split("ERROR:")[1].replace("'",'"').replace("None","null")
-        json_parsed = json.loads(content)
+        content = ast.literal_eval(str(s).split("ERROR:")[1])
+        json_parsed = json.loads(json.dumps(content))
         return json_parsed['errors'][index]
 
     ##############################################################################################

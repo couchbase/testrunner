@@ -95,7 +95,8 @@ class QueryUpdateStatsTests(QueryTests):
         with_clauses = [
             "{'resolution':0.5}",
             "{'resolution':1, 'sample_size':20000}",
-            "{'resolution':1.5, 'sample_size':20000, 'update_statistics_timeout':120}"
+            "{'resolution':1.5, 'sample_size':20000, 'update_statistics_timeout':120}",
+            "{'resolution':1.5, 'sample_size':20000, 'update_statistics_timeout':120, 'batch_size':5}"
         ]
         for with_clause in with_clauses:
             update_stats = f"{self.UPDATE_STATISTICS} {self.keyspace}(city, country) WITH {with_clause}"
@@ -699,3 +700,29 @@ class QueryUpdateStatsTests(QueryTests):
         except Exception as e:
             self.log.error(f"Update statistics failed: {e}")
             self.fail()
+
+    def test_update_stats_batch(self):
+        for batch in [0,10,5,99]:
+            update_stats = f"{self.UPDATE_STATISTICS} {self.keyspace}(city) WITH {{'batch_size':{batch}}}"
+            try:
+                self.run_cbq_query(query=update_stats)
+            except Exception as e:
+                self.log.error(f"Update statistics failed: {e}")
+                self.fail()
+
+    def test_negative_batch(self):
+        cases = [
+            {'code': 5360, 'message': "'batch_size' option must be an integer, not string", 'batch_size': {'batch_size': '20'}},
+            {'code': 5360, 'message': "'batch_size' option must be an integer, not float", 'batch_size': {'batch_size': 3.1}}
+        ]
+        for case in cases:
+            error_code = case['code']
+            error_message = case['message']
+            update_stats = f"{self.UPDATE_STATISTICS} {self.keyspace}(city) WITH {case['batch_size']}"
+            try:
+                self.run_cbq_query(query=update_stats)
+                self.fail(f"Query did not fail as expected with error: {error_message}")
+            except CBQError as ex:
+                error = self.process_CBQE(ex)
+                self.assertEqual(error['code'], error_code)
+                self.assertEqual(error['msg'], error_message)
