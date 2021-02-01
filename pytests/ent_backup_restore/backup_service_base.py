@@ -1121,7 +1121,7 @@ class SambaClient(Client):
         self.remote_shell.execute_command(f"umount -f -l {directory_to_mount}")
         self.remote_shell.execute_command(f"rm -rf {directory_to_mount}")
         self.remote_shell.execute_command(f"mkdir -p {directory_to_mount}")
-        self.remote_shell.execute_command(f"mount -t cifs -o username=Couchbase,password=password //{self.server.ip}/Anonymous {directory_to_mount}")
+        self.remote_shell.execute_command(f"mount -t cifs -o username=Couchbase,password=password,uid=$(id -u couchbase),gid=$(id -g couchbase),nobrl //{self.server.ip}/Anonymous {directory_to_mount}")
 
     def clean(self, directory_to_mount):
         self.remote_shell.execute_command(f"umount -f -l {directory_to_mount}")
@@ -1168,6 +1168,10 @@ class SambaServer(Server):
         self.remote_shell.execute_command(f"systemctl restart smb.service")
         self.remote_shell.execute_command(f"(echo \"password\"; echo \"password\") | smbpasswd -a couchbase")
         self.remote_shell.execute_command(f"smbpasswd -e couchbase")
+
+        # A SELinux specific interaction:
+        # If you want to allow samba to share any file/directory read/write, you must turn on the samba_export_all_rw boolean.
+        self.remote_shell.execute_command(f"setsebool -P samba_export_all_rw on")
 
     def clean(self):
         self.remote_shell.execute_command(f"echo -n > {SambaServer.samba_config_directory} && systemctl stop smb.service")
