@@ -486,12 +486,19 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             running_tasks = repo.running_one_off if one_off else repo.running_tasks
 
             if running_tasks and task_name in running_tasks:
-                self.log.info(f"Task {task_name} is running (progress: {running_tasks[task_name].node_runs[0].progress})")
+                if running_tasks[task_name].node_runs:
+                    self.log.info(f"Task {task_name} is running (progress: {running_tasks[task_name].node_runs[0].progress})")
+                else:
+                    self.log.info(f"There were no node_runs for task {task_name}")
             else:
                 task_history = self.get_task_history('active', repo_name, task_name)
 
                 if len(task_history) > 0:
-                    self.log.info(f"The task {task_name} has completed successfully.")
+                    self.log.info(f"The task {task_name} has completed with status: {task_history[0].status}")
+
+                    if task_history[0].status != 'done':
+                        self.log.info(f"\n{task_history[0]}")
+
                     return task_history[0].status == 'done'
                 else:
                     self.log.info(f"The task {task_name} has not started yet.")
