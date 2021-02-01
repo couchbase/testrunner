@@ -83,6 +83,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.cli_command_location = bin_path.replace('"','') + "/"
 
         self.debug_logs = self.input.param("debug-logs", False)
+        self.backupset.cluster_version = self.cb_version
         self.show_bk_list = self.input.param("show_bk_list", True)
         self.vbuckets_filter_no_data = False
         self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
@@ -2825,6 +2826,7 @@ class Backupset:
         self.disable_ft_alias = False
         self.disable_analytics = False
         self.auto_create_buckets = False
+        self.cluster_version = None
 
         # Common configuration which is to be shared accross cloud providers
         self.objstore_access_key_id = ""
