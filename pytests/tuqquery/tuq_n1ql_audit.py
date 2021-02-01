@@ -439,6 +439,78 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
 
         self.checkConfig(self.eventID, self.master, expected_results, n1ql_audit=True)
 
+    def test_audit_transactions(self):
+        query_type = self.input.param("ops", None)
+        user = self.master.rest_username
+        source = 'ns_server'
+        expected_results = {}
+        tx_start = self.run_cbq_query(query="START TRANSACTION", txtimeout="2m")
+        txid = tx_start['results'][0]['txid']
+        if query_type == 'select':
+            self.run_cbq_query(query='select * from ' + self.query_buckets[0] + ' where name = "employee-9"', txnid=txid)
+        elif query_type == 'update':
+            self.run_cbq_query(query='update ' + self.query_buckets[0] + ' SET name = "employee-9000" where name = "employee-9"', txnid=txid)
+        elif query_type == 'delete':
+            self.run_cbq_query(query='delete from ' + self.query_buckets[0] + ' where name = "employee-6" limit 100', txnid=txid)
+        elif query_type == 'insert':
+            self.run_cbq_query(
+                query='INSERT INTO ' + self.query_buckets[0] + ' ( KEY, VALUE ) VALUES ("1",{ "order_id": "1", "type": '
+                                                           '"order", "customer_id":"24601", "total_price": 30.3, '
+                                                           '"lineitems": '
+                                                           '[ "11", "12", "13" ] })', txnid=txid)
+        if not (query_type == 'start'):
+            self.run_cbq_query(query='COMMIT TRANSACTION', txnid=txid)
+        if query_type == 'select':
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+                                'isAdHoc': True,
+                                'name': 'SELECT statement', 'real_userid': {'source': source, 'user': user},
+                                'statement': 'select * from ' + self.query_buckets[0] + ' where name = "employee-9"',
+                                'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID, 'txId': txid,
+                                'description': 'A N1QL SELECT statement was executed'}
+        elif query_type == 'start':
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+                                'isAdHoc': True,
+                                'name': 'START TRANSACTION statement', 'real_userid': {'source': source, 'user': user},
+                                'statement': 'START TRANSACTION',
+                                'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID, 'txId': txid,
+                                'description': 'A N1QL START TRANSACTION statement was executed'}
+        elif query_type == 'commit':
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+                                'isAdHoc': True,
+                                'name': 'COMMIT TRANSACTION statement', 'real_userid': {'source': source, 'user': user},
+                                'statement': 'COMMIT TRANSACTION',
+                                'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID, 'txId': txid,
+                                'description': 'A N1QL COMMIT TRANSACTION statement was executed'}
+        elif query_type == 'update':
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+                                'isAdHoc': True,
+                                'name': 'UPDATE statement', 'real_userid': {'source': source, 'user': user},
+                                'statement': 'update ' + self.query_buckets[0] + ' SET name = "employee-9000" where name = "employee-9"',
+                                'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID, 'txId': txid,
+                                'description': 'A N1QL UPDATE statement was executed'}
+            self.checkConfig("28679", self.master, expected_results, n1ql_audit=True)
+        elif query_type == 'insert':
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+                                'isAdHoc': True,
+                                'name': 'INSERT statement', 'real_userid': {'source': source, 'user': user},
+                                'statement': 'INSERT INTO ' + self.query_buckets[0] +
+                                             ' ( KEY, VALUE ) VALUES ("1",{ "order_id": "1", '
+                                             '"type": '
+                                             '"order", "customer_id":"24601", "total_price": 30.3, "lineitems": '
+                                             '[ "11", "12", "13" ] })',
+                                'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID, 'txId': txid,
+                                'description': 'A N1QL INSERT statement was executed'}
+
+        elif query_type == 'delete':
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+                                'isAdHoc': True,
+                                'name': 'DELETE statement', 'real_userid': {'source': source, 'user': user},
+                                'statement': 'DELETE FROM ' + self.query_buckets[0] + ' WHERE type = "hotel"',
+                                'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID, 'txId': txid,
+                                'description': 'A N1QL DELETE statement was executed'}
+
+        self.checkConfig(self.eventID, self.master, expected_results, n1ql_audit=True)
+
     def gen_vacant_prepared_name(self, prefix):
         vacant_prepared_name = "a"
         for i in range(1, 10000):
