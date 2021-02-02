@@ -120,14 +120,18 @@ class EventingBaseTest(QueryHelperTests):
         self.check_eventing_logs_for_panic()
         rest = RestConnection(self.master)
         buckets = rest.get_buckets()
+        meta_bucket=False
+        for i in range(len(buckets)):
+            if buckets[i].name=="metadata":
+                meta_bucket=True
         self.hostname = self.input.param('host', 'https://postman-echo.com/')
         if self.hostname == 'local':
             self.teardown_curl()
         # check metadata bucke is empty
-        if len(buckets) > 0 and not self.skip_metabucket_check and not self.is_upgrade_test:
-            stats_meta = rest.get_bucket_stats("metadata")
-            self.log.info("number of documents in metadata bucket {}".format(stats_meta["curr_items"]))
-            if stats_meta["curr_items"] != 0:
+        if len(buckets) > 0 and meta_bucket and not self.skip_metabucket_check and not self.is_upgrade_test:
+            count_meta = self.get_count("metadata")
+            self.log.info("number of documents in metadata bucket {}".format(count_meta))
+            if count_meta!= 0:
                 raise Exception("metdata bucket is not empty at the end of test")
         super(EventingBaseTest, self).tearDown()
 
@@ -1006,7 +1010,8 @@ class EventingBaseTest(QueryHelperTests):
 
     def get_count(self,bucket):
         query="select RAW(count(*)) from "+bucket
-        result_set=self.n1ql_helper.run_cbq_query(query,server=self.n1ql_node)
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        result_set=RestConnection(n1ql_node).query_tool(query)
         count=result_set['results']
         return count[0]
 

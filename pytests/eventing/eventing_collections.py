@@ -113,6 +113,8 @@ class EventingCollections(EventingBaseTest):
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
                                      is_delete=True)
         self.collection_rest.create_scope(bucket=self.dst_bucket_name, scope=self.dst_bucket_name)
+        self.collection_rest.create_collection(bucket=self.dst_bucket_name, scope=self.dst_bucket_name,
+                                               collection=self.dst_bucket_name)
         self.resume_function(body)
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", 0)
         self.undeploy_and_delete_function(body)

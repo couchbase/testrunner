@@ -8,6 +8,8 @@ from eventing.eventing_constants import HANDLER_CODE
 from membase.api.rest_client import RestConnection
 from testconstants import STANDARD_BUCKET_PORT
 
+from lib.membase.api.rest_client import RestHelper
+
 
 class EventingMultiHandler(EventingBaseTest):
     def setUp(self):
@@ -21,9 +23,9 @@ class EventingMultiHandler(EventingBaseTest):
         self.worker_count=self.input.param('worker_count',1)
         self.handler_code=self.input.param('handler_code','handler_code/ABO/insert.js')
         self.gens_load = self.generate_docs(self.docs_per_day)
-        quota=(self.num_src_buckets+self.num_dst_buckets)*100+400
+        quota=(self.num_src_buckets+self.num_dst_buckets)*100+300
         self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=quota)
-        self.metadata_bucket_size = 400
+        self.metadata_bucket_size = 300
         bucket_params_meta = self._create_bucket_params(server=self.server, size=self.metadata_bucket_size,
                                                         replicas=self.num_replicas)
         self.create_n_buckets(self.src_bucket_name,self.num_src_buckets)
@@ -43,6 +45,7 @@ class EventingMultiHandler(EventingBaseTest):
                                           full_docs_list=self.full_docs_list, log=self.log, input=self.input,
                                           master=self.master, use_rest=True)
             self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.binding_map={}
 
     def create_n_buckets(self,name,number):
         self.bucket_size = 100
@@ -51,8 +54,8 @@ class EventingMultiHandler(EventingBaseTest):
         for i in range(number):
             self.cluster.create_standard_bucket(name+"_"+str(i), port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
-            self.create_scope_collection(bucket=name+"_"+str(i), scope=name+"_"+str(i),
-                                         collection=name+"_"+str(i))
+            self.create_scope_collection(bucket=name+"_"+str(i), scope="scope_0",
+                                         collection="coll_0")
 
 
     def create_n_handler(self,num_handler,num_src,num_dst,handler_code):
@@ -60,12 +63,17 @@ class EventingMultiHandler(EventingBaseTest):
         dst_bucket=self.dst_bucket_name
         for i in range(num_handler):
             self.src_bucket_name=src_bucket+"_"+str(i%num_src)
-            source_namespace=self.src_bucket_name+"."+self.src_bucket_name+"."+self.src_bucket_name
+            source_namespace=self.src_bucket_name+".scope_0.coll_0"
             meta_namespace=self.metadata_bucket_name+"."+self.metadata_bucket_name+"."+self.metadata_bucket_name
             dst_namespace=[]
             if num_dst > 0:
                 self.dst_bucket_name=dst_bucket+"_"+str(i%num_dst)
-                dst_namespace.append("dst_bucket."+self.dst_bucket_name+"."+self.dst_bucket_name+"."+self.dst_bucket_name+".rw")
+                binding=self.dst_bucket_name + ".scope_0.coll_0"
+                dst_namespace.append("dst_bucket."+binding+".rw")
+                if binding not in self.binding_map.keys():
+                    self.binding_map[binding]=1
+                else:
+                    self.binding_map[binding] = self.binding_map[binding]+1
             body = self.create_function_with_collection(self.function_name+"_"+str(i),handler_code,
                                                         src_namespace=source_namespace,meta_namespace=meta_namespace,collection_bindings=dst_namespace)
             # if num_dst == 0 and not self.is_sbm and len(body['depcfg']['buckets']) > 0:
@@ -73,6 +81,7 @@ class EventingMultiHandler(EventingBaseTest):
             self.log.info("Creating the following handler code : {0} with {1}".format(body['appname'], body['depcfg']))
             self.log.info("\n{0}".format(body['appcode']))
             self.rest.create_function(body["appname"],body)
+            print(self.binding_map)
 
     def deploy_n_handler(self,num,sequential=True):
         funcs = self.handler_status_map()
@@ -130,8 +139,7 @@ class EventingMultiHandler(EventingBaseTest):
 
     def test_multiple_handle_multiple_buckets_preload(self):
         # load data
-        self.load(self.gens_load, buckets=self.buckets, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        self.load_data_to_all_source_collections()
         self.create_n_handler(self.num_handlers,self.num_src_buckets,self.num_dst_buckets,self.handler_code)
         self.deploy_n_handler(self.deploy_handler,sequential=self.sequential)
         self.wait_for_handlers_to_deployed()
@@ -144,8 +152,7 @@ class EventingMultiHandler(EventingBaseTest):
         self.create_n_handler(self.num_handlers,self.num_src_buckets,self.num_dst_buckets,self.handler_code)
         self.deploy_n_handler(self.deploy_handler,sequential=self.sequential)
         # load data
-        self.load(self.gens_load, buckets=self.buckets, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        self.load_data_to_all_source_collections()
         self.wait_for_handlers_to_deployed()
         self.print_handlers_state()
         if self.num_pause > 0:
@@ -183,3 +190,172 @@ class EventingMultiHandler(EventingBaseTest):
         self.print_handlers_state()
         self.undeploy_delete_all_handler()
 
+    def load_data_to_all_source_collections(self,is_delete=False):
+        buckets = RestConnection(self.master).get_buckets()
+        task=[]
+        for bucket in buckets:
+            if "src_bucket" in bucket.name:
+                task.append(self.load_data_to_collection(self.docs_per_day * self.num_docs, bucket.name+".scope_0.coll_0"
+                                                         ,is_delete=is_delete,wait_for_loading=False))
+        for tk in task:
+            tk.result()
+
+    def verify_destination_buckets(self,num_docs):
+        for bind in self.binding_map:
+            self.verify_doc_count_collections(bind,num_docs *self.binding_map[bind])
+
+    def test_multiple_handle_multiple_collections_rebalance_in(self):
+        # load data
+        self.load_data_to_all_source_collections()
+        self.create_n_handler(self.num_handlers,self.num_src_buckets,self.num_dst_buckets,self.handler_code)
+        self.deploy_n_handler(self.deploy_handler,sequential=self.sequential)
+        self.wait_for_handlers_to_deployed()
+        # rebalance in a eventing node when eventing is processing mutations
+        services_in = ["eventing"]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                 services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.verify_destination_buckets(self.docs_per_day * self.num_docs)
+        # delete load data
+        self.load_data_to_all_source_collections(is_delete=True)
+        self.verify_destination_buckets(0)
+        self.undeploy_delete_all_handler()
+        # Get all eventing nodes
+        nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        # rebalance out all eventing nodes
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], nodes_out_list)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+    def test_multiple_handle_multiple_collections_rebalance_out(self):
+        # load data
+        self.load_data_to_all_source_collections()
+        self.create_n_handler(self.num_handlers,self.num_src_buckets,self.num_dst_buckets,self.handler_code)
+        self.deploy_n_handler(self.deploy_handler,sequential=self.sequential)
+        self.wait_for_handlers_to_deployed()
+        # rebalance out a eventing node when eventing is processing mutations
+        nodes_out_ev = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_ev])
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.verify_destination_buckets(self.docs_per_day * self.num_docs)
+        # delete load data
+        self.load_data_to_all_source_collections(is_delete=True)
+        self.verify_destination_buckets(0)
+        self.undeploy_delete_all_handler()
+        # Get all eventing nodes
+        nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        # rebalance out all eventing nodes
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], nodes_out_list)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+    def test_multiple_handle_multiple_collections_swap_rebalance(self):
+        # load data
+        self.load_data_to_all_source_collections()
+        self.create_n_handler(self.num_handlers,self.num_src_buckets,self.num_dst_buckets,self.handler_code)
+        self.deploy_n_handler(self.deploy_handler,sequential=self.sequential)
+        self.wait_for_handlers_to_deployed()
+        # swap rebalance an eventing node when eventing is processing mutations
+        services_in = ["eventing"]
+        nodes_out_ev = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                 nodes_out_ev, services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.verify_destination_buckets(self.docs_per_day * self.num_docs)
+        # delete load data
+        self.load_data_to_all_source_collections(is_delete=True)
+        self.verify_destination_buckets(0)
+        self.undeploy_delete_all_handler()
+        # Get all eventing nodes
+        nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        # rebalance out all eventing nodes
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], nodes_out_list)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+    def test_multiple_handle_multiple_collections_rebalance_in_kv(self):
+        # load data
+        self.load_data_to_all_source_collections()
+        self.create_n_handler(self.num_handlers,self.num_src_buckets,self.num_dst_buckets,self.handler_code)
+        self.deploy_n_handler(self.deploy_handler,sequential=self.sequential)
+        self.wait_for_handlers_to_deployed()
+        # rebalance in a kv node when eventing is processing mutations
+        services_in = ["kv"]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                 services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.verify_destination_buckets(self.docs_per_day * self.num_docs)
+        # delete load data
+        self.load_data_to_all_source_collections(is_delete=True)
+        self.verify_destination_buckets(0)
+        self.undeploy_delete_all_handler()
+        # Get all eventing nodes
+        nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        # rebalance out all eventing nodes
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], nodes_out_list)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+    def test_multiple_handle_multiple_collections_rebalance_out_kv(self):
+        # load data
+        self.load_data_to_all_source_collections()
+        self.create_n_handler(self.num_handlers,self.num_src_buckets,self.num_dst_buckets,self.handler_code)
+        self.deploy_n_handler(self.deploy_handler,sequential=self.sequential)
+        self.wait_for_handlers_to_deployed()
+        # rebalance out a kv node when eventing is processing mutations
+        nodes_out_kv = self.servers[1]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_kv])
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.verify_destination_buckets(self.docs_per_day * self.num_docs)
+        # delete load data
+        self.load_data_to_all_source_collections(is_delete=True)
+        self.verify_destination_buckets(0)
+        self.undeploy_delete_all_handler()
+        # Get all eventing nodes
+        nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        # rebalance out all eventing nodes
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], nodes_out_list)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+    def test_multiple_handle_multiple_collections_swap_rebalance_kv(self):
+        # load data
+        self.load_data_to_all_source_collections()
+        self.create_n_handler(self.num_handlers,self.num_src_buckets,self.num_dst_buckets,self.handler_code)
+        self.deploy_n_handler(self.deploy_handler,sequential=self.sequential)
+        self.wait_for_handlers_to_deployed()
+        # swap rebalance an kv node when eventing is processing mutations
+        services_in = ["kv"]
+        nodes_out_kv = self.servers[1]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                 [nodes_out_kv], services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.verify_destination_buckets(self.docs_per_day * self.num_docs)
+        # delete load data
+        self.load_data_to_all_source_collections(is_delete=True)
+        self.verify_destination_buckets(0)
+        self.undeploy_delete_all_handler()
+        # Get all eventing nodes
+        nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        # rebalance out all eventing nodes
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], nodes_out_list)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()

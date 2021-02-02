@@ -1,8 +1,13 @@
 function OnUpdate(doc, meta) {
     log("Doc created/updated", meta.id);
     try{
-        var result1= couchbase.insert(dst_bucket,meta,doc);
-        log(result1);
+    var result = couchbase.get(src_bucket,meta);
+    log(result);
+    if(result.success && result.meta.cas != undefined &&
+        JSON.stringify(result.doc) === JSON.stringify(doc)){
+            var result1= couchbase.insert(dst_bucket,meta,doc);
+    }
+    log(result1);
     }catch(e){
         log("error:",e);
     }
