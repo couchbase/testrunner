@@ -4,6 +4,7 @@ import subprocess
 import sys
 import threading
 import time
+import os
 from couchbase_helper.cluster import Cluster
 
 sys.path = [".", "lib"] + sys.path
@@ -43,11 +44,15 @@ params = {
 
 
 class build:
-    def __init__(self, name, url, path, product="cb"):
+    def __init__(self, name, url, path, product="cb",  debug_name=None,
+                 debug_url=None, debug_path=None):
         self.name = name
         self.url = url
         self.path = path
         self.product = product
+        self.debug_name = debug_name
+        self.debug_url = debug_url
+        self.debug_path = debug_path
         self.version = params["version"]
         self.bkrs_client = None
 
@@ -175,14 +180,25 @@ class NodeHelper:
     def install_cb(self):
         self.pre_install_cb()
         self.set_vm_swappiness_and_thp()
+        cmd_d = None
+        cmd_debug = None
         if self.actions_dict[self.info.deliverable_type]["install"]:
             if "suse" in self.get_os():
                 cmd = self.actions_dict[self.info.deliverable_type]["suse_install"]
+                cmd_d = self.actions_dict[self.info.deliverable_type][
+                    "suse_install"]
+                cmd_debug = None
             else:
                 cmd = self.actions_dict[self.info.deliverable_type]["install"]
+                cmd_d = self.actions_dict[self.info.deliverable_type][
+                    "install"]
+                cmd_debug = None
             cmd = cmd.replace("buildbinary", self.build.name)
             cmd = cmd.replace("buildpath", self.build.path)
             cmd = cmd.replace("mountpoint", "/tmp/couchbase-server-" + params["version"])
+            if self.get_os() in install_constants.DEBUG_INFO_SUPPORTED and cmd_d is not None:
+                cmd_debug = cmd_d.replace("buildpath",
+                                          self.build.debug_path)
             duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["install"]
             start_time = time.time()
             while time.time() < start_time + timeout:
@@ -198,6 +214,22 @@ class NodeHelper:
                     log.warning("install_cb: Exception {0} occurred on {1}, retrying..".format(e,
                                                                                          self.ip))
                     self.wait_for_completion(duration, event)
+            if cmd_debug is not None:
+                start_time = time.time()
+                while time.time() < start_time + timeout:
+                    try:
+                        ou, er = self.shell.execute_command(cmd_debug,
+                                                                  debug=
+                                                                  self.params[
+                                                                      "debug_logs"])
+                        if ou == ['1']:
+                            break
+                        self.wait_for_completion(duration, event)
+                    except Exception as e:
+                        log.warning(
+                            "Exception {0} occurred on {1}, retrying.."
+                            .format(e, self.ip))
+                        self.wait_for_completion(duration, event)
         self.post_install_cb()
 
     def post_install_cb(self):
@@ -624,12 +656,18 @@ def pre_install_steps():
         else:
             for node in NodeHelpers:
                 build_binary = __get_build_binary_name(node)
+                debug_binary = __get_debug_binary_name(node)
                 build_url = __get_build_url(node, build_binary)
+                debug_url = __get_build_url(node, debug_binary)
                 if not build_url:
                     print_result_and_exit(
                         "Build is not present in latestbuilds or release repos, please check {0}".format(build_binary))
                 filepath = __get_download_dir(node) + build_binary
-                node.build = build(build_binary, build_url, filepath)
+                filepath_debug = __get_download_dir(node) + debug_binary
+                node.build = build(build_binary, build_url, filepath,
+                                   debug_name=debug_binary,
+                                   debug_url=debug_url,
+                                   debug_path=filepath_debug)
 
 
 def _execute_local(command, timeout):
@@ -695,9 +733,14 @@ def download_build():
     if params["all_nodes_same_os"] and all_nodes_same_version and not params["skip_local_download"]:
         check_and_retry_download_binary_local(NodeHelpers[0])
         _copy_to_nodes(NodeHelpers[0].build.path, NodeHelpers[0].build.path)
+        _copy_to_nodes(NodeHelpers[0].build.debug_path,
+                       NodeHelpers[0].build.debug_path)
         ok = True
         for node in NodeHelpers:
-            if not check_file_exists(node, node.build.path) or not check_file_size(node):
+            if not check_file_exists(node, node.build.path) \
+                    or not check_file_size(node) \
+                    or not check_file_exists(node, node.build.debug_path)\
+                    or not check_file_size(node, debug_build=True):
                 node.install_success = False
                 ok = False
         if not ok:
@@ -706,28 +749,55 @@ def download_build():
         for node in NodeHelpers:
             build_url = node.build.url
             filepath = node.build.path
-            cmd = install_constants.DOWNLOAD_CMD[node.info.deliverable_type]
-            if "curl" in cmd:
-                cmd = cmd.format(build_url, filepath,
-                                 install_constants.WAIT_TIMES[node.info.deliverable_type]
-                                 ["download_binary"])
+            debug_url = node.build.debug_url
+            filepath_debug = node.build.debug_path
+            cmd_master = install_constants.DOWNLOAD_CMD[
+                node.info.deliverable_type]
+            cmd = None
+            cmd_debug = None
+            if "curl" in cmd_master:
+                cmd = cmd_master.format(build_url, filepath,
+                                        install_constants.WAIT_TIMES[
+                                            node.info.deliverable_type]
+                                        ["download_binary"])
+                cmd_debug = cmd_master.format(debug_url, filepath_debug,
+                                              install_constants.WAIT_TIMES[
+                                                  node.info.deliverable_type]
+                                              ["download_binary"])
 
-            elif "wget" in cmd:
-                cmd = cmd.format(__get_download_dir(node), build_url)
-            logging.info("Downloading build binary to {0}:{1}..".format(node.ip, filepath))
-            check_and_retry_download_binary(cmd, node)
+
+            elif "wget" in cmd_master:
+
+                cmd = cmd_master.format(__get_download_dir(node),
+                                        build_url)
+                cmd_debug = cmd_master.format(__get_download_dir(node),
+                                              debug_url)
+            if cmd:
+                check_and_retry_download_binary(cmd, node,
+                                                node.build.path)
+            if cmd_debug:
+                check_and_retry_download_binary(cmd_debug, node,
+                                                node.build.debug_path
+                                                , debug_build=True)
     log.debug("Done downloading build binary")
 
 def check_and_retry_download_binary_local(node):
     log.info("Downloading build binary to {0}..".format(node.build.path))
+    log.info("Downloading debug binary to {0}..".format(
+        node.build.debug_path))
     duration, event, timeout = install_constants.WAIT_TIMES[node.info.deliverable_type][
         "download_binary"]
     cmd = install_constants.WGET_CMD.format(__get_download_dir(node), node.build.url)
+    cmd_debug = install_constants.WGET_CMD.format(
+        __get_download_dir(node), node.build.debug_url)
     start_time = time.time()
     while time.time() < start_time + timeout:
         try:
             exit_code = _execute_local(cmd, timeout)
-            if exit_code == 0 and os.path.exists(node.build.path):
+            exit_code_debug = _execute_local(cmd_debug, timeout)
+            if exit_code == 0 and os.path.exists(node.build.path) and\
+                    exit_code_debug == 0 and os.path.exists(
+                node.build.debug_path):
                 break
             time.sleep(duration)
         except Exception as e:
@@ -745,34 +815,46 @@ def check_file_exists(node, filepath):
     return False
 
 
-def get_remote_build_size(node):
-    response = urllib.request.urlopen(node.build.url)
+def get_remote_build_size(node, debug_build=False):
+    if debug_build:
+        url = node.build.debug_url
+    else:
+        url = node.build.url
+    response = urllib.request.urlopen(url)
     remote_build_size = int(response.info()["Content-Length"])
     return remote_build_size
 
 
-def get_local_build_size(node):
-    output, _ = node.shell.execute_command(install_constants.LOCAL_BUILD_SIZE_CMD.format(__get_download_dir(node), __get_build_binary_name(node)))
+def get_local_build_size(node, debug_build=False):
+    if debug_build:
+        binary_name= node.build.debug_name
+    else:
+        binary_name = node.build.name
+    output, _ = node.shell.execute_command(
+        install_constants.LOCAL_BUILD_SIZE_CMD.format(
+            __get_download_dir(node), binary_name))
     local_build_size = int(output[0].strip().split(" ")[0])
     return local_build_size
 
 
-def check_file_size(node):
+def check_file_size(node, debug_build=False):
     try:
-        expected_size = get_remote_build_size(node)
-        actual_size = get_local_build_size(node)
+        expected_size = get_remote_build_size(node, debug_build)
+        actual_size = get_local_build_size(node, debug_build)
         return expected_size == actual_size
     except Exception:
         return False
 
 
-def check_and_retry_download_binary(cmd, node):
+def check_and_retry_download_binary(cmd, node, path, debug_build=False):
     duration, event, timeout = install_constants.WAIT_TIMES[node.info.deliverable_type]["download_binary"]
     start_time = time.time()
     while time.time() < start_time + timeout:
         try:
             _, _, download_exit_code = node.shell.execute_command(cmd, debug=params["debug_logs"], get_exit_code=True)
-            if download_exit_code == 0 and check_file_size(node) and check_file_exists(node, node.build.path):
+            if download_exit_code == 0 \
+                    and check_file_size(node, debug_build) \
+                    and check_file_exists(node, path):
                 break
             time.sleep(duration)
         except Exception as e:
@@ -886,3 +968,31 @@ def init_clusters(timeout=60, retries=3):
             except Exception:
                 time.sleep(5)
                 retries -= 1
+
+def __get_debug_binary_name(node):
+    # couchbase-server-enterprise-debuginfo-6.5.0-4557-centos7.x86_64
+    # .rpm
+    # couchbase-server-enterprise-debuginfo-6.5.0-4557-suse15.x86_64.rpm
+    # couchbase-server-enterprise-debuginfo-6.5.0-4557-rhel8.x86_64.rpm
+    # couchbase-server-enterprise-debuginfo-6.5.0-4557-oel7.x86_64.rpm
+    # couchbase-server-enterprise-debuginfo-6.5.0-4557-amzn2.x86_64.rpm
+    if node.get_os() in install_constants.X86:
+        return "{0}-{1}-{2}.{3}.{4}".format(
+            params["cb_edition"] + "-debuginfo",
+            params["version"],
+            node.get_os(),
+            node.info.architecture_type,
+            node.info.deliverable_type)
+
+    # couchbase-server-enterprise-dbg_6.5.0-4557-ubuntu16.04_amd64.deb
+    # couchbase-server-enterprise-dbg_6.5.0-4557-debian8_amd64.deb
+    # couchbase-server-enterprise-dbg_6.5.0-4557-windows_amd64.msi
+    elif node.get_os() in install_constants.AMD64:
+        if "windows" in node.get_os():
+            node.info.deliverable_type = "msi"
+        return "{0}_{1}-{2}_{3}.{4}".format(
+            params["cb_edition"] + "-dbg",
+            params["version"],
+            node.get_os(),
+            "amd64",
+            node.info.deliverable_type)
