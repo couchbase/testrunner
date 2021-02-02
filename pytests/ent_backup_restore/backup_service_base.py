@@ -120,6 +120,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             # the cluster.
             self.input.test_params["skip_cleanup"] = False
 
+            # Skip the log scan as it causes the backup service jobs to hang.
+            self.input.test_params["skip_log_scan"] = True
+
         super().setUp()
         self.preamble()
 
