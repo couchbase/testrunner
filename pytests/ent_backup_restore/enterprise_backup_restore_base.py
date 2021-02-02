@@ -1959,12 +1959,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         rest.set_indexer_storage_mode(username='Administrator',
                                       password='password',
                                       storageMode=storageMode)
-        self.log.info("Done reset node")
+        self.log.info("Done reset node in set storage mode")
         sv_in_rs = self.backupset.restore_cluster_host.services
+
         if self.backupset.restore_cluster_host.services and \
             "," in self.backupset.restore_cluster_host.services[0]:
             sv_in_rs = self.backupset.restore_cluster_host.services.split(",")
-        kv_quota = rest.init_node(sv_in_rs)
+        kv_quota = rest.init_node([sv_in_rs])
         return kv_quota
 
     def _reset_restore_cluster_with_bk_services(self, bk_services):
@@ -1991,7 +1992,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 break
         rest = RestConnection(self.backupset.restore_cluster_host)
         kv_quota = rest.init_node()
-        self.log.info("Done reset node")
+        self.log.info("Done reset node in reset cluster")
         if len(self.input.clusters[1]) > 1:
             num_servers = len(self.backupset.restore_cluster) - 1
             self.cluster.rebalance(

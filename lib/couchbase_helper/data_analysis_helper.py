@@ -869,7 +869,7 @@ class DataCollector(object):
                                    {"KV store name":key_partition, "Status":key_status[idx],
                                     "Value":key_value[idx]}
                         status = True
-            else:
+            elif cluster_version[:3] >= "6.6" and cluster_version[:3] < "7.0":
                 for i in range(0, 1024):
                     command = "{}cbriftdump{}".format(cli_command, cmd_ext)
                     command += " -f {}".format(objstore_provider.schema_prefix() + backupset.objstore_bucket + '/' if objstore_provider else '')
@@ -898,6 +898,34 @@ class DataCollector(object):
                         for idx, key in enumerate(key_ids):
                             backup_data[bucket.name][key] = \
                                {"KV store name":key_partition, "Status":key_status[idx],
+                                "Value":key_value[idx]}
+                        status = True
+            elif cluster_version[:3] < "6.6":
+                dump_output = []
+                for i in range(0, 1024):
+                    cmd2 = "{0}cbsqlitedump{1} "\
+                       " -f {2}/backup/{3}*/{4}*/data/shard_{5}.sqlite.0 | grep -A 8 'Key: {6}' "\
+                                                  .format(cli_command, cmd_ext,\
+                                                   backupset.directory, now.year, bucket.name,\
+                                                   i, master_key)
+                    output, error = conn.execute_command(cmd2, debug=False)
+                    if output:
+                        """ remove empty element """
+                        output = [x.strip(' ') for x in output]
+                        """ remove '--' element """
+                        output = [ x for x in output if not "--" in x ]
+                        key_ids       =  [x.split(":")[1].strip(' ') for x in output[0::9]]
+                        key_partition =  [x.split(":")[1].strip(' ') for x in output[1::9]]
+                        key_status    =  [x.split(":")[1].strip(' ') for x in output[4::9]]
+                        key_value = []
+                        for x in output[8::9]:
+                            if x.split(":",1)[1].strip(' ').startswith("{"):
+                                key_value.append(x.split(":",1)[1].strip())
+                            else:
+                                key_value.append(x.split(":")[-1].strip(' '))
+                        for idx, key in enumerate(key_ids):
+                            backup_data[bucket.name][key] = \
+                               {"KV store name":key_partition[idx], "Status":key_status[idx],
                                 "Value":key_value[idx]}
                         status = True
 
