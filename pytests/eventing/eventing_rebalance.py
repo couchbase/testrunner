@@ -39,17 +39,17 @@ class EventingRebalance(EventingBaseTest):
         self.expiry = 3
         handler_code = self.input.param('handler_code', 'bucket_op')
         if handler_code == 'bucket_op':
-            self.handler_code = "handler_code/ABO/insert_rebalance.js"
+            self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
         elif handler_code == 'bucket_op_with_timers':
             self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS
         elif handler_code == 'bucket_op_with_cron_timers':
-            self.handler_code = "handler_code/ABO/insert_timer.js"
+            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMERS
         elif handler_code == 'n1ql_op_with_timers':
             self.handler_code = HANDLER_CODE.N1QL_OPS_WITH_TIMERS
         elif handler_code == 'n1ql_op_without_timers':
             self.handler_code = HANDLER_CODE.N1QL_OPS_WITHOUT_TIMERS
         elif handler_code == 'source_bucket_mutation':
-            self.handler_code = "handler_code/ABO/insert_sbm.js"
+            self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION
         elif handler_code == 'source_bucket_mutation_with_timers':
             self.handler_code = HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS
         elif handler_code == 'source_bucket_mutation_delete':
@@ -65,7 +65,7 @@ class EventingRebalance(EventingBaseTest):
         elif handler_code == 'bucket_op_curl_delete':
             self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_DELETE
         elif handler_code == 'bucket_op_curl_jenkins':
-            self.handler_code = "handler_code/ABO/curl_get.js"
+            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_JENKINS
         elif handler_code == 'timer_op_curl_get':
             self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_GET
         elif handler_code == 'timer_op_curl_post':
