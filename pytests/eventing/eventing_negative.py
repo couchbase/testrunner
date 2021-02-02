@@ -206,8 +206,7 @@ class EventingNegative(EventingBaseTest):
         # Validation of any issues like panic will be taken care by teardown method
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
-        # needs to remove when MB-38787 fixed
-        self.skip_metabucket_check=True
+
 
     # MB-29533 and MB-31545
     def test_metadata_bucket_delete_when_eventing_is_processing_mutations(self):

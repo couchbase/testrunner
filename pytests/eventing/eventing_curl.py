@@ -8,7 +8,7 @@ from lib.couchbase_helper.tuq_helper import N1QLHelper
 from string import Template
 import os
 import logging
-import datetime
+import datetime, json
 
 log = logging.getLogger()
 
@@ -255,5 +255,8 @@ class EventingCurl(EventingBaseTest):
                       batch_size=self.batch_size, op_type='delete')
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
             self.undeploy_and_delete_function(body)
+
+
+
 
 

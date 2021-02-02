@@ -431,3 +431,17 @@ class EventingN1QL(EventingBaseTest):
             self.sleep(timeout=2, message="Waiting for docs to get expired")
         self.assertNotEqual(count, 20, "All docs didn't expired in dst_bucket. Check eventing logs for details.")
         self.undeploy_and_delete_function(body)
+
+    #MB-42513
+    def test_delete_query(self):
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_DELETE_QUERY_TEST, worker_count=3)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                 batch_size=self.batch_size, op_type='delete')
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+

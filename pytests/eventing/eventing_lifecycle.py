@@ -454,3 +454,35 @@ class EventingLifeCycle(EventingBaseTest):
         self.rest.stop_eventing_debugger(self.function_name)
         # undeploy and delete the function
         self.undeploy_and_delete_function(body)
+
+    # MB-42177
+    def test_single_function_filter(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
+        function_details = self.rest.get_function_details(body['appname'])
+        body1 = json.loads(function_details)
+        assert body1['appname'] == self.function_name, True
+
+    # MB-40502
+    def same_api_call_multiple_times(self):
+        try:
+            body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
+            self.deploy_function(body)
+            self.deploy_function(body)
+        except Exception as e:
+            self.log.info(e)
+            assert "ERR_APP_ALREADY_DEPLOYED" in str(e), True
+        finally:
+            self.undeploy_and_delete_function(body)
+
+    # MB-40423
+    def test_error_deploy_after_pause(self):
+        try:
+            body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
+            self.deploy_function(body)
+            self.pause_function(body)
+            self.deploy_function(body)
+        except Exception as e:
+            self.log.info(e)
+            assert "ERR_APP_NOT_UNDEPLOYED" in str(e), True
+        finally:
+            self.undeploy_and_delete_function(body)
