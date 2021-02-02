@@ -576,9 +576,9 @@ class QueryAdvisorTests(QueryTests):
                 session = start['results'][0]['$1']['session']
                 # Run query in transaction
                 results = self.run_cbq_query(query="BEGIN WORK", server=self.master)
-                query_params = {'txid': results['results'][0]['txid']}
-                results = self.run_cbq_query(query=query1, query_params=query_params, server=self.master)
-                results = self.run_cbq_query(query=rollback_or_commit, query_params=query_params, server=self.master)
+                txid = results['results'][0]['txid']
+                results = self.run_cbq_query(query=query1, txnid=txid, server=self.master)
+                results = self.run_cbq_query(query=rollback_or_commit, txnid=txid, server=self.master)
                 # Stop and check session advise
                 stop = self.run_cbq_query(query="SELECT ADVISOR({{'action':'stop', 'session':'{0}'}}) as Stop".format(session), server=self.master)
                 get = self.run_cbq_query(query="SELECT ADVISOR({{'action':'get', 'session':'{0}'}}) as Get".format(session), server=self.master)
@@ -591,10 +591,10 @@ class QueryAdvisorTests(QueryTests):
 
     def test_negative_txn(self):
         results = self.run_cbq_query(query="BEGIN WORK", server=self.master)
-        query_params = {'txid': results['results'][0]['txid']}
+        txid = results['results'][0]['txid']
         error = "advisor function is not supported within the transaction"
         try:
-            start = self.run_cbq_query(query="SELECT ADVISOR({'action': 'start', 'duration': '15m'})", query_params=query_params, server=self.master)
+            start = self.run_cbq_query(query="SELECT ADVISOR({'action': 'start', 'duration': '15m'})", txnid=txid, server=self.master)
             self.fail("Start session did not fail. Error expected: {0}".format(error))
         except CBQError as ex:
             self.assertTrue(str(ex).find(error) > 0)
