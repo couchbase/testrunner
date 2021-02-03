@@ -548,7 +548,7 @@ class RebalanceTask(Task):
         except Exception as e:
             self.state = FINISHED
             self.set_unexpected_exception(e, " in {0} sec".format(time.time() - self.start_time))
-        retry_get_process_num = 25
+        retry_get_process_num = 300
         if self.rest.is_cluster_mixed():
             """ for mix cluster, rebalance takes longer """
             self.log.info("rebalance in mix cluster")
