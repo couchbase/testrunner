@@ -7,8 +7,9 @@ function OnUpdate(doc, meta) {
     createTimer(expiry, meta.id,context);
     }catch(e){
         log(e);
-        if(e instanceof EventingError)
+        if(e.includes("First argument to createTimer must be a valid global function")){
         dst_bucket[meta.id]=e;
+        }
     }
 }
 
