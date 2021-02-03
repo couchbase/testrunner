@@ -2442,25 +2442,54 @@ class BaseTestCase(unittest.TestCase):
                 shell.disconnect()
                 break
 
+    def reset_and_enable_ipv6(self, node):
+        """ Use the couchbase-cli to set the address family of the node to IPv6
+
+        Deletes all the configuration files to reset the cluster and sets the
+        address family to IPv6.
+        """
+        shell = RemoteMachineShellConnection(node)
+        data_path = RestConnection(node).get_data_path()
+
+        # Stop Couchbase
+        if shell.is_couchbase_installed():
+            shell.stop_couchbase()
+
+        self.sleep(5)
+
+        # Delete Path
+        shell.cleanup_all_configuration(data_path)
+
+        # Start Couchbase
+        if shell.is_couchbase_installed():
+            shell.start_couchbase()
+
+        self.assertTrue(RestHelper(RestConnection(node)).is_ns_server_running(), "Unable to restart Couchbase")
+
+        shell.set_address_family_to_ipv6()
+        shell.disconnect()
+
     def reset_cluster(self):
         if self.targetMaster or self.reset_services:
             try:
-                for node in self.servers:
-                    shell = RemoteMachineShellConnection(node)
-                    # Start node
-                    rest = RestConnection(node)
-                    data_path = rest.get_data_path()
-                    # Stop node
-                    self.stop_server(node)
-                    self.sleep(5)
-                    # Delete Path
-                    shell.cleanup_data_config(data_path)
-                    self.start_server(node)
+                # On IPv6 tests, delete all the configuration files and enable IPv6 on ALL nodes.
+                if self.input.param('enable_ipv6', False):
+                    # Note the list 'self.input.servers' is not the same as 'self.servers'
+                    for node in self.input.servers:
+                        self.reset_and_enable_ipv6(node)
+                else:
+                    for node in self.servers:
+                        shell = RemoteMachineShellConnection(node)
+                        # Start node
+                        rest = RestConnection(node)
+                        data_path = rest.get_data_path()
+                        # Stop node
+                        self.stop_server(node)
+                        self.sleep(5)
+                        # Delete Path
+                        shell.cleanup_data_config(data_path)
+                        self.start_server(node)
 
-                    # If Ipv6 update dist_cfg file post server restart to change distribution to IPv6
-                    if '.com' in node.ip or ':' in node.ip:
-                        self.log.info("Updating dist_cfg for IPv6 Machines")
-                        shell.update_dist_type()
                 self.sleep(10)
             except Exception as ex:
                 self.log.info(ex)
