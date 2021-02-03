@@ -1778,7 +1778,7 @@ class ESRunQueryCompare(Task):
 
                 n1ql_query = f"select meta().id from {kv_container} where type='" + str(
                     query_type) + "' and search(default, " + str(
-                    json.dumps(self.fts_query)) + ")"
+                    json.dumps(self.fts_query, ensure_ascii=False)) + ")"
                 self.log.info("Running N1QL query: " + str(n1ql_query))
                 n1ql_result = self.n1ql_executor.run_n1ql_query(query=n1ql_query)
                 if n1ql_result['status'] == 'success':
