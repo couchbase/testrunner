@@ -195,8 +195,8 @@ class EventingN1QL(EventingBaseTest):
                                               dcp_stream_boundary="from_now")
             self.deploy_function(body, deployment_fail=True)
         except Exception as e:
-            if "Handler code is missing OnUpdate() and OnDelete() functions. At least one of them is needed to deploy the handler" not in str(e):
-                self.fail("Function deployment succeeded with missing OnUpdate() and OnDelete()")
+            self.log.info(e)
+            assert "ERR_HANDLER_COMPILATION" in str(e) and "handler must have at least OnUpdate() or OnDelete() function" in str(e), True
 
 
     def test_anonymous_with_cron_timer(self):
