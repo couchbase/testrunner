@@ -55,7 +55,8 @@ class QueryTests(BaseTestCase):
                 and str(self.__class__).find('N1qlFTSIntegrationPhase2ClusteropsTest') == -1 \
                 and str(self.__class__).find('QueryCollectionsEnd2EndTests') == -1 \
                 and str(self.__class__).find('FlexIndexTests') == -1 \
-                and str(self.__class__).find('AggregatePushdownRecoveryClass') == -1:
+                and str(self.__class__).find('AggregatePushdownRecoveryClass') == -1 \
+                and str(self.__class__).find('ClusterOpsLargeMetaKV') == -1:
             self.skip_buckets_handle = True
         else:
             self.skip_buckets_handle = False
@@ -168,7 +169,7 @@ class QueryTests(BaseTestCase):
             self.log.info("--> docs_per_day>0..generating TuqGenerators...")
             self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
             self.log.info("--> End: docs_per_day>0..generating TuqGenerators...")
-        if str(self.__class__).find('QueriesUpgradeTests') == -1 and str(self.__class__).find('FlexIndexTests') == -1:
+        if str(self.__class__).find('QueriesUpgradeTests') == -1 and str(self.__class__).find('ClusterOpsLargeMetaKV') == -1 and str(self.__class__).find('FlexIndexTests') == -1:
             if not (self.analytics and self.skip_primary_index_for_collection):
                 self.log.info("--> start: create_primary_index_for_3_0_and_greater...")
                 self.create_primary_index_for_3_0_and_greater()
@@ -350,6 +351,23 @@ class QueryTests(BaseTestCase):
         os.system(cmd)
         # os.remove(filename)
 
+    def _load_emp_dataset_on_all_buckets(self, op_type="create", expiration=0, start=0,
+                          end=1000):
+        # Load Emp Dataset
+        for bucket in self.buckets:
+            self.cluster.bucket_flush(self.master, bucket)
+
+        if end > 0:
+            self._kv_gen = JsonDocGenerator("emp_",
+                                            encoding="utf-8",
+                                            start=start,
+                                            end=end)
+            gen = copy.deepcopy(self._kv_gen)
+
+            for bucket in self.buckets:
+                self._load_bucket(bucket, self.servers[0], gen, op_type,
+                                  expiration)
+
     def _load_emp_dataset(self, op_type="create", expiration=0, start=0,
                           end=1000):
         # Load Emp Dataset
@@ -398,7 +416,7 @@ class QueryTests(BaseTestCase):
     def create_fts_index(self, name, source_type='couchbase',
                          source_name=None, index_type='fulltext-index',
                          index_params=None, plan_params=None,
-                         source_params=None, source_uuid=None, doc_count=1000, index_storage_type=None):
+                         source_params=None, source_uuid=None, doc_count=1000, index_storage_type=None, cbcluster=None):
         """Create fts index/alias
         @param node: Node on which index is created
         @param name: name of the index/alias
@@ -417,7 +435,10 @@ class QueryTests(BaseTestCase):
                                 INDEX_DEFAULTS.SOURCE_FILE_PARAMS
         @param source_uuid: UUID of the source, may not be used
         """
-        self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
+        if cbcluster:
+            self.cbcluster = cbcluster
+        else:
+            self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         self.keyword_analyzer_at_type_mapping = self.input.param("keyword_analyzer_at_type_mapping", False)
         if not self.custom_map:
             if self.keyword_analyzer_at_type_mapping:

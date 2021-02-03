@@ -585,6 +585,9 @@ class BaseTestCase(unittest.TestCase):
                     stopped = rest.stop_rebalance()
                     self.assertTrue(stopped, msg="unable to stop rebalance")
                 BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+                sleep_after_bucket_deletion = self.input.param("sleep_after_bucket_deletion", None)
+                if sleep_after_bucket_deletion:
+                        self.sleep(sleep_after_bucket_deletion)
                 ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
                 ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
                 #if self.ntonencrypt == 'enable' and not self.x509enable:
