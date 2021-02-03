@@ -181,3 +181,13 @@ class EventingSourceMutation(EventingBaseTest):
             else:
                 raise Exception("No inter handler recursion observed")
         self.undeploy_function(body1)
+
+    def test_sbm_via_n1ql(self):
+        try:
+            body = self.create_save_function_body(self.function_name, "handler_code/sbm_with_n1ql.js", worker_count=3)
+            self.deploy_function(body)
+        except Exception as e:
+            self.log.info(e)
+            assert "ERR_INTER_BUCKET_RECURSION" in str(e), True
+        finally:
+            self.delete_function(body)
