@@ -494,14 +494,10 @@ def get_logs_cluster_run(input, path, ns_server_path):
         log.error("NOT POSSIBLE TO GRAB LOGS (CLUSTER_RUN)")
 
 def get_cbcollect_info(input, path):
-    for server in input.servers:
-        print(("grabbing cbcollect from {0}".format(server.ip)))
-        path = path or "."
-        try:
-            print(("-->get_cbcollect_info: {}:{},{}:{}".format(type(server),server,type(path),path)))
-            cbcollectRunner(server, path).run()
-        except Exception as e:
-            log.error("NOT POSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}".format(server.ip, e))
+    runner = cbcollectRunner(input.servers, path)
+    runner.run()
+    for (server, e) in runner.fail:
+        log.error("NOT POSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}".format(server.ip, e))
 
 def get_couch_dbinfo(input, path):
     for server in input.servers:

@@ -709,27 +709,27 @@ class NodeHelper:
         return version[:version.rfind('-')]
 
     @staticmethod
-    def get_cbcollect_info(server):
+    def get_cbcollect_info(servers):
         """Collect cbcollectinfo logs for all the servers in the cluster.
         """
         path = TestInputSingleton.input.param("logs_folder", "/tmp")
-        print(("grabbing cbcollect from {0}".format(server.ip)))
         path = path or "."
-        try:
-            cbcollectRunner(server, path).run()
+        runner = cbcollectRunner(servers, path)
+        runner.run()
+        if len(runner.succ) > 0:
             TestInputSingleton.input.test_params[
                 "get-cbcollect-info"] = False
-        except Exception as e:
+        for (server, e) in runner.fail:
             NodeHelper._log.error(
                 "IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}".format(
                     server.ip,
                     e))
 
     @staticmethod
-    def collect_logs(server):
+    def collect_logs(servers):
         """Grab cbcollect before we cleanup
         """
-        NodeHelper.get_cbcollect_info(server)
+        NodeHelper.get_cbcollect_info(servers)
 
 
 class FloatingServers:
@@ -3764,9 +3764,7 @@ class FTSBaseTest(unittest.TestCase):
         # collect logs before tearing down clusters
         if self._input.param("get-cbcollect-info", False) and \
                 self.__is_test_failed() or collect_logs:
-            for server in self._input.servers:
-                self.log.info("Collecting logs @ {0}".format(server.ip))
-                NodeHelper.collect_logs(server)
+            NodeHelper.collect_logs(self._input.servers)
 
         # ---backup pindex_data if the test has failed
         # if self._input.param('backup_pindex_data', False) and \

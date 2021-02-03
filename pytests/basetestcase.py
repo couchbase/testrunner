@@ -469,17 +469,17 @@ class BaseTestCase(unittest.TestCase):
             self.log.info("{0} => {1}".format(cluster_node, node_stats))
         self.log.info("--- End of cluster statistics ---")
 
-    def get_cbcollect_info(self, server):
+    def get_cbcollect_info(self, servers):
         """Collect cbcollectinfo logs for all the servers in the cluster.
         """
         path = TestInputSingleton.input.param("logs_folder", "/tmp")
-        print(("grabbing cbcollect from {0}".format(server.ip)))
         path = path or "."
-        try:
-            cbcollectRunner(server, path).run()
+        runner = cbcollectRunner(servers, path, log=self.log)
+        runner.run()
+        if len(runner.succ) > 0:
             TestInputSingleton.input.test_params[
                 "get-cbcollect-info"] = False
-        except Exception as e:
+        for (server, e) in runner.fail:
             self.log.error("IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}"
                            .format(server.ip, e))
 
@@ -551,9 +551,7 @@ class BaseTestCase(unittest.TestCase):
                 if test_failed or collect_logs:
                     # collect logs here instead of in test runner because we have not shut things down
                     if TestInputSingleton.input.param("get-cbcollect-info", False) or collect_logs:
-                        for server in self.servers:
-                            self.log.info("Collecting logs @ {0}".format(server.ip))
-                            self.get_cbcollect_info(server)
+                        self.get_cbcollect_info(self.servers)
                         # collected logs so turn it off so it is not done later
                         TestInputSingleton.input.test_params["get-cbcollect-info"] = False
 

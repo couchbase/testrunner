@@ -518,17 +518,17 @@ class NodeHelper:
         #    raise "NEED To SETUP DATE COMMAND FOR WINDOWS"
 
     @staticmethod
-    def get_cbcollect_info(server):
+    def get_cbcollect_info(servers):
         """Collect cbcollectinfo logs for all the servers in the cluster.
         """
         path = TestInputSingleton.input.param("logs_folder", "/tmp")
-        print("grabbing cbcollect from {0}".format(server.ip))
         path = path or "."
-        try:
-            cbcollectRunner(server, path).run()
+        runner = cbcollectRunner(servers, path)
+        runner.run()
+        if len(runner.succ) > 0:
             TestInputSingleton.input.test_params[
                 "get-cbcollect-info"] = False
-        except Exception as e:
+        for (server, e) in runner.fail:
             NodeHelper._log.error(
                 "IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}".format(
                     server.ip,
@@ -542,12 +542,13 @@ class NodeHelper:
         collect_data_files.cbdatacollectRunner(server, path).run()
 
     @staticmethod
-    def collect_logs(server, cluster_run=False):
+    def collect_logs(servers, cluster_run=False):
         """Grab cbcollect before we cleanup
         """
-        NodeHelper.get_cbcollect_info(server)
+        NodeHelper.get_cbcollect_info(servers)
         if not cluster_run:
-            NodeHelper.collect_data_files(server)
+            for server in servers:
+                NodeHelper.collect_data_files(server)
 
 class ValidateAuditEvent:
 
@@ -2783,9 +2784,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         # collect logs before tearing down clusters
         if self._input.param("get-cbcollect-info", False) and \
                 self.__is_test_failed():
-            for server in self._input.servers:
-                self.log.info("Collecting logs @ {0}".format(server.ip))
-                NodeHelper.collect_logs(server, self.__is_cluster_run())
+            NodeHelper.collect_logs(self._input.servers, self.__is_cluster_run())
 
         for i in range(1, len(self.__cb_clusters) + 1):
             try:

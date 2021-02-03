@@ -85,37 +85,63 @@ class cbcollectRunner(object):
         self.server = server
         self.path = path
         self.local = local
+        self.succ = []
+        self.fail = []
+
+    def _run(self, server):
+        try:
+            file_name = "%s-%s-diag.zip" % (server.ip.replace('[', '').replace(']', '').replace(':', '.'),
+                                        time_stamp())
+            if not self.local:
+                from lib.remote.remote_util import RemoteMachineShellConnection
+                remote_client = RemoteMachineShellConnection(server)
+                print("Collecting logs from %s\n" % server.ip)
+                output, error = remote_client.execute_cbcollect_info(file_name)
+                print("\n".join(error))
+
+                user_path = "/home/"
+                if remote_client.info.distribution_type.lower() == 'mac':
+                    user_path = "/Users/"
+                else:
+                    if server.ssh_username == "root":
+                        user_path = "/"
+
+                remote_path = "%s%s" % (user_path, server.ssh_username)
+                status = remote_client.file_exists(remote_path, file_name)
+                if not status:
+                    raise Exception("%s doesn't exists on server" % file_name)
+                status = remote_client.get_file(remote_path, file_name,
+                                            "%s/%s" % (self.path, file_name))
+                if status:
+                    print("Downloading zipped logs from %s" % server.ip)
+                else:
+                    raise Exception("Fail to download zipped logs from %s"
+                                                        % server.ip)
+                remote_client.execute_command("rm -f %s" % os.path.join(remote_path, file_name))
+                remote_client.disconnect()
+        except Exception as e:
+            self.fail.append((server, e))
+        else:
+            self.succ.append(server)
+
 
     def run(self):
-        file_name = "%s-%s-diag.zip" % (self.server.ip.replace('[', '').replace(']', '').replace(':', '.'),
-                                        time_stamp())
-        if not self.local:
-            from lib.remote.remote_util import RemoteMachineShellConnection
-            remote_client = RemoteMachineShellConnection(self.server)
-            print("Collecting logs from %s\n" % self.server.ip)
-            output, error = remote_client.execute_cbcollect_info(file_name)
-            print("\n".join(error))
-
-            user_path = "/home/"
-            if remote_client.info.distribution_type.lower() == 'mac':
-                user_path = "/Users/"
-            else:
-                if self.server.ssh_username == "root":
-                    user_path = "/"
-
-            remote_path = "%s%s" % (user_path, self.server.ssh_username)
-            status = remote_client.file_exists(remote_path, file_name)
-            if not status:
-                raise Exception("%s doesn't exists on server" % file_name)
-            status = remote_client.get_file(remote_path, file_name,
-                                        "%s/%s" % (self.path, file_name))
-            if status:
-                print("Downloading zipped logs from %s" % self.server.ip)
-            else:
-                raise Exception("Fail to download zipped logs from %s"
-                                                     % self.server.ip)
-            remote_client.execute_command("rm -f %s" % os.path.join(remote_path, file_name))
-            remote_client.disconnect()
+        if isinstance(self.server, list):
+            cbcollect_threads = []
+            timeout = time.time() + (60 * 60)
+            for server in self.server:
+                cbcollect_thread = Thread(target=self._run, args=(server,))
+                cbcollect_thread.start()
+                cbcollect_threads.append(cbcollect_thread)
+            for [i, cbcollect_thread] in enumerate(cbcollect_threads):
+                thread_timeout = timeout - time.time()
+                if thread_timeout < 0:
+                    thread_timeout = 0
+                cbcollect_thread.join(timeout=thread_timeout)
+                if cbcollect_thread.is_alive():
+                    self.fail.append((self.server[i], Exception("timeout")))
+        else:
+            self._run(self.server)
 
 class memInfoRunner(object):
     def __init__(self, server, local=False):
