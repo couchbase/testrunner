@@ -932,7 +932,13 @@ class StableTopFTS(FTSBaseTest):
         index.update()
         # updating mapping on ES is not easy, often leading to merge issues
         # drop and recreate the index, load again
+
         self.create_es_index_mapping(index.es_custom_map, index.index_definition)
+        gen = copy.deepcopy(self.create_gen)
+        task = self.es.async_bulk_load_ES(index_name='es_index',
+                                   gen=gen,
+                                   op_type='create')
+        task.result()
         self.wait_for_indexing_complete()
         try:
             if self.run_via_n1ql:
