@@ -1,6 +1,7 @@
 import datetime
 import json
 import random
+from string import Template
 
 from couchbase_helper.tuq_helper import N1QLHelper
 from eventing.eventing_base import EventingBaseTest
@@ -76,6 +77,8 @@ class EventingMultiHandler(EventingBaseTest):
                     self.binding_map[binding] = self.binding_map[binding]+1
             body = self.create_function_with_collection(self.function_name+"_"+str(i),handler_code,
                                                         src_namespace=source_namespace,meta_namespace=meta_namespace,collection_bindings=dst_namespace)
+            if "template" in handler_code:
+                body['appcode'] = Template(body['appcode']).substitute(key=str("func_"+str(i)))
             # if num_dst == 0 and not self.is_sbm and len(body['depcfg']['buckets']) > 0:
             #     del body['depcfg']['buckets'][0]
             self.log.info("Creating the following handler code : {0} with {1}".format(body['appname'], body['depcfg']))
