@@ -519,7 +519,7 @@ class StableTopFTS(FTSBaseTest):
         index = self.create_index(bucket, 'sample_index', collection_index=collection_index, _type=type,
                                   scope=index_scope, collections=index_collections)
         # wait till half the keys are indexed
-        self.wait_for_indexing_complete(self._num_items//2)
+        self.wait_for_indexing_complete(self._num_items//5)
         status, stat_value = rest.get_fts_stats(index_name=index.name,
                                                 bucket_name=bucket.name,
                                                 stat_name='num_recs_to_persist')
