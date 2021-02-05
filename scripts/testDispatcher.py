@@ -734,6 +734,8 @@ def main():
                     response, content = httplib2.Http(timeout=TIMEOUT).request(url, 'GET')
                     print("Response is: {0}".format(str(response)))
                     print("Content is: {0}".format(str(content)))
+                    if int(response['status'])>=400:
+                        raise Exception("Unexpected response while dispatching the request!")
 
                 total_servers_being_used += testsToLaunch[0]['serverCount']
                 total_addl_servers_being_used += testsToLaunch[0]['addPoolServerCount']
@@ -754,6 +756,9 @@ def main():
         except Exception as e:
             print('have an exception')
             print((traceback.format_exc()))
+            if descriptor:
+                print('Releasing servers for {} ...'.format(descriptor))
+                release_servers(descriptor)
             time.sleep(POLL_INTERVAL)
     # endwhile
 
