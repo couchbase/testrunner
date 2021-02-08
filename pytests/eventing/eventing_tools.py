@@ -126,7 +126,8 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
                                                           self.backup_validation_files_location,
                                                           self.backups,
                                                           self.num_items,
-                                                          self.vbuckets)
+                                                          self.vbuckets,
+                                                          None)
         self.restore_only = self.input.param("restore-only", False)
         self.same_cluster = self.input.param("same-cluster", False)
         self.reset_restore_cluster = self.input.param("reset-restore-cluster", True)
@@ -406,9 +407,13 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
         remote_client = RemoteMachineShellConnection(eventing_node)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE, worker_count=3)
         self.deploy_function(body,wait_for_bootstrap=False,deployment_status=False,processing_status=False)
+        self.wait_for_handler_state(self.function_name, "deployed")
         # export the function that we have created
         output = self.rest.export_function(self.function_name)
         self.log.info("exported function: {}".format(output))
+        self._couchbase_cli_eventing(eventing_node, self.function_name, "undeploy",
+                                     "SUCCESS: Request to undeploy the function was accepted")
+        self.wait_for_handler_state(self.function_name, "undeployed")
         # delete the function
         self._couchbase_cli_eventing(eventing_node, self.function_name, "delete",
                                      "SUCCESS: Request to delete the function was accepted")
@@ -470,10 +475,14 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
                                               worker_count=3)
         self.deploy_function(body, wait_for_bootstrap=False, deployment_status=False, processing_status=False)
+        self.wait_for_handler_state(self.function_name, "deployed")
         # export via cli
         self._couchbase_cli_eventing(eventing_node, self.function_name, "export",
                                      "SUCCESS: Function exported to: "+self.function_name+".json",
                                      file_name=self.function_name+".json")
+        self._couchbase_cli_eventing(eventing_node, self.function_name, "undeploy",
+                                     "SUCCESS: Request to undeploy the function was accepted")
+        self.wait_for_handler_state(self.function_name, "undeployed")
         # delete the function
         self._couchbase_cli_eventing(eventing_node, self.function_name, "delete",
                                      "SUCCESS: Request to delete the function was accepted")
