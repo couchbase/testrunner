@@ -1185,7 +1185,12 @@ class MovingTopFTS(FTSBaseTest):
          for D,D+F,F cluster
         """
         self.load_data()
-        self.create_fts_indexes_all_buckets()
+        plan_params = None
+        index_partitions = TestInputSingleton.input.param("index_partitions", 0)
+        if index_partitions > 0:
+            plan_params = {"indexPartitions": index_partitions}
+
+        self.create_fts_indexes_all_buckets(plan_params=plan_params)
         self.sleep(10)
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
