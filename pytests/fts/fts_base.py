@@ -4974,7 +4974,7 @@ class FTSBaseTest(unittest.TestCase):
                                            json_template=dataset,
                                            start=start, end=start+num_items,
                                            es_compare=self.compare_es, es_host=elastic_ip, es_port=elastic_port,
-                                           es_login=elastic_username, es_password=elastic_password, key_prefix=dataset,
+                                           es_login=elastic_username, es_password=elastic_password, key_prefix=dataset+"_",
                                            upd_del_shift=self._num_items
                                  )
 
