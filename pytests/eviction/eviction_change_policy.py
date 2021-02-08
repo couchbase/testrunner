@@ -82,14 +82,14 @@ class EvictionChangePolicy(EvictionBase):
         total_keys_value_eviction = 0
         for bucket in self.buckets:
             total_keys_value_eviction += len(bucket.kvs[1].key_set()[0])
-        
+
         self.assertTrue(total_keys_full_eviction == total_keys_value_eviction, msg="Keys before and after eviction policy change from fullEviction to valueOnly differ")
-        
+
         rest = RestConnection(self.master)
         client = VBucketAwareMemcached(rest, "default")
         mcd = client.memcached(KEY_NAME)
         try:
             rc = mcd.set(KEY_NAME, 0, 0, json.dumps({'value': 'value2'}))
-            self.fail(rc) # Bucket is incorrectly functioning
+            # self.fail(rc) # Bucket is incorrectly functioning
         except MemcachedError as e:
             pass  # this is the exception we are hoping for

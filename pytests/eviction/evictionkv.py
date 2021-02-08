@@ -340,7 +340,7 @@ class EphemeralBackupRestoreTest(EvictionBase):
             "/opt/couchbase/bin/cbbackupmgr backup --archive /tmp/backups --repo example "
             "--cluster couchbase://127.0.0.1 --username Administrator --password password")
         self.log.info(output)
-        self.assertTrue(" ".join(output).find("Backup successfully completed") != -1)
+        self.assertTrue(" ".join(output).find("Backup completed successfully") != -1)
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         imp_rest = RestConnection(self.master)
         info = imp_rest.get_nodes_self()

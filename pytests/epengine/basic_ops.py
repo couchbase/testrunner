@@ -206,7 +206,7 @@ class basic_ops(BaseTestCase):
             if int(stats['curr_temp_items']) == 1:
                 self.fail("Error on second setWithMeta(), expected curr_temp_items to be 0")
             else:
-                self.log.info("<MemcachedError #%d ``%s''>" % (error.status, error.message))
+                self.log.info("expected error is %s" % (error))
 
     def generate_docs_bigdata(self, docs_per_day, start=0, document_size=1024000):
         json_generator = JsonGenerator()
