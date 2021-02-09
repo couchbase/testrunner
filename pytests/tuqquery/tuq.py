@@ -2574,6 +2574,7 @@ class QueryTests(BaseTestCase):
         return status, content, header
 
     def grant_role(self, role=None):
+        self.log.info(self.roles)
         if not role:
             role = self.roles[0]['roles']
         if self.all_buckets:

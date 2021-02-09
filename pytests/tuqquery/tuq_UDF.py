@@ -492,8 +492,8 @@ class QueryUDFTests(QueryTests):
             results = self.run_cbq_query(
                 'CREATE OR REPLACE FUNCTION func5() {(SELECT array_length(func4()) FROM `travel-sample`)}')
             results = self.run_cbq_query('EXECUTE FUNCTION func5()')
-            self.assertEqual(results['metrics']['resultCount'], 31591)
-            self.assertEqual(results['results'][0], {'$1': 31591})
+            self.assertEqual(results['metrics']['resultCount'], 1)
+            self.assertEqual(results['results'][0][0], {'$1': 31591})
         finally:
             try:
                 self.run_cbq_query("DROP FUNCTION func4")

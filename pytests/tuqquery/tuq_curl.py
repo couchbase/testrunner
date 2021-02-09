@@ -1039,6 +1039,8 @@ class QueryCurlTests(QueryTests):
         json_curl = self.convert_to_json(curl)
         # Compare the curl statement to the expected result of the n1ql query done normally
         expected_result = self.run_cbq_query(n1ql_query)
+        self.log.info(expected_result)
+        self.log.info(json_curl)
         self.assertEqual(json_curl['results'][0]['$1']['results'], expected_result['results'])
 
     '''Test if curl can be used to grant roles without the correct permissions'''
@@ -1131,6 +1133,7 @@ class QueryCurlTests(QueryTests):
                                                                           "returning meta().id, * '})"
         curl = self.shell.execute_commands_inside(cbqpath, curl_query + options, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
+        self.log.info(json_curl)
         self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg)
 
         error_msg = "UserdoesnothavecredentialstorunUPDATEqueriesondefault:default." \
