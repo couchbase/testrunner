@@ -1644,7 +1644,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     try:
                         if restore_file_data[bucket.name][key]:
                             bucket_data_value = buckets_data[bucket.name][key]
-                            if version[:3] <= "6.6":
+                            if version[:3] <= "6.6" and version[:5] != "6.5.2":
                                 bucket_data_value = str(bucket_data_value.replace(" ", ""))
                             if bucket_data_value != restore_file_data[bucket.name][key]["Value"]:
                                 if count < 20:
