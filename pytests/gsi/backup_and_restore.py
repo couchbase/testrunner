@@ -762,10 +762,14 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             namespace="default:" + bucket)
         self.run_cbq_query(query)
         self.sleep(5, "wait for index to drop")
-        out_nodes = [
-            node for node in self.indexer_nodes if self.master.ip != node.ip]
+        # out_nodes = [
+        #    node for node in self.indexer_nodes if self.master.ip != node.ip]
+        # if len(out_nodes) > 1:
+        #    out_node = out_nodes[1]
+        # else:
+        out_node = self.indexer_nodes[1]
         rebalance = self.cluster.async_rebalance(
-            self.servers[:self.nodes_init], [], out_nodes)
+            self.servers[:self.nodes_init], [], [out_node])
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
@@ -780,19 +784,19 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.assertEqual(len(indexes_after_restore), 1)
         self._verify_indexes(indexes_before_backup,
                              indexes_after_restore)
-        services = ["index" for node in out_nodes]
-        rebalance = self.cluster.async_rebalance(
-            self.servers[:self.nodes_init], out_nodes, [],
-            services=services)
-        reached = RestHelper(self.rest).rebalance_reached()
-        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-        rebalance.result()
-        self.sleep(10)
-        replica_indexes_after_restore = [
-            index for index in self.rest.get_indexer_metadata()['status']
-            if index['name'].startswith(replica_index.index_name)]
-        self._verify_indexes(replica_indexes_before_backup,
-                             replica_indexes_after_restore)
+        #services = ["index" for node in out_nodes]
+        #rebalance = self.cluster.async_rebalance(
+        #    self.servers[:self.nodes_init], [out_node], [],
+        #    services=services)
+        #reached = RestHelper(self.rest).rebalance_reached()
+        #self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        #rebalance.result()
+        #self.sleep(10)
+        #replica_indexes_after_restore = [
+        #    index for index in self.rest.get_indexer_metadata()['status']
+        #    if index['name'].startswith(replica_index.index_name)]
+        #self._verify_indexes(replica_indexes_before_backup,
+        #                     replica_indexes_after_restore)
 
     def test_backup_restore_with_rebalance_and_partition_index(self):
         """
@@ -830,10 +834,14 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             namespace="default:" + bucket)
         self.run_cbq_query(query)
         self.sleep(5, "wait for index to drop")
-        out_nodes = [
-            node for node in self.indexer_nodes if self.master.ip != node.ip]
+        #out_nodes = [
+        #    node for node in self.indexer_nodes if self.master.ip != node.ip]
+        #if len(out_nodes) > 1:
+        #    out_node = out_nodes[1]
+        #else:
+        out_node = self.indexer_nodes[1]
         rebalance = self.cluster.async_rebalance(
-            self.servers[:self.nodes_init], [], out_nodes)
+            self.servers[:self.nodes_init], [], [out_node])
         reached = RestHelper(self.rest).rebalance_reached()
         if not reached:
             self.fail(msg="Rebalance failed")
@@ -1379,7 +1387,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.assertTrue(backup_result[0], str(backup_result[1]))
         mappings = ["{0}:{1}".format(scope, invalid_scope)]
         restore_result = backup_client.restore(mappings)
-        self.assertFalse(restore_result[0], str(restore_result[1]))
+        self.assertFalse(restore_result[0], restore_result[1])
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
         namespace = ["{0}.{1}".format(scope, collection)]
