@@ -363,10 +363,10 @@ class QueryUpdateStatsTests(QueryTests):
 
     def test_negative_txn(self):
         results = self.run_cbq_query(query="BEGIN WORK", server=self.master)
-        query_params = {'txid': results['results'][0]['txid']}
+        txid = results['results'][0]['txid']
         error = "UPDATE_STATISTICS statement is not supported within the transaction"
         try:
-            start = self.run_cbq_query(query="UPDATE STATISTICS `travel-sample`(city)", query_params=query_params, server=self.master)
+            start = self.run_cbq_query(query="UPDATE STATISTICS `travel-sample`(city)", txnid=txid, server=self.master)
             self.fail("Update statistics did not fail. Error expected: {0}".format(error))
         except CBQError as ex:
             self.assertTrue(str(ex).find(error) > 0)
