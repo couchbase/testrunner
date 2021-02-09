@@ -911,10 +911,10 @@ class QueryTests(BaseTestCase):
             self.log.info("current indexes: \n" + str(current_indexes) + "\n")
             return False
 
-    def wait_for_all_indexes_online(self):
+    def wait_for_all_indexes_online(self, build_deferred=False):
         cur_indexes = self.get_parsed_indexes()
         for index in cur_indexes:
-            self._wait_for_index_online(index['bucket'], index['name'])
+            self._wait_for_index_online(index['bucket'], index['name'], build_deferred=build_deferred)
 
     def wait_for_index_status_bulk(self, bucket_index_status_list):
         for item in bucket_index_status_list:
@@ -1036,7 +1036,17 @@ class QueryTests(BaseTestCase):
                     name, keyspace, fields, joined_fields, using, is_primary, where = self.get_index_vars(desired_index)
                     self.log.info("creating index: %s %s %s" % (keyspace, name, using))
                     if is_primary:
-                        self.run_cbq_query("CREATE PRIMARY INDEX ON `%s` USING %s" % (keyspace, using))
+                        init_time = time.time()
+                        while True:
+                            next_time = time.time()
+                            try:
+                                self.run_cbq_query("CREATE PRIMARY INDEX ON `%s` USING %s" % (keyspace, using))
+                                break
+                            except CBQError as ex:
+                                self.log.error(f"Fail to create index: {ex}")
+                            if next_time - init_time > 600:
+                                self.log.fail("Fail to create primary index before timeout")
+                            time.sleep(2)
                     else:
                         if where != '':
                             self.run_cbq_query("CREATE INDEX %s ON %s(%s) WHERE %s  USING %s" % (
@@ -1739,7 +1749,7 @@ class QueryTests(BaseTestCase):
         self.create_desired_indexes(desired_index_set, current_index_set, desired_indexes)
         self.log.info("--> end: ensure_primary_indexes_exist..")
 
-    def _wait_for_index_online(self, bucket, index_name, timeout=600):
+    def _wait_for_index_online(self, bucket, index_name, timeout=600, build_deferred=False):
         end_time = time.time() + timeout
         while time.time() < end_time:
             query = "SELECT * FROM system:indexes where name='%s'" % index_name
@@ -1756,6 +1766,8 @@ class QueryTests(BaseTestCase):
                 if item['indexes']['keyspace_id'] == bucket_name:
                     if item['indexes']['state'] == "online":
                         return
+                    if build_deferred and item['indexes']['state'] == "deferred":
+                        self.run_cbq_query(query=f"BUILD INDEX ON `{item['indexes']['keyspace_id']}` (`{item['indexes']['name']}`) USING {item['indexes']['using']}")
             self.sleep(1, 'index is pending or not in the list. sleeping... (%s)' % [item['indexes'] for item in
                                                                                      res['results']])
         raise Exception('index %s is not online. last response is %s' % (index_name, res))
@@ -3815,6 +3827,46 @@ class QueryTests(BaseTestCase):
                 self.run_cbq_query(query=delete_stats, server=self.master)
             except Exception as e:
                 self.log.error("Update statistics error: {0}".format(e))
+
+    ##############################################################################################
+    #
+    #   UDF helpers
+    #
+    ##############################################################################################            
+
+    '''Create a library with functions, check to see that the library was created and the functions were created'''
+    def create_library(self, library_name='', functions={}, function_names=[], replace= False):
+        created = False
+        url = f"http://{self.master.ip}:{self.n1ql_port}/functions/v1/libraries"
+        data = f'[{{"name": "{library_name}", "functions": {functions}}}]'
+        if replace:
+            self.shell.execute_command(f"{self.curl_path} -X PUT {url} -u Administrator:password -H 'content-type: application/json' -d '{data}'")
+        else:
+            self.shell.execute_command(f"{self.curl_path} -X POST {url} -u Administrator:password -H 'content-type: application/json' -d '{data}'")
+        libraries = self.shell.execute_command(f"{self.curl_path} {url} -u Administrator:password")
+        if library_name in str(libraries[0]):
+            created = True
+        else:
+            self.log.error(f"The library {library_name} was not created: {libraries}")
+
+        for function in function_names:
+            if function in str(libraries[0]):
+                created = True
+            else:
+                self.log.error(f"The function {function} was not created! {libraries}")
+                created = False
+                break
+        return created
+
+    '''Delete a library'''
+    def delete_library(self, library_name =''):
+        deleted = False
+        url = f"http://{self.master.ip}:{self.n1ql_port}/functions/v1/libraries/{library_name}"
+        curl_output = self.shell.execute_command(f"{self.curl_path} -X DELETE {url} -u Administrator:password ")
+        libraries = self.shell.execute_command(f"{self.curl_path} {url} -u Administrator:password")
+        if library_name not in str(libraries):
+            deleted = True
+        return deleted
 
 ##############################################################################################
 #
