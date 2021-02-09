@@ -515,7 +515,10 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             options = "--server-failover={0}:8091" \
                       .format(self.servers[nodes_add - nodes_rem - num].ip)
             if self.force_failover:
-                options += " --force --hard"
+                if self.cb_version[:5] == "6.5.2":
+                    options += " --force "
+                else:
+                    options += " --force --hard"
                 output, error = remote_client.execute_couchbase_cli(
                         cli_command=cli_command, options=options,
                         cluster_host="localhost", cluster_port=8091,
@@ -613,7 +616,10 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             options = "--server-failover={0}:8091"\
                       .format(self.servers[nodes_add - nodes_rem - num].ip)
             if self.force_failover or num == nodes_failover - 1:
-                options += " --force --hard"
+                if self.cb_version[:5] == "6.5.2":
+                    options += " --force "
+                else:
+                    options += " --force --hard"
                 force_failover = True
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                                 options=options,
@@ -1866,7 +1872,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             self.assertTrue(success, "Bucket not created during test setup")
             time.sleep(10)
 
-        cli = CouchbaseCLI(server, username, password)
+        cli = CouchbaseCLI(server, username, password, self.cb_version[:5])
         stdout, _, _ = cli.failover(server_to_failover, force)
 
         if not expect_error:
@@ -2302,7 +2308,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         servers_to_add = ",".join(servers_to_add)
 
         if initialized:
-            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password,
+                               self.cb_version[:5])
             _, _, success = cli.cluster_init(256, 256, None, "data", None, None,
                                              server.rest_username,
                                              server.rest_password, None)
@@ -2371,7 +2378,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         servers_to_add = ",".join(servers_to_add)
 
         if initialized:
-            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password,
+                               self.cb_version[:5])
             _, _, success = cli.cluster_init(256, 256, None, "data", None, None,
                                              server.rest_username,
                                              server.rest_password, None)

@@ -179,7 +179,11 @@ class CouchbaseCLI:
         if failover_servers:
             options += " --server-failover " + str(failover_servers)
         if force:
-            options += " --hard --force"
+            if self.cb_version is not None and \
+                        self.cb_version[:5] == "6.5.2":
+                options += " --force"
+            else:
+                options += " --hard --force"
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("failover", self.hostname,
