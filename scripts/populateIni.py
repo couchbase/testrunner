@@ -63,15 +63,18 @@ def main():
         runner = memInfoRunner(test_servers)
         runner.run()
         if len(runner.succ) > 0:
-            sorted_by_mem = sorted(runner.succ.items(), key=lambda item: item[1])
+            sorted_by_mem = sorted(runner.succ.items(), key=lambda item: int(item[1]))
             print('the servers memory info is', sorted_by_mem)
+            orig_servers = servers
             servers = []
             for (k,v) in sorted_by_mem:
                 servers.append(k)
         for (server, e) in runner.fail:
             print("CAN'T GET MEMORY FROM {0}: {1}".format(server, e))
             servers.append(server)
-
+        for nomemserver in orig_servers:
+            if nomemserver not in servers:
+                servers.append(nomemserver)
 
     addPoolServers = []
 
