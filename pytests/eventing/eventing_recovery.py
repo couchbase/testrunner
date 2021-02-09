@@ -432,6 +432,7 @@ class EventingRecovery(EventingBaseTest):
         if self.pause_resume:
             self.wait_for_handler_state(body['appname'], "paused")
             self.resume_function(body)
+        self.wait_for_handler_state(body['appname'], "deployed")
         # Wait for eventing to catch up with all the update mutations and verify results
         if not self.cancel_timer:
             if self.is_sbm:
@@ -465,6 +466,7 @@ class EventingRecovery(EventingBaseTest):
         if self.pause_resume:
             self.wait_for_handler_state(body['appname'], "paused")
             self.resume_function(body)
+        self.wait_for_handler_state(body['appname'], "deployed")
         # Wait for eventing to catch up with all the delete mutations and verify results
         if not self.cancel_timer:
             if self.is_sbm:
