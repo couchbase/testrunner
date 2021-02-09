@@ -6384,12 +6384,12 @@ class SDKLoadDocumentsTask(Task):
                 self.sdk_docloader.es_port) + \
                       " -es_login " + str(self.sdk_docloader.es_login) + " -es_password " + str(
                 self.sdk_docloader.es_password)
-        self.log.info(command)
         if self.sdk_docloader.op_type == "update":
             arr_fields_to_update = eval(self.sdk_docloader.fields_to_update) if self.sdk_docloader.fields_to_update else ""
             if len(arr_fields_to_update) > 0:
                 command = command + " -fu "
                 command = command + ",".join(arr_fields_to_update)
+        self.log.info(command)
         try:
             proc = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
             out = proc.communicate(timeout=self.sdk_docloader.timeout)
