@@ -1568,7 +1568,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         regex_backup_data = {}
         if regex_pattern is not None:
             search_pattern = regex_pattern
-            if " " in regex_pattern:
+            if " " in regex_pattern and self.backupset.cluster_version[:5] != "6.5.2":
                 search_pattern = search_pattern.replace(" ", "")
             pattern = re.compile(search_pattern)
             for bucket in self.buckets:
