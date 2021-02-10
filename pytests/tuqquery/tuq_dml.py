@@ -15,8 +15,8 @@ class DMLQueryTests(QueryTests):
         if len(self.query_buckets) > 1:
             self.bucket0 = self.query_buckets[0]
             self.bucket1 = self.query_buckets[1]
-        self.run_cbq_query("DELETE from {0}".format(self.bucket0))
-        self.run_cbq_query("DELETE from {0}".format(self.bucket1))
+        for bucket in self.query_buckets:
+            self.run_cbq_query("DELETE from {0}".format(bucket))
         self.log.info("-" * 100)
         self.log.info("==============  DMLQueryTests setup has started ==============")
         self.log_config_info()
