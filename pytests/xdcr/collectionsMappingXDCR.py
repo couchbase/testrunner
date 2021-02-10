@@ -64,9 +64,8 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
     def test_migration_1rule_mapping(self):
         try:
             lhs = "\"REGEXP_CONTAINS(META().id,'1$')\""
-            rhs = "\"scope_1:collection_1\""
+            rhs = '"scope_1.collection_1"'
             setting_val_map = {"collectionsMigrationMode": "true",
-                               "collectionsExplicitMapping": "true",
                                "colMappingRules": '{' + lhs + ':' + rhs + '}',
                                }
             self.src_rest.set_xdcr_params('default', 'default', setting_val_map)
@@ -77,9 +76,8 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
     def test_migration_2rule_mapping(self):
         try:
             lhs = "\"REGEXP_CONTAINS(META().id,'^d') AND 'country' IS NOT MISSING\""
-            rhs = "\"scope_1:collection_1\""
+            rhs = '"scope_1.collection_1"'
             setting_val_map = {"collectionsMigrationMode": "true",
-                               "collectionsExplicitMapping": "true",
                                "colMappingRules": '{' + lhs + ':' + rhs + '}',
                                }
             self.src_rest.set_xdcr_params('default', 'default', setting_val_map)
@@ -93,9 +91,9 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                 self.log.info("Migration batch {}:".format(batch + 1))
                 # first migrate doc ids ending with 0, then 1 and so on until all docs are migrated
                 lhs = "\"REGEXP_CONTAINS(META().id,'" + str(batch) + "$')\""
-                rhs = "\"scope_1:collection_1\""
+                rhs = '"scope_1.collection_1"'
                 setting_val_map = {"collectionsMigrationMode": "true",
-                                   "collectionsExplicitMapping": "true",
+                                   "collectionsExplicitMapping": "false",
                                    "colMappingRules": '{' + lhs + ':' + rhs + '}',
                                    }
                 self.src_rest.set_xdcr_params('default', 'default', setting_val_map)
@@ -129,9 +127,8 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
             for batch in range(10):
                 self.log.info("Migration batch {}:".format(batch + 1))
                 lhs = "\"REGEXP_CONTAINS(META().id,'^doc_" + str(batch) + "')\""
-                rhs = "\"scope_1:collection_1\""
+                rhs = '"scope_1.collection_1"'
                 setting_val_map = {"collectionsMigrationMode": "true",
-                                   "collectionsExplicitMapping": "true",
                                    "colMappingRules": '{' + lhs + ':' + rhs + '}',
                                    }
                 self.src_rest.set_xdcr_params('default', 'default', setting_val_map)
