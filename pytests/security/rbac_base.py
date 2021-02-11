@@ -56,6 +56,9 @@ class RbacBase:
                 for role in user_role_param:
                     if ']' not in role and '[' in role:
                         final_roles = role + "]," + final_roles
+                    elif ':' in role:
+                        role = role.replace(":", ",")
+                        final_roles = role + "," + final_roles
                     else:
                         final_roles = role + "," + final_roles
             payload="name="+username+"&roles="+final_roles

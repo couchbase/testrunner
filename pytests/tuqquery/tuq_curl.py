@@ -3,6 +3,7 @@ from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 from security.rbac_base import RbacBase
 from deepdiff import DeepDiff
+import time
 
 SOURCE_CB_PARAMS = {
     "authUser": "default",
@@ -64,6 +65,15 @@ class QueryCurlTests(QueryTests):
         super(QueryCurlTests, self).suite_setUp()
         self.log.info("==============  QueryCurlTests suite_setup has started ==============")
         self.rest.load_sample("beer-sample")
+        init_time = time.time()
+        while True:
+            next_time = time.time()
+            query_response = self.run_cbq_query("SELECT COUNT(*) FROM `beer-sample`")
+            if query_response['results'][0]['$1'] == 7303:
+                break
+            if next_time - init_time > 600:
+                break
+            time.sleep(1)
         index_definition = INDEX_DEFINITION
         index_name = index_definition['name'] = "beers"
         index_definition['sourceName'] = "beer-sample"
@@ -83,7 +93,6 @@ class QueryCurlTests(QueryTests):
                     {'id': 'curl', 'name': 'curl', 'password': 'password'},
                     {'id': 'curl_no_insert', 'name': 'curl_no_insert', 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', self.master)
-
         noncurl_permissions = 'bucket_full_access[*]:query_select[*]:query_update[*]:' \
                               'query_insert[*]:query_delete[*]:query_manage_index[*]:' \
                               'query_system_catalog'
