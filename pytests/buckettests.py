@@ -245,7 +245,7 @@ class CreateBucketTests(BaseTestCase):
             bucket_quota_flag = "-m"
             data_set_location_flag = "-d"
         shell.execute_command("{0}cbdocloader -u Administrator -p password \
-                      {3} {1}:{6} -b travel-sample {4} 100 {5} {2}travel-sample.zip" \
+                      {3} {1}:{6} -b travel-sample {4} 200 {5} {2}travel-sample.zip" \
                                                       .format(self.bin_path,
                                                        self.master.ip,
                                                        self.sample_path,
