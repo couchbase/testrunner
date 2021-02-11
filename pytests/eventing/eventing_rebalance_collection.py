@@ -275,9 +275,9 @@ class EventingRebalanceCollection(EventingBaseTest):
         self.create_save_handlers()
         self.deploy_all_handlers()
         # load data
-        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+        task1=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
                                      wait_for_loading=False)
-        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.scope_1.coll_1",
+        task2=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.scope_1.coll_1",
                                      wait_for_loading=False)
         # rebalance in a eventing nodes when eventing is processing mutations
         services_in = ["eventing", "eventing"]
@@ -286,13 +286,15 @@ class EventingRebalanceCollection(EventingBaseTest):
         reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+        task1.result()
+        task2.result()
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         self.verify_all_handler(self.docs_per_day * self.num_docs)
         self.verify_doc_count_collections("src_bucket.scope_1.coll_1", self.docs_per_day * self.num_docs * 2)
         # delete json documents
-        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default", is_delete=True,
+        task1=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default", is_delete=True,
                                      wait_for_loading=False)
-        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.scope_1.coll_1", is_delete=True,
+        task2=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.scope_1.coll_1", is_delete=True,
                                      wait_for_loading=False)
         # Get all eventing nodes
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
@@ -304,6 +306,8 @@ class EventingRebalanceCollection(EventingBaseTest):
         reached1 = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached1, "rebalance failed, stuck or did not complete")
         rebalance1.result()
+        task1.result()
+        task2.result()
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_all_handler(0)
         self.verify_doc_count_collections("src_bucket.scope_1.coll_1", self.docs_per_day * self.num_docs)
@@ -501,7 +505,8 @@ class EventingRebalanceCollection(EventingBaseTest):
         reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
-        self.verify_all_handler(0)
+        self.verify_doc_count_collections("dst_bucket.scope_1.coll_3", 0)
+        self.verify_doc_count_collections("dst_bucket.scope_1.coll_4", 0)
         self.verify_doc_count_collections("src_bucket.scope_1.coll_1", self.docs_per_day * self.num_docs)
         self.undeploy_delete_all_functions()
 
@@ -536,7 +541,8 @@ class EventingRebalanceCollection(EventingBaseTest):
         reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
-        self.verify_all_handler(0)
+        self.verify_doc_count_collections("dst_bucket.scope_1.coll_3", 0)
+        self.verify_doc_count_collections("dst_bucket.scope_1.coll_4", 0)
         self.verify_doc_count_collections("src_bucket.scope_1.coll_1", self.docs_per_day * self.num_docs)
         self.undeploy_delete_all_functions()
 

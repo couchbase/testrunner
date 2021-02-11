@@ -961,6 +961,7 @@ class EventingBaseTest(QueryHelperTests):
             actual_count = self.get_count(namespace)
             ### compact buckets when mutation count not progressing. Helpful for expiry events
             if count==10:
+                self.rest = RestConnection(self.master)
                 self.bucket_compaction()
             actual_count = self.get_count(namespace)
             if curr_items == actual_count:
@@ -974,11 +975,19 @@ class EventingBaseTest(QueryHelperTests):
             total_dcp_backlog = 0
             timers_in_past = 0
             lcb = {}
+            total_on_update_success=0
+            total_on_update_failure=0
+            total_on_delete_success = 0
+            total_on_delete_failure = 0
             # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
             for eventing_node in eventing_nodes:
                 rest_conn = RestConnection(eventing_node)
                 out = rest_conn.get_all_eventing_stats()
                 total_dcp_backlog += out[0]["events_remaining"]["dcp_backlog"]
+                total_on_update_success += out[0]["execution_stats"]["on_update_success"]
+                total_on_update_failure += out[0]["execution_stats"]["on_update_failure"]
+                total_on_delete_success += out[0]["execution_stats"]["on_delete_success"]
+                total_on_delete_failure += out[0]["execution_stats"]["on_delete_failure"]
                 if "TIMERS_IN_PAST" in out[0]["event_processing_stats"]:
                     timers_in_past += out[0]["event_processing_stats"]["TIMERS_IN_PAST"]
                 total_lcb_exceptions= out[0]["lcb_exception_stats"]
@@ -992,15 +1001,24 @@ class EventingBaseTest(QueryHelperTests):
                                                                                                 indent=4)))
             if actual_count < expected_count:
                 self.skip_metabucket_check = True
+                log.info("Execution stats update_success: {0}  update_failure: {1}  delete_success: {2}  "
+                         "delete_failure: {3}".format(total_on_update_success,total_on_update_failure,total_on_delete_success
+                                                      ,total_on_delete_failure))
                 raise Exception("missing data in destination bucket. Current : {0} "
                                 "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(
                     actual_count, expected_count, total_dcp_backlog, timers_in_past, lcb))
             elif actual_count > expected_count and not expected_duplicate:
                 self.skip_metabucket_check = True
+                log.info("Execution stats update_success: {0}  update_failure: {1}  delete_success: {2}  "
+                         "delete_failure: {3}".format(total_on_update_success, total_on_update_failure,
+                                                      total_on_delete_success, total_on_delete_failure))
                 raise Exception("duplicated data in destination bucket which is not expected. Current : {0} "
                                 "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(
                     actual_count, expected_count, total_dcp_backlog, timers_in_past, lcb))
             elif actual_count > expected_count and expected_duplicate:
+                log.info("Execution stats update_success: {0}  update_failure: {1}  delete_success: {2}  "
+                         "delete_failure: {3}".format(total_on_update_success, total_on_update_failure,
+                                                      total_on_delete_success, total_on_delete_failure))
                 self.log.info("duplicated data in destination bucket which is expected. Current : {0} "
                               "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(
                     actual_count, expected_count, total_dcp_backlog, timers_in_past, lcb))
