@@ -15,12 +15,19 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         super(SecondaryIndexDGMTests, self).setUp()
         self.num_plasma_buckets = self.input.param("standard_buckets", 1)
         self.indexMemQuota = self.input.param("indexMemQuota", 256)
+        self.in_mem_comp = self.input.param("in_mem_comp", None)
+        self.sweep_interval = self.input.param("sweep_interval", 120)
         self.dgmServer = self.get_nodes_from_services_map(service_type="index")
         self.rest = RestConnection(self.dgmServer)
         if self.indexMemQuota > 256:
             log.info("Setting indexer memory quota to {0} MB...".format(self.indexMemQuota))
             self.rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=self.indexMemQuota)
             self.sleep(30)
+        if self.in_mem_comp:
+            self.rest.set_index_settings({"indexer.plasma.mainIndex.evictSweepInterval": self.sweep_interval})
+            self.rest.set_index_settings({"indexer.plasma.backIndex.evictSweepInterval": self.sweep_interval})
+            self.rest.set_index_settings({"indexer.plasma.backIndex.enableInMemoryCompression": True})
+            self.rest.set_index_settings({"indexer.plasma.mainIndex.enableInMemoryCompression": True})
         self.deploy_node_info = ["{0}:{1}".format(self.dgmServer.ip, self.dgmServer.port)]
         self.load_query_definitions = []
         self.initial_index_number = self.input.param("initial_index_number", 5)
@@ -69,6 +76,10 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self._verify_bucket_count_with_index_count(self.query_definitions)
         self.multi_query_using_index(buckets=self.buckets,
                     query_definitions=self.query_definitions)
+        if self.in_mem_comp:
+            self.sleep(60)
+            if not self.verify_compression_stat(self.query_definitions):
+                self.fail("Seeing index data not compressed")
 
     def test_dgm_drop_indexes(self):
         """
@@ -101,6 +112,10 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self._verify_bucket_count_with_index_count(self.query_definitions)
         self.multi_query_using_index(buckets=self.buckets,
                                      query_definitions=self.query_definitions)
+        if self.in_mem_comp:
+            self.sleep(60)
+            if not self.verify_compression_stat(self.query_definitions):
+                self.fail("Seeing index data not compressed")
 
     def test_dgm_flush_bucket(self):
         """
@@ -130,6 +145,10 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self._verify_bucket_count_with_index_count(self.query_definitions)
         self.multi_query_using_index(buckets=self.buckets,
                                      query_definitions=self.query_definitions)
+        if self.in_mem_comp:
+            self.sleep(60)
+            if not self.verify_compression_stat(self.query_definitions):
+                self.fail("Seeing index data not compressed")
 
     def test_oom_delete_bucket(self):
         """
@@ -182,6 +201,10 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self._run_tasks([kvOps_tasks, mid_operation_tasks])
         post_operation_tasks = self.async_run_operations(phase="after")
         self._run_tasks([post_operation_tasks])
+        if self.in_mem_comp:
+            self.sleep(60)
+            if not self.verify_compression_stat(self.query_definitions):
+                self.fail("Seeing index data not compressed")
 
     def test_decrease_indexer_memory_quota(self):
         pre_operation_tasks = self.async_run_operations(phase="before")
@@ -199,6 +222,10 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self._run_tasks([kvOps_tasks, mid_operation_tasks])
         post_operation_tasks = self.async_run_operations(phase="after")
         self._run_tasks([post_operation_tasks])
+        if self.in_mem_comp:
+            self.sleep(60)
+            if not self.verify_compression_stat(self.query_definitions):
+                self.fail("Seeing index data not compressed")
 
     def test_decrease_indexer_memory_quota_in_dgm(self):
         self.index_map = self.rest.get_index_status()
@@ -219,6 +246,10 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self._run_tasks([kvOps_tasks, mid_operation_tasks])
         post_operation_tasks = self.async_run_operations(phase="after")
         self._run_tasks([post_operation_tasks])
+        if self.in_mem_comp:
+            self.sleep(60)
+            if not self.verify_compression_stat(self.query_definitions):
+                self.fail("Seeing index data not compressed")
 
     def test_increase_decrease_mem_quota(self):
         memory_quanta = [50, 100, 150, 200]
@@ -243,6 +274,10 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self._run_tasks([kvOps_tasks, mid_operation_tasks])
         post_operation_tasks = self.async_run_operations(phase="after")
         self._run_tasks([post_operation_tasks])
+        if self.in_mem_comp:
+            self.sleep(60)
+            if not self.verify_compression_stat(self.query_definitions):
+                self.fail("Seeing index data not compressed")
 
     def test_plasma_dgm_with_multiple_resident_ratio(self):
         self.dgm_rasident_ratio = self.input.param("dgm_resident_ratio", None)
@@ -294,6 +329,10 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
             cnt += 1
             docs += 20
         self.assertTrue(validate_dgm, "DGM is not achieved")
+        if self.in_mem_comp:
+            self.sleep(60)
+            if not self.verify_compression_stat(self.query_definitions):
+                self.fail("Seeing index data not compressed")
         self.multi_query_using_index()
 
     def test_lru(self):
@@ -325,6 +364,10 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
                     cache_misses[bucket.name][query_definition.index_name] = \
                         content[bucket.name][query_definition.index_name]["MainStore"]["cache_misses"]
         self.multi_query_using_index(query_definitions=query_definitions)
+        if self.in_mem_comp:
+            self.sleep(60)
+            if not self.verify_compression_stat(self.query_definitions):
+                self.fail("Seeing index data not compressed")
         self.sleep(30)
         for bucket in self.buckets:
             for query_definition in self.query_definitions:

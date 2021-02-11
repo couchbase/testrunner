@@ -960,6 +960,26 @@ class BaseSecondaryIndexingTests(QueryTests):
                                 (bucket.name, query.index_name, bucket_count, index_count))
         self.log.info("Items Indexed Verified with bucket count...")
 
+    def verify_compression_stat(self, query_definitions):
+        all_index_comp_stat_verified = False
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index",
+                                                         get_all_nodes=True)
+        for node in indexer_nodes:
+            indexer_rest = RestConnection(node)
+            content = indexer_rest.get_index_storage_stats()
+            for index in list(content.values()):
+                for index_name, stats in index.items():
+                    comp_stat_verified = False
+                    for query in query_definitions:
+                        if index_name == query.index_name:
+                            self.log.info(f'num_rec_compressed for index {index_name} found to be '
+                                          f'{stats["MainStore"]["num_rec_compressed"]} and num_rec_swapin found to be '
+                                          f'{stats["MainStore"]["num_rec_swapin"]}')
+                            if stats["MainStore"]["num_rec_compressed"] > 0:
+                                comp_stat_verified = True
+                    all_index_comp_stat_verified = all_index_comp_stat_verified or comp_stat_verified
+        return all_index_comp_stat_verified
+
     def wait_for_mutation_processing(self, index_nodes):
         count = 0
         all_nodes_mutation_processed = True
