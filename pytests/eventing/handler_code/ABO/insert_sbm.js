@@ -1,9 +1,12 @@
 function OnUpdate(doc, meta) {
     log("Doc created/updated", meta.id);
-    var time_rand = random_gen();
-    var result= couchbase.insert(src_bucket,{"id":meta.id + time_rand},doc);
-    log(result);
-
+    try{
+        var time_rand = random_gen();
+        var result= couchbase.insert(src_bucket,{"id":meta.id + time_rand},doc);
+        log(result);
+    }catch(e){
+        log(e);
+    }
 }
 
 
