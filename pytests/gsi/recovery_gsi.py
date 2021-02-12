@@ -518,15 +518,16 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
         self.scan_indexes(self.index_ops_obj.get_create_index_list())
 
-    def test_oso_server_crash_while_building(self):
+    def test_server_crash_while_building(self):
 
         for index_node in self.index_nodes:
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 1000})
 
-        for index_node in self.index_nodes:
-            rest = RestConnection(index_node)
-            rest.set_index_settings({"indexer.build.enableOSO": True})
+        if self.enable_oso:
+            for index_node in self.index_nodes:
+                rest = RestConnection(index_node)
+                rest.set_index_settings({"indexer.build.enableOSO": True})
 
         self.create_scope_collections(num_scopes=1, num_collections=2, scope_prefix="oso_scope",
                                               collection_prefix="oso_collection")
@@ -562,15 +563,16 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
         self.scan_indexes(self.index_ops_obj.get_defer_index_list())
 
-    def test_oso_rebalance_in_kv_node_while_building(self):
+    def test_rebalance_in_kv_node_while_building(self):
 
         for index_node in self.index_nodes:
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 1000})
 
-        for index_node in self.index_nodes:
-            rest = RestConnection(index_node)
-            rest.set_index_settings({"indexer.build.enableOSO": True})
+        if self.enable_oso:
+            for index_node in self.index_nodes:
+                rest = RestConnection(index_node)
+                rest.set_index_settings({"indexer.build.enableOSO": True})
 
         self.create_scope_collections(num_scopes=1, num_collections=2, scope_prefix="oso_scope",
                                               collection_prefix="oso_collection")
@@ -600,7 +602,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
         self.scan_indexes(self.index_ops_obj.get_create_index_list())
 
-    def test_oso_rebalance_in_indexer_node_while_building(self):
+    def test_rebalance_in_indexer_node_while_building(self):
 
         self.retry_time = self.input.param("retry_time", 10)
         self.num_retries = self.input.param("num_retries", 3)
@@ -612,9 +614,10 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         rest = RestConnection(self.master)
         rest.set_retry_rebalance_settings(body)
 
-        for index_node in self.index_nodes:
-            rest = RestConnection(index_node)
-            rest.set_index_settings({"indexer.build.enableOSO": True})
+        if self.enable_oso:
+            for index_node in self.index_nodes:
+                rest = RestConnection(index_node)
+                rest.set_index_settings({"indexer.build.enableOSO": True})
 
         self.create_scope_collections(num_scopes=1, num_collections=1, scope_prefix="oso_scope",
                                               collection_prefix="oso_collection")
