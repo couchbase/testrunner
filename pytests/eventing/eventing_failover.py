@@ -97,6 +97,8 @@ class EventingFailover(EventingBaseTest):
         self.wait_for_failover()
         task.result()
         fail_over_task.result()
+        # Wait for failover to complete
+        self.sleep(10)
         if self.non_default_collection:
             self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs,expected_duplicate=True)
         else:
@@ -119,6 +121,8 @@ class EventingFailover(EventingBaseTest):
         self.wait_for_failover()
         fail_over_task.result()
         task.result()
+        # Wait for failover to complete
+        self.sleep(10)
         if self.non_default_collection:
             self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs,expected_duplicate=True)
         else:
@@ -141,7 +145,10 @@ class EventingFailover(EventingBaseTest):
                                          wait_for_loading=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
+        self.wait_for_failover()
         fail_over_task.result()
+        # Wait for failover to complete
+        self.sleep(10)
         # do a recovery and rebalance
         self.rest.set_recovery_type('ns_1@' + eventing_server[1].ip, "full")
         self.rest.add_back_node('ns_1@' + eventing_server[1].ip)
@@ -177,6 +184,8 @@ class EventingFailover(EventingBaseTest):
                 self.fail("Lifecycle operation succeed even when failover is running")
         fail_over_task.result()
         task.result()
+        # Wait for failover to complete
+        self.sleep(10)
         if self.is_sbm:
             if self.non_default_collection:
                 self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket",
@@ -213,6 +222,8 @@ class EventingFailover(EventingBaseTest):
         self.wait_for_failover()
         fail_over_task.result()
         task.result()
+        # Wait for failover to complete
+        self.sleep(10)
         self.wait_for_handler_state(body1['appname'],"deployed")
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True,
@@ -245,6 +256,8 @@ class EventingFailover(EventingBaseTest):
         fail_over_task.result()
         fail_over_task2.result()
         task.result()
+        # Wait for failover to complete
+        self.sleep(10)
         if self.is_sbm:
             if self.non_default_collection:
                 self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket",
@@ -280,6 +293,8 @@ class EventingFailover(EventingBaseTest):
         fail_over_task.result()
         fail_over_task2.result()
         task.result()
+        # Wait for failover to complete
+        self.sleep(10)
         if self.is_sbm:
             if self.non_default_collection:
                 self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket",
@@ -317,6 +332,8 @@ class EventingFailover(EventingBaseTest):
         self.wait_for_failover()
         fail_over_task.result()
         task.result()
+        # Wait for failover to complete
+        self.sleep(10)
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 , skip_stats_validation=True,
                                      expected_duplicate=True)
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 , bucket=self.dst_bucket_name1,
@@ -347,6 +364,8 @@ class EventingFailover(EventingBaseTest):
                 self.fail("Error missmatch {}".format(e))
         fail_over_task.result()
         task.result()
+        # Wait for failover to complete
+        self.sleep(10)
         if self.non_default_collection:
             self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs,
                                               expected_duplicate=True)
@@ -368,8 +387,10 @@ class EventingFailover(EventingBaseTest):
                                          wait_for_loading=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
-        fail_over_task.result()
         self.wait_for_failover()
+        fail_over_task.result()
+        # Wait for failover to complete
+        self.sleep(10)
         while self.check_eventing_rebalance():
             pass
         rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
@@ -403,6 +424,8 @@ class EventingFailover(EventingBaseTest):
         self.wait_for_failover()
         fail_over_task.result()
         task.result()
+        # Wait for failover to complete
+        self.sleep(10)
         while self.check_eventing_rebalance():
             pass
         self.resume_function(body1)
@@ -435,6 +458,8 @@ class EventingFailover(EventingBaseTest):
                 self.fail("Incorrect error {}".format(e))
         task.result()
         fail_over_task.result()
+        # Wait for failover to complete
+        self.sleep(10)
         stats_dst = self.rest.get_bucket_stats(self.dst_bucket_name)
         self.log.info("documents in destination bucket {}".format(stats_dst["curr_items"]))
         if stats_dst["curr_items"] < self.docs_per_day * 2016:
