@@ -281,7 +281,7 @@ class CreateBucketTests(BaseTestCase):
         """ check all indexes are completed """
 
         self.log.info("check if all %s indexes built." % index_count)
-        end_time_i = time.time() + 60
+        end_time_i = time.time() + 180
         while time.time() < end_time_i and len(index_name) < index_count:
             if result["indexes"]:
                 for x in result["indexes"]:

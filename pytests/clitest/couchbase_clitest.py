@@ -3195,7 +3195,7 @@ class XdcrCLITest(CliBaseTest):
                             in element:
                         self.log.info("match {0}".format(element))
                         return True
-                    elif "ERROR: _ - Authentication failed. Verify username and password." \
+                    elif "ERROR: Authentication failed. Verify username and password." \
                             in element:
                         self.log.info("match {0}".format(element))
                         return True
@@ -3203,7 +3203,7 @@ class XdcrCLITest(CliBaseTest):
                             in element:
                         self.log.info("match {0}".format(element))
                         return True
-                    elif "ERROR: _ - Invalid remote cluster." \
+                    elif "ERROR: Invalid remote cluster." \
                             in element:
                         self.log.info("match {0}".format(element))
                         return True
@@ -3240,10 +3240,9 @@ class XdcrCLITest(CliBaseTest):
                 output_error = output_error.replace("HOSTNAME", \
                           (self.servers[xdcr_hostname].ip, "")[xdcr_hostname is None])
             if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-                expect_error = ("['ERROR: unable to delete xdcr remote site localhost "
-                                  "(404) Object Not Found', 'unknown remote cluster']")
+                expect_error = ("['ERROR: unknown remote cluster : refName - unknown']")
                 if output_error == expect_error:
-                    output_error = "ERROR: _ - unknown remote cluster"
+                    output_error = "ERROR: unknown remote cluster : refName - unknown"
                 self.assertTrue(self._check_output(output_error, output))
             else:
                 if output_error == \
