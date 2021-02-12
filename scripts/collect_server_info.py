@@ -151,6 +151,7 @@ class memInfoRunner(object):
         self.fail = []
 
     def _run(self, server):
+        mem = None
         try:
             if not self.local:
                 from lib.remote.remote_util import RemoteMachineShellConnection
@@ -161,10 +162,14 @@ class memInfoRunner(object):
                 output, error = remote_client.execute_command(remote_cmd)
                 print("\n".join(error))
                 remote_client.disconnect()
+                mem = int("".join(output))
         except Exception as e:
             self.fail.append((server.ip, e))
         else:
-            self.succ[server.ip] = "".join(output)
+            if mem:
+                self.succ[server.ip] = mem
+            else:
+                self.fail.append((server.ip, Exception("mem parse failed")))
 
     def run(self):
         if isinstance(self.server, list):
