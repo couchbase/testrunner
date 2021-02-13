@@ -35,7 +35,8 @@ params = {
     "fts_quota": testconstants.FTS_QUOTA,
     "fts_query_limit": 0,
     "cluster_version": None,
-    "bkrs_client": None
+    "bkrs_client": None,
+    "ntp": False
 }
 
 
@@ -521,6 +522,8 @@ def _parse_user_input():
             params["variant"] = value
         if key == "cluster_version":
             params["cluster_version"] = value
+        if key == "ntp":
+            params["ntp"] = value
 
     if userinput.bkrs_client and not params["cluster_version"]:
         print_result_and_exit("Need 'cluster_version' in params to proceed", install_started=False)
@@ -582,6 +585,16 @@ def _check_version_compatibility(node):
 
 
 def pre_install_steps():
+    # CBQE-6402
+    if "ntp" in params and params["ntp"]:
+        ntp_threads = []
+        for node in NodeHelpers:
+            ntp_thread = threading.Thread(target=node.shell.is_ntp_installed)
+            ntp_threads.append(ntp_thread)
+            ntp_thread.start()
+        for ntpt in ntp_threads:
+            ntpt.join()
+
     if "install" in params["install_tasks"]:
         if params["url"] is not None:
             if NodeHelpers[0].shell.is_url_live(params["url"]):

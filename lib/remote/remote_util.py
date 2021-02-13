@@ -1073,6 +1073,16 @@ class RemoteMachineShellConnection(KeepRefs):
                                                                           debug=False)
                     self.execute_command("firewall-cmd --reload", debug=False)
                     do_install = True
+                # Check if ntp time sync didn't happened
+                ntpstatoutput, _ = self.execute_command("ntpstat")
+                ntpstat = "".join(ntpstatoutput)
+                timeoutput, _ = self.execute_command("timedatectl status")
+                log.debug("{}--->{}".format(self.ip, timeoutput))
+                is_ntp_sync = "".join(timeoutput)
+                if "unsynchronised" in ntpstat or "NTP synchronized: no" in is_ntp_sync:
+                    log.info("Forcing ntp time sync as time is out of sync with NTP")
+                    self.execute_command("systemctl stop ntpd; ntpd -gq; systemctl start ntpd", debug=False)
+
                 timezone, _ = self.execute_command("date")
                 timezone0 = timezone[0]
                 try:
