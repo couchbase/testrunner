@@ -1145,7 +1145,9 @@ class RemoteMachineShellConnection(KeepRefs):
                    "        This server {0} \n"\
                    "        failed to install ntp service.\n"\
                    "===============\n".format(self.ip)
-            self.stop_current_python_running(mesg)
+            # CBQE-6470: Continue with install by skipping the process kill in case some issue with ntp setup
+            log.info(mesg)       
+            # self.stop_current_python_running(mesg)
 
     def download_build(self, build):
         return self.download_binary(build.url, build.deliverable_type, build.name,
