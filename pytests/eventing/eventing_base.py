@@ -117,11 +117,11 @@ class EventingBaseTest(QueryHelperTests):
 
     def create_save_function_body(self, appname, appcode, description="Sample Description",
                                   checkpoint_interval=20000, cleanup_timers=False,
-                                  dcp_stream_boundary="everything", deployment_status=True,
+                                  dcp_stream_boundary="everything", deployment_status=False,
                                   # rbacpass="password", rbacrole="admin", rbacuser="cbadminbucket",
                                   skip_timer_threshold=86400,
                                   sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
-                                  timer_worker_pool_size=3, worker_count=3, processing_status=True,
+                                  timer_worker_pool_size=3, worker_count=3, processing_status=False,
                                   cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=20,
                                   data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62,
                                   language_compatibility='6.5.0',hostpath=None,validate_ssl=False,src_binding=False):
