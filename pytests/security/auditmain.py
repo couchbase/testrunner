@@ -455,6 +455,8 @@ class audit:
             else:
                 if (isinstance(data[items], dict)):
                     for seclevel in data[items]:
+                        if (seclevel == 'port' and type(data[items][seclevel]) == str):
+                            data[items][seclevel] = int(data[items][seclevel])
                         tempLevel = items + ":" + seclevel
                         if (tempLevel in list(expectedResult.keys())):
                             tempValue = expectedResult[tempLevel]
