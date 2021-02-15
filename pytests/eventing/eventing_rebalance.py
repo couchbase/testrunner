@@ -1287,11 +1287,11 @@ class EventingRebalance(EventingBaseTest):
             # if (RestHelper(self.rest).is_cluster_rebalanced()):
             #     raise Exception("Rebalance completed before killing")
             # reboot kv and eventing when eventing is processing mutations
+            task.result()
             for node in [kv_node, eventing_node]:
                 self.reboot_server(node)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
-            task.result()
         except Exception as ex:
             if "Rebalance completed before killing" in str(ex):
                 exit(1)

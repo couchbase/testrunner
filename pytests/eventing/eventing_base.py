@@ -1035,20 +1035,20 @@ class EventingBaseTest(QueryHelperTests):
 
 
     def load_data_to_collection(self,num_items,namespace,is_create=True,is_delete=False,is_update=False,
-                                expiry=0,wait_for_loading=True):
+                                expiry=0,wait_for_loading=True,template="Person"):
         if is_delete or is_update:
             is_create=False
         collection_list=namespace.split(".")
         if is_create:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=100, percent_update=0,
                                         percent_delete=0, scope=collection_list[1], collection=collection_list[2],
-                                            doc_expiry=expiry)
+                                            doc_expiry=expiry,json_template=template)
         elif is_delete:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=0, percent_delete=100,
-                                            scope=collection_list[1], collection=collection_list[2])
+                                            scope=collection_list[1], collection=collection_list[2],json_template=template)
         elif is_update:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=100, percent_delete=0,
-                                            scope=collection_list[1], collection=collection_list[2],doc_expiry=expiry)
+                                            scope=collection_list[1], collection=collection_list[2],doc_expiry=expiry,json_template=template)
         task=self.cluster.async_load_gen_docs(self.master, collection_list[0], self.gen_create, pause_secs=1,
                                          timeout_secs=300,exp=expiry)
         if wait_for_loading:

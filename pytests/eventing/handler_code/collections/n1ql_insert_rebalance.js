@@ -4,5 +4,6 @@ function OnUpdate(doc,meta) {
 }
 
 function OnDelete(meta,options){
-    delete dst_bucket[meta.id];
+    var id=meta.id;
+    delete from dst_bucket.scope_1.coll_4 where META().id=$id;
 }
