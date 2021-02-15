@@ -413,18 +413,16 @@ class EventingRecovery(EventingBaseTest):
         # load some data
         if not self.is_expired:
             if self.non_default_collection:
-                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
-                                             wait_for_loading=False)
+                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
             else:
-                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
-                                             wait_for_loading=False)
+                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
         else:
             if self.non_default_collection:
                 self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
-                                             expiry=10, wait_for_loading=False)
+                                             expiry=10)
             else:
                 self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
-                                             expiry=10, wait_for_loading=False)
+                                             expiry=10)
         # kill erlang on kv when eventing is processing mutations
         for node in [kv_node]:
             self.print_eventing_stats_from_all_eventing_nodes()
@@ -432,7 +430,6 @@ class EventingRecovery(EventingBaseTest):
         if self.pause_resume:
             self.wait_for_handler_state(body['appname'], "paused")
             self.resume_function(body)
-        self.wait_for_handler_state(body['appname'], "deployed")
         # Wait for eventing to catch up with all the update mutations and verify results
         if not self.cancel_timer:
             if self.is_sbm:
@@ -455,10 +452,10 @@ class EventingRecovery(EventingBaseTest):
         if not self.is_expired:
             if self.non_default_collection:
                 self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
-                                             is_delete=True, wait_for_loading=False)
+                                             is_delete=True)
             else:
                 self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
-                                             is_delete=True, wait_for_loading=False)
+                                             is_delete=True)
         # kill erlang on kv when eventing is processing mutations
         for node in [kv_node]:
             self.print_eventing_stats_from_all_eventing_nodes()
@@ -466,7 +463,6 @@ class EventingRecovery(EventingBaseTest):
         if self.pause_resume:
             self.wait_for_handler_state(body['appname'], "paused")
             self.resume_function(body)
-        self.wait_for_handler_state(body['appname'], "deployed")
         # Wait for eventing to catch up with all the delete mutations and verify results
         if not self.cancel_timer:
             if self.is_sbm:
