@@ -95,6 +95,10 @@ class EventingRebalance(EventingBaseTest):
                                       full_docs_list=self.full_docs_list, log=self.log, input=self.input,
                                       master=self.master, use_rest=True)
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        if self.non_default_collection:
+            self.create_scope_collection(bucket=self.src_bucket_name,scope=self.src_bucket_name,collection=self.src_bucket_name)
+            self.create_scope_collection(bucket=self.metadata_bucket_name,scope=self.metadata_bucket_name,collection=self.metadata_bucket_name)
+            self.create_scope_collection(bucket=self.dst_bucket_name,scope=self.dst_bucket_name,collection=self.dst_bucket_name)
 
 
     def tearDown(self):
