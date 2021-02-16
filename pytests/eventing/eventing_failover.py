@@ -338,6 +338,8 @@ class EventingFailover(EventingBaseTest):
                                      expected_duplicate=True)
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 , bucket=self.dst_bucket_name1,
                                      skip_stats_validation=True,expected_duplicate=True)
+        while self.check_eventing_rebalance():
+            pass
         self.undeploy_delete_all_functions()
 
 
@@ -355,6 +357,7 @@ class EventingFailover(EventingBaseTest):
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         self.wait_for_failover()
+        self.sleep(3)
         try:
             rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
             self.fail("Rebalance operation succeed even when failover is running")
