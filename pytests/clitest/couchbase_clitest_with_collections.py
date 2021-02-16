@@ -819,6 +819,8 @@ class XdcrCLITest(CliBaseTest):
                 if isinstance(col_stats, str):
                     col_stats = col_stats.split(",")
                 for stats in col_stats:
+                    if self.custom_scopes and not self.custom_collections:
+                        break
                     if self.custom_collections or self.buckets[0].name == "default":
                         load_sc_item_id = load_scope_id_src + ":" + load_collection_id_src + ":items"
                         if load_sc_item_id in stats:
@@ -834,7 +836,7 @@ class XdcrCLITest(CliBaseTest):
         role_del = ['cbadminbucket']
         RbacBase().remove_user_role(role_del, RestConnection(self.dest_nodes[0]))
         if not items_match:
-            if self.custom_collections:
+            if self.custom_collections and self.custom_collections:
                 self.fail("Items in des cluster don't match with src")
             else:
                 self.log.info("This is negative test which not create custom collections")
