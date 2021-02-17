@@ -100,9 +100,10 @@ class EventingMultiHandler(EventingBaseTest):
             deployed=deployed+1
 
     def undeploy_delete_all_handler(self):
+        self.refresh_rest_server()
         for key in self.deploying:
-            self.log.info("Deploying the following handler code : {0}".format(key))
-            self.rest.undeploy_function(key)
+            self.log.info("Undeploying the following handler code : {0}".format(key))
+            self.undeploy_function_by_name(key,wait_for_undeployment=False)
         for key in self.deploying:
             self.wait_for_handler_state(key,"undeployed")
         self.rest.delete_all_function()

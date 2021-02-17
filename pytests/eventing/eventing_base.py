@@ -432,6 +432,12 @@ class EventingBaseTest(QueryHelperTests):
         self.wait_for_handler_state(body['appname'], "undeployed")
         return content
 
+    def undeploy_function_by_name(self, name,wait_for_undeployment=True):
+        content = self.rest.lifecycle_operation(name,"undeploy")
+        log.info("Undeploy Application : {0}".format(name))
+        if wait_for_undeployment:
+            self.wait_for_handler_state(name, "undeployed")
+
     def delete_function(self, body):
         content1 = self.rest.delete_single_function(body['appname'])
         log.info("Delete Application : {0}".format(body['appname']))
