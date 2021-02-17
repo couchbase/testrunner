@@ -771,6 +771,8 @@ class EventingRebalance(EventingBaseTest):
         else:
             task= self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
                                          wait_for_loading=False)
+        if self.pause_resume:
+            self.resume_function(body)
         # fail over the kv node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         fail_over_task.result()
@@ -787,8 +789,6 @@ class EventingRebalance(EventingBaseTest):
             self.log.info(msg.format(result))
         # This is intenionally added
         self.sleep(60)
-        if self.pause_resume:
-            self.resume_function(body)
         try:
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after rebalance goes through successfully
