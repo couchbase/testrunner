@@ -104,6 +104,7 @@ def triage(os, build, component, username, password, job_list, format, ignore_li
     for row in cb.n1ql_query(query):
         build_id = row['server']['build_id']
         job_name = row['server']['name']
+        build_url = row['server']['url']
 
         '''Constructing skeleton of main data structure'''
         job_dict = {}
@@ -126,7 +127,7 @@ def triage(os, build, component, username, password, job_list, format, ignore_li
         job_dict['fail_reasons']['all_the_rest'] = fail_reason_all_the_rest
 
         '''Load json logs for last job call'''
-        logs_url = "http://qa.sc.couchbase.com/job/test_suite_executor/"+str(build_id)+"/testReport/api/json"
+        logs_url = f"{build_url}{str(build_id)}/testReport/api/json"
         try:
             response = urllib.request.urlopen(logs_url)
         except urllib.error.HTTPError as err:
@@ -157,7 +158,7 @@ def triage(os, build, component, username, password, job_list, format, ignore_li
         job_logs = []
         full_job_logs = []
         if 'd' in fmt:
-            full_job_logs = download_job_logs(build_id)
+            full_job_logs = download_job_logs(build_id, build_url)
 
             job_logs = extract_cmd_lines(full_job_logs)
             ini_filename = extract_ini_filename(full_job_logs)
@@ -270,9 +271,9 @@ def download_core_dump(vm_ip, logs_folder):
     return files[0]
 
 
-def download_job_logs(build_id):
+def download_job_logs(build_id, build_url):
     logs = []
-    console_page_url = "http://qa.sc.couchbase.com/job/test_suite_executor/" + str(build_id) + "/consoleText"
+    console_page_url = f"{build_url}{str(build_id)}/consoleText"
     console_response = urllib.request.urlopen(console_page_url)
     for line in console_response.readlines():
         logs.append(line)
