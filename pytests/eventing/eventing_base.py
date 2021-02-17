@@ -173,9 +173,12 @@ class EventingBaseTest(QueryHelperTests):
             body['depcfg']['source_collection'] = self.src_bucket_name
             if self.is_sbm:
                 del body['depcfg']['buckets'][0]
-                body['depcfg']['buckets'].append(
-                    {"alias": "src_bucket", "bucket_name": self.src_bucket_name, "scope_name": self.src_bucket_name,
-                     "collection_name": self.src_bucket_name, "access": "rw"})
+                if src_binding:
+                    body['depcfg']['buckets'][0]['access'] = "rw"
+                else:
+                    body['depcfg']['buckets'].append(
+                        {"alias": "src_bucket", "bucket_name": self.src_bucket_name, "scope_name": self.src_bucket_name,
+                         "collection_name": self.src_bucket_name, "access": "rw"})
         else:
             if src_binding:
                 body['depcfg']['buckets'].append(
@@ -188,8 +191,11 @@ class EventingBaseTest(QueryHelperTests):
             body['depcfg']['source_bucket'] = self.src_bucket_name
             if self.is_sbm:
                 del body['depcfg']['buckets'][0]
-                body['depcfg']['buckets'].append(
-                    {"alias": "src_bucket", "bucket_name": self.src_bucket_name, "access": "rw"})
+                if src_binding:
+                    body['depcfg']['buckets'][0]['access'] = "rw"
+                else:
+                    body['depcfg']['buckets'].append(
+                        {"alias": "src_bucket", "bucket_name": self.src_bucket_name, "access": "rw"})
         if multi_dst_bucket:
             body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
         body['settings'] = {}

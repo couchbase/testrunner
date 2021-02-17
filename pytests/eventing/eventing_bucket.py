@@ -56,6 +56,13 @@ class EventingBucket(EventingBaseTest):
                                       full_docs_list=self.full_docs_list, log=self.log, input=self.input,
                                       master=self.master, use_rest=True)
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        if self.non_default_collection:
+            self.create_scope_collection(bucket=self.src_bucket_name, scope=self.src_bucket_name,
+                                         collection=self.src_bucket_name)
+            self.create_scope_collection(bucket=self.metadata_bucket_name, scope=self.metadata_bucket_name,
+                                         collection=self.metadata_bucket_name)
+            self.create_scope_collection(bucket=self.dst_bucket_name, scope=self.dst_bucket_name,
+                                         collection=self.dst_bucket_name)
 
     def tearDown(self):
         try:
@@ -85,12 +92,12 @@ class EventingBucket(EventingBaseTest):
             task.result()
         n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
-                                      item_flag=self.item_flag, n1ql_port=self.n1ql_port,
-                                      full_docs_list=self.full_docs_list, log=self.log, input=self.input,
-                                      master=self.master, use_rest=True)
+                                 item_flag=self.item_flag, n1ql_port=self.n1ql_port,
+                                 full_docs_list=self.full_docs_list, log=self.log, input=self.input,
+                                 master=self.master, use_rest=True)
         for bucket in self.buckets:
             if bucket.name != "metadata":
-                query="CREATE PRIMARY INDEX ON %s " % bucket.name
+                query = "CREATE PRIMARY INDEX ON %s " % bucket.name
                 n1ql_helper.run_cbq_query(query=query, server=n1ql_node)
         try:
             # load data
@@ -120,8 +127,12 @@ class EventingBucket(EventingBaseTest):
     def test_eventing_with_with_the_couchbase_buckets_in_heavy_dgm(self):
         gen_load_del = copy.deepcopy(self.gens_load)
         # load some data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if self.non_default_collection:
+            task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                                wait_for_loading=False)
+        else:
+            task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                                wait_for_loading=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         if self.pause_resume:
@@ -130,17 +141,27 @@ class EventingBucket(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
         # delete all documents
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_del,
-                                                self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
+        if self.non_default_collection:
+            task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                         is_delete=True, wait_for_loading=False)
+        else:
+            task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                         is_delete=True, wait_for_loading=False)
         if self.pause_resume:
             self.pause_function(body)
             self.sleep(30)
             self.resume_function(body)
         task.result()
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", 0)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", 0)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(30)
@@ -154,19 +175,27 @@ class EventingBucket(EventingBaseTest):
                                               dcp_stream_boundary="from_now")
         self.deploy_function(body)
         # load documents on the source bucket
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name,
-                                     total_items + self.docs_per_day * 2016,  # add the data we have already created
-                                     skip_stats_validation=True)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs + total_items)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs + total_items)
         # delete all documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                         is_delete=True)
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                         is_delete=True)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name,
-                                     total_items,  # Since it will only delete the items created by eventing
-                                     skip_stats_validation=True)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", total_items)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", total_items)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(30)
@@ -183,27 +212,46 @@ class EventingBucket(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
         # load documents on the source bucket
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True,expected_duplicate=True)
+        if self.non_default_collection:
+            if self.is_sbm:
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs * 2)
+            else:
+                self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            if self.is_sbm:
+                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs * 2)
+            else:
+                self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
         if self.pause_resume:
             self.pause_function(body)
         # delete all documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                         is_delete=True)
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                         is_delete=True)
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,expected_duplicate=True)
+        if self.non_default_collection:
+            if self.is_sbm:
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket",
+                                                  self.docs_per_day * self.num_docs)
+            else:
+                self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", 0)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            if self.is_sbm:
+                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs)
+            else:
+                self.verify_doc_count_collections("dst_bucket._default._default", 0)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(30)
@@ -217,17 +265,25 @@ class EventingBucket(EventingBaseTest):
                                               dcp_stream_boundary="from_now")
         self.deploy_function(body)
         # load documents on the source bucket
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name,
-                                     self.docs_per_day * 2016,  # since we have deployed with dcp boundary from_now
-                                     skip_stats_validation=True)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
         # delete all documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket", is_delete=True)
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default", is_delete=True)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", 0)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", 0)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(30)
@@ -272,36 +328,57 @@ class EventingBucket(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
         # load some data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
         # start compacting source, metadata and destination buckets
         self.bucket_compaction()
         # load some data on metadata bucket while eventing is processing mutations
         # metadata bucket can be used for other purposes as well
-        task = self.cluster.async_load_gen_docs(self.master, self.metadata_bucket_name, gen_load_copy,
-                                                self.buckets[0].kvs[1], "create", compression=self.sdk_compression)
+        if self.non_default_collection:
+            task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "metadata.metadata.metadata",
+                                                wait_for_loading=False)
+        else:
+            task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "metadata._default._default",
+                                                wait_for_loading=False)
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+        if self.non_default_collection:
+            if self.is_sbm:
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs * 2)
+            else:
+                self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            if self.is_sbm:
+                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs * 2)
+            else:
+                self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
         task.result()
         if self.pause_resume:
             self.pause_function(body)
         # delete all documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket", is_delete=True)
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default", is_delete=True)
         # start compacting source, metadata and destination buckets
         self.bucket_compaction()
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if self.non_default_collection:
+            if self.is_sbm:
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket",
+                                                  self.docs_per_day * self.num_docs)
+            else:
+                self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", 0)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            if self.is_sbm:
+                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs)
+            else:
+                self.verify_doc_count_collections("dst_bucket._default._default", 0)
         self.undeploy_and_delete_function(body)
         self.skip_metabucket_check=True
 
@@ -333,24 +410,36 @@ class EventingBucket(EventingBaseTest):
     def test_eventing_with_ephemeral_buckets_with_eviction_enabled(self):
         # delete src_bucket which will be created as part of setup
         self.rest.delete_bucket(self.src_bucket_name)
+        if self.non_default_collection:
+            self.collection_rest.delete_collection(bucket=self.src_bucket_name, scope=self.src_bucket_name,
+                                             collection=self.src_bucket_name)
         # create source bucket as ephemeral bucket with the same name
         bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                    replicas=self.num_replicas, bucket_type='ephemeral',
                                                    eviction_policy='nruEviction')
         self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                             bucket_params=bucket_params)
+        if self.non_default_collection:
+            self.create_scope_collection(bucket=self.src_bucket_name, scope=self.src_bucket_name,
+                                         collection=self.src_bucket_name)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         # deploy function
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
         # load data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
         try:
             # delete all documents
-            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size, op_type='delete')
+            if self.non_default_collection:
+                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                             is_delete=True)
+            else:
+                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                             is_delete=True)
         except:
             # since some of the docs are already ejected by eventing, load method will fails, hence ignoring failure
             pass
@@ -358,7 +447,10 @@ class EventingBucket(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
-        self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,expected_duplicate=True)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", stats_src["curr_items"])
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", stats_src["curr_items"])
         self.undeploy_and_delete_function(body)
         vb_active_auto_delete_count = StatsCommon.get_stats([self.master], self.src_bucket_name, '',
                                                             'vb_active_auto_delete_count')[self.master]
@@ -377,6 +469,13 @@ class EventingBucket(EventingBaseTest):
         # delete existing couchbase buckets which will be created as part of setup
         for bucket in self.buckets:
             self.rest.delete_bucket(bucket.name)
+        if self.non_default_collection:
+            self.collection_rest.delete_collection(bucket=self.src_bucket_name, scope=self.src_bucket_name,
+                                             collection=self.src_bucket_name)
+            self.collection_rest.delete_collection(bucket=self.metadata_bucket_name, scope=self.metadata_bucket_name,
+                                             collection=self.metadata_bucket_name)
+            self.collection_rest.delete_collection(bucket=self.dst_bucket_name, scope=self.dst_bucket_name,
+                                             collection=self.dst_bucket_name)
         # create buckets with the same name with different compression modes
         if bucket_type != "ephemeral":
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
@@ -393,32 +492,56 @@ class EventingBucket(EventingBaseTest):
                                                                    bucket_params=bucket_params))
         for task in tasks:
             task.result()
+        if self.non_default_collection:
+            self.create_scope_collection(bucket=self.src_bucket_name, scope=self.src_bucket_name,
+                                         collection=self.src_bucket_name)
+            self.create_scope_collection(bucket=self.metadata_bucket_name, scope=self.metadata_bucket_name,
+                                         collection=self.metadata_bucket_name)
+            self.create_scope_collection(bucket=self.dst_bucket_name, scope=self.dst_bucket_name,
+                                         collection=self.dst_bucket_name)
         body = self.create_save_function_body(self.function_name, self.handler_code,src_binding=True)
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+        if self.non_default_collection:
+            if self.is_sbm:
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs * 2)
+            else:
+                self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            if self.is_sbm:
+                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs * 2)
+            else:
+                self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
         if self.pause_resume:
             self.pause_function(body)
         # delete all documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket", is_delete=True)
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default", is_delete=True)
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if self.non_default_collection:
+            if self.is_sbm:
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket",
+                                                  self.docs_per_day * self.num_docs)
+            else:
+                self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", 0)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            if self.is_sbm:
+                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs)
+            else:
+                self.verify_doc_count_collections("dst_bucket._default._default", 0)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(30)
@@ -435,33 +558,34 @@ class EventingBucket(EventingBaseTest):
         self.deploy_function(body)
         # sleep intentionally added as we are validating no mutations are processed by eventing
         self.sleep(60)
-        countMap=self.get_buckets_itemCount()
-        initalDoc=countMap["metadata"]
+        countMap = self.get_buckets_itemCount()
+        initalDoc = countMap["metadata"]
         # load some data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 2016*self.docs_per_day, skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, 2016 * self.docs_per_day, skip_stats_validation=True)
         countMap = self.get_buckets_itemCount()
-        finalDoc=countMap["metadata"]
-        if(initalDoc !=finalDoc):
+        finalDoc = countMap["metadata"]
+        if (initalDoc != finalDoc):
             n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
             n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
-                                          item_flag=self.item_flag, n1ql_port=self.n1ql_port,
-                                          full_docs_list=self.full_docs_list, log=self.log, input=self.input,
-                                          master=self.master, use_rest=True)
+                                     item_flag=self.item_flag, n1ql_port=self.n1ql_port,
+                                     full_docs_list=self.full_docs_list, log=self.log, input=self.input,
+                                     master=self.master, use_rest=True)
             n1ql_helper.create_primary_index(using_gsi=True, server=n1ql_node)
-            query1="select meta().id from metadata where meta().id not like 'eventing::%::vb::%'" \
-                  " and meta().id not like 'eventing::%:rt:%' and meta().id not like 'eventing::%:sp'"
-            result1=n1ql_helper.run_cbq_query(query=query1, server=n1ql_node)
+            query1 = "select meta().id from metadata where meta().id not like 'eventing::%::vb::%'" \
+                     " and meta().id not like 'eventing::%:rt:%' and meta().id not like 'eventing::%:sp'"
+            result1 = n1ql_helper.run_cbq_query(query=query1, server=n1ql_node)
             print(result1)
-            query2="select meta().id from metadata where meta().id like 'eventing::%:sp' and sta != stp"
+            query2 = "select meta().id from metadata where meta().id like 'eventing::%:sp' and sta != stp"
             result2 = n1ql_helper.run_cbq_query(query=query2, server=n1ql_node)
             print(result2)
-            query3="select meta().id from meta where meta().id like 'eventing::%:rt:%'"
-            result3=n1ql_helper.run_cbq_query(query=query3, server=n1ql_node)
+            query3 = "select meta().id from meta where meta().id like 'eventing::%:rt:%'"
+            result3 = n1ql_helper.run_cbq_query(query=query3, server=n1ql_node)
             print(result3)
-            self.fail("initial doc in metadata {} is not equals to final doc in metadata {}".format(initalDoc, finalDoc))
+            self.fail(
+                "initial doc in metadata {} is not equals to final doc in metadata {}".format(initalDoc, finalDoc))
         self.undeploy_and_delete_function(body)
 
     #MB-30973
@@ -474,10 +598,15 @@ class EventingBucket(EventingBaseTest):
         initalDoc = countMap["metadata"]
         assert int(initalDoc) != 0
         # load some data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 2016 * self.docs_per_day, skip_stats_validation=True)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
         self.undeploy_and_delete_function(body)
         countMap = self.get_buckets_itemCount()
         finalDoc = countMap["metadata"]
@@ -485,34 +614,49 @@ class EventingBucket(EventingBaseTest):
 
     def test_source_bucket_mutation_with_read_access(self):
         # load some data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
         body = self.create_save_function_body(self.function_name,"handler_code/bucket_op_read_only.js",src_binding=True)
         self.deploy_function(body)
         # sleep intentionally added as we are validating no mutations are processed by eventing
         self.sleep(60)
-        self.verify_eventing_results(self.function_name, 2016 * self.docs_per_day, skip_stats_validation=True)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs * 2)
+        else:
+            self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs * 2)
         # Undeploy and delete the function
         self.undeploy_and_delete_function(body)
 
     def test_langague_compatibility_6_0(self):
         # load some data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
         body = self.create_save_function_body(self.function_name,'handler_code/language_compatibility_6_0.js',
                                               worker_count=3,language_compatibility='6.0.0')
         self.deploy_function(body)
-        self.verify_eventing_results(self.function_name, 2016 * self.docs_per_day, skip_stats_validation=True)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
         # Undeploy and delete the function
         self.undeploy_and_delete_function(body)
 
     def test_langague_compatibility_6_5(self):
         # load some data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
         body = self.create_save_function_body(self.function_name,'handler_code/language_compatibility_6_5.js',
                                               worker_count=3)
         self.deploy_function(body)
-        self.verify_eventing_results(self.function_name, 2016 * self.docs_per_day, skip_stats_validation=True)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
         # Undeploy and delete the function
         self.undeploy_and_delete_function(body)
