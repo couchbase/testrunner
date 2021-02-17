@@ -7,8 +7,10 @@ from lib.membase.api.exception import FTSException
 from .es_base import ElasticSearchBase
 from TestInput import TestInputSingleton
 from lib.couchbase_helper.documentgenerator import JsonDocGenerator
+from lib.couchbase_helper.documentgenerator import SDKDataLoader
 from lib.membase.api.rest_client import RestConnection
 from .random_query_generator.rand_query_gen import FTSESQueryGenerator
+
 
 class FTSCallable:
 
@@ -31,7 +33,7 @@ class FTSCallable:
         fts_obj.delete_all()
     """
 
-    def __init__(self, nodes, es_validate=False, es_reset=True):
+    def __init__(self, nodes, es_validate=False, es_reset=True, scope=None, collections=None, collection_index=False):
         self.log = logger.Logger.get_logger()
         self.cb_cluster = CouchbaseCluster(name="C1", nodes= nodes, log=self.log)
         self.cb_cluster.get_buckets()
@@ -45,8 +47,12 @@ class FTSCallable:
                       "prefix", "fuzzy", "conjunction", "disjunction",
                       "wildcard", "regexp", "query_string",
                       "numeric_range", "date_range"]
+        self.scope = scope
+        self.collections = collections
+        self.collection_index = collection_index
+        self.create_gen = None
         if self.compare_es and not self.elastic_node:
-            raise "For ES result validation, pls add in the"
+            raise "For ES result validation, pls add elastic search node in the .ini file."
         elif self.compare_es:
             self.es = ElasticSearchBase(self.elastic_node, self.log)
             if es_reset:
@@ -55,12 +61,44 @@ class FTSCallable:
                 self.log.info("Created empty index \'es_index\' on Elastic Search node with "
                               "custom standard analyzer(default)")
 
-    def create_default_index(self, index_name, bucket_name):
-        index = FTSIndex(self.cb_cluster,
-                         name=index_name,
-                         source_name=bucket_name)
+    def create_default_index(self, index_name, bucket_name, analyzer='standard'):
+
+        """Create fts index
+        @param index_name: name of the index/alias
+        @param bucket_name : name of couchbase bucket
+
+        @param type_mapping: UUID of the source, may not be used
+        @param analyzer: index analyzer
+        """
+        types_mapping = self.__define_index_types_mapping()
+
+        index = FTSIndex(
+            self,
+            name=index_name,
+            source_name=bucket_name,
+            type_mapping=types_mapping,
+            collection_index=self.collection_index,
+            scope=self.scope,
+            collections=self.collections
+        )
+
         rest = RestConnection(self.cb_cluster.get_random_fts_node())
         index.create(rest)
+
+        if self.collection_index:
+            if not index.custom_map:
+                if type(types_mapping) is list:
+                    for typ in types_mapping:
+                        index.add_type_mapping_to_index_definition(type=typ, analyzer=analyzer)
+                else:
+                    index.add_type_mapping_to_index_definition(type=types_mapping, analyzer=analyzer)
+
+            doc_config = dict()
+            doc_config['mode'] = 'scope.collection.type_field'
+            doc_config['type_field'] = "type"
+            index.index_definition['params']['doc_config'] = {}
+            index.index_definition['params']['doc_config'] = doc_config
+
         return index
 
     def wait_for_indexing_complete(self, item_count = None):
@@ -164,16 +202,17 @@ class FTSCallable:
         load_tasks = []
         self.__populate_create_gen()
         if self.es:
-            gen = copy.deepcopy(self.create_gen)
-            if isinstance(gen, list):
-                for generator in gen:
+            if not self.collection_index:
+                gen = copy.deepcopy(self.create_gen)
+                if isinstance(gen, list):
+                    for generator in gen:
+                        load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
+                                                                     gen=generator,
+                                                                     op_type='create'))
+                else:
                     load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
-                                                                 gen=generator,
+                                                                 gen=gen,
                                                                  op_type='create'))
-            else:
-                load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
-                                                             gen=gen,
-                                                             op_type='create'))
         load_tasks += self.cb_cluster.async_load_all_buckets_from_generator(
             self.create_gen)
         return load_tasks
@@ -198,7 +237,8 @@ class FTSCallable:
                 fts_index=index,
                 es=self.es,
                 es_index_name=es_index_name,
-                query_index=count))
+                query_index=count,
+                use_collections=self.collection_index))
 
         num_queries = len(tasks)
 
@@ -238,32 +278,33 @@ class FTSCallable:
                           format(self.cb_cluster.get_name(), expires))
             self.__populate_update_gen()
             if self.compare_es:
-                gen = copy.deepcopy(self.update_gen)
-                if not expires:
-                    if isinstance(gen, list):
-                        for generator in gen:
+                if not self.collection_index:
+                    gen = copy.deepcopy(self.update_gen)
+                    if not expires:
+                        if isinstance(gen, list):
+                            for generator in gen:
+                                load_tasks.append(self.es.async_bulk_load_ES(
+                                    index_name='es_index',
+                                    gen=generator,
+                                    op_type="update"))
+                        else:
                             load_tasks.append(self.es.async_bulk_load_ES(
                                 index_name='es_index',
-                                gen=generator,
+                                gen=gen,
                                 op_type="update"))
                     else:
-                        load_tasks.append(self.es.async_bulk_load_ES(
-                            index_name='es_index',
-                            gen=gen,
-                            op_type="update"))
-                else:
-                    # an expire on CB translates to delete on ES
-                    if isinstance(gen, list):
-                        for generator in gen:
+                        # an expire on CB translates to delete on ES
+                        if isinstance(gen, list):
+                            for generator in gen:
+                                load_tasks.append(self.es.async_bulk_load_ES(
+                                    index_name='es_index',
+                                    gen=generator,
+                                    op_type="delete"))
+                        else:
                             load_tasks.append(self.es.async_bulk_load_ES(
                                 index_name='es_index',
-                                gen=generator,
+                                gen=gen,
                                 op_type="delete"))
-                    else:
-                        load_tasks.append(self.es.async_bulk_load_ES(
-                            index_name='es_index',
-                            gen=gen,
-                            op_type="delete"))
 
             load_tasks += self.cb_cluster.async_load_all_buckets_from_generator(
                 kv_gen=self.update_gen,
@@ -280,18 +321,19 @@ class FTSCallable:
             self.log.info("Deleting keys @ {0}".format(self.cb_cluster.get_name()))
             self.__populate_delete_gen()
             if self.compare_es:
-                del_gen = copy.deepcopy(self.delete_gen)
-                if isinstance(del_gen, list):
-                    for generator in del_gen:
+                if not self.collection_index:
+                    del_gen = copy.deepcopy(self.delete_gen)
+                    if isinstance(del_gen, list):
+                        for generator in del_gen:
+                            load_tasks.append(self.es.async_bulk_load_ES(
+                                index_name='es_index',
+                                gen=generator,
+                                op_type="delete"))
+                    else:
                         load_tasks.append(self.es.async_bulk_load_ES(
                             index_name='es_index',
-                            gen=generator,
+                            gen=del_gen,
                             op_type="delete"))
-                else:
-                    load_tasks.append(self.es.async_bulk_load_ES(
-                        index_name='es_index',
-                        gen=del_gen,
-                        op_type="delete"))
             load_tasks += self.cb_cluster.async_load_all_buckets_from_generator(
                 self.delete_gen, "delete")
 
@@ -334,10 +376,30 @@ class FTSCallable:
 
     def __populate_create_gen(self):
         start = 0
-        self.create_gen = JsonDocGenerator(name="emp",
-                                           encoding="utf-8",
-                                           start=start,
-                                           end=start + self._num_items)
+        if not self.collection_index:
+            self.create_gen = JsonDocGenerator(name="emp",
+                                    encoding="utf-8",
+                                    start=start,
+                                    end=start + self._num_items)
+        else:
+            elastic_ip = None
+            elastic_port = None
+            elastic_username = None
+            elastic_password = None
+            if self.compare_es:
+                elastic_ip = self.elastic_node.ip
+                elastic_port = self.elastic_node.port
+                elastic_username = self.elastic_node.es_username
+                elastic_password = self.elastic_node.es_password
+            self.create_gen = SDKDataLoader(num_ops = self._num_items, percent_create = 100,
+                                           percent_update=0, percent_delete=0, scope=self.scope,
+                                           collection=self.collections,
+                                           json_template="emp",
+                                           start=start, end=start+self._num_items,
+                                           es_compare=self.compare_es, es_host=elastic_ip, es_port=elastic_port,
+                                           es_login=elastic_username, es_password=elastic_password, key_prefix="emp_",
+                                           upd_del_shift=self._num_items
+                                 )
 
     def __populate_update_gen(self):
         self.update_gen = copy.deepcopy(self.create_gen)
@@ -347,9 +409,31 @@ class FTSCallable:
         self.update_gen.update()
 
     def __populate_delete_gen(self):
-        self.delete_gen = JsonDocGenerator(
-            self.create_gen.name,
-            op_type="delete",
-            start=int((self.create_gen.end)
-                      * (float)(100 - 30) / 100),
-            end=self.create_gen.end)
+        if self.collection_index:
+            self.delete_gen = copy.deepcopy(self.create_gen)
+            self.delete_gen.op_type = "delete"
+            self.delete_gen.encoding = "utf-8"
+            self.delete_gen.start = int((self.create_gen.end)
+                                        * (float) (30 / 100))
+            self.delete_gen.end = self.create_gen.end
+            self.delete_gen.delete()
+        else:
+            self.delete_gen = JsonDocGenerator(
+                self.create_gen.name,
+                op_type="delete",
+                encoding="utf-8",
+                start=int((self.create_gen.end)
+                          * (float)(30 / 100)),
+                end=self.create_gen.end)
+
+    def __define_index_types_mapping(self):
+        """Defines types mapping for FTS index
+        """
+        if not self.collection_index :
+            _type = None
+        else:
+            _type = []
+            for c in self.collections:
+                _type.append(f"{self.scope}.{c}")
+        return _type
+

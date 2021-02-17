@@ -650,11 +650,12 @@ class GeoSpatialDataLoader(KVGenerator):
         return self.name+str(self.itr),\
                json.dumps(doc, indent=3).encode(self.encoding, "ignore")
 
+
 class SDKDataLoader(object):
     # type: (int, int, int, int, str, int, str, str, list, list, str, bool)
     def __init__(self, num_ops=0, percent_create=0, percent_update=0, percent_delete=0,
                  load_pattern="uniform", start_seq_num=1, key_prefix="doc_", key_suffix="_",
-                 scope="_default", collection="default", json_template="Person", doc_expiry=0,
+                 scope="_default", collection="_default", json_template="Person", doc_expiry=0,
                  doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
                  start=0, end=0, op_type="create", all_collections=False, es_compare=False, es_host=None, es_port=None,
                  es_login=None, es_password=None, output=False, upd_del_shift=0 , shuffle_docs=False):
