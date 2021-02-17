@@ -815,17 +815,21 @@ class XdcrCLITest(CliBaseTest):
                             self.assertEqual(value.split(":")[1].strip(), "running")
                 self.stat_col = CollectionsStats(self.dest_nodes[0])
                 self.sleep(20, "wait for replication complete")
-                col_stats, _ = self.get_collection_stats()
-                if isinstance(col_stats, str):
-                    col_stats = col_stats.split(",")
+                server_set =  self.get_nodes_in_cluster()
+                col_stats = self.get_collection_stats(cluster=server_set)
+                items_in_cluster = 0
                 for stats in col_stats:
-                    if self.custom_scopes and not self.custom_collections:
-                        break
-                    if self.custom_collections or self.buckets[0].name == "default":
-                        load_sc_item_id = load_scope_id_src + ":" + load_collection_id_src + ":items"
-                        if load_sc_item_id in stats:
-                            if self.num_items == int(stats.split(':')[-1].strip()):
-                                items_match = True                        #des_items = stats.rpartition(":")[2].strip()
+                    if isinstance(col_stats, str):
+                        col_stats = col_stats.split(",")
+                    for x in stats:
+                        if self.custom_scopes and not self.custom_collections:
+                            break
+                        if self.custom_collections or self.buckets[0].name == "default":
+                            load_sc_item_id = load_scope_id_src + ":" + load_collection_id_src + ":items"
+                            if load_sc_item_id in x:
+                                items_in_cluster += int(x.split(':')[-1].strip()) #des_items = stats.rpartition(":")[2].strip()
+                if self.num_items == items_in_cluster:
+                    items_match = True
 
                 options = "--delete"
                 options += (" --xdcr-replicator={0}".format(replicator))

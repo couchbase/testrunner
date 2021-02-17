@@ -1128,13 +1128,23 @@ class CliBaseTest(BaseTestCase):
             collections = self.cli_col.get_bucket_collections(bucket_name)
         return collections
 
-    def get_collection_stats(self, buckets=None):
+    def get_collection_stats(self, buckets=None, cluster=None):
         """ return output, error """
+        col_stats = []
         if buckets:
             bucket = buckets[0]
         else:
             bucket = self.buckets[0]
-        return self.stat_col.get_collection_stats(bucket)
+        if cluster is None:
+            return self.stat_col.get_collection_stats(bucket)
+        elif cluster:
+            for node in cluster:
+                stat_col = CollectionsStats(node)
+                node_stats = stat_col.get_collection_stats(bucket)
+                if isinstance(node_stats, tuple):
+                    node_stats = node_stats[0]
+                col_stats.append(node_stats)
+            return col_stats
 
     def get_collection_names(self):
         #collections, error = self.get_collection_stats()
