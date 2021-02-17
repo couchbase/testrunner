@@ -3836,9 +3836,9 @@ class RemoteMachineShellConnection(KeepRefs):
             o = "Total Physical Memory =" + win_info['Total Physical Memory'] + '\n'
             o += "Available Physical Memory =" + win_info['Available Physical Memory']
         elif mac:
-            o, r = self.execute_command_raw('df -h', debug=False)
+            o, r = self.execute_command_raw('df -hl', debug=False)
         else:
-            o, r = self.execute_command_raw('df -Th', debug=False)
+            o, r = self.execute_command_raw('df -Thl', debug=False)
         if o:
             return o
 
@@ -5231,7 +5231,7 @@ class RemoteMachineShellConnection(KeepRefs):
         :param location: Mount location
         :return: Output and error message from the mount command
         """
-        command = "mount -o loop,rw,usrquota,grpquota /usr/disk-img/disk-quota.ext3 {0}; df -Th".format(location)
+        command = "mount -o loop,rw,usrquota,grpquota /usr/disk-img/disk-quota.ext3 {0}; df -Thl".format(location)
         output, error = self.execute_command(command)
         return output, error
 
@@ -5241,7 +5241,7 @@ class RemoteMachineShellConnection(KeepRefs):
         :param location: Mount location
         :return: Output and error message from the mount command
         """
-        command = "mount -o loop,rw,usrquota,grpquota /usr/disk-img/disk-quota.ext4 {0}; df -Th".format(location)
+        command = "mount -o loop,rw,usrquota,grpquota /usr/disk-img/disk-quota.ext4 {0}; df -Thl".format(location)
         output, error = self.execute_command(command)
         return output, error
 
@@ -5294,7 +5294,7 @@ class RemoteMachineShellConnection(KeepRefs):
         :param size: Size of disk space to fill up, in MB
         :return: Output and error message from filling up the disk.
         """
-        command = "dd if=/dev/zero of={0}/disk-quota.ext3 count={1}; df -Th".format(location, 1024000000)
+        command = "dd if=/dev/zero of={0}/disk-quota.ext3 count={1}; df -Thl".format(location, 1024000000)
         output, error = self.execute_command(command)
         return output, error
 
