@@ -1069,9 +1069,6 @@ class RemoteMachineShellConnection(KeepRefs):
                     self.execute_command("yum install -y ntp", debug=False)
                     self.execute_command("systemctl start ntpd", debug=False)
                     self.execute_command("systemctl enable ntpd", debug=False)
-                    self.execute_command("firewall-cmd --add-service=ntp --permanent",
-                                                                          debug=False)
-                    self.execute_command("firewall-cmd --reload", debug=False)
                     do_install = True
                 # Check if ntp time sync didn't happened
                 ntpstatoutput, _ = self.execute_command("ntpstat")
