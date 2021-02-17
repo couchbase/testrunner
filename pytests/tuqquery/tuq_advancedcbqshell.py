@@ -361,7 +361,7 @@ class AdvancedQueryTests(QueryTests):
                 #wrong url not including http
                 queries = ['\connect localhost3458097;', 'create primary index on bucketname;']
                 o = self.execute_commands_inside(self.cbqpath, '', queries, '', '', bucket.name, '' )
-                self.assertTrue("no such host" in o)
+                self.assertTrue("Connection failed" in o)
                 queries = ['\disconnect', 'drop primary index on bucketname;']
                 o = self.execute_commands_inside(self.cbqpath, '', queries, '', '', bucket.name, '' )
                 self.assertTrue("Too many input arguments to command" in o)

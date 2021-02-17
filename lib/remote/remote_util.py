@@ -3286,6 +3286,8 @@ class RemoteMachineShellConnection(KeepRefs):
             filedata = fileout.read()
             fileout.close()
 
+        if type(filedata) == bytes:
+            filedata = filedata.decode()
         newdata = filedata.replace("bucketname",bucket2)
         newdata = newdata.replace("user",bucket1)
         newdata = newdata.replace("pass",password)
