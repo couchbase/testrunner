@@ -679,7 +679,7 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
         if TestInputSingleton.input.test_params:
             for key, value in TestInputSingleton.input.test_params.items():
                 if key and value:
-                    params += "," + str(key) + ":" + str(value)
+                    params += "," + str(key) + "=" + str(value)
 
         if result.failures or result.errors:
             # Immediately get the server logs, if
@@ -763,20 +763,38 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
 
 
 def filter_fields(testname):
-    testwords = testname.split(",")
-    line = ""
-    for fw in testwords:
-        if not fw.startswith("logs_folder") and not fw.startswith("conf_file") \
-                and not fw.startswith("cluster_name:") \
-                and not fw.startswith("ini:") \
-                and not fw.startswith("case_number:") \
-                and not fw.startswith("num_nodes:") \
-                and not fw.startswith("spec:"):
-            line = line + fw.replace(":", "=", 1)
-            if fw != testwords[-1]:
-                line = line + ","
+    # TODO: Fix for old xml style
+    if "logs_folder:" in testname:
+        testwords = testname.split(",")
+        line = ""
+        for fw in testwords:
+            if not fw.startswith("logs_folder") and not fw.startswith("conf_file") \
+                    and not fw.startswith("cluster_name:") \
+                    and not fw.startswith("ini:") \
+                    and not fw.startswith("case_number:") \
+                    and not fw.startswith("num_nodes:") \
+                    and not fw.startswith("spec:"):
+                if not "\":" in fw or "query:" in fw:
+                    #log.info("Replacing : with ={}".format(fw))
+                    line = line + fw.replace(":", "=", 1)
+                else:
+                    line = line + fw
+                if fw != testwords[-1]:
+                    line = line + ","
 
-    return line
+        return line    
+    else:
+        testwords = testname.split(",")
+        line = []
+        for fw in testwords:
+            if not fw.startswith("logs_folder=") and not fw.startswith("conf_file=") \
+                    and not fw.startswith("cluster_name=") \
+                    and not fw.startswith("ini=") \
+                    and not fw.startswith("case_number=") \
+                    and not fw.startswith("num_nodes=") \
+                    and not fw.startswith("spec="):
+                line.append(fw)
+        return ",".join(line)
 
 def compare_with_sort(dict, key):
     for k in dict.keys():
