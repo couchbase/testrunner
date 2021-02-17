@@ -2052,6 +2052,23 @@ class RestConnection(object):
                     index_map[field] = val
         return index_map
 
+    def trigger_compaction(self, timeout=120):
+        api = self.index_baseUrl + 'plasmaDiag'
+        command = {'Cmd': 'listDBs'}
+        status, content, header = self._http_request(api, 'POST', json.dumps(command), timeout=timeout)
+        for l in list(iter(str(content, 'utf-8').splitlines())):
+            try:
+                x, id = l.split(" : ")
+                if id:
+                    log.info(f'Triggering compaction for instance id {id}')
+                    compact_command = {'Cmd': 'compactAll', 'Args': [int(id)]}
+                    status, content, header = self._http_request(api, 'POST', json.dumps(compact_command))
+                    if not status:
+                        log.error(f'Failed to trigger compaction : {content}')
+            except ValueError:
+                pass
+
+
     def get_index_status(self, timeout=120, index_map=None):
         api = self.baseUrl + 'indexStatus'
         index_map = {}

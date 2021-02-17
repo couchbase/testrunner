@@ -377,6 +377,75 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
                 else:
                     log.info("Reads happen from memory for index {0} on bucket {1}".format(query_definition.index_name, bucket.name))
 
+    def test_compaction(self):
+        self.multi_create_index(
+            buckets=self.buckets, query_definitions=self.query_definitions,
+            deploy_node_info=self.deploy_node_info)
+        self.index_map = self.rest.get_index_status()
+        self.sleep(30)
+        for i in range(10):
+            self.multi_query_using_index(verify_results=False)
+        self.multi_query_using_index()
+        num_rec_compressed_before = {}
+        for bucket in self.buckets:
+            if bucket.name not in list(num_rec_compressed_before.keys()):
+                num_rec_compressed_before[bucket.name] = {}
+            for query_definition in self.query_definitions:
+                content = self.rest.get_index_storage_stats()
+                self.log.info(f'Logging some stats for index {query_definition.index_name}')
+                self.log.info(f'compacts : {content[bucket.name][query_definition.index_name]["MainStore"]["compacts"]}')
+                self.log.info(f'num_rec_allocs : {content[bucket.name][query_definition.index_name]["MainStore"]["num_rec_allocs"]}')
+                self.log.info(f'num_rec_frees : {content[bucket.name][query_definition.index_name]["MainStore"]["num_rec_frees"]}')
+                self.log.info(f'num_rec_swapout : {content[bucket.name][query_definition.index_name]["MainStore"]["num_rec_swapout"]}')
+                self.log.info(f'num_rec_swapin : {content[bucket.name][query_definition.index_name]["MainStore"]["num_rec_swapin"]}')
+                self.log.info(f'num_rec_compressed : {content[bucket.name][query_definition.index_name]["MainStore"]["num_rec_compressed"]}')
+                self.log.info(f'num_pages : {content[bucket.name][query_definition.index_name]["MainStore"]["num_pages"]}')
+                if query_definition.index_name not in list(num_rec_compressed_before[bucket.name].keys()):
+                    num_rec_compressed_before[bucket.name][query_definition.index_name] = \
+                        content[bucket.name][query_definition.index_name]["MainStore"]["num_rec_compressed"]
+        self.run_doc_ops()
+        self.rest.trigger_compaction()
+        count = 0
+        while not self._verify_items_count() and count < 15:
+            self.log.info("All Items Yet to be Indexed...")
+            self.sleep(10)
+            count += 1
+        if not self._verify_items_count():
+            raise Exception("All Items didn't get Indexed...")
+        for bucket in self.buckets:
+            for query_definition in self.query_definitions:
+                content = self.rest.get_index_storage_stats()
+                self.log.info(f'Logging some stats for index {query_definition.index_name}')
+                self.log.info(f'compacts : {content[bucket.name][query_definition.index_name]["MainStore"]["compacts"]}')
+                self.log.info(f'num_rec_allocs : {content[bucket.name][query_definition.index_name]["MainStore"]["num_rec_allocs"]}')
+                self.log.info(f'num_rec_frees : {content[bucket.name][query_definition.index_name]["MainStore"]["num_rec_frees"]}')
+                self.log.info(f'num_rec_swapout : {content[bucket.name][query_definition.index_name]["MainStore"]["num_rec_swapout"]}')
+                self.log.info(f'num_rec_swapin : {content[bucket.name][query_definition.index_name]["MainStore"]["num_rec_swapin"]}')
+                self.log.info(f'num_rec_compressed : {content[bucket.name][query_definition.index_name]["MainStore"]["num_rec_compressed"]}')
+                self.log.info(f'num_pages : {content[bucket.name][query_definition.index_name]["MainStore"]["num_pages"]}')
+                num_rec_compressed_before_compact = num_rec_compressed_before[bucket.name][query_definition.index_name]
+                num_rec_compressed_after_compact = content[bucket.name][query_definition.index_name]["MainStore"]["num_rec_compressed"]
+                self.log.info(f'num_rec_compressed before: {num_rec_compressed_before_compact} and num_rec_compressed after: {num_rec_compressed_after_compact}')
+                if num_rec_compressed_after_compact <= num_rec_compressed_before_compact:
+                    self.log.info("num_rec_compressed_after_compact found to be less than num_rec_compressed_before_compact as expected")
+                else:
+                    self.fail("num_rec_compressed_after_compact found to be greater than num_rec_compressed_before_compact which is not expected")
+
+        self.multi_query_using_index()
+
+        query_definitions = []
+
+        query_definitions.append(QueryDefinition(index_name="lru_job_title", index_fields=["job_title"],
+                                                 query_template="SELECT * FROM %s WHERE {0}".format(
+                                                     " %s " % "job_title = \"Engineer\" ORDER BY _id"),
+                                                 groups=["employee"], index_where_clause=" job_title IS NOT NULL "))
+        query_definitions.append(QueryDefinition(index_name="lru_join_yr", index_fields=["join_yr"],
+                                                 query_template="SELECT * FROM %s WHERE {0}".format(
+                                                     " %s " % "join_yr = 2008  ORDER BY _id"), groups=["employee"],
+                                                 index_where_clause=" join_yr IS NOT NULL "))
+
+        self.multi_query_using_index(query_definitions=query_definitions)
+
     def _get_indexer_out_of_dgm(self, indexer_nodes=None):
         body = {"stale": "False"}
         for bucket in self.buckets:
