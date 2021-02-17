@@ -18,7 +18,7 @@ log = logging.getLogger()
 class EventingLogging(EventingBaseTest, LogRedactionBase):
     def setUp(self):
         super(EventingLogging, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=1200)
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=1500)
         if self.create_functions_buckets:
             self.bucket_size = 100
             log.info(self.bucket_size)
@@ -122,7 +122,7 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
         self.rest.create_function(body['appname'], body)
         # deploy a function without any alias
         self.deploy_function(body)
-        self.verify_eventing_results(self.function_name, 31591)
+        self.verify_doc_count_collections("dst_bucket._default._default", 31591)
         number=self.check_number_of_files()
         if number ==1:
             raise Exception("Files not rotated")
