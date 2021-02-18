@@ -181,9 +181,9 @@ class EventingBucket(EventingBaseTest):
             self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
         # Wait for eventing to catch up with all the update mutations and verify results
         if self.non_default_collection:
-            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs + total_items)
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         else:
-            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs + total_items)
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
         # delete all documents
         if self.non_default_collection:
             self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
@@ -193,9 +193,9 @@ class EventingBucket(EventingBaseTest):
                                          is_delete=True)
         # Wait for eventing to catch up with all the delete mutations and verify results
         if self.non_default_collection:
-            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", total_items)
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", 0)
         else:
-            self.verify_doc_count_collections("dst_bucket._default._default", total_items)
+            self.verify_doc_count_collections("dst_bucket._default._default", 0)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(30)
