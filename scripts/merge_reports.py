@@ -15,23 +15,40 @@ import argparse
 
 
 def filter_fields(testname, run_params=""):
-    testwords = testname.split(",")
-    line = ""
-    filter_test_params = ['logs_folder', 'conf_file',
-                          'cluster_name:', 'ini:', 'case_number:',
-                          'num_nodes:', 'spec:', 'is_container:']
-    filter_test_params.extend([param.split("=")[0] for param in
-                          run_params.split(',')])
-    for fw in testwords:
-        filter_word = False
-        for filter_words in filter_test_params:
-            if fw.startswith(filter_words):
-                filter_word = True
-        if not filter_word:
-            line = line + fw.replace(":", "=", 1)
-            if fw != testwords[-1]:
-                line = line + ","
-    return line.rstrip(',')
+    if "logs_folder:" in testname:
+        testwords = testname.split(",")
+        line = ""
+        filter_test_params = ['logs_folder', 'conf_file',
+                            'cluster_name:', 'ini:', 'case_number:',
+                            'num_nodes:', 'spec:', 'is_container:']
+        filter_test_params.extend([param.split("=")[0] for param in
+                            run_params.split(',')])
+        for fw in testwords:
+            filter_word = False
+            for filter_words in filter_test_params:
+                if fw.startswith(filter_words):
+                    filter_word = True
+            if not filter_word:
+                line = line + fw.replace(":", "=", 1)
+                if fw != testwords[-1]:
+                    line = line + ","
+        return line.rstrip(',')
+    else:
+        testwords = testname.split(",")
+        line = []
+        filter_test_params = ['logs_folder=', 'conf_file=',
+                            'cluster_name=', 'ini=', 'case_number=',
+                            'num_nodes=', 'spec=', 'is_container=']
+        filter_test_params.extend([param.split("=")[0] for param in
+                            run_params.split(',')])
+        for fw in testwords:
+            filter_word = False
+            for filter_words in filter_test_params:
+                if fw.startswith(filter_words):
+                    filter_word = True
+            if not filter_word:
+                line.append(fw)
+        return ",".join(line)
 
 def compare_with_sort(dict, key):
     key_split = key.split(',')
