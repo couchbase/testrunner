@@ -62,11 +62,11 @@ def main():
             test_servers.append(server)
         runner = memInfoRunner(test_servers)
         runner.run()
+        orig_servers = servers
+        servers = []
         if len(runner.succ) > 0:
             sorted_by_mem = sorted(runner.succ.items(), key=lambda item: int(item[1]))
             print('the servers memory info is', sorted_by_mem)
-            orig_servers = servers
-            servers = []
             for (k,v) in sorted_by_mem:
                 servers.append(k)
         for (server, e) in runner.fail:
@@ -74,6 +74,7 @@ def main():
             servers.append(server)
         for nomemserver in orig_servers:
             if nomemserver not in servers:
+                print("CAN'T GET MEMORY FROM {0}: unknown error".format(server))
                 servers.append(nomemserver)
 
     addPoolServers = []
