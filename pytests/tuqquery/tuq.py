@@ -1467,7 +1467,11 @@ class QueryTests(BaseTestCase):
                     except Exception as ex:
                         self.log.error("CANNOT LOAD QUERY RESULT IN JSON: %s" % ex.message)
                         self.log.error("INCORRECT DOCUMENT IS: " + str(output1))
-        if isinstance(result, str) or 'errors' in result:
+        try:
+            if isinstance(result, str) or 'errors' in result:
+                raise CBQError(result, server.ip)
+        except Exception as ex:
+            self.log.error(f"PROBLEM WITH RESULT. TYPE IS: {type(result)} AND CONTENT IS: {result}")
             raise CBQError(result, server.ip)
         if 'metrics' in result and debug_query:
             self.log.info("TOTAL ELAPSED TIME: %s" % result["metrics"]["elapsedTime"])
