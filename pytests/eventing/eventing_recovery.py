@@ -164,9 +164,9 @@ class EventingRecovery(EventingBaseTest):
                     self.verify_doc_count_collections("src_bucket._default._default",0)
         else:
             if self.non_default_collection:
-                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs)
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", 0)
             else:
-                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs)
+                self.verify_doc_count_collections("src_bucket._default._default", 0)
         self.undeploy_and_delete_function(body)
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
@@ -247,9 +247,9 @@ class EventingRecovery(EventingBaseTest):
                     self.verify_doc_count_collections("src_bucket._default._default",0)
         else:
             if self.non_default_collection:
-                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs)
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", 0)
             else:
-                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs)
+                self.verify_doc_count_collections("src_bucket._default._default", 0)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(5)
@@ -390,9 +390,9 @@ class EventingRecovery(EventingBaseTest):
                     self.verify_doc_count_collections("src_bucket._default._default", 0)
         else:
             if self.non_default_collection:
-                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs)
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", 0)
             else:
-                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs)
+                self.verify_doc_count_collections("src_bucket._default._default", 0)
         self.undeploy_and_delete_function(body)
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
@@ -478,9 +478,9 @@ class EventingRecovery(EventingBaseTest):
                     self.verify_doc_count_collections("src_bucket._default._default", 0)
         else:
             if self.non_default_collection:
-                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs)
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", 0)
             else:
-                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs)
+                self.verify_doc_count_collections("src_bucket._default._default", 0)
         self.undeploy_and_delete_function(body)
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
@@ -564,9 +564,9 @@ class EventingRecovery(EventingBaseTest):
                     self.verify_doc_count_collections("src_bucket._default._default", 0)
         else:
             if self.non_default_collection:
-                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs)
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", 0)
             else:
-                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs)
+                self.verify_doc_count_collections("src_bucket._default._default", 0)
         self.undeploy_and_delete_function(body)
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
