@@ -2432,6 +2432,10 @@ class RestConnection(object):
             log.info("Node versions in cluster {0}".format(versions))
         return versions
 
+    def get_major_version(self):
+        """ Returns the major version of the node (e.g. 6.5) """
+        return self.get_nodes_self().major_version
+
     def check_cluster_compatibility(self, version):
         """
         Check if all nodes in cluster are of versions equal or above the version required.
@@ -5702,6 +5706,24 @@ class Node(object):
         """ Returns tree if a node is in the failed-over state
         """
         return self.failed_over_state_a or self.failed_over_state_b
+
+    @property
+    def complete_version(self):
+        """ Returns the complete version of the node (e.g. 6.5.0)
+        """
+        return self.version.split('-')[0]
+
+    @property
+    def major_version(self):
+        """ Returns the major version of the node (e.g. 6.5)
+        """
+        return self.complete_version.rsplit('.', 1)[0]
+
+    @property
+    def minor_version(self):
+        """ Returns the minor version of the node (e.g. 0)
+        """
+        return self.complete_version.rsplit('.', 1)[1]
 
 class AutoFailoverSettings(object):
     def __init__(self):
