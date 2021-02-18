@@ -3021,8 +3021,8 @@ class QuerySanityTests(QueryTests):
                             now * 1000 + 100 * 24 * 60 * 60, (now + 10) * 1000 + 100 * 24 * 60 * 60, res["results"]))
 
     def test_date_add_str(self):
-        self.query = "select date_add_str(clock_str(), 10, 'day') as now"
-        now = datetime.datetime.now() + datetime.timedelta(days=10)
+        self.query = "select date_add_str(clock_utc(), 10, 'day') as now"
+        now = datetime.datetime.utcnow() + datetime.timedelta(days=10)
         res = self.run_cbq_query()
         expected = "%s-%02d-%02dT%02d:" % (now.year, now.month, now.day, now.hour)
         expected_delta = "%s-%02d-%02dT%02d:" % (now.year, now.month, now.day, now.hour + 1)
@@ -3056,10 +3056,10 @@ class QuerySanityTests(QueryTests):
         self.assertFalse("error" in str(res).lower())
 
     def test_hours(self):
-        self.query = 'select date_part_str(now_str(), "hour") as hour, ' + \
-                     'date_part_str(now_str(),"minute") as minute, date_part_str(' + \
-                     'now_str(),"second") as sec, date_part_str(now_str(),"millisecond") as msec'
-        now = datetime.datetime.now()
+        self.query = 'select date_part_str(now_utc(), "hour") as hour, ' + \
+                     'date_part_str(now_utc(),"minute") as minute, date_part_str(' + \
+                     'now_utc(),"second") as sec, date_part_str(now_utc(),"millisecond") as msec'
+        now = datetime.datetime.utcnow()
         res = self.run_cbq_query()
         self.assertTrue(res["results"][0]["hour"] == now.hour or res["results"][0]["hour"] == (now.hour + 1),
                         "Result for hours expected: %s. Actual %s" % (now.hour, res["results"]))
@@ -3125,21 +3125,21 @@ class QuerySanityTests(QueryTests):
 
     def test_millis_to_str(self):
         now_millis = time.time()
-        now_time = datetime.datetime.fromtimestamp(now_millis)
+        now_time = datetime.datetime.utcfromtimestamp(now_millis)
         expected = "%s-%02d-%02dT%02d:%02d" % (now_time.year, now_time.month, now_time.day,
                                                now_time.hour, now_time.minute)
-        self.query = "select millis_to_str(%s) as now" % (now_millis * 1000)
+        self.query = "select millis_to_utc(%s) as now" % (now_millis * 1000)
         res = self.run_cbq_query()
         self.assertTrue(res["results"][0]["now"].startswith(expected),
                         "Result expected: %s. Actual %s" % (expected, res["results"]))
 
     def test_date_part_millis(self):
         now_millis = time.time()
-        now_time = datetime.datetime.fromtimestamp(now_millis)
+        now_time = datetime.datetime.utcfromtimestamp(now_millis)
         now_millis = now_millis * 1000
-        self.query = 'select date_part_millis(%s, "hour") as hour, ' % now_millis + \
-                     'date_part_millis(%s,"minute") as minute, date_part_millis(' % now_millis + \
-                     '%s,"second") as sec, date_part_millis(%s,"millisecond") as msec' % (now_millis, now_millis)
+        self.query = 'select date_part_millis(%s, "hour", "UTC") as hour, ' % now_millis + \
+                     'date_part_millis(%s,"minute", "UTC") as minute, date_part_millis(' % now_millis + \
+                     '%s,"second") as sec, date_part_millis(%s,"millisecond", "UTC") as msec' % (now_millis, now_millis)
         res = self.run_cbq_query()
         self.assertTrue(res["results"][0]["hour"] == now_time.hour,
                         "Result expected: %s. Actual %s" % (now_time.hour, res["results"]))
