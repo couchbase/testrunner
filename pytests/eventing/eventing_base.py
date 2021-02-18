@@ -114,6 +114,7 @@ class EventingBaseTest(QueryHelperTests):
         self.collection_rest = CollectionsRest(self.master)
         self.non_default_collection=self.input.param('non_default_collection',False)
         self.num_docs=2016
+        self.is_binary=self.input.param('binary_doc',False)
 
     def tearDown(self):
         # catch panics and print it in the test log
@@ -143,7 +144,7 @@ class EventingBaseTest(QueryHelperTests):
                                   timer_worker_pool_size=3, worker_count=3, processing_status=False ,
                                   cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=20,
                                   data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62,
-                                  language_compatibility='6.5.0',hostpath=None,validate_ssl=False,src_binding=False):
+                                  language_compatibility='6.6.2',hostpath=None,validate_ssl=False,src_binding=False):
         body = {}
         body['appname'] = appname
         script_dir = os.path.dirname(__file__)
@@ -1048,6 +1049,8 @@ class EventingBaseTest(QueryHelperTests):
 
     def load_data_to_collection(self,num_items,namespace,is_create=True,is_delete=False,is_update=False,
                                 expiry=0,wait_for_loading=True,template="Person"):
+        if self.is_binary:
+            template="Binary"
         if is_delete or is_update:
             is_create=False
         collection_list=namespace.split(".")
@@ -1072,7 +1075,7 @@ class EventingBaseTest(QueryHelperTests):
                                  dcp_stream_boundary="everything",src_namespace="src_bucket._default._default",
                                         meta_namespace="metadata._default._default",
                                         collection_bindings=["dst_bucket.dst_bucket._default._default.rw"],is_curl=False,
-                                        hostpath=None, validate_ssl=False,worker_count=1):
+                                        hostpath=None, validate_ssl=False,worker_count=1,language_compatibility='6.6.2'):
         src_map=src_namespace.split(".")
         meta_map=meta_namespace.split(".")
         src_bucket=src_map[0]
@@ -1109,6 +1112,7 @@ class EventingBaseTest(QueryHelperTests):
         body['settings']['deployment_status'] = False
         body['settings']['processing_status'] = False
         body['settings']['worker_count'] = worker_count
+        body['settings']['language_compatibility'] = language_compatibility
         if is_curl:
             if hostpath != None:
                 body['depcfg']['curl'].append({"hostname": self.hostname+hostpath, "value": "server", "auth_type": self.auth_type,
