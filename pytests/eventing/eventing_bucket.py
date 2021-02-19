@@ -15,7 +15,7 @@ log = logging.getLogger()
 class EventingBucket(EventingBaseTest):
     def setUp(self):
         super(EventingBucket, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=1200)
         if self.create_functions_buckets:
             self.bucket_size = 100
             self.metadata_bucket_size = 400
@@ -205,7 +205,7 @@ class EventingBucket(EventingBaseTest):
     def test_eventing_where_source_bucket_is_in_dgm(self):
         self.skip_metabucket_check=True
         # push the source bucket to dgm
-        self.push_to_dgm(self.src_bucket_name, 50)
+        total_items = self.push_to_dgm(self.src_bucket_name, 50)
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               dcp_stream_boundary="from_now",src_binding=True)
         self.deploy_function(body)
@@ -226,7 +226,7 @@ class EventingBucket(EventingBaseTest):
                 self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         else:
             if self.is_sbm:
-                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs * 2)
+                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs * 2 + total_items)
             else:
                 self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
         if self.pause_resume:
@@ -249,7 +249,7 @@ class EventingBucket(EventingBaseTest):
                 self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", 0)
         else:
             if self.is_sbm:
-                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs)
+                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs + total_items)
             else:
                 self.verify_doc_count_collections("dst_bucket._default._default", 0)
         self.undeploy_and_delete_function(body)
@@ -410,36 +410,24 @@ class EventingBucket(EventingBaseTest):
     def test_eventing_with_ephemeral_buckets_with_eviction_enabled(self):
         # delete src_bucket which will be created as part of setup
         self.rest.delete_bucket(self.src_bucket_name)
-        if self.non_default_collection:
-            self.collection_rest.delete_collection(bucket=self.src_bucket_name, scope=self.src_bucket_name,
-                                             collection=self.src_bucket_name)
         # create source bucket as ephemeral bucket with the same name
         bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                    replicas=self.num_replicas, bucket_type='ephemeral',
                                                    eviction_policy='nruEviction')
         self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                             bucket_params=bucket_params)
-        if self.non_default_collection:
-            self.create_scope_collection(bucket=self.src_bucket_name, scope=self.src_bucket_name,
-                                         collection=self.src_bucket_name)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         # deploy function
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
         # load data
-        if self.non_default_collection:
-            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
-        else:
-            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
         try:
             # delete all documents
-            if self.non_default_collection:
-                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
-                                             is_delete=True)
-            else:
-                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
-                                             is_delete=True)
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
         except:
             # since some of the docs are already ejected by eventing, load method will fails, hence ignoring failure
             pass
@@ -447,10 +435,8 @@ class EventingBucket(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
-        if self.non_default_collection:
-            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", stats_src["curr_items"])
-        else:
-            self.verify_doc_count_collections("dst_bucket._default._default", stats_src["curr_items"])
+        self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
+                                     expected_duplicate=True)
         self.undeploy_and_delete_function(body)
         vb_active_auto_delete_count = StatsCommon.get_stats([self.master], self.src_bucket_name, '',
                                                             'vb_active_auto_delete_count')[self.master]
