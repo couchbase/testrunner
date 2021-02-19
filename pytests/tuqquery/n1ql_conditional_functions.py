@@ -961,7 +961,7 @@ class QueryConditionalFunctionsTests(QueryTests):
 
         self.query_runner(queries)
 
-    def test_decode_meta(self):
+    def test_array_binary_search_meta(self):
         queries = dict()
 
         query_1 = "select array_binary_search((select raw meta().expiration from {0}), 0)".format(self.query_bucket)
@@ -989,12 +989,12 @@ class QueryConditionalFunctionsTests(QueryTests):
         verify_7 = "select 0 from {0}".format(self.query_bucket)
 
         query_8 = "select array_binary_search((select raw meta().id from {0} order by meta().id), " \
-                  "'query-testemployee10153.1877827-0')".format(self.query_bucket)
+                  "'query-testemployee10153.187782713003-0')".format(self.query_bucket)
         verify_8 = "select 0"
 
         query_9 = "select array_binary_search([meta().id, meta().id, meta().id], meta().id) from {0}".format(
             self.query_bucket)
-        verify_9 = "select 0 from {0}"
+        verify_9 = "select 0 from {0}".format(self.query_bucket)
 
         queries["a"] = {"indexes": [self.primary_index_def], "queries": [query_1],
                         "asserts": [self.verifier(verify_1, 0)]}
