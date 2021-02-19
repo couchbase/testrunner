@@ -1900,7 +1900,7 @@ class QuerySanityTests(QueryTests):
                     actual_result = self.run_cbq_query()
                     diffs = DeepDiff(actual_result['results'], [{'x': 100, 's': [100]}], ignore_order=True)
 
-                    self.assertTrue(diffs, diffs)
+                    self.assertEqual(diffs, {})
                 finally:
                     self.query = 'delete from %s use keys["kk02"]' % query_bucket
                     self.run_cbq_query()
