@@ -38,7 +38,7 @@ class USINGFTS(FTSBaseTest):
             index_name="custom_index", collection_index=collection_index, _type=type, analyzer="keyword",
             scope=index_scope, collections=index_collections)
         self.wait_for_indexing_complete()
-        results = self.n1ql_helper.run_cbq_query(query="START TRANSACTION", txtimeout="2m")
+        results = self.n1ql_helper.run_cbq_query(query="START TRANSACTION", txtimeout="2m", server=self.master)
         txn_id = results['results'][0]['txid']
 
         if self.using_fts_and_gsi:
@@ -49,7 +49,7 @@ class USINGFTS(FTSBaseTest):
             query = "select * from default:default.test.collection1 USE INDEX (USING FTS) where dept = 'Sales'"
         explain_results = self.n1ql_helper.run_cbq_query(query="explain " + query, server=self.master)
         self.assertTrue('IndexFtsSearch' in str(explain_results))
-        primary_results = self.n1ql_helper.run_cbq_query(query="select * from default:default.test.collection1 where dept = 'Sales'", server=self.master,txn_id=txn_id)
+        primary_results = self.n1ql_helper.run_cbq_query(query="select * from default:default.test.collection1 where dept = 'Sales'", server=self.master,txnid=txn_id)
         results = self.n1ql_helper.run_cbq_query(query=query, server=self.master)
         diffs = DeepDiff(set(primary_results), set(results), ignore_order=True)
         if diffs:
@@ -64,18 +64,18 @@ class USINGFTS(FTSBaseTest):
                 query = "select * from default:default.test.collection2 USE INDEX (USING FTS) where dept = 'Sales'"
             explain_results = self.n1ql_helper.run_cbq_query(
                 query="explain " + query,
-                server=self.master,txn_id=txn_id)
+                server=self.master, txnid=txn_id)
             self.assertTrue('IndexFtsSearch' in str(explain_results))
             primary_results = self.n1ql_helper.run_cbq_query(
                 query="select * from default:default.test.collection2 USE INDEX (`#primary`) where dept = 'Sales'",
-                server=self.master,txn_id=txn_id)
+                server=self.master, txnid=txn_id)
             results = self.n1ql_helper.run_cbq_query(
                 query=query,
-                server=self.master,txn_id=txn_id)
+                server=self.master, txnid=txn_id)
             diffs = DeepDiff(set(primary_results), set(results), ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
-            results = self.n1ql_helper.run_cbq_query(query="COMMIT TRANSACTION", txn_id=txn_id)
+            results = self.n1ql_helper.run_cbq_query(query="COMMIT TRANSACTION", txnid=txn_id, server=self.master)
 
     def test_using_fts(self):
         self.load_data()
