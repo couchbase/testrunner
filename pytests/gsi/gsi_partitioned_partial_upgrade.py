@@ -129,6 +129,39 @@ class UpgradePartialParititionedIndex(UpgradeSecondaryIndex):
         self.log.info("All indexes are online")
         self.add_built_in_server_user()
         self.sleep(20)
+        try:
+            # Depending on the order of the async upgrade indexes could be lost (since it is offline upgrade) For the specific fix this is fine as indexes need to be recreated anyway
+            if self.partial_partitioned:
+                create_index_query = "CREATE INDEX idx_pending ON {0}(createdDateTime) PARTITION BY HASH(meta().id) WHERE status = 'PENDING'".format(
+                    self.bucket_name)
+                self.n1ql_helper.run_cbq_query(query=create_index_query,server=self.n1ql_node)
+                create_index_query = "CREATE INDEX idx_success ON {0}(createdDateTime) PARTITION BY HASH(meta().id) WHERE status = 'SUCCESS'".format(
+                    self.bucket_name)
+                self.n1ql_helper.run_cbq_query(query=create_index_query, server=self.n1ql_node)
+                create_index_query = "CREATE INDEX idx_error ON {0}(createdDateTime) PARTITION BY HASH(meta().id) WHERE status = 'ERROR'".format(
+                    self.bucket_name)
+                self.n1ql_helper.run_cbq_query(query=create_index_query, server=self.n1ql_node)
+            elif self.partial_index:
+                create_index_query = "CREATE INDEX idx_pending ON {0}(createdDateTime) WHERE status = 'PENDING'".format(
+                    self.bucket_name)
+                self.n1ql_helper.run_cbq_query(query=create_index_query,server=self.n1ql_node)
+                create_index_query = "CREATE INDEX idx_success ON {0}(createdDateTime) WHERE status = 'SUCCESS'".format(
+                    self.bucket_name)
+                self.n1ql_helper.run_cbq_query(query=create_index_query, server=self.n1ql_node)
+                create_index_query = "CREATE INDEX idx_error ON {0}(createdDateTime) WHERE status = 'ERROR'".format(
+                    self.bucket_name)
+                self.n1ql_helper.run_cbq_query(query=create_index_query, server=self.n1ql_node)
+            elif self.secondary_index:
+                create_index_query = "CREATE INDEX idx_pending ON {0}(createdDateTime)".format(
+                    self.bucket_name)
+                self.n1ql_helper.run_cbq_query(query=create_index_query, server=self.n1ql_node)
+            else:
+                create_index_query = "CREATE INDEX idx_pending ON {0}(createdDateTime) PARTITION BY HASH(meta().id)".format(
+                    self.bucket_name)
+                self.n1ql_helper.run_cbq_query(query=create_index_query, server=self.n1ql_node)
+        except Exception as e:
+            self.log.error(str(e))
+        self.wait_until_indexes_online()
 
         # Check behavior post-upgrade
         pending_results = self.n1ql_helper.run_cbq_query(
