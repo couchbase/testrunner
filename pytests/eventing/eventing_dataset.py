@@ -78,7 +78,7 @@ class EventingDataset(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         # delete both binary and json documents
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load, self.buckets[0].kvs[1], 'delete',
                                    exp=0, flag=0, batch_size=1000, compression=self.sdk_compression)
@@ -125,12 +125,12 @@ class EventingDataset(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         # delete non json documents
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json_del, self.buckets[0].kvs[1],
                                    'delete', compression=self.sdk_compression)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     # See MB-26706

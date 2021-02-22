@@ -127,12 +127,8 @@ class EventingBucket(EventingBaseTest):
     def test_eventing_with_with_the_couchbase_buckets_in_heavy_dgm(self):
         gen_load_del = copy.deepcopy(self.gens_load)
         # load some data
-        if self.non_default_collection:
-            task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
-                                                wait_for_loading=False)
-        else:
-            task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
-                                                wait_for_loading=False)
+        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         if self.pause_resume:
@@ -141,27 +137,17 @@ class EventingBucket(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        if self.non_default_collection:
-            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
-        else:
-            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete all documents
-        if self.non_default_collection:
-            task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
-                                         is_delete=True, wait_for_loading=False)
-        else:
-            task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
-                                         is_delete=True, wait_for_loading=False)
+        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_del,
+                                                self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
         if self.pause_resume:
             self.pause_function(body)
             self.sleep(30)
             self.resume_function(body)
         task.result()
         # Wait for eventing to catch up with all the delete mutations and verify results
-        if self.non_default_collection:
-            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", 0)
-        else:
-            self.verify_doc_count_collections("dst_bucket._default._default", 0)
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(30)
@@ -183,7 +169,7 @@ class EventingBucket(EventingBaseTest):
         if self.non_default_collection:
             self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         else:
-            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs + total_items)
         # delete all documents
         if self.non_default_collection:
             self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
@@ -195,7 +181,7 @@ class EventingBucket(EventingBaseTest):
         if self.non_default_collection:
             self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", 0)
         else:
-            self.verify_doc_count_collections("dst_bucket._default._default", 0)
+            self.verify_doc_count_collections("dst_bucket._default._default", total_items)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(30)

@@ -671,8 +671,10 @@ class EventingRecovery(EventingBaseTest):
             self.rest.create_function(body['appname'], body)
         self.deploy_function(body)
         # load some data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if self.non_default_collection:
+            task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket", wait_for_loading=False)
+        else:
+            task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default", wait_for_loading=False)
         # reboot eventing node when it is processing mutations
         self.kill_erlang_service(n1ql_node)
         task.result()
