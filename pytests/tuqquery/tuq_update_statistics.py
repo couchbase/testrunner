@@ -49,7 +49,7 @@ class QueryUpdateStatsTests(QueryTests):
                     break
                 time.sleep(2)
 
-            self.wait_for_all_indexes_online()
+            self.wait_for_all_indexes_online(build_deferred=True)
         
         self.delete_stats(bucket="travel-sample")
 
@@ -408,6 +408,8 @@ class QueryUpdateStatsTests(QueryTests):
         histogram_expected = [
             {"bucket": "travel-sample", "collection": "_default", "histogramKey": "city", "scope": "_default"}
         ]
+        self.log.info("Drop N1QL_SYSTEM_BUCKET if exists")
+        self.ensure_bucket_does_not_exist("N1QL_SYSTEM_BUCKET")
         system_stats = self.rest.fetch_system_stats()
         num_nodes = len(system_stats['nodes'])
         quota_total = system_stats['storageTotals']['ram']['quotaTotal']
@@ -592,7 +594,7 @@ class QueryUpdateStatsTests(QueryTests):
             # run update statistics
             self.run_cbq_query(query=update_stats)
             explain_after = self.run_cbq_query(query=explain_query)
-            fetch_operator = explain_after['results'][0]['plan']['~children'][0]['~children'][1]
+            fetch_operator = explain_after['results'][0]['plan']['~children'][0]['~children'][1]['optimizer_estimates']
             self.assertTrue(fetch_operator['cost'] > 0 and fetch_operator['cardinality'] > 0)
         except Exception as e:
             self.log.error(f"Update statistics failed: {e}")
@@ -608,7 +610,7 @@ class QueryUpdateStatsTests(QueryTests):
             # run update statistics
             self.run_cbq_query(query=update_stats)
             explain_after = self.run_cbq_query(query=explain_query)
-            interscan_operator = explain_after['results'][0]['plan']['~children'][0]['scans'][0]
+            interscan_operator = explain_after['results'][0]['plan']['~children'][0]['scans'][1]['optimizer_estimates']
             self.assertTrue(interscan_operator['cost'] > 0 and interscan_operator['cardinality'] > 0)
             # run query
             self.run_cbq_query(query=explain_query[8:])
