@@ -17,7 +17,8 @@ class RbacN1QL(QueryTests):
         users = TestInputSingleton.input.param("users", None)
         self.all_buckets = TestInputSingleton.input.param("all_buckets", False)
         self.expect_failure = TestInputSingleton.input.param("expect_failure", False)
-
+        self.atr = TestInputSingleton.input.param("atr", False)
+        self.atr_collection = TestInputSingleton.input.param("atr_collection", None)
         self.inp_users = []
         if users:
             self.inp_users = eval(eval(users))
@@ -26,12 +27,20 @@ class RbacN1QL(QueryTests):
         if self.load_collections:
             try:
                 self.run_cbq_query(query="CREATE scope default:default.{0}".format(self.scope))
+                self.run_cbq_query(query="CREATE scope default:default.test2")
+                self.run_cbq_query(query="CREATE scope default:default.test3")
                 self.sleep(10)
                 self.run_cbq_query(query="CREATE COLLECTION default:default.{0}.{1}".format(self.scope, self.collections[0]))
                 self.run_cbq_query(query="CREATE COLLECTION default:default.{0}.{1}".format(self.scope, self.collections[1]))
+                self.run_cbq_query(query="CREATE COLLECTION default:default.test2.{1}".format(self.scope, self.collections[0]))
+                self.run_cbq_query(query="CREATE COLLECTION default:default.test2.{1}".format(self.scope, self.collections[1]))
+                self.run_cbq_query(query="CREATE COLLECTION default:default.test3.{1}".format(self.scope, self.collections[0]))
+                self.run_cbq_query(query="CREATE COLLECTION default:default.test3.{1}".format(self.scope, self.collections[1]))
                 self.sleep(10)
                 self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[0]))
                 self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[1]))
+                self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.test2.{1}".format(self.scope, self.collections[0]))
+                self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.test2.{1}".format(self.scope, self.collections[1]))
                 self.sleep(20)
             except Exception as e:
                 self.log.info(str(e))
@@ -53,6 +62,123 @@ class RbacN1QL(QueryTests):
 
     def suite_tearDown(self):
         pass
+
+    def test_transaction(self):
+        self.create_users()
+        self.grant_role()
+        results = self.run_cbq_query(query="START TRANSACTION", username="johnDoe129", password="password1",txtimeout="2m")
+        txid = results['results'][0]['txid']
+        try:
+            self.run_cbq_query(
+                query='INSERT INTO default ( KEY, VALUE ) VALUES ("1",{ "order_id": "1", "type": '
+                                                               '"order", "customer_id":"24601", "total_price": 30.3, '
+                                                               '"lineitems": '
+                                                               '[ "11", "12", "13" ] })',username="johnDoe129", password="password1",txnid=txid)
+            self.run_cbq_query(
+                query='INSERT INTO default ( KEY, VALUE ) VALUES ("2",{ "order_id": "1", "type": '
+                                                               '"order", "customer_id":"24602", "total_price": 30.3, '
+                                                               '"lineitems": '
+                                                               '[ "11", "12", "13" ] })',username="johnDoe129", password="password1",txnid=txid)
+        except Exception as e:
+            self.log.error(str(e))
+            if "query_insert(default)" in self.roles[0]['roles']:
+                self.fail("Insert should have worked but failed. {0}".format(str(e)))
+        try:
+            self.run_cbq_query(query='select * from default where customer_id = "24601"',username="johnDoe129", password="password1", txnid=txid)
+        except Exception as e:
+            self.log.error(str(e))
+            if "query_select(default:default._default._default)" in self.roles[0]['roles']:
+                self.fail("Select should have worked but failed. {0}".format(str(e)))
+        try:
+            results = self.run_cbq_query(query='update default SET name = "employee-9000" where customer_id = "24601" RETURNING RAW META().id',username="johnDoe129", password="password1", txnid=txid)
+            self.log.info(results)
+        except Exception as e:
+            self.log.error(str(e))
+            if "query_update(default)" in self.roles[0]['roles'] and "query_select(default:default._default._default)" in self.roles[0]['roles']:
+                self.fail("Update should have worked but failed. {0}".format(str(e)))
+        try:
+            results = self.run_cbq_query(query='delete from default where customer_id = "24602"',username="johnDoe129", password="password1", txnid=txid)
+            self.log.info(results)
+        except Exception as e:
+            self.log.error(str(e))
+            if "query_delete(default)" in self.roles[0]['roles']:
+                self.fail("Delete should have worked but failed. {0}".format(str(e)))
+        results = self.run_cbq_query(query='COMMIT TRANSACTION', username="johnDoe129", password="password1", txnid=txid)
+        self.assertTrue(results['status'], "success")
+
+    def test_transaction_collection(self):
+        self.create_users()
+        self.grant_role()
+        if "query_insert(default:default.test)" in self.roles[0]['roles']:
+            username = "johnDoe131"
+        else:
+            username = "johnDoe130"
+
+        if self.atr:
+            results = self.run_cbq_query(query="START TRANSACTION", username=username, password="password1", txtimeout="2m", atr_collection=self.atr_collection)
+        else:
+            results = self.run_cbq_query(query="START TRANSACTION", username=username, password="password1", txtimeout="2m")
+        txid = results['results'][0]['txid']
+        try:
+            self.run_cbq_query(
+                query='INSERT INTO default:default.test.test1 ( KEY, VALUE ) VALUES ("1",{ "order_id": "1", "type": '
+                                                               '"order", "customer_id":"24601", "total_price": 30.3, '
+                                                               '"lineitems": '
+                                                               '[ "11", "12", "13" ] })',username=username, password="password1",txnid=txid)
+            self.run_cbq_query(
+                query='INSERT INTO default:default.test.test2 ( KEY, VALUE ) VALUES ("2",{ "order_id": "1", "type": '
+                                                               '"order", "customer_id":"24602", "total_price": 30.3, '
+                                                               '"lineitems": '
+                                                               '[ "11", "12", "13" ] })',username=username, password="password1",txnid=txid)
+
+            self.run_cbq_query(query='select * from default:default.test.test1 where customer_id = "24601"',username=username, password="password1", txnid=txid)
+            results = self.run_cbq_query(query='update default:default.test.test1 SET name = "employee-9000" where customer_id = "24601" RETURNING RAW META().id',username=username, password="password1", txnid=txid)
+            self.log.info(results)
+            results = self.run_cbq_query(query='delete from default:default.test.test2 where customer_id = "24602"',username=username, password="password1", txnid=txid)
+            self.log.info(results)
+        except Exception as e:
+            self.log.error(str(e))
+            if "data_writer" in self.roles[0]['roles'] and "data_reader" in self.roles[0]['roles']:
+                self.fail("The user has the right permissions to continue the transaction! {0}".format(str(e)))
+        results = self.run_cbq_query(query='COMMIT TRANSACTION',username=username, password="password1", txnid=txid)
+        self.log.info(results)
+        if "data_writer" in self.roles[0]['roles'] and "data_reader" in self.roles[0]['roles']:
+            self.assertTrue(results['status'], "success")
+
+    def test_transaction_multi_collection(self):
+        self.create_users()
+        self.grant_role()
+        username = "johnDoe132"
+
+        if self.atr:
+            results = self.run_cbq_query(query="START TRANSACTION", username=username, password="password1", txtimeout="2m", atr_collection=self.atr_collection)
+        else:
+            results = self.run_cbq_query(query="START TRANSACTION", username=username, password="password1", txtimeout="2m")
+        txid = results['results'][0]['txid']
+        try:
+            self.run_cbq_query(
+                query='INSERT INTO default:default.test.test1 ( KEY, VALUE ) VALUES ("1",{ "order_id": "1", "type": '
+                                                               '"order", "customer_id":"24601", "total_price": 30.3, '
+                                                               '"lineitems": '
+                                                               '[ "11", "12", "13" ] })',username=username, password="password1", txnid=txid)
+            self.run_cbq_query(
+                query='INSERT INTO default:default.test2.test1 ( KEY, VALUE ) VALUES ("2",{ "order_id": "1", "type": '
+                                                               '"order", "customer_id":"24602", "total_price": 30.3, '
+                                                               '"lineitems": '
+                                                               '[ "11", "12", "13" ] })',username=username, password="password1", txnid=txid)
+            self.run_cbq_query(query='select * from default:default.test.test1 where customer_id = "24601"',username=username, password="password1", txnid=txid)
+            results = self.run_cbq_query(query='update default:default.test2.test1 SET name = "employee-9000" where customer_id = "24601" RETURNING RAW META().id',username=username, password="password1", txnid=txid)
+            self.log.info(results)
+            results = self.run_cbq_query(query='delete from default:default.test.test2 where customer_id = "24602"',username=username, password="password1", txnid=txid)
+            self.log.info(results)
+        except Exception as e:
+            self.log.error(str(e))
+            if "data_writer" in self.roles[0]['roles'] and "data_reader" in self.roles[0]['roles']:
+                self.fail("The user has the right permissions to continue the transaction! {0}".format(str(e)))
+        results = self.run_cbq_query(query='COMMIT TRANSACTION', username=username, password="password1", txnid=txid)
+        self.log.info(results)
+        if "data_writer" in self.roles[0]['roles'] and "data_reader" in self.roles[0]['roles']:
+            self.assertTrue(results['status'], "success")
 
     def test_select(self):
         self.create_users()
