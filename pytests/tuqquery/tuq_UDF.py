@@ -39,21 +39,30 @@ class QueryUDFTests(QueryTests):
     def suite_setUp(self):
         super(QueryUDFTests, self).suite_setUp()
         self.log.info("==============  QueryUDFTests suite_setup has started ==============")
+        changed = False
         if self.load_collections:
-            self.run_cbq_query(query='CREATE INDEX idx on default(name)')
-            self.sleep(5)
-            self.wait_for_all_indexes_online()
+            if not self.analytics:
+                self.run_cbq_query(query='CREATE INDEX idx on default(name)')
+                self.sleep(5)
+                self.wait_for_all_indexes_online()
             self.collections_helper.create_scope(bucket_name="default", scope_name="test2")
             self.collections_helper.create_collection(bucket_name="default", scope_name="test2",
                                                       collection_name=self.collections[0])
             self.collections_helper.create_collection(bucket_name="default", scope_name="test2",
                                                       collection_name=self.collections[1])
-            self.run_cbq_query(
-                query="CREATE INDEX idx1 on default:default.test2.{0}(name)".format(self.collections[0]))
-            self.run_cbq_query(
-                query="CREATE INDEX idx2 on default:default.test2.{0}(name)".format(self.collections[1]))
-            self.sleep(5)
-            self.wait_for_all_indexes_online()
+            if self.analytics:
+                self.run_cbq_query(query="CREATE DATASET collection3 on default.test2.test1")
+                self.run_cbq_query(query="CREATE DATASET collection4 on default.test2.test2")
+            if not self.analytics:
+                self.run_cbq_query(
+                    query="CREATE INDEX idx1 on default:default.test2.{0}(name)".format(self.collections[0]))
+                self.run_cbq_query(
+                    query="CREATE INDEX idx2 on default:default.test2.{0}(name)".format(self.collections[1]))
+                self.sleep(5)
+                self.wait_for_all_indexes_online()
+            if self.analytics:
+                self.analytics = False
+                changed = True
             self.run_cbq_query(
                 query=('INSERT INTO default:default.test2.{0}'.format(self.collections[
                     1]) + '(KEY, VALUE) VALUES ("key1", { "type" : "hotel", "name" : "old hotel" })'))
@@ -73,20 +82,12 @@ class QueryUDFTests(QueryTests):
                 if next_time - init_time > 600:
                     break
                 time.sleep(1)
-            self.wait_for_all_indexes_online()
-        if self.analytics:
-            self.run_cbq_query(query="CREATE DATASET default on default")
-            self.run_cbq_query(query="connect link Local")
-            self.run_cbq_query(query="CREATE DATASET collection1 on default.test.test1")
-            self.run_cbq_query(query="connect link Local")
-            self.run_cbq_query(query="CREATE DATASET collection2 on default.test.test2")
-            self.run_cbq_query(query="connect link Local")
-            self.run_cbq_query(query="CREATE DATASET collection3 on default.test2.test1")
-            self.run_cbq_query(query="connect link Local")
-            self.run_cbq_query(query="CREATE DATASET collection4 on default.test2.test2")
-            self.run_cbq_query(query="connect link Local")
-            self.run_cbq_query(query="CREATE DATASET travel on `travel-sample`")
-            self.run_cbq_query(query="connect link Local")
+            if changed:
+                self.analytics = True
+            if self.analytics:
+                self.run_cbq_query(query="CREATE DATASET travel on `travel-sample`")
+        if changed:
+            self.analytics = True
         self.log.info("==============  QueryUDFTests suite_setup has completed ==============")
 
     def tearDown(self):
@@ -146,7 +147,10 @@ class QueryUDFTests(QueryTests):
             except Exception as e:
                 self.log.error(str(e))
                 if self.no_params:
-                    self.assertTrue("Incorrect number of arguments supplied to function celsius" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
+                    if self.analytics:
+                        self.assertTrue("Cannot find function with signature" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
+                    else:
+                        self.assertTrue("Incorrect number of arguments supplied to function celsius" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
                 else:
                     self.fail()
             try:
@@ -158,7 +162,10 @@ class QueryUDFTests(QueryTests):
             except Exception as e:
                 self.log.error(str(e))
                 if self.named_params or self.no_params:
-                    self.assertTrue("Incorrect number of arguments supplied to function celsius" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
+                    if self.analytics:
+                        self.assertTrue("Cannot find function with signature" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
+                    else:
+                        self.assertTrue("Incorrect number of arguments supplied to function celsius" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
                 else:
                     self.fail()
             try:
@@ -173,7 +180,10 @@ class QueryUDFTests(QueryTests):
             except Exception as e:
                 self.log.error(str(e))
                 if self.named_params:
-                    self.assertTrue("Incorrect number of arguments supplied to function celsius" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
+                    if self.analytics:
+                        self.assertTrue("Cannot find function with signature" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
+                    else:
+                        self.assertTrue("Incorrect number of arguments supplied to function celsius" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
                 else:
                     self.fail()
         finally:
@@ -227,9 +237,9 @@ class QueryUDFTests(QueryTests):
             try:
                 if self.analytics:
                     if self.special_chars:
-                        self.run_cbq_query("DROP ANALYTICS FUNCTION `c%.-_`(param1)")
+                        results = self.run_cbq_query("DROP ANALYTICS FUNCTION `c%.-_`(param1)")
                     else:
-                        self.run_cbq_query("DROP ANALYTICS FUNCTION cels(param1)")
+                        results = self.run_cbq_query("DROP ANALYTICS FUNCTION cels(param1)")
                 else:
                     if self.special_chars:
                         results = self.run_cbq_query("DROP FUNCTION `c%.-_`")
@@ -253,7 +263,10 @@ class QueryUDFTests(QueryTests):
                 self.fail("Query should have error'd, but it did not")
             except Exception as e:
                 self.log.error(str(e))
-                self.assertTrue('Function not found' in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
+                if self.analytics:
+                    self.assertTrue('Cannot find function with signature' in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
+                else:
+                    self.assertTrue('Function not found' in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
         finally:
             try:
                 if self.analytics:
@@ -277,7 +290,10 @@ class QueryUDFTests(QueryTests):
                 self.run_cbq_query(query="DROP FUNCTION func_does_not_exist")
         except Exception as e:
             self.log.error(str(e))
-            self.assertTrue('Function not found func_does_not_exist' in str(e), "Error message is wrong {0}".format(str(e)))
+            if self.analytics:
+                self.assertTrue('DROP ANALYTICS FUNCTION func_does_not_exist' in str(e), "Error message is wrong {0}".format(str(e)))
+            else:
+                self.assertTrue('Function not found func_does_not_exist' in str(e), "Error message is wrong {0}".format(str(e)))
 
     def test_inline_function_syntax(self):
         try:
@@ -456,7 +472,7 @@ class QueryUDFTests(QueryTests):
                 self.run_cbq_query(
                     "CREATE OR REPLACE ANALYTICS FUNCTION func4(doctype) { (SELECT RAW city FROM travel WHERE `type` = doctype) }")
                 results = self.run_cbq_query(
-                    'SELECT t1.city FROM travel t1 WHERE t1.type = "landmark" AND t1.city IN func4("airport")')
+                    'SELECT t1.city FROM travel t1 WHERE t1.`type` = "landmark" AND t1.city IN func4("airport")')
                 self.assertEqual(results['metrics']['resultCount'], 2776)
                 results = self.run_cbq_query(
                     'CREATE OR REPLACE ANALYTICS FUNCTION func5(doctype) {(SELECT t1.city FROM travel t1 WHERE t1.`type` = "landmark" AND t1.city IN func4(doctype))}')
@@ -707,7 +723,10 @@ class QueryUDFTests(QueryTests):
                     "SELECT * FROM collection1 WHERE ANY v in collection1.numbers SATISFIES v = func1(36) END")
             else:
                 results = self.run_cbq_query("SELECT * FROM default:default.test.test1  WHERE ANY v in test1.numbers SATISFIES v = func1(36) END")
-            self.assertEqual(results['results'], [{'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+            if self.analytics:
+                self.assertEqual(results['results'], [{'collection1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+            else:
+                self.assertEqual(results['results'], [{'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
         finally:
             try:
                 if self.analytics:

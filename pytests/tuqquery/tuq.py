@@ -198,6 +198,7 @@ class QueryTests(BaseTestCase):
         self.log.info("==============  QueryTests suite_setup has started ==============")
         try:
             os = self.shell.extract_remote_info().type.lower()
+            changed = False
             self.collections_helper = CollectionsN1QL(self.master)
             # if os != 'windows':
             # self.sleep(10, 'sleep before load')
@@ -212,7 +213,8 @@ class QueryTests(BaseTestCase):
                 self._build_tuq(self.master)
             self.skip_buckets_handle = True
             if self.analytics:
-                self.cluster.rebalance([self.master, self.cbas_node], [self.cbas_node], [], services=['cbas'])
+                if self.cbas_node is not self.master:
+                    self.cluster.rebalance([self.master, self.cbas_node], [self.cbas_node], [], services=['cbas'])
                 self.setup_analytics()
                 # self.sleep(30, 'wait for analytics setup')
             if self.testrunner_client == 'python_sdk':
@@ -222,16 +224,23 @@ class QueryTests(BaseTestCase):
                 self.collections_helper.create_scope(bucket_name="default",scope_name=self.scope)
                 self.collections_helper.create_collection(bucket_name="default",scope_name=self.scope,collection_name=self.collections[0])
                 self.collections_helper.create_collection(bucket_name="default",scope_name=self.scope,collection_name=self.collections[1])
+                if self.analytics:
+                    self.run_cbq_query(query="CREATE DATASET collection1 on default.test.test1")
+                    self.run_cbq_query(query="CREATE DATASET collection2 on default.test.test2")
                 if not self.use_advice:
-                    self.run_cbq_query(query="CREATE INDEX idx1 on default:default.{0}.{1}(name)".format(self.scope, self.collections[0]))
-                    self.run_cbq_query(query="CREATE INDEX idx2 on default:default.{0}.{1}(name)".format(self.scope, self.collections[1]))
-                    self.run_cbq_query(query="CREATE INDEX idx3 on default:default.test.{1}(nested)".format(self.scope, self.collections[0]))
-                    self.run_cbq_query(query="CREATE INDEX idx4 on default:default.test.{1}(ALL numbers)".format(self.scope, self.collections[0]))
-                    if self.primary_index_collections:
-                        self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[0]))
-                        self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[1]))
-                    self.sleep(5)
-                    self.wait_for_all_indexes_online()
+                    if not self.analytics:
+                        self.run_cbq_query(query="CREATE INDEX idx1 on default:default.{0}.{1}(name)".format(self.scope, self.collections[0]))
+                        self.run_cbq_query(query="CREATE INDEX idx2 on default:default.{0}.{1}(name)".format(self.scope, self.collections[1]))
+                        self.run_cbq_query(query="CREATE INDEX idx3 on default:default.test.{1}(nested)".format(self.scope, self.collections[0]))
+                        self.run_cbq_query(query="CREATE INDEX idx4 on default:default.test.{1}(ALL numbers)".format(self.scope, self.collections[0]))
+                        if self.primary_index_collections:
+                            self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[0]))
+                            self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[1]))
+                        self.sleep(5)
+                        self.wait_for_all_indexes_online()
+                if self.analytics:
+                    self.analytics = False
+                    changed = True
                 self.run_cbq_query(
                     query=('INSERT INTO default:default.{0}.{1}'.format(self.scope, self.collections[0]) + '(KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "new hotel" })'))
                 self.run_cbq_query(
@@ -243,6 +252,8 @@ class QueryTests(BaseTestCase):
                 self.run_cbq_query(
                     query=('INSERT INTO default:default.{0}.{1}'.format(self.scope, self.collections[0]) + ' (KEY, VALUE) VALUES ("key4", { "numbers": [1,2,3,4] , "name" : "old hotel" })'))
                 time.sleep(20)
+                if changed:
+                    self.analytics = True
         except Exception as ex:
             self.log.error('SUITE SETUP FAILED')
             self.log.info(ex)
@@ -1340,7 +1351,7 @@ class QueryTests(BaseTestCase):
             json_output_str += s
         return json.loads(json_output_str)
 
-    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None, username=None, password=None, use_fts_query_param=None, debug_query=True, query_context=None, txnid=None, txtimeout=None):
+    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None, username=None, password=None, use_fts_query_param=None, debug_query=True, query_context=None, txnid=None, txtimeout=None,atr_collection=None):
         if query is None:
             query = self.query
         if server is None:
@@ -1371,6 +1382,10 @@ class QueryTests(BaseTestCase):
             query_params['txid'] = ''"{0}"''.format(txnid)
         else:
             query_params.pop('txid', None)
+        if atr_collection:
+            query_params['atrcollection'] = atr_collection
+        else:
+            query_params.pop('atrcollection', None)
 
         if self.testrunner_client == 'python_sdk' and not is_prepared:
             sdk_cluster = Cluster('couchbase://' + str(server.ip))
