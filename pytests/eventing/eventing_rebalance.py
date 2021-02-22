@@ -567,7 +567,7 @@ class EventingRebalance(EventingBaseTest):
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         else:
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=300)
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=600)
         if self.pause_resume:
             self.pause_function(body)
         nodes_out_list = self.servers[self.server_out]
@@ -1285,15 +1285,12 @@ class EventingRebalance(EventingBaseTest):
                                                      [],
                                                      services=services_in)
             reached = RestHelper(self.rest).rebalance_reached(percentage=30)
-            # while (not self.check_eventing_rebalance() and not RestHelper(self.rest).is_cluster_rebalanced()):
-            #     self.log.info("waiting for eventing rebalance to trigger")
-            #     self.sleep(3)
-            # if (RestHelper(self.rest).is_cluster_rebalanced()):
-            #     raise Exception("Rebalance completed before killing")
+            ### wait_for_failover check for rebalance and failover both
+            self.wait_for_failover()
             # reboot kv and eventing when eventing is processing mutations
-            task.result()
             for node in [kv_node, eventing_node]:
                 self.reboot_server(node)
+            task.result()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
         except Exception as ex:

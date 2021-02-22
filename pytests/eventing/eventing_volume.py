@@ -48,6 +48,7 @@ class EventingVolume(EventingBaseTest):
                                       use_rest=True
                                       )
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.batch_size=10**4
 
 
     def tearDown(self):
@@ -86,9 +87,9 @@ class EventingVolume(EventingBaseTest):
     def test_eventing_volume(self):
         self.create_save_handlers()
         # load data
-        task1=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+        task1=self.load_batch_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
                                      wait_for_loading=False)
-        task2=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.scope_1.coll_1",
+        task2=self.load_batch_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.scope_1.coll_1",
                                      wait_for_loading=False)
         self.deploy_all_handlers()
         task1.result()
@@ -97,9 +98,9 @@ class EventingVolume(EventingBaseTest):
         self.verify_all_handler(self.docs_per_day * self.num_docs)
         self.verify_doc_count_collections("src_bucket.scope_1.coll_1", self.docs_per_day * self.num_docs * 2)
         # delete json documents
-        task1=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default", is_delete=True,
+        task1=self.load_batch_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default", is_delete=True,
                                            wait_for_loading=False)
-        task2=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.scope_1.coll_1", is_delete=True,
+        task2=self.load_batch_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.scope_1.coll_1", is_delete=True,
                                            wait_for_loading=False)
         task1.result()
         task2.result()
