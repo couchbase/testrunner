@@ -134,10 +134,16 @@ class QueryDefinition(object):
         return ind_content
 
     def generate_index_drop_query(self, namespace="default", use_gsi_for_secondary=True, use_gsi_for_primary=True):
+        if not self.cb_version:
+            self.cb_version = RestConnection(self.master).get_nodes_version()
+
         if "#primary" in self.index_name:
             query = f"DROP PRIMARY INDEX ON {namespace}"
         else:
-            query = f"DROP INDEX {self.index_name} ON {namespace}"
+            if self.cb_version < '7.0':
+                query = f"DROP INDEX {namespace}.{self.index_name}"
+            else:
+                query = f"DROP INDEX {self.index_name} ON {namespace}"
         if use_gsi_for_secondary and "primary" not in self.index_name:
             query += " USING GSI"
         elif use_gsi_for_primary and "primary" in self.index_name:
