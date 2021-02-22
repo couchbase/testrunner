@@ -351,20 +351,21 @@ class RestConnection(object):
                 break
         # determine the real couchApiBase for cluster_run
         # couchApiBase appeared in version 2.*
-        if not http_res or http_res["version"][0:2] == "1.":
-            self.capiBaseUrl = self.baseUrl + "/couchBase"
-        else:
-            for iteration in range(5):
-                if "couchApiBase" not in list(http_res.keys()):
-                    if self.is_cluster_mixed():
-                        self.capiBaseUrl = self.baseUrl + "/couchBase"
+        if isinstance(http_res, dict):
+            if not http_res or http_res["version"][0:2] == "1.":
+                self.capiBaseUrl = self.baseUrl + "/couchBase"
+            else:
+                for iteration in range(5):
+                    if "couchApiBase" not in http_res.keys():
+                        if self.is_cluster_mixed():
+                            self.capiBaseUrl = self.baseUrl + "/couchBase"
+                            return
+                        time.sleep(0.2)
+                        http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
+                    else:
+                        self.capiBaseUrl = http_res["couchApiBase"]
                         return
-                    time.sleep(0.2)
-                    http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
-                else:
-                    self.capiBaseUrl = http_res["couchApiBase"]
-                    return
-            raise ServerUnavailableException("couchApiBase doesn't exist in nodes/self: %s " % http_res)
+                raise ServerUnavailableException("couchApiBase doesn't exist in nodes/self: %s " % http_res)
 
     def sasl_streaming_rq(self, bucket, timeout=120):
         api = self.baseUrl + 'pools/default/bucketsStreaming/{0}'.format(bucket)
@@ -1503,33 +1504,38 @@ class RestConnection(object):
                                    'user': user,
                                    'password': password,
                                    'services': services})
-        status, content, header = self._http_request(api, 'POST', params)
-        if status:
-            json_parsed = json.loads(content)
-            otpNodeId = json_parsed['otpNode']
-            otpNode = OtpNode(otpNodeId)
-            if otpNode.ip == '127.0.0.1':
-                otpNode.ip = self.ip
-        else:
-            self.print_UI_logs()
-            try:
-                # print logs from node that we want to add
-                wanted_node = deepcopy(self)
-                wanted_node.ip = remoteIp
-                wanted_node.print_UI_logs()
-            except Exception as ex:
-                self.log(ex)
-            if content.find(b'Prepare join failed. Node is already part of cluster') >= 0:
-                raise ServerAlreadyJoinedException(nodeIp=self.ip,
-                                                   remoteIp=remoteIp)
-            elif content.find(b'Prepare join failed. Joining node to itself is not allowed') >= 0:
-                raise ServerSelfJoinException(nodeIp=self.ip,
-                                          remoteIp=remoteIp)
+        if self.monitorRebalance():
+            status, content, header = self._http_request(api, 'POST', params)
+            if status:
+                json_parsed = json.loads(content)
+                otpNodeId = json_parsed['otpNode']
+                otpNode = OtpNode(otpNodeId)
+                if otpNode.ip == '127.0.0.1':
+                    otpNode.ip = self.ip
             else:
-                log.error('add_node error : {0}'.format(content))
-                raise AddNodeException(nodeIp=self.ip,
-                                          remoteIp=remoteIp,
-                                          reason=content)
+                self.print_UI_logs()
+                try:
+                    # print logs from node that we want to add
+                    wanted_node = deepcopy(self)
+                    wanted_node.ip = remoteIp
+                    wanted_node.print_UI_logs()
+                except Exception as ex:
+                    self.log(ex)
+                if content.find(b'Prepare join failed. Node is already part of cluster') >= 0:
+                    raise ServerAlreadyJoinedException(nodeIp=self.ip,
+                                                       remoteIp=remoteIp)
+                elif content.find(b'Prepare join failed. Joining node to itself is not allowed') >= 0:
+                    raise ServerSelfJoinException(nodeIp=self.ip,
+                                              remoteIp=remoteIp)
+                else:
+                    log.error('add_node error : {0}'.format(content))
+                    raise AddNodeException(nodeIp=self.ip,
+                                              remoteIp=remoteIp,
+                                              reason=content)
+        else:
+            raise AddNodeException(nodeIp=self.ip,
+                                   remoteIp=remoteIp,
+                                   reason="Rebalance error, cannot add node")
         return otpNode
 
         # params serverIp : the server to add to this cluster

@@ -9,9 +9,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.kvstore import KVStore
 from fts.stable_topology_fts import StableTopFTS
 from pytests.fts.fts_callable import FTSCallable
-from cbas.cbas_functional_tests import CBASFunctionalTests
 from couchbase.cluster import Cluster, PasswordAuthenticator
-from couchbase.exceptions import CouchbaseError, CouchbaseNetworkError, CouchbaseTransientError
 from security.rbac_base import RbacBase
 from threading import Thread
 from collection.collections_cli_client import CollectionsCLI
@@ -32,10 +30,39 @@ class XDCRUpgradeCollectionsTests(NewUpgradeBaseTest):
         self.threads = self.input.param("threads", 5)
         self.use_replica_to = self.input.param("use_replica_to", False)
         self.index_name_prefix = None
+        self.rest_src = RestConnection(self.servers[0])
 
     def tearDown(self):
         super(XDCRUpgradeCollectionsTests, self).tearDown()
 
+    def enable_migration_mode(self, src_bucket, dest_bucket):
+        setting_val_map = {"collectionsMigrationMode": "true",
+                           "colMappingRules": '{"REGEXP_CONTAINS(META().id,\'0$\')":"scope1.mycollection_scope1"}'
+                           }
+        self.rest_src.set_xdcr_params(src_bucket, dest_bucket, setting_val_map)
+
+    def verify_doc_counts(self):
+        des_master = self.servers[self.nodes_init]
+        src_cbver = RestConnection(self.master).get_nodes_version()
+        des_cbver = RestConnection(des_master).get_nodes_version()
+        src_items = RestConnection(self.master).get_buckets_itemCount()
+        des_items = RestConnection(des_master).get_buckets_itemCount()
+        if src_cbver[:3] < "7.0" and des_cbver[:3] >= "7.0":
+            des_items = self.get_col_item_count(des_master, "default", "_default",
+                                                "_default", self.des_stat_col)
+            if src_items["default"] != des_items:
+                self.fail("items do not match. src: {0} != des: {1}"
+                          .format(src_items["default"], des_items))
+        elif src_cbver[:3] >= "7.0" and des_cbver[:3] < "7.0":
+            src_items = self.get_col_item_count(self.master, "default", "_default",
+                                                "_default", self.stat_col)
+            if src_items != des_items["default"]:
+                self.fail("items do not match. src: {0} != des: {1}"
+                          .format(src_items, des_items["default"]))
+        elif src_cbver[:3] >= "7.0" and des_cbver[:3] >= "7.0":
+            if src_items["default"] != des_items["default"]:
+                self.fail("items do not match. src: {0} != des: {1}"
+                          .format(src_items["default"], des_items["default"]))
 
     def test_xdcr_upgrade_with_services(self):
         after_upgrade_services_in = self.input.param("after_upgrade_services_in", False)
@@ -66,12 +93,11 @@ class XDCRUpgradeCollectionsTests(NewUpgradeBaseTest):
             self.log.info("bucket is created")
 
         # create a xdcr relationship between cluster1 and cluster2
-        rest_src = RestConnection(self.servers[0])
-        rest_src.add_remote_cluster(self.servers[self.nodes_init].ip,
+        self.rest_src.add_remote_cluster(self.servers[self.nodes_init].ip,
                                     self.servers[self.nodes_init].port,
                                     'Administrator', 'password', "C2")
 
-        repl_id = rest_src.start_replication('continuous', 'default', "C2")
+        repl_id = self.rest_src.start_replication('continuous', 'default', "C2")
         if repl_id is not None:
             self.log.info("Replication created successfully")
         # Run the post_upgrade operations
@@ -117,6 +143,7 @@ class XDCRUpgradeCollectionsTests(NewUpgradeBaseTest):
         self.cli_col = CollectionsCLI(self.master)
         self.stat_col = CollectionsStats(self.master)
         self.log.info("Create scope collection at src cluster")
+        #self.rest_col.create_scope_collection_count()
         self._create_scope_collection(self.rest_col, self.cli_col, self.buckets[0].name)
         self.sleep(10)
 
@@ -129,28 +156,10 @@ class XDCRUpgradeCollectionsTests(NewUpgradeBaseTest):
         self._create_scope_collection(self.des_rest_col, self.des_cli_col, self.buckets[0].name)
         self.load_to_collections_bucket()
 
-        self.sleep(10)
-        des_master = self.servers[self.nodes_init]
-        src_cbver = RestConnection(self.master).get_nodes_version()
-        des_cbver = RestConnection(des_master).get_nodes_version()
-        src_items = RestConnection(self.master).get_buckets_itemCount()
-        des_items = RestConnection(des_master).get_buckets_itemCount()
-        if (src_cbver[:3] < "7.0" and des_cbver[:3] >= "7.0"):
-            des_items = self.get_col_item_count(des_master, "default", "_default",
-                                                     "_default", self.des_stat_col)
-            if src_items["default"] != des_items:
-                self.fail("items do not match. src: {0} != des: {1}"\
-                            .format(src_items["default"], des_items))
-        elif src_cbver[:3] >= "7.0" and des_cbver[:3] < "7.0":
-            src_items = self.get_col_item_count(self.master, "default", "_default",
-                                                     "_default", self.stat_col)
-            if src_items != des_items["default"]:
-                self.fail("items do not match. src: {0} != des: {1}"\
-                            .format(src_items, des_items["default"]))
-        elif src_cbver[:3] >= "7.0" and des_cbver[:3] >= "7.0":
-            if src_items["default"] != des_items["default"]:
-                self.fail("items do not match. src: {0} != des: {1}"\
-                      .format(src_items["default"], des_items["default"]))
+        self.enable_migration = self.input.param("enable_migration", False)
+        if self.enable_migration:
+            self.enable_migration_mode(self.buckets[0].name, self.buckets[0].name)
+        self.verify_doc_counts()
 
         if after_upgrade_buckets_in is not False:
             self.bucket_size = 100
@@ -192,4 +201,4 @@ class XDCRUpgradeCollectionsTests(NewUpgradeBaseTest):
         self.log.info("before create_user_source")
         RbacBase().create_user_source(testuser, 'builtin', node)
         self.log.info("before add_user_role")
-        status = RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
+        RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
