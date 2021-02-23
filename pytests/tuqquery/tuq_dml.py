@@ -16,6 +16,7 @@ class DMLQueryTests(QueryTests):
             self.bucket0 = self.query_buckets[0]
             self.bucket1 = self.query_buckets[1]
         for bucket in self.query_buckets:
+            self.ensure_primary_indexes_exist()
             self.run_cbq_query("DELETE from {0}".format(bucket))
         self.log.info("-" * 100)
         self.log.info("==============  DMLQueryTests setup has started ==============")
