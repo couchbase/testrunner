@@ -209,8 +209,12 @@ class EventingFailover(EventingBaseTest):
         eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         # load some data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if self.non_default_collection:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                         wait_for_loading=False)
+        else:
+            task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                         wait_for_loading=False)
         self.deploy_function(body)
         body1 = self.create_save_function_body(self.function_name + "1", self.handler_code)
         del body1['depcfg']['buckets'][0]
@@ -226,15 +230,27 @@ class EventingFailover(EventingBaseTest):
         self.sleep(10)
         self.wait_for_handler_state(body1['appname'],"deployed")
         if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True,
-                                         expected_duplicate=True)
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True,
-                                         expected_duplicate=True,bucket=self.dst_bucket_name1)
+            if self.non_default_collection:
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket",
+                                                  self.docs_per_day * self.num_docs * 2,expected_duplicate=True)
+                self.verify_doc_count_collections("dst_bucket1._default._default",
+                                                  self.docs_per_day * self.num_docs * 2, expected_duplicate=True)
+            else:
+                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs * 2,
+                                                  expected_duplicate=True)
+                self.verify_doc_count_collections("dst_bucket1._default._default",
+                                                  self.docs_per_day * self.num_docs * 2, expected_duplicate=True)
         else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,
-                                         expected_duplicate=True)
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 , skip_stats_validation=True,
-                                         expected_duplicate=True,bucket=self.dst_bucket_name1)
+            if self.non_default_collection:
+                self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs,
+                                                  expected_duplicate=True)
+                self.verify_doc_count_collections("dst_bucket1._default._default",
+                                                  self.docs_per_day * self.num_docs, expected_duplicate=True)
+            else:
+                self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs,
+                                                  expected_duplicate=True)
+                self.verify_doc_count_collections("dst_bucket1._default._default",
+                                                  self.docs_per_day * self.num_docs, expected_duplicate=True)
         self.undeploy_delete_all_functions()
 
     def test_multiple_eventing_failover_with_failover_running(self):
@@ -272,6 +288,8 @@ class EventingFailover(EventingBaseTest):
             else:
                 self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs,
                                                   expected_duplicate=True)
+        while self.check_eventing_rebalance():
+            pass
         self.undeploy_and_delete_function(body)
 
     def test_multiple_eventing_failover(self):
