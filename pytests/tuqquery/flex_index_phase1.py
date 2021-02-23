@@ -45,6 +45,7 @@ class FlexIndexTests(QueryTests):
         self.rebalance_in = self.input.param("rebalance_in", False)
         self.failover_fts = self.input.param("failover_fts", False)
         self.use_fts_query_param = self.input.param("use_fts_query_param", None)
+        self.query_node = self.get_nodes_from_services_map(service_type="n1ql")
         self.log.info("==============  FlexIndexTests setup has completed ==============")
 
     def tearDown(self):
@@ -63,7 +64,8 @@ class FlexIndexTests(QueryTests):
 
     def compare_results_with_gsi(self, flex_query, gsi_query, use_fts_query_param=None):
         try:
-            flex_result = self.run_cbq_query(flex_query, query_params={}, use_fts_query_param=use_fts_query_param)["results"]
+            flex_result = self.run_cbq_query(flex_query, query_params={}, use_fts_query_param=use_fts_query_param,
+                                             server=self.query_node)["results"]
             self.log.info("Number of results from flex query: {0} is {1}".format(flex_query, len(flex_result)))
         except Exception as e:
             self.log.info("Failed to run flex query: {0}".format(flex_query))
@@ -71,7 +73,8 @@ class FlexIndexTests(QueryTests):
             return False
 
         try:
-            gsi_result = self.run_cbq_query(gsi_query, query_params={}, use_fts_query_param=None)["results"]
+            gsi_result = self.run_cbq_query(gsi_query, query_params={}, use_fts_query_param=None,
+                                            server=self.query_node)["results"]
             self.log.info("Number of results from gsi query: {0} is {1}".format(gsi_query, len(gsi_result)))
         except Exception as e:
             self.log.info("Failed to run gsi query: {0}".format(gsi_query))
@@ -183,7 +186,7 @@ class FlexIndexTests(QueryTests):
             explain_query = "explain " + flex_query
             self.log.info("Query : {0}".format(explain_query))
             try:
-                result = self.run_cbq_query(explain_query)
+                result = self.run_cbq_query(explain_query, server=self.query_node)
             except Exception as e:
                 self.log.info("Failed to run query")
                 self.log.error(e)
@@ -481,8 +484,8 @@ class FlexIndexTests(QueryTests):
 
         fts_index = self.create_fts_index(
             name="default_index", source_name=self.bucket_name, doc_count=self.num_items)
-        if not self.is_index_present("default", "primary_gsi_index"):
-            self.run_cbq_query("create primary index primary_gsi_index on default")
+        if not self.is_index_present("default", "primary_gsi_index", server=self.query_node):
+            self.run_cbq_query("create primary index primary_gsi_index on default", server=self.query_node)
 
         query_list = ['SELECT META().id FROM `default` {0} WHERE address.ecpdId="1" ORDER BY META().id LIMIT 100',
                       'SELECT META().id, email FROM `default` {0} WHERE address.ecpdId="3" OR address.applicationId=300'

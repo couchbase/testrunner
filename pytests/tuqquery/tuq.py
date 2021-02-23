@@ -880,8 +880,8 @@ class QueryTests(BaseTestCase):
                 self.sleep(delay)
         self.log.info("indexers ready")
 
-    def is_index_present(self, bucket_name, index_name, fields_set=None, using=None, status="online"):
-        query_response = self.run_cbq_query("SELECT * FROM system:indexes WHERE indexes.bucket_id is missing")
+    def is_index_present(self, bucket_name, index_name, fields_set=None, using=None, status="online", server=None):
+        query_response = self.run_cbq_query("SELECT * FROM system:indexes WHERE indexes.bucket_id is missing", server=server)
         if fields_set is None and using is None:
             if status is "any":
                 desired_index = (index_name, bucket_name)
