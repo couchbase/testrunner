@@ -109,6 +109,7 @@ class EventingNegative(EventingBaseTest):
         except Exception as ex:
             if "ERR_SOURCE_BUCKET_MEMCACHED" not in str(ex):
                 self.fail("Eventing function allowed both source and metadata bucket to be memcached buckets")
+        self.skip_metabucket_check=True
 
     def test_src_metadata_and_dst_bucket_flush_when_eventing_is_processing_mutations(self):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
@@ -445,6 +446,7 @@ class EventingNegative(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, on_delete=True,skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+        self.skip_metabucket_check=True
 
     def test_n1ql_without_index_node(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
