@@ -331,10 +331,10 @@ class EventingRecovery(EventingBaseTest):
         else:
             if self.non_default_collection:
                 self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
-                                             expiry=10, wait_for_loading=False)
+                                             expiry=150, wait_for_loading=False)
             else:
                 self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
-                                             expiry=10, wait_for_loading=False)
+                                             expiry=150, wait_for_loading=False)
         # kill erlang on eventing when eventing is processing mutations
         for node in [eventing_node]:
             self.print_eventing_stats_from_all_eventing_nodes()
@@ -506,10 +506,10 @@ class EventingRecovery(EventingBaseTest):
         else:
             if self.non_default_collection:
                 self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
-                                             expiry=10, wait_for_loading=False)
+                                             expiry=150, wait_for_loading=False)
             else:
                 self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
-                                             expiry=10, wait_for_loading=False)
+                                             expiry=150, wait_for_loading=False)
         # pause handler
         if self.pause_resume:
             self.pause_function(body)
