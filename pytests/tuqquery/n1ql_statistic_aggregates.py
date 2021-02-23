@@ -1,4 +1,5 @@
 import math
+import statistics
 
 from membase.api.exception import CBQError
 from .tuq import QueryTests
@@ -320,86 +321,37 @@ class StatisticAggregatesTest(QueryTests):
     def _calculate_median_value(self, params):
         filtered_params = self._filter_digit_params(params)
         sorted_params = sorted(filtered_params)
-        ret_val = 0
-
-        if len(sorted_params) == 0:
-            return ret_val
-
-        if len(sorted_params) == 1:
-            return sorted_params[0]
-
-        if len(sorted_params) == 2:
-            return (sorted_params[0] + sorted_params[1]) // 2
-
-        if len(sorted_params) % 2 != 0:
-            ret_val = sorted_params[len(sorted_params) // 2]
-        else:
-            val_left = sorted_params[len(sorted_params) // 2 - 1]
-            val_right = sorted_params[len(sorted_params) // 2]
-            ret_val = (val_left + val_right) // 2
-
-        return ret_val
+        return statistics.median(sorted_params)
 
     def _calculate_stddev_value(self, params):
         filtered_params = self._filter_digit_params(params)
-        avg = self._calculate_avg(filtered_params)
-        sum = 0
-        for i in range(len(filtered_params)):
-            sum += math.pow(filtered_params[i] - avg, 2)
-
-        return math.sqrt(sum // (len(filtered_params) - 1))
+        return statistics.stdev(filtered_params)
 
     def _calculate_stddev_pop_value(self, params):
         filtered_params = self._filter_digit_params(params)
-        avg = self._calculate_avg(filtered_params)
-        sum = 0
-        for i in range(len(filtered_params)):
-            sum += math.pow(filtered_params[i] - avg, 2)
-
-        return math.sqrt(sum // len(filtered_params))
+        return statistics.pstdev(filtered_params)
 
     def _calculate_stddev_samp_value(self, params):
         filtered_params = self._filter_digit_params(params)
-        if len(filtered_params) <= 1:
-            return None
-
-        return self._calculate_stddev_value(filtered_params)
+        return statistics.stdev(filtered_params)
 
     def _calculate_mean_value(self, params):
-        return self._calculate_avg(params)
+        return statistics.mean(params)
 
     def _calculate_avg(self, params):
-        sum = 0
-        for i in range(len(params)):
-            sum += params[i]
-        return sum // len(params)
+        return statistics.mean(params)
 
     def _calculate_variance_value(self, params):
         filtered_params = self._filter_digit_params(params)
-        avg = self._calculate_avg(filtered_params)
-        sum = 0;
-        for i in range(len(filtered_params)):
-            sum += math.pow(filtered_params[i] - avg, 2)
-
-        return sum // (len(filtered_params) - 1)
+        return statistics.variance(filtered_params)
 
     def _calculate_variance_pop_value(self, params):
         filtered_params = self._filter_digit_params(params)
-        avg = self._calculate_avg(filtered_params)
-        sum = 0;
-        for i in range(len(filtered_params)):
-            sum += math.pow(filtered_params[i] - avg, 2)
-
-        return sum // len(params)
+        return statistics.pvariance(filtered_params)
 
     def _calculate_variance_samp_value(self, params):
         filtered_params = self._filter_digit_params(params)
-        avg = self._calculate_avg(filtered_params)
-        sum = 0;
-        for i in range(len(filtered_params)):
-            sum += math.pow(filtered_params[i] - avg, 2)
-
-        return sum // (len(filtered_params) - 1)
+        return statistics.variance(filtered_params)
 
     def _filter_digit_params(self, params):
         ret_val = list([x for x in params if isinstance(x, int) or isinstance(x, int) or isinstance(x, float)])
