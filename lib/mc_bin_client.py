@@ -155,7 +155,7 @@ class MemcachedClient(KeepRefs):
                     extended_meta_data = extended_meta_data.encode()
                 except AttributeError:
                     pass
-                self.s.send(msg + extraHeader + key + val + extended_meta_data)
+                self.s.sendall(msg + extraHeader + key + val + extended_meta_data)
             else:
                 raise exceptions.EOFError("Timeout waiting for socket send. from {0}".format(self.host))
 
