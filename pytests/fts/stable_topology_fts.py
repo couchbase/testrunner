@@ -1533,9 +1533,9 @@ class StableTopFTS(FTSBaseTest):
         """
         Test if the TF score in the Scoring functionality works fine
         """
-        test_data = ["{\\\"text\\\":\\\"cat - a lazy cat and a brown cat\\\"}",
-                     "{\\\"text\\\":\\\"a lazy cat and a brown cat\\\"}",
-                     "{\\\"text\\\":\\\"a lazy cat\\\"}"]
+        test_data = [{"text":"cat - a lazy cat and a brown cat"},
+                     {"text":"a lazy cat and a brown cat"},
+                     {"text":"a lazy cat"}]
 
         self.create_test_dataset(self._master, test_data)
         self.wait_till_items_in_bucket_equal(items=len(test_data))
@@ -1601,13 +1601,13 @@ class StableTopFTS(FTSBaseTest):
         """
         Test if the IDF score in the Scoring functionality works fine
         """
-        test_data = ["{\\\"text\\\":\\\"a brown cat\\\"}",
-                     "{\\\"text\\\":\\\"a lazy cat\\\"}",
-                     "{\\\"text\\\":\\\"a lazy cat and a brown cat\\\"}",
-                     "{\\\"text\\\":\\\"a brown dog\\\"}",
-                     "{\\\"text\\\":\\\"a lazy dog\\\"}",
-                     "{\\\"text\\\":\\\"a lazy dog and a brown dog\\\"}",
-                     "{\\\"text\\\":\\\"a lazy fox and a brown fox\\\"}"]
+        test_data = [{"text":"a brown cat"},
+                     {"text":"a lazy cat"},
+                     {"text":"a lazy cat and a brown cat"},
+                     {"text":"a brown dog"},
+                     {"text":"a lazy dog"},
+                     {"text":"a lazy dog and a brown dog"},
+                     {"text":"a lazy fox and a brown fox"}]
 
         self.create_test_dataset(self._master, test_data)
         self.wait_till_items_in_bucket_equal(items=len(test_data))
@@ -1655,9 +1655,9 @@ class StableTopFTS(FTSBaseTest):
         """
         Test if the Field Normalization score in the Scoring functionality works fine
         """
-        test_data = ["{\\\"text\\\":\\\"a cat\\\"}",
-                     "{\\\"text\\\":\\\"a lazy cat\\\"}",
-                     "{\\\"text\\\":\\\"a lazy cat and a brown cat\\\"}"]
+        test_data = [{"text":"a cat"},
+                     {"text":"a lazy cat"},
+                     {"text":"a lazy cat and a brown cat"}]
 
         self.create_test_dataset(self._master, test_data)
         self.wait_till_items_in_bucket_equal(items=len(test_data))
@@ -1716,9 +1716,9 @@ class StableTopFTS(FTSBaseTest):
         """
         Test if the Query Normalization score in the Scoring functionality works fine
         """
-        test_data = ["{\\\"text\\\":\\\"a cat\\\"}",
-                     "{\\\"text\\\":\\\"a lazy cat\\\"}",
-                     "{\\\"text\\\":\\\"a lazy cat and a brown cat\\\"}"]
+        test_data = [{"text":"a cat"},
+                     {"text":"a lazy cat"},
+                     {"text":"a lazy cat and a brown cat"}]
 
         self.create_test_dataset(self._master, test_data)
         self.wait_till_items_in_bucket_equal(items=len(test_data))
@@ -1777,8 +1777,8 @@ class StableTopFTS(FTSBaseTest):
         """
         Test if the Coord score in the Scoring functionality works fine
         """
-        test_data = ["{\\\"text\\\":\\\"a cat\\\"}",
-                     "{\\\"text\\\":\\\"a lazy cat\\\"}"]
+        test_data = [{"text":"a cat"},
+                     {"text":"a lazy cat"}]
 
         self.create_test_dataset(self._master, test_data)
         self.wait_till_items_in_bucket_equal(items=len(test_data))
