@@ -428,11 +428,12 @@ class QueryAdviseTests(QueryTests):
             self.fail()
 
     def test_array_func(self):
-        field_list =['`roomType`','DISTINCT ARRAY [`s`.`level`, `s`.`size`, `s`.`num`] FOR s in `rooms` END','`guestCode`','`startTime`','`endTime`','array_distinct(ifmissing((array_star((`rooms`)).`num`), []))']
+        field_list =['`roomType`','DISTINCT ARRAY [`s`.`level`, `s`.`size`, `s`.`num`] FOR s in `rooms` END','`guestCode`','`startTime`','`endTime`','array_distinct(ifmissing((array_star(`rooms`).`num`), []))']
         try:
             results_fake_field = self.run_cbq_query(query="advise SELECT META(p).id, ARRAY_DISTINCT(IFMISSING(rooms[*].num,[])) FROM `travel-sample` AS p WHERE type = 'hotel' AND (guestCode = IFNULL($guestCode, '') OR guestCode = '') AND (roomType = IFNULL($roomType,'R') OR roomType = IFNULL($roomType,'D') ) AND ($checkinTime BETWEEN startTime AND endTime) AND (ANY s IN rooms SATISFIES [s.`level`,s.size, s.num] = [$level, $size, $num] END)", server=self.master)
+            self.log.info("Advised index is {0}".format(results_fake_field))
             for field in field_list:
-                self.assertTrue(field in results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][0]['index_statement'], "The field is missing from the recommended index: {0}".format(field))
+                self.assertTrue(field in results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][0]['index_statement'], "The field is missing from the recommended index: {0}, Index advised: {1}".format(field,results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][0]['index_statement']))
         except Exception as e:
             self.log.info("Advise statement failed: {0}".format(e))
             self.fail()
@@ -460,50 +461,53 @@ class QueryAdviseTests(QueryTests):
 
     def test_user_generated_advise_2(self):
         field_list1 =['`type`','`type_`','`effectiveDate`','`policy`.`id`']
-        field_list2 =['`type_`','`policy`.`id`','to_number((`loadingPremium`))','to_number((`installmentPremium`))']
+        field_list2 =['`type_`','`policy`.`id`','to_number(`loadingPremium`)','to_number(`installmentPremium`)']
         try:
             results_fake_field = self.run_cbq_query(query="ADVISE select q1.PolID as PolicyID, SUM(((q1.POLoadPrem) + (q1.POInstPrem) + (q1.PCOLoadPrem) + (q1.PCOInstPrem)) * (q1.FreqValue)) as TotalPremium from (select meta(pol).id as PolID, TO_NUMBER(pol.paymentOption.frequency) as Freq, TO_NUMBER(po.installmentPremium) as POInstPrem, TO_NUMBER(po.loadingPremium) as POLoadPrem, TO_NUMBER(pco.installmentPremium) as PCOInstPrem, TO_NUMBER(pco.loadingPremium) as PCOLoadPrem, CASE WHEN pol.paymentOption.frequency == 'ANNUAL' THEN 1 WHEN pol.paymentOption.frequency == 'SEMI-ANNUAL' THEN 2 WHEN pol.paymentOption.frequency == 'QUARTERLY' THEN 4 WHEN pol.paymentOption.frequency == 'MONTHLY' THEN 12 WHEN pol.paymentOption.frequency == 'SINGLE' THEN 0.1 END AS FreqValue from data td join data pol on td.policy.id = meta(pol).id join data po on td.policy.id = po.policy.id join data pco on td.policy.id = pco.policy.id where td.type_ = 'TransactionDetail' and pol.type_ = 'Policy' and po.type_ = 'ProductOption' and pco.type_ = 'ProductComponentOption' and td.type = 'NEWCONTRACTPROPOSAL' and td.effectiveDate = '2019-12-13' and pol.status = 'INFORCE' ) q1 group by q1.PolID", server=self.master)
+            self.log.info("Advised index is {0}".format(results_fake_field))
             for field in field_list1:
                 self.assertTrue(field in
-                                results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
-                                    'covering_indexes'][0]['index_statement'],
-                                "The field is missing from the recommended index: {0}".format(field))
+                                results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][0]['index_statement'],
+                                "The field is missing from the recommended index: {0} , Index Advised {1}".format(field,results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][0]['index_statement']))
             for field in field_list2:
                 self.assertTrue(field in
-                                results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
-                                    'covering_indexes'][1]['index_statement'],
-                                "The field is missing from the recommended index: {0}".format(field))
+                                results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][1]['index_statement'],
+                                "The field is missing from the recommended index: {0}, Index Advised {1}".format(field, results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][1]['index_statement']))
         except Exception as e:
             self.log.info("Advise statement failed: {0}".format(e))
             self.fail()
 
     def test_user_generated_advise_3(self):
-        field_list1 =['ALL `details`','`type`','`storeId`','lower(((`drawer`).`name`))']
+        field_list1 =['ALL `details`','`type`','`storeId`','lower((`drawer`.`name`))']
         field_list2 =['ALL ARRAY lower((`currencyDetails`.`currencyCode`)) FOR currencyDetails IN `details` END','`type`','`storeId`']
-        field_list3 =['ALL `details`','`type`','`storeId`','lower(((`transactionUser`).`name`))']
+        field_list3 =['ALL `details`','`type`','`storeId`','lower((`transactionUser`.`name`))']
         field_list4 =['ALL `details`','`type`','`storeId`']
         try:
             results_fake_field = self.run_cbq_query(query="ADVISE SELECT parent.id, parent.createdDate, parent.drawer.name, parent.transactionUser.name as userName, currencyDetails.currencyCode, currencyDetails.totalValue, store[0].name AS storeName FROM TransactionManager AS parent UNNEST parent.details AS currencyDetails LET store = ARRAY node FOR node IN parent.nodeStructure WHEN node.nodeType= 'STORE' END WHERE parent.type='PICK_UP' AND (LOWER(parent.drawer.name) LIKE 'sal%' OR LOWER(currencyDetails.currencyCode) LIKE 'sal%' OR LOWER(parent.transactionUser.name) LIKE 'sal%' OR ARRAY  node FOR node IN store WHEN node.nodeType='STORE' AND LOWER(node.name) LIKE 'sal%'  END) AND parent.storeId IN ['S::1','S::2','S::3','S::4','S::5','S::6','S::7','S::31','NODE::7070483e-f2c8-4b33-9360-eeec26e38a38','NODE::7070483e-f2c8-4b33-9360-eeec26e38a39']", server=self.master)
+            self.log.info("Advised index is {0}".format(results_fake_field))
             for field in field_list1:
                 self.assertTrue(field in
                                 results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['indexes'][0]['index_statement'],
-                                "The field is missing from the recommended index: {0}".format(field))
+                                "The field is missing from the recommended index: {0}, Index Advised {1}".format(field, results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['indexes'][0]['index_statement']))
             for field in field_list2:
                 self.assertTrue(field in
                                 results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
                                     'indexes'][1]['index_statement'],
-                                "The field is missing from the recommended index: {0}".format(field))
+                                "The field is missing from the recommended index: {0}, Index Advised {1}".format(field, results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
+                                    'indexes'][1]['index_statement']))
             for field in field_list3:
                 self.assertTrue(field in
                                 results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
                                     'indexes'][2]['index_statement'],
-                                "The field is missing from the recommended index: {0}".format(field))
+                                "The field is missing from the recommended index: {0}, Index Advised {1}".format(field, results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
+                                    'indexes'][2]['index_statement']))
 
             for field in field_list4:
                 self.assertTrue(field in
                                 results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
                                     'indexes'][3]['index_statement'],
-                                "The field is missing from the recommended index: {0}".format(field))
+                                "The field is missing from the recommended index: {0}, Index Advised {1}".format(field, results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
+                                    'indexes'][3]['index_statement']))
         except Exception as e:
             self.log.info("Advise statement failed: {0}".format(e))
             self.fail()
