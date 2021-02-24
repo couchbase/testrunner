@@ -374,19 +374,16 @@ class EventingFailover(EventingBaseTest):
                                          wait_for_loading=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
+        fail_over_task.result()
         self.wait_for_failover()
-        self.sleep(3)
         try:
-            rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+            self.cluster.rebalance(self.servers[:self.nodes_init], [], [eventing_server[1]])
             self.fail("Rebalance operation succeed even when failover is running")
         except Exception as e:
             self.log.info(str(e))
             if "Rebalance failed. See logs for detailed reason. You can try again." not in str(e):
                 self.fail("Error missmatch {}".format(e))
-        fail_over_task.result()
         task.result()
-        # Wait for failover to complete
-        self.sleep(10)
         if self.non_default_collection:
             self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs,
                                               expected_duplicate=True)

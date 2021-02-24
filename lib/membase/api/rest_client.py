@@ -3749,7 +3749,7 @@ class RestConnection(object):
     def get_logs(self, last_n=10, contains_text=None):
         api = self.baseUrl + 'logs'
         status, content, header = self._http_request(api)
-        json_parsed = json.loads(content)
+        json_parsed = json.loads(content.decode("utf-8","ignore"))
         logs = json_parsed['list']
         logs.reverse()
         result = []
