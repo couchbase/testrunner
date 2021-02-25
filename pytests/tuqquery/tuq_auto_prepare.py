@@ -285,7 +285,7 @@ class QueryAutoPrepareTests(QueryTests):
                 query="PREPARE P1 FROM select * from {0} WHERE join_day = 10 limit 5".format(self.query_bucket),
                 server=self.servers[0])
             self.sleep(2)
-            prepared_results = self.run_cbq_query(query="select * from system:prepareds")
+            prepared_results = self.run_cbq_query(query="select * from system:prepareds where name = 'P1'")
             self.assertEqual(prepared_results['metrics']['resultCount'], 2,
                              "Count mismatch dumping results from system:prepareds: " % prepared_results)
             query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])
@@ -315,7 +315,7 @@ class QueryAutoPrepareTests(QueryTests):
                 query="PREPARE P1 FROM select * from {0} WHERE join_day = 10 limit 5".format(self.query_bucket),
                 server=self.servers[0])
             self.sleep(2)
-            prepared_results = self.run_cbq_query(query="select * from system:prepareds")
+            prepared_results = self.run_cbq_query(query="select * from system:prepareds where name = 'P1'")
             self.assertEqual(prepared_results['metrics']['resultCount'], 2,
                              "Count mismatch dumping results from system:prepareds: " % prepared_results)
             query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])
@@ -346,7 +346,7 @@ class QueryAutoPrepareTests(QueryTests):
                 query="PREPARE P1 FROM select * from {0} WHERE join_day = 10 limit 5".format(self.query_bucket),
                 server=self.servers[0])
             self.sleep(2)
-            prepared_results = self.run_cbq_query(query="select * from system:prepareds")
+            prepared_results = self.run_cbq_query(query="select * from system:prepareds where name = 'P1'")
             self.assertEqual(prepared_results['metrics']['resultCount'], 2,
                              "Count mismatch dumping results from system:prepareds: " % prepared_results)
             query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])
@@ -381,7 +381,7 @@ class QueryAutoPrepareTests(QueryTests):
                 query="PREPARE P1 FROM select * from {0} WHERE join_day = 10 limit 5".format(self.query_bucket),
                 server=self.servers[0])
             self.sleep(2)
-            prepared_results = self.run_cbq_query(query="select * from system:prepareds")
+            prepared_results = self.run_cbq_query(query="select * from system:prepareds where name = 'P1'")
             self.assertEqual(prepared_results['metrics']['resultCount'], 2,
                              "Count mismatch dumping results from system:prepareds: " % prepared_results)
             query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])
