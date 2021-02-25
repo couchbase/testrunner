@@ -469,7 +469,7 @@ class DataCollector(object):
                     completeMap[bucket][server.ip] = newMap
                 else:
                     completeMap[bucket].update(newMap)
-        return headerInfo,completeMap
+        return headerInfo, completeMap
 
     def collect_vbucket_stats(self, buckets, servers, collect_vbucket = True,
                                                       collect_vbucket_seqno = True,

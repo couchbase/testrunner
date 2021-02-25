@@ -4087,12 +4087,18 @@ class RemoteMachineShellConnection:
             transfer_command = "%scbtransfer" % (MAC_COUCHBASE_BIN_PATH)
 
         command = "%s %s %s %s" % (transfer_command, source, destination, command_options)
+        uncompress_flag = ""
+        f, s, b = self.get_cbversion(self.info.type.lower())
+        if f[:5] == "6.6.2":
+            uncompress_flag = " -x uncompress=1 "
+            """ need to uncompress data to compare value in bkrs from 6.6.2"""
         if self.info.type.lower() == 'windows':
             command = "cmd /c \"%s\" \"%s\" \"%s\" %s" % (transfer_command,
                                                           source,
                                                           destination,
                                                           command_options)
-        output, error = self.execute_command(command, debug=debug, use_channel=True)
+        output, error = self.execute_command(command + uncompress_flag, debug=debug,
+                                             use_channel=True)
         if debug:
             self.log_command_output(output, error)
         log.info("done execute cbtransfer")
