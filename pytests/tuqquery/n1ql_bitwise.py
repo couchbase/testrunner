@@ -164,35 +164,35 @@ class QueryBitwiseTests(QueryTests):
 
     def test_default_bitand_bitor_bitxor_bitnot(self):
         self.query = "select bitand(VMs[0].RAM,VMs[1].RAM) from {0} where" \
-                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
+                     " _id='query-testemployee10153.187782713003-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': 10}])
         self.query = "select bitand(tasks_points.task1,tasks_points.task2) from {0} where" \
-                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
+                     " _id='query-testemployee10153.187782713003-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': 1}])
         self.query = "select bitor(VMs[0].RAM,VMs[1].RAM) from {0} where" \
-                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
+                     " _id='query-testemployee10153.187782713003-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': 10}])
         self.query = "select bitor(tasks_points.task1,tasks_points.task2) from {0} where" \
-                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
+                     " _id='query-testemployee10153.187782713003-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': 1}])
         self.query = "select bitxor(VMs[0].RAM,VMs[1].RAM) from {0} where" \
-                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
+                     " _id='query-testemployee10153.187782713003-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': 0}])
         self.query = "select bitxor(tasks_points.task1,tasks_points.task2) from {0} where" \
-                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
+                     " _id='query-testemployee10153.187782713003-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': 0}])
         self.query = "select bitnot(VMs[0].RAM) from {0} where" \
-                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
+                     " _id='query-testemployee10153.187782713003-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': -11}])
         self.query = "select bitnot(tasks_points.task1) from {0} where" \
-                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
+                     " _id='query-testemployee10153.187782713003-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': -2}])
 
