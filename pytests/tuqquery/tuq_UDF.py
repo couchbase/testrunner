@@ -760,6 +760,62 @@ class QueryUDFTests(QueryTests):
             except Exception as e:
                 self.log.error(str(e))
 
+    def test_abort_udf(self):
+        try:
+            try:
+                self.run_cbq_query('CREATE FUNCTION variadic(...) { CASE WHEN array_length(args) != 1 THEN abort("wrong args: " || to_string(array_length(args)))  WHEN type(args[0]) = "string" THEN args[0] ELSE abort("wrong type " || type(args[0]) || ": " || to_string(args[0])) END }')
+            except Exception as e:
+                self.log.error(str(e))
+                self.fail()
+            try:
+                results = self.run_cbq_query("EXECUTE FUNCTION variadic(1,2)")
+                self.fail("Function should have failed with an error {0}".format(results))
+            except Exception as e:
+                self.log.error(str(e))
+                self.assertTrue("wrong args: 2" in str(e))
+            try:
+                results = self.run_cbq_query("EXECUTE FUNCTION variadic(1)")
+                self.fail("Function should have failed with an error {0}".format(results))
+            except Exception as e:
+                self.log.error(str(e))
+                self.assertTrue("wrong type number" in str(e))
+            try:
+                results = self.run_cbq_query("EXECUTE FUNCTION variadic('string')")
+                self.assertEqual(results['results'], ['string'])
+            except Exception as e:
+                self.log.error(str(e))
+                self.fail()
+            try:
+                results = self.run_cbq_query("select variadic(1,2)")
+                self.fail("Function should have failed with an error {0}".format(results))
+            except Exception as e:
+                self.log.error(str(e))
+                self.assertTrue("wrong args: 2" in str(e))
+            try:
+                results = self.run_cbq_query("select variadic(1)")
+                self.fail("Function should have failed with an error {0}".format(results))
+            except Exception as e:
+                self.log.error(str(e))
+                self.assertTrue("wrong type number" in str(e))
+            try:
+                results = self.run_cbq_query("select variadic('string')")
+                self.assertEqual(results['results'], [{'$1': 'string'}])
+            except Exception as e:
+                self.log.error(str(e))
+                self.fail()
+            try:
+                self.run_cbq_query('CREATE FUNCTION abort_msg() {  abort("This function simply aborts") }')
+                results = self.run_cbq_query("select abort_msg()")
+            except Exception as e:
+                self.log.error(str(e))
+                self.assertTrue("This function simply aborts" in str(e))
+        finally:
+            try:
+                self.run_cbq_query("DROP FUNCTION variadic")
+                self.run_cbq_query("DROP FUNCTION abort_msg")
+            except Exception as e:
+                self.log.error(str(e))
+
 ##############################################################################################
 #
 #   JAVASCRIPT FUNCTIONS
