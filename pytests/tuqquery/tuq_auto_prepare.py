@@ -334,7 +334,7 @@ class QueryAutoPrepareTests(QueryTests):
             query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
             self.assertEqual(query_results2['metrics']['resultCount'], 5)
         finally:
-            self.run_cbq_query(query="DROP INDEX idx ON {0}2".format(self.query_bucket))
+            self.run_cbq_query(query="DROP INDEX idx2 ON {0}".format(self.query_bucket))
             self.wait_for_index_drop(self.default_bucket_name, "idx2", [("join_day", 0)], self.index_type.lower())
 
     '''Run a prepared statement using primary index, then drop primary index and create a new index that the query will
