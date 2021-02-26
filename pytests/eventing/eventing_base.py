@@ -115,12 +115,6 @@ class EventingBaseTest(QueryHelperTests):
         self.non_default_collection=self.input.param('non_default_collection',False)
         self.num_docs=2016
         self.is_binary=self.input.param('binary_doc',False)
-        self.eventing_role=self.input.param('eventing_role', True)
-        if self.eventing_role:
-            self.eventing_role_username="eventing_admin"
-            self.eventing_role_password="password"
-            payload="name="+self.eventing_role_username+"&roles=eventing_admin"+"&password="+self.eventing_role_password
-            self.rest.add_set_builtin_user(self.eventing_role_username,payload)
 
     def tearDown(self):
         # catch panics and print it in the test log
