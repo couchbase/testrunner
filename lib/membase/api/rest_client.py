@@ -391,8 +391,8 @@ class RestConnection(object):
             return None
         return t
 
-    def is_cluster_mixed(self):
-            http_res, success = self.init_http_request(self.baseUrl + 'pools/default')
+    def is_cluster_mixed(self, timeout=120):
+            http_res, success = self.init_http_request(self.baseUrl + 'pools/default', timeout=timeout)
             if http_res == 'unknown pool':
                 return False
             try:
@@ -437,11 +437,11 @@ class RestConnection(object):
             return False
         return True
 
-    def init_http_request(self, api):
+    def init_http_request(self, api, timeout=120):
         content = None
         try:
             headers = self._create_capi_headers()
-            status, content, header = self._http_request(api, 'GET', headers=headers)
+            status, content, header = self._http_request(api, 'GET', headers=headers, timeout=timeout)
             json_parsed = json.loads(content)
             if status:
                 return json_parsed, True

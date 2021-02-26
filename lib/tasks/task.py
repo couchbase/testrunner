@@ -859,7 +859,7 @@ class RebalanceTask(Task):
             self.state = FINISHED
             self.set_unexpected_exception(e, " in {0} sec".format(time.time() - self.start_time))
         retry_get_process_num = 25
-        if self.rest.is_cluster_mixed():
+        if self.rest.is_cluster_mixed(timeout=300): # See MB-40670
             """ for mix cluster, rebalance takes longer """
             self.log.info("rebalance in mix cluster")
             retry_get_process_num = 40
