@@ -1205,7 +1205,7 @@ class QueryCollectionsDDLTests(QueryTests):
             "test_queries": [
                 {
                     "text": "drop collection collection1",
-                    "expected_error": "Invalid path specified: path has wrong number of parts"
+                    "expected_error": "Invalid path specified: default:collection1 has invalid number of parts"
                 }
             ]
         },
