@@ -3854,33 +3854,6 @@ class RemoteMachineShellConnection(KeepRefs):
              words = [x for x in words if x != ""]
              return words[1]
 
-    def set_address_family_to_ipv6(self):
-        """ Sets the address family of the node to ipv6"""
-        username = self.input.membase_settings.rest_username
-        password = self.input.membase_settings.rest_password
-        output, error = self.execute_couchbase_cli('ip-family', cluster_host=self.ip, options="--set --ipv6", user=username, password=password)
-        self.log_command_output(output, error)
-
-    def cleanup_all_configuration(self, data_path):
-        """ Deletes the contents of the parent folder that holds the data and config directories.
-
-        Args:
-            data_path (str): The path key from the /nodes/self end-point which
-            looks something like "/opt/couchbase/var/lib/couchbase/data" on
-            Linux or "c:/Program Files/Couchbase/Server/var/lib/couchbase/data"
-            on Windows.
-        """
-        # The path returned on both Linux and Windows by the /nodes/self end-point uses forward slashes.
-        path = data_path.replace("/data", "")
-
-        self.extract_remote_info()
-        # Use the cygwin style path instead
-        if "c:/Program Files" in path and self.info.type.lower() == 'windows':
-            path = path.replace("c:/Program Files", "/cygdrive/c/Program\ Files")
-
-        o, r = self.execute_command(f"rm -rf {path}/*")
-        self.log_command_output(o, r)
-
     def cleanup_data_config(self, data_path):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
