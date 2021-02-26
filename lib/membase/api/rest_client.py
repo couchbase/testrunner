@@ -2130,14 +2130,19 @@ class RestConnection(object):
             for key in json_parsed:
                 # each key contain node info
                 value = json_parsed[key]
-                # get otp,get status
+                # Create an OtpNode object given the id and status.
+                # Note the OtpNode object grabs the ip address from the id.
                 node = OtpNode(id=value['otpNode'],
                                status=value['status'])
                 if node.ip == 'cb.local':
                     node.ip = self.ip
                     node.id = node.id.replace('cb.local',
                                               self.ip.__str__())
-                if node.ip == '127.0.0.1':
+                # The ip address grabbed from the id is '127.0.0.1' or '::1'
+                # when the node is not part of a cluster.  This can be amended
+                # to the ip address in the TestInputServer object that is
+                # provided.
+                if node.ip in ['127.0.0.1', '[::1]']:
                     node.ip = self.ip
                 node.port = int(key[key.rfind(":") + 1:])
                 node.replication = value['replication']
