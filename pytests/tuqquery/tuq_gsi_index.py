@@ -2139,11 +2139,11 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(plan['~children'][0]['~children'][0]['index'] == idx3)
                 self.assertTrue("cover" in str(plan))
                 self.query = "select meta().id from {0} WHERE  tasks[1]='Sales'".format(query_bucket) + \
-                             " AND  NOT (department = 'Manager') order by department limit 10"
+                             " AND  NOT (department = 'Manager') order by department, meta().id  limit 10"
                 actual_result = self.run_cbq_query()
                 self.query = "select meta().id from {0} use index(`#primary`) " \
                              "WHERE  tasks[1]='Sales'".format(query_bucket) + \
-                             " AND  NOT (department = 'Manager') order by department limit 10"
+                             " AND  NOT (department = 'Manager') order by department, meta().id limit 10"
 
                 expected_result = self.run_cbq_query()
                 self.assertEqual(actual_result['results'], expected_result['results'])

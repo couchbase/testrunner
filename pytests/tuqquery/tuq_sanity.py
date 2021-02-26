@@ -1756,11 +1756,13 @@ class QuerySanityTests(QueryTests):
             0] + ' d let name1 = substr(name[0].FirstName,0,10) WHERE name1 = "employeefi"'
         res = self.run_cbq_query()
         plan = self.ExplainPlanHelper(res)
-        self.assertEqual(plan['~children'][2]['~child']['~children'], [
-            {'#operator': 'Let', 'bindings': [{'var': 'name1',
-                                               'expr': 'substr0((((`d`.`name`)[0]).`FirstName`), 0, 10)'}]},
-            {'#operator': 'Filter', 'condition': '(`name1` = "employeefi")'},
-            {'#operator': 'InitialProject', 'result_terms': [{'expr': '`name1`'}]}])
+        for operator in plan['~children'][2]['~child']['~children']:
+            if operator['#operator'] == 'Filter':
+                self.assertTrue(operator['condition'] == '(`name1` = "employeefi")' or operator['condition'] == '(substr0((((`d`.`name`)[0]).`FirstName`), 0, 10) = "employeefi")')
+            if operator['#operator'] == 'Let':
+                self.assertEqual(operator['bindings'], [{'expr': 'substr0((((`d`.`name`)[0]).`FirstName`), 0, 10)', 'var': 'name1'}])
+            if operator['#operator'] == 'InitialProject':
+                self.assertEqual(operator['result_terms'], [{'expr': '`name1`'}])
 
         self.query = 'select name1 from ' + self.query_buckets[
             0] + ' d let name1 = substr(name[0].FirstName,0,10) WHERE name1 = "employeefi" limit 2'

@@ -1054,7 +1054,11 @@ class QueryTests(BaseTestCase):
                                 self.run_cbq_query("CREATE PRIMARY INDEX ON `%s` USING %s" % (keyspace, using))
                                 break
                             except CBQError as ex:
-                                self.log.error(f"Fail to create index: {ex}")
+                                if "Index #primary already exists" in ex:
+                                    self.log.info("Primary index already exists")
+                                    break
+                                else:
+                                    self.log.error(f"Fail to create index: {ex}")
                             if next_time - init_time > 600:
                                 self.log.fail("Fail to create primary index before timeout")
                             time.sleep(2)
