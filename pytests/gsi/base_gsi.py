@@ -962,6 +962,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def verify_compression_stat(self, query_definitions):
         all_index_comp_stat_verified = False
+        is_any_stat_negative = False
         indexer_nodes = self.get_nodes_from_services_map(service_type="index",
                                                          get_all_nodes=True)
         for node in indexer_nodes:
@@ -970,6 +971,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             for index in list(content.values()):
                 for index_name, stats in index.items():
                     comp_stat_verified = False
+                    is_stat_negative = False
                     for query in query_definitions:
                         if index_name == query.index_name:
                             self.log.info(f'num_rec_compressed for index {index_name} found to be '
@@ -977,7 +979,13 @@ class BaseSecondaryIndexingTests(QueryTests):
                                           f'{stats["MainStore"]["num_rec_swapin"]}')
                             if stats["MainStore"]["num_rec_compressed"] > 0:
                                 comp_stat_verified = True
+                            if stats["MainStore"]["num_rec_compressed"] < 0:
+                                is_stat_negative = True
                     all_index_comp_stat_verified = all_index_comp_stat_verified or comp_stat_verified
+                    is_any_stat_negative = is_any_stat_negative and is_stat_negative
+
+            if is_any_stat_negative:
+                all_index_comp_stat_verified = False
         return all_index_comp_stat_verified
 
     def wait_for_mutation_processing(self, index_nodes):
