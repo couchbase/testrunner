@@ -1251,39 +1251,43 @@ class BaseSecondaryIndexingTests(QueryTests):
         while not check:
             index_status = rest.get_index_status()
             next_time = time.time()
-            for index_info in index_status.values():
-                for index_state in index_info.values():
-                    if defer_build:
-                        if index_state["status"] == "Ready" or index_state["status"] == "Created":
-                            check = True
+            if index_status == {}:
+                self.log.error("No indexes are present, this check does not apply!")
+                break
+            else:
+                for index_info in index_status.values():
+                    for index_state in index_info.values():
+                        if defer_build:
+                            if index_state["status"] == "Ready" or index_state["status"] == "Created":
+                                check = True
+                            else:
+                                check = False
+                                time.sleep(1)
+                                break
+                        elif check_paused_index:
+                            if index_state["status"] == "Paused":
+                                check = True
+                            else:
+                                check = False
+                                time.sleep(1)
+                                break
+                        elif schedule_index:
+                            if index_state["status"] == "Ready" or index_state["status"] == "Scheduled for Creation":
+                                check = True
+                            else:
+                                check = False
+                                time.sleep(1)
+                                break
                         else:
-                            check = False
-                            time.sleep(1)
-                            break
-                    elif check_paused_index:
-                        if index_state["status"] == "Paused":
-                            check = True
-                        else:
-                            check = False
-                            time.sleep(1)
-                            break
-                    elif schedule_index:
-                        if index_state["status"] == "Ready" or index_state["status"] == "Scheduled for Creation":
-                            check = True
-                        else:
-                            check = False
-                            time.sleep(1)
-                            break
-                    else:
-                        if index_state["status"] == "Ready":
-                            check = True
-                        else:
-                            check = False
-                            time.sleep(1)
-                            break
-            if next_time - init_time > timeout:
-                timed_out = True
-                check = next_time - init_time > timeout
+                            if index_state["status"] == "Ready":
+                                check = True
+                            else:
+                                check = False
+                                time.sleep(1)
+                                break
+                    if next_time - init_time > timeout:
+                        timed_out = True
+                        check = next_time - init_time > timeout
         if timed_out:
             check = False
         return check

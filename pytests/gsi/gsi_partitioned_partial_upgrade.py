@@ -71,7 +71,7 @@ class UpgradePartialParititionedIndex(UpgradeSecondaryIndex):
             query="INSERT INTO `{0}` ( KEY, VALUE ) VALUES ('K4', {1})".format(self.bucket_name, insert4),
             server=self.n1ql_node)
 
-        time.sleep(20)
+        time.sleep(40)
 
         pending_results = self.n1ql_helper.run_cbq_query('SELECT meta().id FROM `{0}` WHERE createdDateTime BETWEEN 1 AND 10 AND status = "PENDING" order by meta().id'.format(self.bucket_name))
         success_results = self.n1ql_helper.run_cbq_query('SELECT meta().id FROM `{0}` WHERE createdDateTime BETWEEN 1 AND 10 AND status = "SUCCESS" order by meta().id'.format(self.bucket_name))
@@ -93,7 +93,7 @@ class UpgradePartialParititionedIndex(UpgradeSecondaryIndex):
             query="UPDATE `{0}` USE KEYS '{1}' SET status = 'ERROR'".format(self.bucket_name, update_error),
             server=self.n1ql_node)
 
-        time.sleep(20)
+        time.sleep(40)
 
         pending_results = self.n1ql_helper.run_cbq_query('SELECT meta().id FROM `{0}` WHERE createdDateTime BETWEEN 1 AND 10 AND status = "PENDING" order by meta().id'.format(self.bucket_name))
         success_results = self.n1ql_helper.run_cbq_query('SELECT meta().id FROM `{0}` WHERE createdDateTime BETWEEN 1 AND 10 AND status = "SUCCESS" order by meta().id'.format(self.bucket_name))
@@ -125,8 +125,6 @@ class UpgradePartialParititionedIndex(UpgradeSecondaryIndex):
         msg = "Cluster is not healthy after upgrade"
         self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
         self.log.info("Cluster is healthy")
-        self.assertTrue(self.wait_until_indexes_online(), "Some indexes are not online")
-        self.log.info("All indexes are online")
         self.add_built_in_server_user()
         self.sleep(20)
         try:
@@ -162,6 +160,7 @@ class UpgradePartialParititionedIndex(UpgradeSecondaryIndex):
         except Exception as e:
             self.log.error(str(e))
         self.wait_until_indexes_online()
+        self.log.info("All indexes are online")
 
         # Check behavior post-upgrade
         pending_results = self.n1ql_helper.run_cbq_query(
@@ -218,7 +217,7 @@ class UpgradePartialParititionedIndex(UpgradeSecondaryIndex):
             query="UPDATE `{0}` USE KEYS {1} SET status = 'PENDING'".format(self.bucket_name, update_pending),
             server=self.n1ql_node)
 
-        time.sleep(20)
+        time.sleep(40)
         pending_results = self.n1ql_helper.run_cbq_query(
             'SELECT meta().id FROM `{0}` WHERE createdDateTime BETWEEN 1 AND 10 AND status = "PENDING" order by meta().id'.format(self.bucket_name))
         success_results = self.n1ql_helper.run_cbq_query(
@@ -242,18 +241,21 @@ class UpgradePartialParititionedIndex(UpgradeSecondaryIndex):
             self.assertEqual(pending_results['results'], pending_expected)
             self.assertEqual(success_results['results'], success_expected)
             self.assertEqual(error_results['results'], error_expected)
+        try:
+            self.n1ql_helper.run_cbq_query(query="CREATE PRIMARY INDEX on `standard_bucket0`", server=self.n1ql_node)
+            self.wait_until_indexes_online()
+        except Exception as e:
+            self.log.error(str(e))
 
         # Delete check
         self.n1ql_helper.run_cbq_query(
             query="DELETE FROM `{0}` WHERE meta().id = '{1}'".format(self.bucket_name, update_error), server=self.n1ql_node)
+        time.sleep(40)
 
         error_results = self.n1ql_helper.run_cbq_query(
             'SELECT meta().id FROM `{0}` WHERE createdDateTime BETWEEN 1 AND 10 AND status = "ERROR" order by meta().id'.format(self.bucket_name))
 
-        if self.mixed_mode_kv:
-            self.assertEqual(error_results['metrics']['resultCount'], 1)
-        else:
-            self.assertEqual(error_results['metrics']['resultCount'], 0)
+        self.assertEqual(error_results['metrics']['resultCount'], 0)
 
 
 
