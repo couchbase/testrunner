@@ -760,7 +760,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                              "Results count does not match for test " + test_name + ", operation - " + uie +
                              ". Full query - " + str(len(full_results)) + ", sum of 2 queries - " +
                              str(len(left_right_results)))
-            self.assertEqual(sorted(full_results), sorted(left_right_results),
+            self.assertEqual(full_results.sort(key=lambda item: item.get("id")), left_right_results.sort(key=lambda item: item.get("id")),
                              "Found mismatch in results for test " + test_name + ", operation - " + uie + ".")
 
         self._remove_all_fts_indexes()
