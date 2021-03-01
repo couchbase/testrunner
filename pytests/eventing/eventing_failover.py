@@ -94,7 +94,7 @@ class EventingFailover(EventingBaseTest):
                                          wait_for_loading=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
-        self.wait_for_failover()
+        self.wait_for_failover_or_rebalance()
         task.result()
         fail_over_task.result()
         # Wait for failover to complete
@@ -118,7 +118,7 @@ class EventingFailover(EventingBaseTest):
                                          wait_for_loading=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
-        self.wait_for_failover()
+        self.wait_for_failover_or_rebalance()
         fail_over_task.result()
         task.result()
         # Wait for failover to complete
@@ -145,7 +145,7 @@ class EventingFailover(EventingBaseTest):
                                          wait_for_loading=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
-        self.wait_for_failover()
+        self.wait_for_failover_or_rebalance()
         fail_over_task.result()
         # Wait for failover to complete
         self.sleep(10)
@@ -175,7 +175,7 @@ class EventingFailover(EventingBaseTest):
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         body1 = self.create_save_function_body(self.function_name+"1", self.handler_code)
-        self.wait_for_failover()
+        self.wait_for_failover_or_rebalance()
         try:
             self.deploy_function(body1)
         except Exception as e:
@@ -223,7 +223,7 @@ class EventingFailover(EventingBaseTest):
         self.deploy_function(body1,wait_for_bootstrap=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
-        self.wait_for_failover()
+        self.wait_for_failover_or_rebalance()
         fail_over_task.result()
         task.result()
         # Wait for failover to complete
@@ -266,7 +266,7 @@ class EventingFailover(EventingBaseTest):
                                          wait_for_loading=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
-        self.wait_for_failover()
+        self.wait_for_failover_or_rebalance()
         fail_over_task2 = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[2]],
                                                       graceful=False)
         fail_over_task.result()
@@ -307,7 +307,7 @@ class EventingFailover(EventingBaseTest):
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         fail_over_task2 = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[2]],
                                                       graceful=False)
-        self.wait_for_failover()
+        self.wait_for_failover_or_rebalance()
         fail_over_task.result()
         fail_over_task2.result()
         task.result()
@@ -347,7 +347,7 @@ class EventingFailover(EventingBaseTest):
                                                 self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
-        self.wait_for_failover()
+        self.wait_for_failover_or_rebalance()
         fail_over_task.result()
         task.result()
         # Wait for failover to complete
@@ -375,7 +375,8 @@ class EventingFailover(EventingBaseTest):
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         fail_over_task.result()
-        self.wait_for_failover()
+        self.wait_for_failover_or_rebalance()
+        self.sleep(1)
         try:
             self.cluster.rebalance(self.servers[:self.nodes_init], [], [eventing_server[1]])
             self.fail("Rebalance operation succeed even when failover is running")
@@ -405,7 +406,7 @@ class EventingFailover(EventingBaseTest):
                                          wait_for_loading=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
-        self.wait_for_failover()
+        self.wait_for_failover_or_rebalance()
         fail_over_task.result()
         # Wait for failover to complete
         self.sleep(10)
@@ -439,7 +440,7 @@ class EventingFailover(EventingBaseTest):
         self.pause_function(body1)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
-        self.wait_for_failover()
+        self.wait_for_failover_or_rebalance()
         fail_over_task.result()
         task.result()
         # Wait for failover to complete
@@ -469,7 +470,7 @@ class EventingFailover(EventingBaseTest):
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         try:
-            self.wait_for_failover()
+            self.wait_for_failover_or_rebalance()
             self.fail("Failover triggered when auto_redistribute_vbs_on_failover is False")
         except Exception as e:
             if "Failover not started even after waiting for long"  not in str(e):

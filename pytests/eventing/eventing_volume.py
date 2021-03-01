@@ -92,8 +92,10 @@ class EventingVolume(EventingBaseTest):
         task2=self.load_batch_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.scope_1.coll_1",
                                      wait_for_loading=False)
         self.deploy_all_handlers()
-        task1.result()
-        task2.result()
+        for task in task1:
+            task.result()
+        for task in task2:
+            task.result()
         # Validate the results of all the functions deployed
         self.verify_all_handler(self.docs_per_day * self.num_docs)
         self.verify_doc_count_collections("src_bucket.scope_1.coll_1", self.docs_per_day * self.num_docs * 2)
@@ -102,8 +104,10 @@ class EventingVolume(EventingBaseTest):
                                            wait_for_loading=False)
         task2=self.load_batch_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.scope_1.coll_1", is_delete=True,
                                            wait_for_loading=False)
-        task1.result()
-        task2.result()
+        for task in task1:
+            task.result()
+        for task in task2:
+            task.result()
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_all_handler(0)
         self.verify_doc_count_collections("src_bucket.scope_1.coll_1", self.docs_per_day * self.num_docs)

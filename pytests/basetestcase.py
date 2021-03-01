@@ -3117,3 +3117,29 @@ class BaseTestCase(unittest.TestCase):
     def _upgrade_addr_family(self,addr_family):
         self.log.info('Upgrade Address Family to {0}'.format(addr_family))
         IPv6_IPv4(self.servers).upgrade_addr_family(addr_family)
+
+    def data_ops_javasdk_loader_in_batches_to_collection(self, bucket,sdk_data_loader, batch_size):
+        start_document = sdk_data_loader.get_start_seq_num()
+        tot_num_items_in_collection = sdk_data_loader.get_num_ops()
+        batches = []
+        for start in range(0, tot_num_items_in_collection, batch_size):
+            end = start + batch_size
+            if end >= tot_num_items_in_collection:
+                end = tot_num_items_in_collection
+            num_ops = end - start
+            start_seq = start + start_document
+
+            loader_batch = copy.deepcopy(sdk_data_loader)
+            loader_batch.set_num_ops(num_ops)
+            loader_batch.set_start_seq_num(start_seq)
+            batches.append(loader_batch)
+
+        self.log.info("Number of batches : {0}".format(len(batches)))
+        self.sleep(10)
+        tasks = []
+        for batch in batches:
+            tasks.append(self.cluster.async_load_gen_docs(self.master, bucket, batch, pause_secs=1,
+                                                      timeout_secs=300))
+
+        self.log.info("done")
+        return tasks

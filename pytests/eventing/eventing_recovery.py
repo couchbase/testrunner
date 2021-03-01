@@ -1069,10 +1069,10 @@ class EventingRecovery(EventingBaseTest):
             services_in = ["eventing"]
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
                                                      services=services_in)
-            self.sleep(5)
             reached = RestHelper(self.rest).rebalance_reached(percentage=30)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             # kill eventing producer when eventing is processing mutations
+            self.wait_for_failover_or_rebalance()
             self.kill_producer(eventing_node)
             if self.pause_resume:
                 self.wait_for_handler_state(body['appname'], "paused")

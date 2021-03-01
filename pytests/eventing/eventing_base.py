@@ -922,7 +922,7 @@ class EventingBaseTest(QueryHelperTests):
         self.log.info(result_set['results'])
         self.log.info("===============================================================================================")
 
-    def wait_for_failover(self):
+    def wait_for_failover_or_rebalance(self):
         self.log.info("Waiting for internal failover to start ....")
         failover_started=False
         count =0
@@ -1094,7 +1094,7 @@ class EventingBaseTest(QueryHelperTests):
         elif is_update:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=100, percent_delete=0,
                                             scope=collection_list[1], collection=collection_list[2],doc_expiry=expiry,json_template=template)
-        task=self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
+        task=self.data_ops_javasdk_loader_in_batches_to_collection(collection_list[0],sdk_data_loader=self.gen_create,
                                                                     batch_size=self.batch_size)
         if wait_for_loading:
             task.result()
