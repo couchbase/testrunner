@@ -1343,15 +1343,12 @@ class EventingRebalance(EventingBaseTest):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
                                                      [],
                                                      services=services_in)
-            reached = RestHelper(self.rest).rebalance_reached(percentage=30)
+            reached = RestHelper(self.rest).rebalance_reached(percentage=10)
             # kill eventing process when eventing rebalance is going on
             if len(eventing_nodes) < 2:
                 self.fail("At least two eventing nodes are required")
-            # while (not self.check_eventing_rebalance() and not RestHelper(self.rest).is_cluster_rebalanced()):
-            #     self.log.info("waiting for eventing rebalance to trigger")
-            #     self.sleep(3)
-            # if (RestHelper(self.rest).is_cluster_rebalanced()):
-            #     raise Exception("Rebalance completed before killing")
+            self.wait_for_failover_or_rebalance()
+            self.sleep(3)
             self.kill_consumer(eventing_nodes[0])
             self.kill_consumer(self.servers[self.nodes_init])
             self.kill_producer(eventing_nodes[1])
@@ -1361,6 +1358,7 @@ class EventingRebalance(EventingBaseTest):
         except Exception as ex:
             log.info("Rebalance failed as expected after eventing got killed: {0}".format(str(ex)))
         else:
+            self.skip_metabucket_check=True
             self.fail("Rebalance succeeded even after killing eventing processes")
         self.sleep(120)
         # retry the failed rebalance
