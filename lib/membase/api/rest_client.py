@@ -307,7 +307,8 @@ class RestConnection(object):
                 new_services=fts-kv-index-n1ql """
             self.services_node_init = self.input.param("new_services", None)
             self.debug_logs = self.input.param("debug-logs", False)
-            self.eventing_role = self.input.param('eventing_role', True)
+            if float(self.cb_version[:3]) >= 7.0:
+                self.eventing_role = self.input.param('eventing_role', False)
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.fts_baseUrl = "http://{0}:{1}/".format(self.ip, self.fts_port)
         self.index_baseUrl = "http://{0}:{1}/".format(self.ip, self.index_port)
