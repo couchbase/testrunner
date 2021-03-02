@@ -2579,7 +2579,7 @@ class BaseTestCase(unittest.TestCase):
             self.log.info("cannot find service node {0} in cluster " \
                           .format(service_type))
         else:
-            list = []
+            lst = []
             for server_info in self.services_map[service_type]:
                 tokens = server_info.rsplit(":", 1)
                 ip = tokens[0]
@@ -2629,13 +2629,13 @@ class BaseTestCase(unittest.TestCase):
                         shell.disconnect()
                     if (port != 8091 and port == int(server.port)) or \
                             (port == 8091 and server.ip.lower() == ip.lower()):
-                        list.append(server)
-            self.log.info("list of {0} nodes in cluster: {1}".format(service_type, list))
+                        lst.append(server)
+            self.log.info("list of {0} nodes in cluster: {1}".format(service_type, lst))
             if get_all_nodes:
-                return list
+                return lst
             else:
                 try:
-                    return list[0]
+                    return lst[0]
                 except IndexError as e:
                     self.log.info(self.services_map)
                     raise e

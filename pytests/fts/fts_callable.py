@@ -10,7 +10,8 @@ from lib.couchbase_helper.documentgenerator import JsonDocGenerator
 from lib.couchbase_helper.documentgenerator import SDKDataLoader
 from lib.membase.api.rest_client import RestConnection
 from .random_query_generator.rand_query_gen import FTSESQueryGenerator
-
+from lib.collection.collections_cli_client import CollectionsCLI
+from scripts.java_sdk_setup import JavaSdkSetup
 
 class FTSCallable:
 
@@ -61,7 +62,82 @@ class FTSCallable:
                 self.log.info("Created empty index \'es_index\' on Elastic Search node with "
                               "custom standard analyzer(default)")
 
-    def create_default_index(self, index_name, bucket_name, analyzer='standard'):
+    def init_kv(self):
+        self.__create_buckets()
+        if self.collection_index:
+            for bucket in self.cb_cluster.get_buckets():
+                if type(self.collections) is list:
+                    for c in self.collections:
+                        self.cb_cluster._create_collection(bucket=bucket.name, scope=self.scope, collection=c,
+                                                            cli_client=self.cli_client)
+                else:
+                    self.cb_cluster._create_collection(bucket=bucket.name, scope=self.scope,
+                                                        collection=self.collections, cli_client=self.cli_client)
+
+    def create_fts_index(self, name, source_type='couchbase',
+                         source_name=None, index_type='fulltext-index',
+                         index_params=None, plan_params=None,
+                         source_params=None, source_uuid=None, collection_index=False, _type=None, analyzer="standard", scope=None, collections=None, no_check=False, cluster=None):
+        """Create fts index/alias
+        @param node: Node on which index is created
+        @param name: name of the index/alias
+        @param source_type : 'couchbase' or 'files'
+        @param source_name : name of couchbase bucket or "" for alias
+        @param index_type : 'fulltext-index' or 'fulltext-alias'
+        @param index_params :  to specify advanced index mapping;
+                                dictionary overriding params in
+                                INDEX_DEFAULTS.BLEVE_MAPPING or
+                                INDEX_DEFAULTS.ALIAS_DEFINITION depending on
+                                index_type
+        @param plan_params : dictionary overriding params defined in
+                                INDEX_DEFAULTS.PLAN_PARAMS
+        @param source_params: dictionary overriding params defined in
+                                INDEX_DEFAULTS.SOURCE_CB_PARAMS or
+                                INDEX_DEFAULTS.SOURCE_FILE_PARAMS
+        @param source_uuid: UUID of the source, may not be used
+        @param collection_index: is collection index
+        @param type: type mapping for collection index
+        @analyzer: index analyzer
+        """
+        index = FTSIndex(
+            cluster=cluster,
+            name=name,
+            source_type=source_type,
+            source_name=source_name,
+            index_type=index_type,
+            index_params=index_params,
+            plan_params=plan_params,
+            source_params=source_params,
+            source_uuid=source_uuid,
+            type_mapping=_type,
+            collection_index=collection_index,
+            scope=scope,
+            collections=collections
+        )
+        if collection_index:
+            if not index.custom_map:
+                if type(_type) is list:
+                    for typ in _type:
+                        index.add_type_mapping_to_index_definition(type=typ, analyzer=analyzer)
+                else:
+                    index.add_type_mapping_to_index_definition(type=_type, analyzer=analyzer)
+
+            doc_config = {}
+            doc_config['mode'] = 'scope.collection.type_field'
+            doc_config['type_field'] = "type"
+            index.index_definition['params']['doc_config'] = {}
+            index.index_definition['params']['doc_config'] = doc_config
+
+        if no_check:
+            index.create_no_check()
+        else:
+            index.create()
+        self.cb_cluster.get_indexes().append(index)
+        return index
+
+
+    def create_default_index(self, index_name, bucket_name, analyzer='standard',
+                             cluster=None, collection_index=False, scope=None, collections=None):
 
         """Create fts index
         @param index_name: name of the index/alias
@@ -70,22 +146,22 @@ class FTSCallable:
         @param type_mapping: UUID of the source, may not be used
         @param analyzer: index analyzer
         """
-        types_mapping = self.__define_index_types_mapping()
+        types_mapping = self.__define_index_types_mapping(collection_index=collection_index, scope=scope, collections=collections)
 
         index = FTSIndex(
-            self,
+            cluster=cluster,
             name=index_name,
             source_name=bucket_name,
             type_mapping=types_mapping,
-            collection_index=self.collection_index,
-            scope=self.scope,
-            collections=self.collections
+            collection_index=collection_index,
+            scope=scope,
+            collections=collections
         )
 
         rest = RestConnection(self.cb_cluster.get_random_fts_node())
         index.create(rest)
 
-        if self.collection_index:
+        if collection_index:
             if not index.custom_map:
                 if type(types_mapping) is list:
                     for typ in types_mapping:
@@ -196,6 +272,10 @@ class FTSCallable:
         for index in self.fts_indexes:
             index.delete()
         self.es.delete_indices()
+
+    def flush_buckets(self, buckets=[]):
+        self.cb_cluster.flush_buckets(buckets)
+
 
     def async_load_data(self):
         """ Loads data into CB and ES"""
@@ -426,14 +506,14 @@ class FTSCallable:
                           * (float)(30 / 100)),
                 end=self.create_gen.end)
 
-    def __define_index_types_mapping(self):
+    def __define_index_types_mapping(self, collection_index=False, scope=None, collections=None):
         """Defines types mapping for FTS index
         """
-        if not self.collection_index :
+        if not collection_index :
             _type = None
         else:
             _type = []
-            for c in self.collections:
-                _type.append(f"{self.scope}.{c}")
+            for c in collections:
+                _type.append(f"{scope}.{c}")
         return _type
 
