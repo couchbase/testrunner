@@ -1391,7 +1391,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         seen = False
         next_time = init_time
         timed_out = False
-        while not check or not timed_out:
+        while not check and not timed_out:
             index_status = rest.get_index_status()
             log.info(index_status)
             for index_info in list(index_status.values()):
