@@ -565,7 +565,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if len(index_nodes) < 2:
             self.fail("Need at least 3 nodes")
-        node_a, node_b = index_nodes
+        node_a, node_b = index_nodes[:2]
         
         node_b_rest = RestConnection(node_b)
         self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs)
@@ -765,7 +765,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                 self.wait_until_indexes_online(defer_build=self.defer_build)
         index_info = self.rest.get_indexer_metadata()['status']
         for index in index_info:
-            self.assertFalse(f'{node_b.ip}.{node_b.port}' not in index['hosts'])
+            self.assertFalse(f'{node_b.ip}:{node_b.port}' not in index['hosts'])
 
     def test_schedule_indexes_during_rebalance(self):
         num_of_docs = 10 ** 5
