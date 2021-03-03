@@ -101,12 +101,12 @@ def transform_val(val):
     # Match vals and transform them to their equivalent Python types
     if re.search(num_pat + "B$", val):
         return int(float(val[:-1]))
-    elif re.search(num_pat + "Ki?B$", val):
-        return int(float(val[:-2]) * (1024 ** 1))
-    elif re.search(num_pat + "Mi?B$", val):
-        return int(float(val[:-2]) * (1024 ** 2))
-    elif re.search(num_pat + "Gi?B$", val):
-        return int(float(val[:-2]) * (1024 ** 3))
+    elif re.search(num_pat + "KiB$", val):
+        return int(float(val[:-3]) * (1024 ** 1))
+    elif re.search(num_pat + "MiB$", val):
+        return int(float(val[:-3]) * (1024 ** 2))
+    elif re.search(num_pat + "GiB$", val):
+        return int(float(val[:-3]) * (1024 ** 3))
     elif re.search(num_pat + "$", val):
         try:
             return int(val)
