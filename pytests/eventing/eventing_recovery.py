@@ -672,12 +672,11 @@ class EventingRecovery(EventingBaseTest):
         self.deploy_function(body)
         # load some data
         if self.non_default_collection:
-            task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket", wait_for_loading=False)
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
         else:
-            task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default", wait_for_loading=False)
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
         # reboot eventing node when it is processing mutations
         self.kill_erlang_service(n1ql_node)
-        task.result()
         stats = self.rest.get_all_eventing_stats()
         on_update_failure = stats[0]["execution_stats"]["on_update_failure"]
         n1ql_op_exception_count = stats[0]["failure_stats"]["n1ql_op_exception_count"]
@@ -1175,9 +1174,9 @@ class EventingRecovery(EventingBaseTest):
             services_in = ["eventing"]
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
                                                      [], services=services_in)
-            self.sleep(5)
             reached = RestHelper(self.rest).rebalance_reached(percentage=60)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            self.wait_for_failover_or_rebalance()
             # kill eventing producer when eventing is processing mutations
             self.kill_producer(eventing_node)
             if self.pause_resume:
