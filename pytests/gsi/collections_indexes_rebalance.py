@@ -372,8 +372,6 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         num_of_docs = 10 ** 4
         self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs)
         collection_namespace = self.namespaces[0]
-        _, keyspace = collection_namespace.split(':')
-        bucket, scope, collection = keyspace.split('.')
         idx_prefix = 'idx'
         index_gen_list = []
         index_gen_query_list = []
@@ -419,7 +417,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         add_nodes = [self.servers[2]]
         task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                             to_remove=[], services=['index', 'index'])
-        result = task.result()
+        task.result()
         rebalance_status = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
 
@@ -442,8 +440,6 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         num_of_docs = 10 ** 5
         self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs)
         collection_namespace = self.namespaces[0]
-        _, keyspace = collection_namespace.split(':')
-        bucket, scope, collection = keyspace.split('.')
         idx_prefix = 'idx'
         index_gen_list = []
         index_gen_query_list = []
@@ -482,33 +478,26 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         self.wait_until_indexes_online()
         index_meta_info = self.rest.get_indexer_metadata()['status']
         self.assertEqual(len(index_meta_info), len(index_field_list) * (self.num_replicas + 1))
-        index_hosts = set()
-        for index in index_meta_info:
-            host = index['hosts'][0]
-            index_hosts.add(host.split(':')[0])
 
         self.log.info('Starting Rebalance In process')
         add_nodes = [self.servers[2]]
+        task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
+                                            to_remove=[], services=['index', 'index'])
+        while self.rest._rebalance_progress_status() != "running":
+            self.sleep(5, "Allowing some time for rebalance to make progress")
+        self.stop_server(self.servers[2])
+        self.sleep(5)
+        self.start_server(self.servers[2])
         try:
-            task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
-                                                to_remove=[], services=['index', 'index'])
-
-            self.sleep(15, "Allowing sometime for rebalance to make progress")
-            if self.rest._rebalance_progress_status() == "running":
-                self.stop_server(self.servers[2])
-                self.sleep(5)
-                self.start_server(self.servers[2])
-            else:
-                self.fail("Rebalance finished/failed before it can be cancelled")
+            task.result()
         except Exception as err:
             self.log.info(err)
         self.wait_until_indexes_online()
+        self.sleep(10)
         index_meta_info = self.rest.get_indexer_metadata()['status']
         self.assertEqual(len(index_lists) * 2, len(index_meta_info),
                          "Some Index/es  is/are missing due to rebalance failover")
-        for index in index_meta_info:
-            host = index['hosts'][0]
-            index_hosts.add(host.split(':')[0])
+
         for index_field in index_field_list:
             query = f"select count(*) from {collection_namespace} where {index_field} is not null"
             count = self.run_cbq_query(query=query)['results'][0]['$1']
@@ -524,13 +513,16 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
             query = f"select count(*) from {collection_namespace} where {index_field} is not null"
             count = self.run_cbq_query(query=query)['results'][0]['$1']
             self.assertEqual(count, num_of_docs, "No. indexed docs are not matching after rebalance")
+        index_hosts = set()
+        for index in index_meta_info:
+            host = index['hosts'][0]
+            index_hosts.add(host.split(':')[0])
+        self.assertTrue(self.servers[2].ip in index_hosts)
 
     def test_rebalance_out_of_nodes_with_failed_rebalance(self):
         num_of_docs = 10 ** 5
         self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs)
         collection_namespace = self.namespaces[0]
-        _, keyspace = collection_namespace.split(':')
-        bucket, scope, collection = keyspace.split('.')
         idx_prefix = 'idx'
         index_gen_list = []
         index_gen_query_list = []
@@ -569,34 +561,24 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         self.wait_until_indexes_online()
         index_meta_info = self.rest.get_indexer_metadata()['status']
         self.assertEqual(len(index_meta_info), len(index_field_list) * (self.num_replicas + 1))
-        index_hosts = set()
-        for index in index_meta_info:
-            host = index['hosts'][0]
-            index_hosts.add(host.split(':')[0])
 
         self.log.info('Starting Rebalance out process')
         remove_nodes = [self.servers[2]]
+        task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
+                                            to_remove=remove_nodes)
+        while self.rest._rebalance_progress_status() != "running":
+            self.sleep(5, "Allowing some time for rebalance to make progress")
+        self.stop_server(self.servers[2])
+        self.sleep(5)
+        self.start_server(self.servers[2])
         try:
-            task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
-                                                to_remove=remove_nodes)
-
-            self.sleep(15, "Allowing sometime for rebalance to make progress")
-            if self.rest._rebalance_progress_status() == "running":
-                self.stop_server(self.servers[2])
-                self.sleep(5)
-                self.start_server(self.servers[2])
-            else:
-                self.fail("Rebalance finished/failed before it can be cancelled")
+            task.result()
         except Exception as err:
             self.log.info(err)
         self.wait_until_indexes_online()
         index_meta_info = self.rest.get_indexer_metadata()['status']
         self.assertEqual(len(index_lists) * 2, len(index_meta_info),
                          "Some Index/es  is/are missing due to rebalance failover")
-        for index in index_meta_info:
-            host = index['hosts'][0]
-            index_hosts.add(host.split(':')[0])
-        self.assertTrue(self.servers[2].ip in index_hosts)
         for index_field in index_field_list:
             query = f"select count(*) from {collection_namespace} where {index_field} is not null"
             count = self.run_cbq_query(query=query)['results'][0]['$1']
@@ -613,6 +595,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
             query = f"select count(*) from {collection_namespace} where {index_field} is not null"
             count = self.run_cbq_query(query=query)['results'][0]['$1']
             self.assertEqual(count, num_of_docs, "No. indexed docs are not matching after rebalance")
+        index_hosts = set()
         for index in index_meta_info:
             host = index['hosts'][0]
             index_hosts.add(host.split(':')[0])
@@ -622,8 +605,6 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         num_of_docs = 10 ** 5
         self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs)
         collection_namespace = self.namespaces[0]
-        _, keyspace = collection_namespace.split(':')
-        bucket, scope, collection = keyspace.split('.')
         idx_prefix = 'idx'
         index_gen_list = []
         index_gen_query_list = []
@@ -658,39 +639,31 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                     elif self.err_msg2 in str(err):
                         continue
                     else:
-                        self.fail(err)
+                        self.log.error(err)
         self.wait_until_indexes_online()
         index_meta_info = self.rest.get_indexer_metadata()['status']
         self.assertEqual(len(index_meta_info), len(index_field_list) * (self.num_replicas + 1))
-        index_hosts = set()
-        for index in index_meta_info:
-            host = index['hosts'][0]
-            index_hosts.add(host.split(':')[0])
 
         self.log.info('Starting Rebalance Swap process')
         add_nodes = [self.servers[2]]
         remove_nodes = [self.servers[1]]
-        try:
-            task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
-                                                to_remove=remove_nodes, services=['index', 'index'])
+        task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
+                                            to_remove=remove_nodes, services=['index', 'index'])
 
-            self.sleep(15, "Allowing sometime for rebalance to make progress")
-            if self.rest._rebalance_progress_status() == "running":
-                self.stop_server(self.servers[2])
-                self.sleep(5)
-                self.start_server(self.servers[2])
-            else:
-                self.fail("Rebalance finished/failed before it can be cancelled")
+        while self.rest._rebalance_progress_status() != "running":
+            self.sleep(5, "Allowing some time for rebalance to make progress")
+        self.stop_server(self.servers[2])
+        self.sleep(5)
+        self.start_server(self.servers[2])
+        try:
+            task.result()
         except Exception as err:
             self.log.info(err)
         self.wait_until_indexes_online()
+        self.sleep(5)
         index_meta_info = self.rest.get_indexer_metadata()['status']
         self.assertEqual(len(index_lists) * 2, len(index_meta_info),
                          "Some Index/es  is/are missing due to rebalance failover")
-        for index in index_meta_info:
-            host = index['hosts'][0]
-            index_hosts.add(host.split(':')[0])
-        self.assertTrue(self.servers[2].ip in index_hosts)
         for index_field in index_field_list:
             query = f"select count(*) from {collection_namespace} where {index_field} is not null"
             count = self.run_cbq_query(query=query)['results'][0]['$1']
@@ -707,6 +680,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
             query = f"select count(*) from {collection_namespace} where {index_field} is not null"
             count = self.run_cbq_query(query=query)['results'][0]['$1']
             self.assertEqual(count, num_of_docs, "No. indexed docs are not matching after rebalance")
+        index_hosts = set()
         for index in index_meta_info:
             host = index['hosts'][0]
             index_hosts.add(host.split(':')[0])
@@ -795,8 +769,6 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         num_of_docs = 10 ** 5
         self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs)
         collection_namespace = self.namespaces[0]
-        _, keyspace = collection_namespace.split(':')
-        bucket, scope, collection = keyspace.split('.')
         idx_prefix = 'idx'
         index_gen_list = []
         index_gen_query_list = []
