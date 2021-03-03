@@ -4987,81 +4987,77 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             """
             return json.loads(output[0]) if use_json else parse_info.construct_tree(output)
 
-        try:
-            # Configure initial flags
-            json_options, all_flag_options = [True], [False]
+        # Configure initial flags
+        json_options, all_flag_options = [True], [False]
 
-            # Enable tabular output tests
-            if check_tabular:
-                json_options.append(False)
+        # Enable tabular output tests
+        if check_tabular:
+            json_options.append(False)
 
-            # Enable all flag tests
-            if check_all_flag:
-                all_flag_options.append(True)
+        # Enable all flag tests
+        if check_all_flag:
+            all_flag_options.append(True)
 
-            def output_logs(flag_depth, use_json, all_flag):
-                """ Outputs flags tested in current test case."""
-                use_json = "--json" if use_json else ""
-                all_flag = "--all" if all_flag else ""
-                flags = " ".join(["--archive", "--repo", "--backup", "--bucket"][: flag_depth + 1])
-                self.log.info("---")
-                self.log.info(f"Testing Flags: {flags} {use_json} {all_flag}")
-                self.log.info("---")
+        def output_logs(flag_depth, use_json, all_flag):
+            """ Outputs flags tested in current test case."""
+            use_json = "--json" if use_json else ""
+            all_flag = "--all" if all_flag else ""
+            flags = " ".join(["--archive", "--repo", "--backup", "--bucket"][: flag_depth + 1])
+            self.log.info("---")
+            self.log.info(f"Testing Flags: {flags} {use_json} {all_flag}")
+            self.log.info("---")
 
-            # Perform tests
-            for use_json, all_flag in itertools.product(json_options, all_flag_options):
-                output_logs(0, use_json, all_flag)
+        # Perform tests
+        for use_json, all_flag in itertools.product(json_options, all_flag_options):
+            output_logs(0, use_json, all_flag)
 
-                # cbbackupmgr info --archive
-                arch = parse_output(use_json, self.get_backup_info(json=use_json, all_flag=all_flag))
-                print_tree(arch)
-                repos = check_arch(arch)
+            # cbbackupmgr info --archive
+            arch = parse_output(use_json, self.get_backup_info(json=use_json, all_flag=all_flag))
+            print_tree(arch)
+            repos = check_arch(arch)
+
+            if all_flag:
+                [check_buck(buck) for repo in repos for back in check_repo(repo) for buck in check_back(back)]
+
+            if flag_depth < 1:
+                continue
+
+            output_logs(1, use_json, all_flag)
+
+            # cbbackupmgr info --archive --repo
+            for repo_name in expected_repos:
+                repo = parse_output(use_json, self.get_backup_info(json=use_json, repo=repo_name, all_flag=all_flag))
+                print_tree(repo)
+                backs = check_repo(repo)
 
                 if all_flag:
-                    [check_buck(buck) for repo in repos for back in check_repo(repo) for buck in check_back(back)]
+                    [check_buck(buck) for back in backs for buck in check_back(back)]
 
-                if flag_depth < 1:
-                    continue
+            if flag_depth < 2:
+                continue
 
-                output_logs(1, use_json, all_flag)
+            output_logs(2, use_json, all_flag)
 
-                # cbbackupmgr info --archive --repo
-                for repo_name in expected_repos:
-                    repo = parse_output(use_json, self.get_backup_info(json=use_json, repo=repo_name, all_flag=all_flag))
-                    print_tree(repo)
-                    backs = check_repo(repo)
+            # cbbackupmgr info --archive --repo --backup
+            for repo_name in expected_repos:
+                for back_name in expected_backs[repo_name]:
+                    back = parse_output(use_json, self.get_backup_info(json=use_json, repo=repo_name, backup=back_name, all_flag=all_flag))
+                    print_tree(back)
+                    bucks = check_back(back)
 
                     if all_flag:
-                        [check_buck(buck) for back in backs for buck in check_back(back)]
+                        [check_buck(buck) for buck in bucks]
 
-                if flag_depth < 2:
-                    continue
+            if flag_depth < 3:
+                continue
 
-                output_logs(2, use_json, all_flag)
+            output_logs(3, use_json, all_flag)
 
-                # cbbackupmgr info --archive --repo --backup
-                for repo_name in expected_repos:
-                    for back_name in expected_backs[repo_name]:
-                        back = parse_output(use_json, self.get_backup_info(json=use_json, repo=repo_name, backup=back_name, all_flag=all_flag))
-                        print_tree(back)
-                        bucks = check_back(back)
-
-                        if all_flag:
-                            [check_buck(buck) for buck in bucks]
-
-                if flag_depth < 3:
-                    continue
-
-                output_logs(3, use_json, all_flag)
-
-                # cbbackupmgr info --archive --repo --backup --bucket
-                for repo_name in expected_repos:
-                    for back_name in expected_backs[repo_name]:
-                        for buck_name in expected_bucks:
-                            buck = parse_output(use_json, self.get_backup_info(json=use_json, repo=repo_name,
-                                                backup=back_name, collection_string=buck_name, all_flag=all_flag))
-                            print_tree(buck)
-                            check_buck(buck)
-
-        except Exception as e:
-            self.fail(str(e))
+            # cbbackupmgr info --archive --repo --backup --bucket
+            for repo_name in expected_repos:
+                for back_name in expected_backs[repo_name]:
+                    for buck_name in expected_bucks:
+                        buck = parse_output(use_json, self.get_backup_info(json=use_json, repo=repo_name,
+                                            backup=back_name, collection_string=buck_name, all_flag=all_flag))
+                        print_tree(buck)
+                        check_buck(buck)
