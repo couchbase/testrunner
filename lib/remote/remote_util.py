@@ -3548,10 +3548,10 @@ class RemoteMachineShellConnection(KeepRefs):
 
                     os_distro_dict = {'ubuntu': 'Ubuntu', 'debian': 'Ubuntu', 'mint': 'Ubuntu',
                         'amazon linux ami': 'CentOS', 'centos': 'CentOS', 'opensuse': 'openSUSE',
-                        'red': 'Red Hat', 'suse': 'SUSE', 'oracle': 'Oracle Linux'}
+                        'red': 'Red Hat', 'suse': 'SUSE', 'oracle': 'Oracle Linux', 'openshift' : 'CentOS'}
                     os_shortname_dict = {'ubuntu': 'ubuntu', 'debian': 'debian', 'mint': 'ubuntu',
                         'amazon linux ami': 'amzn2', 'centos': 'centos', 'opensuse': 'suse',
-                        'red': 'rhel', 'suse': 'suse', 'oracle': 'oel'}
+                        'red': 'rhel', 'suse': 'suse', 'oracle': 'oel', 'openshift' : 'centos'}
                     log.debug("os_pretty_name:" + os_pretty_name)
                     if os_pretty_name:
                         os_name = os_pretty_name.split(' ')[0].lower()
