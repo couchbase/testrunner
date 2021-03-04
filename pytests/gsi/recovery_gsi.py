@@ -57,6 +57,9 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             rest = RestConnection(index_node)
             rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=1000)
             rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": self.moi_snapshot_interval})
+        self.split_num_index_nodes = len(self.index_nodes)//2
+        self.recovering_nodes = self.index_nodes[:self.split_num_index_nodes]
+        self.verify_nodes = self.index_nodes[self.split_num_index_nodes:]
 
         self.disk_location = RestConnection(self.index_nodes[0]).get_index_path()
         self.index_create_task_manager = TaskManager(
@@ -93,7 +96,8 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 rest = RestConnection(index_node)
                 rest.set_index_settings({"indexer.build.enableOSO": True})
 
-        index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
+        index_create_tasks = self.create_indexes(num=self.num_pre_indexes, recovery_nodes=self.recovering_nodes,
+                                                 verifying_nodes=self.verify_nodes)
         for task in index_create_tasks:
             task.result()
 
@@ -104,7 +108,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 3000})
 
-        self._kill_all_processes_index(self.index_nodes[0])
+        self._kill_all_processes_index(self.recovering_nodes[0])
 
         self.load_docs(self.start_doc)
 
@@ -115,7 +119,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 1200000})
 
-        self._kill_all_processes_index(self.index_nodes[0])
+        self._kill_all_processes_index(self.recovering_nodes[0])
 
         self.sleep(10)
 
@@ -124,9 +128,28 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.log.info("some indexes did not process mutations on time")
 
-        self._kill_all_processes_index(self.index_nodes[0])
-        if not self.check_index_recovered_snapshot(self.index_ops_obj.get_create_index_list(), self.index_nodes[0]):
+        index_list = self.index_ops_obj.get_create_index_list()
+        self._kill_all_processes_index(self.recovering_nodes[0])
+        if not self.check_index_recovered_snapshot(index_list, self.recovering_nodes[0]):
             self.fail("Some indexes did not recover from snapshot")
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.log.info("some indexes did not process mutations on time")
+
+        self.verify_query_results()
+
+    def verify_query_results(self):
+        index_list = self.index_ops_obj.get_create_index_list()
+        for index_meta in index_list:
+            query_def = index_meta["query_def"]
+            expected_result_query = query_def.generate_use_index_query(index_meta["verifying_index"])
+            expected_result = self.n1ql_helper.run_cbq_query(query=expected_result_query,
+                                                           server=self.n1ql_nodes[0])
+            actual_query = query_def.generate_use_index_query(index_meta["name"])
+            actual_result = self.n1ql_helper.run_cbq_query(query=actual_query,
+                                                             server=self.n1ql_nodes[0])
+            self.n1ql_helper._verify_results(actual_result['results'], expected_result['results'])
+
 
     def test_recovery_no_disk_snapshot(self):
 
@@ -136,7 +159,8 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
         self._kill_all_processes_index(self.index_nodes[0])
 
-        index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
+        index_create_tasks = self.create_indexes(num=self.num_pre_indexes, recovery_nodes=self.recovering_nodes,
+                                                 verifying_nodes=self.verify_nodes)
         for task in index_create_tasks:
             task.result()
 
@@ -150,12 +174,14 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
         self.sleep(10)
 
-        self._kill_all_processes_index(self.index_nodes[0])
+        self._kill_all_processes_index(self.recovering_nodes[0])
         if not self.check_index_recovered_snapshot(self.index_ops_obj.get_create_index_list(), self.index_nodes[0]):
             self.fail("Some indexes did not recover from snapshot")
 
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.log.info("Some indexes did not process mutations on time")
+
+        self.verify_query_results()
 
     def test_recover_index_from_in_memory_snapshot(self):
 
@@ -535,7 +561,8 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.load_docs(self.start_doc)
         self.sleep(5)
 
-        index_create_tasks = self.create_indexes(num=50, query_def_group="unique", defer_build=True)
+        index_create_tasks = self.create_indexes(num=50, query_def_group="unique", defer_build=True, recovery_nodes=self.recovering_nodes,
+                                                 verifying_nodes=self.verify_nodes)
 
         for task in index_create_tasks:
             task.result()
@@ -554,7 +581,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             remote = RemoteMachineShellConnection(self.data_nodes[1])
             remote.terminate_process(process_name=self.targetProcess)
         else:
-            remote = RemoteMachineShellConnection(self.index_nodes[0])
+            remote = RemoteMachineShellConnection(self.recovering_nodes[0])
             remote.terminate_process(process_name=self.targetProcess)
 
         self.sleep(10)
@@ -562,6 +589,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self.fail("some indexes did not process mutations on time")
 
         self.scan_indexes(self.index_ops_obj.get_defer_index_list())
+        self.verify_query_results()
 
     def test_rebalance_in_kv_node_while_building(self):
 
