@@ -400,7 +400,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
 
     def test_delete_multiple_collections_with_indexes(self):
         num_of_docs_per_collection = 10 ** 2
-        self.prepare_collection_for_indexing(num_scopes=5, num_collections=2,
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
                                              num_of_docs_per_collection=num_of_docs_per_collection)
         for namespace in self.namespaces:
             index_gen1 = QueryDefinition(index_name='idx1', index_fields=['age'])

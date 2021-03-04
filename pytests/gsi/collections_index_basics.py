@@ -1126,12 +1126,13 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
 
     def test_build_multiple_index_concurrently_across_collections(self):
         num_docs = 1000
-        self.prepare_collection_for_indexing(num_scopes=5, num_collections=2, num_of_docs_per_collection=num_docs)
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=num_docs)
         index_gen_list = []
         for item, namespace in enumerate(self.namespaces):
             idx_name = f'idx_{item}'
             index_gen = QueryDefinition(index_name=idx_name, index_fields=['age', 'city'])
-            query = index_gen.generate_index_create_query(namespace=namespace, defer_build=True)
+            query = index_gen.generate_index_create_query(namespace=namespace, defer_build=False)
             self.run_cbq_query(query=query)
             index_gen_list.append(index_gen)
 
@@ -1139,7 +1140,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             for index_gen, namespace in zip(index_gen_list, self.namespaces):
                 query = index_gen.generate_build_query(namespace=namespace)
                 executor.submit(self.run_cbq_query, query=query)
-        self.wait_until_indexes_online(timeout=600, defer_build=True)
+        self.wait_until_indexes_online(timeout=600)
 
         for namespace in self.namespaces:
             query = f'select count(age) from {namespace} where age >= 0'

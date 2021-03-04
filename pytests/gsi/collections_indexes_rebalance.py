@@ -75,8 +75,8 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         self.index_create_task_manager.start()
         self.n1ql_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
 
-        self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs, num_scopes=3, num_collections=3,
-                                             json_template='Employee')
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs, num_scopes=self.num_scopes,
+                                             num_collections=self.num_collections, json_template='Employee')
         self.update_keyspace_list(bucket=self.test_bucket)
         index_create_tasks = self.create_indexes(num=3*3*unique_index_type_per_collection*2,
                                                  query_def_group="unique")
@@ -130,15 +130,14 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
             except Exception as err:
                 self.fail(f'{query} failed with {err}')
 
-
-
     def test_schedule_index_drop_during_rebalance(self):
         schedule_index_disable = {"indexer.debug.enableBackgroundIndexCreation": False}
         self.rest.set_index_settings(schedule_index_disable)
         redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
         self.rest.set_index_settings(redistribute)
         num_of_docs = 10 ** 4
-        self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs, num_scopes=3, num_collections=1)
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs, num_scopes=self.num_scopes,
+                                             num_collections=self.num_collections)
         idx_prefix = 'idx'
         index_gen_list = []
         index_gen_query_list = []
@@ -164,7 +163,6 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         dqueries_during_rebalance = drop_index_queries[0:15]
         dqueries_after_rebalance = drop_index_queries[15:]
         with ThreadPoolExecutor() as executor:
-
             for query in cqueries_before_rebalance:
                 task = executor.submit(self.run_cbq_query, query=query)
                 tasks.append(task)
@@ -181,7 +179,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                         add_nodes = [self.servers[2]]
                         remove_nodes = [self.servers[1]]
                         if not rebalance_flag:
-                            self.sleep(10)
+                            self.sleep(30)
                             rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
                                                                           to_add=add_nodes,
                                                                           to_remove=remove_nodes,
