@@ -44,10 +44,10 @@ class QuerySkipRangeScanTests(QueryTests):
             self.assertEqual(spans, check_data)
         if check_type == "index":
             index = plan["~children"][0]['index']
-            self.assertEqual(index, check_data)
+            self.assertEqual(index, check_data, f"Index got {index} but we expected {check_data}. Plan was {plan}")
         if check_type == "join_index":
-            index = plan["~children"][2]['~child']['~children'][0]['~child']['~children'][0]['index']
-            self.assertEqual(index, check_data)
+            index = plan["~children"][2]['~child']['~children'][1]['~child']['~children'][0]['index']
+            self.assertEqual(index, check_data, f"Join index got {index} but we expected {check_data}. Plan was {plan}")
         if check_type == "join_span":
             spans = plan["~children"][2]['~child']['~children'][0]['~child']['~children'][0]['spans'][0]['range']
             self.assertEqual(spans, check_data)
@@ -355,7 +355,7 @@ class QuerySkipRangeScanTests(QueryTests):
                     'using': self.index_type.lower(), 'is_primary': False}
         index_1b = {'name': 'idx2', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0), ("join_yr", 1)], 'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
-        spans_1a = [{'low': 'null', 'inclusion': 0}]
+        spans_1a = [{'inclusion': 0, 'low': 'null'}, {'inclusion': 0, 'low': 'null'}]
         spans_1b = [{'high': '(`d1`.`join_yr`)', 'low': '(`d1`.`join_yr`)', 'inclusion': 3}]
 
         queries["a"] = {"indexes": [self.primary_index_def, index_1a, index_1b], "queries": [query_1],
@@ -404,7 +404,7 @@ class QuerySkipRangeScanTests(QueryTests):
         index_4b = {'name': 'idx2', 'bucket': self.default_bucket_name, 'fields': [("join_day", 0), ("join_mo", 1), ("join_yr", 2)],
                     'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
-        spans_4a = [{'low': 'null', 'inclusion': 0}]
+        spans_4a = [{'inclusion': 0, 'low': 'null'}, {'inclusion': 0}, {'inclusion': 0, 'low': 'null'}]
         spans_4b = [{'high': '(`d1`.`join_yr`)', 'low': '(`d1`.`join_yr`)', 'inclusion': 3}]
 
         queries["d"] = {"indexes": [self.primary_index_def, index_4a, index_4b], "queries": [query_4],
@@ -422,7 +422,7 @@ class QuerySkipRangeScanTests(QueryTests):
                     'using': self.index_type.lower(), 'is_primary': False}
         index_5c = {'name': 'idx3', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0), ("join_day", 1)], 'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
-        spans_5a = [{'low': 'null', 'inclusion': 0}]
+        spans_5a = [{'inclusion': 0, 'low': 'null'}, {'inclusion': 0, 'low': 'null'}]
         spans_5b = [{'high': '(`d1`.`join_yr`)', 'low': '(`d1`.`join_yr`)', 'inclusion': 3}]
 
         queries["e"] = {"indexes": [self.primary_index_def, index_5a, index_5b, index_5c], "queries": [query_5],
@@ -443,7 +443,7 @@ class QuerySkipRangeScanTests(QueryTests):
         index_6d = {'name': 'idx4', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0), ("join_day", 1), ("join_mo", 2)],
                     'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
-        spans_6a = [{'low': 'null', 'inclusion': 0}]
+        spans_6a = [{'inclusion': 0, 'low': 'null'}, {'inclusion': 0, 'low': 'null'}]
         spans_6b = [{'high': '(`d1`.`join_yr`)', 'low': '(`d1`.`join_yr`)', 'inclusion': 3}]
 
         queries["f"] = {"indexes": [self.primary_index_def, index_6a, index_6b, index_6c, index_6d],
