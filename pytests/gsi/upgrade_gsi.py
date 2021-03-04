@@ -1,6 +1,7 @@
 import copy
 import logging
 from datetime import datetime
+import random
 from threading import Thread
 
 from .base_gsi import BaseSecondaryIndexingTests
@@ -33,6 +34,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         query_template += " WHERE {0}".format(self.whereCondition)
         self.load_query_definitions = []
         self.initial_index_number = self.input.param("initial_index_number", 1)
+        if self.enable_dgm:
+            if self.gsi_type == 'memory_optimized':
+                self.skipTest("DGM can be achieved only for plasma")
+            dgm_server = self.get_nodes_from_services_map(service_type="index")
+            self.get_dgm_for_plasma(indexer_nodes=[dgm_server])
         for x in range(self.initial_index_number):
             index_name = "index_name_" + str(x)
             query_definition = QueryDefinition(index_name=index_name, index_fields=["job_title"],
@@ -47,6 +53,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             self.multi_create_index(buckets = self.buckets,
                                     query_definitions=self.load_query_definitions)
         self.skip_metabucket_check = True
+        if self.enable_dgm:
+            self.assertTrue(self._is_dgm_reached())
+
 
     def tearDown(self):
         self.upgrade_servers = self.servers
@@ -67,6 +76,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                                                  phase="before")
         self._run_tasks([before_tasks])
         prepare_statements = self._create_prepare_statement()
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        index_rest = RestConnection(index_node)
+        pre_upgrade_index_stats = index_rest.get_all_index_stats()
         for server in self.servers:
             remote = RemoteMachineShellConnection(server)
             remote.stop_server()
@@ -101,6 +113,188 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             msg = "No such prepared statement"
             self.assertIn(msg, str(ex), str(ex))
         self._verify_index_partitioning()
+        post_upgrade_index_stats = index_rest.get_all_index_stats()
+
+        # self.log.info(f"PRE:{pre_upgrade_index_stats}")
+        # self.log.info(f"POST:{post_upgrade_index_stats}")
+        self._post_upgrade_task(task='stats_comparison', stats_before_upgrade=pre_upgrade_index_stats,
+                                stats_after_upgrade=post_upgrade_index_stats)
+        self._post_upgrade_task(task='create_collection')
+        self._post_upgrade_task(task='create_indexes')
+        if self.enable_dgm:
+            self.assertTrue(self._is_dgm_reached())
+        self._post_upgrade_task(task='run_query')
+        self._post_upgrade_task(task='rebalance_in', node=self.servers[4])
+        self._post_upgrade_task(task='rebalance_out', node=self.servers[4])
+        self._post_upgrade_task(task='drop_all_indexes')
+        # creating indexes again to check plasma sharding
+        self._post_upgrade_task(task='create_indexes')
+
+    def _post_upgrade_task(self, task, num_replica=0, stats_before_upgrade=None, stats_after_upgrade=None,
+                           node=None):
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        index_rest = RestConnection(index_node)
+        if task == 'create_collection':
+            self.prepare_collection_for_indexing(bucket_name=self.buckets[0].name, num_scopes=3, num_collections=3,
+                                                 num_of_docs_per_collection=1000)
+        elif task == 'create_indexes':
+            result = index_rest.get_indexer_metadata()
+            if 'status' in result:
+                indexer_metadata = result['status']
+            else:
+                indexer_metadata = {}
+
+            initial_index_count = len(indexer_metadata)
+            err_msg1 = 'The index is scheduled for background creation'
+            err_msg2 = 'Index creation will be retried in background'
+            err_msg3 = 'will retry building in the background for reason: Build Already In Progress.'
+            new_index_count = 0
+            for namespace in self.namespaces:
+                index_gen1 = QueryDefinition(index_name='idx1', index_fields=['age'])
+                index_gen2 = QueryDefinition(index_name='idx2', index_fields=['city'])
+                index_gen3 = QueryDefinition(index_name='idx3', index_fields=['country'])
+                build_option = [True, False]
+                defer_build = random.choice(build_option)
+                try:
+                    query1 = index_gen1.generate_index_create_query(namespace=namespace, num_replica=num_replica,
+                                                                    defer_build=defer_build)
+                    self.run_cbq_query(server=self.n1ql_node, query=query1)
+                    if defer_build:
+                        defer_query = index_gen1.generate_build_query(namespace=namespace)
+                        self.run_cbq_query(server=self.n1ql_node, query=defer_query)
+                except Exception as err:
+                    if err_msg1 in str(err) or err_msg2 in str(err) or err_msg3 in str(err):
+                        self.log.info(err)
+                    else:
+                        self.fail(err)
+
+                try:
+                    defer_build = random.choice(build_option)
+                    query2 = index_gen2.generate_index_create_query(namespace=namespace, num_replica=num_replica,
+                                                                    defer_build=defer_build)
+                    self.run_cbq_query(server=self.n1ql_node, query=query2)
+                    if defer_build:
+                        defer_query = index_gen2.generate_build_query(namespace=namespace)
+                        self.run_cbq_query(server=self.n1ql_node, query=defer_query)
+                except Exception as err:
+                    if err_msg1 in str(err) or err_msg2 in str(err) or err_msg3 in str(err):
+                        self.log.info(err)
+                    else:
+                        self.fail(err)
+
+                try:
+                    defer_build = random.choice(build_option)
+                    query3 = index_gen3.generate_index_create_query(namespace=namespace, num_replica=num_replica,
+                                                                    defer_build=defer_build)
+                    self.run_cbq_query(server=self.n1ql_node, query=query3)
+                    if defer_build:
+                        defer_query = index_gen3.generate_build_query(namespace=namespace)
+                        self.run_cbq_query(server=self.n1ql_node, query=defer_query)
+                except Exception as err:
+                    if err_msg1 in str(err) or err_msg2 in str(err) or err_msg3 in str(err):
+                        self.log.info(err)
+                    else:
+                        self.fail(err)
+                new_index_count += 3
+            self.wait_until_indexes_online()
+            indexer_metadata = index_rest.get_indexer_metadata()['status']
+            final_indexes = []
+            for index in indexer_metadata:
+                final_indexes.append(index['indexName'])
+            try:
+                self.assertEqual(initial_index_count + new_index_count, len(indexer_metadata))
+            except Exception as err:
+                self.log.error(err)
+
+        elif task == 'run_query':
+            try:
+                for namespace in self.namespaces:
+                    query1 = f'select count(age) from {namespace} where age > 10'
+                    result = self.run_cbq_query(server=self.n1ql_node, query=query1)['results'][0]['$1']
+                    self.assertTrue(result > 0)
+                    query1 = f'select count(city) from {namespace} where city like "A%"'
+                    result = self.run_cbq_query(server=self.n1ql_node, query=query1)['results'][0]['$1']
+                    self.assertTrue(result > 0)
+                    query1 = f'select count(age) from {namespace} where country like "A%"'
+                    result = self.run_cbq_query(server=self.n1ql_node, query=query1)['results'][0]['$1']
+                    self.assertTrue(result > 0)
+            except Exception as err:
+                self.log.error(err)
+
+        elif task == 'stats_comparison':
+            if not (stats_after_upgrade and stats_before_upgrade):
+                self.fail("Provide PRE and POST upgrade stats for comparison")
+
+            pre_upgrade_keys = set(stats_before_upgrade.keys())
+            post_upgrade_keys = set(stats_after_upgrade.keys())
+            bucket_stats = ["mutation_queue_size", "num_mutations_queued", "num_nonalign_ts",
+                            "num_rollbacks", "timings/dcp_getseqs", "ts_queue_size"]
+            new_post_upgrade_keys = set()
+            for key in post_upgrade_keys:
+                chunks = key.split(":")
+                if chunks[-1] in bucket_stats and "MAINT_STREAM" in chunks[0]:
+                    new_post_upgrade_keys.add(":".join(key.split(':')[1:]))
+                else:
+                    new_post_upgrade_keys.add(key)
+            diff = pre_upgrade_keys - new_post_upgrade_keys
+            if diff:
+                self.log.error("Following stats keys are missing")
+                self.log.error(diff)
+
+        elif task == 'rebalance_in':
+            if not node:
+                self.fail("Node info not provided for Rebalancing In new node")
+            node_rest = RestConnection(node)
+            cb_version = "-".join(node_rest.get_nodes_version().split('-')[0:-1])
+            if cb_version != self.upgrade_versions:
+                upgrade_th = self._async_update(self.upgrade_to, [node])
+                for th in upgrade_th:
+                    th.join()
+                self.sleep(120)
+            self.log.info("Rebalance-In a new Indexer node for auto re-distribution of Indexes")
+            redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
+            index_rest.set_index_settings(redistribute)
+            add_nodes = [node]
+            task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
+                                                to_remove=[], services=['index'])
+            result = task.result()
+            rebalance_status = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+            indexer_metadata = index_rest.get_indexer_metadata()['status']
+            indexes_hosts = set()
+            for index in indexer_metadata:
+                for host in index['hosts']:
+                    indexes_hosts.add(host.split(':')[0])
+            self.assertTrue(self.servers[4].ip in indexes_hosts, "Indexes re-distribution failed for new Indexer Node")
+
+        elif task == 'rebalance_out':
+            if not node:
+                self.fail("Node info not provided for Rebalance-Out a node")
+            self.log.info("Rebalance-Out an Indexer node")
+            remove_nodes = [node]
+            task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
+                                                to_remove=remove_nodes, services=['index'])
+            task.result()
+            rebalance_status = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+
+        elif task == 'drop_all_indexes':
+            self.log.info("Dropping all indexes")
+            system_query = 'select * from system:indexes;'
+            result = self.run_cbq_query(server=self.n1ql_node, query=system_query)['results']
+            for index_dict in result:
+                index = index_dict['indexes']
+                if 'scope_id' in index:
+                    keyspacename = f'{index["bucket_id"]}.{index["scope_id"]}.{index["keyspace_id"]}'
+                else:
+                    keyspacename = index["keyspace_id"]
+                index_name = index['name']
+                query = f"Drop Index `{index_name}` ON {keyspacename}"
+                self.run_cbq_query(server=self.n1ql_node, query=query)
+
+            self.sleep(10, "Waiting before checking for Index traces")
+            result = self.run_cbq_query(server=self.n1ql_node, query=system_query)['results']
+            self.assertTrue(len(result) == 0, f"Not all indexes has been dropped. System query result: {result}")
 
     def test_online_upgrade(self):
         services_in = []
@@ -392,6 +586,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         """
         self.set_circular_compaction = self.input.param("set_circular_compaction", False)
         kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        index_rest = RestConnection(index_node)
+        pre_upgrade_index_stats = index_rest.get_all_index_stats()
         log.info("Upgrading all kv nodes...")
         for node in kv_nodes:
             log.info("Rebalancing kv node {0} out to upgrade...".format(node.ip))
@@ -468,9 +665,30 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         self._verify_bucket_count_with_index_count()
         self.multi_query_using_index(self.buckets, self.query_definitions)
 
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        index_rest = RestConnection(index_node)
+        post_upgrade_index_stats = index_rest.get_all_index_stats()
+        # Only one Index node, can't compare Index stats
+        # self._post_upgrade_task(task='stats_comparison', stats_before_upgrade=pre_upgrade_index_stats,
+        #                         stats_after_upgrade=post_upgrade_index_stats)
+        self._post_upgrade_task(task='create_collection')
+        self._post_upgrade_task(task='create_indexes')
+        if self.enable_dgm:
+            self.assertTrue(self._is_dgm_reached())
+        self._post_upgrade_task(task='run_query')
+        self.log.info(f"Rebalancing in new node - {self.servers[self.nodes_init]}")
+        self._post_upgrade_task(task='rebalance_in', node=self.servers[self.nodes_init])
+        self._post_upgrade_task(task='rebalance_out', node=self.servers[self.nodes_init])
+        self._post_upgrade_task(task='drop_all_indexes')
+        # creating indexes again to check plasma sharding
+        self._post_upgrade_task(task='create_indexes')
+
     def test_online_upgrade_path_with_rebalance(self):
         pre_upgrade_tasks = self.async_run_operations(phase="before")
         self._run_tasks([pre_upgrade_tasks])
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        index_rest = RestConnection(index_node)
+        pre_upgrade_index_stats = index_rest.get_all_index_stats()
         threads = [Thread(target=self._async_continuous_queries, name="run_query")]
         kvOps_tasks = self.async_run_doc_ops()
         for thread in threads:
@@ -513,7 +731,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                                                  [node], [],
                                                  services=node_services)
                 rebalance.result()
-                self.sleep(100)
+                # self.sleep(100)
                 node_version = RestConnection(node).get_nodes_versions()
                 log.info("{0} node {1} Upgraded to: {2}".format(service, node.ip, node_version))
                 ops_map = self.generate_operation_map("in_between")
@@ -540,6 +758,24 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         self.multi_query_using_index(buckets=buckets, query_definitions=self.query_definitions)
         self._verify_gsi_rebalance()
         self._verify_index_partitioning()
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        index_rest = RestConnection(index_nodes[0])
+        post_upgrade_index_stats = index_rest.get_all_index_stats()
+
+        self._post_upgrade_task(task='stats_comparison', stats_before_upgrade=pre_upgrade_index_stats,
+                                stats_after_upgrade=post_upgrade_index_stats)
+        self._post_upgrade_task(task='create_collection')
+        self._post_upgrade_task(task='create_indexes')
+        if self.enable_dgm:
+            self.assertTrue(self._is_dgm_reached())
+        self._post_upgrade_task(task='run_query')
+        # self.log.infor(f"Rebalancing in new node - {self.servers[self.nodes_init]}")
+        # self._post_upgrade_task(task='rebalance_in', node=self.servers[self.nodes_init])
+        if len(index_nodes) > 1:
+            self._post_upgrade_task(task='rebalance_out', node=index_nodes[0])
+        self._post_upgrade_task(task='drop_all_indexes')
+        # creating indexes again to check plasma sharding
+        self._post_upgrade_task(task='create_indexes')
 
     def kv_mutations(self, docs=None):
         if not docs:
@@ -547,6 +783,19 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         gens_load = self.generate_docs(docs)
         tasks = self.async_load(generators_load=gens_load, batch_size=self.batch_size)
         return tasks
+
+    def _is_dgm_reached(self):
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        index_rest = RestConnection(index_node)
+        stats = index_rest.get_all_index_stats()
+        for key in stats:
+            if ':resident_percent' in key:
+                if stats[key] < 100:
+                    self.log.info("DGM achieved")
+                    return True
+        else:
+            self.log.error(stats)
+            return False
 
     def _run_tasks(self, tasks_list):
         for tasks in tasks_list:
@@ -614,7 +863,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                 msg = "IndexScan3"
                 self.assertIn(msg, str(actual_result), "IndexScan3 is not used for Vulcan Nodes")
 
-    def _create_replica_indexes(self,  keyspace='default'):
+    def _create_replica_indexes(self, keyspace='default'):
         nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         create_index_query = f"CREATE INDEX index_replica_index ON {keyspace}(age) USING GSI  WITH {{'num_replica': {len(nodes)-1}}};"
         try:
