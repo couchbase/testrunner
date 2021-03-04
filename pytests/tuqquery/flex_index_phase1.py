@@ -31,9 +31,10 @@ class FlexIndexTests(QueryTests):
     def setUp(self):
         super(FlexIndexTests, self).setUp()
         #self._load_test_buckets()
-
         self.log.info("==============  FlexIndexTests setuAp has started ==============")
-        self.log_config_info()
+        self.query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        if self.query_node:
+            self.log_config_info(self.query_node)
         self.dataset = self.input.param("flex_dataset", "emp")
         self.use_index_name_in_query = bool(self.input.param("use_index_name_in_query", True))
         self.expected_gsi_index_map = {}
@@ -45,12 +46,13 @@ class FlexIndexTests(QueryTests):
         self.rebalance_in = self.input.param("rebalance_in", False)
         self.failover_fts = self.input.param("failover_fts", False)
         self.use_fts_query_param = self.input.param("use_fts_query_param", None)
-        self.query_node = self.get_nodes_from_services_map(service_type="n1ql")
         self.log.info("==============  FlexIndexTests setup has completed ==============")
 
     def tearDown(self):
         self.log.info("==============  FlexIndexTests tearDown has started ==============")
-        self.log_config_info()
+        self.query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        if self.query_node:
+            self.log_config_info(self.query_node)
         self.log.info("==============  FlexIndexTests tearDown has completed ==============")
         super(FlexIndexTests, self).tearDown()
 

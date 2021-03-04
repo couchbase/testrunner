@@ -293,10 +293,10 @@ class QueryTests(BaseTestCase):
     #  Setup Helpers
     ##############################################################################################
 
-    def log_config_info(self):
+    def log_config_info(self, query_node=None):
         try:
             current_indexes = []
-            query_response = self.run_cbq_query("SELECT * FROM system:indexes WHERE indexes.bucket_id is missing")
+            query_response = self.run_cbq_query("SELECT * FROM system:indexes WHERE indexes.bucket_id is missing", server=query_node)
             current_indexes = [(i['indexes']['name'],
                                 i['indexes']['keyspace_id'],
                                 frozenset([key.replace('`', '').replace('(', '').replace(')', '')
@@ -304,11 +304,11 @@ class QueryTests(BaseTestCase):
                                 i['indexes']['state'],
                                 i['indexes']['using']) for i in query_response['results']]
             # get all buckets
-            query_response = self.run_cbq_query("SELECT * FROM system:keyspaces WHERE keyspaces.`bucket` is missing")
+            query_response = self.run_cbq_query("SELECT * FROM system:keyspaces WHERE keyspaces.`bucket` is missing", server=query_node)
             buckets = [i['keyspaces']['name'] for i in query_response['results']]
             self.log.info("==============  System Config: ==============\n")
             for bucket in buckets:
-                query_response = self.run_cbq_query("SELECT COUNT(*) FROM `" + bucket + "`")
+                query_response = self.run_cbq_query("SELECT COUNT(*) FROM `" + bucket + "`", server=query_node)
                 docs = query_response['results'][0]['$1']
                 bucket_indexes = []
                 for index in current_indexes:
