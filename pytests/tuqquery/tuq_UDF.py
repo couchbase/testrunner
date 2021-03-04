@@ -98,7 +98,6 @@ class QueryUDFTests(QueryTests):
     def suite_tearDown(self):
         self.log.info("==============  QueryUDFTests suite_tearDown has started ==============")
         if self.analytics:
-            self.run_cbq_query(query="DROP DATASET default")
             self.run_cbq_query(query="DROP DATASET travel")
             self.run_cbq_query(query="DROP DATASET collection1")
             self.run_cbq_query(query="DROP DATASET collection2")
@@ -330,8 +329,8 @@ class QueryUDFTests(QueryTests):
         try:
             if self.analytics:
                 self.run_cbq_query(
-                    "CREATE OR REPLACE ANALYTICS FUNCTION collection1.celsius(degrees) {(degrees - 32) * 5/9}")
-                results = self.run_cbq_query("SELECT RAW collection1.celsius(10)".format(self.scope))
+                    "CREATE OR REPLACE ANALYTICS FUNCTION Default.celsius(degrees) {(degrees - 32) * 5/9}")
+                results = self.run_cbq_query("SELECT RAW Default.celsius(10)".format(self.scope))
             else:
                 self.run_cbq_query("CREATE FUNCTION default:default.{0}.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9".format(self.scope))
                 results = self.run_cbq_query("EXECUTE FUNCTION default:default.{0}.celsius(10)".format(self.scope))
@@ -345,7 +344,7 @@ class QueryUDFTests(QueryTests):
         finally:
             try:
                 if self.analytics:
-                    self.run_cbq_query("DROP ANALYTICS FUNCTION collection1.celsius(degrees)")
+                    self.run_cbq_query("DROP ANALYTICS FUNCTION Default.celsius(degrees)")
                 else:
                     self.run_cbq_query("DROP FUNCTION default:default.{0}.celsius".format(self.scope))
             except Exception as e:
@@ -405,10 +404,10 @@ class QueryUDFTests(QueryTests):
             if self.analytics:
                 self.run_cbq_query("CREATE OR REPLACE ANALYTICS FUNCTION func2(degrees) { (degrees - 32)} ")
                 self.run_cbq_query(
-                    "CREATE OR REPLACE ANALYTICS FUNCTION func4(nameval) {{ (select * from collection1 where name = nameval) }}".format(
+                    "CREATE OR REPLACE ANALYTICS FUNCTION func4(nameval) {{ (select * from collection1 where collection1.name = nameval) }}".format(
                         self.scope, self.collections[0]))
                 results = self.run_cbq_query(
-                    "SELECT f.test1.name FROM func4('old hotel') as f LET maximum_no = func2(36) WHERE ANY v in f.test1.numbers SATISFIES v = maximum_no END GROUP BY f.test1.name LETTING letter = 'o' HAVING f.test1.name > letter")
+                    "SELECT f.collection1.name FROM func4('old hotel') as f LET maximum_no = func2(36) WHERE ANY v in f.collection1.numbers SATISFIES v = maximum_no END GROUP BY f.collection1.name LETTING letter = 'o' HAVING f.collection1.name > letter")
                 self.assertEqual(results['results'], [{'name': 'old hotel'}])
             else:
                 self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "comparator" AT "strings"')
@@ -1327,10 +1326,10 @@ class QueryUDFTests(QueryTests):
             created = self.create_library("math", functions, function_names)
         try:
             if self.analytics:
-                self.run_cbq_query("CREATE FUNCTION func2(degrees) {(degrees - 32)}")
+                self.run_cbq_query("CREATE ANALYTICS FUNCTION func2(degrees) {(degrees - 32)}")
                 results = self.run_cbq_query(
-                    "SELECT COUNT(name), hotel_name FROM default:default.test.test1 LET maximum_no = func2(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END GROUP BY name AS hotel_name")
-                self.assertEqual(results['results'], [{'$1': 1, 'hotel_name': 'new hotel'}])
+                    "SELECT COUNT(name), hotel_name FROM collection1 LET maximum_no = func2(36) WHERE ANY v in collection1.numbers SATISFIES v = maximum_no END GROUP BY name AS hotel_name")
+                self.assertEqual(results['results'], [{'$1': 1, 'hotel_name': 'old hotel'}])
             else:
                 self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "comparator" AT "math"')
                 self.run_cbq_query("CREATE FUNCTION func2(degrees) LANGUAGE INLINE AS (degrees - 32) ")
