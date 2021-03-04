@@ -74,3 +74,13 @@ class EventingTimers(EventingBaseTest):
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
         self.undeploy_and_delete_function(body)
 
+    def test_multiple_timers_with_same_callback_reference(self):
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
+        body = self.create_save_function_body(self.function_name, self.handler_code, worker_count=1)
+        self.deploy_function(body)
+        self.verify_doc_count_collections("dst_bucket._default._default", 1)
+        self.undeploy_and_delete_function(body)
+
+
+
+
