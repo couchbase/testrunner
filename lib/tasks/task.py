@@ -6415,6 +6415,8 @@ class SDKLoadDocumentsTask(Task):
         else:
             self.execute_for_collection(self.sdk_docloader.collection)
         self.check(task_manager)
+        #TODO additional sleep to let ES finish with docs indexing, should be replaced with something more intelligent.
+        time.sleep(30)
 
     def check(self, task_manager):
         self.set_result(True)
