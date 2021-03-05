@@ -571,11 +571,15 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
     def online_upgrade(self, services=None):
         servers_in = self.servers[self.nodes_init:self.num_servers]
-        self.cluster.rebalance(self.servers[:self.nodes_init], servers_in, [], services=services)
+        servers_out = self.servers[:self.nodes_init]
+        self.cluster.rebalance(self.servers[:self.nodes_init], servers_in, servers_out, services=services)
+        self.sleep(60)
+
         self.log.info("Rebalance in all {0} nodes" \
                       .format(self.input.param("upgrade_version", "")))
-        self.sleep(self.sleep_time)
-        status, content = ClusterOperationHelper.find_orchestrator(self.master)
+        self.log.info("Rebalanced out all old version nodes")
+
+        status, content = ClusterOperationHelper.find_orchestrator(servers_in[0])
         self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}". \
                         format(status, content))
         FIND_MASTER = False
@@ -591,10 +595,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             raise Exception( \
                 "After rebalance in {0} nodes, {0} node doesn't become master" \
                     .format(self.input.param("upgrade_version", "")))
-
-        servers_out = self.servers[:self.nodes_init]
-        self.log.info("Rebalanced out all old version nodes")
-        self.cluster.rebalance(self.servers[:self.num_servers], [], servers_out)
 
     def online_upgrade_swap_rebalance(self):
         self._install(self.servers[:self.nodes_init])
