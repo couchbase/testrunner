@@ -1340,8 +1340,6 @@ class BaseTestCase(unittest.TestCase):
                             batch_size=1000, replica_to_read=None, scope=None, collection_name=None):
         tasks = []
 
-        if len(self.buckets) > 1:
-            batch_size = 1
         for bucket in self.buckets:
             try:
                 len(self.collection_name[bucket.name])
