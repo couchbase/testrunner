@@ -473,7 +473,7 @@ class CollectionCreateTask(Task):
 class ConcurrentIndexCreateTask(Task):
     def __init__(self, server, bucket, scope, collection, query_definitions=None, IndexTrackingObject=None,
                  n1ql_helper=None, num_indexes=1, defer_build="", itr=0, expected_failure=[],
-                 query_def_group="plasma_test",recovery_nodes=None, verifying_nodes=None):
+                 query_def_group="plasma_test"):
         Task.__init__(self, "collection_create_task")
         self.server = server
         self.bucket_name = bucket
@@ -488,16 +488,6 @@ class ConcurrentIndexCreateTask(Task):
         self.itr = itr
         self.expected_failure = expected_failure
         self.query_def_group = query_def_group
-        self.recovery_node_dep_info = None
-        self.verifying_node_dep_info = None
-        if recovery_nodes:
-            self.recovery_node_dep_info = []
-            for node in recovery_nodes:
-                self.recovery_node_dep_info.append("{0}:{1}".format(node.ip, node.port))
-        if verifying_nodes:
-            self.verifying_node_dep_info = []
-            for node in verifying_nodes:
-                self.verifying_node_dep_info.append("{0}:{1}".format(node.ip, node.port))
 
     def execute(self, task_manager):
         try:
@@ -524,31 +514,13 @@ class ConcurrentIndexCreateTask(Task):
                         index_meta = {"name": query_def_copy.get_index_name(), "query_def": query_def_copy,
                                       "defer_build": defer_build}
                         if "primary" in query_def.groups:
-                            query = query_def_copy.generate_primary_index_create_query(defer_build=defer_build,
-                                                                                       deploy_node_info=self.recovery_node_dep_info)
+                            query = query_def_copy.generate_primary_index_create_query(defer_build=defer_build)
                         else:
                             query = query_def_copy.generate_index_create_query(use_gsi_for_secondary=True, gsi_type="plasma",
-                                                                          defer_build=defer_build,deploy_node_info=self.recovery_node_dep_info)
+                                                                          defer_build=defer_build)
                         try:
                             # create index
                             self.n1ql_helper.run_cbq_query(query=query, server=self.server)
-                            if self.verifying_node_dep_info:
-                                query_def_verify = copy.deepcopy(query_def_copy)
-                                index_name = query_def_verify.get_index_name()
-                                index_name = "verifying" + index_name
-                                query_def_verify.update_index_name(index_name)
-                                if "primary" in query_def_verify.groups:
-                                    query = query_def_verify.generate_primary_index_create_query(defer_build=defer_build,
-                                                                                                 deploy_node_info=self.verifying_node_dep_info)
-                                else:
-                                    query = query_def_verify.generate_index_create_query(use_gsi_for_secondary=True, gsi_type="plasma",
-                                                                                         defer_build=defer_build,deploy_node_info=self.verifying_node_dep_info)
-                                try:
-                                    # create index
-                                    self.n1ql_helper.run_cbq_query(query=query, server=self.server)
-                                    index_meta["verifying_index"] = query_def_verify.get_index_name()
-                                except Exception as err:
-                                    self.log.error(f'{err} occured while creating verifying index {query_def_verify.get_index_name()}')
                             self.index_tracking_obj.all_indexes_metadata(index_meta=index_meta, operation="create",
                                                                           defer_build=defer_build)
                         except Exception as err:

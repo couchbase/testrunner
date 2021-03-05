@@ -131,7 +131,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.keyspace = list(set(self.keyspace))
 
     def create_indexes(self, num=0, defer_build=False, itr=0, expected_failure=[], index_name_prefix="idx_",
-                       query_def_group="plasma_test", recovery_nodes=None, verifying_nodes=None):
+                       query_def_group="plasma_test"):
         query_definition_generator = SQLDefinitionGenerator()
         index_create_tasks = []
         self.log.info(threading.currentThread().getName() + " Started")
@@ -152,7 +152,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 index_create_task = ConcurrentIndexCreateTask(server, self.test_bucket, scope_name,
                                                               collection_name, query_definitions,
                                                               self.index_ops_obj, self.n1ql_helper, num_indexes_collection, defer_build,
-                                                              itr, expected_failure, query_def_group,recovery_nodes, verifying_nodes)
+                                                              itr, expected_failure, query_def_group)
                 self.index_create_task_manager.schedule(index_create_task)
                 index_create_tasks.append(index_create_task)
         self.log.info(threading.currentThread().getName() + " Completed")
