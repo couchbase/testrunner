@@ -153,7 +153,7 @@ class QueryMiscTests(QueryTests):
             self.query = 'select TIM_ID, MSISDN from ' + self.temp_bucket + ' WHERE CUSTOMER_ID = 551 ORDER BY MSISDN ASC LIMIT 2 OFFSET 0 '
             for i in range(0, 100):
                 res = self.run_cbq_query()
-                time.sleep(1)
+                time.sleep(5)
                 self.assertEqual(len(res['results']), 2)
         finally:
             for index in list(createdIndexes.keys()):
@@ -231,6 +231,8 @@ class QueryMiscTests(QueryTests):
             for i in range(0, 1000):
                 res = self.run_cbq_query()
                 self.assertEqual(len(res['results']), 1000)
+                
+            self.sleep(30)
 
             curl_output = self.shell.execute_command(curl_cmd)
             pprof_list = curl_output[0]

@@ -174,24 +174,34 @@ class QueryMonitoringTests(QueryTests):
         self.run_cbq_query(query='select * from default where name = "employee-9"', txnid=txid)
         self.run_cbq_query(query='update default SET name = "employee-9000" where name = "employee-9"', txnid=txid)
         self.run_cbq_query(query='delete from default limit 10000', txnid=txid)
-        self.run_cbq_query(query='COMMIT TRANSACTION', txnid=txid)
+        try:
+            self.run_cbq_query(query='COMMIT TRANSACTION', txnid=txid)
+        except Exception as ex:
+            if "errors" in str(ex):
+                self.assertTrue("17018" in str(ex))
+            else:
+                self.log.error(str(ex))
 
         select_results = self.run_cbq_query(query='select * from system:completed_requests where statement = "select * from default where name = \\"employee-9\\""')
+        self.log.info(select_results)
         self.assertEqual(select_results['results'][0]['completed_requests']['txid'], txid)
         self.assertTrue('transactionRemainingTime' in select_results['results'][0]['completed_requests'],"Transaction Remaining Time not found in the entry! {0}".format(str(select_results['results'][0]['completed_requests'])))
         self.assertTrue('transactionElapsedTime' in select_results['results'][0]['completed_requests'],"Transaction Elapsed Time not found in the entry! {0}".format(str(select_results['results'][0]['completed_requests'])))
 
         update_results = self.run_cbq_query(query='select * from system:completed_requests where statement = "update default SET name = \\"employee-9000\\" where name = \\"employee-9\\""')
+        self.log.info(update_results)
         self.assertEqual(update_results['results'][0]['completed_requests']['txid'], txid)
         self.assertTrue('transactionRemainingTime' in update_results['results'][0]['completed_requests'],"Transaction Remaining Time not found in the entry! {0}".format(str(update_results['results'][0]['completed_requests'])))
         self.assertTrue('transactionElapsedTime' in update_results['results'][0]['completed_requests'],"Transaction Elapsed Time not found in the entry! {0}".format(str(update_results['results'][0]['completed_requests'])))
 
         delete_results = self.run_cbq_query(query='select * from system:completed_requests where statement = "delete from default limit 10000"')
-        self.assertEqual(delete_results['results'][0]['completed_requests']['txid'],txid)
+        self.log.info(delete_results)
+        self.assertEqual(delete_results['results'][0]['completed_requests']['txid'], txid)
         self.assertTrue('transactionRemainingTime' in delete_results['results'][0]['completed_requests'],"Transaction Remaining Time not found in the entry! {0}".format(str(delete_results['results'][0]['completed_requests'])))
         self.assertTrue('transactionElapsedTime' in delete_results['results'][0]['completed_requests'],"Transaction Elapsed Time not found in the entry! {0}".format(str(delete_results['results'][0]['completed_requests'])))
 
         commit_results = self.run_cbq_query(query='select * from system:completed_requests where statement = "COMMIT TRANSACTION"')
+        self.log.info(commit_results)
         self.assertEqual(commit_results['results'][0]['completed_requests']['txid'],txid)
         self.assertFalse('transactionRemainingTime' in commit_results['results'][0]['completed_requests'],"Transaction Remaining Time found in the entry but it should not be there! {0}".format(str(commit_results['results'][0]['completed_requests'])))
         self.assertTrue('transactionElapsedTime' in commit_results['results'][0]['completed_requests'],"Transaction Elapsed Time not found in the entry! {0}".format(str(commit_results['results'][0]['completed_requests'])))
