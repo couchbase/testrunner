@@ -3912,7 +3912,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.backupset.end = 2
 
             if bk_fxn != "":
-                self._verify_backup_events_definition(json.loads(bk_fxn), backup_index = backup_index)
+                self._verify_backup_events_definition(json.loads(bk_fxn), body, backup_index = backup_index)
 
             self.backup_restore()
 
@@ -3923,7 +3923,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
             self.bkrs_resume_function(body, rest_rs)
             rs_events_created = True
-            #self._verify_restore_events_definition(bk_fxn)
+            self._verify_restore_events_definition(bk_fxn)
         except Exception as e:
             self.fail(e)
         finally:

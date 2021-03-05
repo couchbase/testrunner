@@ -2695,7 +2695,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("Delete Application : {0}".format(body['appname']))
         return content1
 
-    def _verify_backup_events_definition(self, bk_fxn, backup_index=0):
+    def _verify_backup_events_definition(self, bk_fxn, body, backup_index=0):
         backup_path = self.backupset.directory + "/backup/{0}/".format(self.backups[backup_index])
         events_file_name = "events.json"
         bk_file_events_dir = "/tmp/backup_events{0}/".format(self.master.ip)
@@ -2712,7 +2712,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         local_bk_def = open(bk_file_events_path)
         bk_file_fxn = json.loads(local_bk_def.read())
         for k, v in list(bk_file_fxn[0]["settings"].items()):
-            if v != bk_fxn[0]["settings"][k]:
+            if k in body['settings'] and v != bk_fxn[0]["settings"][k]:
                 self.log.info("key {0} has value not match".format(k))
                 self.log.info("{0} : {1}".format(v, bk_fxn[0]["settings"][k]))
         self.log.info("remove tmp file in slave")
@@ -2727,8 +2727,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         bk_file_events_path = bk_file_events_dir + events_file_name
         rest = RestConnection(self.backupset.restore_cluster_host)
         rs_fxn = rest.get_all_functions()
-
-        if self.ordered(rs_fxn) != self.ordered(bk_fxn):
+        rs_fxn_dict = json.loads(rs_fxn)[0]
+        bk_fxn_dict = json.loads(bk_fxn)[0]
+        not_matching_list = ['version', 'handleruuid', 'function_instance_id']
+        for i in not_matching_list:
+            rs_fxn_dict.pop(i)
+            bk_fxn_dict.pop(i)
+        if self.ordered(rs_fxn_dict) != self.ordered(bk_fxn_dict):
             self.fail("Events definition of backup and restore cluster are different")
 
     def ordered(self, obj):
