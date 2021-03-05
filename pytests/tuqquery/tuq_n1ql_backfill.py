@@ -150,14 +150,26 @@ class QueryN1QLBackfillTests(QueryTests):
                                                  services=services_in)
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-        self.sleep(1)
         curl_url = "http://%s:%s/settings/querySettings" % (self.servers[self.nodes_init].ip,
                                                             self.servers[self.nodes_init].port)
-        curl_output = self.shell.execute_command("%s -u Administrator:password %s"
-                                                 % (self.curl_path, curl_url))
-        expected_curl = self.convert_list_to_json(curl_output[0])
-        self.assertEqual(expected_curl['queryTmpSpaceSize'], self.tmp_size)
-        self.assertEqual(expected_curl['queryTmpSpaceDir'], self.directory_path)
+        max_try = 15
+        for i in range(max_try+1):
+            self.sleep(3)
+            curl_output = self.shell.execute_command("%s -u Administrator:password %s"
+                                                     % (self.curl_path, curl_url))
+            try:
+                expected_curl = self.convert_list_to_json(curl_output[0])
+            except Exception as e:
+                self.log.error(str(e))
+            try:
+                self.assertEqual(expected_curl['queryTmpSpaceSize'], self.tmp_size)
+                self.assertEqual(expected_curl['queryTmpSpaceDir'], self.directory_path)
+                break
+            except Exception as e:
+                if i == max_try:
+                    self.fail(f'Assertion error: {str(e)}')
+                else:
+                    self.log.error(f"[{i+1}/9] Got TmpSpaceSize: {expected_curl['queryTmpSpaceSize']} and TmpSpaceDir: {expected_curl['queryTmpSpaceDir']}. Retrying ...")
 
     def test_setting_propogation_swap_rebalance(self):
         expected_curl = self.set_tmpspace()
