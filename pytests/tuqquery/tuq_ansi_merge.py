@@ -425,7 +425,7 @@ class QueryANSIMERGETests(QueryTests):
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['results'][0]['plan']['~children'][0]['index'],
                              'name2', "The incorrect index is being used")
-            self.assertEqual(actual_result['results'][0]['plan']['~children'][2]['~child']['~children'][0][
+            self.assertEqual(actual_result['results'][0]['plan']['~children'][2]['~child']['~children'][1][
                                  '~child']['~children'][0]['index'],
                              'name', "The incorrect index is being used")
 
