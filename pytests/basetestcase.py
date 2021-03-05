@@ -1338,8 +1338,6 @@ class BaseTestCase(unittest.TestCase):
 
     def _verify_all_buckets(self, server, kv_store=1, timeout=180, max_verify=None, only_store_hash=True,
                             batch_size=1000, replica_to_read=None, scope=None, collection_name=None):
-        tasks = []
-
         for bucket in self.buckets:
             try:
                 len(self.collection_name[bucket.name])
@@ -1350,17 +1348,17 @@ class BaseTestCase(unittest.TestCase):
             # self.collection_bucket=self.collection_name[bucket]
             if not collection_name and (len(self.collection_name[bucket.name]) > 0):
                 for collections in self.collection_name[bucket.name]:
-                    tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify,
+                    task = self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify,
                                                                 only_store_hash, batch_size, replica_to_read,
                                                                 compression=self.sdk_compression,
-                                                                scope=scope, collection=collections))
+                                                                scope=scope, collection=collections)
+                    task.result(timeout)
             else:
-                tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify,
+                task = self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify,
                                                             only_store_hash, batch_size, replica_to_read,
                                                             compression=self.sdk_compression,
-                                                            scope=scope, collection=collection_name))
-        for task in tasks:
-            task.result(timeout)
+                                                            scope=scope, collection=collection_name)
+                task.result(timeout)
 
     def disable_compaction(self, server=None, bucket="default"):
 

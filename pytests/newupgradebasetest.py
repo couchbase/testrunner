@@ -439,7 +439,7 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
             self.log.warning(f"Skipping stats verification as the clusters are in mixed-mode")
         else:
             self.verify_cluster_stats(servers, max_verify=self.max_verify, \
-                                  timeout=self.wait_timeout * 2, check_items=check_items)
+                                  timeout=self.wait_timeout * 15, check_items=check_items)
 
         if self.ddocs:
             self.verify_all_queries()
