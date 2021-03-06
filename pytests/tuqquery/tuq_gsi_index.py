@@ -52,10 +52,11 @@ class QueriesIndexTests(QueryTests):
             self.cluster.bucket_delete(self.master, bucket=bucket, timeout=180000)
         rest = RestConnection(self.master)
         rest.load_sample(self.sample_bucket)
-        self.wait_for_all_indexes_online()
         created_indexes = []
         query_bucket = self.get_collection_name('`{0}`'.format(self.sample_bucket))
         try:
+            time.sleep(5)
+            self.wait_for_all_indexes_online()
             idx = "idx_abv"
             self.query = "CREATE INDEX {0} ON {1}(abv)".format(idx, query_bucket)
             self.run_cbq_query()
@@ -88,6 +89,8 @@ class QueriesIndexTests(QueryTests):
         query_bucket = self.get_collection_name("`{0}`".format(self.sample_bucket))
         created_indexes = []
         try:
+            time.sleep(5)
+            self.wait_for_all_indexes_online()
             idx = "idx_abv"
             self.query = "CREATE INDEX {0} ON {1}(abv)".format(idx, query_bucket)
             self.run_cbq_query()
@@ -114,6 +117,8 @@ class QueriesIndexTests(QueryTests):
         query_bucket = self.get_collection_name('`{0}`'.format(self.sample_bucket))
         created_indexes = []
         try:
+            time.sleep(5)
+            self.wait_for_all_indexes_online()
             idx = "idx_name_suffixes"
             self.query = "CREATE INDEX {0} ON {1}( DISTINCT ARRAY s FOR s IN SUFFIXES(name) " \
                          "END )".format(idx, query_bucket)
@@ -3595,7 +3600,7 @@ class QueriesIndexTests(QueryTests):
                     self.query = "CREATE PRIMARY INDEX ON {0}".format(query_bucket)
                     self.run_cbq_query()
                     self.sleep(15, 'wait for index')
-                    self.query = "select meta().id from {0} use index(`#primary`) WHERE _id like '{0}' ".format(
+                    self.query = "select meta().id from {0} use index(`#primary`) WHERE _id like '{1}' ".format(
                         query_bucket, 'query-testemployee10%')
                     result = self.run_cbq_query()
                     diffs = DeepDiff(actual_result['results'], result['results'], ignore_order=True)

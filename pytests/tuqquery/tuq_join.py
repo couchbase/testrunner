@@ -473,10 +473,15 @@ class JoinTests(QuerySanityTests):
                                    doc['tasks_ids']]
                 if self.type_join.upper() == JOIN_LEFT:
                     expected_result.extend([{}] * self.gens_tasks[-1].end)
-
-                self.query = "create primary index on %s" % query_bucket
-                self.run_cbq_query()
-                self.sleep(15, 'wait for index')
+                try:
+                    self.query = "create primary index on %s" % query_bucket
+                    self.run_cbq_query()
+                    self.sleep(15, 'wait for index')
+                except Exception as e:
+                    if "Index #primary already exists." in str(e):
+                        continue
+                    else:
+                        self.fail("Index failed to be created! {0}".format(str(e)))
                 self.query = "SELECT emp.name, task FROM %s emp use index (`#primary`) %s UNNEST emp.tasks_ids task where emp.name is not null" % (
                     query_bucket, self.type_join)
                 result = self.run_cbq_query()
