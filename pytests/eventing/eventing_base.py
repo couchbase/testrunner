@@ -1144,6 +1144,8 @@ class EventingBaseTest(QueryHelperTests):
         body['settings']['worker_count'] = worker_count
         body['settings']['language_compatibility'] = language_compatibility
         if is_curl:
+            self.is_curl=True
+        if self.is_curl:
             if hostpath != None:
                 body['depcfg']['curl'].append({"hostname": self.hostname+hostpath, "value": "server", "auth_type": self.auth_type,
                                                "username": self.curl_username, "password": self.curl_password,
