@@ -1360,7 +1360,7 @@ class QueryUDFTests(QueryTests):
             if self.analytics:
                 self.run_cbq_query("CREATE OR REPLACE ANALYTICS FUNCTION func2(degrees) {(degrees - 32)} ")
                 results = self.run_cbq_query(
-                    "SELECT name FROM collection1 LET maximum_no = func2(36) WHERE ANY v in collection1.numbers SATISFIES v = maximum_no END GROUP BY name HAVING name = 'old_hotel'")
+                    "SELECT name FROM collection1 LET maximum_no = func2(36) WHERE ANY v in collection1.numbers SATISFIES v = maximum_no END GROUP BY name HAVING name = 'old hotel'")
                 self.assertEqual(results['results'], [{'name': 'old hotel'}])
             else:
                 self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "comparator" AT "math"')
