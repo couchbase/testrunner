@@ -51,10 +51,9 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
             setting_val_map = {"filterExpression": "age>0",
                                "filterSkipRestream": "false",
                                "collectionsMigrationMode": "true",
-                               "collectionsExplicitMapping": "true",
                                "colMappingRules": '{' + "\"REGEXP_CONTAINS(META().id,'[a-z].*[0-9]')\""
                                                   + ':'
-                                                  + "\"scope_1:collection_2\"" + '}'
+                                                  + "\"scope_1.collection_2\"" + '}'
                                }
             self.src_rest.set_xdcr_params('default', 'default', setting_val_map)
         except Exception as e:
