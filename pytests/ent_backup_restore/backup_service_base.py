@@ -528,6 +528,17 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         return False
 
+    def wait_until_repositories_are_deleted(self, timeout=10):
+        timeout = time.time() + timeout
+
+        while time.time() < timeout:
+            if not self.get_repositories('active') and not self.get_repositories('archived'):
+                return True
+
+            self.sleep(1, "Waiting until all repositories are deleted")
+
+        return False
+
     def get_backups(self, state, repo_name):
         """ Returns the backups in a repository.
 
@@ -576,6 +587,14 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             repo_name (str): THe name of the repository to fetch.
         """
         return self.repository_api.cluster_self_repository_state_id_get('active', repo_name)
+
+    def get_repositories(self, state):
+        """ Gets all repositories
+
+        Attr:
+            state (str): The state of the repository e.g. 'active'.
+        """
+        return self.repository_api.cluster_self_repository_state_get(state)
 
     def get_task_history(self, state, repo_name, task_name=None):
         if task_name:
@@ -979,6 +998,8 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         if self.is_backup_service_running():
             self.delete_all_repositories()
             self.delete_all_plans()
+
+        return self.wait_until_repositories_are_deleted()
 
     # Clean up cbbackupmgr
     def tearDown(self):

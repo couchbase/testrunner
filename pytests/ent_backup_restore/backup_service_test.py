@@ -2162,6 +2162,7 @@ class BackupServiceTest(BackupServiceBase):
         roles = \
         [
             ('admin', True),
+            ('backup_admin', True),
             ('ro_admin', False),
             ('security_admin_local', False),
             ('cluster_admin', False),
@@ -2171,10 +2172,15 @@ class BackupServiceTest(BackupServiceBase):
         for role, operation_should_succeed in roles:
             # Set Mallory's role to `role`
             rest_connection.add_set_builtin_user("Mallory", f"name={self.configuration.username}&roles={role}&password={self.configuration.password}")
+            self.sleep(5)
             # Create a repository using the new credentials
             _, status, _, response_data = self.active_repository_api.cluster_self_repository_active_id_post_with_http_info("my_repo", body=Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory, bucket_name=None))
             # Check the status
             self.assertIn(status, [200] if operation_should_succeed else [403, 400])
+            # Clean up if a repository was created successfully
+            if status == 200:
+                self.backup_service_cleanup()
+
             # Check the error message if the status is 400
             if status == 400:
                 self.log.info("Response: " + response_data.data)
