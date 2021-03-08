@@ -3192,6 +3192,64 @@ class BackupServiceTest(BackupServiceBase):
             # Check the ip and port fields are present in the local field
             self.assertTrue(ip_port_fields.issubset(event['local'].keys()))
 
+    def test_minimum_tls_version(self):
+        """ Test the backup service respects the min_tls_version
+
+        1. Use the couchbase-cli to update the global tls-min-version.
+        2. Use curl to restrict the tls version used to make the https request.
+        3. Test any version less than the tls-min-version fails and any version
+        greater than the tls-min-version succeeds.
+        """
+        remote_shell = RemoteMachineShellConnection(self.master)
+
+        remote_shell.execute_command("yum -y install curl")
+
+        username = self.master.rest_username
+        password = self.master.rest_password
+
+        versions = [1, 1.1, 1.2]
+
+        def set_tls_version(version):
+            """ Sets the global min-tls-version using the couchbase-cli
+
+            Returns:
+                (bool): Returns True if the min-tls-version was set successfully
+            """
+            command = f"/opt/couchbase/bin/couchbase-cli setting-security -c localhost -u {username} -p {password} --tls-min-version tlsv{version} --set"
+            _, _, exit_code = remote_shell.execute_command(command, get_exit_code=True)
+            return exit_code == 0
+
+        def make_http_request_with_tls_version(version):
+            """ Returns True if a http request could be made using this specific tls version
+
+            Returns:
+                (bool):
+            """
+            # The tls-max flag prefers 1.0 as opposed to 1
+            if version == 1:
+                version = 1.0
+
+            command = f"curl --tlsv{version} --tls-max {version} https://{self.master.ip}:18097/api/v1/plan --insecure -u {username}:{password}"
+            _, _, exit_code = remote_shell.execute_command(command, get_exit_code=True)
+            return exit_code == 0
+
+        for i, version in enumerate(versions):
+            # Given a version, everything greater or equal to that version should work
+            # Conversely, everything less than that version should not work
+            should_not_work, should_work = [v for v in versions if v < version], [v for v in versions if v >= version]
+
+            # Use the couchbase-cli to set the global cluster min-tls-version
+            self.assertTrue(set_tls_version(version), "Could not set min-tls-version using couchbase-cli")
+
+            for v in should_not_work:
+                self.assertFalse(make_http_request_with_tls_version(v))
+
+            for v in should_work:
+                self.assertTrue(make_http_request_with_tls_version(v))
+
+        set_tls_version(min(versions))
+        remote_shell.disconnect()
+
     def test_sanity(self):
         """ A sanity tests """
         tests = [self.test_one_off_backup, self.test_one_off_restore, self.test_one_off_merge]
