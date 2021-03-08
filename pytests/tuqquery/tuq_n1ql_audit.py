@@ -310,7 +310,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
                 self.master.ip, self.n1ql_port)
             query = 'select * from ' + self.query_buckets[0] + ' limit 100'
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'errors',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal',
                                 'isAdHoc': True,
                                 'statement': 'select * from ' + self.query_buckets[0] + ' limit 100;',
                                 'description': 'A N1QL SELECT statement was executed',
