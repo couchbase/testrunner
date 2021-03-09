@@ -130,7 +130,7 @@ class cbcollectRunner(object):
             cbcollect_threads = []
             timeout = time.time() + (60 * 60)
             for server in self.server:
-                cbcollect_thread = Thread(target=self._run, args=(server,))
+                cbcollect_thread = Thread(target=self._run, args=(server,), daemon=True)
                 cbcollect_thread.start()
                 cbcollect_threads.append(cbcollect_thread)
             for [i, cbcollect_thread] in enumerate(cbcollect_threads):
@@ -208,25 +208,8 @@ def main():
 
     if not local:
         file_path = input.param("path", ".")
-        remotes = (cbcollectRunner(server, file_path, local) for server in input.servers)
-
-        remote_threads = [Thread(target=remote.run()) for remote in remotes]
-        for remote_thread in remote_threads:
-            remote_thread.daemon = True
-            remote_thread.start()
-            run_time = 0
-            while remote_thread.isAlive() and run_time < 1200:
-                time.sleep(15)
-                run_time += 15
-                print("Waiting for another 15 seconds (time-out after 20 min)")
-            if run_time == 1200:
-                print("cbcollect_info hung on this node. Jumping to next node")
-            print("collect info done")
-
-        for remote_thread in remote_threads:
-            remote_thread.join(120)
-            if remote_thread.isAlive():
-                raise Exception("cbcollect_info hung on remote node")
+        runner = cbcollectRunner(input.servers, file_path)
+        runner.run()
     else:
         file_name = "%s-%s-diag.zip" % ("local", time_stamp())
         cbcollect_command = WIN_COUCHBASE_BIN_PATH_RAW + "cbcollect_info.exe"
