@@ -791,7 +791,8 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
                 try:
                     t._stop()
                 except Exception as e:
-                    pass
+                    print("Unable to stop hung thread, killing python process")
+                    os.kill(os.getpid(), signal.SIGKILL)
 
     return results, xunit, "{0}{2}report-{1}".format(os.path.dirname(logs_folder), str_time, os.sep)
 
