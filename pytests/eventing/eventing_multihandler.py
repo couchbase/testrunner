@@ -270,7 +270,7 @@ class EventingMultiHandler(EventingBaseTest):
         nodes_out_ev = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
                                                  nodes_out_ev, services=services_in)
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=200)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         self.verify_destination_buckets(self.docs_per_day * self.num_docs)
