@@ -527,8 +527,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             backup_name (str): The name of the backup to validate.
             filter_keys set(str): Restrict the keys fetched from the cluster.
         """
-        self.validate_backup_data(backup_host, cluster_host, "ent-backup", False, False, "memory", item_count, None,
-                backup_name=backup_name, skip_stats_check=True, filter_keys=filter_keys)
+        if self.os_info != "windows":
+            self.validate_backup_data(backup_host, cluster_host, "ent-backup", False, False, "memory", item_count, None,
+                    backup_name=backup_name, skip_stats_check=True, filter_keys=filter_keys)
 
     def wait_for_task(self, repo_name, task_name, timeout=200, task_scheduled_time=None, one_off=True):
         self.log.info(f"Waiting for running one off {task_name}")
