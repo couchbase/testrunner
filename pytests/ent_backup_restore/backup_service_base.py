@@ -514,6 +514,22 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
     def map_task_to_backup(self, state, repo_name, task_name):
         return self.get_task_history(state, repo_name, task_name=task_name)[0].backup
 
+    def perform_backup_data_validation(self, backup_host, cluster_host, key_prefix, item_count, backup_name, filter_keys=None):
+        """ Check the contents of the backup matches the contents of the cluster
+
+        Uses cbriftdump and cbtransfer to check contents of backup matches the content of the cluster.
+
+        Args:
+            backup_host (TestInputServer): The server on which cbriftdump is present.
+            cluster_host list(TestInputServer): A list of nodes in the cluster.
+            key_prefix (str): The prefix of keys to test.
+            item_count (int): The expected number of items in the backup.
+            backup_name (str): The name of the backup to validate.
+            filter_keys set(str): Restrict the keys fetched from the cluster.
+        """
+        self.validate_backup_data(backup_host, cluster_host, "ent-backup", False, False, "memory", item_count, None,
+                backup_name=backup_name, skip_stats_check=True, filter_keys=filter_keys)
+
     def wait_for_task(self, repo_name, task_name, timeout=200, task_scheduled_time=None, one_off=True):
         self.log.info(f"Waiting for running one off {task_name}")
 

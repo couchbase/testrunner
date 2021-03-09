@@ -749,15 +749,13 @@ class BackupServiceTest(BackupServiceBase):
         # Wait until task has completed
         self.assertTrue(self.wait_for_task(repo_name, task_name))
 
-        # Configure repository name and staging directory
-        if self.objstore_provider:
-            self.backupset.objstore_staging_directory = repository.cloud_info.staging_dir
+        # Configure repository name
         self.backupset.name = repository.repo
 
         backup_name = self.map_task_to_backup("active", repo_name, task_name)
 
         # Check backup content equals content of backup cluster
-        self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name=backup_name, skip_stats_check=True)
+        self.perform_backup_data_validation(self.backupset.backup_host, self.input.clusters[0], "ent-backup", self.num_items, backup_name)
 
     def test_one_off_incr_backup(self):
         """ Test one off backup full backup followed by one off incremental backup
@@ -798,9 +796,7 @@ class BackupServiceTest(BackupServiceBase):
             # Wait until task has completed
             self.assertTrue(self.wait_for_task(repo_name, task_name))
 
-            # Configure repository name and staging directory
-            if self.objstore_provider:
-                self.backupset.objstore_staging_directory = repository.cloud_info.staging_dir
+            # Configure repository name
             self.backupset.name = repository.repo
 
             backup_name = self.map_task_to_backup("active", repo_name, task_name)
@@ -808,7 +804,8 @@ class BackupServiceTest(BackupServiceBase):
             filter_keys = set(key for key, val in get_blob_gen(i))
 
             # Check backup content equals content of backup cluster
-            self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name=backup_name, filter_keys=filter_keys, skip_stats_check=True)
+            self.perform_backup_data_validation(self.backupset.backup_host, self.input.clusters[0], "ent-backup",
+                    self.num_items, backup_name, filter_keys=filter_keys)
 
     def test_one_off_merge(self):
         """ Test one off merge
@@ -863,11 +860,11 @@ class BackupServiceTest(BackupServiceBase):
         backups = [backup._date for backup in self.get_backups("active", repo_name)]
 
         # Check backup content equals content of backup cluster
-        self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name=backup_name, filter_keys = filter_keys, skip_stats_check=True)
+        self.perform_backup_data_validation(self.backupset.backup_host, self.input.clusters[0], "ent-backup",
+                self.num_items, backup_name, filter_keys=filter_keys)
 
         backups = [backup._date for backup in self.get_backups("active", repo_name)]
         self.assertEqual(len(backups) - 1, no_of_backups - subtrahend_for_no_of_backups)
-
 
     def test_one_off_cloud_merge_fails(self):
         """ Should not be able to merge with cloud options
@@ -948,9 +945,7 @@ class BackupServiceTest(BackupServiceBase):
             rest_connection.change_bucket_props(bucket, flushEnabled=1)
             rest_connection.flush_bucket(bucket)
 
-        # Configure repository name and staging directory
-        if self.objstore_provider:
-            self.backupset.objstore_staging_directory = repository.cloud_info.staging_dir
+        # Configure repository name
         self.backupset.name = repository.repo
 
         cluster_host = self.master
@@ -964,7 +959,7 @@ class BackupServiceTest(BackupServiceBase):
         self.assertTrue(self.wait_for_task(repo_name, task_name))
 
         # Check backup content equals content of cluster after restore
-        self.validate_backup_data(self.backupset.backup_host, self.input.clusters[0], "ent-backup", False, False, "memory", self.num_items, None, backup_name=backup_name, skip_stats_check=True)
+        self.perform_backup_data_validation(self.backupset.backup_host, self.input.clusters[0], "ent-backup", self.num_items, backup_name)
 
     def test_invalid_tasks(self):
         """ Merging/Restoring backups that do not exist.
