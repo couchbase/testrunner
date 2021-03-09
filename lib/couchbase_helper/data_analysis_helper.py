@@ -205,7 +205,7 @@ class DataAnalyzer(object):
                 Result[bucket][node] = self.compare_data_maps(info1,info2,headerInfo,"key")
         return Result
 
-    def compare_stats_dataset(self,bucketmap1,bucketmap2,mainKey,comparisonMap=None):
+    def compare_stats_dataset(self,bucketmap1,bucketmap2,mainKey,comparisonMap=None, mapBucket=None):
         """
             Method to compare data sets and given as input of two bucket maps
 
@@ -232,7 +232,10 @@ class DataAnalyzer(object):
         Result = {}
         for bucket in list(bucketmap1.keys()):
             info1 = bucketmap1[bucket]
-            info2 = bucketmap2[bucket]
+            if mapBucket:
+                info2 = bucketmap2[list(bucketmap2.keys())[0]]
+            else:
+                info2 = bucketmap2[bucket]
             Result[bucket] = self.compare_maps(info1,info2,mainKey,comparisonMap)
         return Result
 

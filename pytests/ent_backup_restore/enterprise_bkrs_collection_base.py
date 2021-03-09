@@ -233,7 +233,9 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             self.backupset.cluster_host_username = self.servers[0].rest_username
             self.backupset.cluster_host_password = self.servers[0].rest_password
         self.same_cluster = self.input.param("same-cluster", False)
+        self.reset_backup_cluster = self.input.param("reset_backup_cluster", False)
         self.reset_restore_cluster = self.input.param("reset-restore-cluster", True)
+        self.backupset.backup_services_init = self.input.param("backup_services_init", None)
         self.no_progress_bar = self.input.param("no-progress-bar", True)
         self.multi_threads = self.input.param("multi_threads", False)
         self.threads_count = self.input.param("threads_count", 1)
@@ -288,6 +290,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         self.backupset.bucket_backup = self.input.param("bucket-backup", None)
         self.backupset.backup_to_compact = self.input.param("backup-to-compact", 0)
         self.backupset.map_buckets = self.input.param("map-buckets", None)
+        self.backupset.map_bucket_names = []
         self.ops_type = self.input.param("ops-type", "update")
         """
         ****** Collection params *******
@@ -582,6 +585,8 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
 
     def get_bucket_scope_restore_cluster_host(self):
         bucket_name = self.buckets[0].name
+        if self.backupset.map_buckets:
+            bucket_name = self.backupset.map_bucket_name[0]
         scopes = None
         if self.use_rest:
             scopes = self.rest_rs.get_bucket_scopes(bucket_name)
@@ -649,12 +654,15 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             if "_default" in scope:
                 scopes.remove(scope)
         for scope in scopes:
-            backup_collections = self.get_bucket_collection_cluster_host(bucket_name, scope)
-            print("\nbackup collections: ", backup_collections)
+            check_bucket = bucket_name
+            if self.backupset.map_buckets:
+                check_bucket = RestConnection(self.backupset.cluster_host).get_buckets()[0].name
+            backup_collections = self.get_bucket_collection_cluster_host(check_bucket, scope)
             if isinstance(backup_collections, tuple):
                 backup_collections = backup_collections[0]
+            if self.backupset.map_buckets:
+                bucket_name = self.backupset.map_bucket_name[0]
             restore_collections = self.get_bucket_collection_restore_cluster_host(bucket_name, scope)
-            print("\nrestore collections: ", restore_collections)
             if isinstance(restore_collections, tuple):
                 restore_collections = restore_collections[0]
             for backup_collection in backup_collections:
@@ -1049,6 +1057,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                         self.log.info("Create new bucket name to restore to this bucket")
                         bucket_maps = ""
                         bucket_name = bucket.name + "_" + str(count)
+                        self.backupset.map_bucket_name.append(bucket_name)
                     if self.bucket_type == "ephemeral":
                         self.eviction_policy = "noEviction"
                         self.log.info("ephemeral bucket needs to set restore cluster "
@@ -1292,8 +1301,9 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         """ Add built-in user cbadminbucket to second cluster """
         self.add_built_in_server_user(node=self.input.clusters[0][:self.nodes_init][0])
         current_vseqno = {}
+        verify_buckets = RestConnection(self.backupset.restore_cluster_host).get_buckets()
         if not self.backupset.force_updates:
-            current_vseqno = self.get_vbucket_seqnos(self.cluster_to_restore, self.buckets,
+            current_vseqno = self.get_vbucket_seqnos(self.cluster_to_restore, verify_buckets,
                                                      self.skip_consistency, self.per_node)
         self.log.info("*** Start to validate the restore ")
         if self.replace_ttl_with:
@@ -1868,7 +1878,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         rest.set_indexer_storage_mode(username='Administrator',
                                       password='password',
                                       storageMode=storageMode)
-        self.log.info("Done reset node")
+        self.log.info("Done reset node with storage mode")
         sv_in_rs = self.backupset.restore_cluster_host.services
         if self.backupset.restore_cluster_host.services and \
             "," in self.backupset.restore_cluster_host.services[0]:
@@ -2470,6 +2480,26 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                     vbuckets_per_shard[bucket.name][i] = int(output[0])
         shell.disconnect()
 
+    def _create_backup_cluster(self, node_services=["kv,index"]):
+        rest_bk = RestConnection(self.backupset.cluster_host)
+        bk_bucket = rest_bk.get_buckets()
+        if bk_bucket:
+            BucketOperationHelper.delete_all_buckets_or_assert(self.backupset.restore_cluster, self)
+        ClusterOperationHelper.cleanup_cluster(self.backupset.restore_cluster,
+                                               master=self.backupset.restore_cluster_host)
+
+        rest_bk = RestConnection(self.backupset.cluster_host)
+        rest_bk.force_eject_node()
+        ready = RestHelper(rest_bk).is_ns_server_running()
+        if ready:
+            shell = RemoteMachineShellConnection(self.backupset.cluster_host)
+            shell.enable_diag_eval_on_non_local_hosts()
+            shell.disconnect()
+        kv_quota = rest_bk.init_node(node_services)
+        rest_bk.set_indexer_storage_mode(username='Administrator',
+                                      password='password')
+        self.add_built_in_server_user(node=self.backupset.cluster_host)
+
     def _create_restore_cluster(self, node_services=["kv"]):
         rest_rs = RestConnection(self.backupset.restore_cluster_host)
         rs_bucket = rest_rs.get_buckets()
@@ -2479,13 +2509,23 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                                                master=self.backupset.restore_cluster_host)
 
         rest_bk = RestConnection(self.backupset.cluster_host)
-        bk_storage_mode = rest_bk.get_index_settings()["indexer.settings.storage_mode"]
         eventing_service_in = False
+        index_service_in = False
+        fts_service_in = False
         bk_cluster_services = list(rest_bk.get_nodes_services().values())
+        print("\nbk service in reset restore: ", bk_cluster_services)
         for srv in bk_cluster_services:
+            print("\n service: ", srv)
             if "eventing" in srv:
                 eventing_service_in = True
-                break
+            if "index" in srv:
+                index_service_in = True
+            if "fts" in srv:
+                fts_service_in = True
+        if index_service_in:
+            bk_storage_mode = rest_bk.get_index_settings()["indexer.settings.storage_mode"]
+        else:
+            bk_storage_mode = "plasma"
         bk_services = max(bk_cluster_services, key=len)
 
         rest_rs = RestConnection(self.backupset.restore_cluster_host)
@@ -2585,6 +2625,7 @@ class Backupset:
         self.bucket_backup = ''
         self.backup_to_compact = ''
         self.map_buckets = None
+        self.map_bucket_name = []
         self.delete_old_bucket = False
         self.backup_compressed = False
         self.user_env = False
@@ -2622,6 +2663,7 @@ class Backupset:
         self.exist_collections_in_restore_buckets = False
         self.custom_scopes = False
         self.custom_collections = False
+        self.backup_services_init = None
 
         # Common configuration which is to be shared accross cloud providers
         self.objstore_access_key_id = ""

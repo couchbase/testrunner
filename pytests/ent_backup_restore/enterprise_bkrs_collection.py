@@ -83,6 +83,13 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
         2. Perform updates and create backups for specified number of times (test param number_of_backups)
         3. Perform restores for the same number of times with random start and end values
         """
+        if self.reset_backup_cluster:
+            self.log.info("*** start to reset backup cluster")
+            self._create_backup_cluster(self.backupset.backup_services_init)
+            self.sleep(10)
+            rest_conn = RestConnection(self.backupset.cluster_host)
+            rest_conn.create_bucket(bucket="default", ramQuotaMB="256")
+            self.buckets = RestConnection(self.master).get_buckets()
         self.log.info("*** create collection in all buckets")
         self.log.info("*** start to load items to all buckets")
         self.active_resident_threshold = 100
@@ -90,6 +97,8 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
         self.log.info("*** done to load items to all buckets")
         self.ops_type = self.input.param("ops-type", "update")
         self.expected_error = self.input.param("expected_error", None)
+        if self.create_gsi:
+            self.create_indexes()
         if self.create_scopes and not self.buckets_only:
                 self.create_scope_cluster_host()
         if self.create_collections and not self.buckets_only and not self.scopes_only:
@@ -120,7 +129,18 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
         else:
             self.delete_collection_cluster_host()
         rest_bk = RestConnection(self.backupset.cluster_host)
-        bk_storage_mode = rest_bk.get_index_settings()["indexer.settings.storage_mode"]
+        cluster_srv = list(rest_bk.get_nodes_services().values())
+        fts_srv = False
+        index_srv = False
+        for node_srv in cluster_srv:
+            if "fts" in node_srv:
+                fts_srv = True
+            if "index" in node_srv:
+                index_srv = True
+        if index_srv:
+            bk_storage_mode = rest_bk.get_index_settings()["indexer.settings.storage_mode"]
+        else:
+            bk_storage_mode = "plasma"
 
         self.backup_create_validate()
         for i in range(1, self.backupset.number_of_backups + 1):
@@ -143,6 +163,7 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
                                 scopes_id.append(self.get_scopes_id_cluster_host(scope))
                             self.backupset.load_scope_id = scopes_id[0]
                     col_cmd = " -c {0} ".format(self.backupset.load_scope_id)
+                self.sleep(10, "wait for scopes and collections created")
                 self.load_all_buckets(self.backupset.cluster_host, ratio=0.1,
                                                      command_options=col_cmd)
                 self.log.info("*** done update items in all buckets")

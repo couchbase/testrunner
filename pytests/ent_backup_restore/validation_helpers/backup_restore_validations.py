@@ -93,7 +93,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         success_msg = ""
         if not self.backupset.force_updates:
             status, msg = self.compare_vbucket_stats(backup_vbucket_seqno[backup_number - 1], restored_vbucket_seqno,
-                                                 compare_uuid=compare_uuid, seqno_compare=compare)
+                            compare_uuid=compare_uuid, seqno_compare=compare, mapBucket = self.backupset.map_buckets)
             if not status:
                 return status, msg
             success_msg = "{0}\n".format(msg)

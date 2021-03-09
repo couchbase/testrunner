@@ -13,7 +13,8 @@ class BackupRestoreValidationBase:
         return
 
     @staticmethod
-    def compare_vbucket_stats(prev_vbucket_stats, cur_vbucket_stats, compare_uuid=False, seqno_compare="=="):
+    def compare_vbucket_stats(prev_vbucket_stats, cur_vbucket_stats, compare_uuid=False, seqno_compare="==",
+                              mapBucket=None):
         """
         Compares vbucket stats
         :param prev_vbucket_stats: old
@@ -34,7 +35,8 @@ class BackupRestoreValidationBase:
         compare_vbucket_seqnos_result = data_analyzer.compare_stats_dataset(prev_vbucket_stats,
                                                                             cur_vbucket_stats,
                                                                             "vbucket_id",
-                                                                            comparisonMap=comp_map)
+                                                                            comparisonMap=comp_map,
+                                                                            mapBucket=mapBucket)
 
         is_same, summary, result = result_analyzer.analyze_all_result(compare_vbucket_seqnos_result,
                                                                       addedItems=False,
