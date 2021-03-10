@@ -1535,13 +1535,13 @@ class EventingRebalance(EventingBaseTest):
         # load data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        # deploy the function, don't wait for bootstrap to complete
-        self.deploy_function(body, wait_for_bootstrap=False)
+        self.deploy_function(body)
+        self.pause_function(body, wait_for_pause=False)
         try:
             # rebalance in a node when eventing is processing mutations
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
                                                      [], services=[services_in])
-            self.sleep(timeout=5)
+            self.sleep(60)
             reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         except Exception as ex:
@@ -1550,7 +1550,8 @@ class EventingRebalance(EventingBaseTest):
                 self.fail("Rebalance failed with wrong error message : {0}".format(str(ex)))
         else:
             self.fail("Rebalance succeeded when lifecycle operation is going on...")
-        self.wait_for_handler_state(self.function_name, "deployed")
+        self.wait_for_handler_state(self.function_name, "paused")
+        self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # Retry failed rebalance
