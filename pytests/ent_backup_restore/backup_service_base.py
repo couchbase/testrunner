@@ -143,6 +143,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # Stop the vboxadd-service again to prevent it from syncing the time with the host
         self.multiple_remote_shell_connections.execute_command("sudo service vboxadd-service stop")
 
+        # Specify the directory being shared
+        self.directory_to_share = "/tmp/share"
+
         # Share archive directory
         self.create_shared_folder(self.input.clusters[0][0], self.input.clusters[0])
 
@@ -188,13 +191,13 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             server (TestInputServer): The server that holds the shared folder.
             clients (list(TestInputServer)): The servers that mount the shared folder.
         """
-        self.directory_to_share = "/tmp/share"
-        self.nfs_connection = NfsConnection(server, clients, NfsShareFactory() if self.input.param("share_type", "nfs") == "nfs" else SambaShareFactory())
-        self.nfs_connection.share(self.directory_to_share, self.backupset.directory)
+        share_factory = NfsShareFactory() if self.input.param("share_type", "nfs") == "nfs" else SambaShareFactory()
+        self.nfs_connection = NfsConnection(server, clients, share_factory, self.directory_to_share, self.backupset.directory)
+        self.nfs_connection.share()
 
     def delete_shared_folder(self):
         """ Unmounts the shared folder """
-        self.nfs_connection.clean(self.backupset.directory)
+        self.nfs_connection.clean()
 
     def load_custom_certificates(self):
         """ Loads custom certificates
@@ -1058,20 +1061,23 @@ class HistoryFile:
         self.remote_shell.execute_command(f"sed -i '$ d' {self.history_file}")
 
 class NfsConnection:
-    def __init__(self, server, clients, abstract_share_factory):
-        self.server, self.clients = abstract_share_factory.create_server(server), [abstract_share_factory.create_client(server, client) for client in clients]
+    def __init__(self, server, clients, abstract_share_factory, directory_to_share, directory_to_mount):
+        self.server = abstract_share_factory.create_server(server)
+        self.clients = [abstract_share_factory.create_client(server, client) for client in clients]
+        self.directory_to_share = directory_to_share
+        self.directory_to_mount = directory_to_mount
 
-    def share(self, directory_to_share, directory_to_mount, privileges={}):
-        self.server.share(directory_to_share, privileges=privileges)
+    def share(self, privileges={}):
+        self.server.share(self.directory_to_share, privileges=privileges)
 
         for client in self.clients:
-            client.mount(directory_to_share, directory_to_mount)
+            client.mount(self.directory_to_share, self.directory_to_mount)
 
-    def clean(self, directory_to_mount):
+    def clean(self):
         self.server.clean()
 
         for client in self.clients:
-            client.clean(directory_to_mount)
+            client.clean(self.directory_to_mount)
 
 class AbstractShareFactory(abc.ABC):
 

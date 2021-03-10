@@ -1825,12 +1825,12 @@ class BackupServiceTest(BackupServiceBase):
             # Pick a 2 random clients and unmount the archive location
             # Consequently, either the leader and the node lose shared access Or both non-leader nodes lose shared access.
             for client in random.sample(self.nfs_connection.clients, 2):
-                client.clean(self.backupset.directory)
+                client.clean()
                 clients_that_lost_shared_access.append(client)
 
         if lose_shared == 'all':
             # Unshare shared directory and unmount archive location for all nodes
-            self.nfs_connection.clean(self.backupset.directory)
+            self.nfs_connection.clean()
 
         if permissions == 'wo':
             # Make shared directory write only
@@ -1844,8 +1844,8 @@ class BackupServiceTest(BackupServiceBase):
         if leader_case:
             leadernode = self.get_leader()
             privileges = {server.ip: 'rw' if server == leadernode else 'ro' for server in self.input.clusters[0]}
-            self.nfs_connection.clean(self.backupset.directory)
-            self.nfs_connection.share(self.directory_to_share, self.backupset.directory, privileges)
+            self.nfs_connection.clean()
+            self.nfs_connection.share(privileges)
 
         # Perform a one off backup
         _, status, _, response_data = self.active_repository_api.cluster_self_repository_active_id_backup_post_with_http_info(repo_name)
@@ -1906,7 +1906,7 @@ class BackupServiceTest(BackupServiceBase):
         else:
             # Unmount shared directory
             for client in self.nfs_connection.clients:
-                client.clean(self.backupset.directory)
+                client.clean()
 
         # Perform a one off backup
         self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name)
@@ -1919,7 +1919,7 @@ class BackupServiceTest(BackupServiceBase):
         else:
             # Remount shared directory
             for client in self.nfs_connection.clients:
-                client.mount(self.directory_to_share, self.backupset.directory)
+                client.mount()
 
         self.sleep(30)
         # Check the 2nd backup does not exist
