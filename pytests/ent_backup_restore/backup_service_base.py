@@ -191,13 +191,15 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             server (TestInputServer): The server that holds the shared folder.
             clients (list(TestInputServer)): The servers that mount the shared folder.
         """
-        share_factory = NfsShareFactory() if self.input.param("share_type", "nfs") == "nfs" else SambaShareFactory()
-        self.nfs_connection = NfsConnection(server, clients, share_factory, self.directory_to_share, self.backupset.directory)
-        self.nfs_connection.share()
+        if self.os_info == "centos":
+            share_factory = NfsShareFactory() if self.input.param("share_type", "nfs") == "nfs" else SambaShareFactory()
+            self.nfs_connection = NfsConnection(server, clients, share_factory, self.directory_to_share, self.backupset.directory)
+            self.nfs_connection.share()
 
     def delete_shared_folder(self):
         """ Unmounts the shared folder """
-        self.nfs_connection.clean()
+        if self.os_info == "centos":
+            self.nfs_connection.clean()
 
     def load_custom_certificates(self):
         """ Loads custom certificates
