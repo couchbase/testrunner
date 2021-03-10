@@ -309,7 +309,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.objstore_no_ssl_verify = self.input.cbbackupmgr_param('no_ssl_verify', False)
         self.backupset.objstore_region = self.input.cbbackupmgr_param('region', '')
         self.backupset.objstore_secret_access_key = self.input.cbbackupmgr_param('secret_access_key', '') # Required
-        self.backupset.objstore_staging_directory = self.input.cbbackupmgr_param('staging_directory')
+        self.backupset.objstore_staging_directory = self.change_root_of_path(info, self.input.cbbackupmgr_param('staging_directory'))
 
         # S3 specific configuration
         self.backupset.s3_force_path_style = self.input.cbbackupmgr_param('s3_force_path_style', False)
@@ -417,6 +417,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             sysinfo = remote_client.get_windows_system_info()
             numprocs = sysinfo['Processor(s)'].split(' ')
             return numprocs[0]
+
+    def change_root_of_path(self, os_info, path):
+        """ If the operating system is windows changes the path's root to c:/ """
+        if os_info == "windows":
+            path = re.sub(r"^/", "c:/", path)
+        return path
 
     def _get_current_bkrs_client_version(self):
         self.backupset.current_bkrs_client_version = \
