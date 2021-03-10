@@ -1048,7 +1048,7 @@ class BackupServiceTest(BackupServiceBase):
 
         # Check status and warning message
         self.assertEqual(status, 500)
-        self.assertEqual(data['msg'], "could not send task")
+        self.assertEqual(data['msg'], "Could not send task")
         self.assertEqual(data['extras'], f"failed bucket check for bucket '{bucket_name}': element not found")
 
     def test_archived_repository(self):
@@ -1244,7 +1244,7 @@ class BackupServiceTest(BackupServiceBase):
 
         # Check status and warning message
         self.assertEqual(status, 500)
-        self.assertEqual(data['msg'], "could not info repository")
+        self.assertEqual(data['msg'], "Could not get repository info")
         self.assertIn(f"Error opening archive", data['extras'])
 
     def test_manually_deleting_staging_directory(self):
