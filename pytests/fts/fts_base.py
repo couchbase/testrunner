@@ -956,8 +956,10 @@ class FTSIndex:
                     ["analysis"]["analyzers"]["customAnalyzer1"]["token_filters"]
                 for custom_filter in custom_filters:
                     self.__log.info("custom filter = " + custom_filter)
-                    del self.index_definition['params']['mapping']['analysis'] \
-                        ['token_filters'][custom_filter]
+                    if custom_filter in self.index_definition['params']['mapping']['analysis'] \
+                        ['token_filters'].keys():
+                        del self.index_definition['params']['mapping']['analysis'] \
+                            ['token_filters'][custom_filter]
             else:
                 from .custom_map_generator.map_generator import CustomMapGenerator
                 cm_gen = CustomMapGenerator(seed=seed, dataset=self.dataset,
