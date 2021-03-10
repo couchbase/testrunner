@@ -119,6 +119,19 @@ class EventingRebalance(EventingBaseTest):
         #     pass
         super(EventingRebalance, self).tearDown()
 
+    def create_n_handlers(self,n):
+        for i in range(1, n+1):
+            self.create_save_function_body(self.function_name + str(i), self.handler_code, worker_count=1)
+
+    def deploy_n_handlers(self,n):
+        for i in range(1,n+1):
+            self.deploy_handler_by_name(self.function_name + str(i), wait_for_bootstrap=False)
+
+    def wait_for_deployment_n_handlers(self,n):
+        for i in range(1, n + 1):
+            self.wait_for_handler_state(self.function_name + str(i), "deployed")
+
+
     def test_eventing_rebalance_in_when_existing_eventing_node_is_processing_mutations(self):
         sock_batch_size = self.input.param('sock_batch_size', 1)
         worker_count = self.input.param('worker_count', 3)
@@ -1531,17 +1544,16 @@ class EventingRebalance(EventingBaseTest):
         services_in = self.input.param("services_in", "eventing")
         # worker_count_count is intentionally set to smaller value so that bootstrap takes more time completed
         # and we get enough time
-        body = self.create_save_function_body(self.function_name, self.handler_code, worker_count=1)
+        self.create_n_handlers(5)
         # load data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        self.deploy_function(body)
-        self.pause_function(body, wait_for_pause=False)
+        self.deploy_n_handlers(5)
         try:
             # rebalance in a node when eventing is processing mutations
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
                                                      [], services=[services_in])
-            self.sleep(60)
+            self.sleep(30)
             reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         except Exception as ex:
@@ -1550,8 +1562,7 @@ class EventingRebalance(EventingBaseTest):
                 self.fail("Rebalance failed with wrong error message : {0}".format(str(ex)))
         else:
             self.fail("Rebalance succeeded when lifecycle operation is going on...")
-        self.wait_for_handler_state(self.function_name, "paused")
-        self.resume_function(body)
+        self.wait_for_deployment_n_handlers(5)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # Retry failed rebalance
@@ -1566,7 +1577,7 @@ class EventingRebalance(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
-        self.undeploy_and_delete_function(body)
+        self.undeploy_delete_all_functions()
 
     def test_kv_eventing_rebalance_with_multiple_functions_deployed(self):
         self.services_in = self.input.param("services_in", "eventing")
