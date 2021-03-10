@@ -1091,6 +1091,11 @@ class BaseSecondaryIndexingTests(QueryTests):
         shell = RemoteMachineShellConnection(server)
         shell.execute_command("pkill indexer")
 
+    def _kill_all_processes_index_with_sleep(self, server, sleep_time):
+        shell = RemoteMachineShellConnection(server)
+        shell.execute_command("pkill indexer")
+        self.sleep(sleep_time)
+
     def _check_all_bucket_items_indexed(self, query_definitions=None, buckets=None):
         """
         :param bucket:
@@ -1544,7 +1549,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         return int(content['indexMemoryQuota'])
 
 
-class ConCurIndexOps:
+class ConCurIndexOps():
     def __init__(self):
         self.all_indexes_state = {"created": [], "deleted": [], "defer_build": []}
         self.errors = []
@@ -1628,3 +1633,30 @@ class ConCurIndexOps:
         with self._lock_queue:
             if index is not None:
                 self.all_indexes_state["created"].append(index)
+
+    def check_if_indexes_created(self, index_node, defer_build=False):
+        indexes_not_created = []
+        if defer_build:
+            index_list = self.all_indexes_state["defer_build"]
+        else:
+            index_list = self.all_indexes_state["created"]
+        for index in index_list:
+            index_created, status = self.check_if_index_created(index_node, index["name"], defer_build)
+            if not index_created:
+                indexes_not_created.append({"name": index["name"], "status": status})
+        return indexes_not_created
+
+    @staticmethod
+    def check_if_index_created(index_node, index, defer_build=False):
+        index_created = False
+        status = None
+        rest = RestConnection(index_node)
+        index_status = rest.get_index_status()
+        for index_info in index_status.values():
+            for k, v in index_info.items():
+                if k == index:
+                    status = v["status"]
+                    if status == "Ready" or status == "Building" or (defer_build and status == "Created"):
+                        index_created = True
+
+        return index_created, status

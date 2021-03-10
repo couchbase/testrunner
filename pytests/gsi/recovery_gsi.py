@@ -442,12 +442,13 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.scan_indexes(self.index_ops_obj.get_create_index_list())
 
     def scan_indexes(self, query_def_list):
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         for index_to_scan in query_def_list:
             self.log.info(f'Processing index: {index_to_scan["name"]}')
             query_def = index_to_scan["query_def"]
             query = query_def.generate_query(bucket=query_def.keyspace)
             try:
-                self.run_cbq_query(query=query, server=self.n1ql_nodes[0], scan_consistency="request_plus")
+                self.run_cbq_query(query=query, server=n1ql_node, scan_consistency="request_plus")
             except Exception as err:
                 self.fail(f'{query} failed with {err}')
 
@@ -649,6 +650,92 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self.fail("some indexes did not process mutations on time")
 
         self.scan_indexes(self.index_ops_obj.get_create_index_list())
+
+    def test_multiple_rebalances(self):
+
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 1000})
+
+        #self.load_docs(self.start_doc)
+        #50
+        index_create_tasks = self.create_indexes(num=10, query_def_group="unique", defer_build=True)
+
+        for task in index_create_tasks:
+            task.result()
+
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
+
+        self.build_indexes()
+
+        self.sleep(2)
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.fail("some indexes did not process mutations on time")
+
+        self.scan_indexes(self.index_ops_obj.get_create_index_list())
+
+        #rebalance in
+
+        rebalance = self.cluster.async_rebalance(
+            self.servers[:self.nodes_init],
+            [self.servers[self.nodes_init]],
+            [], services=["index"])
+        rebalance.result()
+
+        index_node = self.get_nodes_from_services_map(service_type="index")
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.fail("some indexes did not process mutations on time")
+
+        self.scan_indexes(self.index_ops_obj.get_defer_index_list())
+
+        indexes_not_created = self.index_ops_obj.check_if_indexes_created(index_node, defer_build=True)
+        if indexes_not_created:
+            self.index_ops_obj.update_errors(f'Expected Created indexes {indexes_not_created} found to be not created')
+            self.fail(f'Expected Created indexes {indexes_not_created} found to be not created')
+
+        #rebalance out
+        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        node_out = kv_nodes[1]
+
+        rebalance = self.cluster.async_rebalance(
+            self.servers[:self.nodes_init+1],
+            [], [node_out])
+        rebalance.result()
+
+        index_node = self.get_nodes_from_services_map(service_type="index")
+
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.fail("some indexes did not process mutations on time")
+
+        self.scan_indexes(self.index_ops_obj.get_defer_index_list())
+
+        indexes_not_created = self.index_ops_obj.check_if_indexes_created(index_node, defer_build=True)
+        if indexes_not_created:
+            self.index_ops_obj.update_errors(f'Expected Created indexes {indexes_not_created} found to be not created')
+            self.fail(f'Expected Created indexes {indexes_not_created} found to be not created')
+
+        swap_node_out = self.get_nodes_from_services_map(service_type="index")
+
+        #swap rebalance
+        rebalance = self.cluster.async_rebalance(
+            self.servers[:self.nodes_init],
+            [node_out],
+            [swap_node_out], services=["kv"])
+        rebalance.result()
+
+        index_node = self.get_nodes_from_services_map(service_type="index")
+        if not self.wait_for_mutation_processing(self.index_nodes):
+            self.fail("some indexes did not process mutations on time")
+
+        self.scan_indexes(self.index_ops_obj.get_defer_index_list())
+
+        indexes_not_created = self.index_ops_obj.check_if_indexes_created(index_node, defer_build=True)
+        if indexes_not_created:
+            self.index_ops_obj.update_errors(f'Expected Created indexes {indexes_not_created} found to be not created')
+            self.fail(f'Expected Created indexes {indexes_not_created} found to be not created')
 
     def test_rebalance_in_indexer_node_while_building(self):
 
