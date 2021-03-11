@@ -4721,7 +4721,7 @@ class RemoteMachineShellConnection(KeepRefs):
         return output, error
 
     def execute_cbworkloadgen(self, username, password, num_items, ratio, bucket,
-                                                     item_size, command_options):
+                              item_size, command_options, timeout=1200):
         cbworkloadgen_command = self._get_cbworkloadgen_command()
         command = "%s -n %s:%s -r %s -i %s -b %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
                                                                           self.ip, self.port,
@@ -4729,7 +4729,7 @@ class RemoteMachineShellConnection(KeepRefs):
                                                                           item_size, command_options,
                                                                           username, password)
 
-        output, error = self.execute_command(command)
+        output, error = self.execute_command(command, timeout=timeout)
         self.log_command_output(output, error)
         return output, error
 

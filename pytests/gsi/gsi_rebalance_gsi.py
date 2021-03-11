@@ -407,6 +407,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         reb1 = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
         if self.ansi_join:
             self.ansi_join_query(stage="post_rebalance", expected=expected_result)
+        self.sleep(240)
         self.run_operation(phase="during")
         if reb1:
             result = self.rest.monitorRebalance()
@@ -438,6 +439,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         reb1 = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
         if self.ansi_join:
             self.ansi_join_query(stage="post_rebalance", expected=expected_result)
+        self.sleep(240)
         self.run_operation(phase="during")
         if reb1:
             result = self.rest.monitorRebalance()
@@ -485,13 +487,14 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # failover the indexer node
         failover_task = self.cluster.async_failover([self.master], failover_nodes=[index_server], graceful=True)
         failover_task.result()
-        self.sleep(240)
+        self.sleep(30)
         # do a full recovery and rebalance
         self.rest.set_recovery_type('ns_1@' + index_server.ip, "full")
         self.rest.add_back_node('ns_1@' + index_server.ip)
         reb1 = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
         if self.ansi_join:
             self.ansi_join_query(stage="post_rebalance", expected=expected_result)
+        self.sleep(240)
         self.run_operation(phase="during")
         if reb1:
             result = self.rest.monitorRebalance()
@@ -516,13 +519,14 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # failover the indexer node
         failover_task = self.cluster.async_failover([self.master], failover_nodes=[index_server], graceful=True)
         failover_task.result()
-        self.sleep(120)
+        self.sleep(30)
         # do a delta recovery and rebalance
         self.rest.set_recovery_type('ns_1@' + index_server.ip, "delta")
         self.rest.add_back_node('ns_1@' + index_server.ip)
         reb1 = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
         if self.ansi_join:
             self.ansi_join_query(stage="post_rebalance", expected=expected_result)
+        self.sleep(240)
         self.run_operation(phase="during")
         if reb1:
             result = self.rest.monitorRebalance()
