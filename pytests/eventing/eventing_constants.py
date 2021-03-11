@@ -104,3 +104,4 @@ class EXPORTED_FUNCTION:
     N1QL_OP='exported_functions/n1ql_op.json'
     EXPIRY='exported_functions/expiry.json'
     CANCEL_TIMERS='exported_functions/cancel_timers.json'
+    ADVANCE_OP='exported_functions/advance_bucket_op.json'

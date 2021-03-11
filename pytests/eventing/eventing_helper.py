@@ -1,6 +1,7 @@
 import logging,os,json
 
 from TestInput import TestInputServer
+from eventing.eventing_base import EventingBaseTest
 from eventing.eventing_constants import EXPORTED_FUNCTION
 from lib.membase.api.rest_client import RestConnection
 import time
@@ -9,7 +10,7 @@ from remote.remote_util import RemoteMachineShellConnection
 
 log = logging.getLogger()
 
-class EventingHelper:
+class EventingHelper(EventingBaseTest):
     '''
     __author__      = "vikas chaudhary"
     __email__       = "vikas.chaudhary@couchbase.com"
@@ -228,69 +229,9 @@ class EventingHelper:
         log.info("Final docs count... Current : {0} Expected : {1}".
                  format(stats_dst["curr_items"], expected_dcp_mutations))
 
-    def deploy_function(self, body, deployment_fail=False, wait_for_bootstrap=True,print_eventing_handler_code_in_logs=False):
-        body['settings']['deployment_status'] = True
-        body['settings']['processing_status'] = True
-        if print_eventing_handler_code_in_logs:
-            log.info("Deploying the following handler code : {0} with {1}".format(body['appname'],body['depcfg']))
-            log.info("\n{0}".format(body['appcode']))
-        content1 = self.eventing_rest.create_function(body['appname'], body)
-        log.info("deploy Application : {0}".format(content1))
-        if deployment_fail:
-            res = json.loads(content1)
-            if not res["compile_success"]:
-                return
-            else:
-                raise Exception("Deployment is expected to be failed but no message of failure")
-        if wait_for_bootstrap:
-            # wait for the function to come out of bootstrap state
-            self.wait_for_handler_state(body['appname'], "deployed")
-
-    def wait_for_handler_state(self, name,status,iterations=20):
-        self.sleep(20, message="Waiting for {} to {}...".format(name,status))
-        result = self.eventing_rest.get_composite_eventing_status()
-        count = 0
-        composite_status = None
-        while composite_status != status and count < iterations:
-            self.sleep(20,"Waiting for {} to {}...".format(name,status))
-            result = self.eventing_rest.get_composite_eventing_status()
-            for i in range(len(result['apps'])):
-                if result['apps'][i]['name'] == name:
-                    composite_status = result['apps'][i]['composite_status']
-            count+=1
-        if count == iterations:
-            raise Exception('Eventing took lot of time for handler {} to {}'.format(name,status))
-
-    def undeploy_function(self, name,wait_for_undeployment=True):
-        content = self.eventing_rest.undeploy_function(name)
-        log.info("Undeploy Application : {0}".format(name))
-        if wait_for_undeployment:
-            self.wait_for_handler_state(name,"undeployed")
-        return content
-
     def sleep(self, timeout=15, message=""):
         log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)
-
-    def pause_function(self, body,wait_for_pause=True):
-        body['settings']['deployment_status'] = True
-        body['settings']['processing_status'] = False
-        content1 = self.eventing_rest.set_settings_for_function(body['appname'], body['settings'])
-        log.info("Pause Application : {0}".format(body['appname']))
-        if wait_for_pause:
-            self.wait_for_handler_state(body['appname'], "paused")
-
-    def resume_function(self, body,wait_for_resume=True):
-        body['settings']['deployment_status'] = True
-        body['settings']['processing_status'] = True
-        if "dcp_stream_boundary" in body['settings']:
-            body['settings'].pop('dcp_stream_boundary')
-        log.info("Settings after deleting dcp_stream_boundary : {0}".format(body['settings']))
-        # undeploy the function
-        content1 = self.eventing_rest.set_settings_for_function(body['appname'], body['settings'])
-        log.info("Resume Application : {0}".format(body['appname']))
-        if wait_for_resume:
-            self.wait_for_handler_state(body['appname'], "deployed")
 
     def is_function_deployed(self,handler_name):
         result = self.eventing_rest.get_composite_eventing_status()
@@ -385,3 +326,41 @@ class EventingHelper:
                 if service not in self.services_map.keys():
                     self.services_map[service] = []
                 self.services_map[service].append(key)
+
+    def deploy_handler_with_advance_op(self):
+        """
+        Wrapper method to deploy advance op handler
+        Needs 3 buckets 'src_bucket','metadata','advance_op'
+        Implemented in Cheshire-Cat(> 6.6.1)
+        """
+        bucket = ["src_bucket", "metadata","advance_op"]
+        self.check_for_buckets(bucket)
+        self.__deploy_function(EXPORTED_FUNCTION.ADVANCE_OP)
+
+    def undeploy_advance_op_handler(self):
+        """
+        This method to undeploy handler which is with advance bucket op
+        """
+        self.__undeploy_function("advance_op")
+
+
+    def deploy_handler_with_collection(self,source_collection,metadata_collection,destination_collection):
+        """
+        Implemented in Cheshire-Cat(> 7.0)
+        This method is to deploy bucket op handler with collection
+        @param source_collection: it should be the collection handler will listen to e.g src_bucket.scope_1.coll_0
+        @param metadata_collection: metadata collection for handler e.g metadata.scope_0.coll_0
+        @param destination_collection: dstination binding is an array with binding alias and access right e.g.
+            ["dst_bucket.dst_bucket._default._default.rw"] where dst_bucket - alias , then dst_bucket._default._default is
+            collection namespace and rw : is access
+        """
+        body=self.create_function_with_collection("bucket_op_coll","handler_code/ABO/insert_rebalance.js",
+                                             src_namespace=source_collection,meta_namespace=metadata_collection,
+                                             collection_bindings=destination_collection)
+        self.deploy_function(body)
+
+    def undeploy_collection_handler(self):
+        """
+        This method to undeploy handler which is with bucket op
+        """
+        self.__undeploy_function("bucket_op_coll")
