@@ -2558,6 +2558,39 @@ class RestConnection(object):
         log.error("ERROR: Stat {0} error on {1} on bucket {2}".
                   format(stat_name, index_name, bucket_name))
 
+    def start_fts_index_compaction(self, index_name):
+        api = "{0}{1}".format(self.fts_baseUrl, f'api/index/{index_name}/tasks')
+        params = {"op": "merge"}
+        status, content, header = self._http_request(api,
+                                    method='POST',
+                                    params=json.dumps(params, ensure_ascii=False),
+                                    headers=self._create_capi_headers(),
+                                    timeout=30)
+        json_parsed = json.loads(content)
+        return status, json_parsed
+
+    def get_fts_index_compactions(self, index_name):
+        api = "{0}{1}".format(self.fts_baseUrl, f'api/index/{index_name}/tasks')
+        params = {"op": "get"}
+        status, content, header = self._http_request(api,
+                                    method='POST',
+                                    params=json.dumps(params, ensure_ascii=False),
+                                    headers=self._create_capi_headers(),
+                                    timeout=30)
+        json_parsed = json.loads(content)
+        return status, json_parsed
+
+    def cancel_fts_index_compaction(self, index_name=None, uuid=None):
+        api = "{0}{1}".format(self.fts_baseUrl, f'api/index/{index_name}/tasks')
+        params = {"op": "cancel", "uuid": uuid}
+        status, content, header = self._http_request(api,
+                                    method='POST',
+                                    params=json.dumps(params, ensure_ascii=False),
+                                    headers=self._create_capi_headers(),
+                                    timeout=30)
+        json_parsed = json.loads(content)
+        return status, json_parsed
+
     def get_bucket_status(self, bucket):
         if not bucket:
             log.error("Bucket Name not Specified")
