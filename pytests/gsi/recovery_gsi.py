@@ -76,6 +76,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.targetProcess = self.input.param("targetProcess", 'memcached')
         self.data_nodes = self.get_kv_nodes()
         self.sleep_time = self.input.param("sleep_time", 1)
+        self.dgm_check_timeout = self.input.param("dgm_check_timeout", 1800)
 
         self.log.info("==============  PlasmaCollectionsTests setup has completed ==============")
 
@@ -653,13 +654,15 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def test_multiple_rebalances(self):
 
+        self.key_prefix = f'bigkeybigkeybigkeybigkeybigkeybigkey_{self.master.ip}_'
+
         for index_node in self.index_nodes:
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 1000})
 
         #self.load_docs(self.start_doc)
         #50
-        index_create_tasks = self.create_indexes(num=10, query_def_group="unique", defer_build=True)
+        index_create_tasks = self.create_indexes(num=25, query_def_group="unique", defer_build=True)
 
         for task in index_create_tasks:
             task.result()
@@ -670,6 +673,20 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.build_indexes()
 
         self.sleep(2)
+
+        load_doc_thread = threading.Thread(name="load_doc_thread",
+                                           target=self.load_docs,
+                                           args=[self.start_doc],
+                                           kwargs={'key_prefix': self.key_prefix})
+        load_doc_thread.start()
+
+        self.sleep(60, "sleeping for 60 sec for index to start processing docs")
+
+        if not self.check_if_indexes_in_dgm():
+            self.log.error("indexes not in dgm even after {}".format(self.dgm_check_timeout))
+
+        self.kill_loader_process()
+        self.sdk_loader_manager.shutdown(True)
 
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.fail("some indexes did not process mutations on time")
@@ -685,7 +702,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         rebalance.result()
 
         index_node = self.get_nodes_from_services_map(service_type="index")
-
+        self.index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.fail("some indexes did not process mutations on time")
 
@@ -706,7 +723,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         rebalance.result()
 
         index_node = self.get_nodes_from_services_map(service_type="index")
-
+        self.index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.fail("some indexes did not process mutations on time")
 
@@ -727,6 +744,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         rebalance.result()
 
         index_node = self.get_nodes_from_services_map(service_type="index")
+        self.index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.fail("some indexes did not process mutations on time")
 

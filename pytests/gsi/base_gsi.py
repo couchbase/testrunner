@@ -1,6 +1,7 @@
 import copy
 import logging
 import math
+import os
 import random
 import threading
 import time
@@ -159,13 +160,13 @@ class BaseSecondaryIndexingTests(QueryTests):
 
         return index_create_tasks
 
-    def load_docs(self, start_doc):
-        load_tasks = self.async_load_docs(start_doc)
+    def load_docs(self, start_doc, key_prefix="bigkeybigkeybigkeybigkeybigkeybigkeybigkeybigkeyb_"):
+        load_tasks = self.async_load_docs(start_doc, key_prefix=key_prefix)
 
         for task in load_tasks:
             task.result()
 
-    def async_load_docs(self, start_doc, num_ops=None):
+    def async_load_docs(self, start_doc, key_prefix="bigkeybigkeybigkeybigkeybigkeybigkeybigkeybigkeyb_", num_ops=None):
         load_tasks = []
         if not num_ops:
             num_ops = self.num_items_in_collection
@@ -174,7 +175,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                                         percent_update=self.percent_update, percent_delete=self.percent_delete,
                                         all_collections=self.all_collections, timeout=1800,
                                         json_template=self.dataset_template,
-                                        key_prefix="bigkeybigkeybigkeybigkeybigkeybigkeybigkeybigkeyb_")
+                                        key_prefix=key_prefix)
         for bucket in self.buckets:
             _task = SDKLoadDocumentsTask(self.master, bucket, sdk_data_loader)
             self.sdk_loader_manager.schedule(_task)
@@ -1091,10 +1092,19 @@ class BaseSecondaryIndexingTests(QueryTests):
         shell = RemoteMachineShellConnection(server)
         shell.execute_command("pkill indexer")
 
-    def _kill_all_processes_index_with_sleep(self, server, sleep_time):
-        shell = RemoteMachineShellConnection(server)
-        shell.execute_command("pkill indexer")
-        self.sleep(sleep_time)
+    def kill_loader_process(self):
+        self.log.info("killing java doc loader process")
+        os.system(f'pgrep -f .*{self.key_prefix}*')
+        os.system(f'pkill -f .*{self.key_prefix}*')
+
+    def _kill_all_processes_index_with_sleep(self, server, sleep_time, timeout=1200):
+        self.log.info(threading.currentThread().getName() + " Started")
+        endtime = time.time() + timeout
+        while self.kill_index and time.time() < endtime:
+            shell = RemoteMachineShellConnection(server)
+            shell.execute_command("pkill indexer")
+            self.sleep(sleep_time)
+        self.log.info(threading.currentThread().getName() + " Completed")
 
     def _check_all_bucket_items_indexed(self, query_definitions=None, buckets=None):
         """

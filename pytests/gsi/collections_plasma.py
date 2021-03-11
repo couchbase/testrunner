@@ -533,11 +533,6 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
 
         self.log.info(threading.currentThread().getName() + " Completed")
 
-    def kill_loader_process(self):
-        self.log.info("killing java doc loader process")
-        os.system(f'pgrep -f .*{self.key_prefix}*')
-        os.system(f'pkill -f .*{self.key_prefix}*')
-
     def test_system_failure_create_drop_indexes(self):
         self.test_fail = False
         self.errors = []
@@ -711,6 +706,67 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.sdk_loader_manager.shutdown(True)
         self.index_create_task_manager.shutdown(True)
         self.system_failure_task_manager.shutdown(True)
+
+        self.wait_until_indexes_online()
+        self.sleep(5, "sleep for 5 secs before validation")
+        self.verify_index_ops_obj()
+
+        self.n1ql_helper.drop_all_indexes_on_keyspace()
+
+        if self.index_ops_obj.get_errors():
+            self.fail(str(self.index_ops_obj.get_errors()))
+
+    def test_kill_indexer_create_drop_indexes_simple(self):
+        self.test_fail = False
+        self.concur_system_failure = self.input.param("concur_system_failure", False)
+        self.errors = []
+        self.index_create_task_manager = TaskManager(
+            "index_create_task_manager")
+        self.index_create_task_manager.start()
+        self.system_failure_task_manager = TaskManager(
+            "system_failure_detector_thread")
+        self.system_failure_task_manager.start()
+        self.sdk_loader_manager = TaskManager(
+            "sdk_loader_manager")
+        self.sdk_loader_manager.start()
+        if self.num_failure_iteration:
+            self.test_timeout = self.failure_timeout * len(self.index_nodes)
+
+        self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
+        self.run_tasks = True
+
+        index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
+        for task in index_create_tasks:
+            task.result()
+
+        load_doc_thread = threading.Thread(name="load_doc_thread",
+                                           target=self.load_docs)
+        load_doc_thread.start()
+
+        self.sleep(60, "sleeping for 60 sec for index to start processing docs")
+
+        if not self.check_if_indexes_in_dgm():
+            self.log.error("indexes not in dgm even after {}".format(self.dgm_check_timeout))
+
+        index_create_tasks = self.create_indexes(itr=300, num=25)
+
+        self.kill_index = True
+        index_node = self.get_nodes_from_services_map(service_type="index")
+        system_failure_thread = threading.Thread(name="kill_indexer_thread",
+                                                 target=self._kill_all_processes_index_with_sleep,
+                                                 args=(index_node, 1, 600))
+        system_failure_thread.start()
+
+        for task in index_create_tasks:
+            task.result()
+
+        self.kill_index = False
+        self.index_ops_obj.update_stop_create_index(True)
+        self.kill_loader_process()
+        self.sdk_loader_manager.shutdown(True)
+        self.index_create_task_manager.shutdown(True)
+        self.system_failure_task_manager.shutdown(True)
+        system_failure_thread.join()
 
         self.wait_until_indexes_online()
         self.sleep(5, "sleep for 5 secs before validation")
