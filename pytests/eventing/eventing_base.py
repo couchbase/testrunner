@@ -1143,6 +1143,7 @@ class EventingBaseTest(QueryHelperTests):
         body['settings']['processing_status'] = False
         body['settings']['worker_count'] = worker_count
         body['settings']['language_compatibility'] = language_compatibility
+        body['settings']['log_level'] = self.eventing_log_level
         if is_curl:
             self.is_curl=True
         if self.is_curl:
