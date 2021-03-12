@@ -51,6 +51,7 @@ def do_install_task(task, node):
 
 def validate_install(params):
     log.info("-" * 100)
+    cluster_nodes = {}
     for node in install_utils.NodeHelpers:
         version = params["version"]
         if node.install_success is None:
@@ -63,6 +64,8 @@ def validate_install(params):
                 except:
                     continue
                 for item in node_status:
+                    if node.ip not in item["hostname"]:
+                        continue
                     if version in item['version'] and item['status'] == "healthy":
                         node.install_success = True
 
@@ -73,10 +76,43 @@ def validate_install(params):
                     if 'addressFamily' in list(item.keys()):
                         afamily = item['addressFamily']
 
-                    log.info("node:{0}\tversion:{1}\taFamily:{2}\tservices:{3}".format(item['hostname'],
-                                                                                item['version'],
-                                                                                afamily,
-                                                                                item['services']))
+                    cluster_nodes[node.ip] = {
+                        "hostname": item["hostname"],
+                        "version": item["version"],
+                        "afamily": afamily,
+                        "services": item["services"]
+                    }
+
+                # check cluster has correct number of nodes
+                if params.get("init_clusters", False):
+                    selected_cluster = None
+                    for cluster in params["clusters"].values():
+                        for server in cluster:
+                            if server.ip == node.ip:
+                                selected_cluster = cluster
+                    if selected_cluster is not None:
+                        if len(node_status) != len(selected_cluster):
+                            node.install_success = False
+
+    clusters = []
+
+    if params.get("init_clusters", False):
+        for cluster in params["clusters"].values():
+            nodes = { node.ip: cluster_nodes[node.ip] for node in cluster}
+            for [ip, node] in nodes.items():
+                del cluster_nodes[ip]
+            clusters.append(list(nodes.values()))
+
+    for node in cluster_nodes.values():
+        clusters.append([node])
+
+    for [i, cluster] in enumerate(clusters):
+        for node in cluster:
+            log.info("cluster:C{0}\tnode:{1}\tversion:{2}\taFamily:{3}\tservices:{4}".format(i + 1, node['hostname'],
+                                                                                    node['version'],
+                                                                                    node['afamily'],
+                                                                                    node['services']))
+
     install_utils.print_result_and_exit()
 
 def do_install(params):
@@ -105,6 +141,9 @@ def do_install(params):
                 log.error("INSTALL TIMED OUT AFTER {0}s.VALIDATING..".format(params["timeout"]))
                 break
     if "init" in params["install_tasks"]:
+        if params.get("init_clusters", False) and len(params["clusters"]) > 0:
+            timeout = force_stop - time.time()
+            install_utils.init_clusters(timeout)
         validate_install(params)
 
 

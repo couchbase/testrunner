@@ -4,6 +4,7 @@ import subprocess
 import sys
 import threading
 import time
+from couchbase_helper.cluster import Cluster
 
 sys.path = [".", "lib"] + sys.path
 import testconstants
@@ -470,6 +471,7 @@ def _parse_user_input():
         print_result_and_exit("No servers specified. Please use the -i parameter." + "\n" + install_constants.USAGE, install_started=False)
     else:
         params["servers"] = userinput.servers
+        params["clusters"] = userinput.clusters
 
     if userinput.bkrs_client:
         params["bkrs_client"] = userinput.bkrs_client
@@ -526,6 +528,8 @@ def _parse_user_input():
             params["cluster_version"] = value
         if key == "ntp":
             params["ntp"] = value
+        if key == "init_clusters":
+            params["init_clusters"] = True if value.lower() == "true" else False
 
     if userinput.bkrs_client and not params["cluster_version"]:
         print_result_and_exit("Need 'cluster_version' in params to proceed", install_started=False)
@@ -822,3 +826,49 @@ def is_fatal_error(errors):
             if fatal_error in line:
                 return True
     return False
+
+def init_clusters(timeout=60, retries=3):
+    """ For each cluster defined in the config with more than 1 node, add the nodes to form a cluster
+    """
+
+    force_stop = time.time() + timeout
+    # only need to init clusters with more than 1 node
+    todo = list(filter(lambda cluster: len(cluster) > 1, params["clusters"].values()))
+
+    while len(todo) > 0 and retries > 0:
+        tasks = []
+
+        for servers in todo:
+            cluster = Cluster()
+            try:
+                # add rest of nodes to first node and rebalance to form a cluster
+                # use the services defined for that node in the config or kv if no services defined
+                task = cluster.async_rebalance(servers, servers[1:], [], services=[server.services or "kv" for server in servers[1:]])
+            except Exception:
+                task = None
+            tasks.append((task, servers, cluster))
+
+        todo = []
+
+        for (task, servers, cluster) in tasks:
+            try:
+                task.result(timeout=max(0, force_stop - time.time()))
+            except Exception:
+                # retry failed rebalance
+                todo.append(servers)
+            cluster.shutdown(force=True)
+
+        retries -= 1
+    
+    # set cluster name using the first node in each cluster
+    for [i, cluster] in enumerate(params["clusters"].values()):
+        retries = 3
+        while retries > 0:
+            try:
+                rest = RestConnection(cluster[0])
+                ok = rest.set_cluster_name("C{}".format(i + 1))
+                if ok:
+                    break
+            except Exception:
+                time.sleep(5)
+                retries -= 1
