@@ -330,8 +330,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             #    self.run_test_update_stats()
             #with self.subTest("MIXED CBO TEST"):
             #    self.run_test_cbo()
-            with self.subTest("MIXED COLLECTION TEST"):
-                self.run_test_collection(phase=phase)
+            #with self.subTest("MIXED COLLECTION TEST"):
+            #    self.run_test_collection(phase=phase)
             if upgrade_type != "offline":
                 with self.subTest("MIXED PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
@@ -376,13 +376,6 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 name="default_index", source_name="default", doc_count=2016, index_storage_type=self.fts_index_type)
         elif phase == "mixed-mode":
             self.log.info("running mixed-mode test for flex index")
-            failed_to_run_query, not_found_index_in_response, result_mismatch = ft_object.run_query_and_validate(flex_query_list)
-            if failed_to_run_query or result_mismatch:
-                self.fail("Found queries not runnable: {0} "
-                          "or flex query and gsi query results not matching: {1}"
-                          .format(failed_to_run_query, result_mismatch))
-            else:
-                self.log.info("All queries passed")
         elif phase == "post-upgrade":
             self.log.info("running post-upgrade test for flex index")
             failed_to_run_query, not_found_index_in_response, result_mismatch = ft_object.run_query_and_validate(flex_query_list)

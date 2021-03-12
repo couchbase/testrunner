@@ -178,6 +178,8 @@ class FlexIndexTests(QueryTests):
         not_found_index_in_response = []
         result_mismatch = []
         iteration = 1
+        if not hasattr(self, "query_node"):
+            self.query_node = self.get_nodes_from_services_map(service_type="n1ql")
 
         for query in query_list:
             query_num = iteration
