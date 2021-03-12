@@ -3153,7 +3153,7 @@ class RemoteMachineShellConnection:
         output = re.sub('\s+', '', output)
         return (output)
 
-    def execute_command(self, command, info=None, debug=True, use_channel=False, timeout=600):
+    def execute_command(self, command, info=None, debug=True, use_channel=False, timeout=600, get_exit_code=False):
         if getattr(self, "info", None) is None and info is not None :
             self.info = info
         else:
@@ -3165,14 +3165,15 @@ class RemoteMachineShellConnection:
         if self.use_sudo:
             command = "sudo " + command
 
-        return self.execute_command_raw(command, debug=debug, use_channel=use_channel, timeout=timeout)
+        return self.execute_command_raw(command, debug=debug, use_channel=use_channel, timeout=timeout, get_exit_code=get_exit_code)
 
-    def execute_command_raw(self, command, debug=True, use_channel=False, timeout=600):
+    def execute_command_raw(self, command, debug=True, use_channel=False, timeout=600, get_exit_code=False):
         if debug:
             log.info("running command.raw on {0}: {1}".format(self.ip, command))
         output = []
         error = []
         temp = ''
+        p, stdout, exit_code = None, None, None
         if self.remote and self.use_sudo or use_channel:
             channel = self._ssh_client.get_transport().open_session()
             channel.get_pty()
@@ -3195,6 +3196,12 @@ class RemoteMachineShellConnection:
             p = Popen(command , shell=True, stdout=PIPE, stderr=PIPE)
             output, error = p.communicate()
 
+        if get_exit_code:
+            if stdout:
+                exit_code = stdout.channel.recv_exit_status()
+            if p:
+                exit_code = p.returncode
+
         if self.remote:
             for line in stdout.read().splitlines():
                 output.append(line)
@@ -3207,7 +3214,7 @@ class RemoteMachineShellConnection:
             stderro.close()
         if debug:
             log.info('command executed successfully')
-        return output, error
+        return (output, error, exit_code) if get_exit_code else (output, error)
 
     def execute_non_sudo_command(self, command, info=None, debug=True, use_channel=False):
         info = info or self.extract_remote_info()
