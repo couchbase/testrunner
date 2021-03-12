@@ -1502,13 +1502,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
-        output, error = remote_client.execute_command(command)
+        output, error, exit_code = remote_client.execute_command(command,
+                get_exit_code=True)
         remote_client.log_command_output(output, error)
-        if error:
+        if error or exit_code:
             return False, error, "Merging backup failed"
-        elif output and not self._check_output(["succeeded", "successfully"], output):
-            return False, output, "Merging backup failed"
-        elif not output:
+        if not output:
             self.log.info("process cbbackupmge may be killed")
             return False, [] , "cbbackupmgr may be killed"
         del self.backups[self.backupset.start - 1:self.backupset.end]
