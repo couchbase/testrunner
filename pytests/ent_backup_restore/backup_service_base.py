@@ -108,6 +108,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # Log files
         self.log_directory = f"/opt/couchbase/var/lib/couchbase/logs/backup_service.log"
 
+        # Operating system information
+        self.os_type, self.os_dist = self.get_os_info(self.master)
+
     def setUp(self):
         """ Sets up.
 
@@ -184,6 +187,14 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         self.objstore_provider = objstore_provider
         self.cluster = Cluster()
 
+    def get_os_info(self, server):
+        """ Returns the operating system type and the distribution version """
+        shell = RemoteMachineShellConnection(server)
+        os_type = shell.info.type.lower()
+        os_dist = shell.info.distribution_version.replace(" ", "").lower()
+        shell.disconnect()
+        return os_type, os_dist
+
     def create_shared_folder(self, server, clients):
         """ Mounts the shared folder
 
@@ -191,14 +202,14 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             server (TestInputServer): The server that holds the shared folder.
             clients (list(TestInputServer)): The servers that mount the shared folder.
         """
-        if self.os_info == "centos":
+        if self.os_type == "linux" and self.os_dist == "centos7":
             share_factory = NfsShareFactory() if self.input.param("share_type", "nfs") == "nfs" else SambaShareFactory()
             self.nfs_connection = NfsConnection(server, clients, share_factory, self.directory_to_share, self.backupset.directory)
             self.nfs_connection.share()
 
     def delete_shared_folder(self):
         """ Unmounts the shared folder """
-        if self.os_info == "centos":
+        if self.os_type == "linux" and self.os_dist == "centos7":
             self.nfs_connection.clean()
 
     def load_custom_certificates(self):
