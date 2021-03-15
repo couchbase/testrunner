@@ -1190,8 +1190,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                      "name": "{0}".format(self.cluster_new_user),
                      "roles": "{0}".format(self.cluster_new_role)}]
         users_can_backup_all = ["admin", "bucket_full_access[*]",
-                                "data_backup[*]", "eventing_admin", "cluster_admin"]
-
+                                "data_backup[*]", "eventing_admin",
+                                "cluster_admin", "backup_admin"]
         users_can_not_backup_all = ["views_admin[*]", "replication_admin",
                                     "replication_target[*]", "data_monitoring[*]",
                                     "data_writer[*]", "data_reader[*]",
