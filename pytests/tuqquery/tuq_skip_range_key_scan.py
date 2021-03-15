@@ -359,8 +359,8 @@ class QuerySkipRangeScanTests(QueryTests):
         spans_1b = [{'high': '(`d1`.`join_yr`)', 'low': '(`d1`.`join_yr`)', 'inclusion': 3}]
 
         queries["a"] = {"indexes": [self.primary_index_def, index_1a, index_1b], "queries": [query_1],
-                        "asserts": [self.plan_verifier("index", "idx1", 0),
-                                    self.plan_verifier("join_index", "idx1", 0),
+                        "asserts": [self.plan_verifier("index", "idx2", 0),
+                                    self.plan_verifier("join_index", "idx2", 0),
                                     self.plan_verifier("spans", spans_1a, 0),
                                     self.plan_verifier("join_spans", spans_1b, 0)]}
 
@@ -501,11 +501,11 @@ class QuerySkipRangeScanTests(QueryTests):
 
         query_5 = "explain select * from " + self.query_bucket + " where join_yr > 2010 and join_day > 1"
         queries["e"] = {"indexes": [self.primary_index_def, index_3, index_5], "queries": [query_5],
-                        "asserts": [self.plan_verifier("index", "idx3", 0)]}
+                        "asserts": [self.plan_verifier("index", "idx5", 0)]}
 
         query_6 = "explain select * from " + self.query_bucket + " where join_yr > 2010 and join_day > 1"
         queries["f"] = {"indexes": [self.primary_index_def, index_4, index_5], "queries": [query_6],
-                        "asserts": [self.plan_verifier("index", "idx4", 0)]}
+                        "asserts": [self.plan_verifier("index", "idx5", 0)]}
 
         query_6 = "explain select * from " + self.query_bucket + " where join_yr > 2010 and join_day > 1"
         queries["g"] = {"indexes": [self.primary_index_def, index_6, index_7], "queries": [query_6],
