@@ -25,11 +25,11 @@ class BackupServiceHook():
         self.backup_service = BackupServiceTest()
         self.backup_service.bootstrap(servers, backupset, objstore_provider)
 
-        # Share a folder between the servers
-        self.backup_service.create_shared_folder(servers[0], servers)
-
         # Load APIs
         self.backup_service.preamble(master)
+
+        # Share a folder between the servers
+        self.backup_service.create_shared_folder(servers[0], servers)
 
     def run_test(self):
         """ A one off backup test to check the backup service is working """

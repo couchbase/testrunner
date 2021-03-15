@@ -111,6 +111,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # Operating system information
         self.os_type, self.os_dist = self.get_os_info(self.master)
 
+        # Specify the directory being shared
+        self.directory_to_share = "/tmp/share"
+
     def setUp(self):
         """ Sets up.
 
@@ -145,9 +148,6 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         # Stop the vboxadd-service again to prevent it from syncing the time with the host
         self.multiple_remote_shell_connections.execute_command("sudo service vboxadd-service stop")
-
-        # Specify the directory being shared
-        self.directory_to_share = "/tmp/share"
 
         # Share archive directory
         self.create_shared_folder(self.input.clusters[0][0], self.input.clusters[0])
