@@ -1172,7 +1172,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_create()
 
         if all_buckets:
-            self.cluster_new_role = self.cluster_new_role + "[*]"
+            if "-" in self.cluster_new_role:
+                self.cluster_new_role = "[*],".join(self.cluster_new_role.split("-")) + "[*]"
+            else:
+                self.cluster_new_role = self.cluster_new_role + "[*]"
+            admin_roles = ["cluster_admin", "eventing_admin"]
+            for role in admin_roles:
+              if role in self.cluster_new_role:
+                self.cluster_new_role = self.cluster_new_role.replace(role + "[*]", role)
 
         self.log.info("\n***** Create new user: {0} with role: {1} to do backup *****"\
                       .format(self.cluster_new_user, self.cluster_new_role))
@@ -1183,7 +1190,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                      "name": "{0}".format(self.cluster_new_user),
                      "roles": "{0}".format(self.cluster_new_role)}]
         users_can_backup_all = ["admin", "bucket_full_access[*]",
-                                "data_backup[*]"]
+                                "data_backup[*]", "eventing_admin", "cluster_admin"]
+
         users_can_not_backup_all = ["views_admin[*]", "replication_admin",
                                     "replication_target[*]", "data_monitoring[*]",
                                     "data_writer[*]", "data_reader[*]",
