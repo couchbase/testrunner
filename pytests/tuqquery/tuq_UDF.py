@@ -1634,14 +1634,15 @@ class QueryUDFTests(QueryTests):
     '''Create a library with functions, check to see that the library was created and the functions were created'''
     def create_library(self, library_name='', functions={},function_names=[], replace= False):
         created = False
-        url = "http://{0}:{1}/functions/v1/libraries".format(self.master.ip, self.n1ql_port)
+        url = "http://{0}:{1}/evaluator/v1/libraries/{2}".format(self.master.ip, self.n1ql_port, library_name)
         data = '[{{"name": "{0}"'.format(library_name) + ', "functions": {0}}}]'.format(functions)
         if replace:
-            self.shell.execute_command(
+            results = self.shell.execute_command(
                 "{0} -X PUT {1} -u Administrator:password -H 'content-type: application/json' -d '{2}'".format(
                     self.curl_path, url, data))
         else:
-            self.shell.execute_command("{0} -X POST {1} -u Administrator:password -H 'content-type: application/json' -d '{2}'".format(self.curl_path, url, data))
+            results = self.shell.execute_command("{0} -X POST {1} -u Administrator:password -H 'content-type: application/json' -d '{2}'".format(self.curl_path, url, data))
+        self.log.info(results[0])
         libraries = self.shell.execute_command("{0} {1} -u Administrator:password".format(self.curl_path, url))
         if library_name in str(libraries[0]):
             created = True
@@ -1658,10 +1659,11 @@ class QueryUDFTests(QueryTests):
         return created
 
     '''Delete a library'''
-    def delete_library(self, library_name =''):
+    def delete_library(self, library_name=''):
         deleted = False
-        url = "http://{0}:{1}/functions/v1/libraries/{2}".format(self.master.ip, self.n1ql_port, library_name)
+        url = "http://{0}:{1}/evaluator/v1/libraries/{2}".format(self.master.ip, self.n1ql_port, library_name)
         curl_output = self.shell.execute_command("{0} -X DELETE {1} -u Administrator:password ".format(self.curl_path, url))
+        self.log.info(curl_output[0])
         libraries = self.shell.execute_command("{0} {1} -u Administrator:password".format(self.curl_path, url))
         if library_name not in str(libraries):
             deleted = True
@@ -1670,7 +1672,7 @@ class QueryUDFTests(QueryTests):
     '''Add a function to an existing library, it is assumed the library already exists'''
     def add_function(self, library_name ='', function_name ='', function =''):
         added = False
-        url = "http://{0}:{1}/functions/v1/libraries/{2}/functions/{3}".format(self.master.ip, self.n1ql_port, library_name, function_name)
+        url = "http://{0}:{1}/evaluator/v1/libraries/{2}/functions/{3}".format(self.master.ip, self.n1ql_port, library_name, function_name)
         self.shell.execute_command("{0} -X PUT {1} -u Administrator:password -H 'content-type: application/json' -d '{2}'".format(self.curl_path, url, function))
         function = self.shell.execute_command("{0} {1} -u Administrator:password".format(self.curl_path, url))
         if function_name in str(function[0]):
@@ -1684,7 +1686,7 @@ class QueryUDFTests(QueryTests):
     '''Delete a specific function'''
     def delete_function(self, library_name ='', function_name =''):
         deleted = False
-        url = "http://{0}:{1}/functions/v1/libraries/{2}/functions/{3}".format(self.master.ip, self.n1ql_port, library_name,function_name)
+        url = "http://{0}:{1}/evaluator/v1/libraries/{2}/functions/{3}".format(self.master.ip, self.n1ql_port, library_name,function_name)
         curl_output = self.shell.execute_command("{0} -X DELETE {1} -u Administrator:password ".format(self.curl_path, url))
         libraries = self.shell.execute_command("{0} {1} -u Administrator:password".format(self.curl_path, url))
         if library_name not in str(libraries):

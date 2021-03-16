@@ -3860,7 +3860,7 @@ class QueryTests(BaseTestCase):
     '''Create a library with functions, check to see that the library was created and the functions were created'''
     def create_library(self, library_name='', functions={}, function_names=[], replace= False):
         created = False
-        url = f"http://{self.master.ip}:{self.n1ql_port}/functions/v1/libraries"
+        url = f"http://{self.master.ip}:{self.n1ql_port}/evaluator/v1/libraries/{library_name}"
         data = f'[{{"name": "{library_name}", "functions": {functions}}}]'
         if replace:
             self.shell.execute_command(f"{self.curl_path} -X PUT {url} -u Administrator:password -H 'content-type: application/json' -d '{data}'")
@@ -3884,7 +3884,7 @@ class QueryTests(BaseTestCase):
     '''Delete a library'''
     def delete_library(self, library_name =''):
         deleted = False
-        url = f"http://{self.master.ip}:{self.n1ql_port}/functions/v1/libraries/{library_name}"
+        url = f"http://{self.master.ip}:{self.n1ql_port}/evaluator/v1/libraries/{library_name}"
         curl_output = self.shell.execute_command(f"{self.curl_path} -X DELETE {url} -u Administrator:password ")
         libraries = self.shell.execute_command(f"{self.curl_path} {url} -u Administrator:password")
         if library_name not in str(libraries):
