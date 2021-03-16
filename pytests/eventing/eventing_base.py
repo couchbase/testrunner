@@ -32,6 +32,7 @@ class EventingBaseTest(QueryHelperTests):
 
 
     def setUp(self):
+        log.info("==============  EventingBaseTest setup has started ==============")
         if self._testMethodDoc:
             log.info("\n\nStarting Test: %s \n%s" % (self._testMethodName, self._testMethodDoc))
         else:
@@ -121,8 +122,10 @@ class EventingBaseTest(QueryHelperTests):
             self.eventing_role_password="password"
             payload="name="+self.eventing_role_username+"&roles=eventing_admin"+"&password="+self.eventing_role_password
             RestConnection(self.master).add_set_builtin_user(self.eventing_role_username,payload)
+        log.info("==============  EventingBaseTest setup has completed ==============")
 
     def tearDown(self):
+        log.info("==============  EventingBaseTest tearDown has started ==============")
         # catch panics and print it in the test log
         self.check_eventing_logs_for_panic()
         rest = RestConnection(self.master)
@@ -141,6 +144,7 @@ class EventingBaseTest(QueryHelperTests):
             if count_meta!= 0:
                 raise Exception("metdata bucket is not empty at the end of test")
         super(EventingBaseTest, self).tearDown()
+        log.info("==============  EventingBaseTest tearDown has completed ==============")
 
     def create_save_function_body(self, appname, appcode, description="Sample Description",
                                   checkpoint_interval=20000, cleanup_timers=False,
@@ -967,6 +971,13 @@ class EventingBaseTest(QueryHelperTests):
             namespace="dst_bucket.dst_bucket.dst_bucket"
         count=0
         try:
+            self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+            self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify,
+                                          buckets=self.buckets,
+                                          item_flag=self.item_flag, n1ql_port=self.n1ql_port,
+                                          full_docs_list=self.full_docs_list, log=self.log,
+                                          input=self.input,
+                                          master=self.master, use_rest=True)
             query = "create primary index on " + namespace
             result_set = self.n1ql_helper.run_cbq_query(query, server=self.n1ql_node)
         except Exception as e:

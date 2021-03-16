@@ -3,7 +3,7 @@ import copy
 
 from TestInput import TestInputSingleton
 from couchbase_helper.tuq_helper import N1QLHelper
-from newupgradebasetest import NewUpgradeBaseTest
+from eventing.eventing_base import EventingBaseTest
 from membase.api.rest_client import RestHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from pytests.basetestcase import BaseTestCase
@@ -15,11 +15,14 @@ from testconstants import COUCHBASE_VERSION_2
 import os
 import json
 
+from upgrade.newupgradebasetest import NewUpgradeBaseTest
+
 log = logging.getLogger()
 
 
-class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
+class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
     def setUp(self):
+        log.info("==============  EventingUpgrade setup has started ==============")
         super(EventingUpgrade, self).setUp()
         self.rest = RestConnection(self.master)
         self.server = self.master
@@ -34,36 +37,12 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.n1ql_op_dst=self.input.param('n1ql_op_dst', 'n1ql_op_dst')
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.upgrade_version = self.input.param("upgrade_version")
-        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 60, bucket=self.src_bucket_name)
+        log.info("==============  EventingUpgrade setup has completed ==============")
 
     def tearDown(self):
+        log.info("==============  EventingUpgrade tearDown has started ==============")
         super(EventingUpgrade, self).tearDown()
-
-    def test_offline_upgrade_with_eventing_pre_vulcan(self):
-        self._install(self.servers[:self.nodes_init])
-        self.operations(self.servers[:self.nodes_init], services="kv,kv,index,n1ql")
-        self.create_buckets()
-        # Load the data in older version
-        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
-        # upgrade all the nodes
-        upgrade_threads = self._async_update(self.upgrade_version, self.servers)
-        for upgrade_thread in upgrade_threads:
-            upgrade_thread.join()
-        self.sleep(120)
-        success_upgrade = True
-        while not self.queue.empty():
-            success_upgrade &= self.queue.get()
-        if not success_upgrade:
-            self.fail("Upgrade failed!")
-        self.add_built_in_server_user()
-        # Add eventing node to the cluster after upgrade
-        self.cluster.rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
-                               services=["eventing"])
-        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
-        self.rest = RestConnection(self.restServer)
-        self.import_function(EXPORTED_FUNCTION.BUCKET_OP)
-        self.sleep(180)
-        self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
+        log.info("==============  EventingUpgrade tearDown has completed ==============")
 
     ### for this to work upgrade_version > 5.5
     def test_offline_upgrade_with_eventing(self):
@@ -79,6 +58,10 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.import_function(EXPORTED_FUNCTION.BUCKET_OP)
         # Validate the data
         self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
+        # Deploy the bucket op with timer function
+        self.import_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        # Validate the data
+        self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
         # offline upgrade all the nodes
         upgrade_threads = self._async_update(self.upgrade_version, self.servers)
         for upgrade_thread in upgrade_threads:
@@ -92,26 +75,22 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.add_built_in_server_user()
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
-        # Deploy the bucket op with timer function
-        self.import_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
-        # Validate the data
-        self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
         # Load the data in older version
         self.load(self.gens_load, buckets=self.sbm, verify_data=False)
         #Deploy the Source bucket handler
         self.import_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
         # Validate the data
-        self.validate_eventing(self.source_bucket_mutation, 2*self.docs_per_day * 2016)
+        self.verify_doc_count_collections("source_bucket_mutation._default._default", 2*self.docs_per_day * 2016)
         # Deploy the curl handler
         self.import_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
         # Validate the data
-        self.validate_eventing(self.dst_bucket_curl, self.docs_per_day * 2016)
+        self.verify_doc_count_collections("dst_bucket_curl._default._default", self.docs_per_day * 2016)
         ### index creation for n1ql
         self._create_primary_index()
         # deploy n1ql handler
         self.import_function(EXPORTED_FUNCTION.N1QL_OP)
         # Validate the data
-        self.validate_eventing(self.n1ql_op_dst, self.docs_per_day * 2016)
+        self.verify_doc_count_collections("n1ql_op_dst._default._default", self.docs_per_day * 2016)
         # Delete the data on source bucket
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
         # Delete the data on SBM bucket
@@ -139,94 +118,11 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.resume_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
         self.resume_function(EXPORTED_FUNCTION.N1QL_OP)
         # Validate the data for both the functions
-        self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
-        self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
-        self.validate_eventing(self.dst_bucket_curl, self.docs_per_day * 2016)
-        self.validate_eventing(self.n1ql_op_dst, self.docs_per_day * 2016)
-        self.validate_eventing(self.source_bucket_mutation, 2 * self.docs_per_day * 2016)
-        # Undeploy and delete both the functions
-        self.undeploy_and_delete_function("test_import_function_1")
-        self.undeploy_and_delete_function("test_import_function_2")
-        self.undeploy_and_delete_function('bucket_op_sbm')
-        self.undeploy_and_delete_function('bucket_op_curl')
-        self.undeploy_and_delete_function('n1ql_op')
-
-    ### for this to work current version > 5.5
-    def test_offline_upgrade_with_eventing_post_vulcan(self):
-        self._install(self.servers[:self.nodes_init])
-        self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
-        self.create_buckets()
-        # Load the data in older version
-        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False,exp=600)
-        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
-        self.rest = RestConnection(self.restServer)
-        # Deploy the bucket op function
-        log.info("Deploy the function in the initial version")
-        self.import_function(EXPORTED_FUNCTION.BUCKET_OP)
-        # Validate the data
-        self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
-        # Deploy the bucket op with timer function
-        self.import_function(EXPORTED_FUNCTION.CANCEL_TIMERS)
-        # Validate the data
-        self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
-        # offline upgrade all the nodes
-        upgrade_threads = self._async_update(self.upgrade_version, self.servers)
-        for upgrade_thread in upgrade_threads:
-            upgrade_thread.join()
-        self.sleep(120)
-        success_upgrade = True
-        while not self.queue.empty():
-            success_upgrade &= self.queue.get()
-        if not success_upgrade:
-            self.fail("Upgrade failed!")
-        self.add_built_in_server_user()
-        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
-        self.rest = RestConnection(self.restServer)
-        # Load the data source bucket
-        self.load(self.gens_load, buckets=self.sbm, verify_data=False)
-        self.import_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
-        # Validate the data
-        self.validate_eventing(self.source_bucket_mutation, 2*self.docs_per_day * 2016)
-        # Deploy the Source bucket handler
-        self.import_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
-        # Validate the data
-        self.validate_eventing(self.dst_bucket_curl, self.docs_per_day * 2016)
-        ### index creation for n1ql
-        self._create_primary_index()
-        # Deploy the n1ql handler
-        self.import_function(EXPORTED_FUNCTION.N1QL_OP)
-        # Validate the data
-        self.validate_eventing(self.n1ql_op_dst, self.docs_per_day * 2016)
-        # Delete the data on source bucket
-        #self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
-        # Delete the data on SBM bucket
-        self.load(self.gens_load, buckets=self.sbm, verify_data=False, op_type='delete')
-        # Validate the data for both the functions
-        self.validate_eventing(self.dst_bucket_name, 0)
-        self.validate_eventing(self.dst_bucket_name1, 0)
-        self.validate_eventing(self.source_bucket_mutation, 0)
-        self.validate_eventing(self.dst_bucket_curl, 0)
-        self.validate_eventing(self.n1ql_op_dst,0)
-        ## pause resume handler
-        self.pause_function(EXPORTED_FUNCTION.BUCKET_OP)
-        self.pause_function(EXPORTED_FUNCTION.CANCEL_TIMERS)
-        self.pause_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
-        self.pause_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
-        self.pause_function(EXPORTED_FUNCTION.N1QL_OP)
-        # add data to source bucket
-        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
-        self.load(self.gens_load, buckets=self.sbm, verify_data=False)
-        self.resume_function(EXPORTED_FUNCTION.BUCKET_OP)
-        self.resume_function(EXPORTED_FUNCTION.CANCEL_TIMERS)
-        self.resume_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
-        self.resume_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
-        self.resume_function(EXPORTED_FUNCTION.N1QL_OP)
-        # Validate the data for both the functions
-        self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
-        self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
-        self.validate_eventing(self.dst_bucket_curl, self.docs_per_day * 2016)
-        self.validate_eventing(self.n1ql_op_dst, self.docs_per_day * 2016)
-        self.validate_eventing(self.source_bucket_mutation, 2*self.docs_per_day * 2016)
+        self.verify_doc_count_collections("dst_bucket_name._default._default", self.docs_per_day * 2016)
+        self.verify_doc_count_collections("dst_bucket_name1._default._default", self.docs_per_day * 2016)
+        self.verify_doc_count_collections("dst_bucket_curl._default._default", self.docs_per_day * 2016)
+        self.verify_doc_count_collections("n1ql_op_dst._default._default", self.docs_per_day * 2016)
+        self.verify_doc_count_collections("source_bucket_mutation._default._default", 2 * self.docs_per_day * 2016)
         # Undeploy and delete both the functions
         self.undeploy_and_delete_function("test_import_function_1")
         self.undeploy_and_delete_function("test_import_function_2")
