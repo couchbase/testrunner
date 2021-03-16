@@ -3054,10 +3054,15 @@ class BaseTestCase(unittest.TestCase):
 
         for server in self.get_kv_nodes(master=self.master):
             for bucket in buckets:
-                mc = MemcachedClient(server.ip, 11210)
-                mc.sasl_auth_plain(self.master.rest_username,
-                                   self.master.rest_password)
-                mc.bucket_select(bucket.name)
+                try:
+                    mc = MemcachedClient(server.ip, 11210)
+                    mc.sasl_auth_plain(self.master.rest_username,
+                                       self.master.rest_password)
+                except:
+                    mc = MemcachedClient(server.ip, 11210)
+                    mc.sasl_auth_plain(self.master.rest_username,
+                                       self.master.rest_password)
+                mc.bucket_select(str(bucket.name))
                 stats = mc.stats()
                 self.assertEqual(int(stats['ep_flusher_total_batch_limit']),
                                  flusher_total_batch_limit)
