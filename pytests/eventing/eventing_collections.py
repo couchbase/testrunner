@@ -202,3 +202,13 @@ class EventingCollections(EventingBaseTest):
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs*3)
         self.undeploy_delete_all_functions()
+
+    def test_source_and_metadata_same_keyspace(self):
+        try:
+            body = self.create_function_with_collection(self.function_name, "handler_code/ABO/insert_rand.js",
+                                                 src_namespace="src_bucket.src_bucket.src_bucket",
+                                                 meta_namespace="src_bucket.src_bucket.src_bucket")
+            self.rest.create_function(body['appname'], body)
+        except Exception as e:
+            self.log.info(e)
+            assert "ERR_SRC_MB_SAME" in str(e) and "Source keyspace same as metadata keyspace" in str(e), True

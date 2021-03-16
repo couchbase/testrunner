@@ -299,6 +299,19 @@ class EventingSettings(EventingBaseTest):
             self.log.info(e)
             assert "ERR_INVALID_CONFIG" in str(e) and "timer_context_size must be a number" in str(e), True
 
+    def test_bindings_to_non_existent_buckets(self):
+        try:
+            body = self.create_save_function_body(self.function_name, self.handler_code)
+            body['depcfg']['buckets'].append({"alias": "new_bucket", "bucket_name": "new_bucket", "access": "rw"})
+            self.rest.create_function(body['appname'], body)
+        except Exception as e:
+            self.log.info(e)
+            assert "ERR_BUCKET_MISSING" in str(e) and "Bucket does not exist in the cluster" in str(e), True
+
+
+
+
+
 
 
 
