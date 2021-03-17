@@ -66,6 +66,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.initial_version = self.input.param('initial_version', '2.5.1-1083')
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
         self.upgrade_versions = self.input.param('upgrade_version', '2.0.1-170-rel')
+        self.travel_sample_bucket = self.input.param("travel_sample_bucket", False)
         self.call_ftsCallable = True
         self.upgrade_versions = self.upgrade_versions.split(";")
         self.skip_cleanup = self.input.param("skip_cleanup", False)

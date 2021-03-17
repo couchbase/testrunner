@@ -131,7 +131,22 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
             self.maxParallelReplicaIndexers, self.port)
         self.add_built_in_server_user(node=self.master)
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
-        self.create_buckets()
+        if self.travel_sample_bucket:
+            shell = RemoteMachineShellConnection(self.master)
+            shell.execute_command("""curl -g -v -u Administrator:password \
+                         -X POST http://{0}:8091/sampleBuckets/install \
+                         -d  '["travel-sample"]'""".format(self.master.ip))
+            shell.disconnect()
+
+            buckets = RestConnection(self.master).get_buckets()
+            for bucket in buckets:
+                if bucket.name != "travel-sample":
+                    self.fail("travel-sample bucket did not create")
+            self.sleep(60, "time needs to load data to travel- sample")
+            if self.dgm_run:
+                self.create_buckets()
+        else:
+            self.create_buckets()
         self.n1ql_server = None
         self.success_run = True
         self.failed_thread = None
@@ -957,9 +972,8 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                                            list(servers_in.values()),
                                            list(servers_out.values()),
                                            sleep_before_rebalance=15)
-            except Exception as ex:
-                self.log.info(ex)
-                raise
+            except BaseException as ex:
+                self.fail(ex)
             self.out_servers_pool = servers_out
             self.in_servers_pool = new_servers
             servers = new_servers
