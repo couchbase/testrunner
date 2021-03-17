@@ -27,11 +27,12 @@ class MovingTopFTS(FTSBaseTest):
 
     """ Topology change during indexing"""
 
-
-    def kill_fts_service(self, timeout):
+    def kill_fts_service(self, timeout, retries=1):
         fts_node = self._cb_cluster.get_random_fts_node()
-        self.sleep(timeout)
-        NodeHelper.kill_cbft_process(fts_node)
+        for i in range(retries):
+            self.sleep(timeout)
+            NodeHelper.kill_cbft_process(fts_node)
+        return fts_node
 
     def kill_erlang_service(self, timeout):
         fts_node = self._cb_cluster.get_random_fts_node()
@@ -62,16 +63,17 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
                           %(index.name,index.get_indexed_doc_count()))
+
+        reb_thread = Thread(
+            target=self.kill_fts_service,
+            args=[2, 10])
         try:
-            reb_thread = Thread(
-                target=self.kill_fts_service,
-                args=[10])
             reb_thread.start()
-            self.sleep(2)
             self._cb_cluster.rebalance_in(num_nodes=1, services=["fts"])
             self.fail("Rebalance did not fail")
         except Exception as e:
             self.log.error(str(e))
+            reb_thread.join()
             self.sleep(5)
             self._check_retry_rebalance_succeeded()
 
@@ -167,8 +169,11 @@ class MovingTopFTS(FTSBaseTest):
 
         try:
             reb_thread = Thread(
-                target=self._cb_cluster.reboot_after_timeout(),
+                target=self.kill_fts_service,
                 args=[5])
+            #reb_thread = Thread(
+            #    target=self._cb_cluster.reboot_after_timeout(),
+            #    args=[5])
             reb_thread.start()
             self._cb_cluster.swap_rebalance(services=["fts"])
         except Exception as e:
@@ -377,7 +382,8 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
-        self._cb_cluster.reboot_one_node(test_case=self)
+        #self._cb_cluster.reboot_one_node(test_case=self)
+        self.kill_fts_service(120)
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
@@ -391,7 +397,8 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
-        self._cb_cluster.reboot_one_node(test_case=self, master=True)
+        #self._cb_cluster.reboot_one_node(test_case=self, master=True)
+        self.kill_fts_service(120)
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
@@ -684,7 +691,8 @@ class MovingTopFTS(FTSBaseTest):
         self.log.info("Index building has begun...")
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
-        self._cb_cluster.reboot_one_node(test_case=self)
+        #self._cb_cluster.reboot_one_node(test_case=self)
+        self.kill_fts_service(120)
         self.sleep(5)
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
@@ -809,8 +817,11 @@ class MovingTopFTS(FTSBaseTest):
             target=self.retry_rebalance,
             args=[services])
         retry_reb_thread.start()
+        #reb_thread = Thread(
+        #    target=self._cb_cluster.reboot_after_timeout(),
+        #    args=[5])
         reb_thread = Thread(
-            target=self._cb_cluster.reboot_after_timeout(),
+            target=self.kill_fts_service,
             args=[5])
         reb_thread.start()
         for count in range(0, len(index.fts_queries)):
@@ -871,8 +882,11 @@ class MovingTopFTS(FTSBaseTest):
             target=self.retry_rebalance,
             args=[])
         retry_reb_thread.start()
+        #reb_thread = Thread(
+        #    target=self._cb_cluster.reboot_after_timeout(),
+        #    args=[2])
         reb_thread = Thread(
-            target=self._cb_cluster.reboot_after_timeout(),
+            target=self.kill_fts_service,
             args=[2])
         reb_thread.start()
         for count in range(0, len(index.fts_queries)):
@@ -1034,7 +1048,8 @@ class MovingTopFTS(FTSBaseTest):
     def node_reboot_during_querying(self):
         #TESTED
         index = self.create_index_generate_queries()
-        node = self._cb_cluster.reboot_one_node(test_case=self)
+        #node = self._cb_cluster.reboot_one_node(test_case=self)
+        node = self.kill_fts_service(120)
         self._cb_cluster.set_bypass_fts_node(node)
         self.is_index_partitioned_balanced(index)
         self.run_query_and_compare(index)

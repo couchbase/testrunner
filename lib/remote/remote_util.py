@@ -749,6 +749,9 @@ class RemoteMachineShellConnection(KeepRefs):
         else:
             o, r = self.execute_command("killall -9 cbft")
             self.log_command_output(o, r)
+            if r and r[0] and "command not found" in r[0]:
+                o, r = self.execute_command("pkill cbft")
+                self.log_command_output(o, r)
         return o, r
 
     def kill_memcached(self, num_retries=10, poll_interval=2):
