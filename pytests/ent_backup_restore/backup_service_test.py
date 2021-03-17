@@ -1,41 +1,106 @@
-import re
-import time
-import json
-import random
 import datetime
 import itertools
+import json
+import random
+import re
 import threading
-from multiprocessing import Pool
+import time
+from multiprocessing import (
+    Pool
+)
 
-from ent_backup_restore.backup_service_base import BackupServiceBase, HistoryFile, MultipleRemoteShellConnections
-from lib.couchbase_helper.time_helper import TimeUtil
-from ent_backup_restore.backup_service_base import Prometheus, FailoverServer, ScheduleTest, Time, DocumentUtil
-from ent_backup_restore.backup_service_base import Collector, File
-from ent_backup_restore.backup_service_base import HttpConfigurationFactory
-from membase.api.rest_client import RestConnection
-from lib.backup_service_client.models.task_template import TaskTemplate
-from lib.backup_service_client.models.task_template_schedule import TaskTemplateSchedule
-from lib.backup_service_client.models.task_template_options import TaskTemplateOptions
-from backup_service_client.rest import ApiException
-from lib.backup_service_client.models.body import Body
-from lib.backup_service_client.models.body1 import Body1
-from lib.backup_service_client.models.body2 import Body2
-from lib.backup_service_client.models.body3 import Body3
-from lib.backup_service_client.models.body4 import Body4
-from lib.backup_service_client.models.body5 import Body5
-from lib.backup_service_client.models.body6 import Body6
-from lib.backup_service_client.models.plan import Plan
-from lib.backup_service_client.models.service_configuration import ServiceConfiguration
-from lib.backup_service_client.api_client import ApiClient
-from lib.backup_service_client.api.plan_api import PlanApi
-from lib.backup_service_client.api.active_repository_api import ActiveRepositoryApi
-from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
-from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
-from couchbase_helper.cluster import Cluster
-from membase.api.exception import ServerAlreadyJoinedException
-from couchbase_helper.document import View
-from pytests.eventing.eventing_constants import HANDLER_CODE
-from pytests.fts.fts_callable import FTSCallable
+from backup_service_client.rest import (
+    ApiException
+)
+from couchbase_helper.cluster import (
+    Cluster
+)
+from couchbase_helper.document import (
+    View
+)
+from couchbase_helper.documentgenerator import (
+    BlobGenerator,
+    DocumentGenerator
+)
+from ent_backup_restore.backup_service_base import (
+    BackupServiceBase,
+    Collector,
+    DocumentUtil,
+    FailoverServer,
+    File,
+    HistoryFile,
+    HttpConfigurationFactory,
+    MultipleRemoteShellConnections,
+    Prometheus,
+    ScheduleTest,
+    Time
+)
+from membase.api.exception import (
+    ServerAlreadyJoinedException
+)
+from membase.api.rest_client import (
+    RestConnection
+)
+from remote.remote_util import (
+    RemoteMachineShellConnection,
+    RemoteUtilHelper
+)
+
+from lib.backup_service_client.api.active_repository_api import (
+    ActiveRepositoryApi
+)
+from lib.backup_service_client.api.plan_api import (
+    PlanApi
+)
+from lib.backup_service_client.api_client import (
+    ApiClient
+)
+from lib.backup_service_client.models.body import (
+    Body
+)
+from lib.backup_service_client.models.body1 import (
+    Body1
+)
+from lib.backup_service_client.models.body2 import (
+    Body2
+)
+from lib.backup_service_client.models.body3 import (
+    Body3
+)
+from lib.backup_service_client.models.body4 import (
+    Body4
+)
+from lib.backup_service_client.models.body5 import (
+    Body5
+)
+from lib.backup_service_client.models.body6 import (
+    Body6
+)
+from lib.backup_service_client.models.plan import (
+    Plan
+)
+from lib.backup_service_client.models.service_configuration import (
+    ServiceConfiguration
+)
+from lib.backup_service_client.models.task_template import (
+    TaskTemplate
+)
+from lib.backup_service_client.models.task_template_options import (
+    TaskTemplateOptions
+)
+from lib.backup_service_client.models.task_template_schedule import (
+    TaskTemplateSchedule
+)
+from lib.couchbase_helper.time_helper import (
+    TimeUtil
+)
+from pytests.eventing.eventing_constants import (
+    HANDLER_CODE
+)
+from pytests.fts.fts_callable import (
+    FTSCallable
+)
+
 
 class BackupServiceTest(BackupServiceBase):
     def setUp(self):

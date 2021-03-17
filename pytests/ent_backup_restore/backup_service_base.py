@@ -1,40 +1,95 @@
-import os
-import re
-import math
-import time
-import json
-import shlex
-import random
-import logger
-import datetime
 import abc
+import datetime
+import json
+import logger
+import math
+import os
+import random
+import re
+import shlex
+import time
 
-from TestInput import TestInputSingleton
-from lib.couchbase_helper.time_helper import TimeUtil
-from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase
-from membase.api.rest_client import RestConnection
-from membase.helper.rebalance_helper import RebalanceHelper
-from lib.backup_service_client.models.task_template import TaskTemplate
-from lib.backup_service_client.models.task_template_schedule import TaskTemplateSchedule
-from lib.backup_service_client.models.task_template_options import TaskTemplateOptions
-from lib.backup_service_client.configuration import Configuration
-from lib.backup_service_client.api_client import ApiClient
-from lib.backup_service_client.api.plan_api import PlanApi
-from lib.backup_service_client.api.import_api import ImportApi
-from lib.backup_service_client.api.repository_api import RepositoryApi
-from lib.backup_service_client.api.configuration_api import ConfigurationApi
-from lib.backup_service_client.api.active_repository_api import ActiveRepositoryApi
-from lib.backup_service_client.models.body1 import Body1
-from lib.backup_service_client.models.body2 import Body2
-from lib.backup_service_client.models.body3 import Body3
-from lib.backup_service_client.models.body4 import Body4
-from lib.backup_service_client.models.body5 import Body5
-from lib.backup_service_client.models.body6 import Body6
-from lib.backup_service_client.models.plan import Plan
-from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
-from lib.membase.helper.bucket_helper import BucketOperationHelper
-from couchbase_helper.cluster import Cluster
-from testconstants import CLUSTER_QUOTA_RATIO
+from couchbase_helper.cluster import (
+    Cluster
+)
+from ent_backup_restore.enterprise_backup_restore_base import (
+    EnterpriseBackupRestoreBase
+)
+from membase.api.rest_client import (
+    RestConnection
+)
+from membase.helper.rebalance_helper import (
+    RebalanceHelper
+)
+from remote.remote_util import (
+    RemoteMachineShellConnection,
+    RemoteUtilHelper
+)
+from testconstants import (
+    CLUSTER_QUOTA_RATIO
+)
+
+from lib.backup_service_client.api.active_repository_api import (
+    ActiveRepositoryApi
+)
+from lib.backup_service_client.api.configuration_api import (
+    ConfigurationApi
+)
+from lib.backup_service_client.api.import_api import (
+    ImportApi
+)
+from lib.backup_service_client.api.plan_api import (
+    PlanApi
+)
+from lib.backup_service_client.api.repository_api import (
+    RepositoryApi
+)
+from lib.backup_service_client.api_client import (
+    ApiClient
+)
+from lib.backup_service_client.configuration import (
+    Configuration
+)
+from lib.backup_service_client.models.body1 import (
+    Body1
+)
+from lib.backup_service_client.models.body2 import (
+    Body2
+)
+from lib.backup_service_client.models.body3 import (
+    Body3
+)
+from lib.backup_service_client.models.body4 import (
+    Body4
+)
+from lib.backup_service_client.models.body5 import (
+    Body5
+)
+from lib.backup_service_client.models.body6 import (
+    Body6
+)
+from lib.backup_service_client.models.plan import (
+    Plan
+)
+from lib.backup_service_client.models.task_template import (
+    TaskTemplate
+)
+from lib.backup_service_client.models.task_template_options import (
+    TaskTemplateOptions
+)
+from lib.backup_service_client.models.task_template_schedule import (
+    TaskTemplateSchedule
+)
+from lib.couchbase_helper.time_helper import (
+    TimeUtil
+)
+from lib.membase.helper.bucket_helper import (
+    BucketOperationHelper
+)
+from TestInput import (
+    TestInputSingleton
+)
+
 
 class BackupServiceBase(EnterpriseBackupRestoreBase):
 
