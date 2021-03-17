@@ -1204,7 +1204,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def resume_blocked_incoming_network_from_node(self, node1, node2):
         shell = RemoteMachineShellConnection(node1)
-        self.log.info("Adding {0} into iptables rules on {1}".format(
+        self.log.info("Removing {0} from iptables rules on {1}".format(
             node1.ip, node2.ip))
         command = "iptables -D INPUT -s {0} -j REJECT".format(node2.ip)
         shell.execute_command(command)

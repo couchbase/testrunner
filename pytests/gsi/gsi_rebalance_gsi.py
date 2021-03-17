@@ -2751,7 +2751,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rest = RestConnection(self.master)
         rest.set_retry_rebalance_settings(body)
         result = rest.get_retry_rebalance_settings()
-        self.shell.execute_cbworkloadgen(rest.username, rest.password, 2000000, 100, "default", 1024, '-j')
+        self.shell.execute_cbworkloadgen(rest.username, rest.password, 1000000, 100, "default", 1024, '-j')
         if not self.build_index:
             self.run_operation(phase="before")
             self.sleep(30)
@@ -2775,17 +2775,19 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                                                          [self.servers[self.nodes_init]], [],
                                                          services=services_in)
             self.sleep(4)
-            # reboot an index node during gsi rebalance
+            # stop an index node during gsi rebalance
             if not self.build_index:
-                self.reboot_node(index_server)
+                self.stop_server(index_server)
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
         except Exception as ex:
+            self.start_server(index_server)
             if "Rebalance failed" not in str(ex):
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
         else:
-            self.fail("rebalance did not fail after index node reboot")
+            self.start_server(index_server)
+            self.fail("rebalance did not fail")
         # Rerun rebalance to check if it can recover from failure
         if self.build_index:
             thread1.join()
