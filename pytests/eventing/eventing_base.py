@@ -7,7 +7,7 @@ import socket
 
 from TestInput import TestInputSingleton
 from couchbase_helper.tuq_helper import N1QLHelper
-from lib.couchbase_helper.documentgenerator import BlobGenerator
+from lib.couchbase_helper.documentgenerator import BlobGenerator, JsonDocGenerator
 from lib.couchbase_helper.stats_tools import StatsCommon
 from lib.couchbase_helper.tuq_generators import JsonGenerator
 from lib.membase.api.rest_client import RestConnection
@@ -95,6 +95,7 @@ class EventingBaseTest(QueryHelperTests):
         self.is_expired=self.input.param('is_expired', False)
         self.print_app_log=self.input.param('print_app_log', False)
         self.print_go_routine=self.input.param('print_go_routine', False)
+        self.is_binary=self.input.param('binary_doc', False)
 
     def tearDown(self):
         # catch panics and print it in the test log
@@ -124,7 +125,7 @@ class EventingBaseTest(QueryHelperTests):
                                   timer_worker_pool_size=3, worker_count=3, processing_status=False,
                                   cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=20,
                                   data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62,
-                                  language_compatibility='6.5.0',hostpath=None,validate_ssl=False,src_binding=False):
+                                  language_compatibility='6.6.2',hostpath=None,validate_ssl=False,src_binding=False):
         body = {}
         body['appname'] = appname
         script_dir = os.path.dirname(__file__)
@@ -891,6 +892,17 @@ class EventingBaseTest(QueryHelperTests):
             body = "{\"auto_redistribute_vbs_on_failover\": false}"
         self.rest.update_eventing_config(body)
         self.log.info(self.rest.get_eventing_config())
+
+    def load_data_to_bucket(self, bucket, scale=1, exp=0):
+        if self.is_binary:
+            gen_load = BlobGenerator('binary', 'binary-', self.value_size, end=2016 * self.docs_per_day * scale)
+            self.cluster.load_gen_docs(self.master, bucket, gen_load, self.buckets[0].kvs[1], 'create',
+                                       exp, flag=self.item_flag, batch_size=self.batch_size)
+        else:
+            gen_load = JsonDocGenerator('json', op_type="create", end=2016 * self.docs_per_day * scale)
+            self.cluster.load_gen_docs(self.master, bucket, gen_load, self.buckets[0].kvs[1], 'create',
+                                       exp, flag=self.item_flag, batch_size=self.batch_size)
+
 
 
 

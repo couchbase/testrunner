@@ -7,6 +7,7 @@ from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL
 from pytests.eventing.eventing_base import EventingBaseTest
 from membase.helper.cluster_helper import ClusterOperationHelper
+from lib.couchbase_helper.documentgenerator import BlobGenerator
 import logging
 
 log = logging.getLogger()
@@ -35,7 +36,10 @@ class EventingRebalance(EventingBaseTest):
             self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params_meta)
             self.buckets = RestConnection(self.master).get_buckets()
-        self.gens_load = self.generate_docs(self.docs_per_day)
+        if self.is_binary:
+            self.gens_load = BlobGenerator('binary', 'binary-', self.value_size, end=2016 * self.docs_per_day)
+        else:
+            self.gens_load = self.generate_docs(self.docs_per_day)
         self.expiry = 3
         handler_code = self.input.param('handler_code', 'bucket_op')
         if handler_code == 'bucket_op':

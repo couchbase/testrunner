@@ -35,8 +35,7 @@ class EventingSanity(EventingBaseTest):
         super(EventingSanity, self).tearDown()
 
     def test_create_mutation_for_dcp_stream_boundary_from_beginning(self):
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        self.load_data_to_bucket(self.src_bucket_name)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
@@ -214,8 +213,7 @@ class EventingSanity(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_source_bucket_mutations_with_timers(self):
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                 batch_size=self.batch_size)
+        self.load_data_to_bucket(self.src_bucket_name)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS,
                                               worker_count=3)
         self.deploy_function(body)
@@ -232,14 +230,13 @@ class EventingSanity(EventingBaseTest):
     def test_pause_resume_execution(self):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
         self.deploy_function(body)
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        self.load_data_to_bucket(self.src_bucket_name)
         self.pause_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(60)
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
-        self.gens_load = self.generate_docs(self.docs_per_day*2)
+        self.load_data_to_bucket(self.src_bucket_name, scale=2)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size*2)
         self.resume_function(body)
@@ -276,8 +273,7 @@ class EventingSanity(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_expired_mutation(self):
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, exp=1)
+        self.load_data_to_bucket(self.src_bucket_name, exp=1)
         # set expiry pager interval
         ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 1, bucket=self.src_bucket_name)
         body = self.create_save_function_body(self.function_name, "handler_code/bucket_op_expired.js", worker_count=3)
@@ -310,8 +306,7 @@ class EventingSanity(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_advance_bucket_op(self):
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                 batch_size=self.batch_size,exp=300)
+        self.load_data_to_bucket(self.src_bucket_name, exp=300)
         # set expiry pager interval
         ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 3, bucket=self.src_bucket_name)
         body = self.create_save_function_body(self.function_name, "handler_code/ABO/curl_timer_insert.js")
