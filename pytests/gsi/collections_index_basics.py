@@ -303,8 +303,8 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             if self.defer_build:
                 query = index_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-            self.wait_until_indexes_online(defer_build=self.defer_build)
-
+            self.wait_until_indexes_online()
+            self.sleep(10)
             # querying docs for the idx index
             query = f'SELECT COUNT(*) FROM {collection_namespace} WHERE age > 65'
             result = self.run_cbq_query(query=query)['results'][0]['$1']
@@ -326,7 +326,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             if self.defer_build:
                 query = index_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-            self.wait_until_indexes_online(defer_build=self.defer_build)
+            self.wait_until_indexes_online()
             self.sleep(5)
 
             # querying docs for the idx index
@@ -356,12 +356,15 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             if self.defer_build:
                 query = primary_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-            self.wait_until_indexes_online(defer_build=self.defer_build)
+            self.wait_until_indexes_online()
+            self.sleep(10)
 
             # Creating Array index
             query = f"create index {arr_index} on {collection_namespace}(ALL ARRAY v.name for v in VMs END) "
             self.run_cbq_query(query=query)
-            self.wait_until_indexes_online()
+            result = self.wait_until_indexes_online()
+            if not result:
+                self.wait_until_indexes_online(timeout=1200)
             # Run a query that uses array indexes
             query = f'select count(*) from {collection_namespace}  where any v in VMs satisfies v.name like "vm_%" END'
             result = self.run_cbq_query(query=query)['results'][0]['$1']
@@ -432,7 +435,8 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             if self.defer_build:
                 query = primary_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-            self.wait_until_indexes_online(defer_build=self.defer_build)
+            self.wait_until_indexes_online()
+            self.sleep(10)
 
             # Creating Partitioned index
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build)
@@ -440,7 +444,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             if self.defer_build:
                 query = index_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-            self.wait_until_indexes_online(defer_build=self.defer_build)
+            self.wait_until_indexes_online()
             self.sleep(5)
 
             # Validating index partition
@@ -519,7 +523,8 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             if self.defer_build:
                 query = primary_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-            self.wait_until_indexes_online(defer_build=self.defer_build)
+            self.wait_until_indexes_online()
+            self.sleep(10)
 
             # Creating Partial index
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
@@ -528,8 +533,8 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             if self.defer_build:
                 query = index_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-            self.wait_until_indexes_online(defer_build=self.defer_build)
-            self.sleep(5)
+            self.wait_until_indexes_online()
+            self.sleep(10)
 
             query = f"select count(*) from {collection_namespace} where join_mo > 8 and join_day > 15 and" \
                     f" join_yr > 2010"
@@ -804,6 +809,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
 
             query = f"BUILD INDEX ON {collection_namespace}(idx_1, idx_2, idx_3) USING GSI "
             self.run_cbq_query(query=query)
+            self.sleep(5)
 
             # Building index while another index is in progress to check background queue
             try:
@@ -812,8 +818,10 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             except Exception as err:
                 err_msg = 'Index idx_4 will retry building in the background for reason: Build Already In Progress'
                 self.assertTrue(err_msg in str(err), str(err))
-
-            self.wait_until_indexes_online(defer_build=True)
+            result = self.wait_until_indexes_online()
+            if not result:
+                self.wait_until_indexes_online(timeout=1200)
+            self.sleep(10)
 
             query = f"select count(age) from {collection_namespace} where age > 30"
             result = self.run_cbq_query(query=query)['results'][0]['$1']
@@ -890,9 +898,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                     self.log.info(task_2.result())
                     task_1.result()
             except Exception as err:
-                err_msg = 'No index available on keyspace test_collection_1 that matches your query.' \
-                          ' Use CREATE INDEX or CREATE PRIMARY INDEX to create an index, or check that your' \
-                          ' expected index is online.'
+                err_msg = 'No index available on keyspace'
                 self.assertTrue(err_msg in str(err), err)
 
         except Exception as err:
