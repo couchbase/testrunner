@@ -377,7 +377,7 @@ class QueryExpirationTests(QueryTests):
         -i b/resources/tmp.ini -p default_bucket=False,nodes_init=1,initial_index_number=1,primary_indx_type=GSI,
         bucket_size=100 -t tuqquery.ttl_with_n1ql.QueryExpirationTests.test_upsert_with_ttl_with_nested_select
         """
-        expiration_time = 10
+        expiration_time = 60
 
         # Loading beer-sample bucket
         result_count = 7303
@@ -412,7 +412,7 @@ class QueryExpirationTests(QueryTests):
         self.run_cbq_query(upsert_query)
 
         result = self._is_expected_index_count(bucket_name=self.default_bucket_name, idx_name=self.exp_index,
-                                               stat_name=self.index_stat, expected_stat_value=result_count)
+                                               stat_name=self.index_stat, max_try=50, expected_stat_value=result_count)
         self.assertTrue(result, "Indexer not able to index all the items")
         self.sleep(expiration_time + 10, "Allowing time to all the docs to get expired")
         select_query = "Select * FROM {0}".format(query_default_bucket)
@@ -422,19 +422,22 @@ class QueryExpirationTests(QueryTests):
         kv_stat_result = self._is_expected_kv_expired_stats(bucket, result_count)
         self.assertTrue(kv_stat_result, "KV vb_active_expired stat is not matching with actual no. of expired docs")
         result = self._is_expected_index_count(bucket_name=self.default_bucket_name, idx_name=self.exp_index,
-                                               stat_name=self.index_stat, expected_stat_value=0)
+                                               stat_name=self.index_stat, max_try = 50, expected_stat_value=0)
         self.assertTrue(result, "Indexer has indexes for expired docs")
 
         # Inserting docs with expiration time with nested select
-        update_expiration_on_beer_sample = 'UPDATE {0} AS b SET META(b).expiration=1 * 10'.format(query_sample_bucket)
-        self.run_cbq_query(update_expiration_on_beer_sample)
+        update_expiration_on_beer_sample = 'UPDATE {0} AS b SET META(b).expiration = {1}'.format(query_sample_bucket, expiration_time)
+        result = self.run_cbq_query(update_expiration_on_beer_sample)
+        self.log.info(result)
 
         upsert_query_with_exp = 'UPSERT INTO {0} (KEY doc_keys, VALUE doc, OPTIONS {{"expiration": exptime}})' \
                                 '  SELECT META(t).id AS doc_keys, t AS doc, META(t).expiration AS exptime' \
                                 '  FROM {1} AS t'.format(query_default_bucket, query_sample_bucket)
-        self.run_cbq_query(upsert_query_with_exp)
+        result = self.run_cbq_query(upsert_query_with_exp)
+        self.log.info(result)
+
         result = self._is_expected_index_count(bucket_name=self.default_bucket_name, idx_name=self.exp_index,
-                                               stat_name=self.index_stat, expected_stat_value=result_count)
+                                               stat_name=self.index_stat, max_try = 50, expected_stat_value=result_count)
         self.assertTrue(result, "Indexer not able to index all the items")
         self.sleep(expiration_time + 10, "Allowing time to all the docs to get expired")
         select_query = "Select * FROM {0}".format(query_default_bucket)
@@ -445,7 +448,7 @@ class QueryExpirationTests(QueryTests):
         kv_stat_result = self._is_expected_kv_expired_stats(bucket, result_count * 2)
         self.assertTrue(kv_stat_result, "KV vb_active_expired stat is not matching with actual no. of expired docs")
         result = self._is_expected_index_count(bucket_name=self.default_bucket_name, idx_name=self.exp_index,
-                                               stat_name=self.index_stat, expected_stat_value=0)
+                                               stat_name=self.index_stat, max_try = 50, expected_stat_value=0)
         self.assertTrue(result, "Indexer has indexes for expired docs")
 
     def test_upsert_with_valid_invalid_ttl(self):
@@ -847,7 +850,7 @@ class QueryExpirationTests(QueryTests):
         """
         @summary: Testing delete query with docs for which expiration is set.
         """
-        expiration_time = 1 * 60
+        expiration_time = 1 * 90
         limit_count = 10
 
         # Loading travel-sample bucket
@@ -882,21 +885,26 @@ class QueryExpirationTests(QueryTests):
         delete_query_with_limit = 'DELETE FROM {0} as d LIMIT {1}'.format(query_sample_bucket, limit_count)
         self.run_cbq_query(delete_query_with_limit)
         count_query = "SELECT COUNT(*) FROM {}".format(query_sample_bucket)
-        results = self.run_cbq_query(count_query)['results']
+        count, max_retry = 0, 15
+        while count < max_retry:
+            results = self.run_cbq_query(count_query)['results']
+            if results[0]['$1'] == result_count - 10:
+                break
+            count += 1
         self.assertEqual(results[0]['$1'], result_count - 10, "DELETE failed to delete docs")
         result =self._is_expected_index_count(bucket_name=self.sample_bucket, idx_name=self.exp_index,
-                                              stat_name=self.index_stat, expected_stat_value=result_count - 10)
+                                              stat_name=self.index_stat, max_try=50, expected_stat_value=result_count - 10)
         self.assertTrue(result, "Indexer still has indexes for expired docs")
         result_count = result_count - 10
 
         update_expiry_query = "UPDATE {0} as b SET META(b).expiration = {1}" \
-                              " WHERE type = 'airline'".format(query_sample_bucket, expiration_time / 10)
+                              " WHERE type = 'airline'".format(query_sample_bucket, expiration_time // 10)
         self.run_cbq_query(update_expiry_query)
-        doc_updated_query = "SELECT COUNT(*) FROM {0} where META().expiration = {1}".format(query_sample_bucket,
-                                                                                            expiration_time / 10)
+        doc_updated_query = "SELECT COUNT(*) FROM {0} as b where META(b).expiration > 0 and "\
+                            "type = 'airline'".format(query_sample_bucket)
         num_of_doc_updated = self.run_cbq_query(doc_updated_query)['results'][0]['$1']
         delete_on_expiry_query = "DELETE FROM {0} as b WHERE META(b).expiration > 0 and" \
-                                 " META(b).expiration < {1}".format(query_sample_bucket, expiration_time / 10 + 1)
+                                 " type = 'airline'".format(query_sample_bucket)
         self.run_cbq_query(delete_on_expiry_query)
         result = self._is_expected_index_count(bucket_name=self.sample_bucket, idx_name=self.exp_index,
                                                stat_name=self.index_stat,
@@ -917,7 +925,7 @@ class QueryExpirationTests(QueryTests):
                                                                     """.format(query_sample_bucket)
         self.run_cbq_query(nested_delete_query)
         result = self._is_expected_index_count(bucket_name=self.sample_bucket, idx_name=self.exp_index,
-                                      stat_name=self.index_stat, expected_stat_value=result_count - 8)
+                                      stat_name=self.index_stat, max_try= 50, expected_stat_value=result_count - 8)
         self.assertTrue(result, "Indexer still has indexes for expired docs")
 
         # Waiting for all docs to expire
@@ -1005,7 +1013,7 @@ class QueryExpirationTests(QueryTests):
             if curr_stat_value == expected_stat_value:
                 self.log.info("Expected: {0}, Actual: {1}".format(expected_stat_value, curr_stat_value))
                 return True
-            self.sleep(sleep_time, "Waiting before rechecking if Index stat matches expected value")
+            self.sleep(sleep_time, f"Wait before rechecking if index[{idx_name}] stat[{stat_name}] current [{curr_stat_value}] matches expected [{expected_stat_value}]")
             count += 1
         self.log.info("Expected: {0}, Actual: {1}".format(expected_stat_value, curr_stat_value))
         return False
