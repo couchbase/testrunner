@@ -52,7 +52,7 @@ class RecoveryUseTransferTests(TransferBaseTest):
             bucket_params = self._create_bucket_params(server=self.server_recovery, size=self.bucket_size,
                                                               replicas=self.num_replicas)
             self.cluster.create_default_bucket(bucket_params)
-            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
+            self.buckets.append(Bucket(name="default", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
         self._create_sasl_buckets(self.server_recovery, self.sasl_buckets)
         self._create_standard_buckets(self.server_recovery, self.standard_buckets)
 
@@ -125,7 +125,7 @@ class RecoveryUseTransferTests(TransferBaseTest):
             bucket_params = self._create_bucket_params(server=self.server_origin, size=self.bucket_size,
                                                               replicas=self.num_replicas)
             self.cluster.create_default_bucket(bucket_params)
-            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
+            self.buckets.append(Bucket(name="default", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
         self._create_sasl_buckets(self.server_origin, self.sasl_buckets)
         self._create_standard_buckets(self.server_origin, self.standard_buckets)
 

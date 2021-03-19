@@ -48,8 +48,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
             buckets=self.buckets, query_definitions=self.query_definitions)
 
     def _create_bucket(self, bucketname):
-        self.rest.create_bucket(bucket=bucketname, ramQuotaMB=100, authType="sasl",
-                                saslPassword="password")
+        self.rest.create_bucket(bucket=bucketname, ramQuotaMB=100)
         ready = BucketOperationHelper.wait_for_memcached(self.master, bucketname)
         self.assertTrue(ready, msg="wait_for_memcached failed")
 

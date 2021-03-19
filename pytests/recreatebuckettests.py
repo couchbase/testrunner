@@ -150,9 +150,7 @@ class RecreateMembaseBuckets(unittest.TestCase):
             rest.create_bucket(bucket=name,
                                ramQuotaMB=200,
                                replicaNumber=replicaNumber,
-                               proxyPort=proxyPort,
-                               authType="sasl",
-                               saslPassword='password')
+                               proxyPort=proxyPort)
             msg = 'create_bucket succeeded but bucket {0} does not exist'.format(name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
             ready = BucketOperationHelper.wait_for_memcached(serverInfo, name)

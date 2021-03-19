@@ -96,8 +96,6 @@ class Lww(XDCRNewBaseTest):
 
     def _create_buckets(self, bucket='',
                         ramQuotaMB=1,
-                        authType='none',
-                        saslPassword='',
                         replicaNumber=1,
                         proxyPort=11211,
                         replica_index=1,
@@ -111,8 +109,7 @@ class Lww(XDCRNewBaseTest):
         if not skip_src:
             src_rest = RestConnection(self.c1_cluster.get_master_node())
             if src_lww:
-                src_rest.create_bucket(bucket=bucket, ramQuotaMB=ramQuotaMB, authType=authType,
-                                       saslPassword=saslPassword,
+                src_rest.create_bucket(bucket=bucket, ramQuotaMB=ramQuotaMB,
                                        replicaNumber=replicaNumber, proxyPort=proxyPort, bucketType=self.bucketType,
                                        replica_index=replica_index, flushEnabled=flushEnabled,
                                        evictionPolicy=self.evictionPolicy,
@@ -120,23 +117,21 @@ class Lww(XDCRNewBaseTest):
                 self.assertTrue(src_rest.is_lww_enabled(bucket), "LWW not enabled on source bucket")
                 self.log.info("LWW enabled on source bucket as expected")
             else:
-                src_rest.create_bucket(bucket=bucket, ramQuotaMB=ramQuotaMB, authType=authType,
-                                       saslPassword=saslPassword,
+                src_rest.create_bucket(bucket=bucket, ramQuotaMB=ramQuotaMB,
                                        replicaNumber=replicaNumber, proxyPort=proxyPort, bucketType=self.bucketType,
                                        replica_index=replica_index, flushEnabled=flushEnabled,
                                        evictionPolicy=self.evictionPolicy)
                 self.assertFalse(src_rest.is_lww_enabled(bucket), "LWW enabled on source bucket")
                 self.log.info("LWW not enabled on source bucket as expected")
-            self.c1_cluster.add_bucket(ramQuotaMB=ramQuotaMB, bucket=bucket, authType=authType,
-                                       saslPassword=saslPassword, replicaNumber=replicaNumber,
+            self.c1_cluster.add_bucket(ramQuotaMB=ramQuotaMB, bucket=bucket,
+                                       replicaNumber=replicaNumber,
                                        proxyPort=proxyPort, bucketType=self.bucketType,
                                        evictionPolicy=self.evictionPolicy)
             self._create_collections(bucket, self.c1_cluster.get_master_node())
         if not skip_dst:
             dst_rest = RestConnection(self.c2_cluster.get_master_node())
             if dst_lww:
-                dst_rest.create_bucket(bucket=bucket, ramQuotaMB=ramQuotaMB, authType=authType,
-                                       saslPassword=saslPassword,
+                dst_rest.create_bucket(bucket=bucket, ramQuotaMB=ramQuotaMB,
                                        replicaNumber=replicaNumber, proxyPort=proxyPort, bucketType=self.bucketType,
                                        replica_index=replica_index, flushEnabled=flushEnabled,
                                        evictionPolicy=self.evictionPolicy,
@@ -144,15 +139,14 @@ class Lww(XDCRNewBaseTest):
                 self.assertTrue(dst_rest.is_lww_enabled(bucket), "LWW not enabled on dest bucket")
                 self.log.info("LWW enabled on dest bucket as expected")
             else:
-                dst_rest.create_bucket(bucket=bucket, ramQuotaMB=ramQuotaMB, authType=authType,
-                                       saslPassword=saslPassword,
+                dst_rest.create_bucket(bucket=bucket, ramQuotaMB=ramQuotaMB,
                                        replicaNumber=replicaNumber, proxyPort=proxyPort, bucketType=self.bucketType,
                                        replica_index=replica_index, flushEnabled=flushEnabled,
                                        evictionPolicy=self.evictionPolicy)
                 self.assertFalse(dst_rest.is_lww_enabled(bucket), "LWW enabled on dest bucket")
                 self.log.info("LWW not enabled on dest bucket as expected")
-            self.c2_cluster.add_bucket(ramQuotaMB=ramQuotaMB, bucket=bucket, authType=authType,
-                                       saslPassword=saslPassword, replicaNumber=replicaNumber,
+            self.c2_cluster.add_bucket(ramQuotaMB=ramQuotaMB, bucket=bucket,
+                                       replicaNumber=replicaNumber,
                                        proxyPort=proxyPort, bucketType=self.bucketType,
                                        evictionPolicy=self.evictionPolicy)
             self._create_collections(bucket, self.c2_cluster.get_master_node())
@@ -262,7 +256,7 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_replication_with_lww_sasl(self):
-        self._create_buckets(bucket='sasl_bucket', ramQuotaMB=100, authType='sasl', saslPassword='password')
+        self._create_buckets(bucket='sasl_bucket', ramQuotaMB=100)
         self.setup_xdcr()
         self.merge_all_buckets()
         self.c1_cluster.pause_all_replications_by_id()
@@ -1203,8 +1197,8 @@ class Lww(XDCRNewBaseTest):
 
     def test_lww_with_mixed_buckets(self):
         self._create_buckets(bucket='default', ramQuotaMB=100)
-        self._create_buckets(bucket='sasl_bucket_1', ramQuotaMB=100, authType='sasl', saslPassword='password')
-        self._create_buckets(bucket='sasl_bucket_2', ramQuotaMB=100, authType='sasl', saslPassword='password')
+        self._create_buckets(bucket='sasl_bucket_1', ramQuotaMB=100)
+        self._create_buckets(bucket='sasl_bucket_2', ramQuotaMB=100)
         self._create_buckets(bucket='standard_bucket_1', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
         self._create_buckets(bucket='standard_bucket_2', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1)
         self.sleep(10)
@@ -1221,11 +1215,11 @@ class Lww(XDCRNewBaseTest):
         c3_conn = RestConnection(self.c3_cluster.get_master_node())
 
         self._create_buckets(bucket='default', ramQuotaMB=100)
-        c3_conn.create_bucket(bucket='default', ramQuotaMB=100, authType='none', saslPassword='', replicaNumber=1,
+        c3_conn.create_bucket(bucket='default', ramQuotaMB=100, replicaNumber=1,
                               proxyPort=11211, replica_index=1, threadsNumber=3,
                               flushEnabled=1, lww=True)
-        self.c3_cluster.add_bucket(ramQuotaMB=100, bucket='default', authType='none',
-                                   saslPassword='', replicaNumber=1, proxyPort=11211,
+        self.c3_cluster.add_bucket(ramQuotaMB=100, bucket='default',
+                                   replicaNumber=1, proxyPort=11211,
                                    )
         self.assertTrue(c3_conn.is_lww_enabled(), "LWW not enabled on c3 bucket")
         self.log.info("LWW enabled on c3 bucket as expected")
@@ -1401,11 +1395,11 @@ class Lww(XDCRNewBaseTest):
         c3_conn = RestConnection(self.c3_cluster.get_master_node())
 
         self._create_buckets(bucket='default', ramQuotaMB=100)
-        c3_conn.create_bucket(bucket='default', ramQuotaMB=100, authType='none', saslPassword='', replicaNumber=1,
+        c3_conn.create_bucket(bucket='default', ramQuotaMB=100, replicaNumber=1,
                               proxyPort=11211, replica_index=1, threadsNumber=3,
                               flushEnabled=1, lww=True)
-        self.c3_cluster.add_bucket(ramQuotaMB=100, bucket='default', authType='none',
-                                   saslPassword='', replicaNumber=1, proxyPort=11211)
+        self.c3_cluster.add_bucket(ramQuotaMB=100, bucket='default',
+                                   replicaNumber=1, proxyPort=11211)
         self.assertTrue(c3_conn.is_lww_enabled(), "LWW not enabled on C3 bucket")
         self.log.info("LWW enabled on C3 bucket as expected")
         self._create_collections("default", self.c3_cluster.get_master_node())
@@ -1454,11 +1448,11 @@ class Lww(XDCRNewBaseTest):
         c3_conn = RestConnection(self.c3_cluster.get_master_node())
 
         self._create_buckets(bucket='default', ramQuotaMB=100, src_lww=True, dst_lww=False)
-        c3_conn.create_bucket(bucket='default', ramQuotaMB=100, authType='none', saslPassword='', replicaNumber=1,
+        c3_conn.create_bucket(bucket='default', ramQuotaMB=100, replicaNumber=1,
                               proxyPort=11211, replica_index=1, threadsNumber=3,
                               flushEnabled=1, lww=True)
-        self.c3_cluster.add_bucket(ramQuotaMB=100, bucket='default', authType='none',
-                                   saslPassword='', replicaNumber=1, proxyPort=11211)
+        self.c3_cluster.add_bucket(ramQuotaMB=100, bucket='default',
+                                   replicaNumber=1, proxyPort=11211)
         self.assertTrue(c3_conn.is_lww_enabled(), "LWW not enabled on C3 bucket")
         self.log.info("LWW enabled on C3 bucket as expected")
         try:
@@ -1474,11 +1468,11 @@ class Lww(XDCRNewBaseTest):
         c3_conn = RestConnection(self.c3_cluster.get_master_node())
 
         self._create_buckets(bucket='default', ramQuotaMB=100, src_lww=True, dst_lww=True)
-        c3_conn.create_bucket(bucket='default', ramQuotaMB=100, authType='none', saslPassword='', replicaNumber=1,
+        c3_conn.create_bucket(bucket='default', ramQuotaMB=100, replicaNumber=1,
                               proxyPort=11211, replica_index=1, threadsNumber=3,
                               flushEnabled=1, lww=True)
-        self.c3_cluster.add_bucket(ramQuotaMB=100, bucket='default', authType='none',
-                                   saslPassword='', replicaNumber=1, proxyPort=11211)
+        self.c3_cluster.add_bucket(ramQuotaMB=100, bucket='default',
+                                   replicaNumber=1, proxyPort=11211)
         self.assertTrue(c3_conn.is_lww_enabled(), "LWW not enabled on C3 bucket")
         self.log.info("LWW enabled on C3 bucket as expected")
         self._create_collections("default", self.c3_cluster.get_master_node())
@@ -1821,7 +1815,7 @@ class Lww(XDCRNewBaseTest):
         conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
         command = "curl -X POST -u Administrator:password " + self.c1_cluster.get_master_node().ip + \
                   ":8091/pools/default/buckets/default -d name=default -d conflictResolutionType=seqno " + \
-                  "-d authType=none -d proxyPort=11212 -d ramQuotaMB=100"
+                  "-d proxyPort=11212 -d ramQuotaMB=100"
         output, error = conn.execute_command(command)
         conn.log_command_output(output, error)
         self.assertTrue("Conflict resolution type not allowed in update bucket" in str(output),

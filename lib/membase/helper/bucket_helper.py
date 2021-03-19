@@ -67,8 +67,6 @@ class BucketOperationHelper:
                     rest.create_bucket(bucket=name,
                                        ramQuotaMB=bucket_ram,
                                        replicaNumber=replica,
-                                       authType="sasl",
-                                       saslPassword=saslPassword,
                                        proxyPort=port,
                                        bucketType=bucketType,
                                        evictionPolicy=evictionPolicy,
@@ -112,17 +110,10 @@ class BucketOperationHelper:
             info = rest.get_nodes_self()
             bucket_ram = info.memoryQuota * 2 // 3
 
-        if password == None:
-            authType = "sasl"
-        else:
-            authType = "none"
-
         rest.create_bucket(bucket=name,
                            ramQuotaMB=bucket_ram,
                            replicaNumber=replica,
-                           proxyPort=port,
-                           authType=authType,
-                           saslPassword=password)
+                           proxyPort=port)
         msg = 'create_bucket succeeded but bucket "{0}" does not exist'
         bucket_created = BucketOperationHelper.wait_for_bucket_creation(name, rest)
         if not bucket_created:

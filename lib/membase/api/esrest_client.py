@@ -66,8 +66,6 @@ class EsRestConnection(RestConnection):
             bucket.name = index
             bucket.type = "es"
             bucket.port = self.port
-            bucket.authType = None
-            bucket.saslPassword = self.password
             bucket.nodes = list()
 
             #vBucketServerMap

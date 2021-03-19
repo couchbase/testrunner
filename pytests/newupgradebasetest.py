@@ -764,7 +764,7 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
             bucket_tasks.append(
                 self.cluster.async_create_standard_bucket(name=name, port=port,
                                                           bucket_params=bucket_params))
-            bucket = Bucket(name=name, authType=None, saslPassword=None,
+            bucket = Bucket(name=name,
                             num_replicas=self.num_replicas,
                             bucket_size=self.bucket_size,
                             port=port, master_id=server_id,

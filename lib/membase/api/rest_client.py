@@ -2734,8 +2734,6 @@ class RestConnection(object):
     # figure out the proxy port
     def create_bucket(self, bucket='',
                       ramQuotaMB=1,
-                      authType='none',
-                      saslPassword='',
                       replicaNumber=1,
                       proxyPort=11211,
                       bucketType='membase',
@@ -2754,54 +2752,18 @@ class RestConnection(object):
 
 
 
-        # this only works for default bucket ?
-        if bucket == 'default':
-            init_params = {'name': bucket,
-                           'authType': 'sasl',
-                           'saslPassword': saslPassword,
-                           'ramQuotaMB': ramQuotaMB,
-                           'replicaNumber': replicaNumber,
-                           #'proxyPort': proxyPort,
-                           'bucketType': bucketType,
-                           'replicaIndex': replica_index,
-                           'threadsNumber': threadsNumber,
-                           'flushEnabled': flushEnabled,
-                           'evictionPolicy': evictionPolicy}
+        init_params = {'name': bucket,
+                       'ramQuotaMB': ramQuotaMB,
+                       'replicaNumber': replicaNumber,
+                       #'proxyPort': proxyPort,
+                       'bucketType': bucketType,
+                       'replicaIndex': replica_index,
+                       'threadsNumber': threadsNumber,
+                       'flushEnabled': flushEnabled,
+                       'evictionPolicy': evictionPolicy}
 
-        elif authType == 'none':
-            init_params = {'name': bucket,
-                           'ramQuotaMB': ramQuotaMB,
-                           'authType': authType,
-                           'replicaNumber': replicaNumber,
-                           #'proxyPort': proxyPort,
-                           'bucketType': bucketType,
-                           'replicaIndex': replica_index,
-                           'threadsNumber': threadsNumber,
-                           'flushEnabled': flushEnabled,
-                           'evictionPolicy': evictionPolicy}
-        elif authType == 'sasl':
-            init_params = {'name': bucket,
-                           'ramQuotaMB': ramQuotaMB,
-                           'authType': authType,
-                           'saslPassword': saslPassword,
-                           'replicaNumber': replicaNumber,
-                           #'proxyPort': self.get_nodes_self().moxi,
-                           'bucketType': bucketType,
-                           'replicaIndex': replica_index,
-                           'threadsNumber': threadsNumber,
-                           'flushEnabled': flushEnabled,
-                           'evictionPolicy': evictionPolicy}
         if bucketType == "memcached":
             log.info("Create memcached bucket")
-            init_params = {'name': bucket,
-                           'ramQuotaMB': ramQuotaMB,
-                           'authType': authType,
-                           'saslPassword': saslPassword,
-                           'bucketType': bucketType,
-                           'replicaIndex': replica_index,
-                           'threadsNumber': threadsNumber,
-                           'flushEnabled': flushEnabled,
-                           'evictionPolicy': evictionPolicy}
 
         if lww:
             init_params['conflictResolutionType'] = 'lww'
@@ -2855,8 +2817,6 @@ class RestConnection(object):
 
     def change_bucket_props(self, bucket,
                       ramQuotaMB=None,
-                      authType=None,
-                      saslPassword=None,
                       replicaNumber=None,
                       proxyPort=None,
                       replicaIndex=None,
@@ -2872,11 +2832,6 @@ class RestConnection(object):
         existing_bucket = self.get_bucket_json(bucket)
         if ramQuotaMB:
             params_dict["ramQuotaMB"] = ramQuotaMB
-        if authType:
-            params_dict["authType"] = authType
-        if saslPassword:
-            params_dict["authType"] = "sasl"
-            params_dict["saslPassword"] = saslPassword
         if replicaNumber:
             params_dict["replicaNumber"] = replicaNumber
         #if proxyPort:
@@ -3616,9 +3571,6 @@ class RestConnection(object):
             bucket_info = self.get_bucket_json(bucket)
             quota = self.get_bucket_json(bucket)["quota"]["ram"] // (1048576 * num_nodes)
             params["ramQuotaMB"] = quota
-            if bucket_info["authType"] == "sasl" and bucket_info["name"] != "default":
-                params["authType"] = self.get_bucket_json(bucket)["authType"]
-                params["saslPassword"] = self.get_bucket_json(bucket)["saslPassword"]
 
         params["parallelDBAndViewCompaction"] = parallelDBAndVC
         # Need to verify None because the value could be = 0
@@ -5800,7 +5752,7 @@ class NodeDiskStorage(object):
 
 
 class Bucket(object):
-    def __init__(self, bucket_size='', name="", authType="sasl", saslPassword="", num_replicas=0, port=11211, master_id=None,
+    def __init__(self, bucket_size='', name="", num_replicas=0, port=11211, master_id=None,
                  type='', eviction_policy="valueOnly", bucket_priority=None, uuid="", lww=False, maxttl=None, bucket_storage=None):
         self.name = name
         self.port = port
@@ -5811,11 +5763,8 @@ class Bucket(object):
         self.vbuckets = []
         self.forward_map = []
         self.numReplicas = num_replicas
-        self.saslPassword = saslPassword
-        self.authType = ""
         self.bucket_size = bucket_size
         self.kvs = {1:KVStore()}
-        self.authType = authType
         self.master_id = master_id
         self.eviction_policy = eviction_policy
         self.bucket_priority = bucket_priority
@@ -6092,8 +6041,6 @@ class RestParser(object):
         bucket.type = parsed['bucketType']
         if 'proxyPort' in parsed:
             bucket.port = parsed['proxyPort']
-        bucket.authType = parsed["authType"]
-        bucket.saslPassword = parsed["saslPassword"]
         bucket.nodes = list()
         if 'vBucketServerMap' in parsed:
             vBucketServerMap = parsed['vBucketServerMap']

@@ -1972,7 +1972,7 @@ class ViewQueryTests(BaseTestCase):
             task = None
             bucket = data_set.bucket
             if not isinstance(bucket, Bucket):
-                bucket = Bucket(name=bucket, authType="sasl", saslPassword="")
+                bucket = Bucket(name=bucket)
 
             # initialize the template for document generator
             items = 0

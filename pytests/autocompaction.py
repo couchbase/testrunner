@@ -97,8 +97,8 @@ class AutoCompactionTests(BaseTestCase):
             items = (int(available_ram * 1000) // 2) // item_size
             print("ITEMS =============%s" % items)
 
-            rest.create_bucket(bucket=bucket_name, ramQuotaMB=int(available_ram), authType='sasl',
-                               saslPassword='password', replicaNumber=1, proxyPort=11211)
+            rest.create_bucket(bucket=bucket_name, ramQuotaMB=int(available_ram),
+                               replicaNumber=1, proxyPort=11211)
             BucketOperationHelper.wait_for_memcached(serverInfo, bucket_name)
             BucketOperationHelper.wait_for_vbuckets_ready_state(serverInfo, bucket_name)
 

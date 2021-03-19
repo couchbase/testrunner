@@ -773,8 +773,6 @@ class BaseTestCase(unittest.TestCase):
                 maxttl=self.maxttl, compression_mode=self.compression_mode)
             self.cluster.create_default_bucket(default_params)
             self.buckets.append(Bucket(name=self.default_bucket_name,
-                                       authType="sasl",
-                                       saslPassword="",
                                        num_replicas=self.num_replicas,
                                        bucket_size=self.bucket_size,
                                        eviction_policy=self.eviction_policy,
@@ -871,8 +869,7 @@ class BaseTestCase(unittest.TestCase):
 
             bucket_tasks.append(self.cluster.async_create_sasl_bucket(
                 name=name, password=password, bucket_params=bucket_params))
-            self.buckets.append(Bucket(name=name, authType="sasl",
-                                       saslPassword=password,
+            self.buckets.append(Bucket(name=name,
                                        num_replicas=self.num_replicas,
                                        bucket_size=self.bucket_size,
                                        master_id=server_id,
@@ -914,7 +911,7 @@ class BaseTestCase(unittest.TestCase):
             bucket_params['bucket_storage'] = self.bucket_storage
             bucket_tasks.append(self.cluster.async_create_standard_bucket(name=name, port=port,
                                                                           bucket_params=bucket_params))
-            self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
+            self.buckets.append(Bucket(name=name,
                                        num_replicas=self.num_replicas,
                                        bucket_size=self.bucket_size,
                                        port=port, master_id=server_id,
@@ -955,7 +952,7 @@ class BaseTestCase(unittest.TestCase):
             bucket_tasks.append(
                 self.cluster.async_create_standard_bucket(name=bucket_name, port=STANDARD_BUCKET_PORT + i,
                                                           bucket_params=standard_params))
-            self.buckets.append(Bucket(name=bucket_name, authType=None, saslPassword=None,
+            self.buckets.append(Bucket(name=bucket_name,
                                        num_replicas=self.num_replicas,
                                        bucket_size=bucket_size,
                                        port=STANDARD_BUCKET_PORT + i, master_id=server_id,
@@ -993,7 +990,7 @@ class BaseTestCase(unittest.TestCase):
 
             bucket_tasks.append(self.cluster.async_create_memcached_bucket(name=name, port=port,
                                                                            bucket_params=bucket_params))
-            self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
+            self.buckets.append(Bucket(name=name,
                                        num_replicas=self.num_replicas,
                                        bucket_size=bucket_size, port=port,
                                        master_id=server_id, type='memcached'));

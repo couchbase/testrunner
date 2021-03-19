@@ -220,7 +220,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                    replicas=self.num_replicas)
         self.cluster.create_default_bucket(bucket_params)
-        self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+        self.buckets.append(Bucket(name="default",
                                    num_replicas=self.num_replicas, bucket_size=self.bucket_size))
         self._create_sasl_buckets(self.master, (bucket_num - 1) // 2)
         self._create_standard_buckets(self.master, bucket_num - 1 - (bucket_num - 1) // 2)
@@ -281,7 +281,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                    replicas=self.num_replicas)
         self.cluster.create_default_bucket(bucket_params)
-        self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+        self.buckets.append(Bucket(name="default",
                                    num_replicas=self.num_replicas, bucket_size=self.bucket_size))
         self._create_sasl_buckets(self.master, (bucket_num - 1) // 2)
         self._create_standard_buckets(self.master, bucket_num - 1 - (bucket_num - 1) // 2)

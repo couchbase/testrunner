@@ -191,72 +191,8 @@ class AdvancedQueryTests(QueryTests):
 
     # difference combinations of username/password and creds
     def check_onesaslbucket_auth(self):
-        for server in self.servers:
-            shell = RemoteMachineShellConnection(server)
-            for bucket in self.buckets:
-                try:
-                    if (bucket.saslPassword != ''):
-                        #sasl
-                        o = shell.execute_commands_inside('%s/cbq -c %s:%s -q' % (self.path, bucket.name, bucket.saslPassword), 'CREATE PRIMARY INDEX ON %s USING GSI' %bucket.name, '', '', '', '', '')
-                        self.assertTrue("requestID" in o)
-                        o = shell.execute_commands_inside('%s/cbq -c %s:%s -q' % (self.path, bucket.name, bucket.saslPassword), 'select *,join_day from %s limit 10'%bucket.name, '', '', '', '', '')
-                        if self.analytics:
-                            self.query = 'select join_day from %s limit 10'%bucket.name
-                            o = self.run_cbq_query()
-                        self.assertTrue("requestID" in o)
-                        o = shell.execute_commands_inside('%s/cbq -c %s:%s -q' % (self.path, bucket.name, 'wrong'), 'select * from %s limit 10'%bucket.name, '', '', '', '', '')
-                        self.assertTrue("AuthorizationFailed"  in o)
-
-                        o = shell.execute_commands_inside('%s/cbq -c %s:%s -q' % (self.path, '', 'wrong'), 'select * from %s limit 10'%bucket.name, '', '', '', '', '')
-                        self.assertEqual('FAIL', o[7:])
-                        o = shell.execute_commands_inside('%s/cbq -c %s:%s -q' % (self.path, 'wrong', bucket.saslPassword), 'select * from %s limit 10'%bucket.name, '', '', '', '', '')
-                        self.assertTrue("AuthorizationFailed"  in o)
-
-                        queries = ['\set -creds user:pass;', 'select *,join_day from bucketname limit 10;']
-                        o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path), '', queries, bucket.name, bucket.saslPassword, bucket.name, '' )
-                        self.assertTrue("requestID" in o)
-                        queries = ['\set -creds user:pass;', 'select * from bucketname union all select * from default limit 10;']
-                        o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path), '', queries, 'Administrator', 'password', bucket.name, '' )
-                        self.assertTrue("requestID" in o)
-                        queries = ['\set -creds user:pass;', 'SELECT buck.email FROM  bucketname buck LEFT JOIN default on keys "query-testemployee10153.1877827-0";']
-                        o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path), '', queries, 'Administrator', 'password', bucket.name, '' )
-                        self.assertTrue("requestID" in o)
-                        queries = ['\set -creds user:pass;', 'SELECT buck.email FROM  bucketname buck LEFT JOIN default on keys "query-testemployee10153.1877827-0";']
-                        o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path), '', queries, bucket.name, bucket.saslPassword, bucket.name, '' )
-                        self.assertTrue("requestID" in o)
-
-                        queries = ['select count(*) from bucketname  union all select count(*) from default;']
-                        o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path), '', queries, '', bucket.saslPassword, bucket.name, ''  )
-                        self.assertTrue("AuthorizationFailed"  in o)
-
-                        queries = ['\set -creds user:pass;', 'select *,email,join_day from bucketname;']
-                        o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path), '', queries, 'Administrator', 'password', bucket.name, '' )
-                        self.assertTrue("requestID" in o)
-                        queries = ['\set -creds user:pass;', 'create primary index on default;', 'select email,join_day from bucketname union all select email,join_day from default;']
-                        o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path), '', queries, bucket.name, bucket.saslPassword, bucket.name, '' )
-                        self.assertTrue("requestID" in o)
-
-                        o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path), '', queries, 'wrong', 'wrong', bucket.name, '' )
-                        self.assertTrue("AuthorizationFailed"  in o)
-                        o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path), '', queries, 'wrong', bucket.saslPassword, bucket.name, '' )
-                        self.assertTrue("AuthorizationFailed"  in o)
-                        o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path), '', queries, bucket.name, 'wrong', bucket.name, '' )
-                        self.assertTrue("AuthorizationFailed"  in o)
-                        o = shell.execute_commands_inside('%s/cbq -q -u=%s -p=%s' % (self.path, 'Administrator', 'password'), 'select * from %s limit 10;' %bucket.name, '', '', '', '', '' )
-                        self.assertTrue("requestID" in o)
-                        o = shell.execute_commands_inside('%s/cbq -q -u=%s -p=%s' % (self.path, bucket.name, bucket.saslPassword), 'select * from %s limit 10;' %bucket.name, '', '', '', '', '' )
-                        self.assertTrue("requestID" in o)
-                        #nonsasl
-                        o = shell.execute_commands_inside('%s/cbq -q -u %s -p %s' % (self.path, 'Administrator', 'password'), 'select * from default limit 10;', '', '', '', '', '' )
-                        self.assertTrue("requestID" in o)
-                        o = shell.execute_commands_inside('%s/cbq -q -u %s -p %s' % (self.path, bucket.name, bucket.saslPassword), 'select * from default limit 10;', '', '', '', '', '' )
-                        self.assertTrue("requestID" in o)
-                        o = shell.execute_commands_inside('%s/cbq -q ' % (self.path), 'select * from default limit 10;', '', '', '', '', '' )
-                        self.assertTrue("requestID" in o)
-                        break;
-
-                finally:
-                    shell.disconnect()
+        # No longer valid test as sasl password is no longer used
+        return
 
 
     def check_multiple_saslbuckets_auth(self):

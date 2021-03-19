@@ -761,35 +761,6 @@ class RebalanceInTests(RebalanceBaseTest):
         self.verify_unacked_bytes_all_buckets()
 
     '''
-    test rebalances nodes_in nodes ,
-    changes bucket passwords and then rebalances nodes_in_second nodes
-    '''
-    def rebalance_in_with_bucket_password_change(self):
-        if self.sasl_buckets == 0:
-            self.fail("no sasl buckets are specified!")
-        new_pass = self.input.param("new_pass", "new_pass")
-        servs_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
-        nodes_in_second = self.input.param("nodes_in_second", 1)
-        servs_in_second = self.servers[self.nodes_init + self.nodes_in:
-                                       self.nodes_init + self.nodes_in + nodes_in_second]
-        servs_init = self.servers[:self.nodes_init]
-        servs_result = self.servers[:self.nodes_init + self.nodes_in]
-
-        rebalance = self.cluster.async_rebalance(
-            servs_init, servs_in, [],
-            sleep_before_rebalance=self.sleep_before_rebalance)
-        rebalance.result()
-        rest = RestConnection(self.master)
-        bucket_to_change = [bucket for bucket in self.buckets
-                            if bucket.authType == 'sasl' and bucket.name != 'default'][0]
-        rest.change_bucket_props(bucket_to_change, saslPassword=new_pass)
-        rebalance = self.cluster.async_rebalance(
-            servs_result, servs_in_second, [],
-            sleep_before_rebalance=self.sleep_before_rebalance)
-        rebalance.result()
-        self.verify_unacked_bytes_all_buckets()
-
-    '''
     test changes password of cluster during rebalance.
     http://www.couchbase.com/issues/browse/MB-6459
     '''

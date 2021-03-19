@@ -276,8 +276,6 @@ class rbacPermissionList():
         }
         try:
             params = {'name': 'default1',
-                        'authType': 'sasl',
-                        'saslPassword': '',
                         'ramQuotaMB': 100,
                         'replicaNumber': 1,
                         'proxyPort': 1121,

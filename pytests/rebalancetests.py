@@ -537,7 +537,7 @@ class IncrementalRebalanceWithMcsoda(unittest.TestCase):
         for bucket in buckets:
             loader = {}
             loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count, prefix='', bucket=bucket.name,
-                password=bucket.saslPassword, protocol='membase-binary')
+                    protocol='membase-binary')
             loader["mcsoda"].cfg["max-ops"] = 0
             loader["mcsoda"].cfg["max-ops-per-sec"] = self.max_ops_per_second // len(buckets)
             loader["mcsoda"].cfg["exit-after-creates"] = 0

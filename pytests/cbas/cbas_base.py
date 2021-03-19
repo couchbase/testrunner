@@ -109,7 +109,7 @@ class CBASBaseTest(BaseTestCase):
                                                          enable_replica_index=self.enable_replica_index,
                                                          eviction_policy=self.eviction_policy, lww=self.lww)
         self.cluster.create_default_bucket(default_params)
-        self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+        self.buckets.append(Bucket(name="default",
                                    num_replicas=self.num_replicas, bucket_size=self.bucket_size,
                                    eviction_policy=self.eviction_policy, lww=self.lww,
                                    type=self.bucket_type))

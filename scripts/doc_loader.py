@@ -209,13 +209,11 @@ class NonDocLoader(DocLoaderCouchbase):
         return generators
 
 
-def initialize_bucket(name, port=None, saslPassword=None):
-    if saslPassword:
-       return Bucket(name=name, authType="sasl", saslPassword=saslPassword)
-    elif port:
-       return Bucket(name=name, authType=None, saslPassword=None, port=port)
+def initialize_bucket(name, port=None):
+    if port:
+       return Bucket(name=name, port=port)
     else:
-       return Bucket(name=name, authType="sasl", saslPassword=None)
+       return Bucket(name=name)
 
 class DocLoaderDirectory(DocLoader):
     def __init__(self, server, directory, bucket_name):

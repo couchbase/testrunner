@@ -2357,7 +2357,7 @@ class CouchbaseCluster:
                                                                           bucket_params=sasl_params))
             self.__buckets.append(
                 Bucket(
-                    name=name, authType="sasl", saslPassword="password",
+                    name=name,
                     num_replicas=num_replicas, bucket_size=bucket_size,
                     eviction_policy=eviction_policy,
                     bucket_priority=bucket_priority,
@@ -2467,8 +2467,6 @@ class CouchbaseCluster:
             self.__buckets.append(
                 Bucket(
                     name=name,
-                    authType=None,
-                    saslPassword=None,
                     num_replicas=num_replicas,
                     bucket_size=bucket_size,
                     port=start_port + i,
@@ -2510,8 +2508,6 @@ class CouchbaseCluster:
         self.__buckets.append(
             Bucket(
                 name=BUCKET_NAME.DEFAULT,
-                authType="sasl",
-                saslPassword="",
                 num_replicas=num_replicas,
                 bucket_size=bucket_size,
                 eviction_policy=eviction_policy,
@@ -4709,9 +4705,6 @@ class FTSBaseTest(unittest.TestCase):
         """
         Creates a default index given bucket, index_name and plan_params
         """
-        bucket_password = ""
-        if bucket.authType == "sasl":
-            bucket_password = bucket.saslPassword
         if not plan_params:
             plan_params = self.construct_plan_params()
         index = self._cb_cluster.create_fts_index(

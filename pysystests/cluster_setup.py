@@ -156,9 +156,7 @@ class SETUP(initialize):
             rest.create_bucket(bucket=self.default_bucket_name,
                                ramQuotaMB=bucket_size,
                                replicaNumber=self._num_replicas,
-                               proxyPort=11211,
-                               authType="none",
-                               saslPassword=None)
+                               proxyPort=11211)
             self._buckets.append(self.default_bucket_name)
         if self._sasl_buckets > 0:
             if self._sasl_quota != 0:
@@ -189,9 +187,7 @@ class SETUP(initialize):
             rest.create_bucket(bucket=name,
                                ramQuotaMB=bucket_size,
                                replicaNumber=self._num_replicas,
-                               proxyPort=11211,
-                               authType="sasl",
-                               saslPassword=password)
+                               proxyPort=11211)
             self._buckets.append(name)
 
     def _create_standard_buckets(self, server, server_id, bucket_size):
@@ -204,9 +200,7 @@ class SETUP(initialize):
             rest.create_bucket(bucket=name,
                                ramQuotaMB=bucket_size,
                                replicaNumber=self._num_replicas,
-                               proxyPort=STANDARD_BUCKET_PORT + i,
-                               authType="none",
-                               saslPassword=None)
+                               proxyPort=STANDARD_BUCKET_PORT + i)
             self._buckets.append(name)
 
     def _get_bucket_size(self, master_node, nodes, mem_quota, num_buckets, ratio=3.0 / 2.0):

@@ -39,7 +39,7 @@ class MoxiTests(BaseTestCase):
                 ",cycle=200,default_bucket_name={3} http://{4}:{5}/pools/default/bucketsStreaming/{3} -d").\
                    format(cb_server.rest_username, cb_server.rest_password, self.moxi_port, bucket.name,
                           cb_server.ip, (cb_server.port or '8091'))
-        if bucket.name != 'default' and bucket.authType == "sasl":
+        if bucket.name != 'default':
             command = ("nohup /opt/moxi/bin/moxi -u root -Z usr={0},pwd={1},port_listen={2}," +
                 "concurrency=1024,wait_queue_timeout=200,connect_timeout=400,connect_max_errors=3," +
                 "connect_retry_interval=30000,auth_timeout=100,downstream_conn_max=16,downstream_timeout=5000" +

@@ -31,8 +31,6 @@ def create_buckets(server, count, prefix, quota):
             rest.create_bucket(bucket=name,
                                ramQuotaMB=quota,
                                replicaNumber=replica,
-                               saslPassword="password",
-                               authType="sasl",
                                proxyPort=info.memcached)
             print("created bucket {0}".format(name))
 

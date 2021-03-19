@@ -150,7 +150,7 @@ class XdcrMiscTests(XDCRReplicationBaseTest):
         #if not cluster run use ip addresses instead of localhost
         if len({server.ip for server in self._servers}) != 1:
             master_id = master_id.replace("127.0.0.1", self.src_master.ip).replace("localhost", self.src_master.ip)
-        self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+        self.buckets.append(Bucket(name="default",
                                        num_replicas=self._num_replicas, bucket_size=256, master_id=master_id,
                                        eviction_policy=self.eviction_policy))
 
@@ -160,7 +160,7 @@ class XdcrMiscTests(XDCRReplicationBaseTest):
         #if not cluster run use ip addresses instead of localhost
         if len({server.ip for server in self._servers}) != 1:
             master_id = master_id.replace("127.0.0.1", self.dest_master.ip).replace("localhost", self.dest_master.ip)
-        self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+        self.buckets.append(Bucket(name="default",
                                        num_replicas=self._num_replicas, bucket_size=256, master_id=master_id,
                                        eviction_policy=self.eviction_policy))
 

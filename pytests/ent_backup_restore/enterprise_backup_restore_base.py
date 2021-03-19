@@ -860,22 +860,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         rest_conn.create_bucket(bucket=bucket_name,
                                                 ramQuotaMB=int(bucket_size) - 1,
                                                 replicaNumber=replicas,
-                                                authType=bucket.authType if bucket.authType else 'none',
-                                                bucketType=self.bucket_type,
-                                                proxyPort=bucket.port,
-                                                evictionPolicy=self.eviction_policy,
-                                                lww=self.lww_new,
-                                                compressionMode=bucket_compression_mode)
-                    except Exception as e:
-                        if "unable to create bucket" in str(e):
-                            ready = RestHelper(RestConnection(self.backupset.restore_cluster_host)).is_ns_server_running()
-                            if not ready:
-                                self.fail("Couchbase Server failed to start")
-                            else:
-                                rest_conn.create_bucket(bucket=bucket_name,
-                                                    ramQuotaMB=int(bucket_size) - 1,
-                                                    replicaNumber=replicas,
-                                                    authType=bucket.authType if bucket.authType else 'none',
                                                     bucketType=self.bucket_type,
                                                     proxyPort=bucket.port,
                                                     evictionPolicy=self.eviction_policy,
@@ -894,7 +878,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     rest_conn.create_bucket(bucket=bucket_name,
                                             ramQuotaMB=int(bucket_size) - 1,
                                             replicaNumber=replicas,
-                                            authType=bucket.authType if bucket.authType else 'none',
                                             bucketType=self.bucket_type,
                                             proxyPort=bucket.port,
                                             evictionPolicy=self.eviction_policy,
@@ -3618,7 +3601,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             bucket_tasks.append(
                 self.cluster.async_create_standard_bucket(name=name, port=port,
                                                           bucket_params=bucket_params))
-            bucket = CBBucket(name=name, authType=None, saslPassword=None,
+            bucket = CBBucket(name=name,
                               num_replicas=self.num_replicas,
                               bucket_size=self.bucket_size,
                               port=port, master_id=server_id,
@@ -3669,7 +3652,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             bucket_tasks.append(
                 self.cluster.async_create_standard_bucket(name=name, port=port,
                                                           bucket_params=bucket_params))
-            bucket = Bucket(name=name, authType=None, saslPassword=None,
+            bucket = Bucket(name=name,
                             num_replicas=self.num_replicas,
                             bucket_size=self.bucket_size,
                             port=port, master_id=server_id,
@@ -3936,10 +3919,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                         self.eviction_policy = "noEviction"
                     rest_src.create_bucket(bucket=bucket_name,
                                            ramQuotaMB=bucket_size,
-                                           authType=bucket.authType if bucket.authType else 'none',
                                            bucketType=self.bucket_type,
                                            proxyPort=bucket.port,
-                                           saslPassword=bucket.saslPassword,
                                            evictionPolicy=self.eviction_policy,
                                            lww=self.lww_new)
                     bucket_ready = rest_helper.vbucket_map_ready(bucket_name)

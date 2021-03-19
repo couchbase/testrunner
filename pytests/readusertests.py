@@ -33,8 +33,7 @@ class ROUserTests(BaseTestCase):
 
         self.log.info("Try to edit bucket")
         try:
-            rest.create_bucket(bucket='bucket0', ramQuotaMB=100,
-                               authType='sasl', saslPassword='sasl')
+            rest.create_bucket(bucket='bucket0', ramQuotaMB=100)
         except BucketCreationException as e:
             self.log.info("Unable to create the bucket. Expected")
         else:
@@ -57,14 +56,11 @@ class ROUserTests(BaseTestCase):
         rest = RestConnection(self.master)
 
         self.log.info("Try to delete ddoc")
-        self.buckets[0].authType = ""
         try:
             rest.delete_view(self.buckets[0], ddoc.views[0])
         except Exception as ex:
             self.log.info("Unable to delete ddoc. Expected")
-            self.buckets[0].authType = "sasl"
         else:
-            self.buckets[0].authType = "sasl"
             self.fail("Able to delete ddoc")
 
     def negative_create_user_test(self):

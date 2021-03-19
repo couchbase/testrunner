@@ -549,7 +549,7 @@ class AlternateAddressTests(AltAddrBaseTest):
             server = self.master
         create_bucket_command = """ curl -g -u Administrator:password \
                       http://{0}:8091/pools/default/buckets \
-                      -d ramQuotaMB=256 -d authType=sasl -d replicaNumber=1 """.format(server.ip)
+                      -d ramQuotaMB=256 -d replicaNumber=1 """.format(server.ip)
         if num_buckets == 1:
             self.log.info("Create bucket {0} ".format("bucket_1"))
             create_bucket_command += " -d name=bucket_1 "
@@ -580,7 +580,7 @@ class AlternateAddressTests(AltAddrBaseTest):
             server = self.master
         create_bucket_command = """ curl -g -u Administrator:password \
                       http://{0}:8091/pools/default/buckets -d name=default \
-                      -d ramQuotaMB=256 -d authType=sasl -d replicaNumber=1 """.format(server.ip)
+                      -d ramQuotaMB=256 -d replicaNumber=1 """.format(server.ip)
         self.log.info("Create default bucket ")
         output = check_output("{0}".format(create_bucket_command), shell=True,
                                            stderr=STDOUT)

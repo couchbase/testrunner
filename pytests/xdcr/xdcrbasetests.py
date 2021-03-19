@@ -628,7 +628,7 @@ class XDCRBaseTest(unittest.TestCase):
             name = "sasl_bucket_" + str(i + 1)
             bucket_tasks.append(self.cluster.async_create_sasl_bucket(name=name, password='password', bucket_params=sasl_params))
 
-            self.buckets.append(Bucket(name=name, authType="sasl", saslPassword="password",
+            self.buckets.append(Bucket(name=name,
                                    num_replicas=self._num_replicas, bucket_size=bucket_size,
                                    master_id=server_id, eviction_policy=self.eviction_policy,
                                    bucket_storage=self.bucket_storage))
@@ -646,7 +646,7 @@ class XDCRBaseTest(unittest.TestCase):
             bucket_tasks.append(self.cluster.async_create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT+i,
                                                                           bucket_params=standard_params))
 
-            self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
+            self.buckets.append(Bucket(name=name,
                                     num_replicas=self._num_replicas, bucket_size=bucket_size,
                                     port=STANDARD_BUCKET_PORT + i, master_id=server_id, eviction_policy=self.eviction_policy,
                                     bucket_storage=self.bucket_storage))
@@ -676,7 +676,6 @@ class XDCRBaseTest(unittest.TestCase):
                                                        eviction_policy=self.eviction_policy)
             self.cluster.create_default_bucket(bucket_params)
             self.buckets.append(Bucket(name="default",
-                                       authType="sasl", saslPassword="",
                                        num_replicas=self._num_replicas,
                                        bucket_size=bucket_size,
                                        master_id=master_id,

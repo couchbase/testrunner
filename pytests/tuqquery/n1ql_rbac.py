@@ -17,15 +17,15 @@ class N1QLRBACTests(QueryTests):
     def suite_setUp(self):
         super(N1QLRBACTests, self).suite_setUp()
 
-        cmd = 'curl -X POST -u %s:%s -d name=bucket1 -d ramQuotaMB=100 -d authType=sasl -d password=pwd1' \
+        cmd = 'curl -X POST -u %s:%s -d name=bucket1 -d ramQuotaMB=100' \
               ' http://%s:%s/pools/default/buckets' % (
                   self.rest.username, self.rest.password, self.master.ip, self.port)
         o = self.shell.execute_command(cmd)
-        cmd = 'curl -X POST -u %s:%s -d name=bucket2 -d ramQuotaMB=100 -d authType=sasl -d password=pwd2' \
+        cmd = 'curl -X POST -u %s:%s -d name=bucket2 -d ramQuotaMB=100' \
               ' http://%s:%s/pools/default/buckets' % (
                   self.rest.username, self.rest.password, self.master.ip, self.port)
         o = self.shell.execute_command(cmd)
-        cmd = 'curl -X POST -u %s:%s -d name=bucket3 -d ramQuotaMB=100 -d authType=None' \
+        cmd = 'curl -X POST -u %s:%s -d name=bucket3 -d ramQuotaMB=100' \
               ' http://%s:%s/pools/default/buckets' % (
                   self.rest.username, self.rest.password, self.master.ip, self.port)
         o = self.shell.execute_command(cmd)

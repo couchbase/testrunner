@@ -167,7 +167,7 @@ class BucketConfig(BaseTestCase):
                 self.servers)
             info = self.rest.get_nodes_self()
             self.rest.create_bucket(bucket=self.bucket,
-                ramQuotaMB=512, authType='sasl', lww=self.lww)
+                ramQuotaMB=512, lww=self.lww)
             try:
                 ready = BucketOperationHelper.wait_for_memcached(self.master,
                     self.bucket)
@@ -182,7 +182,7 @@ class BucketConfig(BaseTestCase):
         info = self.rest.get_nodes_self()
 
         status, content = self.rest.change_bucket_props(bucket=self.bucket,
-            ramQuotaMB=512, authType='sasl', timeSynchronization='enabledWithOutDrift')
+            ramQuotaMB=512, timeSynchronization='enabledWithOutDrift')
         if re.search('TimeSyncronization not allowed in update bucket', content):
             self.log.info('[PASS]Expected modify bucket to disallow Time Synchronization.')
         else:

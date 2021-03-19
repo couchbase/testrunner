@@ -22,7 +22,7 @@ class StatsCrashRepro(BaseTestCase):
         bucket_params=self._create_bucket_params(server=self.servers[0], size=self.bucket_size, replicas=self.num_replicas)
         self.cluster.create_default_bucket(bucket_params)
 
-        self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+        self.buckets.append(Bucket(name="default",
              num_replicas=self.num_replicas, bucket_size=self.bucket_size))
         rest = RestConnection(self.servers[0])
         self.nodes_server = rest.get_nodes()

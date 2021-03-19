@@ -1403,7 +1403,7 @@ class CouchbaseCluster:
                                                       bucket_params=sasl_params))
             self.__buckets.append(
                 Bucket(
-                    name=name, authType="sasl", saslPassword="password",
+                    name=name,
                     num_replicas=num_replicas, bucket_size=bucket_size,
                     eviction_policy=eviction_policy,
                     bucket_priority=bucket_priority,
@@ -1446,8 +1446,6 @@ class CouchbaseCluster:
             self.__buckets.append(
                 Bucket(
                     name=name,
-                    authType=None,
-                    saslPassword=None,
                     num_replicas=num_replicas,
                     bucket_size=bucket_size,
                     port=STANDARD_BUCKET_PORT + i,
@@ -1488,8 +1486,6 @@ class CouchbaseCluster:
         self.__buckets.append(
             Bucket(
                 name=BUCKET_NAME.DEFAULT,
-                authType="sasl",
-                saslPassword="",
                 num_replicas=num_replicas,
                 bucket_size=bucket_size,
                 eviction_policy=eviction_policy,
@@ -1508,14 +1504,12 @@ class CouchbaseCluster:
 
     def add_bucket(self, bucket='',
                    ramQuotaMB=1,
-                   authType='none',
-                   saslPassword='',
                    replicaNumber=1,
                    proxyPort=11211,
                    bucketType='membase',
                    evictionPolicy='valueOnly'):
-        self.__buckets.append(Bucket(bucket_size=ramQuotaMB, name=bucket, authType=authType,
-                                     saslPassword=saslPassword, num_replicas=replicaNumber,
+        self.__buckets.append(Bucket(bucket_size=ramQuotaMB, name=bucket,
+                                     num_replicas=replicaNumber,
                                      port=proxyPort, type=bucketType, eviction_policy=evictionPolicy))
 
     def get_bucket_by_name(self, bucket_name):
@@ -2552,10 +2546,7 @@ class CouchbaseCluster:
             self.__log.info(
                 "Executing cbvdiff for bucket {0}".format(
                     bucket.name))
-            if bucket.saslPassword:
-                ssh_conn.execute_cbvdiff(bucket, node_str, bucket.saslPassword)
-            else:
-                ssh_conn.execute_cbvdiff(bucket, node_str)
+            ssh_conn.execute_cbvdiff(bucket, node_str)
         ssh_conn.disconnect()
 
     def verify_data(self, kv_store=1, timeout=None,

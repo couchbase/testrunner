@@ -315,8 +315,6 @@ class BucketCreateTask(Task):
         if self.size is None or int(self.size) <= 0:
             self.size = info.memoryQuota * 2 // 3
 
-        authType = 'none' if self.password is None else 'sasl'
-
         if int(info.port) in range(9091, 9991):
             try:
                 self.port = info.port
@@ -335,8 +333,6 @@ class BucketCreateTask(Task):
                                    ramQuotaMB=self.size,
                                    replicaNumber=self.replicas,
                                    proxyPort=self.port,
-                                   authType=authType,
-                                   saslPassword=self.password,
                                    bucketType=self.bucket_type,
                                    replica_index=self.enable_replica_index,
                                    flushEnabled=self.flush_enabled,
@@ -351,8 +347,6 @@ class BucketCreateTask(Task):
                                    ramQuotaMB=self.size,
                                    replicaNumber=self.replicas,
                                    proxyPort=self.port,
-                                   authType=authType,
-                                   saslPassword=self.password,
                                    bucketType=self.bucket_type,
                                    replica_index=self.enable_replica_index,
                                    flushEnabled=self.flush_enabled,

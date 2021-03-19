@@ -118,15 +118,11 @@ class BucketCreateTask(Task):
             info = rest.get_nodes_self()
             self.size = info.memoryQuota * 2 // 3
 
-        authType = 'none' if self.password is None else 'sasl'
-
         try:
             rest.create_bucket(bucket=self.bucket,
                 ramQuotaMB=self.size,
                 replicaNumber=self.replicas,
-                proxyPort=self.port,
-                authType=authType,
-                saslPassword=self.password)
+                proxyPort=self.port)
             self.state = "checking"
             task_manager.schedule(self)
         except BucketCreationException:

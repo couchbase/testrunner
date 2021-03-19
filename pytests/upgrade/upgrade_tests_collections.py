@@ -520,7 +520,7 @@ class UpgradeTestsCollections(NewUpgradeBaseTest):
                 self.servers)
             info = self.rest.get_nodes_self()
             self.rest.create_bucket(bucket=bucket,
-                ramQuotaMB=512, authType='sasl', timeSynchronization=self.time_synchronization)
+                ramQuotaMB=512, timeSynchronization=self.time_synchronization)
             try:
                 ready = BucketOperationHelper.wait_for_memcached(self.master,
                     bucket)
@@ -588,7 +588,7 @@ class UpgradeTestsCollections(NewUpgradeBaseTest):
             #Change Bucket Properties
             for bucket in self.buckets:
                 self.rest.change_bucket_props(bucket, ramQuotaMB=None,\
-                       authType=None, saslPassword=None, replicaNumber=0,\
+                        replicaNumber=0,\
                     proxyPort=None, replicaIndex=None, flushEnabled=False)
         except Exception as ex:
             self.log.info(ex)

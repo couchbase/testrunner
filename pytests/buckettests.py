@@ -58,7 +58,7 @@ class CreateBucketTests(BaseTestCase):
     def test_banned_bucket_name(self, password='password'):
         try:
             if self.bucket_type == 'sasl':
-                self.rest.create_bucket(self.bucket_name, authType='sasl', saslPassword=password, ramQuotaMB=200)
+                self.rest.create_bucket(self.bucket_name, ramQuotaMB=200)
             elif self.bucket_type == 'standard':
                 self.rest.create_bucket(self.bucket_name, ramQuotaMB=200, proxyPort=STANDARD_BUCKET_PORT + 1)
             elif self.bucket_type == 'memcached':
@@ -94,19 +94,19 @@ class CreateBucketTests(BaseTestCase):
                                                               replicas=self.num_replicas)
             if self.bucket_type == 'sasl':
                 self.cluster.create_sasl_bucket(name=self.bucket_name, password=password, bucket_params=shared_params)
-                self.buckets.append(Bucket(name=self.bucket_name, authType="sasl", saslPassword=password, num_replicas=self.num_replicas,
+                self.buckets.append(Bucket(name=self.bucket_name, num_replicas=self.num_replicas,
                                            bucket_size=self.bucket_size, master_id=self.server))
             elif self.bucket_type == 'standard':
                 self.cluster.create_standard_bucket(name=self.bucket_name, port=STANDARD_BUCKET_PORT+1,
                                                     bucket_params=shared_params)
-                self.buckets.append(Bucket(name=self.bucket_name, authType=None, saslPassword=None, num_replicas=self.num_replicas,
+                self.buckets.append(Bucket(name=self.bucket_name, num_replicas=self.num_replicas,
                                            bucket_size=self.bucket_size, port=STANDARD_BUCKET_PORT + 1, master_id=self.server))
             elif self.bucket_type == "memcached":
                 tasks.append(self.cluster.async_create_memcached_bucket(name=self.bucket_name,
                                                                         port=STANDARD_BUCKET_PORT+1,
                                                                         bucket_params=shared_params))
 
-                self.buckets.append(Bucket(name=self.bucket_name, authType=None, saslPassword=None,
+                self.buckets.append(Bucket(name=self.bucket_name,
                                            num_replicas=self.num_replicas, bucket_size=self.bucket_size,
                                            port=STANDARD_BUCKET_PORT + 1, master_id=self.server, type='memcached'))
                 for task in tasks:
@@ -384,7 +384,7 @@ class CreateBucketTests(BaseTestCase):
                                                    eviction_policy=eviction_policy)
         # just do sasl for now, pending decision on support of non-sasl buckets in 5.0
         self.cluster.create_sasl_bucket(name=self.bucket_name, password=self.sasl_password, bucket_params=shared_params)
-        self.buckets.append(Bucket(name=self.bucket_name, authType="sasl", saslPassword=self.sasl_password,
+        self.buckets.append(Bucket(name=self.bucket_name,
                                            num_replicas=self.num_replicas,
                                            bucket_size=self.bucket_size, master_id=self.server))
 

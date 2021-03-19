@@ -41,8 +41,6 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
         for bucket in self.buckets:
             self.rest.change_bucket_props(bucket,
                       ramQuotaMB=None,
-                      authType=None,
-                      saslPassword=None,
                       replicaNumber=0,
                       proxyPort=None,
                       replicaIndex=None,

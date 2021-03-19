@@ -102,8 +102,7 @@ class BackupRestoreTests(BaseTestCase):
             rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=info.moxi)
         else:
             proxyPort = info.moxi + 500
-            rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=proxyPort,
-                               authType="sasl", saslPassword="password")
+            rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=proxyPort)
 
         ready = BucketOperationHelper.wait_for_memcached(server, bucket)
         self.assertTrue(ready, "wait_for_memcached failed")
@@ -154,8 +153,7 @@ class BackupRestoreTests(BaseTestCase):
             rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=info.moxi)
         else:
             proxyPort = info.moxi + 500
-            rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=proxyPort,
-                               authType="sasl", saslPassword="password")
+            rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=proxyPort)
         BucketOperationHelper.wait_for_memcached(self.master, bucket)
 
         if bucket == "default":

@@ -293,7 +293,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRNewBaseTest):
             if "src" in upgrade_nodes:
                 src_conn = RestConnection(self.src_master)
                 src_conn.delete_bucket(bucket='default')
-                src_conn.create_bucket(bucket='lww', ramQuotaMB=100, authType='none', saslPassword='', replicaNumber=1,
+                src_conn.create_bucket(bucket='lww', ramQuotaMB=100, replicaNumber=1,
                                     proxyPort=STANDARD_BUCKET_PORT + 1, bucketType='membase', replica_index=1, threadsNumber=3,
                                     flushEnabled=1, lww=True)
                 self.assertTrue(src_conn.is_lww_enabled(bucket='lww'), "LWW not enabled on source bucket")
@@ -302,7 +302,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRNewBaseTest):
             if "dest" in upgrade_nodes:
                 dest_conn = RestConnection(self.dest_master)
                 dest_conn.delete_bucket(bucket='default')
-                dest_conn.create_bucket(bucket='lww', ramQuotaMB=100, authType='none', saslPassword='', replicaNumber=1,
+                dest_conn.create_bucket(bucket='lww', ramQuotaMB=100, replicaNumber=1,
                                     proxyPort=STANDARD_BUCKET_PORT + 1, bucketType='membase', replica_index=1, threadsNumber=3,
                                     flushEnabled=1, lww=True)
                 self.assertTrue(dest_conn.is_lww_enabled(bucket='lww'), "LWW not enabled on dest bucket")
@@ -505,10 +505,10 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRNewBaseTest):
             src_conn.delete_bucket(bucket='default')
             dest_conn.delete_bucket(bucket='default')
 
-            src_conn.create_bucket(bucket='lww', ramQuotaMB=100, authType='none', saslPassword='', replicaNumber=1,
+            src_conn.create_bucket(bucket='lww', ramQuotaMB=100, replicaNumber=1,
                                     proxyPort=STANDARD_BUCKET_PORT + 1, bucketType='membase', replica_index=1, threadsNumber=3,
                                     flushEnabled=1, lww=True)
-            dest_conn.create_bucket(bucket='lww', ramQuotaMB=100, authType='none', saslPassword='', replicaNumber=1,
+            dest_conn.create_bucket(bucket='lww', ramQuotaMB=100, replicaNumber=1,
                                     proxyPort=STANDARD_BUCKET_PORT + 1, bucketType='membase', replica_index=1, threadsNumber=3,
                                     flushEnabled=1, lww=True)
 
