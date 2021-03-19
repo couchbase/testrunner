@@ -208,11 +208,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             self._run_tasks([kv_ops, in_between_tasks])
             rebalance = self.cluster.async_rebalance(active_nodes, [], [node])
             rebalance.result()
-            if "index" in node_services_list:
-                self.disable_upgrade_to_plasma(self.nodes_in_list[i])
-                self._recreate_equivalent_indexes(self.nodes_in_list[i])
-                self.sleep(60)
-                self._verify_indexer_storage_mode(self.nodes_in_list[i])
+            self._verify_indexer_storage_mode(self.nodes_in_list[i])
             self._verify_bucket_count_with_index_count()
             self.multi_query_using_index()
             if self.toggle_disable_upgrade:
@@ -305,8 +301,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                             raise e
                 self.multi_query_using_index()
                 self._execute_prepare_statement(prepare_statements)
-            if self.toggle_disable_upgrade:
-                self.disable_plasma_upgrade = not self.disable_plasma_upgrade
+
 
     def test_online_upgrade_with_rebalance_failover(self):
         nodes_out_list = copy.deepcopy(self.nodes_out_list)
