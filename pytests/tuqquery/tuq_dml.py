@@ -3,7 +3,8 @@ import uuid
 import json
 from tuqquery.tuq import QueryTests
 from deepdiff import DeepDiff
-
+from remote.remote_util import RemoteMachineShellConnection
+from membase.api.exception import CBQError
 
 class DMLQueryTests(QueryTests):
     def setUp(self):
@@ -1397,3 +1398,69 @@ class DMLQueryTests(QueryTests):
                     self.run_cbq_query()
                 except:
                     pass
+
+    ###################################################################################################################
+    # BINARY data
+    ###################################################################################################################
+
+    def test_update_binary(self):
+        error_code = 12030
+        error_message = "UPDATE of binary document is not supported: k01"
+        shell = RemoteMachineShellConnection(self.master)
+        command = f"{self.path}/cbc create -u Administrator -U 'couchbase://localhost/default' -P password k01 -V '<img src=\"https://www.couchbase.com/webfiles/1616069826389/images/couchbase_logo_black.svg\"/>'"
+        shell.execute_command(command)
+        fail_update_binary_statements = [
+            'UPDATE default d USE KEYS "k01" SET d = d',
+            'UPDATE default d USE KEYS "k01" SET d.x = 1'
+            ]
+        for update_binary in fail_update_binary_statements:
+            try:
+                self.run_cbq_query(update_binary)
+                self.fail(f"Query did not fail as expected with error: {error_message}")
+            except CBQError as ex:
+                error = self.process_CBQE(ex)
+                self.assertEqual(error['code'], error_code)
+                self.assertEqual(error['msg'], error_message)
+        self.run_cbq_query('INSERT INTO default (KEY, VALUE) VALUES ("k02", {"x":0, "y":10})')
+        pass_update_binary_statements = [
+            'UPDATE default d SET d.x = 10 WHERE d.y = 10',
+            'UPDATE default d SET d.x = 10 WHERE IS_BINARY(d) = false'
+        ]
+        for update_binary in pass_update_binary_statements:
+            try:
+                self.run_cbq_query(update_binary)
+                result = self.run_cbq_query('SELECT RAW d.x FROM default d WHERE IS_BINARY(d) = false')
+                self.assertEqual(result['results'], [10])
+            except Exception as ex:
+                self.log.error(f"Update with binary failed: {ex}")
+                self.fail()
+
+    def test_insert_binary(self):
+        error_code = 12030
+        error_message = "INSERT of binary document is not supported: k02"
+        shell = RemoteMachineShellConnection(self.master)
+        command = f"{self.path}/cbc create -u Administrator -U 'couchbase://localhost/default' -P password k01 -V '<img src=\"https://www.couchbase.com/webfiles/1616069826389/images/couchbase_logo_black.svg\"/>'"
+        shell.execute_command(command)
+        insert_binary = 'INSERT INTO default (KEY "k02", VALUE d) SELECT d FROM default as d USE KEYS "k01"'
+        try:
+            self.run_cbq_query(insert_binary)
+            self.fail(f"Query did not fail as expected with error: {error_message}")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], error_code)
+            self.assertEqual(error['msg'], error_message)
+
+    def test_upsert_binary(self):
+        error_code = 12030
+        error_message = "UPSERT of binary document is not supported: k02"
+        shell = RemoteMachineShellConnection(self.master)
+        command = f"{self.path}/cbc create -u Administrator -U 'couchbase://localhost/default' -P password k01 -V '<img src=\"https://www.couchbase.com/webfiles/1616069826389/images/couchbase_logo_black.svg\"/>'"
+        shell.execute_command(command)
+        insert_binary = 'UPSERT INTO default (KEY "k02", VALUE d) SELECT d FROM default as d USE KEYS "k01"'
+        try:
+            self.run_cbq_query(insert_binary)
+            self.fail(f"Query did not fail as expected with error: {error_message}")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], error_code)
+            self.assertEqual(error['msg'], error_message)
