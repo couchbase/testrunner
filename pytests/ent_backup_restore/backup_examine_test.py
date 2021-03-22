@@ -1,6 +1,11 @@
 import copy
+import json
 from enum import (
     Enum
+)
+
+from remote.remote_util import (
+    RemoteMachineShellConnection
 )
 
 
@@ -135,3 +140,115 @@ class Backup:
     def get_collection_strings(self):
         """ Gets all collection strings """
         return (CollectionString(cs) for b in self.buckets.values() for cs in b.collections)
+
+
+class Examine:
+
+    def __init__(self, server):
+        self.remote_connection = RemoteMachineShellConnection(server)
+
+    def examine(self, examine_arguments):
+        """ Returns an ExamineResults given an ExamineArguments object """
+        if not examine_arguments.json:
+            raise ValueError("Currently the non-JSON data output from the examine sub-command is not supported for testing.")
+
+        output, error, exit_code = self.remote_connection.execute_command(examine_arguments.to_command(), get_exit_code=True)
+
+        if exit_code != 0 or not output:
+            return None, error
+
+        return ExamineResult.from_output(output[0])
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.remote_connection.disconnect()
+
+
+class ExamineMetadata:
+
+    def __init__(self, flags=None, expiry=None, locktime=None, cas=None, revseqno=None, datatype=None):
+        self.flags = flags
+        self.expiry = expiry
+        self.locktime = locktime
+        self.cas = cas
+        self.revseqno = revseqno
+        self.datatype = datatype
+
+
+class ExamineDocument:
+
+    def __init__(self, key=None, sequence_number=None, value=None, metadata=None, deleted=None):
+        self.key = key
+        self.sequence_number = sequence_number
+        self._value = value
+        self.metadata = metadata if metadata is None else ExamineMetadata(**metadata)
+        self.deleted = deleted
+
+    @property
+    def value(self):
+        if self.metadata.datatype == 0:
+            return bytes.fromhex(self._value).decode()
+        else:
+            return self._value
+
+    @value.setter
+    def value(self, value):
+        self._value = value
+
+
+class ExamineResult:
+    """ Represents a single entry in the examine sub-command's output """
+
+    def __init__(self, backup=None, event_type=None, event_description=None, cluster_uuid=None, bucket_uuid=None, scope_id=None, collection_id=None, document=None):
+        self.backup = backup
+        self.event_type = event_type
+        self.event_description = event_description
+        self.cluster_uuid = cluster_uuid
+        self.bucket_uuid = bucket_uuid
+        self.scope_id = scope_id
+        self.collection_id = collection_id
+        self.document = None if document is None else ExamineDocument(**document)
+
+    @staticmethod
+    def from_output(json_data):
+        """ Returns a list of ExamineResult objects given the json output from the examine sub-command """
+        return [ExamineResult( **entry) for entry in json.loads(json_data)]
+
+
+class ExamineArguments:
+
+    def __init__(self, backupset, collection_string, key, start=None, end=None, search_partial_backups=None, json=True, objstore_provider=None):
+        self.backupset = backupset
+        self.collection_string = collection_string
+        self.key = key
+        self.start = start
+        self.end = end
+        self.search_partial_backups = search_partial_backups
+        self.json = json
+        self.objstore_provider = objstore_provider
+
+    def to_command(self, path="/opt/couchbase/bin"):
+        # Required arguments
+        command = (
+            f"{path}/cbbackupmgr examine "
+            f"--archive {self.backupset.directory} "
+            f"--repo {self.backupset.name} "
+            f"--collection-string {self.collection_string} "
+            f"--key {self.key}"
+        )
+
+        # Optional arguments
+        command += (
+            f"{' --start ' + self.start if self.start else ''}"
+            f"{' --end ' + self.end if self.end else ''}"
+            f"{' --search-partial-backups ' if self.search_partial_backups else ''}"
+            f"{' --json ' if self.json else ''}"
+        )
+
+        # Cloud arguments
+        command += self.backupset.common_objstore_arguments(
+            self.objstore_provider)
+
+        return command.strip()
