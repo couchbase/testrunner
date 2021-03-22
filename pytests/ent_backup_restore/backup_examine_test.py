@@ -4,8 +4,17 @@ from enum import (
     Enum
 )
 
+from membase.api.rest_client import (
+    RestConnection
+)
 from remote.remote_util import (
     RemoteMachineShellConnection
+)
+from lib import (
+    memcacheConstants
+)
+from lib.memcached.helper.data_helper import (
+    MemcachedClientHelper
 )
 
 
@@ -252,3 +261,66 @@ class ExamineArguments:
             self.objstore_provider)
 
         return command.strip()
+
+
+class CreateBucketMutation:
+    """ Create a bucket """
+
+    def __init__(self, name):
+        self.name = name
+
+    def apply(self, backup_base, backup):
+        backup_base._create_buckets(backup_base.master, [self.name], bucket_size=backup_base.config['bucket_size'])
+        backup.add_bucket(Bucket(self.name))
+
+
+class CreateCollectionMutation:
+    """ Create the a collection_string a collection represents """
+
+    def __init__(self, collection_string):
+        self.collection_string = CollectionString(collection_string)
+
+    def apply(self, backup_base, backup):
+        # TODO We can model this entire mutation as operations on a collections manifest
+        rest_connection = RestConnection(backup_base.master)
+        bucket, scope, collection = self.collection_string.bucket_name, self.collection_string.scope_name, self.collection_string.collection_name
+
+        rest_connection.create_scope(bucket, scope)
+        rest_connection.create_collection(bucket, scope, collection)
+
+        uid = int(rest_connection.get_collection_uid(bucket, scope, collection), 16)
+        backup.get_bucket(bucket).add_collection(Collection(self.collection_string, uid))
+
+
+class SetDocumentMutation:
+    """ Set a document in a collection given a key and value"""
+
+    def __init__(self, collection_string, key, value):
+        self.collection_string, self.key, self.value = CollectionString(collection_string), key, value
+
+    def apply(self, backup_base, backup):
+        uid = backup.get_collection_uid(self.collection_string)
+        backup_base.clients.get_client(self.collection_string.bucket_name).set(self.key, 0, 0, self.value, collection=uid)
+        backup.set_document(self.collection_string, self.key, self.value)
+
+
+class Clients:
+    """ Gets you a MemcachedClient given a bucket """
+
+    def __init__(self, server):
+        self.server, self.clients = server, {}
+
+    def get_client(self, bucket):
+        if bucket not in self.clients:
+            self.clients[bucket] = MemcachedClientHelper().direct_client(self.server, bucket)
+
+        self.clients[bucket].hello(memcacheConstants.FEATURE_COLLECTIONS)
+
+        return self.clients[bucket]
+
+    def close(self):
+        for client in self.clients:
+            client.close()
+
+    def __del__(self):
+        self.close()
