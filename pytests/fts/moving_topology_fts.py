@@ -6,6 +6,7 @@ from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from lib.membase.api.rest_client import RestConnection, RestHelper
 import json
+import time
 
 class MovingTopFTS(FTSBaseTest):
 
@@ -13,6 +14,10 @@ class MovingTopFTS(FTSBaseTest):
         self.num_rebalance = TestInputSingleton.input.param("num_rebalance", 1)
         self.retry_time = TestInputSingleton.input.param("retry_time", 300)
         self.num_retries = TestInputSingleton.input.param("num_retries", 1)
+        self.max_concurrent_partition_moves_per_node = TestInputSingleton.input.param(
+            "maxConcurrentPartitionMovesPerNode", 1)
+        self.num_index_partitions = TestInputSingleton.input.param("num_partitions", 1)
+        self.default_concurrent_partition_moves_per_node = 1
         self.query = {"match": "emp", "field": "type"}
         super(MovingTopFTS, self).setUp()
 
@@ -38,6 +43,186 @@ class MovingTopFTS(FTSBaseTest):
         fts_node = self._cb_cluster.get_random_fts_node()
         self.sleep(timeout)
         NodeHelper.kill_erlang(fts_node)
+
+    def swap_rebalance_parallel_partitions_move(self):
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        rest.set_maxConcurrentPartitionMovesPerNode(self.default_concurrent_partition_moves_per_node)
+
+        self.load_data()
+        self.create_fts_indexes_all_buckets()
+        for index in self._cb_cluster.get_indexes():
+            index.update_index_partitions(self.num_index_partitions)
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          % (index.name, index.get_indexed_doc_count()))
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        if rest.is_enterprise_edition():
+            services = ["fts"]
+        else:
+            services = ["fts,kv,index,n1ql"]
+
+        start_rebalance_time = time.time()
+        self._cb_cluster.swap_rebalance(services=services)
+        end_rebalance_time = time.time()
+        simple_rebalance_time = end_rebalance_time - start_rebalance_time
+
+
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        rest.set_maxConcurrentPartitionMovesPerNode(self.max_concurrent_partition_moves_per_node)
+
+        start_parallel_rebalance_time = time.time()
+        self._cb_cluster.swap_rebalance(services=services)
+        end_parallel_rebalance_time = time.time()
+        parallel_rebalance_time = end_parallel_rebalance_time - start_parallel_rebalance_time
+
+        self.log.info("Delta between simple and concurrent partitions move rebalance is {0} sec.".
+                      format(simple_rebalance_time - parallel_rebalance_time))
+
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        self.assertTrue(parallel_rebalance_time < simple_rebalance_time,
+                        "Swap rebalance in with maxConcurrentPartitionMovesPerNode={0} takes longer time than "
+                        "swap rebalance in with maxConcurrentPartitionMovesPerNode={1}"
+                        .format(self.max_concurrent_partition_moves_per_node,
+                                self.default_concurrent_partition_moves_per_node)
+                        )
+
+    def rebalance_in_parallel_partitions_move_add_node(self):
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        rest.set_maxConcurrentPartitionMovesPerNode(self.default_concurrent_partition_moves_per_node)
+        self.load_data()
+        self.create_fts_indexes_all_buckets()
+        for index in self._cb_cluster.get_indexes():
+            index.update_index_partitions(self.num_index_partitions)
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          % (index.name, index.get_indexed_doc_count()))
+        start_rebalance_time = time.time()
+        self._cb_cluster.rebalance_in(num_nodes=1, services=["kv,fts"])
+        end_rebalance_time = time.time()
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        simple_rebalance_time = end_rebalance_time - start_rebalance_time
+
+        self._cb_cluster.rebalance_out(num_nodes=1)
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        rest.set_maxConcurrentPartitionMovesPerNode(self.max_concurrent_partition_moves_per_node)
+
+        start_parallel_rebalance_time = time.time()
+        self._cb_cluster.rebalance_in(num_nodes=1, services=["kv,fts"])
+        end_parallel_rebalance_time = time.time()
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        parallel_rebalance_time = end_parallel_rebalance_time - start_parallel_rebalance_time
+        self.log.info("Delta between simple and concurrent partitions move rebalance is {0} sec.".
+                      format(simple_rebalance_time - parallel_rebalance_time))
+        self.validate_index_count(equal_bucket_doc_count=True)
+        self.assertTrue(simple_rebalance_time > parallel_rebalance_time,
+                        "Rebalance in with maxConcurrentPartitionMovesPerNode={0} takes longer time than "
+                        "rebalance in with maxConcurrentPartitionMovesPerNode={1}".
+                        format(self.max_concurrent_partition_moves_per_node,
+                               self.default_concurrent_partition_moves_per_node))
+
+    def rebalance_out_parallel_partitions_move(self):
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        rest.set_maxConcurrentPartitionMovesPerNode(self.default_concurrent_partition_moves_per_node)
+
+        self.load_data()
+        self.create_fts_indexes_all_buckets()
+        for index in self._cb_cluster.get_indexes():
+            index.update_index_partitions(self.num_index_partitions)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        simple_rebalance_start_time = time.time()
+        self._cb_cluster.rebalance_out(num_nodes=self.num_rebalance)
+        simple_rebalance_finish_time = time.time()
+        simple_rebalance_time = simple_rebalance_finish_time - simple_rebalance_start_time
+
+        self._cb_cluster.rebalance_in(num_nodes=1)
+
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        rest.set_maxConcurrentPartitionMovesPerNode(self.max_concurrent_partition_moves_per_node)
+
+        parallel_rebalance_start_time = time.time()
+        self._cb_cluster.rebalance_out(num_nodes=self.num_rebalance)
+        parallel_rebalance_finish_time = time.time()
+        parallel_rebalance_time = parallel_rebalance_finish_time - parallel_rebalance_start_time
+
+        self.log.info("Delta between simple and concurrent partitions move rebalance is {0} sec.".
+                      format(simple_rebalance_time - parallel_rebalance_time))
+
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        for index in self._cb_cluster.get_indexes():
+            hits, _, _, _ = index.execute_query(query=self.query,
+                                                expected_hits=self._num_items)
+        self.log.info("SUCCESS! Hits: %s" % hits)
+        self.assertTrue(simple_rebalance_time > parallel_rebalance_time,
+                        "Rebalance out with maxConcurrentPartitionMovesPerNode={0} takes longer time than "
+                        "rebalance out with maxConcurrentPartitionMovesPerNode={1}".
+                        format(self.max_concurrent_partition_moves_per_node,
+                               self.default_concurrent_partition_moves_per_node))
+
+    def failover_non_master_parallel_partitions_move(self):
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        rest.set_maxConcurrentPartitionMovesPerNode(self.default_concurrent_partition_moves_per_node)
+
+        self.load_data()
+        self.create_fts_indexes_all_buckets()
+        for index in self._cb_cluster.get_indexes():
+            index.update_index_partitions(self.num_index_partitions)
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          % (index.name, index.get_indexed_doc_count()))
+        simple_rebalance_start_time = time.time()
+        self._cb_cluster.failover_and_rebalance_nodes()
+        simple_rebalance_finish_time = time.time()
+        simple_rebalance_time = simple_rebalance_finish_time - simple_rebalance_start_time
+
+        self._cb_cluster.rebalance_in(num_nodes=1)
+
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        rest.set_maxConcurrentPartitionMovesPerNode(self.max_concurrent_partition_moves_per_node)
+
+        parallel_rebalance_start_time = time.time()
+        self._cb_cluster.failover_and_rebalance_nodes()
+        parallel_rebalance_finish_time = time.time()
+        parallel_rebalance_time = parallel_rebalance_finish_time - parallel_rebalance_start_time
+
+        self.log.info("Delta between simple and concurrent partitions move rebalance is {0} sec.".
+                      format(simple_rebalance_time - parallel_rebalance_time))
+
+        try:
+            for index in self._cb_cluster.get_indexes():
+                self.is_index_partitioned_balanced(index)
+        except Exception as e:
+            if self._cb_cluster.get_num_fts_nodes() == 0:
+                self.log.info("Expected exception: %s" % e)
+            else:
+                raise e
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        self.assertTrue(simple_rebalance_time > parallel_rebalance_time,
+                        "Failover and rebalance with maxConcurrentPartitionMovesPerNode={0} takes longer time than "
+                        "failover and rebalance out with maxConcurrentPartitionMovesPerNode={1}".
+                        format(self.max_concurrent_partition_moves_per_node,
+                               self.default_concurrent_partition_moves_per_node))
 
     def rebalance_in_during_index_building(self):
         self.load_data()
@@ -172,7 +357,7 @@ class MovingTopFTS(FTSBaseTest):
                 target=self.kill_fts_service,
                 args=[5])
             #reb_thread = Thread(
-            #    target=self._cb_cluster.reboot_after_timeout(),
+            #    target=self._cb_cluster.reboot_after_timeout,
             #    args=[5])
             reb_thread.start()
             self._cb_cluster.swap_rebalance(services=["fts"])
@@ -818,7 +1003,7 @@ class MovingTopFTS(FTSBaseTest):
             args=[services])
         retry_reb_thread.start()
         #reb_thread = Thread(
-        #    target=self._cb_cluster.reboot_after_timeout(),
+        #    target=self._cb_cluster.reboot_after_timeout,
         #    args=[5])
         reb_thread = Thread(
             target=self.kill_fts_service,
@@ -883,7 +1068,7 @@ class MovingTopFTS(FTSBaseTest):
             args=[])
         retry_reb_thread.start()
         #reb_thread = Thread(
-        #    target=self._cb_cluster.reboot_after_timeout(),
+        #    target=self._cb_cluster.reboot_after_timeout,
         #    args=[2])
         reb_thread = Thread(
             target=self.kill_fts_service,
@@ -1105,7 +1290,7 @@ class MovingTopFTS(FTSBaseTest):
         index.index_definition['planParams'] = \
             index.build_custom_plan_params(new_plan_param)
         index.index_definition['uuid'] = index.get_uuid()
-        update_index_thread = Thread(target=index.update(),
+        update_index_thread = Thread(target=index.update,
                                    name="update_index",
                                    args=())
         update_index_thread.start()
@@ -1213,7 +1398,7 @@ class MovingTopFTS(FTSBaseTest):
                           %(index.name, index.get_indexed_doc_count()))
         # wait till indexing is midway...
         self.wait_for_indexing_complete(self._num_items//2)
-        fail_thread = Thread(target=self._cb_cluster.failover(),
+        fail_thread = Thread(target=self._cb_cluster.failover,
                                    name="failover",
                                    args=())
         fail_thread.start()
@@ -1223,7 +1408,7 @@ class MovingTopFTS(FTSBaseTest):
             index.build_custom_plan_params(new_plan_param)
         index.index_definition['planParams']['numReplicas'] = 0
         index.index_definition['uuid'] = index.get_uuid()
-        update_index_thread = Thread(target=index.update(),
+        update_index_thread = Thread(target=index.update,
                                    name="update_index",
                                    args=())
         update_index_thread.start()
@@ -1256,7 +1441,7 @@ class MovingTopFTS(FTSBaseTest):
         # wait till indexing is midway...
         self.wait_for_indexing_complete(self._num_items//2)
         fail_thread = Thread(
-            target=self._cb_cluster.failover_and_rebalance_nodes(),
+            target=self._cb_cluster.failover_and_rebalance_nodes,
             name="failover",
             args=())
         index = self._cb_cluster.get_fts_index_by_name('default_index_1')
@@ -1264,7 +1449,7 @@ class MovingTopFTS(FTSBaseTest):
         index.index_definition['planParams'] = \
             index.build_custom_plan_params(new_plan_param)
         index.index_definition['uuid'] = index.get_uuid()
-        update_index_thread = Thread(target=index.update(),
+        update_index_thread = Thread(target=index.update,
                                    name="update_index",
                                    args=())
         fail_thread.start()
