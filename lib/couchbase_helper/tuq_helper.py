@@ -1193,8 +1193,7 @@ class N1QLHelper():
         for key in index_map.keys():
             if index_name in list(index_map[key].keys()):
                 return index_map[key][index_name]['hosts'], index_map[key][index_name]['id']
-            else:
-                raise Exception ("Index does not exist - {0}".format(index_name))
+        raise Exception("Index does not exist - {0}".format(index_name))
 
     def get_index_status_using_index_name(self, index_name, index_map):
         for key in index_map.keys():
@@ -1203,9 +1202,3 @@ class N1QLHelper():
                        index_map[key][index_name]['progress']
             else:
                 raise Exception("Index does not exist - {0}".format(index_name))
-
-
-
-
-
-
