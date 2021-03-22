@@ -2933,16 +2933,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self._reset_storage_mode(rest_rs, bk_storage_mode, False)
 
     def _common_objstore_arguments(self):
-        return (
-            f"{' --obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''}"
-            f"{' --obj-cacert ' + self.backupset.objstore_cacert if self.objstore_provider and self.backupset.objstore_cacert else ''}"
-            f"{' --obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''}"
-            f"{' --obj-no-ssl-verify' if self.objstore_provider and self.backupset.objstore_no_ssl_verify else ''}"
-            f"{' --obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''}"
-            f"{' --obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
-            f"{' --obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
-        )
+        return self.backupset.common_objstore_arguments(self.objstore_provider)
 
 
 class Backupset:
@@ -3033,6 +3024,24 @@ class Backupset:
         # Backup Service specific configuration
         self.backup_service = False
         self.objstore_alternative_staging_directory = ""
+
+    def common_objstore_arguments(self, objstore_provider):
+        """ Returns a string consisting of the common objstore command line params and args.
+
+        Args:
+            objstore_provider (Provider): If None returns an empty string.
+
+        """
+        return (
+            f"{' --obj-access-key-id ' + self.objstore_access_key_id if objstore_provider and self.objstore_access_key_id else ''}"
+            f"{' --obj-cacert ' + self.objstore_cacert if objstore_provider and self.objstore_cacert else ''}"
+            f"{' --obj-endpoint ' + self.objstore_endpoint if objstore_provider and self.objstore_endpoint else ''}"
+            f"{' --obj-no-ssl-verify' if objstore_provider and self.objstore_no_ssl_verify else ''}"
+            f"{' --obj-region ' + self.objstore_region if objstore_provider and self.objstore_region else ''}"
+            f"{' --obj-secret-access-key ' + self.objstore_secret_access_key if objstore_provider and self.objstore_secret_access_key else ''}"
+            f"{' --obj-staging-dir ' + self.objstore_staging_directory if objstore_provider else ''}"
+            f"{' --s3-force-path-style' if objstore_provider and objstore_provider.schema_prefix() == 's3://' else ''}"
+        )
 
 class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
     def setUp(self):
