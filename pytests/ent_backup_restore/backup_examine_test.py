@@ -324,3 +324,22 @@ class Clients:
 
     def __del__(self):
         self.close()
+
+
+class CollectionString:
+    """ Manipulate a collection string """
+
+    def __init__(self, collection_string):
+        collection_string_split = collection_string.split('.')
+
+        if len(collection_string_split) != 3:
+            raise ValueError(f"{collection_string} is not a valid collection string")
+
+        self.bucket_name, self.scope_name, self.collection_name = collection_string_split
+
+    @property
+    def collection_string(self):
+        return f"{self.bucket_name}.{self.scope_name}.{self.collection_name}"
+
+    def __str__(self):
+        return self.collection_string
