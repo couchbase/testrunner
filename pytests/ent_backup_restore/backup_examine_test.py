@@ -1,20 +1,34 @@
 import copy
 import json
+import math
 from enum import (
     Enum
 )
 
+from ent_backup_restore.enterprise_backup_restore_base import (
+    EnterpriseBackupRestoreBase
+)
 from membase.api.rest_client import (
     RestConnection
+)
+from membase.helper.rebalance_helper import (
+    RebalanceHelper
 )
 from remote.remote_util import (
     RemoteMachineShellConnection
 )
+from testconstants import (
+    CLUSTER_QUOTA_RATIO
+)
+
 from lib import (
     memcacheConstants
 )
 from lib.memcached.helper.data_helper import (
     MemcachedClientHelper
+)
+from TestInput import (
+    TestInputSingleton
 )
 
 
@@ -151,6 +165,58 @@ class Backup:
         return (CollectionString(cs) for b in self.buckets.values() for cs in b.collections)
 
 
+class ExamineSimulation:
+
+    def __init__(self, backup_base):
+        self.backups = []
+        # The backup base class which allows us to run cbbackupmgr commands
+        self.backup_base = backup_base
+        # Create a backup repository
+        self.backup_base.backup_create()
+        # An object to run cbbackupmgr examine
+        self.examine = Examine(self.backup_base.backupset.backup_host)
+
+    def run(self, mutations):
+        """ Advance a step in the simulation """
+        # Create a new backup, copy construct from the previous backup if it exists
+        backup = Backup.from_backup(self.backups[-1]) if self.backups else Backup()
+
+        # Mutate the cluster to reflect what we want in the backup
+        for mutation in mutations:
+            mutation.apply(self.backup_base, backup)
+
+        for bucket_name in backup.buckets.keys():
+            if not RebalanceHelper.wait_for_stats_on_all(self.backup_base.master, bucket_name, 'ep_queue_size', 0, timeout_in_seconds=10):
+                return False, f"Timed out waiting for ep_queue_size to reach 0"
+
+        # Take a backup of the simulated documents
+        stdout, stderr = self.backup_base.backup_cluster()
+        if stderr:
+            return False, f"Error: {stderr}"
+
+        backup.date = self.backup_base.backups[-1]
+
+        # Save the backup
+        self.backups.append(backup)
+
+        # Run examine
+        self.run_examine(backup)
+
+        return True, None
+
+    def steps(self):
+        """ The number of steps that have taken place in the simulation """
+        return len(self.backups)
+
+    def run_examine(self, backup):
+        """ Examines things and check they match the contents of the backup object """
+        for cs in backup.get_collection_strings():
+            for doc in backup.get_collection(cs).documents.values():
+                examine_results = self.examine.examine(ExamineArguments(self.backup_base.backupset, str(cs), doc.key))
+                self.backup_base.assertEqual(examine_results[-1].document.value, doc.value)
+                # TODO add more checkers
+
+
 class Examine:
 
     def __init__(self, server):
@@ -261,6 +327,80 @@ class ExamineArguments:
             self.objstore_provider)
 
         return command.strip()
+
+
+class BackupExamineTest(EnterpriseBackupRestoreBase):
+
+    def setUp(self):
+        """ The setup. """
+        self.input = TestInputSingleton.input
+
+        # Do not create the 'default' bucket automatically.
+        self.input.test_params["default_bucket"] = False
+        super().setUp()
+
+        # Create a dictionary of configuration options for examine tests
+        self.populate_config()
+
+        # Set the memory quota based on the `memory` configuration option
+        self.set_memory_quota(self.config['memory'])
+
+        # Holds a dictionary of mapping buckets to their MemcachedClients
+        self.clients = Clients(self.master)
+
+    def tearDown(self):
+        """ The teardown. """
+        super().tearDown()
+
+    def populate_config(self):
+        """ Populates the config dictionary"""
+        self.config = {}
+        # The memory available on the node with the lowest memory
+        self.config['memory'] = self.get_available_memory()
+        # The size of each bucket that is created
+        self.config['bucket_size'] = 100
+        # The max buckets that can be created given the available memory and bucket size
+        self.config['max_buckets'] = self.config['memory'] // self.config['bucket_size']
+
+    def get_available_memory(self):
+        """ Gets the available memory based on the node with the lowest available memory """
+        return math.floor(min(RestConnection(server).get_nodes_self().mcdMemoryReserved for server in self.servers) * CLUSTER_QUOTA_RATIO)
+
+    def set_memory_quota(self, memory):
+        """ Assign the data service memory """
+        self.log.info(f"Setting memoryQuota to: {memory}")
+        RestConnection(self.master).set_service_memoryQuota(service='memoryQuota', memoryQuota=memory)
+
+    def run_simulation(self, mutations):
+        """ Runs a simulation given a list of a list of mutations.
+
+        The i'th element in the list `mutations` contains a list of mutation at the i'th simulation step.
+
+        Args:
+            mutations list(list(Mutation)): Runs a step in the simulation for each list element in this list.
+        """
+        simulation = ExamineSimulation(self)
+
+        for mutations in mutations:
+            success, error_message = simulation.run(mutations)
+            self.assertTrue(success, error_message)
+
+    def test_sample(self):
+        """ Single key test """
+        mutations = []
+
+        mutations.append([ \
+            CreateBucketMutation("default"),
+            CreateCollectionMutation("default.fruit.red_fruit"),
+            CreateCollectionMutation("default.fruit.green_fruit"),
+            SetDocumentMutation("default.fruit.red_fruit", "my_key", "my_value")
+        ])
+
+        mutations.append([ \
+            SetDocumentMutation("default.fruit.red_fruit", "my_key", "a_different_value")
+        ])
+
+        self.run_simulation(mutations)
 
 
 class CreateBucketMutation:
