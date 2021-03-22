@@ -1007,6 +1007,12 @@ class BaseSecondaryIndexingTests(QueryTests):
             all_nodes_mutation_processed = all_nodes_mutation_processed and mutation_processed
         return all_nodes_mutation_processed
 
+    def check_if_shard_exists(self, shard_dir, index_node):
+        data_dir = RestConnection(index_node).get_index_path()
+        shell = RemoteMachineShellConnection(index_node)
+        shard_abs_dirpath = f'{data_dir}/@2i/shards/{shard_dir}'
+        return shell.check_directory_exists(shard_abs_dirpath)
+
     def check_if_index_recovered(self, index_list):
         indexes_not_recovered = []
         for index in index_list:

@@ -1964,6 +1964,19 @@ class RemoteMachineShellConnection(KeepRefs):
             log.error("Directory at {0} DOES exist. Fx returns True".format(remote_path))
             return True
 
+    def check_directory_exists(self, remote_path):
+        sftp = self._ssh_client.open_sftp()
+        try:
+            log.info("Checking if the directory {0} exists or not.".format(remote_path))
+            sftp.stat(remote_path)
+        except IOError as e:
+                log.info(f'Directory at {remote_path} DOES NOT exist.')
+                sftp.close()
+                return False
+        log.info("Directory at {0} exist.")
+        sftp.close()
+        return True
+
     # this function will remove the automation directory in windows
     def create_multiple_dir(self, dir_paths):
         sftp = self._ssh_client.open_sftp()
@@ -5290,6 +5303,12 @@ class RemoteMachineShellConnection(KeepRefs):
         command = "dd bs=1024 count=1048576 </dev/urandom > {0}/\@2i/shards/shard1/data/log.00000000000001.data;" \
                   "chmod -R 777 {0}/\@2i/shards/shard1/data/log.00000000000001.data;" \
                   "chown -R couchbase:couchbase {0}/\@2i/shards/shard1/data/log.00000000000001.data".format(location)
+        output, error = self.execute_command(command)
+        return output, error
+
+    def shard_json_corruption(self, location):
+        shard_json = f'{location}/\@2i/shards/shard1/meta/shard.json'
+        command = f'truncate -s 150 {shard_json}'
         output, error = self.execute_command(command)
         return output, error
 

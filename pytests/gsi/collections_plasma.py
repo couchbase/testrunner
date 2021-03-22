@@ -213,6 +213,9 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                             "empty_files_in_log_dir": {"failure_task": "induce_empty_files_in_log_dir",
                                                 "recover_task": "disable_empty_files_in_log_dir",
                                                 "expected_failure": []},
+                            "shard_json_corruption": {"failure_task": "shard_json_corruption",
+                                                       "recover_task": None,
+                                                       "expected_failure": []},
                             "enable_firewall": {"failure_task": "induce_enable_firewall",
                                                 "recover_task": "disable_firewall",
                                                 "expected_failure": ["There is no available index service that can process "
@@ -297,6 +300,14 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
             if not index_created:
                 indexes_not_created.append({"name": index["name"], "status": status})
         return indexes_not_created
+
+    def check_if_indexes_not_created(self, index_list, defer_build=False):
+        indexes_created = []
+        for index in index_list:
+            index_created, status = self.check_if_index_created(index["name"], defer_build)
+            if index_created:
+                indexes_created.append({"name": index["name"], "status": status})
+        return indexes_created
 
     def check_if_index_recovered(self, index_list):
         indexes_not_recovered = []
@@ -776,6 +787,61 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
 
         if self.index_ops_obj.get_errors():
             self.fail(str(self.index_ops_obj.get_errors()))
+
+    def test_shard_json_corruption(self):
+        self.test_fail = False
+        self.concur_system_failure = self.input.param("concur_system_failure", False)
+        self.errors = []
+        self.index_create_task_manager = TaskManager(
+            "index_create_task_manager")
+        self.index_create_task_manager.start()
+        self.system_failure_task_manager = TaskManager(
+            "system_failure_detector_thread")
+        self.system_failure_task_manager.start()
+        self.sdk_loader_manager = TaskManager(
+            "sdk_loader_manager")
+        self.sdk_loader_manager.start()
+        if self.num_failure_iteration:
+            self.test_timeout = self.failure_timeout * len(self.index_nodes)
+
+        self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
+        self.run_tasks = True
+
+        index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
+        for task in index_create_tasks:
+            task.result()
+
+        load_doc_thread = threading.Thread(name="load_doc_thread",
+                                           target=self.load_docs)
+        load_doc_thread.start()
+
+        self.sleep(60, "sleeping for 60 sec for index to start processing docs")
+
+        #if not self.check_if_indexes_in_dgm():
+            #self.log.error("indexes not in dgm even after {}".format(self.dgm_check_timeout))
+
+        self.kill_loader_process()
+        self.wait_for_mutation_processing(self.index_nodes)
+
+        self.induce_schedule_system_failure(self.failure_map[self.system_failure]["failure_task"])
+        self.sleep(90, "sleeping for  mins for mutation processing during system failure ")
+
+        remote = RemoteMachineShellConnection(self.index_nodes[0])
+        remote.terminate_process(process_name="indexer")
+        self.sleep(60, "sleeping for 60 sec for indexer to come back")
+
+        self.index_ops_obj.update_stop_create_index(True)
+        self.sdk_loader_manager.shutdown(True)
+        self.index_create_task_manager.shutdown(True)
+        self.system_failure_task_manager.shutdown(True)
+
+        self.wait_until_indexes_online()
+        indexes_created = self.check_if_indexes_not_created(self.index_ops_obj.get_create_index_list())
+        if indexes_created:
+            self.fail(f'{indexes_created} are not dropped')
+
+        if self.check_if_shard_exists("shard1", self.index_nodes[0]):
+            self.fail('shard1 is not cleaned on disk')
 
     def test_autocompaction_forestdb(self):
         self.run_tasks = True

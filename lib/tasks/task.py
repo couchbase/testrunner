@@ -5522,6 +5522,8 @@ class NodesFailureTask(Task):
             self._fail_disk(self.current_failure_node)
         elif self.failure_type == "disk_full":
             self._disk_full_recover_failure(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "shard_json_corruption":
+            self.shard_json_corruption(self.current_failure_node)
         elif self.failure_type == "induce_disk_full":
             self._disk_full_failure(self.current_failure_node)
         elif self.failure_type == "recover_disk_failure":
@@ -5761,6 +5763,12 @@ class NodesFailureTask(Task):
     def add_dummy_file_in_log_dir(self, node):
         shell = RemoteMachineShellConnection(node)
         output, error = shell.add_dummy_file_index_log_dir(self.disk_location)
+        if error:
+            self.log.info(error)
+
+    def shard_json_corruption(self, node):
+        shell = RemoteMachineShellConnection(node)
+        output, error = shell.shard_json_corruption(self.disk_location)
         if error:
             self.log.info(error)
 
