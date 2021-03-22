@@ -1129,7 +1129,7 @@ class MemcachedClient(KeepRefs):
                 output.append(0)
             else:
                 output[-1] = byte
-        return output.tostring() + key
+        return output.tobytes().decode() + key
 
     def _update_collection_map(self, manifest):
         parsed = json.loads(manifest)
