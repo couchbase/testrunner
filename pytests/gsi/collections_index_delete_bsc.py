@@ -206,14 +206,14 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
         select_query = f'select count(age) from {collection_namespace} where age >= 0'
         result = self.run_cbq_query(query=select_query)['results'][0]['$1']
         self.assertEqual(result, num_of_docs)
-        gen_create = SDKDataLoader(num_ops=num_of_docs * 10, percent_create=50,
-                                   percent_update=30, percent_delete=20, scope=scope,
+        gen_create = SDKDataLoader(num_ops=num_of_docs * 10, percent_create=80,
+                                   percent_update=10, percent_delete=10, scope=scope,
                                    collection=collection, start_seq_num=num_of_docs + 1)
         try:
             # deleting BSC while indexes catching up with new mutations
             with ThreadPoolExecutor() as executor:
                 executor.submit(self._load_all_buckets, self.master, gen_create)
-                self.sleep(5)
+                self.sleep(30)
                 select_task = executor.submit(self.run_cbq_query, query=select_query)
                 delete_bsc = executor.submit(self.delete_bucket_scope_collection, server=self.servers[0],
                                              delete_item=self.item_to_delete, bucket=bucket, scope=scope,
@@ -338,7 +338,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                                                          collection=collection)
 
             self.assertTrue(result, f"Failed to Delete {self.item_to_delete}")
-
+            self.sleep(20)
             index_status = self.rest.get_index_status()
             self.assertFalse(index_status)
         except Exception as err:
