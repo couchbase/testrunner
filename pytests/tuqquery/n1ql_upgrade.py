@@ -74,7 +74,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
     def tearDown(self):
         self.log.info("==============  QueriesUpgradeTests tearDown has started ==============")
         self.upgrade_servers = self.servers
-        if hasattr(self, 'upgrade_versions') and self.initial_version is '2.5.1-1083':
+        if hasattr(self, 'upgrade_versions') and self.initial_version is '6.5.1-6296':
             self.log.info("checking upgrade version")
             upgrade_major = self.upgrade_versions[0][0]
             self.log.info("upgrade major version: " + str(upgrade_major))
@@ -505,7 +505,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         pass
 
     def run_test_udf_javascript(self):
-        functions = '[{"name": "adder", "code": "function adder(a, b, c) { for (i=0; i< b; i++){a = a + c;} return a; }"}]'
+        functions = 'function adder(a, b, c) { for (i=0; i< b; i++){a = a + c;} return a; }'
         function_names = ["adder"]
         self.log.info("Create math library")
         self.create_library("math", functions, function_names)

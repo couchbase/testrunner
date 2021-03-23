@@ -3861,11 +3861,8 @@ class QueryTests(BaseTestCase):
     def create_library(self, library_name='', functions={}, function_names=[], replace= False):
         created = False
         url = f"http://{self.master.ip}:{self.n1ql_port}/evaluator/v1/libraries/{library_name}"
-        data = f'[{{"name": "{library_name}", "functions": {functions}}}]'
-        if replace:
-            self.shell.execute_command(f"{self.curl_path} -X PUT {url} -u Administrator:password -H 'content-type: application/json' -d '{data}'")
-        else:
-            self.shell.execute_command(f"{self.curl_path} -X POST {url} -u Administrator:password -H 'content-type: application/json' -d '{data}'")
+        data = f'{functions}'
+        self.shell.execute_command(f"{self.curl_path} -X POST {url} -u Administrator:password -H 'content-type: application/json' -d '{data}'")
         libraries = self.shell.execute_command(f"{self.curl_path} {url} -u Administrator:password")
         if library_name in str(libraries[0]):
             created = True

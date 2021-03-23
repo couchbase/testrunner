@@ -394,11 +394,8 @@ class QueryUDFTests(QueryTests):
     '''Test a query that uses a function containing a query in the from'''
     def test_inline_subquery_from(self):
         if not self.analytics:
-            string_functions = '[{"name" : "concater","code" : "function concater(a,b) { var text = \\"\\"; var x; for (x in a) {if (x = b) { return x; }} return \\"n\\"; }"}]'
-            functions = '[{"name" : "comparator","code" : "function comparator(a, b) {if (a > b) { return \\"old hotel\\"; } else { return \\"new hotel\\" }}"}]'
-            function_names = ["comparator"]
+            string_functions = 'function concater(a,b) { var text = ""; var x; for (x in a) {if (x = b) { return x; }} return "n"; } function comparator(a, b) {if (a > b) { return "old hotel"; } else { return "new hotel" }}'
             function_names2 = ["concater","comparator"]
-            created = self.create_library("strings", functions, function_names)
             created2 = self.create_library("strings",string_functions,function_names2)
         try:
             if self.analytics:
@@ -435,11 +432,8 @@ class QueryUDFTests(QueryTests):
 
     '''Test a function that contains a subquery and uses other functions'''
     def test_inline_subquery_nested(self):
-        string_functions = '[{"name" : "concater","code" : "function concater(a,b) { var text = \\"\\"; var x; for (x in a) {if (x = b) { return x; }} return \\"n\\"; }"}]'
-        functions = '[{"name" : "comparator","code" : "function comparator(a, b) {if (a > b) { return \\"old hotel\\"; } else { return \\"new hotel\\" }}"}]'
-        function_names = ["comparator"]
+        string_functions = 'function concater(a,b) { var text = ""; var x; for (x in a) {if (x = b) { return x; }} return "n"; } function comparator(a, b) {if (a > b) { return "old hotel"; } else { return "new hotel" }}'
         function_names2 = ["concater","comparator"]
-        created = self.create_library("strings", functions, function_names)
         created2 = self.create_library("strings",string_functions,function_names2)
         try:
             self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "comparator" AT "strings"')
@@ -820,7 +814,7 @@ class QueryUDFTests(QueryTests):
 #   JAVASCRIPT FUNCTIONS
 ##############################################################################################
     def test_javascript_syntax(self):
-        functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+        functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
         function_names = ["adder", "multiplier"]
         created = self.create_library("math", functions, function_names)
         try:
@@ -854,10 +848,7 @@ class QueryUDFTests(QueryTests):
 
     def test_javascript_params(self):
         try:
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
-            function_names = ["adder", "multiplier"]
-            created = self.create_library("math", functions, function_names)
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
@@ -885,7 +876,7 @@ class QueryUDFTests(QueryTests):
 
     def test_javascript_create_or_replace(self):
         try:
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             self.run_cbq_query(query='CREATE OR REPLACE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
@@ -912,7 +903,7 @@ class QueryUDFTests(QueryTests):
 
     def test_javascript_create_or_replace(self):
         try:
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             self.run_cbq_query(query='CREATE OR REPLACE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
@@ -939,7 +930,7 @@ class QueryUDFTests(QueryTests):
                 self.log.error(str(e))
 
     def test_javascript_if_else(self):
-        functions = '[{"name" : "adder","code" : "function adder(a, b, c) {if (a + b > c) { return a + b - c; } else if (a * b > c) { return a*b - c; } else { return a + b + c; }}"}]'
+        functions = 'function adder(a, b, c) {if (a + b > c) { return a + b - c; } else if (a * b > c) { return a*b - c; } else { return a + b + c; }}'
         function_names = ["adder"]
         created = self.create_library("math", functions, function_names)
         try:
@@ -958,8 +949,8 @@ class QueryUDFTests(QueryTests):
                 self.log.error(str(e))
 
     def test_javascript_for_loop(self):
-        functions = '[{"name" : "adder","code" : "function adder(a, b, c) { for (i=0; i< b; i++){ a = a + c; } return a; }"}]'
-        string_functions = '[{"name" : "concater","code" : "function concater(a) { var text = \\"\\"; var x; for (x in a) {text += a[x] + \\" \\";} return text; }"}]'
+        functions = 'function adder(a, b, c) { for (i=0; i< b; i++){ a = a + c; } return a; }'
+        string_functions = 'function concater(a) { var text = ""; var x; for (x in a) {text += a[x] + " ";} return text; }'
         function_names = ["adder"]
         string_function_names = ["concater"]
         created = self.create_library("math", functions, function_names)
@@ -987,8 +978,8 @@ class QueryUDFTests(QueryTests):
                 self.log.error(str(e))
 
     def test_javascript_while_loop(self):
-        functions = '[{"name" : "adder","code" : "function adder(a,b) { var i = 0; while (i < 3) { a = a + b; i++; } return a; }"}]'
-        string_functions = '[{"name" : "multiplier","code" : "function multiplier(a,b) { do{ a = a + b; } while(a > b) return a; }"}]'
+        functions = 'function adder(a,b) { var i = 0; while (i < 3) { a = a + b; i++; } return a; }'
+        string_functions = 'function multiplier(a,b) { do{ a = a + b; } while(a > b) return a; }'
         function_names = ["adder"]
         string_function_names = ["multiplier"]
         created = self.create_library("math", functions, function_names)
@@ -1014,8 +1005,7 @@ class QueryUDFTests(QueryTests):
                 self.log.error(str(e))
 
     def test_javascript_infinite_loop(self):
-        string_functions = '[{"name" : "multiplier","code" : "function multiplier(a,b) { do{ a = a; } while(a > b) return a; }"}]'
-        function_names = ["adder"]
+        string_functions = 'function multiplier(a,b) { do{ a = a; } while(a > b) return a; }'
         string_function_names = ["multiplier"]
         created = self.create_library("strings", string_functions, string_function_names)
 
@@ -1032,7 +1022,7 @@ class QueryUDFTests(QueryTests):
                 self.log.error(str(e))
     def test_javascript_function_syntax_scope(self):
         try:
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             self.run_cbq_query(query='CREATE OR REPLACE FUNCTION default:default.{0}.func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"'.format(self.scope))
@@ -1046,15 +1036,11 @@ class QueryUDFTests(QueryTests):
                 self.log.error(str(e))
 
     def test_javascript_syntax_error(self):
-        functions = '[{"name" : "adder","code" : "function adder(a, b) { retur a + b; }"}]'
-        function_names = ["adder", "multiplier"]
-        created = self.create_library("math", functions, function_names)
         try:
-            self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
-            results = self.run_cbq_query(query="EXECUTE FUNCTION func1(1,3)")
-        except Exception as e:
-            self.log.error(str(e))
-            self.assertTrue('evaluator worker returned error' in str(e))
+            functions = 'function adder(a, b) { retur a + b; }'
+            function_names = ["adder", "multiplier"]
+            created = self.create_library("math", functions, function_names)
+            self.assertFalse(created, "Library should have failed to create due to a syntax error during compilation, check logs above!")
         finally:
             try:
                 self.delete_library("math")
@@ -1064,7 +1050,7 @@ class QueryUDFTests(QueryTests):
 
     def test_javascript_replace_lib_func(self):
         try:
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             self.run_cbq_query(query='CREATE OR REPLACE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
@@ -1075,8 +1061,9 @@ class QueryUDFTests(QueryTests):
             results = self.run_cbq_query(query="EXECUTE FUNCTION func1(1,3)")
             self.assertEqual(results['results'], [4])
 
-            function = '{"name" : "adder", "code" : "function adder(a,b) { return helper(a,b); } function helper(a,b) { return a - b; }"}'
-            added = self.add_function("math", "adder", function)
+            functions = 'function adder(a,b) { return helper(a,b); } function helper(a,b) { return a - b; }'
+            function_names = ["adder", "helper"]
+            created = self.create_library("math", functions, function_names)
 
             results = self.run_cbq_query("select * from system:functions where identity.name = 'func1'")
             self.assertEqual(results['results'][0]['functions']['definition']['#language'], 'javascript')
@@ -1097,7 +1084,7 @@ class QueryUDFTests(QueryTests):
 
     def test_javascript_delete_lib_func(self):
         try:
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             self.run_cbq_query(query='CREATE OR REPLACE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
@@ -1108,13 +1095,15 @@ class QueryUDFTests(QueryTests):
             results = self.run_cbq_query(query="EXECUTE FUNCTION func1(1,3)")
             self.assertEqual(results['results'], [4])
 
-            deleted = self.delete_function("math", "adder")
+            functions = 'function multiplier(a, b) { return a * b; }'
+            function_names = ["multiplier"]
+            created = self.create_library("math", functions, function_names)
 
             results = self.run_cbq_query(query="EXECUTE FUNCTION func1(1,3)")
 
         except Exception as e:
             self.log.error(str(e))
-            self.assertTrue('function does not exist function adder' in str(e), "The query failed for the wrong reason {0}".format(str(e)))
+            self.assertTrue('symbol is not a function' in str(e), "The query failed for the wrong reason {0}".format(str(e)))
 
         finally:
             try:
@@ -1130,19 +1119,21 @@ class QueryUDFTests(QueryTests):
                 results = self.run_cbq_query(query="EXECUTE FUNCTION func1(1,3)")
             except Exception as e:
                 self.log.error(str(e))
-                self.assertTrue('function does not exist function adder' in str(e),
+                self.assertTrue('no such library in worker' in str(e),
                                 "The query failed for the wrong reason {0}".format(str(e)))
 
             try:
-                functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+                functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
                 function_names = ["adder", "multiplier"]
+                function_names = ["adder", "multiplier"]
+                created = self.create_library("math", functions, function_names)
                 results = self.run_cbq_query(query="EXECUTE FUNCTION func1(1,3)")
                 self.assertEqual(results['results'], [4])
                 self.run_cbq_query(query='CREATE OR REPLACE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "sub" AT "math"')
                 results = self.run_cbq_query(query="EXECUTE FUNCTION func1(1,3)")
             except Exception as e:
                 self.log.error(str(e))
-                self.assertTrue('function does not exist function adder' in str(e),
+                self.assertTrue('symbol is not a function' in str(e),
                                 "The query failed for the wrong reason {0}".format(str(e)))
         finally:
             try:
@@ -1190,7 +1181,7 @@ class QueryUDFTests(QueryTests):
 
     def test_create_or_replace_js_to_inline(self):
         try:
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             self.run_cbq_query(query='CREATE OR REPLACE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
@@ -1214,7 +1205,7 @@ class QueryUDFTests(QueryTests):
 
     def test_create_or_replace_inline_to_js(self):
         try:
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             self.run_cbq_query("CREATE OR REPLACE FUNCTION func1(...) { (args[0] * 9/5) + 32 }")
@@ -1243,7 +1234,7 @@ class QueryUDFTests(QueryTests):
             results = self.run_cbq_query("SELECT * FROM default:default.test.test1  WHERE ANY v in test1.numbers SATISFIES v = func1(36) END")
             self.assertEqual(results['results'], [{'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
 
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             self.run_cbq_query(
@@ -1299,7 +1290,7 @@ class QueryUDFTests(QueryTests):
                     "SELECT * FROM default:default.test.test1 LET maximum_no = func1(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END")
                 self.assertEqual(results['results'], [{'maximum_no': 4, 'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
 
-                functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+                functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
                 function_names = ["adder", "multiplier"]
                 created = self.create_library("math", functions, function_names)
                 self.run_cbq_query(
@@ -1321,7 +1312,7 @@ class QueryUDFTests(QueryTests):
 
     def test_udf_groupby(self):
         if not self.analytics:
-            functions = '[{"name" : "comparator","code" : "function comparator(a, b) {if (a > b) { return \\"old hotel\\"; } else { return \\"new hotel\\" }}"}]'
+            functions = 'function comparator(a, b) {if (a > b) { return "old hotel"; } else { return "new hotel" }}'
             function_names = ["comparator"]
             created = self.create_library("math", functions, function_names)
         try:
@@ -1353,7 +1344,7 @@ class QueryUDFTests(QueryTests):
 
     def test_udf_having(self):
         if not self.analytics:
-            functions = '[{"name" : "comparator","code" : "function comparator(a, b) {if (a > b) { return \\"old hotel\\"; } else { return \\"new hotel\\" }}"}]'
+            functions = 'function comparator(a, b) {if (a > b) { return "old hotel"; } else { return "new hotel" }}'
             function_names = ["comparator"]
             created = self.create_library("math", functions, function_names)
         try:
@@ -1383,11 +1374,8 @@ class QueryUDFTests(QueryTests):
                 self.log.error(str(e))
 
     def test_udf_letting(self):
-        string_functions = '[{"name" : "concater","code" : "function concater(a,b) { var text = \\"\\"; var x; for (x in a) {if (x = b) { return x; }} return \\"n\\"; }"}]'
-        functions = '[{"name" : "comparator","code" : "function comparator(a, b) {if (a > b) { return \\"old hotel\\"; } else { return \\"new hotel\\" }}"}]'
-        function_names = ["comparator"]
+        string_functions = 'function concater(a,b) { var text = ""; var x; for (x in a) {if (x = b) { return x; }} return "n"; } function comparator(a, b) {if (a > b) { return "old hotel"; } else { return "new hotel" }}'
         function_names2 = ["concater","comparator"]
-        created = self.create_library("strings", functions, function_names)
         created2 = self.create_library("strings",string_functions,function_names2)
         try:
             self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "comparator" AT "strings"')
@@ -1410,11 +1398,8 @@ class QueryUDFTests(QueryTests):
                 self.log.error(str(e))
 
     def test_udf_orderby(self):
-        string_functions = '[{"name" : "concater","code" : "function concater(a,b) { var text = \\"\\"; var x; for (x in a) {if (x = b) { return x; }} return \\"n\\"; }"}]'
-        functions = '[{"name" : "comparator","code" : "function comparator(a, b) {if (a > b) { return \\"old hotel\\"; } else { return \\"new hotel\\" }}"}]'
-        function_names = ["comparator"]
+        string_functions = 'function concater(a,b) { var text = ""; var x; for (x in a) {if (x = b) { return x; }} return "n"; } function comparator(a, b) {if (a > b) { return "old hotel"; } else { return "new hotel" }} '
         function_names2 = ["concater","comparator"]
-        created = self.create_library("strings", functions, function_names)
         created2 = self.create_library("strings",string_functions,function_names2)
         try:
             self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "comparator" AT "strings"')
@@ -1437,11 +1422,8 @@ class QueryUDFTests(QueryTests):
                 self.log.error(str(e))
 
     def test_advise_udf(self):
-        string_functions = '[{"name" : "concater","code" : "function concater(a,b) { var text = \\"\\"; var x; for (x in a) {if (x = b) { return x; }} return \\"n\\"; }"}]'
-        functions = '[{"name" : "comparator","code" : "function comparator(a, b) {if (a > b) { return \\"old hotel\\"; } else { return \\"new hotel\\" }}"}]'
-        function_names = ["comparator"]
+        string_functions = 'function concater(a,b) { var text = ""; var x; for (x in a) {if (x = b) { return x; }} return "n"; } function comparator(a, b) {if (a > b) { return "old hotel"; } else { return "new hotel" }}'
         function_names2 = ["concater","comparator"]
-        created = self.create_library("strings", functions, function_names)
         created2 = self.create_library("strings",string_functions,function_names2)
         try:
             self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "comparator" AT "strings"')
@@ -1517,7 +1499,7 @@ class QueryUDFTests(QueryTests):
             results = self.run_cbq_query("EXECUTE p1")
             self.assertEqual(results['results'], [{'maximum_no': 4, 'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
 
-            functions = '[{"name" : "adder","code" : "function adder(a) { return (a - 32); }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a) { return (a - 32); } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             self.run_cbq_query(
@@ -1555,7 +1537,7 @@ class QueryUDFTests(QueryTests):
 ##############################################################################################
     def test_create_library(self):
         try:
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             self.assertTrue(created, "The library was not created! Check run logs for more details")
@@ -1564,14 +1546,15 @@ class QueryUDFTests(QueryTests):
 
     def test_update_library(self):
         try:
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             self.assertTrue(created, "The library was not created! Check run logs for more details")
-            functions = '[{"name" : "sub","code" : "function sub(a, b) { return a - b; }"}, {"name" : "divider","code" : "function divider(a, b) { return a / b; }"}]'
             if self.replace:
+                functions = 'function sub(a, b) { return a - b; } function divider(a, b) { return a / b; }'
                 function_names = ["sub", "divider"]
             else:
+                functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; } function sub(a, b) { return a - b; } function divider(a, b) { return a / b; }'
                 function_names = ["sub", "divider", "adder", "multiplier"]
             created = self.create_library("math", functions, function_names, self.replace)
             self.assertTrue(created, "The library was not updated! Check run logs for more details")
@@ -1580,7 +1563,7 @@ class QueryUDFTests(QueryTests):
 
 
     def test_delete_library(self):
-        functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+        functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
         function_names = ["adder", "multiplier"]
         self.create_library("math", functions, function_names)
         deleted = self.delete_library("math")
@@ -1588,46 +1571,25 @@ class QueryUDFTests(QueryTests):
 
     def test_add_function(self):
         try:
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             self.create_library("math", functions, function_names)
-            function ='{"name" : "sub", "code" : "function sub(a,b) { return helper(a,b); } function helper(a,b) { return a - b; }"}'
-            added = self.add_function("math", "sub", function)
-            self.assertTrue(added, "The function was not added to the library!")
-        finally:
-            self.delete_library("math")
-
-    def test_replace_function(self):
-        try:
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
-            function_names = ["adder", "multiplier"]
-            self.create_library("math", functions, function_names)
-            function = '{"name" : "adder", "code" : "function adder(a,b) { return helper(a,b); } function helper(a,b) { return a - b; }"}'
-            added = self.add_function("math", "adder", function)
-            url = "http://{0}:{1}/functions/v1/libraries/math/functions/adder".format(self.master.ip, self.n1ql_port)
-            function = self.shell.execute_command("{0} {1} -u Administrator:password".format(self.curl_path, url))
-            self.assertTrue('a - b' in str(function[0]), "The function was not overridden {0}".format(function))
+            functions ='function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; } function sub(a,b) { return helper(a,b); } function helper(a,b) { return a - b; }'
+            function_names = ["adder", "multiplier","sub","helper"]
+            created = self.create_library("math", functions, function_names)
+            self.assertTrue(created, "The new library was not created! Check run logs for more details")
         finally:
             self.delete_library("math")
 
     def test_delete_function(self):
         try:
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             self.create_library("math", functions, function_names)
-            deleted = self.delete_function("math", "adder")
-            self.assertTrue(deleted, "The function was not deleted from the library!")
-        finally:
-            self.delete_library("math")
-
-    def test_read_function_negative(self):
-        try:
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
-            function_names = ["adder", "multiplier"]
-            self.create_library("math", functions, function_names)
-            url = "http://{0}:{1}/functions/v1/libraries/math/fakefunction".format(self.master.ip, self.n1ql_port)
-            libraries = self.shell.execute_command("{0} {1} -u Administrator:password".format(self.curl_path, url))
-            self.assertTrue("fakefunction" not in str(libraries), "this function should not exist! {0}".format(libraries))
+            functions = 'function multiplier(a, b) { return a * b; }'
+            function_names = ["multiplier"]
+            created = self.create_library("math", functions, function_names)
+            self.assertTrue(created, "The new library was not created! Check run logs for more details")
         finally:
             self.delete_library("math")
 
@@ -1635,13 +1597,8 @@ class QueryUDFTests(QueryTests):
     def create_library(self, library_name='', functions={},function_names=[], replace= False):
         created = False
         url = "http://{0}:{1}/evaluator/v1/libraries/{2}".format(self.master.ip, self.n1ql_port, library_name)
-        data = '[{{"name": "{0}"'.format(library_name) + ', "functions": {0}}}]'.format(functions)
-        if replace:
-            results = self.shell.execute_command(
-                "{0} -X PUT {1} -u Administrator:password -H 'content-type: application/json' -d '{2}'".format(
-                    self.curl_path, url, data))
-        else:
-            results = self.shell.execute_command("{0} -X POST {1} -u Administrator:password -H 'content-type: application/json' -d '{2}'".format(self.curl_path, url, data))
+        data = '{0}'.format(functions)
+        results = self.shell.execute_command("{0} -X POST {1} -u Administrator:password -H 'content-type: application/json' -d '{2}'".format(self.curl_path, url, data))
         self.log.info(results[0])
         libraries = self.shell.execute_command("{0} {1} -u Administrator:password".format(self.curl_path, url))
         if library_name in str(libraries[0]):
@@ -1665,7 +1622,7 @@ class QueryUDFTests(QueryTests):
         curl_output = self.shell.execute_command("{0} -X DELETE {1} -u Administrator:password ".format(self.curl_path, url))
         self.log.info(curl_output[0])
         libraries = self.shell.execute_command("{0} {1} -u Administrator:password".format(self.curl_path, url))
-        if library_name not in str(libraries):
+        if "No such library" in str(libraries):
             deleted = True
         return deleted
 
@@ -1716,7 +1673,7 @@ class QueryUDFTests(QueryTests):
         try:
             self.create_users()
             self.grant_role()
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             res = self.curl_with_roles('CREATE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
@@ -1767,7 +1724,7 @@ class QueryUDFTests(QueryTests):
         try:
             self.create_users()
             self.grant_role()
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             res = self.curl_with_roles('CREATE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
@@ -1819,7 +1776,7 @@ class QueryUDFTests(QueryTests):
         try:
             self.create_users()
             self.grant_role()
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             res = self.curl_with_roles('CREATE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
@@ -1892,7 +1849,7 @@ class QueryUDFTests(QueryTests):
         try:
             self.create_users()
             self.grant_role()
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             res = self.curl_with_roles('CREATE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
@@ -1941,7 +1898,7 @@ class QueryUDFTests(QueryTests):
         try:
             self.create_users()
             self.grant_role()
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             res = self.curl_with_roles('CREATE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
@@ -1992,7 +1949,7 @@ class QueryUDFTests(QueryTests):
         try:
             self.create_users()
             self.grant_role()
-            functions = '[{"name" : "adder","code" : "function adder(a, b) { return a + b; }"}, {"name" : "multiplier","code" : "function multiplier(a, b) { return a * b; }"}]'
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             res = self.curl_with_roles('CREATE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
