@@ -222,6 +222,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                 self.assertTrue(delete_result, f"Failed to delete: {self.item_to_delete}")
                 count = select_task.result()['results'][0]['$1']
                 self.assertTrue(count > num_of_docs, "Delete bucket happened before mutation operation began")
+            self.sleep(30)
             index_status = self.rest.get_index_status()
             self.assertFalse(index_status)
         except Exception as err:
