@@ -403,7 +403,7 @@ class QueryUpdateStatsTests(QueryTests):
         self.assertEqual(system_bucket['quota']['ram'], 100*1024*1024*num_nodes)
 
     def test_update_stats_quota_full(self):
-        error = "Error while creating system bucket N1QL_SYSTEM_BUCKET - cause: [ramQuotaMB:RAM quota specified is too large to be provisioned into this cluster.]"
+        error = "Error while creating system bucket N1QL_SYSTEM_BUCKET - cause: [ramQuota:RAM quota specified is too large to be provisioned into this cluster.]"
         histogram_query = "SELECT `bucket`, `scope`, `collection`, `histogramKey` FROM `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'"
         histogram_expected = [
             {"bucket": "travel-sample", "collection": "_default", "histogramKey": "city", "scope": "_default"}
