@@ -2,6 +2,7 @@
 
 import json
 from fts_base import FTSBaseTest
+from .fts_base import NodeHelper
 from lib.membase.api.rest_client import RestConnection
 
 
@@ -20,6 +21,132 @@ class IndexManagementAPI(FTSBaseTest):
 
     def tearDown(self):
         super(IndexManagementAPI, self).tearDown()
+
+    def test_config_settings_reflection(self):
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        initial_bleve_max_result_window = int(rest.get_node_settings("bleveMaxResultWindow"))
+        initial_feed_allotment = rest.get_node_settings("feedAllotment")
+        initial_fts_memory_quota = int(rest.get_node_settings("ftsMemoryQuota"))
+        initial_slow_query_timeout = rest.get_node_settings("slowQueryLogTimeout")
+
+        new_bleve_max_result_window = initial_bleve_max_result_window + 1000
+        new_feed_allotment = "twoFeedsPerPIndex"
+        new_fts_memory_quota = initial_fts_memory_quota + 100
+        new_slow_query_timeout = "30s"
+
+        verification_rest = RestConnection(self._cb_cluster.get_fts_nodes()[1])
+        rest.set_node_setting("bleveMaxResultWindow", new_bleve_max_result_window)
+        rest.set_node_setting("feedAllotment", new_feed_allotment)
+        rest.set_node_setting("ftsMemoryQuota", new_fts_memory_quota)
+        rest.set_node_setting("slowQueryLogTimeout", new_slow_query_timeout)
+
+        verification_bleve_max_result_window = int(verification_rest.get_node_settings("bleveMaxResultWindow"))
+        verification_feed_allotment = verification_rest.get_node_settings("feedAllotment")
+        verification_fts_memory_quota = int(verification_rest.get_node_settings("ftsMemoryQuota"))
+        verification_slow_query_timeout = verification_rest.get_node_settings("slowQueryLogTimeout")
+
+        rest.set_node_setting("feedAllotment", initial_feed_allotment)
+        rest.set_node_setting("slowQueryLogTimeout", initial_slow_query_timeout)
+        rest.set_node_setting("ftsMemoryQuota", initial_fts_memory_quota)
+        rest.set_node_setting("bleveMaxResultWindow", initial_bleve_max_result_window)
+
+
+        error = ""
+        if new_bleve_max_result_window != verification_bleve_max_result_window:
+            error = error + "\nbleveMaxResultWindow is not reflected."
+        if new_feed_allotment != verification_feed_allotment:
+            error = error + "\nfeedAllotment is not reflected."
+        if new_fts_memory_quota != verification_fts_memory_quota:
+            error = error + "\nftsMemoryQuota is not reflected."
+        if new_slow_query_timeout != verification_slow_query_timeout:
+            error = error + "\nslowQueryLogTimeout is not reflected."
+
+        self.assertEqual(error, "", error)
+
+
+    def test_config_settings_after_reboot(self):
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        initial_bleve_max_result_window = int(rest.get_node_settings("bleveMaxResultWindow"))
+        initial_feed_allotment = rest.get_node_settings("feedAllotment")
+        initial_fts_memory_quota = int(rest.get_node_settings("ftsMemoryQuota"))
+        initial_slow_query_timeout = rest.get_node_settings("slowQueryLogTimeout")
+
+        new_bleve_max_result_window = initial_bleve_max_result_window + 1000
+        new_feed_allotment = "twoFeedsPerPIndex"
+        new_fts_memory_quota = initial_fts_memory_quota + 100
+        new_slow_query_timeout = "30s"
+
+        rest.set_node_setting("bleveMaxResultWindow", new_bleve_max_result_window)
+        rest.set_node_setting("feedAllotment", new_feed_allotment)
+        rest.set_node_setting("ftsMemoryQuota", new_fts_memory_quota)
+        rest.set_node_setting("slowQueryLogTimeout", new_slow_query_timeout)
+
+        NodeHelper.reboot_server(self._cb_cluster.get_fts_nodes()[0], test_case=self)
+
+        verification_bleve_max_result_window = int(rest.get_node_settings("bleveMaxResultWindow"))
+        verification_feed_allotment = rest.get_node_settings("feedAllotment")
+        verification_fts_memory_quota = int(rest.get_node_settings("ftsMemoryQuota"))
+        verification_slow_query_timeout = rest.get_node_settings("slowQueryLogTimeout")
+
+        rest.set_node_setting("feedAllotment", initial_feed_allotment)
+        rest.set_node_setting("slowQueryLogTimeout", initial_slow_query_timeout)
+        rest.set_node_setting("ftsMemoryQuota", initial_fts_memory_quota)
+        rest.set_node_setting("bleveMaxResultWindow", initial_bleve_max_result_window)
+
+        error = ""
+        if new_bleve_max_result_window != verification_bleve_max_result_window:
+            error = error + "\nbleveMaxResultWindow is not restored after reboot."
+        if new_feed_allotment != verification_feed_allotment:
+            error = error + "\nfeedAllotment is not restored after reboot."
+        if new_fts_memory_quota != verification_fts_memory_quota:
+            error = error + "\nftsMemoryQuota is not restored after reboot."
+        if new_slow_query_timeout != verification_slow_query_timeout:
+            error = error + "\nslowQueryLogTimeout is not restored after reboot."
+
+        self.assertEqual(error, "", error)
+
+    def test_config_settings_new_node(self):
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        initial_bleve_max_result_window = int(rest.get_node_settings("bleveMaxResultWindow"))
+        initial_feed_allotment = rest.get_node_settings("feedAllotment")
+        initial_fts_memory_quota = int(rest.get_node_settings("ftsMemoryQuota"))
+        initial_slow_query_timeout = rest.get_node_settings("slowQueryLogTimeout")
+
+        new_bleve_max_result_window = initial_bleve_max_result_window + 1000
+        new_feed_allotment = "twoFeedsPerPIndex"
+        new_fts_memory_quota = initial_fts_memory_quota + 100
+        new_slow_query_timeout = "30s"
+
+        rest.set_node_setting("bleveMaxResultWindow", new_bleve_max_result_window)
+        rest.set_node_setting("feedAllotment", new_feed_allotment)
+        rest.set_node_setting("ftsMemoryQuota", new_fts_memory_quota)
+        rest.set_node_setting("slowQueryLogTimeout", new_slow_query_timeout)
+
+        self._cb_cluster.rebalance_in(num_nodes=1)
+
+        verification_rest = RestConnection(self._cb_cluster.get_fts_nodes()[1])
+        verification_bleve_max_result_window = int(verification_rest.get_node_settings("bleveMaxResultWindow"))
+        verification_feed_allotment = verification_rest.get_node_settings("feedAllotment")
+        verification_fts_memory_quota = int(verification_rest.get_node_settings("ftsMemoryQuota"))
+        verification_slow_query_timeout = verification_rest.get_node_settings("slowQueryLogTimeout")
+
+        rest.set_node_setting("feedAllotment", initial_feed_allotment)
+        rest.set_node_setting("slowQueryLogTimeout", initial_slow_query_timeout)
+        rest.set_node_setting("ftsMemoryQuota", initial_fts_memory_quota)
+        rest.set_node_setting("bleveMaxResultWindow", initial_bleve_max_result_window)
+
+
+        error = ""
+        if new_bleve_max_result_window != verification_bleve_max_result_window:
+            error = error + "\nbleveMaxResultWindow is not propagated on new node."
+        if new_feed_allotment != verification_feed_allotment:
+            error = error + "\nfeedAllotment is not propagated on new node."
+        if new_fts_memory_quota != verification_fts_memory_quota:
+            error = error + "\nftsMemoryQuota is not propagated on new node."
+        if new_slow_query_timeout != verification_slow_query_timeout:
+            error = error + "\nslowQueryLogTimeout is not propagated on new node."
+
+        self.assertEqual(error, "", error)
 
     def test_ingest_control(self):
         self.load_sample_buckets(self._cb_cluster.get_master_node(), self.sample_bucket_name)

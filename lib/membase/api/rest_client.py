@@ -2068,7 +2068,14 @@ class RestConnection(object):
                     raise Exception("Duplicate entry in the stats command {0}".format(stat_name))
         return stats
 
-
+    def get_node_settings(self, setting_name=None):
+        api = "{0}{1}".format(self.fts_baseUrl, 'api/manager')
+        status, content, header = self._http_request(api)
+        json_parsed = json.loads(content)
+        options_vals = json_parsed['mgr']['options']
+        if setting_name in options_vals.keys():
+            return options_vals[setting_name]
+        log.error("Setting {0} not available".format(setting_name))
 
     def get_bucket_status(self, bucket):
         if not bucket:
@@ -2337,21 +2344,6 @@ class RestConnection(object):
                                     timeout=30)
         json_parsed = json.loads(content)
         return status, json_parsed
-
-
-    def get_bucket_status(self, bucket):
-        if not bucket:
-            log.error("Bucket Name not Specified")
-            return None
-        api = self.baseUrl + 'pools/default/buckets'
-        status, content, header = self._http_request(api)
-        if status:
-            json_parsed = json.loads(content)
-            for item in json_parsed:
-                if item["name"] == bucket:
-                    return item["nodes"][0]["status"]
-            log.error("Bucket {0} doesn't exist".format(bucket))
-            return None
 
     def get_bucket_stats_json(self, bucket='default'):
         stats = {}
@@ -2951,6 +2943,13 @@ class RestConnection(object):
             raise Exception("Error setting fts ram quota: {0}".format(content))
         return status
 
+    def set_maxConcurrentPartitionMovesPerNode(self, value):
+        api = self.fts_baseUrl + "api/managerOptions"
+        params = {"maxConcurrentPartitionMovesPerNode": str(value)}
+        status, content, _ = self._http_request(api, "PUT", params=json.dumps(params, ensure_ascii=False), headers=self._create_capi_headers())
+        if status:
+            log.info("SUCCESS: FTS maxConcurrentPartitionMovesPerNode set to {0}".format(value))
+        return status
 
     def create_fts_index(self, index_name, params):
         """create or edit fts index , returns {"status":"ok"} on success"""
@@ -3073,6 +3072,22 @@ class RestConnection(object):
             log.info("Updated bleveMaxResultWindow")
         else:
             raise Exception("Error Updating bleveMaxResultWindow: {0}".format(content))
+        return status
+
+    def set_node_setting(self, setting_name, value):
+        """create or edit fts index , returns {"status":"ok"} on success"""
+        api = self.fts_baseUrl + "api/managerOptions"
+        params = {str(setting_name): str(value)}
+        log.info(json.dumps(params))
+        status, content, header = self._http_request(api,
+                                                     'PUT',
+                                                     json.dumps(params, ensure_ascii=False),
+                                                     headers=self._create_capi_headers(),
+                                                     timeout=30)
+        if status:
+            log.info("Updated {0}".format(setting_name))
+        else:
+            raise Exception("Error Updating {0}: {1}".format(setting_name, content))
         return status
 
     def unfreeze_fts_index_partitions(self, name):
