@@ -267,7 +267,7 @@ class BaseTestCase(unittest.TestCase):
             # avoid any cluster operations in setup for new upgrade
             #  & upgradeXDCR tests
             if str(self.__class__).find('newupgradetests') != -1 or \
-                    str(self.__class__).find('upgradeXDCR') != -1 or \
+                    str(self.__class__).find('XDCRUpgradeCollectionsTests') != -1 or \
                     str(self.__class__).find('Upgrade_EpTests') != -1 or \
                     (str(self.__class__).find('UpgradeTests') != -1 and self.skip_init_check_cbserver) or \
                     hasattr(self, 'skip_buckets_handle') and \
