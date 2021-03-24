@@ -1005,21 +1005,42 @@ class QueryUDFTests(QueryTests):
                 self.log.error(str(e))
 
     def test_javascript_infinite_loop(self):
-        string_functions = 'function multiplier(a,b) { do{ a = a; } while(a > b) return a; }'
-        string_function_names = ["multiplier"]
-        created = self.create_library("strings", string_functions, string_function_names)
-
         try:
-            self.run_cbq_query(query='CREATE FUNCTION func2(a,b) LANGUAGE JAVASCRIPT AS "multiplier" AT "strings"', query_params={'timeout':"10s"})
-            results = self.run_cbq_query(query="EXECUTE FUNCTION func2(2,1)")
-        except Exception as e:
-            self.log.error(str(e))
+            string_functions = 'function multiplier(a,b) { do{ a = a; } while(a > b) return a; }'
+            string_function_names = ["multiplier"]
+            created = self.create_library("strings", string_functions, string_function_names)
+
+            try:
+                # Should timeout after 10 seconds
+                self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "multiplier" AT "strings"')
+                results = self.run_cbq_query(query="EXECUTE FUNCTION func1(2,1)", query_params={'timeout':"10s"})
+                self.fail("Query should have timed out")
+            except Exception as e:
+                self.log.error(str(e))
+                self.assertTrue("Timeout 10s exceeded" in str(e), "Query should have stopped due to timeout, check error message!")
+            try:
+                # Should timeout after 2 minutes
+                results = self.run_cbq_query(query="EXECUTE FUNCTION func1(2,1)", query_params={'timeout':"130s"})
+                self.fail("Query should have timed out")
+            except Exception as e:
+                self.log.error(str(e))
+                self.assertTrue("stopped after running beyond 120000 ms" in str(e), "Query should have stopped due to timeout, check error message!")
+
+            try:
+                # Should timeout after 2 minutes
+                results = self.run_cbq_query(query="EXECUTE FUNCTION func1(2,1)")
+                self.fail("Query should have timed out")
+            except Exception as e:
+                self.log.error(str(e))
+                self.assertTrue("stopped after running beyond 120000 ms" in str(e), "Query should have stopped due to timeout, check error message!")
+
         finally:
             try:
                 self.delete_library("strings")
-                self.run_cbq_query("DROP FUNCTION func2")
+                self.run_cbq_query("DROP FUNCTION func1")
             except Exception as e:
                 self.log.error(str(e))
+
     def test_javascript_function_syntax_scope(self):
         try:
             functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
