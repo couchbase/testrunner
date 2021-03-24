@@ -834,7 +834,7 @@ class QueryUDFTests(QueryTests):
 
             self.run_cbq_query(query='CREATE FUNCTION func5() LANGUAGE JAVASCRIPT AS "multiplier" AT "math"')
             results = self.run_cbq_query(query="EXECUTE FUNCTION func5()")
-            self.assertEqual(results['results'], ['NaN'])
+            self.assertEqual(results['results'], [None])
         finally:
             try:
                 self.delete_library("math")
