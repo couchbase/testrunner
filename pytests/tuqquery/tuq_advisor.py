@@ -633,29 +633,57 @@ class QueryAdvisorTests(QueryTests):
             self.fail()
 
     def test_session_skip_statement(self):
-        query_lyon=f'SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
-        explain_query = f'EXPLAIN SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
+        """ 
+            Non advisabeable statement (explain, advise, select advisor, prepare, execute) should
+            not show in session.
+        """        
+        explain_query = 'EXPLAIN SELECT airportname FROM `travel-sample` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
         advisor_list_query = "SELECT ADVISOR ({'action': 'list'})"
-        advise_query = f'ADVISE SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
-        prepare_query = f'PREPARE lyon_airport as SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
-        execute_prepared_query = f'EXECUTE lyon_airport'
-        try:
-            start = self.run_cbq_query(query="SELECT ADVISOR({'action': 'start', 'duration': '45m'})")
-            session = start['results'][0]['$1']['session']
-            # Run queries. Explain, advisor, advise, prepare and execute should not show up in session advise.
-            self.run_cbq_query(explain_query)
-            self.run_cbq_query(advise_query)
-            self.run_cbq_query(advisor_list_query)
-            self.run_cbq_query(prepare_query)
-            self.run_cbq_query(execute_prepared_query)
-            # Stop and check session
-            self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'stop', 'session':'{session}'}}) as Stop")
-            get = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'get', 'session':'{session}'}}) as Get")
-            self.assertEqual(get['results'][0]['Get'][0][0], [])
-        except Exception as e:
-            self.log.error(f"Advisor session failed: {e}")
-            self.fail()
+        advise_query = 'ADVISE SELECT airportname FROM `travel-sample` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
+        prepare_query = 'PREPARE aeroport_de_lyon AS SELECT airportname FROM `travel-sample`.`inventory`.`airport` WHERE lower(city) = "lyon" AND country = "France"'
+        execute_prepared_query = 'EXECUTE aeroport_de_lyon'
+        # For prepare statement
+        self.run_cbq_query("CREATE PRIMARY INDEX ON `default`:`default`")
+        # Start session
+        start = self.run_cbq_query("SELECT ADVISOR({'action': 'start', 'duration': '45m'})")
+        session = start['results'][0]['$1']['session']
+        # Run queries. Explain, advisor, advise, prepare and execute should not show up in session advise.
+        self.run_cbq_query(explain_query)
+        self.run_cbq_query(advise_query)
+        self.run_cbq_query(advisor_list_query)
+        self.run_cbq_query(prepare_query)
+        self.run_cbq_query(execute_prepared_query)
+        # Stop and check session
+        self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'stop', 'session':'{session}'}}) as Stop")
+        get = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'get', 'session':'{session}'}}) as Get")
+        # Check there are no errors statement in advise session
+        advise = get['results'][0]['Get'][0][0]
+        self.assertEqual(advise, [])
 
+    def test_session_skip_count(self):
+        """ 
+            Non advisabeable statement (select advisor) should
+            not be counted toward query_count.
+        """        
+        query_lyon='SELECT airportname FROM `travel-sample` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
+        advisor_list_query = "SELECT ADVISOR ({'action': 'list'})"
+        # Start session
+        start = self.run_cbq_query("SELECT ADVISOR({'action': 'start', 'duration': '45m', 'query_count': 2})")
+        session = start['results'][0]['$1']['session']
+        # Run queries.
+        self.run_cbq_query(advisor_list_query)
+        self.run_cbq_query(advisor_list_query)
+        self.run_cbq_query(query_lyon)
+        self.run_cbq_query(advisor_list_query)
+        self.run_cbq_query(query_lyon)
+        # Stop and check session
+        self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'stop', 'session':'{session}'}}) as Stop")
+        get = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'get', 'session':'{session}'}}) as Get")
+        # Check the query_lyon ran 2 times
+        advise = get['results'][0]['Get'][0][0]
+        statements = advise['recommended_covering_indexes'][0]['statements']
+        self.assertEqual(statements[0]['statement'], query_lyon)
+        self.assertEqual(statements[0]['run_count'], 2)
 
     def test_get_active_session(self):
         try:
