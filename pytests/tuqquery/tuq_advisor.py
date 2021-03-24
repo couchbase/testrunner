@@ -632,6 +632,31 @@ class QueryAdvisorTests(QueryTests):
             self.log.error("Advisor session failed: {0}".format(e))
             self.fail()
 
+    def test_session_skip_statement(self):
+        query_lyon=f'SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
+        explain_query = f'EXPLAIN SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
+        advisor_list_query = "SELECT ADVISOR ({'action': 'list'})"
+        advise_query = f'ADVISE SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
+        prepare_query = f'PREPARE lyon_airport as SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
+        execute_prepared_query = f'EXECUTE lyon_airport'
+        try:
+            start = self.run_cbq_query(query="SELECT ADVISOR({'action': 'start', 'duration': '45m'})")
+            session = start['results'][0]['$1']['session']
+            # Run queries. Explain, advisor, advise, prepare and execute should not show up in session advise.
+            self.run_cbq_query(explain_query)
+            self.run_cbq_query(advise_query)
+            self.run_cbq_query(advisor_list_query)
+            self.run_cbq_query(prepare_query)
+            self.run_cbq_query(execute_prepared_query)
+            # Stop and check session
+            self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'stop', 'session':'{session}'}}) as Stop")
+            get = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'get', 'session':'{session}'}}) as Get")
+            self.assertEqual(get['results'][0]['Get'][0][0], [])
+        except Exception as e:
+            self.log.error(f"Advisor session failed: {e}")
+            self.fail()
+
+
     def test_get_active_session(self):
         try:
             results = self.run_cbq_query(query="SELECT ADVISOR({'action': 'start', 'duration': '5000s', 'query_count': 2 })", server=self.master)
