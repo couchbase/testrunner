@@ -254,7 +254,7 @@ class NodeHelper:
             elif self.get_os() in install_constants.WINDOWS_SERVER:
                 return install_constants.DEFAULT_CLI_PATH["WINDOWS_SERVER"]
 
-    def _set_ip_version(self):
+    def _set_ip_version(self, retries=3):
         if params["enable_ipv6"]:
             self.enable_ipv6 = True
             if self.node.ip.startswith("["):
@@ -271,17 +271,19 @@ class NodeHelper:
                                                          self.ip,
                                                          self.node.rest_username,
                                                          self.node.rest_password)
-
-        self.shell.execute_command(cmd)
+        while retries > 0:
+            ret, _ = self.shell.execute_command(cmd)
+            if ret == ['0']:
+                time.sleep(30)
+            retries -= 1
+        else:
+            log.warning("Unable to init node {0}".format(self.ip))
 
     def pre_init_cb(self):
         try:
             self._set_ip_version()
-
             if params["fts_query_limit"] > 0:
                 self.set_cbft_env_options("fts_query_limit", params["fts_query_limit"])
-
-
         except Exception as e:
             log.warning("Exception {0} occurred during pre-init".format(e))
 
@@ -304,10 +306,10 @@ class NodeHelper:
 
     def allocate_memory_quotas(self):
         kv_quota = 0
-        info = self.rest.get_nodes_self()
 
         start_time = time.time()
         while time.time() < start_time + 30 and kv_quota == 0:
+            info = self.rest.get_nodes_self()
             kv_quota = int(info.mcdMemoryReserved * testconstants.CLUSTER_QUOTA_RATIO)
             time.sleep(1)
 
