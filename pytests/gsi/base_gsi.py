@@ -346,7 +346,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
         return metastore_size_on_nodes
 
-    def async_multi_drop_index(self, buckets=None, query_definitions=None):
+    def async_multi_drop_index(self, buckets=None, query_definitions=None, pre_cc=False):
         if not buckets:
             buckets = self.buckets
         if not query_definitions:
@@ -354,10 +354,10 @@ class BaseSecondaryIndexingTests(QueryTests):
         drop_index_tasks = []
         for bucket in buckets:
             for query_definition in query_definitions:
-                index_info = query_definition.generate_index_drop_query(namespace=bucket.name)
+                index_info = query_definition.generate_index_drop_query(namespace=bucket.name, pre_cc=pre_cc)
                 if index_info not in self.memory_drop_list:
                     self.memory_drop_list.append(index_info)
-                    drop_index_tasks.append(self.async_drop_index(bucket.name, query_definition))
+                    drop_index_tasks.append(self.async_drop_index(bucket.name, query_definition, pre_cc=pre_cc))
         return drop_index_tasks
 
     def alter_index_replicas(self, index_name, namespace="default", action='replica_count', num_replicas=1,
@@ -419,10 +419,11 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.assertFalse(check, "Index {0} failed to be deleted".format(query_definition.index_name))
             del (self.index_id_map[bucket][query_definition])
 
-    def async_drop_index(self, bucket, query_definition):
+    def async_drop_index(self, bucket, query_definition, pre_cc=False):
         self.query = query_definition.generate_index_drop_query(namespace=bucket,
                                                                 use_gsi_for_secondary=self.use_gsi_for_secondary,
-                                                                use_gsi_for_primary=self.use_gsi_for_primary)
+                                                                use_gsi_for_primary=self.use_gsi_for_primary,
+                                                                pre_cc=pre_cc)
         drop_index_task = self.gsi_thread.async_drop_index(server=self.n1ql_node, bucket=bucket, query=self.query,
                                                            n1ql_helper=self.n1ql_helper,
                                                            index_name=query_definition.index_name)
@@ -675,11 +676,16 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                                     scan_consistency=scan_consistency,
                                                                     scan_vectors=scan_vectors)
                 if "drop_index" in operation_map:
+                    pre_cc = False
+                    index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+                    cb_version = RestConnection(index_node).get_nodes_version()
+                    if '7.0' not in cb_version:
+                        pre_cc = True
                     if "index" in nodes_out or "n1ql" in nodes_out:
                         if phase == "in_between":
                             tasks = []
                     else:
-                        tasks += self.async_multi_drop_index(self.buckets, query_definitions)
+                        tasks += self.async_multi_drop_index(self.buckets, query_definitions, pre_cc=pre_cc)
             except Exception as ex:
                 log.info(ex)
                 raise

@@ -529,7 +529,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                 else:
                     self.multi_create_index()
                 self._verify_scan_api()
-                self._create_replica_indexes()
+                self._create_replica_indexes(keyspace='standard_bucket0')
                 self.multi_query_using_index(verify_results=False)
                 if "create_index" in ops_map:
                     for bucket in self.buckets:
@@ -539,7 +539,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         for thread in threads:
             thread.join()
         self.sleep(60)
-        self._verify_create_index_api()
+        self._verify_create_index_api(keyspace='standard_bucket0')
         buckets = self._create_plasma_buckets()
         self.load(self.gens_load, buckets=buckets, flag=self.item_flag, batch_size=self.batch_size)
         self.multi_create_index(buckets=buckets, query_definitions=self.query_definitions)
@@ -559,7 +559,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             for task in tasks:
                 task.result()
 
-    def _verify_create_index_api(self):
+    def _verify_create_index_api(self, keyspace='default'):
         """
         1. Get Indexer and Query Versions
         2. Run create query with explain
@@ -573,7 +573,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             if vals["version"] < "5":
                 old_api = True
                 break
-        create_index_query_age = "CREATE INDEX verify_api ON default(age DESC)"
+        create_index_query_age = f"CREATE INDEX verify_api ON {keyspace}(age DESC)"
         try:
             query_result = self.n1ql_helper.run_cbq_query(query=create_index_query_age,
                                            server=self.n1ql_node)
@@ -620,9 +620,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                 msg = "IndexScan3"
                 self.assertIn(msg, str(actual_result), "IndexScan3 is not used for Vulcan Nodes")
 
-    def _create_replica_indexes(self):
+    def _create_replica_indexes(self,  keyspace='default'):
         nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        create_index_query = "CREATE INDEX index_replica_index ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(len(nodes)-1)
+        create_index_query = f"CREATE INDEX index_replica_index ON {keyspace}(age) USING GSI  WITH {{'num_replica': {0}}};".format(len(nodes)-1)
         try:
             query_result = self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -640,7 +640,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                 log.info(str(ex))
                 raise
         else:
-            drop_index_query = "DROP INDEX default.index_replica_index"
+            drop_index_query = f"DROP INDEX {keyspace}.index_replica_index"
             query_result = self.n1ql_helper.run_cbq_query(query=drop_index_query,
                                            server=self.n1ql_node)
 
