@@ -91,10 +91,6 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.defer_build = self.defer_build and self.use_gsi_for_secondary
         self.num_index_replicas = self.input.param("num_index_replica", 0)
 
-        # New settings for schedule Indexes
-        self.rest.set_index_settings({"queryport.client.waitForScheduledIndex": False})
-        self.rest.set_index_settings({"indexer.allowScheduleCreateRebal": True})
-
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
 
