@@ -617,7 +617,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
 
     def _create_replica_indexes(self,  keyspace='default'):
         nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        create_index_query = f"CREATE INDEX index_replica_index ON {keyspace}(age) USING GSI  WITH {{'num_replica': {0}}};".format(len(nodes)-1)
+        create_index_query = f"CREATE INDEX index_replica_index ON {keyspace}(age) USING GSI  WITH {{'num_replica': {len(nodes)-1}}};"
         try:
             query_result = self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
