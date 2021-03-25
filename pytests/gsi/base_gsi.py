@@ -52,6 +52,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.num_collections = self.input.param("num_collections", 1)
         self.item_to_delete = self.input.param('item_to_delete', None)
         self.test_bucket = self.input.param('test_bucket', 'test_bucket')
+        self.wait_for_scheduled_index = self.input.param('wait_for_scheduled_index', False)
+        self.scheduled_index_create_rebal = self.input.param('scheduled_index_create_rebal', True)
         self.enable_dgm = self.input.param('enable_dgm', False)
         self.rest = RestConnection(self.master)
         self.collection_rest = CollectionsRest(self.master)
@@ -90,6 +92,12 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.gsi_thread = Cluster()
         self.defer_build = self.defer_build and self.use_gsi_for_secondary
         self.num_index_replicas = self.input.param("num_index_replica", 0)
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        if index_node:
+            self.index_rest = RestConnection(index_node)
+            # New settings for schedule Indexes
+            self.index_rest.set_index_settings({"queryport.client.waitForScheduledIndex": self.wait_for_scheduled_index})
+            self.index_rest.set_index_settings({"indexer.allowScheduleCreateRebal": self.scheduled_index_create_rebal})
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
