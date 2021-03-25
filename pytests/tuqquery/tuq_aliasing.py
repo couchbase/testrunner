@@ -77,10 +77,10 @@ class QueryAliasTests(QueryTests):
             if self.prepared:
                 self.run_cbq_query(query="PREPARE p2 AS SELECT * FROM default b WHERE b.name = 'employee-9'")
                 results = self.run_cbq_query(query="EXECUTE p2")
-                self.assertEqual(results['metrics']['resultCount'], 72)
+                self.assertEqual(results['metrics']['resultCount'], 72*self.docs_per_day)
             else:
                 results = self.run_cbq_query(query="SELECT * FROM default b WHERE b.name = 'employee-9'")
-                self.assertEqual(results['metrics']['resultCount'], 72)
+                self.assertEqual(results['metrics']['resultCount'], 72*self.docs_per_day)
         elif self.implicit_full_path:
             if self.prepared:
                 self.run_cbq_query(query="PREPARE p3 AS SELECT * FROM default:default.test.test1  WHERE test1.name = 'new hotel'")
@@ -115,8 +115,8 @@ class QueryAliasTests(QueryTests):
             if self.prepared:
                 self.run_cbq_query(query="PREPARE p4 AS SELECT * FROM default  WHERE default.name = 'employee-9'")
                 results = self.run_cbq_query(query="EXECUTE p4")
-                self.assertEqual(results['metrics']['resultCount'], 72)
+                self.assertEqual(results['metrics']['resultCount'], 72*self.docs_per_day)
             else:
                 results = self.run_cbq_query(query="SELECT * FROM default  WHERE default.name = 'employee-9'")
-                self.assertEqual(results['metrics']['resultCount'], 72)
+                self.assertEqual(results['metrics']['resultCount'], 72*self.docs_per_day)
 
