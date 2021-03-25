@@ -739,6 +739,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         for uie in union_intersect_except:
             full_results = self.run_cbq_query(test_cases[test_name]['query_left'] + uie +
                                               test_cases[test_name]['query_right'])['results']
+            self.sleep(2)
             left_results = self.run_cbq_query(test_cases[test_name]['query_left'])['results']
             right_results = self.run_cbq_query(test_cases[test_name]['query_right'])['results']
             left_right_results = []
