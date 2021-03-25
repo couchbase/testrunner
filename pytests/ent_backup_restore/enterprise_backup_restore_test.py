@@ -1178,8 +1178,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.cluster_new_role = self.cluster_new_role + "[*]"
             admin_roles = ["cluster_admin", "eventing_admin"]
             for role in admin_roles:
-              if role in self.cluster_new_role:
-                self.cluster_new_role = self.cluster_new_role.replace(role + "[*]", role)
+               if role in self.cluster_new_role:
+                   self.cluster_new_role = self.cluster_new_role.replace(role + "[*]", role)
 
         self.log.info("\n***** Create new user: {0} with role: {1} to do backup *****"\
                       .format(self.cluster_new_user, self.cluster_new_role))
@@ -1218,10 +1218,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                     for srv in bk_cluster_services:
                         if "eventing" in srv:
                             eventing_service_in = True
-                    eventing_err = "Invalid permissions to backup eventing data"
+                    eventing_err = ["Invalid permissions to backup eventing data",
+                                    "cluster.eventing.functions!manage"]
                     if eventing_service_in and self._check_output(eventing_err, output) and \
-                        "admin" not in self.cluster_new_role:
-                        self.log.info("Only admin role could backup eventing service")
+                        ("admin" not in self.cluster_new_role or \
+                         "eventing_admin" not in self.cluster_new_role):
+                        self.log.info("Only admin or eventing_admin role could backup eventing service")
                     else:
                         self.fail("User {0} failed to backup data.\n"
                                           .format(self.cluster_new_role) + \
@@ -1365,7 +1367,24 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.log.info("Restore data from backup files")
 
         if all_buckets:
-            self.cluster_new_role = self.cluster_new_role + "[*]"
+            if "bucket_full_access" in self.cluster_new_role and \
+                "bucket_full_access[*]" not in self.cluster_new_role:
+                self.cluster_new_role = self.cluster_new_role.replace("bucket_full_access",
+                                                                      "bucket_full_access[*]")
+            else:
+                self.cluster_new_role = self.cluster_new_role + "[*]"
+            if "data_backup" in self.cluster_new_role and \
+                 "data_backup[*]" not in self.cluster_new_role:
+                self.cluster_new_role = self.cluster_new_role.replace("data_backup",
+                                                                      "data_backup[*]")
+            if "fts_admin" in self.cluster_new_role and \
+               "fts_admin[*]" not in self.cluster_new_role:
+                self.cluster_new_role = self.cluster_new_role.replace("fts_admin",
+                                                                      "fts_admin[*]")
+            admin_roles = ["cluster_admin", "eventing_admin"]
+            for role in admin_roles:
+               if role in self.cluster_new_role:
+                   self.cluster_new_role = self.cluster_new_role.replace(role + "[*]", role)
 
         self.log.info("\n***** Create new user: %s with role: %s to do backup *****"
                       % (self.cluster_new_user, self.cluster_new_role))
@@ -1383,7 +1402,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                              self.cluster_new_role))
 
             users_can_restore_all = ["admin", "bucket_full_access[*]",
-                                     "data_backup[*]"]
+                                     "data_backup[*]", "eventing_admin"]
             users_can_not_restore_all = ["views_admin[*]", "ro_admin",
                                          "replication_admin", "data_monitoring[*]",
                                          "data_writer[*]", "data_reader[*]",
@@ -1402,7 +1421,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                     eventing_service_in = True
             eventing_err = "User needs one of the following permissions: cluster.eventing"
             if eventing_service_in and self._check_output(eventing_err, output) and \
-                "admin" not in self.cluster_new_role:
+                ("admin" not in self.cluster_new_role or \
+                 "eventing_admin" not in self.cluster_new_role):
                 self.log.info("Only admin role could backup eventing service")
                 return
             success_msg = 'Restore completed successfully'
@@ -1436,7 +1456,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                         self.fail("User: %s failed to restore data with roles: %s. " \
                                   "Here is the output %s " % \
                                   (self.cluster_new_user, roles, output))
-                    if int(actual_keys) != 1000:
+                    if int(actual_keys) != 10000:
                         self.fail("User: %s failed to restore data with roles: %s. " \
                                   "Here is the actual docs in bucket %s " % \
                                   (self.cluster_new_user, roles, actual_keys))
