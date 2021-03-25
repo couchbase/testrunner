@@ -1292,7 +1292,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                                 time.sleep(1)
                                 break
                         elif check_paused_index:
-                            if index_state["status"] == "Paused":
+                            if index_state["status"] == "Paused" or index_state["status"] == "Ready":
                                 check = True
                             else:
                                 check = False

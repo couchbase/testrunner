@@ -934,11 +934,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         for thread in threads:
             thread.join()
 
-        if self.expected_err_msg:
-            if not str(self.alter_index_error[0]):
-                self.fail("Move index failed with unexpected error: %s" % self.alter_index_error)
-            self.alter_index_error = ''
-        else:
+        if self.flush_bucket:
             self.sleep(30)
             self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
             index_map = self.get_index_map()
@@ -949,6 +945,8 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                         self.assertTrue('"num_replica":{0}'.format(expected_num_replicas) in definition,
                                         "Number of replicas in the definition is wrong: %s" % definition)
             self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, expected_num_replicas)
+        else:
+            self.assertFalse(self.alter_index_error)
 
     def test_alter_index_bucket_partial_rollback(self):
         index_name_prefix = "random_index_" + str(random.randint(100000, 999999))
@@ -1286,10 +1284,12 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                                                         failover_nodes=[stop_node], graceful=False)
             failover_task.result()
 
+            self.sleep(30)
             rebalance = self.cluster.async_rebalance(
                 self.servers[:self.nodes_init],
                 [], [stop_node])
-            reached = RestHelper(self.rest).rebalance_reached()
+            rest = RestConnection(self.master)
+            reached = RestHelper(rest).rebalance_reached()
             self.assertTrue(reached,
                             "rebalance failed, stuck or did not complete")
             rebalance.result()
