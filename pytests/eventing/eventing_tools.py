@@ -523,6 +523,39 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
         self._couchbase_cli_eventing(eventing_node, self.function_name, "delete",
                                      "SUCCESS: Request to delete the function was accepted")
 
+    # MB-44917
+    def test_importing_paused_function_via_cli(self):
+        shell = RemoteMachineShellConnection(self.servers[0])
+        info = shell.extract_remote_info().type.lower()
+        if info == 'linux':
+            self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
+        elif info == 'windows':
+            self.cmd_ext = ".exe"
+            self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH_RAW
+        elif info == 'mac':
+            self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
+        else:
+            raise Exception("OS not supported.")
+        # create the json file need on the node
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        remote_client = RemoteMachineShellConnection(eventing_node)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE,
+                                              worker_count=3)
+        self.deploy_function(body)
+        output = self.rest.export_function(self.function_name)
+        self.log.info("exported function: {}".format(output))
+        self.pause_function(body)
+        remote_client.write_remote_file_single_quote("/root", "test_export_function.json",
+                                                     json.dumps(output, indent=4))
+        # import the function from cli
+        self._couchbase_cli_eventing(eventing_node, self.function_name, "import",
+                                     "SUCCESS: Events imported",
+                                     file_name="test_export_function.json")
+        status = self.rest.get_composite_eventing_status()
+        for i in range(len(status['apps'])):
+            if status['apps'][i]['name'] == self.function_name and status['apps'][i]['composite_status'] != "paused":
+                self.fail("Handler state changed which is not expected")
+        self.undeploy_and_delete_function(body)
 
     def _couchbase_cli_eventing(self, host, function_name, operation, result, file_name=None, name=True):
         remote_client = RemoteMachineShellConnection(host)
