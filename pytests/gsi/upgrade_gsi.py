@@ -208,11 +208,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             self._run_tasks([kv_ops, in_between_tasks])
             rebalance = self.cluster.async_rebalance(active_nodes, [], [node])
             rebalance.result()
-            self._verify_indexer_storage_mode(self.nodes_in_list[i])
+            if "index" in node_services_list:
+                self._verify_indexer_storage_mode(self.nodes_in_list[i])
             self._verify_bucket_count_with_index_count()
             self.multi_query_using_index()
-            if self.toggle_disable_upgrade:
-                self.disable_plasma_upgrade = not self.toggle_disable_upgrade
         after_tasks = self.async_run_operations(buckets=self.buckets, phase="after")
         self._run_tasks([after_tasks])
 
