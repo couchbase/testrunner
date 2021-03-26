@@ -123,17 +123,19 @@ class EventingRebalance(EventingBaseTest):
         sock_batch_size = self.input.param('sock_batch_size', 1)
         worker_count = self.input.param('worker_count', 3)
         cpp_worker_thread_count = self.input.param('cpp_worker_thread_count', 1)
+        gen_load_del = copy.deepcopy(self.gens_load)
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
                                               cpp_worker_thread_count=cpp_worker_thread_count)
         self.deploy_function(body)
         # load data
         if not self.is_expired:
-            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size)
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         else:
-            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size,exp=300)
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', exp=300,
+                                                    compression=self.sdk_compression)
         if self.pause_resume:
             self.pause_function(body)
         # rebalance in a eventing node when eventing is processing mutations
@@ -142,6 +144,7 @@ class EventingRebalance(EventingBaseTest):
                                                  services=services_in)
         reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        task.result()
         rebalance.result()
         if self.pause_resume:
             self.resume_function(body)
@@ -153,12 +156,13 @@ class EventingRebalance(EventingBaseTest):
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         if not self.is_expired:
-            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size, op_type='delete')
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_del,
+                                                    self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
         if self.pause_resume:
             self.pause_function(body)
             self.sleep(30)
             self.resume_function(body)
+        task.result()
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
         if not self.cancel_timer:
@@ -714,13 +718,14 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
         try:
-            # delete json documents
-            self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size, op_type='delete')
+            # delete json/binary documents
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_del,
+                                                    self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
         except:
             pass
         if self.pause_resume:
             self.resume_function(body)
+        task.result()
         try :
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after failover/recovery/rebalance goes through successfully
@@ -775,13 +780,14 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
         try:
-            # delete json documents
-            self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size, op_type='delete')
+            # delete json/binary documents
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_del,
+                                                    self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
         except:
             pass
         if self.pause_resume:
             self.resume_function(body)
+        task.result()
         try:
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after failover/recovery/rebalance goes through successfully
@@ -835,9 +841,10 @@ class EventingRebalance(EventingBaseTest):
                                              skip_stats_validation=True)
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
-            # delete json documents
-            self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size, op_type='delete')
+            # delete json/binary documents
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_del,
+                                                    self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
+            task.result()
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after rebalance goes through successfully
             if self.is_sbm:
@@ -1436,10 +1443,11 @@ class EventingRebalance(EventingBaseTest):
             pass
         try:
             # delete json documents
-            self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size, op_type='delete')
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_del,
+                                                    self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
         except:
             pass
+        task.result()
         try:
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after rebalance goes through successfully
