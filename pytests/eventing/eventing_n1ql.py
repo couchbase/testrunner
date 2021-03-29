@@ -2,7 +2,7 @@ import copy
 import datetime
 
 from lib.couchbase_helper.documentgenerator import JSONNonDocGenerator
-from lib.membase.api.rest_client import RestConnection
+from lib.membase.api.rest_client import RestConnection, RestHelper
 from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_ERROR
 from pytests.eventing.eventing_base import EventingBaseTest, log
@@ -40,6 +40,8 @@ class EventingN1QL(EventingBaseTest):
                                       master=self.master,
                                       use_rest=True
                                       )
+        self.handler_code=self.input.param('handler_code', 'bucket_op')
+
 
     def tearDown(self):
         super(EventingN1QL, self).tearDown()
@@ -432,6 +434,7 @@ class EventingN1QL(EventingBaseTest):
         self.assertNotEqual(count, 20, "All docs didn't expired in dst_bucket. Check eventing logs for details.")
         self.undeploy_and_delete_function(body)
 
+<<<<<<< HEAD   (c37171 CBQE-6426 need to pause few seconds after each add node in c)
     #MB-42513
     def test_delete_query(self):
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
@@ -445,3 +448,37 @@ class EventingN1QL(EventingBaseTest):
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
+=======
+    def test_n1ql_gc_rebalance(self):
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.load_sample_buckets(self.server, "travel-sample")
+        worker_count = self.input.param('worker_count', 12)
+        body = self.create_save_function_body(self.function_name, self.handler_code, worker_count=worker_count)
+        self.deploy_function(body)
+        # load data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        if self.pause_resume:
+            self.pause_function(body)
+        # rebalance in a eventing node when eventing is processing mutations
+        services_in = ["eventing"]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                 services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        if self.pause_resume:
+            self.resume_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results after rebalance
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        # delete json documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        if self.pause_resume:
+            self.pause_function(body)
+            self.sleep(30)
+            self.resume_function(body)
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+>>>>>>> CHANGE (f63b5a Eventing: n1ql gc test cases)
