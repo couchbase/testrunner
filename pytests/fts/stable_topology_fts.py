@@ -619,6 +619,8 @@ class StableTopFTS(FTSBaseTest):
                 self.sleep(60, "Waiting for updates to get indexed...")
             self.wait_for_indexing_complete()
         self.generate_random_queries(index, self.num_queries, self.query_types)
+        self.sleep(30, "additional wait time to be sure, fts index is ready")
+
         if self.run_via_n1ql:
             n1ql_executor = self._cb_cluster
         else:

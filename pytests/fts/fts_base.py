@@ -1500,6 +1500,8 @@ class FTSIndex:
             hits, matches, time_taken, status = \
                 self.__cluster.run_fts_query(self.name, query_dict, timeout=rest_timeout)
         except ServerUnavailableException:
+            if zero_results_ok and expected_hits <= 0:
+                return hits, doc_ids, time_taken, status
             # query time outs
             raise ServerUnavailableException
         except Exception as e:

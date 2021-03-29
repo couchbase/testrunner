@@ -328,6 +328,9 @@ class FlexIndexTests(QueryTests):
         self.update_expected_fts_index_map(fts_index)
         if not self.is_index_present("default", "primary_gsi_index"):
             self.run_cbq_query("create primary index primary_gsi_index on default")
+
+        self.wait_for_fts_indexing_complete(fts_index, self.num_items)
+
         failed_to_run_query, not_found_index_in_response, result_mismatch = self.run_queries_and_validate()
         self.cbcluster.delete_all_fts_indexes()
 
@@ -370,6 +373,9 @@ class FlexIndexTests(QueryTests):
         self.update_expected_fts_index_map(fts_index)
         if not self.is_index_present("default", "primary_gsi_index"):
             self.run_cbq_query("create primary index primary_gsi_index on default")
+
+        self.wait_for_fts_indexing_complete(fts_index, self.num_items)
+
         failed_to_run_query, not_found_index_in_response, result_mismatch = self.run_queries_and_validate(partial_sargability = True)
         self.cbcluster.delete_all_fts_indexes()
 
@@ -392,6 +398,9 @@ class FlexIndexTests(QueryTests):
         self.generate_random_queries()
         fts_index.smart_query_fields = self.query_gen.fields
         self.update_expected_fts_index_map(fts_index)
+
+        self.wait_for_fts_indexing_complete(fts_index, self.num_items)
+
         failed_to_run_query, not_found_index_in_response, result_mismatch = self.run_queries_and_validate()
         self.cbcluster.delete_all_fts_indexes()
 
@@ -416,6 +425,9 @@ class FlexIndexTests(QueryTests):
         self.get_gsi_fields_partial_sargability()
         self.create_gsi_indexes()
         self.generate_random_queries()
+
+        self.wait_for_fts_indexing_complete(fts_index, self.num_items)
+
         failed_to_run_query, not_found_index_in_response, result_mismatch = self.run_queries_and_validate(partial_sargability = True)
         self.cbcluster.delete_all_fts_indexes()
 
@@ -440,6 +452,9 @@ class FlexIndexTests(QueryTests):
         self.get_gsi_fields_partial_sargability()
         self.create_gsi_indexes()
         self.generate_random_queries()
+
+        self.wait_for_fts_indexing_complete(fts_index, self.num_items)
+
         failed_to_run_query, not_found_index_in_response, result_mismatch = self.run_queries_and_validate(partial_sargability = True)
         self.cbcluster.delete_all_fts_indexes()
 
@@ -472,6 +487,10 @@ class FlexIndexTests(QueryTests):
         self.get_gsi_fields_partial_sargability()
         self.create_gsi_indexes()
         self.generate_random_queries()
+
+        self.wait_for_fts_indexing_complete(fts_index_1, self.num_items)
+        self.wait_for_fts_indexing_complete(fts_index_2, self.num_items)
+
         failed_to_run_query, not_found_index_in_response, result_mismatch = self.run_queries_and_validate()
         self.cbcluster.delete_all_fts_indexes()
 
@@ -525,6 +544,8 @@ class FlexIndexTests(QueryTests):
                       'ANY c IN children SATISFIES c.gender = "F" AND (c.age > 5 AND c.age <15) '
                       'OR c.first_name LIKE "a%" END ORDER BY address.country,META().id OFFSET 500 LIMIT 100']
 
+        self.wait_for_fts_indexing_complete(fts_index, self.num_items)
+
         failed_to_run_query, not_found_index_in_response, result_mismatch = self.run_query_and_validate(query_list)
         if failed_to_run_query or not_found_index_in_response or result_mismatch:
             self.fail("Found queries not runnable: {0} or required index not found in the query resonse: {1} "
@@ -545,7 +566,9 @@ class FlexIndexTests(QueryTests):
         fts_index.smart_query_fields = self.query_gen.fields
         self.update_expected_fts_index_map(fts_index)
         fts_index.update_num_replicas(1)
+
         self.wait_for_fts_indexing_complete(fts_index, self.num_items)
+
         failed_to_run_query, not_found_index_in_response, result_mismatch = self.run_queries_and_validate()
 
         if failed_to_run_query or not_found_index_in_response or result_mismatch:
@@ -594,7 +617,10 @@ class FlexIndexTests(QueryTests):
             raise Exception("Invalid test configuration! User name should not be empty.")
 
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
-        self.create_fts_index(name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
+        fts_index = self.create_fts_index(name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
+
+        self.wait_for_fts_indexing_complete(fts_index, 7303)
+
         self._create_user(user, 'beer-sample')
 
         username = self.users[user]['username']
@@ -613,7 +639,9 @@ class FlexIndexTests(QueryTests):
             raise Exception("Invalid test configuration! User name should not be empty.")
 
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
-        self.create_fts_index(name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
+        fts_index = self.create_fts_index(name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
+        self.wait_for_fts_indexing_complete(fts_index, 7303)
+
         self._create_user(user, 'beer-sample')
 
         username = self.users[user]['username']

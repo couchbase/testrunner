@@ -1459,7 +1459,7 @@ class QueryTests(BaseTestCase):
             else:
                 result = rest.query_tool(query, self.n1ql_port, query_params=query_params,
                                          is_prepared=is_prepared, named_prepare=self.named_prepare,
-                                         encoded_plan=encoded_plan, servers=self.servers)
+                                         encoded_plan=encoded_plan, servers=self.servers, verbose=debug_query)
         else:
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside(
