@@ -1,17 +1,16 @@
 function OnUpdate(doc, meta) {
     try{
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
+        let query1 = SELECT * FROM `travel-sample` limit 10;
+        let query2 = SELECT * FROM `travel-sample` limit 10;
+        let query3 = SELECT * FROM `travel-sample` limit 10;
+        let query4 = SELECT * FROM `travel-sample` limit 10;
+        let query5 = SELECT * FROM `travel-sample` limit 10;
+        let query6 = SELECT * FROM `travel-sample` limit 10;
+        let query7 = SELECT * FROM `travel-sample` limit 10;
+        let query8 = SELECT * FROM `travel-sample` limit 10;
+        let query9 = SELECT * FROM `travel-sample` limit 10;
+        let query10 = SELECT * FROM `travel-sample` limit 10;
+        let query11 = SELECT * FROM `travel-sample` limit 10;
     } catch (e) {
         log (e);
         if (e.message === 'Connection pool maximum capacity reached') {
@@ -24,18 +23,17 @@ function OnUpdate(doc, meta) {
 
 function OnDelete(meta){
     try{
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
-    SELECT * FROM `travel-sample` limit 1;
+        let query1 = SELECT * FROM `travel-sample` limit 10;
+        let query2 = SELECT * FROM `travel-sample` limit 10;
+        let query3 = SELECT * FROM `travel-sample` limit 10;
+        let query4 = SELECT * FROM `travel-sample` limit 10;
+        let query5 = SELECT * FROM `travel-sample` limit 10;
+        let query6 = SELECT * FROM `travel-sample` limit 10;
+        let query7 = SELECT * FROM `travel-sample` limit 10;
+        let query8 = SELECT * FROM `travel-sample` limit 10;
+        let query9 = SELECT * FROM `travel-sample` limit 10;
+        let query10 = SELECT * FROM `travel-sample` limit 10;
+        let query11 = SELECT * FROM `travel-sample` limit 10;
     } catch (e) {
         log (e);
         if (e.message === 'Connection pool maximum capacity reached') {
