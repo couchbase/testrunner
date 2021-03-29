@@ -11,7 +11,8 @@ from testconstants import LINUX_COUCHBASE_SAMPLE_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_SAMPLE_PATH_C
 from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_4DOT6,\
-                          COUCHBASE_FROM_SPOCK, COUCHBASE_FROM_VULCAN
+                          COUCHBASE_FROM_SPOCK, COUCHBASE_FROM_VULCAN,\
+                          COUCHBASE_FROM_CHESHIRE_CAT
 from scripts.install import InstallerJob
 
 class CreateBucketTests(BaseTestCase):
@@ -29,7 +30,10 @@ class CreateBucketTests(BaseTestCase):
         self.node_version = self.rest.get_nodes_version()
         self.total_items_travel_sample = 31569
         if self.node_version[:5] in COUCHBASE_FROM_WATSON:
-            self.total_items_travel_sample = 63182
+            if self.node_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT:
+                self.total_items_travel_sample = 63288
+            else:
+                self.total_items_travel_sample = 63182
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
