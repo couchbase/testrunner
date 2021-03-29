@@ -1890,7 +1890,7 @@ class BackupServiceTest(BackupServiceBase):
             # Pick a 2 random clients and unmount the archive location
             # Consequently, either the leader and the node lose shared access Or both non-leader nodes lose shared access.
             for client in random.sample(self.nfs_connection.clients, 2):
-                client.clean()
+                client.clean(self.nfs_connection.directory_to_mount)
                 clients_that_lost_shared_access.append(client)
 
         if lose_shared == 'all':
@@ -1924,7 +1924,7 @@ class BackupServiceTest(BackupServiceBase):
         self.assertEqual(status, 200)
 
         # Sleep to give time for the task to fail and be removed
-        self.sleep(10)
+        self.sleep(60)
 
         # Fetch repository information
         repository = self.repository_api.cluster_self_repository_state_id_get('active', repo_name)
@@ -1971,7 +1971,7 @@ class BackupServiceTest(BackupServiceBase):
         else:
             # Unmount shared directory
             for client in self.nfs_connection.clients:
-                client.clean()
+                client.clean(self.nfs_connection.directory_to_mount)
 
         # Perform a one off backup
         self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name)
@@ -1984,7 +1984,7 @@ class BackupServiceTest(BackupServiceBase):
         else:
             # Remount shared directory
             for client in self.nfs_connection.clients:
-                client.mount()
+                client.mount(self.directory_to_share, self.nfs_connection.directory_to_mount)
 
         self.sleep(30)
         # Check the 2nd backup does not exist
