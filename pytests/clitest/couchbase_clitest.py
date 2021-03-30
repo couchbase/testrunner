@@ -1864,9 +1864,12 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         initial_servers = ",".join(initial_servers_list)
 
         server_to_failover = "{0}:{1}".format(self.servers[1].ip, self.servers[1].port)
+        no_failover_node = False
         if invalid_node:
+            no_failover_node = True
             server_to_failover = "invalid.server:8091"
         if no_failover_servers:
+            no_failover_node = True
             server_to_failover = None
 
         rest = RestConnection(server)
@@ -1891,13 +1894,20 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         cli = CouchbaseCLI(server, username, password)
         stdout, _, _ = cli.failover(server_to_failover, force)
+        if force and not no_failover_node:
+            self.log.info("reset hard failover node {0}".format(self.servers[1].ip))
+            remote_client = RemoteMachineShellConnection(self.servers[1])
+            remote_client.enable_diag_eval_on_non_local_hosts()
+            rest = RestConnection(self.servers[1])
+            rest.force_eject_node()
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Server failed over"),
                             "Expected command to succeed")
             self.assertTrue(self.verifyActiveServers(server, num_initial_servers - 1),
                             "Servers not failed over")
-            self.assertTrue(self.verifyFailedServers(server, 1),
+            if not force:
+                self.assertTrue(self.verifyFailedServers(server, 1),
                             "Not all servers failed over have `inactiveFailed` status")
         else:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
