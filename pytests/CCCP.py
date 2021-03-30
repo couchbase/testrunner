@@ -86,6 +86,8 @@ class CCCP(BaseTestCase):
                                                  + 16 : str(ex).find("for vbucket")]
                     if not config.endswith("}"):
                         config += "}"
+                    if config.strip().startswith("b'{"):
+                         config = config.replace("b'{", "{")
                     try:
                         config = json.loads(config)
                     except Exception as e:
