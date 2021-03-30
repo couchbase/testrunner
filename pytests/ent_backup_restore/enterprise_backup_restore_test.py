@@ -2821,9 +2821,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         # Run all the sub_commands with the (non-objstore) required arguments (so that we are actually checking the
         # correct error)
         for sub_command in ['backup -a archive -r repo -c localhost -u admin -p password',
-                            # TODO(James Lee) - Uncomment when MB-40011 has been closed and the fix has been picked up
-                            # by the latest build.
-                            # 'collect-logs -a archive',
+                            'collect-logs -a archive',
                             'config -a archive -r repo',
                             'examine -a archive -r repo -k asdf --bucket asdf',
                             'info -a archive',
@@ -2835,6 +2833,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             for argument in ['--obj-access-key-id asdf',
                              '--obj-cacert asdf',
                              '--obj-endpoint asdf',
+                             '--obj-log-level asdf',
                              '--obj-no-ssl-verify',
                              '--obj-region asdf',
                              '--obj-secret-access-key asdf']:
@@ -2851,7 +2850,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
                 # Check all the S3 specific arguments
                 if self.objstore_provider.schema_prefix() == 's3://':
-                    for argument in ['--s3-force-path-style', '--s3-log-level asdf']:
+                    for argument in ['--s3-force-path-style']:
                         output, error = remote_client.execute_command(f"{command} {sub_command} {argument}")
                         remote_client.log_command_output(output, error)
                         self.assertNotEqual(len(output), 0)
@@ -2866,6 +2865,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             for argument in ['--obj-access-key-id',
                              '--obj-cacert',
                              '--obj-endpoint',
+                             '--obj-log-level',
                              '--obj-region',
                              '--obj-secret-access-key']:
 
@@ -2881,21 +2881,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                     error_mesg = "Unknown flag: --bucket"
                 self.assertIn(error_mesg, output[0],
                                 "Expected an error about providing cloud arguments without a value")
-
-            # Check all the S3 specific flags that require arguments without providing arguments. This is testing
-            # cbflag.
-            for argument in ['--s3-log-level']:
-                output, error = remote_client.execute_command(
-                    f"{command} {sub_command.replace('archive', 's3://archive')} --obj-staging-dir staging {argument}"
-                )
-                remote_client.log_command_output(output, error)
-                self.assertNotEqual(len(output), 0)
-                error_mesg = f"Expected argument for option: {argument}"
-                if "bucket" in sub_command:
-                    error_mesg = "Unknown flag: --bucket"
-                self.assertIn(error_mesg, output[0],
-                                "Expected an error about providing cloud arguments without a value")
-
 
             # Test omitting the staging directory argument
             output, error = remote_client.execute_command(
@@ -4389,13 +4374,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.assertIsNotNone(self.objstore_provider, "Test requires an object store provider")
         self.objstore_provider.remove_bucket()
         output, _ = self.backup_create(del_old_backup=False)
-        self.assertIn('the specified bucket does not exist', output[0].lower())
+        self.assertRegex(output[0].lower(), re.compile("bucket '.*' not found"))
 
     def test_backup_without_objstore_bucket(self):
         self.assertIsNotNone(self.objstore_provider, "Test requires an object store provider")
         self.objstore_provider.remove_bucket()
         output, _ = self.backup_cluster()
-        self.assertIn('the specified bucket does not exist', output[0].lower())
+        self.assertRegex(output[0].lower(), re.compile("bucket '.*' not found"))
 
     def test_info_without_objstore_bucket(self):
         self.assertIsNotNone(self.objstore_provider, "Test requires an object store provider")
@@ -4408,13 +4393,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.objstore_provider.remove_bucket()
         self.restore_only = True
         output, _ = self.backup_restore()
-        self.assertIn('the specified bucket does not exist', output[0].lower())
+        self.assertRegex(output[0].lower(), re.compile("bucket '.*' not found"))
 
     def test_remove_without_objstore_bucket(self):
         self.assertIsNotNone(self.objstore_provider, "Test requires an object store provider")
         self.objstore_provider.remove_bucket()
         _, output, _ = self.backup_remove()
-        self.assertIn('the specified bucket does not exist', output[0].lower())
+        self.assertRegex(output[0].lower(), re.compile("bucket '.*' not found"))
 
     def test_config_create_multiple_repos_with_remove_staging_directory(self):
         self.assertIsNotNone(self.objstore_provider, "Test requires an object store provider")
