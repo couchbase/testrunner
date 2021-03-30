@@ -239,7 +239,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
     def test_rebalance_of_failed_server_group(self):
         redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
-        self.rest.set_index_settings(redistribute)
+        self.index_rest.set_index_settings(redistribute)
         # Default source zone
         zones = list(self.rest.get_zone_names().keys())
         source_zone = zones[0]
@@ -275,6 +275,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         tasks = []
         err_msg1 = 'The index is scheduled for background creation'
         err_msg2 = 'Index creation will be retried in background'
+        err_msg3 = 'Create index or Alter replica cannot proceed due to another concurrent create index request'
         with ThreadPoolExecutor() as executor:
             for count, query in enumerate(index_gen_query_list):
                 task = executor.submit(self.run_cbq_query, query=query)
@@ -289,11 +290,11 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                         out = re.search(regex_pattern, str(err))
                         index_name = out.groups()[0]
                         self.log.info(f"{index_name} is scheduled for background")
-                    elif err_msg2 in str(err):
+                    elif err_msg2 in str(err) or err_msg3 in str(err):
                         continue
                     else:
                         self.fail(err)
-        self.wait_until_indexes_online()
+        self.wait_until_indexes_online(timeout=1800)
         index_meta_info = self.rest.get_indexer_metadata()['status']
         self.assertEqual(len(index_meta_info), len(index_lists) * (self.num_replicas + 1))
         index_hosts = set()
@@ -3631,4 +3632,3 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
     def _kill_all_processes_index(self, server):
         shell = RemoteMachineShellConnection(server)
         shell.execute_command("killall indexer")
-

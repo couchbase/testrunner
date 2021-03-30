@@ -50,6 +50,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         self.err_msg1 = 'The index is scheduled for background creation'
         self.err_msg2 = 'Index creation will be retried in background'
         self.err_msg3 = 'will retry building in the background for reason: Build Already In Progress.'
+        self.err_msg4 = 'Create index or Alter replica cannot proceed due to another concurrent create index request'
         self.system_query = "select * from system:indexes"
         self.log.info("==============  ConcurrentIndexes setup has completed ==============")
     
@@ -213,6 +214,8 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         result = self.wait_until_indexes_online(timeout=60)
         if not result:
             self.log.error("Timed out while checking for index status. Check index logs")
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info(f"Index Metadata: {index_metadata}")
         system_indexes = self.run_cbq_query(query=self.system_query)['results']
         self.assertFalse(system_indexes)
 
@@ -469,7 +472,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                         out = re.search(regex_pattern, str(err))
                         index_name = out.groups()[0]
                         self.log.info(f"{index_name} is scheduled for background")
-                    elif self.err_msg2 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg4 in str(err):
                         continue
                     else:
                         self.fail(err)
@@ -552,7 +555,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                         out = re.search(regex_pattern, str(err))
                         index_name = out.groups()[0]
                         self.log.info(f"{index_name} is scheduled for background")
-                    elif self.err_msg2 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg4 in str(err):
                         continue
                     else:
                         self.fail(err)
@@ -724,7 +727,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                         out = re.search(regex_pattern, str(err))
                         index_name = out.groups()[0]
                         self.log.info(f"{index_name} is scheduled for background")
-                    elif self.err_msg2 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg4 in str(err):
                         continue
                     else:
                         self.fail(err)
@@ -999,7 +1002,9 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                     self.run_cbq_query(query=build_query)
                 except Exception as err:
                     self.log.info(err)
-        self.wait_until_indexes_online(timeout=1800)
+        result = self.wait_until_indexes_online(timeout=1800)
+        if not result:
+            self.wait_until_indexes_online()
         index_meta_info = self.rest.get_indexer_metadata()['status']
         self.assertEqual(len(index_meta_info), self.num_of_indexes * (self.num_replicas + 1) * self.num_scopes * self.num_collections * 2)
         for index in index_meta_info:
