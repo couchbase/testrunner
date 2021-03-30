@@ -513,6 +513,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             self.log.info("failover node {0}"\
                           "MB-39220: Adding --hard flag for cli failover tests"\
                           .format(self.servers[nodes_add - nodes_rem - num].ip))
+            self.sleep(10, "wait for previous command execute completely")
             options = "--server-failover={0}:8091" \
                       .format(self.servers[nodes_add - nodes_rem - num].ip)
             if self.force_failover:
@@ -521,6 +522,10 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                         cli_command=cli_command, options=options,
                         cluster_host="localhost", cluster_port=8091,
                         user="Administrator", password="password")
+                self.log.info("reset hard failover node {0}".format(
+                                  self.servers[nodes_add - nodes_rem - num].ip))
+                rest = RestConnection(self.servers[nodes_add - nodes_rem - num])
+                rest.force_eject_node()
                 if len(output) == 2:
                     self.assertEqual(output, ["SUCCESS: Server failed over",
                                               ""])
@@ -539,19 +544,24 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                         raise Exception("No printout with command: {0}".format(cli_command))
 
         cli_command = "server-readd"
-        for num in range(nodes_readd):
-            self.log.info("add back node {0} to cluster" \
-                    .format(self.servers[nodes_add - nodes_rem - num ].ip))
-            options = "--server-add={0}:{1}".format(self.servers[nodes_add - nodes_rem - num].ip,
+        if not self.force_failover:
+            for num in range(nodes_readd):
+                self.log.info("add back node {0} to cluster" \
+                        .format(self.servers[nodes_add - nodes_rem - num ].ip))
+                self.sleep(10, "wait for previous command execute completely")
+
+                options = "--server-add={0}:{1}".format(self.servers[nodes_add - nodes_rem - num].ip,
                                                     self.servers[nodes_add - nodes_rem - num].port)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                         options=options, cluster_host="localhost",
                                                           cluster_port=8091, user="Administrator",
                                                                               password="password")
-            self.assertTrue("DEPRECATED: Please use the recovery command "
-                            "instead" in output and "SUCCESS: Servers "
-                                                    "recovered" in output,
-                            "Server readd failed")
+                self.assertTrue("DEPRECATED: Please use the recovery command "
+                                "instead" in output and "SUCCESS: Servers "
+                                                        "recovered" in output,
+                                "Server readd failed")
+        else:
+            self.log.info("This is hard failover.  Could not readd node.")
         cli_command = "rebalance"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                             cluster_host="localhost", cluster_port=8091,
@@ -623,6 +633,11 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                 cluster_host="localhost",
                                                                 user=cluster_user,
                                                                 password=cluster_pwd)
+            if self.force_failover or num == nodes_failover - 1:
+                self.log.info("reset hard failover node {0}".format(
+                                  self.servers[nodes_add - nodes_rem - num].ip))
+                rest = RestConnection(self.servers[nodes_add - nodes_rem - num])
+                rest.force_eject_node()
             self.assertTrue("SUCCESS: Server failed over" in str(output),
                             "Node failover failed")
             if not force_failover:
