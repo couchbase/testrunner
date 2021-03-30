@@ -246,7 +246,7 @@ class CouchbaseCLI:
         if failover_servers:
             options += " --server-failover " + str(failover_servers)
         if force:
-            options += " --hard --force"
+            options += " --hard "
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("failover", self.hostname,

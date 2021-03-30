@@ -517,15 +517,11 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             options = "--server-failover={0}:8091" \
                       .format(self.servers[nodes_add - nodes_rem - num].ip)
             if self.force_failover:
-                options += " --force --hard"
+                options += " --hard "
                 output, error = remote_client.execute_couchbase_cli(
                         cli_command=cli_command, options=options,
                         cluster_host="localhost", cluster_port=8091,
                         user="Administrator", password="password")
-                self.log.info("reset hard failover node {0}".format(
-                                  self.servers[nodes_add - nodes_rem - num].ip))
-                rest = RestConnection(self.servers[nodes_add - nodes_rem - num])
-                rest.force_eject_node()
                 if len(output) == 2:
                     self.assertEqual(output, ["SUCCESS: Server failed over",
                                               ""])
@@ -544,24 +540,21 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                         raise Exception("No printout with command: {0}".format(cli_command))
 
         cli_command = "server-readd"
-        if not self.force_failover:
-            for num in range(nodes_readd):
-                self.log.info("add back node {0} to cluster" \
+        for num in range(nodes_readd):
+            self.log.info("add back node {0} to cluster" \
                         .format(self.servers[nodes_add - nodes_rem - num ].ip))
-                self.sleep(10, "wait for previous command execute completely")
+            self.sleep(10, "wait for previous command execute completely")
 
-                options = "--server-add={0}:{1}".format(self.servers[nodes_add - nodes_rem - num].ip,
+            options = "--server-add={0}:{1}".format(self.servers[nodes_add - nodes_rem - num].ip,
                                                     self.servers[nodes_add - nodes_rem - num].port)
-                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                         options=options, cluster_host="localhost",
                                                           cluster_port=8091, user="Administrator",
                                                                               password="password")
-                self.assertTrue("DEPRECATED: Please use the recovery command "
-                                "instead" in output and "SUCCESS: Servers "
-                                                        "recovered" in output,
-                                "Server readd failed")
-        else:
-            self.log.info("This is hard failover.  Could not readd node.")
+            self.assertTrue("DEPRECATED: Please use the recovery command "
+                            "instead" in output and "SUCCESS: Servers "
+                                                  "recovered" in output,
+                                                  "Server readd failed")
         cli_command = "rebalance"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                             cluster_host="localhost", cluster_port=8091,
@@ -626,18 +619,13 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             options = "--server-failover={0}:8091"\
                       .format(self.servers[nodes_add - nodes_rem - num].ip)
             if self.force_failover or num == nodes_failover - 1:
-                options += " --force --hard"
+                options += " --hard "
                 force_failover = True
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                                 options=options,
                                                                 cluster_host="localhost",
                                                                 user=cluster_user,
                                                                 password=cluster_pwd)
-            if self.force_failover or num == nodes_failover - 1:
-                self.log.info("reset hard failover node {0}".format(
-                                  self.servers[nodes_add - nodes_rem - num].ip))
-                rest = RestConnection(self.servers[nodes_add - nodes_rem - num])
-                rest.force_eject_node()
             self.assertTrue("SUCCESS: Server failed over" in str(output),
                             "Node failover failed")
             if not force_failover:
@@ -1864,12 +1852,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         initial_servers = ",".join(initial_servers_list)
 
         server_to_failover = "{0}:{1}".format(self.servers[1].ip, self.servers[1].port)
-        no_failover_node = False
         if invalid_node:
-            no_failover_node = True
             server_to_failover = "invalid.server:8091"
         if no_failover_servers:
-            no_failover_node = True
             server_to_failover = None
 
         rest = RestConnection(server)
@@ -1894,20 +1879,13 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         cli = CouchbaseCLI(server, username, password)
         stdout, _, _ = cli.failover(server_to_failover, force)
-        if force and not no_failover_node:
-            self.log.info("reset hard failover node {0}".format(self.servers[1].ip))
-            remote_client = RemoteMachineShellConnection(self.servers[1])
-            remote_client.enable_diag_eval_on_non_local_hosts()
-            rest = RestConnection(self.servers[1])
-            rest.force_eject_node()
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Server failed over"),
                             "Expected command to succeed")
             self.assertTrue(self.verifyActiveServers(server, num_initial_servers - 1),
                             "Servers not failed over")
-            if not force:
-                self.assertTrue(self.verifyFailedServers(server, 1),
+            self.assertTrue(self.verifyFailedServers(server, 1),
                             "Not all servers failed over have `inactiveFailed` status")
         else:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
