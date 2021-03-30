@@ -749,10 +749,10 @@ class QueryAdvisorTests(QueryTests):
 
     def test_negative_invalid_value(self):
         invalid_actions = [ \
-            {'cmd': {'action':'start', 'duration':'two'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection. - cause: time: invalid duration "two"'}, \
-            {'cmd': {'action':'start', 'duration':'1hr'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection. - cause: time: unknown unit "hr" in duration "1hr"'}, \
-            {'cmd': {'action':'start', 'duration':'1h', 'response':'nul'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection. - cause: time: invalid duration "nul"'}, \
-            {'cmd': {'action':'start', 'duration':'1h', 'response':'1sec'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection. - cause: time: unknown unit "sec" in duration "1sec"'}, \
+            {'cmd': {'action':'start', 'duration':'two'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection. - cause: time: invalid duration two'}, \
+            {'cmd': {'action':'start', 'duration':'1hr'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection. - cause: time: unknown unit hr in duration 1hr'}, \
+            {'cmd': {'action':'start', 'duration':'1h', 'response':'nul'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection. - cause: time: invalid duration nul'}, \
+            {'cmd': {'action':'start', 'duration':'1h', 'response':'1sec'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection. - cause: time: unknown unit sec in duration 1sec'}, \
             {'cmd': {'action':'start', 'duration':'1h', 'query_count':'ten'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection. - cause: advisor() not valid argument for \'query_count\''}, \
             {'cmd': {'action':'start', 'duration':'1h', 'profile':9999}, 'error_code': 5010, 'error_msg': 'Error evaluating projection. - cause: advisor() not valid argument for \'profile\''} ]
         for action in invalid_actions:
