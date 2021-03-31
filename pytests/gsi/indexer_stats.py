@@ -326,6 +326,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         instance id list and every key of an index 'idx' in /stats response
         should exists in /stats response with instance id filter filtered on
         index 'idx'
+        https://issues.couchbase.com/browse/MB-45467
         """
         index = self.index_status['status'][0]
         namespace = "{0}:{1}:{2}:{3}".format(index['bucket'], index['scope'],
@@ -339,7 +340,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         index_stats_keys = self.rest.get_all_index_stats(
             inst_id_filter=instance_id_filter).keys()
         index_stats_keys = set(
-            [key for key in index_stats_keys if len(key.split(":")) >= 3])
+            [key for key in index_stats_keys if len(key.split(":")) >= 3 and 'MAINT_STREAM' not in key])
         incorrect_index_keys = set(
             [key for key in self.all_master_stats.keys()
                 if not key.startswith(namespace)])
@@ -357,6 +358,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         3. invalid id with correct type
         4. invalid id with incorrect type
         5. valid id with incorrect type
+        https://issues.couchbase.com/browse/MB-45467
         """
         index1 = self.index_status['status'][0]
         index2 = self.index_status['status'][1]
@@ -678,6 +680,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         """
         Indexes are spread across multiple available nodes. On querying stats
         of a node should give stats of indexes residing on that node only
+        https://issues.couchbase.com/browse/MB-45467
         """
         if len(self.servers) < 2:
             self.fail("Atleast 2 servers needed for this test")
@@ -695,7 +698,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
             rest.get_all_index_stats() for rest in rest_connections]
         indexes_info = [
             set([stat.rsplit(":", 1)[0] for stat in index_stats
-                 if len(stat.split(":")) > 2])
+                 if len(stat.split(":")) > 2 and 'MAINT_STREAM' not in stat])
             for index_stats in all_index_stats]
         for idx_num, current_index in enumerate(indexes_info):
             for index in indexes_info[idx_num + 1:]:
@@ -767,7 +770,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
             rest.get_all_index_stats() for rest in rest_connections]
         all_indexes = [set(
             [stat.rsplit(":", 1)[0] for stat in index_stats
-             if len(stat.split(":")) > 2]) for index_stats in all_index_stats]
+             if len(stat.split(":")) > 2 and 'MAINT_STREAM' not in stat]) for index_stats in all_index_stats]
         all_external_api_stats = [
             rest.get_index_official_stats() for rest in rest_connections]
         for external_stats, indexes in zip(
@@ -957,7 +960,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
             len(replica_indexes_1), self.num_index_replicas + 1, msg=msg)
         indexer_stats_2 = rest_connections[1].get_indexer_metadata()
         replica_indexes_2 = list(filter(
-            lambda index: index['name'].startswith(
+            lambda index: index['indexName'].startswith(
                 replica_index.index_name), indexer_stats_2['status']))
         msg = f"{replica_indexes_2}"
         self.assertEqual(
