@@ -5493,6 +5493,32 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
+    '''
+            update eventing config function wise
+    '''
+    def update_eventing_config_per_function(self, body, name):
+        authorization = self.get_authorization(self.username, self.password)
+        url = "api/v1/functions/" + name + "/config"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'POST', headers=headers,
+                                                     params=json.dumps(body).encode("ascii", "ignore"))
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
+            GET eventing config for single function
+    '''
+    def get_eventing_config_per_function(self, name):
+        authorization = self.get_authorization(self.username, self.password)
+        url = "api/v1/functions/" + name + "/config"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers, params='')
+        if not status:
+            raise Exception(content)
+        return content
 
     '''
           Get eventing rebalance status
