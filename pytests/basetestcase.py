@@ -3059,9 +3059,11 @@ class BaseTestCase(unittest.TestCase):
                     mc.sasl_auth_plain(self.master.rest_username,
                                        self.master.rest_password)
                 except:
+                    self.sleep(60)
                     mc = MemcachedClient(server.ip, 11210)
                     mc.sasl_auth_plain(self.master.rest_username,
                                        self.master.rest_password)
+                self.log.info("going to select bucket")
                 mc.bucket_select(str(bucket.name))
                 stats = mc.stats()
                 self.assertEqual(int(stats['ep_flusher_total_batch_limit']),
