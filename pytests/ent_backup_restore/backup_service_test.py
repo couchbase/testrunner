@@ -812,7 +812,7 @@ class BackupServiceTest(BackupServiceBase):
         task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, body=Body4(full_backup=full_backup)).task_name
 
         # Wait until task has completed
-        self.assertTrue(self.wait_for_task(repo_name, task_name))
+        self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=400))
 
         # Configure repository name
         self.backupset.name = repository.repo
@@ -859,7 +859,7 @@ class BackupServiceTest(BackupServiceBase):
             task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, body=Body4(full_backup= i < 1)).task_name
 
             # Wait until task has completed
-            self.assertTrue(self.wait_for_task(repo_name, task_name))
+            self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=400))
 
             # Configure repository name
             self.backupset.name = repository.repo
@@ -907,7 +907,7 @@ class BackupServiceTest(BackupServiceBase):
             task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, body=Body4(full_backup= i < 1)).task_name
 
             # Wait until task has completed
-            self.assertTrue(self.wait_for_task(repo_name, task_name))
+            self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=400))
 
         backups = [backup._date for backup in self.get_backups("active", repo_name)]
 
@@ -999,7 +999,7 @@ class BackupServiceTest(BackupServiceBase):
         task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, body=Body4(full_backup=full_backup)).task_name
 
         # Wait until task has completed
-        self.assertTrue(self.wait_for_task(repo_name, task_name))
+        self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=400))
 
         # Get backup name
         backup_name = self.map_task_to_backup("active", repo_name, task_name)
@@ -1599,7 +1599,7 @@ class BackupServiceTest(BackupServiceBase):
         def get_blob_gen(i):
             return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * (i + 1))), start=0, end=10)
 
-        self.take_n_one_off_backups("active", repo_name, get_blob_gen, no_of_backups, doc_load_sleep=3, sleep_time=5)
+        self.take_n_one_off_backups("active", repo_name, get_blob_gen, no_of_backups)
 
         self.assertEqual(len(self.get_backups("active", repo_name)), no_of_backups)
 
@@ -1643,7 +1643,7 @@ class BackupServiceTest(BackupServiceBase):
             """
             remote_shell.execute_cbworkloadgen(self.backupset.cluster_host.rest_username, self.backupset.cluster_host.rest_password, 10, "1", bucket_name, 2 + i, f"-j -c {collection_id}")
 
-        self.take_n_one_off_backups("active", repo_name, None, no_of_backups, data_provisioning_function=provision_with_data, doc_load_sleep=3, sleep_time=5)
+        self.take_n_one_off_backups("active", repo_name, None, no_of_backups, data_provisioning_function=provision_with_data)
 
         self.assertEqual(len(self.get_backups("active", repo_name)), no_of_backups)
 
@@ -1658,7 +1658,7 @@ class BackupServiceTest(BackupServiceBase):
         _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("pymc0", f"{bucket_name}"))
         self.assertEqual(status, 500)
         data = json.loads(response_data.data)
-        self.assertEqual("failed to run examine command", data["msg"])
+        self.assertEqual("Could not run examine command on repository", data["msg"])
         self.assertIn("examining a collection aware backup at the bucket or scope level is unsupported", data["extras"])
 
     # Monitor Tasks and Task History
@@ -1696,7 +1696,7 @@ class BackupServiceTest(BackupServiceBase):
         # Add repositories and tie plan to repository
         self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
 
-        self.take_n_one_off_backups("active", repo_name, None, no_of_backups, doc_load_sleep=0, retries=20, sleep_time=1)
+        self.take_n_one_off_backups("active", repo_name, None, no_of_backups, sleep_time=10)
 
         self.assertEqual(len(self.get_task_history("active", repo_name)), no_of_backups)
 
@@ -1743,7 +1743,7 @@ class BackupServiceTest(BackupServiceBase):
 
         # Take history file to tipping over point
         for i in range(0, no_of_backups):
-            self.take_one_off_backup("active", repo_name, i < 1, 20, 1)
+            self.take_one_off_backup("active", repo_name, i < 1, 20, 20)
 
             if i == no_of_backups - 1:
                 size_of_entry = size_of_entry + remainder
@@ -1756,17 +1756,13 @@ class BackupServiceTest(BackupServiceBase):
         # List of tasks that should exist after task rotation
         remaining_tasks = []
 
-        # Additional backup to tip over the history file above the rotation size which should remain after rotation
-        for i in range(0, 10):
-            remaining_tasks.append(self.take_one_off_backup("active", repo_name, False, 20, 1))
-
         # Advance 2 days and take a backup to trigger history rotation (New contents over threshold get appended to next history file)
         self.time.change_system_time("+2 days")
-        remaining_tasks.append(self.take_one_off_backup("active", repo_name, False, 20, 1))
+        remaining_tasks.append(self.take_one_off_backup("active", repo_name, False, 20, 20))
 
         # Advance 2 days and take a backup to trigger old history file deletion (Old history file gets deleted)
         self.time.change_system_time("+2 days")
-        remaining_tasks.append(self.take_one_off_backup("active", repo_name, False, 20, 1))
+        remaining_tasks.append(self.take_one_off_backup("active", repo_name, False, 20, 20))
 
         task_history = self.get_task_history("active", repo_name)
 
@@ -1796,7 +1792,7 @@ class BackupServiceTest(BackupServiceBase):
         # Add repositories and tie plan to repository
         self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
 
-        self.take_n_one_off_backups("active", repo_name, None, no_of_backups, doc_load_sleep=0, retries=20, sleep_time=1)
+        self.take_n_one_off_backups("active", repo_name, None, no_of_backups, sleep_time=10)
 
         task_history = self.get_task_history("active", repo_name)
         self.assertEqual(len(task_history), no_of_backups)
@@ -1824,7 +1820,7 @@ class BackupServiceTest(BackupServiceBase):
         # Add repositories and tie plan to repository
         self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
 
-        self.take_n_one_off_backups("active", repo_name, None, no_of_backups, doc_load_sleep=0, retries=20, sleep_time=1)
+        self.take_n_one_off_backups("active", repo_name, None, no_of_backups, sleep_time=10)
 
         start = random.choice(self.get_task_history("active", repo_name)).start
 
@@ -1852,7 +1848,7 @@ class BackupServiceTest(BackupServiceBase):
         # Add repositories and tie plan to repository
         self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
 
-        self.take_n_one_off_backups("active", repo_name, None, no_of_backups, doc_load_sleep=0, retries=20, sleep_time=1)
+        self.take_n_one_off_backups("active", repo_name, None, no_of_backups)
 
         task_start_times = [TimeUtil.rfc3339nano_to_datetime(task.start) for task in self.get_task_history("active", repo_name)]
 
