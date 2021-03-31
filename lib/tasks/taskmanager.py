@@ -16,6 +16,8 @@ class TaskManager(Thread):
     def schedule(self, task, sleep_time=0):
         if not isinstance(task, Task):
             raise TypeError("Tried to schedule somthing that's not a task")
+        if not self.running:
+            raise Exception("Tried to schedule a task when task manager not running")
         if sleep_time <= 0:
             self.readyq.put(task)
         else:
