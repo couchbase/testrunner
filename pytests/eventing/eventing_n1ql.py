@@ -434,7 +434,6 @@ class EventingN1QL(EventingBaseTest):
         self.assertNotEqual(count, 20, "All docs didn't expired in dst_bucket. Check eventing logs for details.")
         self.undeploy_and_delete_function(body)
 
-<<<<<<< HEAD   (c37171 CBQE-6426 need to pause few seconds after each add node in c)
     #MB-42513
     def test_delete_query(self):
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
@@ -448,7 +447,6 @@ class EventingN1QL(EventingBaseTest):
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
-=======
     def test_n1ql_gc_rebalance(self):
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         self.load_sample_buckets(self.server, "travel-sample")
@@ -481,4 +479,3 @@ class EventingN1QL(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
->>>>>>> CHANGE (f63b5a Eventing: n1ql gc test cases)
