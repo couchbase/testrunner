@@ -69,7 +69,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         unique_index_type_per_collection = 8
         num_of_docs = 10 ** 4
         redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
-        self.rest.set_index_settings(redistribute)
+        self.index_rest.set_index_settings(redistribute)
         self.run_tasks = True
         self.index_ops_obj = ConCurIndexOps()
         self.index_create_task_manager = TaskManager("index_create_task_manager")
@@ -102,7 +102,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
             except Exception as err:
                 self.fail(f'{query} failed with {err}')
 
-        add_nodes = self.servers[2:]
+        add_nodes = [self.servers[2]]
         remove_nodes = [self.servers[1]]
 
         rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
@@ -110,10 +110,9 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                                                       to_remove=remove_nodes,
                                                       services=['index', 'index'])
         self.sleep(5)
-        result = rebalance_task.result()
+        rebalance_task.result()
         rebalance_status = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
-        rebalance_flag = True
 
         self.sleep(5)
         after_rebalance_index_meta_info = self.rest.get_indexer_metadata()['status']
@@ -876,7 +875,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                         out = re.search(regex_pattern, str(err))
                         index_name = out.groups()[0]
                         self.log.info(f"{index_name} is scheduled for background")
-                    elif self.err_msg2 in str(err):
+                    elif self.err_msg2 in str(err) and self.err_msg3 in str(err) and self.err_msg4 in str(err):
                         continue
                     else:
                         self.fail(err)

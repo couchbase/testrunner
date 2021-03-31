@@ -57,6 +57,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         self.index_field_list = [list(item) for item in index_field_set]
         self.err_msg1 = 'The index is scheduled for background creation'
         self.err_msg2 = 'Index creation will be retried in background'
+        self.err_msg3 = 'Create index or Alter replica cannot proceed due to another concurrent create index request'
         self.system_query = "select * from system:indexes"
         self.schedule_index_disable = {"indexer.debug.enableBackgroundIndexCreation": False}
         self.schedule_index_enable = {"indexer.debug.enableBackgroundIndexCreation": True}
@@ -479,7 +480,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                         out = re.search(regex_pattern, str(err))
                         index_name = out.groups()[0]
                         schedule_indexes.append(index_name)
-                    elif self.err_msg2 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg3 in str(err):
                         continue
                     else:
                         self.fail(err)
@@ -552,7 +553,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                         self.fail(err)
         self.log.info("Waiting for all indexes to be online...")
         self.wait_until_indexes_online(defer_build=True)
-        
+        self.sleep(5)
         build_query = f'BUILD INDEX ON {collection_namespace}({", ".join(index_fields_list.keys())}) USING GSI'
         self.run_cbq_query(query=build_query)
         self.wait_until_indexes_online()

@@ -799,7 +799,8 @@ class JsonGenerator:
                                                [[dest, dest]], start=start, end=docs_per_day))
         return generators
 
-    def generate_docs_sales(self, key_prefix = "sales_dataset", test_data_type = True, start=0, docs_per_day=None, isShuffle = False):
+    def generate_docs_sales(self, key_prefix = "sales_dataset", test_data_type = True, start=0, docs_per_day=None,
+                            isShuffle = False, end=None):
         generators = []
         if end is None:
             end = self.docs_per_day
@@ -983,7 +984,8 @@ class JsonGenerator:
                                                 [credit_cards], start=start, end=1))
         return generators
 
-    def generate_docs_employee_data(self, key_prefix ="employee_dataset", start=0, docs_per_day = 1, isShuffle = False):
+    def generate_docs_employee_data(self, key_prefix ="employee_dataset", start=0, docs_per_day=1,
+                                    isShuffle=False, end=None):
         generators = []
         count = 1
         sys_admin_info = {"title" : "System Administrator and heliport manager",
@@ -995,7 +997,7 @@ class JsonGenerator:
         senior_arch_info = {"title" : "Senior Architect",
                                "desc" : "As a Member of Technical Staff, Senior Architect, you will design and implement cutting-edge distributed, scale-out data infrastructure software systems, which is a pillar for the growing cloud infrastructure. More specifically, you will bring Unix systems and server tech kung-fu to the team.",
                                "type" : "arch"}
-        data_sets = self._shuffle([sys_admin_info, ui_eng_info, senior_arch_info],isShuffle)
+        data_sets = self._shuffle([sys_admin_info, ui_eng_info, senior_arch_info], isShuffle)
         if end is None:
             end = self.docs_per_day
         join_yr = self._shuffle(list(range(2008, 2008 + self.years)),isShuffle)

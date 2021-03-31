@@ -702,7 +702,9 @@ class BaseSecondaryIndexingTests(QueryTests):
     def run_full_table_scan_using_rest(self, bucket, query_definition, verify_result=False):
         expected_result = []
         actual_result = []
-        full_scan_query = "SELECT * FROM {0} WHERE {1}".format(bucket.name, query_definition.index_where_clause)
+        full_scan_query = f"SELECT * FROM {bucket.name}"
+        if query_definition.index_where_clause:
+            full_scan_query += f" WHERE {query_definition.index_where_clause}"
         self.gen_results.query = full_scan_query
         temp = self.gen_results.generate_expected_result(print_expected_result=False)
         for item in temp:
