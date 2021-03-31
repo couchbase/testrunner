@@ -62,6 +62,12 @@ class FTSCallable:
                 self.log.info("Created empty index \'es_index\' on Elastic Search node with "
                               "custom standard analyzer(default)")
 
+        self.cli_client = None
+
+    def __create_buckets(self):
+        self.log.info("__create_buckets() is not implemented yet.")
+        pass
+
     def init_kv(self):
         self.__create_buckets()
         if self.collection_index:
@@ -99,6 +105,10 @@ class FTSCallable:
         @param type: type mapping for collection index
         @analyzer: index analyzer
         """
+
+        if not cluster:
+            cluster = self.cb_cluster
+
         index = FTSIndex(
             cluster=cluster,
             name=name,
@@ -147,6 +157,8 @@ class FTSCallable:
         @param analyzer: index analyzer
         """
         types_mapping = self.__define_index_types_mapping(collection_index=collection_index, scope=scope, collections=collections)
+        if not cluster:
+            cluster = self.cb_cluster
 
         index = FTSIndex(
             cluster=cluster,
