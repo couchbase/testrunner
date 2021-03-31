@@ -89,7 +89,7 @@ class SaslTest(BaseTestCase):
         self.create_pwd_buckets(self.master, buckets)
 
         for bucket in buckets:
-            assert AUTH_FAILURE in self.do_auth(bucket, "")
+            assert AUTH_FAILURE in self.do_auth(bucket, "''")
             assert AUTH_FAILURE in self.do_auth(bucket, "pass")
             assert AUTH_FAILURE in self.do_auth(bucket, "password")
             assert AUTH_FAILURE in self.do_auth(bucket, "password12")
