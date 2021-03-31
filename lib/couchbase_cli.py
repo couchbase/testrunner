@@ -268,7 +268,7 @@ class CouchbaseCLI:
         if move_servers is not None:
             options += " --move-servers " + str(move_servers)
         if name:
-            options += ' --group-name "' + str(name) + '"'
+            options += " --group-name " + str(name)
         if to_group:
             options += " --to-group " + str(to_group)
         if from_group:

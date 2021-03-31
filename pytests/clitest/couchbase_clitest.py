@@ -610,6 +610,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             self.assertTrue(self.cli_rebalance_msg in output)
 
         self._create_bucket(remote_client)
+        self.sleep(7, "time needs for bucket ready")
 
         cli_command = "failover"
         for num in range(nodes_failover):
@@ -686,6 +687,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                             "instead" in output and "SUCCESS: Servers "
                                                     "recovered" in output,
                             "Server readd failed")
+            self.sleep(5)
 
         """ in spock, server-readd does not work to add a node not
             in cluster back to cluster as server-add
@@ -706,6 +708,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                     user=cluster_user,
                                                                     password=cluster_pwd)
                 self.assertTrue("SUCCESS: Server added" in output)
+                self.sleep(5)
         cli_command = "rebalance"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                             cluster_host="localhost",
