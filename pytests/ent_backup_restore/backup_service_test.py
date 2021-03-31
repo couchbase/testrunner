@@ -451,8 +451,8 @@ class BackupServiceTest(BackupServiceBase):
         with Pool(2) as p:
             result = p.map(create_plan, zip(self.input.clusters[0][:2], schedules))
 
-        # Expect that the operation didn't succeed on both servers
-        self.assertNotEqual(result, [200, 200])
+        # Expect that the operation succeeds on at least one server
+        self.assertIn(200, result)
 
     # Backup Repository Testing
 
