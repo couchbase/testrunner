@@ -4024,12 +4024,13 @@ class RestConnection(object):
         except ValueError:
             return content
 
-    def index_tool_stats(self):
+    def index_tool_stats(self, show_index_stats=True):
         log.info('index n1ql stats')
         api = "http://%s:8091/indexStatus" % (self.ip)
         params = ""
         status, content, header = self._http_request(api, 'GET', params)
-        log.info(content)
+        if show_index_stats:
+            log.info(content)
         try:
             return json.loads(content)
         except ValueError:

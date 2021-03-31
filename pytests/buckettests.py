@@ -148,9 +148,9 @@ class CreateBucketTests(BaseTestCase):
 
         try:
             status = self.rest.init_node_services(hostname=self.master.ip,
-                                        services= ["index,kv,n1ql"])
+                                        services= ["index,kv,n1ql,fts"])
             init_node = self.cluster.async_init_node(self.master,
-                                            services = ["index,kv,n1ql"])
+                                            services = ["index,kv,n1ql,fts"])
         except Exception as e:
             if e:
                 print(e)
@@ -187,7 +187,7 @@ class CreateBucketTests(BaseTestCase):
         index_count = 8
         if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
             index_count = 10
-        result = self.rest.index_tool_stats()
+        result = self.rest.index_tool_stats(False)
 
         self.log.info("check if all %s indexes built." % index_count)
         end_time_i = time.time() + 60
@@ -199,12 +199,12 @@ class CreateBucketTests(BaseTestCase):
                             if x["progress"] < 100:
                                 self.sleep(7, "waiting for indexing {0} complete"
                                            .format(x["index"]))
-                                result = self.rest.index_tool_stats()
+                                result = self.rest.index_tool_stats(False)
                             elif x["progress"] == 100:
                                 if x["index"] not in index_name:
                                     index_name.append(x["index"])
                                     self.sleep(7, "waiting for other indexing complete")
-                                    result = self.rest.index_tool_stats()
+                                    result = self.rest.index_tool_stats(False)
                 else:
                     self.sleep(7, "waiting for indexing start")
                     result = self.rest.index_tool_stats()
@@ -229,14 +229,15 @@ class CreateBucketTests(BaseTestCase):
         if self.node_version[:5] in COUCHBASE_FROM_WATSON:
             set_index_storage_type = " --index-storage-setting=memopt "
         options = ' --cluster-port=8091 \
-                    --cluster-ramsize=300 \
+                    --cluster-ramsize=1000 \
                     --cluster-index-ramsize=300 \
-                    --services=data,index,query %s ' % set_index_storage_type
+                    --services=data,index,query,fts %s ' % set_index_storage_type
         o, e = shell.execute_couchbase_cli(cli_command="cluster-init", options=options)
         if self.node_version[:5] in COUCHBASE_FROM_SPOCK:
             self.assertEqual(o[0], 'SUCCESS: Cluster initialized')
         else:
             self.assertEqual(o[0], "SUCCESS: init/edit localhost")
+        self.sleep(7, "wait for services up completely")
 
         self.log.info("Add new user after reset node! ")
         self.add_built_in_server_user(node=self.master)
@@ -281,7 +282,7 @@ class CreateBucketTests(BaseTestCase):
         index_count = 8
         if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
             index_count = 10
-        result = self.rest.index_tool_stats()
+        result = self.rest.index_tool_stats(False)
         """ check all indexes are completed """
 
         self.log.info("check if all %s indexes built." % index_count)
@@ -294,10 +295,10 @@ class CreateBucketTests(BaseTestCase):
                            x["index"] not in index_name:
                                 index_name.append(x["index"])
                 self.sleep(7, "waiting for indexing complete")
-                result = self.rest.index_tool_stats()
+                result = self.rest.index_tool_stats(False)
             else:
                 self.sleep(2, "waiting for indexing start")
-                result = self.rest.index_tool_stats()
+                result = self.rest.index_tool_stats(False)
         if time.time() >= end_time_i and len(index_name) < index_count:
             self.log.info("index list {0}".format(index_name))
             self.fail("some indexing may not complete")
