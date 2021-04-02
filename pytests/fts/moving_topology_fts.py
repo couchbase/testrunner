@@ -16,7 +16,6 @@ class MovingTopFTS(FTSBaseTest):
         self.num_retries = TestInputSingleton.input.param("num_retries", 1)
         self.max_concurrent_partition_moves_per_node = TestInputSingleton.input.param(
             "maxConcurrentPartitionMovesPerNode", 1)
-        self.num_index_partitions = TestInputSingleton.input.param("num_partitions", 1)
         self.default_concurrent_partition_moves_per_node = 1
         self.query = {"match": "emp", "field": "type"}
         super(MovingTopFTS, self).setUp()

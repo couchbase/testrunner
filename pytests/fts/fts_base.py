@@ -3608,6 +3608,7 @@ class FTSBaseTest(unittest.TestCase):
             self.collection = eval(self.collection)
         use_hostanames = self._input.param("use_hostnames", False)
         sdk_compression = self._input.param("sdk_compression", True)
+        self.num_index_partitions = TestInputSingleton.input.param("num_partitions", 1)
 
         self.master = self._input.servers[0]
         first_node = copy.deepcopy(self.master)
@@ -4494,6 +4495,7 @@ class FTSBaseTest(unittest.TestCase):
             plan_params['numReplicas'] = self.index_replicas
         if self.partitions_per_pindex:
             plan_params['maxPartitionsPerPIndex'] = self.partitions_per_pindex
+        plan_params['indexPartitions'] = self.num_index_partitions
         return plan_params
 
     def populate_node_partition_map(self, index):
