@@ -1400,6 +1400,62 @@ class DMLQueryTests(QueryTests):
                     pass
 
     ###################################################################################################################
+    # USE key with positional/named param
+    ###################################################################################################################
+
+    def test_use_keys_named_param(self):
+        select_query = "SELECT META(g).id, META(g).cas, META(g).expiration, g AS doc FROM $a AS g USE KEYS $b"
+        insert_query = "INSERT INTO $a AS d VALUES($b, $c, $d)"
+        upsert_query = "UPSERT INTO $a AS d VALUES($b, $c, $d)"
+        update_query = "UPDATE $a AS d USE KEYS $b SET d = $c, META(d).expiration = $c.expiration"
+        delete_query = "DELETE FROM $a AS d USE KEYS $b"
+
+        params1 = {'$a': '"default"', '$b': '"k101"', '$c': '{"a":"k101"}', '$d': '{"expiration":604800}'}
+        params2 = {'$a': '"default"', '$b': '"k101"', '$c': '{"b":"k101"}', '$d': '{"expiration":704800}'}
+
+        self.run_cbq_query(query=insert_query, query_params=params1)
+        result = self.run_cbq_query(query=select_query, query_params=params1)
+        self.assertEqual(result['results'][0]['doc'], {'a': 'k101'})
+
+        self.run_cbq_query(query=update_query, query_params=params2)
+        result = self.run_cbq_query(query=select_query, query_params=params2)
+        self.assertEqual(result['results'][0]['doc'], {'b': 'k101'})
+
+        self.run_cbq_query(query=delete_query, query_params=params1)
+        result = self.run_cbq_query(query=select_query, query_params=params1)
+        self.assertEqual(result['results'], [])
+
+        self.run_cbq_query(query=upsert_query, query_params=params1)
+        result = self.run_cbq_query(query=select_query, query_params=params1)
+        self.assertEqual(result['results'][0]['doc'], {'a': 'k101'})
+
+    def test_use_keys_pos_param(self):
+        select_query = "SELECT META(g).id, META(g).cas, META(g).expiration, g AS doc FROM $1 AS g USE KEYS $2"
+        insert_query = "INSERT INTO $1 AS d VALUES($2, $3, $4)"
+        upsert_query = "UPSERT INTO $1 AS d VALUES($2, $3, $4)"
+        update_query = "UPDATE $1 AS d USE KEYS $2 SET d = $3, META(d).expiration = $4.expiration"
+        delete_query = "DELETE FROM $1 AS d USE KEYS $2"
+
+        params1 = {'args': '["default", "k101", {"a":"k101"}, {"expiration":604800}]'}
+        params2 = {'args': '["default", "k101", {"b":"k101"}, {"expiration":704800}]'}
+
+        self.run_cbq_query(query=insert_query, query_params=params1)
+        result = self.run_cbq_query(query=select_query, query_params=params1)
+        self.assertEqual(result['results'][0]['doc'], {'a': 'k101'})
+
+        self.run_cbq_query(query=update_query, query_params=params2)
+        result = self.run_cbq_query(query=select_query, query_params=params2)
+        self.assertEqual(result['results'][0]['doc'], {'b': 'k101'})
+
+        self.run_cbq_query(query=delete_query, query_params=params1)
+        result = self.run_cbq_query(query=select_query, query_params=params1)
+        self.assertEqual(result['results'], [])
+
+        self.run_cbq_query(query=upsert_query, query_params=params1)
+        result = self.run_cbq_query(query=select_query, query_params=params1)
+        self.assertEqual(result['results'][0]['doc'], {'a': 'k101'})
+            
+    ###################################################################################################################
     # BINARY data
     ###################################################################################################################
 
