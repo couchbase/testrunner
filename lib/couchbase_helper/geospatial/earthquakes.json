@@ -7440,21 +7440,6 @@
     "NST": 5
   },
   {
-    "Src": "nc",
-    "geo": {
-      "lat": 38.828,
-      "lon": -122.83
-    },
-    "Region": "Northern California",
-    "Datetime": "Sunday, September 23, 2012 19:29:19 UTC",
-    "Depth": 2.8,
-    "Version": 3,
-    "type": "earthquake",
-    "Eqid": 71846635,
-    "Magnitude": 1.8,
-    "NST": 80
-  },
-  {
     "Src": "pr",
     "geo": {
       "lat": 19.0513,
@@ -12073,21 +12058,6 @@
     "Eqid": 71845560,
     "Magnitude": 1.7,
     "NST": 49
-  },
-  {
-    "Src": "nc",
-    "geo": {
-      "lat": 38.8385,
-      "lon": -122.8292
-    },
-    "Region": "Northern California",
-    "Datetime": "Friday, September 21, 2012 11:50:34 UTC",
-    "Depth": 2.4,
-    "Version": 3,
-    "type": "earthquake",
-    "Eqid": 71845555,
-    "Magnitude": 1.8,
-    "NST": 52
   },
   {
     "Src": "ak",
