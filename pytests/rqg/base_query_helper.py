@@ -952,7 +952,10 @@ class BaseRQGQueryHelper(object):
             value = self._random_char()
         if "NUMERIC_FIELD" in sql:
             field_name = new_sql.replace("NUMERIC_FIELD", random.choice(numeric_field_names))
-            value = str(self._random_int())
+            value = self._random_int()
+            if alias is None:
+               return "{0} = {1}".format(field_name, value)
+            return "{0} = {1}".format(alias+"."+field_name, value)
         if "DATETIME_FIELD" in sql:
             field_name = new_sql.replace("DATETIME_FIELD", random.choice(datetime_field_names))
             value = self._random_datetime()
