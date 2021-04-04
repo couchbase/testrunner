@@ -820,14 +820,21 @@ class EventingBaseTest(QueryHelperTests):
             self.log.info("no handler is available")
 
     def deploy_handler_by_name(self,name,wait_for_bootstrap=True):
-        self.rest.deploy_function_by_name(name)
+        self.rest.lifecycle_operation(name,"deploy")
         if wait_for_bootstrap:
             self.wait_for_handler_state(name, "deployed")
 
     def pause_handler_by_name(self,name,wait_for_pause=True):
-        self.rest.pause_function_by_name(name)
+        self.rest.lifecycle_operation(name,"paused")
         if wait_for_pause:
             self.wait_for_handler_state(name, "paused")
+
+    def resume_handler_by_name(self, name,wait_for_resume=True):
+        self.refresh_rest_server()
+        self.rest.lifecycle_operation(name, "resume")
+        log.info("Resume Application : {0}".format(name))
+        if wait_for_resume:
+            self.wait_for_handler_state(name, "deployed")
 
     def check_word_count_eventing_log(self,function_name,word,expected_count,return_count_only=False):
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
