@@ -60,7 +60,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             if self.defer_build:
                 query = query_gen_1.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-            self.wait_until_indexes_online(defer_build=self.defer_build)
+            self.wait_until_indexes_online()
             query = f'SELECT COUNT(*) from {collection_namespace}'
             count = self.run_query_with_retry(query=query, expected_result=self.num_of_docs_per_collection,
                                               is_count_query=True)
@@ -76,7 +76,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             if self.defer_build:
                 query = query_gen_2.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-            self.wait_until_indexes_online(defer_build=self.defer_build)
+            self.wait_until_indexes_online()
             query = f'SELECT COUNT(*) from {collection_namespace}'
             count = self.run_query_with_retry(query=query, expected_result=self.num_of_docs_per_collection,
                                               is_count_query=True)
