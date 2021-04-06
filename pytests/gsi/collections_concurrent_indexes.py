@@ -109,7 +109,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                         self.fail(err)
             self.log.info(f"No. of concurrent indexes issued: {count_err_1}")
         
-        result = self.wait_until_indexes_online(timeout=60 * self.num_of_indexes, defer_build=self.defer_build)
+        result = self.wait_until_indexes_online(timeout=180 * self.num_of_indexes, defer_build=self.defer_build)
         if not result:
             self.log.warn("All indexes didn't build in given timeout. Increase timeout or check logs")
         self.sleep(30)
@@ -682,7 +682,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                             out = re.search(regex_pattern, str(err))
                             index_name = out.groups()[0]
                             schedule_indexes.append(index_name)
-                        elif self.err_msg2 in str(err):
+                        elif self.err_msg2 in str(err) or self.err_msg3 in str(err):
                             self.log.info(err)
                         else:
                             self.fail(err)
@@ -1118,7 +1118,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         if self.defer_build:
             for build_query in build_query_list:
                 self.run_cbq_query(query=build_query)
-            self.wait_until_indexes_online()
+        self.wait_until_indexes_online(timeout=900)
         index_info = self.rest.get_indexer_metadata()['status']
         self.assertEqual(len(index_info), self.num_of_indexes)
         for index in index_info:
