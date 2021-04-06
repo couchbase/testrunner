@@ -24,6 +24,10 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
         except Exception as e:
             self.fail(str(e))
         self.dest_cluster.flush_buckets(buckets=["default"])
+        if "C1" in self._disable_compaction:
+            self.src_cluster.disable_compaction()
+        if "C2" in self._disable_compaction:
+            self.dest_cluster.disable_compaction()
 
     def tearDown(self):
         XDCRNewBaseTest.tearDown(self)

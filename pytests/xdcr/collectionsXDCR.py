@@ -39,7 +39,6 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
         drop_recreate_scope = self._input.param("drop_recreate_scope", None)
         drop_recreate_collection = self._input.param("drop_recreate_collection", None)
         consistent_metadata = self._input.param("consistent_metadata", None)
-        scalable_stats = self._input.param("scalable_stats", None)
         initial_xdcr = self._input.param("initial_xdcr", random.choice([True, False]))
 
         try:
@@ -49,6 +48,9 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                 self.setup_xdcr_and_load()
         except Exception as e:
             self.fail(e)
+
+        for cluster_name in self._disable_compaction:
+            self.get_cb_cluster_by_name(cluster_name).disable_compaction()
 
         if drop_default_scope:
             for cluster in self.get_cluster_objects_for_input(drop_default_scope):
