@@ -942,7 +942,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.sleep(self.expire_time)
 
         # rebalance in the failed over nodes
-        self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        reb_status = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        if not reb_status:
+            self.sleep(20, "wait for rebalance complete")
 
         # failover another node, this is done so that the conditions of graceful failover are met, otherwise
         # hard failover will be implemented
