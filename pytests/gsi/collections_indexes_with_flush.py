@@ -168,9 +168,8 @@ class CollectionsIndexesWithFlush(BaseSecondaryIndexingTests):
             out = task1.result()
             self.log.info(out)
 
-        self.sleep(15, "Giving some time to indexer to update indexes after flush")
-        self.wait_until_indexes_online(defer_build=True)
-        self.sleep(5)
+        self.sleep(60, "Giving some time to indexer to update indexes after flush")
+        self.wait_until_indexes_online()
         result = self.run_cbq_query(query=select_query)['results'][0]['$1']
         self.assertEqual(result, 0, "Doc count not matching")
 
