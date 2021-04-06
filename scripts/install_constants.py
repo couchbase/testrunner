@@ -97,8 +97,8 @@ CMDS = {
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
         "pre_install": None,
         "install":
-            "apt-get update;" +
-            "dpkg -i buildpath;" +
+            "apt-get update > /dev/null;" +
+            "dpkg -i buildpath > /dev/null &&" +
             "apt-get -f install > /dev/null && echo 1 || echo 0",
         "post_install": "systemctl -q is-active couchbase-server.service && echo 1 || echo 0",
         "post_install_retry": "systemctl restart couchbase-server.service",
