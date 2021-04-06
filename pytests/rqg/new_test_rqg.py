@@ -197,9 +197,13 @@ class RQGTestsNew(BaseRQGTests):
 
         n1ql_result = new_n1ql_result
         actual_result = n1ql_result
+        expected_result = sql_result
 
-        actual_result = sorted(actual_result)
-        expected_result = sorted(sql_result)
+        sort_key = None
+        if len(actual_result) > 0:
+           sort_key = list(actual_result[0].keys())[0]
+        actual_result.sort(key=lambda item: str(item.get(sort_key)) or "")
+        sql_result.sort(key=lambda item: str(item.get(sort_key)) or "")
 
         if len(actual_result) != len(expected_result):
             extra_msg = self._get_failure_message(expected_result, actual_result)
@@ -207,7 +211,8 @@ class RQGTestsNew(BaseRQGTests):
 
         diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
         if diffs:
-            raise Exception("Results are incorrect. " + diffs)
+            self.log.error(diffs)
+            raise Exception("Results are incorrect")
 
         msg = "The number of rows match but the results mismatch, please check"
         sorted_actual = self._sort_data(actual_result)

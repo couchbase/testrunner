@@ -390,7 +390,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                     left_table = table_name
                     right_table = with_alias
 
-                from_clause += " " + left_table + " " + join_type + " " + right_table + " " + "ON" + " " + "(" + left_table + "." + join_field + " " + "==" + " " + right_table + "." + join_field + ")"
+                from_clause += " " + left_table + " " + join_type + " " + right_table + " " + "ON" + " " + "(" + left_table + "." + join_field + " " + "=" + " " + right_table + "." + join_field + ")"
                 from_map = {"left_table": left_table, "class": "TABLE_AND_CTE_JOIN", "type": "joins",
                             "right_table": right_table, "left_on_field": join_field, "right_on_field": join_field,
                             "join_type": join_type}
@@ -403,7 +403,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                 left_table_alias = left_table+"_ALIAS_LEFT"
                 right_table = table_name
                 right_table_alias = right_table+"_ALIAS_RIGHT"
-                from_clause += " " + left_table + " AS " + left_table_alias + " " + join_type + " " + right_table + " AS " + right_table_alias + " " + "ON" + " " + "(" + left_table_alias + "." + join_field + " " + "==" + " " + right_table_alias + "." + join_field + ")"
+                from_clause += " " + left_table + " AS " + left_table_alias + " " + join_type + " " + right_table + " AS " + right_table_alias + " " + "ON" + " " + "(" + left_table_alias + "." + join_field + " " + "=" + " " + right_table_alias + "." + join_field + ")"
                 from_map = {"left_table": left_table, "left_table_alias": left_table_alias, "class": "TABLE_AND_CTE_JOIN", "type": "joins",
                         "right_table": right_table, "right_table_alias": right_table_alias, "left_on_field": join_field, "right_on_field": join_field,
                         "join_type": join_type}
@@ -414,7 +414,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                 join_field = random.choice(common_fields)
 
                 join_type = random.choice(["LEFT OUTER JOIN", "RIGHT OUTER JOIN", "INNER JOIN"])
-                from_clause += " " + left_table + " AS " + left_table_alias + " " + join_type + " " + right_table + " AS " + right_table_alias + " " + "ON" + " " + "(" + left_table_alias + "." + join_field + " " + "==" + " " + right_table_alias + "." + join_field + ")"
+                from_clause += " " + left_table + " AS " + left_table_alias + " " + join_type + " " + right_table + " AS " + right_table_alias + " " + "ON" + " " + "(" + left_table_alias + "." + join_field + " " + "=" + " " + right_table_alias + "." + join_field + ")"
                 from_map = {"left_table": left_table, "left_table_alias": left_table_alias, "class": "TABLE_AND_CTE_JOIN", "type": "joins",
                             "right_table": right_table, "right_table_alias": right_table_alias, "left_on_field": join_field, "right_on_field": join_field,
                             "join_type": join_type}
@@ -926,7 +926,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
 
     def _random_sample(self, sample_list):
         size_of_sample = random.choice(list(range(1, len(sample_list) + 1)))
-        random_sample = [list[i] for i in random.sample(range(len(sample_list)), size_of_sample)]
+        random_sample = random.sample(sample_list, size_of_sample)
         return random_sample
 
     def _random_constant(self, field=None):
