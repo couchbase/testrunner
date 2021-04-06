@@ -1937,30 +1937,27 @@ class ViewQueryTests(BaseTestCase):
     # later in the test case
     ###
     def _query_test_init(self, data_set, verify_results=False):
-        try:
-            views = data_set.views
-            rest = self._rconn()
-            load_task = None
+        views = data_set.views
+        rest = self._rconn()
+        load_task = None
 
-            generators = data_set.generate_docs(views[0])
-            load_task = StoppableThread(target=self.load,
-                                       name="load_data_set",
-                                       args=(data_set, generators))
-            load_task.start()
+        generators = data_set.generate_docs(views[0])
+        load_task = StoppableThread(target=self.load,
+                                    name="load_data_set",
+                                    args=(data_set, generators))
+        load_task.start()
 
-            # run queries while loading data
-            self._query_all_views(views, generators, data_set.kv_store,
-                                  verify_expected_keys=verify_results,
-                                  threads=[load_task])
-            if 'result' in dir(load_task):
-                load_task.result()
-            else:
-                load_task.join()
+        # run queries while loading data
+        self._query_all_views(views, generators, data_set.kv_store,
+                                verify_expected_keys=verify_results,
+                                threads=[load_task])
+        if 'result' in dir(load_task):
+            load_task.result()
+        else:
+            load_task.join()
 
-            self._check_view_intergrity(views)
-            return generators
-        finally:
-            data_set.cluster.shutdown()
+        self._check_view_intergrity(views)
+        return generators
 
     def load(self, data_set, generators_load, exp=0, flag=0,
              kv_store=1, only_store_hash=True, batch_size=1, pause_secs=1,
