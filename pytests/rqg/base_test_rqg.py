@@ -25,6 +25,7 @@ from pytests.fts.random_query_generator.rand_query_gen import DATASET
 from deepdiff import DeepDiff
 from pytests.fts.fts_base import CouchbaseCluster
 import uuid
+import re
 
 class BaseRQGTests(BaseTestCase):
     def setUp(self):
@@ -489,7 +490,10 @@ class BaseRQGTests(BaseTestCase):
 
     def n1ql_query_runner_wrapper(self, n1ql_query="", server=None, query_params={}, scan_consistency=None, verbose=True, query_context=None):
         if self.use_advisor:
-            self.create_secondary_index(n1ql_query=n1ql_query)
+            queries = n1ql_query.split(' UNION ')
+            for q in queries:
+                query = re.sub(r"^\((.*?)\)$", r"\1", q.strip())
+                self.create_secondary_index(n1ql_query=query)
         if self.use_query_context:
             result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=server, query_params=query_params,
                                                     scan_consistency=scan_consistency, verbose=verbose,query_context=query_context)
@@ -519,6 +523,7 @@ class BaseRQGTests(BaseTestCase):
         advise_result = self.n1ql_helper.run_cbq_query(query="ADVISE " + advise_query,
                                                        server=self.advise_server)
         if len(advise_result["results"][0]["advice"]["adviseinfo"]) == 0:
+            self.log.info("No advise for index")
             return
         if "index recommendation at this time" not in str(advise_result["results"][0]["advice"]["adviseinfo"]["recommended_indexes"]):
             if "indexes" in advise_result["results"][0]["advice"]["adviseinfo"][
