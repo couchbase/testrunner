@@ -722,6 +722,9 @@ class RemoteMachineShellConnection(KeepRefs):
                     break
         else:
             o, r = self.execute_command("killall -9 beam.smp")
+            if r and r[0] and "command not found" in r[0]:
+                o, r = self.execute_command("pkill beam.smp")
+                self.log_command_output(o, r)
             self.log_command_output(o, r, debug=False)
             all_killed = False
             count = 0
@@ -736,6 +739,9 @@ class RemoteMachineShellConnection(KeepRefs):
                     all_killed = True
                 if count == 3:
                     o, r = self.execute_command("killall -9 beam.smp")
+                    if r and r[0] and "command not found" in r[0]:
+                        o, r = self.execute_command("pkill beam.smp")
+                        self.log_command_output(o, r)
                 count += 1
             if not all_killed:
                 raise Exception("Could not kill erlang process")

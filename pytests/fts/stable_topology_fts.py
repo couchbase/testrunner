@@ -404,7 +404,7 @@ class StableTopFTS(FTSBaseTest):
         else:
             if type(self.collection) is list:
                 for c in self.collection:
-                    self._cb_cluster._drop_collection(bucket=bucket, scope=self.scope, collection=c)
+                    self._cb_cluster._drop_collection(bucket=bucket, scope=self.scope, collection=c, cli_client=self.cli_client)
             else:
                 self._cb_cluster._drop_collection(bucket=bucket, scope=self.scope, collection=self.collection)
         self.sleep(20, "waiting for bucket deletion to be known by fts")

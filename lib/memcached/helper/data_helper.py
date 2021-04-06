@@ -314,6 +314,7 @@ class MemcachedClientHelper(object):
             log.info("creating direct client {0}:{1} {2}".format(server.ip, node.memcached, bucket))
         RestHelper(rest).vbucket_map_ready(bucket, 60)
         vBuckets = RestConnection(server).get_vbuckets(bucket)
+        client = None
         if isinstance(server, dict):
             client = MemcachedClient(server["ip"], node.memcached, timeout=timeout)
         else:
@@ -339,7 +340,7 @@ class MemcachedClientHelper(object):
         else:
             if isinstance(bucket, Bucket):
                 bucket = bucket.name
-            bucket = bucket.encode('ascii')
+            #bucket = bucket.encode('ascii')
             client.sasl_auth_plain(admin_user, admin_pass)
             client.bucket_select(bucket)
 

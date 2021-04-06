@@ -581,9 +581,11 @@ class NodeHelper:
         start = time.time()
         for server in warmupnodes:
             for bucket in bucket_names:
-                while time.time() - start < 150:
+                while time.time() - start < 2100:
                     mc = None
                     try:
+                        NodeHelper._log.info("Sleep for 1 minute to aviod timing issues")
+                        time.sleep(60)
                         mc = MemcachedClientHelper.direct_client(server, bucket)
                         if mc.stats()["ep_warmup_thread"] == "complete":
                             NodeHelper._log.info(
