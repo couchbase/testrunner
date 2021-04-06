@@ -40,7 +40,7 @@ class StoppableThread(Thread):
 
     def stopit(self):
         for task in self.tasks:
-            task.cancel();
+            task.cancel()
         self._stopper.set()
 
     def stopped(self):
@@ -1988,9 +1988,9 @@ class ViewQueryTests(BaseTestCase):
             self.log.info("LOAD IS FINISHED")
             return gens_load
         except Exception as ex:
-            data_set.views[0].results.addError(self, (Exception, str(ex), sys.exc_info()[2]))
-            self.log.error("At least one of load data threads is crashed: {0}".format(ex))
             self.thread_crashed.set()
+            data_set.views[0].results.addError(self, sys.exc_info())
+            self.log.error("At least one of load data threads is crashed: {0}".format(ex))
             if task:
                 if 'stop' in dir(threading.currentThread()) and\
                    isinstance(threading.currentThread(), StoppableThread):
@@ -2191,9 +2191,9 @@ class QueryView:
                     self.results.addFailure(tc, (Exception, msg, sys.exc_info()[2]))
                     tc.thread_crashed.set()
         except Exception as ex:
-            self.log.error("Error {0} appeared during query run".format(ex))
-            self.results.addError(tc, (Exception, str(ex), sys.exc_info()[2]))
             tc.thread_crashed.set()
+            self.log.error("Error {0} appeared during query run".format(ex))
+            self.results.addError(tc, sys.exc_info())
             if task:
                 if 'stop' in dir(threading.currentThread()) and\
                    isinstance(threading.currentThread(), StoppableThread):
