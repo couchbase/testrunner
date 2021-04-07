@@ -62,11 +62,6 @@ class AnalyticsHelper():
             if not self.analytics_port:
                 self.log.info(" analytics_port is not defined, processing will not proceed further")
                 raise Exception("analytics_port is not defined, processing will not proceed further")
-        cred_params = {'creds': []}
-        for bucket in self.buckets:
-            if bucket.saslPassword:
-                cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
-        query_params.update(cred_params)
         if self.use_rest:
             query_params = {}
             if scan_consistency:
@@ -501,11 +496,6 @@ class AnalyticsHelper():
             if not self.n1ql_port:
                 self.log.info(" n1ql_port is not defined, processing will not proceed further")
                 raise Exception("n1ql_port is not defined, processing will not proceed further")
-        cred_params = {'creds': []}
-        for bucket in self.buckets:
-            if bucket.saslPassword:
-                cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
-        query_params.update(cred_params)
         if self.use_rest:
             query_params = {}
             if scan_consistency:

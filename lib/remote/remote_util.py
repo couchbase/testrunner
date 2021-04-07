@@ -4537,8 +4537,6 @@ class RemoteMachineShellConnection(KeepRefs):
         if self.info.distribution_type.lower() == 'mac':
             cbepctl_command = "%scbepctl" % (MAC_COUCHBASE_BIN_PATH)
 
-        if bucket.saslPassword == None:
-            bucket.saslPassword = ''
         if persistence != "":
             command = "%s %s:11210  -u %s -p %s -b %s %s"\
                                             % (cbepctl_command, self.ip,
