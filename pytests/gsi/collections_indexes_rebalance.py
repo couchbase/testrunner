@@ -357,7 +357,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
 
                             failover_task.result()
                             failover_flag = True
-                    elif self.err_msg2 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg3 in str(err) or self.err_msg4 in str(err):
                         continue
                     else:
                         self.fail(err)

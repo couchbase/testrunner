@@ -71,7 +71,7 @@ class QueryDefinition(object):
             namespace = self.keyspace
         deployment_plan = {}
         if desc is None:
-            query = "CREATE INDEX {0} ON {1}({2})".format(self.index_name, namespace, ",".join(self.index_fields))
+            query = "CREATE INDEX `{0}` ON {1}({2})".format(self.index_name, namespace, ",".join(self.index_fields))
         else:
             collations = ""
             for x, y in zip(self.index_fields, desc):
@@ -81,7 +81,7 @@ class QueryDefinition(object):
                     collations = collations + x + ","
             # remove the extra comma
             collations = collations[:-1]
-            query = "CREATE INDEX {0} ON {1}({2})".format(self.index_name, namespace, collations)
+            query = "CREATE INDEX `{0}` ON {1}({2})".format(self.index_name, namespace, collations)
         if self.partition_by_fields:
             query += " PARTITION BY HASH (" + ", ".join(self.partition_by_fields) + ")"
         if index_where_clause:

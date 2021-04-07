@@ -1488,7 +1488,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         data_nodes = self.get_kv_nodes()
         self.assertTrue(len(data_nodes) >= 3, "Can't run this with less than 3 KV nodes")
         bucket_name = self.buckets[0].name
-        index_name = self.get_index_map()[bucket_name].keys()[0]
+        index_name = list(self.get_index_map()[bucket_name].keys())[0]
         index_node = self.get_nodes_from_services_map(service_type="index",
                                                       get_all_nodes=False)
         rest = RestConnection(index_node)
@@ -1656,7 +1656,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def test_rollback_to_zero_preceded_by_rollback_from_disk_snapshot(self):
         """
-        MB36444
+        MB-36444
         """
         bucket_name = self.buckets[0].name
         index_name = list(self.get_index_map()[bucket_name])[0]
@@ -1887,7 +1887,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         gens_load = self.generate_docs(num_items=self.docs_per_day * 2)
         self.load(gens_load, flag=self.item_flag, batch_size=self.batch_size, op_type="create", verify_data=False)
 
-        use_index_query = "select Count(*) from {0} USE INDEX ({1})".format(bucket_name, index_name)
+        use_index_query = "select Count(*) from {0} USE INDEX (`{1}`)".format(bucket_name, index_name)
         result = self.n1ql_helper.run_cbq_query(query=use_index_query, server=self.n1ql_node,
                                                 scan_consistency=CONSISTENCY_REQUEST)["results"][0]["$1"]
         expected_result = self.docs_per_day * 2 * 2016
