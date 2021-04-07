@@ -262,11 +262,6 @@ class N1QLHelper():
             if not self.n1ql_port:
                 self.log.info(" n1ql_port is not defined, processing will not proceed further")
                 raise Exception("n1ql_port is not defined, processing will not proceed further")
-        cred_params = {'creds': []}
-        for bucket in self.buckets:
-            if bucket.saslPassword:
-                cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
-        query_params.update(cred_params)
 
         result = ""
         if self.use_rest:
