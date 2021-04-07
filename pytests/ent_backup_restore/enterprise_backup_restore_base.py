@@ -860,6 +860,20 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         rest_conn.create_bucket(bucket=bucket_name,
                                                 ramQuotaMB=int(bucket_size) - 1,
                                                 replicaNumber=replicas,
+                                                bucketType=self.bucket_type,
+                                                proxyPort=bucket.port,
+                                                evictionPolicy=self.eviction_policy,
+                                                lww=self.lww_new,
+                                                compressionMode=bucket_compression_mode)
+                    except Exception as e:
+                        if "unable to create bucket" in str(e):
+                            ready = RestHelper(RestConnection(self.backupset.restore_cluster_host)).is_ns_server_running()
+                            if not ready:
+                                self.fail("Couchbase Server failed to start")
+                            else:
+                                rest_conn.create_bucket(bucket=bucket_name,
+                                                    ramQuotaMB=int(bucket_size) - 1,
+                                                    replicaNumber=replicas,
                                                     bucketType=self.bucket_type,
                                                     proxyPort=bucket.port,
                                                     evictionPolicy=self.eviction_policy,
