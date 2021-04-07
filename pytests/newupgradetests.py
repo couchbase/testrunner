@@ -834,6 +834,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         for i in range(0, len(upgrade_servers)):
             self.cluster.rebalance(self.servers, [upgrade_servers[i]], [],
                                    services=[upgrade_services[i]])
+        self.sleep(20, "wait for rebalance complete")
 
         self._new_master(self.servers[self.swap_num_servers])
         # swap out the remaining half of the servers and rebalance
@@ -903,6 +904,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         # Install initial version on the specified nodes
         self._install(self.servers[:self.nodes_init])
         # Configure the nodes with services
+        self.sleep(30, "wait for servers up")
         self.operations(self.servers[:self.nodes_init], services="kv,index,n1ql,kv,kv,index,n1ql,kv")
         # get the n1ql node which will be used in pre,during and post upgrade for running n1ql commands
         self.n1ql_server = self.get_nodes_from_services_map(

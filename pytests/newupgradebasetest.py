@@ -354,6 +354,7 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
                                             fts_query_limit=fts_query_limit, debug_logs=debug_logs)
             self.log.info("upgrade {0} to version {1} is completed".format(server.ip, upgrade_version))
             remote.start_server()
+            self.sleep(30, "wait for servers up")
             """ remove end here """
             if 5.0 > float(self.initial_version[:3]) and self.is_centos7:
                 remote.execute_command("systemctl daemon-reload")

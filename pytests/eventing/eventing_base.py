@@ -112,7 +112,8 @@ class EventingBaseTest(QueryHelperTests):
         self.is_expired=self.input.param('is_expired', False)
         self.print_app_log=self.input.param('print_app_log', False)
         self.print_go_routine=self.input.param('print_go_routine', False)
-        self.collection_rest = CollectionsRest(self.master)
+        if not self.is_upgrade_test:
+            self.collection_rest = CollectionsRest(self.master)
         self.non_default_collection=self.input.param('non_default_collection',False)
         self.num_docs=2016
         self.is_binary=self.input.param('binary_doc',False)
