@@ -3965,7 +3965,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                 except Exception as ex:
                     if ex:
                         print("\nException error: ", str(ex))
-                    if not self._check_output(err_msg, str(ex)):
+                    if err_msg not in str(ex):
                         self.log.error("It should not create same name index")
                         self.fail(ex)
         remote_client.disconnect()
