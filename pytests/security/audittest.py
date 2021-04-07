@@ -89,41 +89,41 @@ class auditTest(BaseTestCase):
         if (ops in ['create']):
             expectedResults = {'bucket_name':'TestBucket', 'ram_quota':104857600, 'num_replicas':1,
                                'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
-                               'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
+                               "autocompaction":'false', "purge_interval":"undefined", \
                                 "flush_enabled":False, "num_threads":3, "source":source, \
                                "user":user, "local:ip":self.master.ip, "local:port":8091, 'sessionid':'', 'conflict_resolution_type':'seqno', \
                                'storage_mode':'couchstore','max_ttl':400,'compression_mode':'passive','remote:ip':self.ipAddress}
-            rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] // 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
+            rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] // 1048576,  expectedResults['num_replicas'], \
                                '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly', maxTTL=expectedResults['max_ttl'],
                                storageBackend=self.bucket_storage)
 
         elif (ops in ['update']):
             expectedResults = {'bucket_name':'TestBucket', 'ram_quota':209715200, 'num_replicas':1, 'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
-                               'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":'true', "num_threads":3, "source":source, \
+                               "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":'true', "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457 , 'sessionid':'','storage_mode':'couchstore', 'max_ttl':400}
-            rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] // 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], '11211', 'membase', \
+            rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] // 1048576,  expectedResults['num_replicas'], '11211', 'membase', \
                                0, expectedResults['num_threads'], 0, 'valueOnly', maxTTL=expectedResults['max_ttl'],
                                storageBackend=self.bucket_storage)
             expectedResults = {'bucket_name':'TestBucket', 'ram_quota':104857600, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
-                               'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":True, "num_threads":3, "source":source, \
+                                "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":True, "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457,'storage_mode':'couchstore', 'max_ttl':200}
-            rest.change_bucket_props(expectedResults['bucket_name'], expectedResults['ram_quota'] // 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
+            rest.change_bucket_props(expectedResults['bucket_name'], expectedResults['ram_quota'] // 1048576,  expectedResults['num_replicas'], \
                                      '11211', 1, 1, maxTTL=expectedResults['max_ttl'])
 
         elif (ops in ['delete']):
             expectedResults = {'bucket_name':'TestBucket', 'ram_quota':104857600, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
-                               'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":False, "num_threads":3, "source":source, \
+                                "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":False, "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457}
-            rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] // 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
+            rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] // 1048576,  expectedResults['num_replicas'], \
                                '11211', 'membase', 1, expectedResults['num_threads'], 0, 'valueOnly',
                                storageBackend=self.bucket_storage)
             rest.delete_bucket(expectedResults['bucket_name'])
 
         elif (ops in ['flush']):
             expectedResults = {'bucket_name':'TestBucket', 'ram_quota':100, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
-           'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":True, "num_threads":3, "source":source, \
+            "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":True, "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457,'storage_mode':'couchstore'}
-            rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'], expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
+            rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'], expectedResults['num_replicas'], \
                                '11211', 'membase', 1, expectedResults['num_threads'], 1, 'valueOnly',
                                storageBackend=self.bucket_storage)
             self.sleep(10)
