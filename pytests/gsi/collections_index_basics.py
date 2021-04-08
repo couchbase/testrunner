@@ -915,6 +915,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
 
         collection_namespace = f'default:{self.test_bucket}.{scope}.{collection}'
         collection_namespace_2 = self.namespaces[0]
+        is_ee = self.rest.is_enterprise_edition()
 
         system_indexes_query = "Select * from system:indexes"
 
@@ -968,6 +969,9 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.fail(f'Failed to Drop indexes with same name on different collections: {str(err)}')
 
         # Dropping replica index
+        if not is_ee:
+            self.log.info("Replica indexes are not supported in CE. Hence skipping drop of Replica Indexes")
+            return
         try:
             query = index_gen.generate_index_create_query(namespace=collection_namespace_2,
                                                           defer_build=self.defer_build, num_replica=1)
