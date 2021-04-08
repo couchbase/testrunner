@@ -3130,7 +3130,7 @@ class BackupServiceTest(BackupServiceBase):
 
         # Check aws credentials are not present in the logs
         for line in output:
-            self.assertNotIn(self.objstore_provider.secret_key_id, line)
+            self.assertNotIn(self.objstore_provider.access_key_id, line)
             self.assertNotIn(self.objstore_provider.secret_access_key, line)
 
     def test_audit_service(self):
