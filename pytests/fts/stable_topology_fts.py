@@ -3625,6 +3625,8 @@ class StableTopFTS(FTSBaseTest):
             task.result()
 
     def test_index_creation_oso(self):
+        rest = RestConnection(self._cb_cluster.get_random_fts_node())
+        rest.set_node_setting("useOSOBackfill", True)
         bucket = self._cb_cluster.get_bucket_by_name('default')
         num_scopes = TestInputSingleton.input.param("num_scopes", 5)
         collections_per_scope = TestInputSingleton.input.param("collections_per_scope", 20)
@@ -3689,6 +3691,9 @@ class StableTopFTS(FTSBaseTest):
             self.fail()
 
     def test_data_mutations_oso(self):
+        rest = RestConnection(self._cb_cluster.get_random_fts_node())
+        rest.set_node_setting("useOSOBackfill", True)
+
         bucket = self._cb_cluster.get_bucket_by_name('default')
         num_scopes = TestInputSingleton.input.param("num_scopes", 5)
         collections_per_scope = TestInputSingleton.input.param("collections_per_scope", 20)
@@ -3765,6 +3770,9 @@ class StableTopFTS(FTSBaseTest):
             self.fail()
 
     def test_doc_id_oso(self):
+        rest = RestConnection(self._cb_cluster.get_random_fts_node())
+        rest.set_node_setting("useOSOBackfill", True)
+
         bucket = self._cb_cluster.get_bucket_by_name('default')
         num_scopes = TestInputSingleton.input.param("num_scopes", 5)
         collections_per_scope = TestInputSingleton.input.param("collections_per_scope", 20)
@@ -3798,6 +3806,8 @@ class StableTopFTS(FTSBaseTest):
     def test_partial_rollback_oso(self):
         from lib.memcached.helper.data_helper import MemcachedClientHelper
         #items = 50000, update = True, upd = 30, upd_del_fields = ['dept']
+        rest = RestConnection(self._cb_cluster.get_random_fts_node())
+        rest.set_node_setting("useOSOBackfill", True)
 
         bucket = self._cb_cluster.get_bucket_by_name("default")
         self._cb_cluster.flush_buckets([bucket])
@@ -3971,6 +3981,9 @@ class StableTopFTS(FTSBaseTest):
                                  "Mutated items after FTS node failover are not equal to that after rollback for multi index")
 
     def test_flush_bucket_oso(self):
+        rest = RestConnection(self._cb_cluster.get_random_fts_node())
+        rest.set_node_setting("useOSOBackfill", True)
+
         bucket = self._cb_cluster.get_bucket_by_name('default')
         num_scopes = TestInputSingleton.input.param("num_scopes", 5)
         collections_per_scope = TestInputSingleton.input.param("collections_per_scope", 20)
