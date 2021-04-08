@@ -459,9 +459,8 @@ class RebalanceProgressTests(BaseUITestCase):
         self.buckets = []
         NavigationHelper(self).navigate('Buckets')
         for i in range(num_buckets):
-            bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password')
+            bucket = Bucket(name='bucket%s' % i, ram_quota=200)
             RestConnection(self.servers[0]).create_bucket(bucket=bucket.name, ramQuotaMB=bucket.ram_quota or 100,
-                                                          saslPassword=bucket.sasl_password,
                                                            proxyPort=STANDARD_BUCKET_PORT + i + 1)
             self.buckets.append(bucket)
         self.baseHelper.loadSampleBucket(self.servers[0], 'beer')
@@ -502,10 +501,10 @@ class GracefullFailoverTests(BaseUITestCase):
             self.buckets = []
             NavigationHelper(self).navigate('Buckets')
             for i in range(num_buckets):
-                bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password',
+                bucket = Bucket(name='bucket%s' % i, ram_quota=200,
                                 replica=self.num_replica)
                 RestConnection(self.servers[0]).create_bucket(bucket=bucket.name, ramQuotaMB=bucket.ram_quota or 100,
-                                                              saslPassword=bucket.sasl_password, replicaNumber=bucket.num_replica,
+                                                              replicaNumber=bucket.num_replica,
                                                               proxyPort=STANDARD_BUCKET_PORT + i + 1)
                 self.buckets.append(bucket)
         except:
@@ -598,9 +597,8 @@ class ViewsTests(BaseUITestCase):
         helper.login()
         NavigationHelper(self).navigate('Buckets')
         for i in range(num_buckets):
-            bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password')
+            bucket = Bucket(name='bucket%s' % i, ram_quota=200)
             RestConnection(self.servers[0]).create_bucket(bucket=bucket.name, ramQuotaMB=bucket.ram_quota or 100,
-                                                          saslPassword=bucket.sasl_password,
                                                           proxyPort=STANDARD_BUCKET_PORT + i + 1)
             self.buckets.append(bucket)
         self.driver.refresh()
@@ -865,8 +863,6 @@ class BucketTestsControls():
                                                             parent_locator=self.parent)
         self.dedicated_port_radio = self.helper.find_control('bucket', 'dedicated_port_radio',
                                                              parent_locator=self.parent)
-        self.sasl_password = self.helper.find_control('bucket', 'sasl_password',
-                                                      parent_locator=self.parent)
         self.port = self.helper.find_control('bucket', 'port', parent_locator=self.parent)
         self.enable_replica_cb = self.helper.find_control('bucket', 'enable_replica_cb',
                                                           parent_locator=self.parent)
@@ -1617,9 +1613,6 @@ class BucketHelper():
             self.controls.bucket_pop_up(parent).show_advanced_settings.click()
             self.controls.bucket_pop_up(parent).type(bucket.type).click()
         self.controls.bucket_pop_up(parent).ram_quota.type(bucket.ram_quota)
-        if bucket.sasl_password:
-            self.controls.bucket_pop_up().standart_port_radio.click()
-            self.controls.bucket_pop_up().sasl_password.type(bucket.sasl_password, is_pwd=True)
         if bucket.protocol_port:
             self.controls.bucket_pop_up().dedicated_port_radio.click()
             self.controls.bucket_pop_up().port.type(bucket.protocol_port)
@@ -2436,7 +2429,7 @@ class SettingsHelper:
 
 # Objects
 class Bucket:
-    def __init__(self, name='default', type='Couchbase', ram_quota=None, sasl_pwd=None,
+    def __init__(self, name='default', type='Couchbase', ram_quota=None,
                  port=None, replica=None, index_replica=None, parse_bucket=None,
                  meta_data=None, io_priority=None, frag_percent_cb=None,
                  frag_percent=None, frag_mb_cb=None, frag_mb=None, view_frag_percent_cb=None, view_frag_percent=None,
@@ -2447,7 +2440,6 @@ class Bucket:
         self.name = name or 'default'
         self.type = type
         self.ram_quota = ram_quota
-        self.sasl_password = sasl_pwd
         self.protocol_port = port
         self.num_replica = replica
         self.index_replica = index_replica
@@ -2475,8 +2467,8 @@ class Bucket:
                     setattr(self, str(param), parse_bucket.test_params[param])
 
     def __str__(self):
-        return '<Bucket: name={0}, type={1}, ram_quota={2}, sasl_pwd={3} >'.format(self.name,
-                                                                    self.type, self.ram_quota, self.sasl_password)
+        return '<Bucket: name={0}, type={1}, ram_quota={2} >'.format(self.name,
+                                                                     self.type, self.ram_quota)
 
 
 class Document():
