@@ -2314,6 +2314,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         for indexer_node in indexer_nodes:
             rest = RestConnection(indexer_node)
             rest.set_index_settings({"indexer.rebalance.node_eject_only": False})
+            rest.set_index_settings({"indexer.settings.rebalance.redistribute_indexes": True})
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
         # rebalance in a node
         services_in = ["index"]
