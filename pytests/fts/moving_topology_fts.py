@@ -224,6 +224,8 @@ class MovingTopFTS(FTSBaseTest):
                                self.default_concurrent_partition_moves_per_node))
 
     def rebalance_in_during_index_building(self):
+        if self._input.param("must_fail", False):
+            self.fail("Temporal fail to let all the other tests to be passed")
         self.load_data()
         self.create_fts_indexes_all_buckets()
         self.sleep(10)
@@ -649,11 +651,11 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
 
-        self.sleep(20)
+        self.wait_for_indexing_complete()
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
                                              expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+            self.log.info("SUCCESS! Hits: %s" % hits)
 
     def rebalance_out_between_indexing_and_querying(self):
         #TESTED

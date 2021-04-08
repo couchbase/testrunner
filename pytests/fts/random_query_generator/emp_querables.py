@@ -90,7 +90,7 @@ class EmployeeQuerables:
         return random.randint(10000000, 10000100)
 
     def get_queryable_salary(self):
-        return round(random.random(), 2) *100000 + 50000
+        return int(round(random.random(), 2) *100000 + 50000)
 
     def get_queryable_manages_team_size(self):
         return random.randint(5, 10)

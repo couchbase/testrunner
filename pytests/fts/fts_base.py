@@ -4425,6 +4425,13 @@ class FTSBaseTest(unittest.TestCase):
                                       f"docs in FTS index '{index.name}': {index_doc_count}")
                         if retry_count == 1:
                             fail = True
+                            rest = RestConnection(self._cb_cluster.get_random_fts_node())
+                            _, fts_service_stats = rest.get_fts_stats()
+
+                            self.log.error(f"Indexing process seems to be dead for index {index.name}")
+                            self.log.error(f"Index definition: {index.index_definition}")
+                            self.log.error(f"FTS service stats: {fts_service_stats}")
+
                             self.fail(f"FTS index count not matching bucket count even after {retry} tries: "
                                       f"Docs in bucket = {container_doc_count}, "
                                       f"docs in FTS index '{index.name}': {index_doc_count}")
@@ -4435,6 +4442,11 @@ class FTSBaseTest(unittest.TestCase):
                                       f" {index_doc_count}, docs in ES index: {es_index_count} ")
                         if retry_count == 1:
                             fail = True
+
+                            self.log.error(f"Indexing process seems to be dead for index {index.name}")
+                            self.log.error(f"Index definition: {index.index_definition}")
+                            self.log.error(f"FTS service stats: {fts_service_stats}")
+
                             self.fail(f"FTS/ES index count not matching bucket count even after {retry} tries: "
                                       f"Docs in bucket = {container_doc_count}, "
                                       f"docs in FTS index '{index.name}': {index_doc_count}, "

@@ -2390,7 +2390,18 @@ class RestConnection(object):
     def get_active_key_count(self, bucket):
         """Fetch bucket stats and return the bucket's curr_items count"""
         bucket_stats = self.fetch_bucket_stats(bucket)
-        return bucket_stats['op']['samples']['curr_items'][-1]
+        ret_val = -1
+        retries = 10
+        while retries > 0:
+            try:
+                ret_val = bucket_stats['op']['samples']['curr_items'][-1]
+                return ret_val
+            except KeyError as err:
+                log.error(f"get_active_key_count() function for bucket {bucket} reported an error {err}")
+                log.error(f"Corresponding bucket stats JSON is {bucket_stats}")
+                time.sleep(2)
+                retries = retries - 1
+        return ret_val
 
     def get_replica_key_count(self, bucket):
         """Fetch bucket stats and return the bucket's replica count"""
@@ -2553,6 +2564,8 @@ class RestConnection(object):
         while attempts < 5:
             status, content, header = self._http_request(api)
             json_parsed = json.loads(content)
+            if bucket_name is None and index_name is None and stat_name is None:
+                return status, content
             if bucket_name is None and index_name is None:
                 key = stat_name
             else:

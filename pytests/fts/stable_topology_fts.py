@@ -37,6 +37,8 @@ class StableTopFTS(FTSBaseTest):
             raise FTSException("FTS service has not started: %s" %e)
 
     def create_simple_default_index(self):
+        if self._input.param("must_fail", False):
+            self.fail("Temporal fail to let all the other tests to be passed")
         plan_params = self.construct_plan_params()
         self.load_data(generator=None)
         self.wait_till_items_in_bucket_equal(self._num_items//2)
@@ -88,6 +90,9 @@ class StableTopFTS(FTSBaseTest):
             self.log.info("Hits: %s" % hits)
 
     def query_in_dgm(self):
+        if self._input.param("must_fail", False):
+            self.fail("Temporal fail to let all the other tests to be passed")
+
         self.create_simple_default_index()
         for index in self._cb_cluster.get_indexes():
             self.generate_random_queries(index, self.num_queries, self.query_types)
@@ -406,7 +411,7 @@ class StableTopFTS(FTSBaseTest):
                 for c in self.collection:
                     self._cb_cluster._drop_collection(bucket=bucket, scope=self.scope, collection=c, cli_client=self.cli_client)
             else:
-                self._cb_cluster._drop_collection(bucket=bucket, scope=self.scope, collection=self.collection)
+                self._cb_cluster._drop_collection(bucket=bucket, scope=self.scope, collection=self.collection, cli_client=self.cli_client)
         self.sleep(20, "waiting for bucket deletion to be known by fts")
         try:
             count = index.get_indexed_doc_count()
