@@ -368,7 +368,7 @@ class N1QLHelper():
         if len(actual_result) != len(expected_result):
             raise Exception("Results are incorrect.Actual num %s. Expected num: %s.\n" % (len(actual_result), len(expected_result)))
         msg = "The number of rows match but the results mismatch, please check"
-        diffs = DeepDiff(actual_result, expected_result, ignore_order=True, ignore_type_in_groups=[(int, float)])
+        diffs = DeepDiff(actual_result, expected_result, ignore_order=True, ignore_numeric_type_changes=True)
         if diffs:
             self.log.info("-->actual vs expected diffs found:{}".format(diffs))
             raise Exception(msg)
@@ -464,7 +464,7 @@ class N1QLHelper():
         if len(actual_result) != len(expected_result):
             extra_msg = self._get_failure_message(expected_result, actual_result)
             raise Exception("Results are incorrect. Actual num %s. Expected num: %s.:: %s \n" % (len(actual_result), len(expected_result), extra_msg))
-        diffs = DeepDiff(actual_result, expected_result, ignore_order=True,ignore_type_in_groups=[(int, float)])
+        diffs = DeepDiff(actual_result, expected_result, ignore_order=True, ignore_numeric_type_changes=True)
         if diffs:
             self.log.info("-->actual vs expected diffs found:{}".format(diffs))
             raise Exception("-->actual vs expected diffs found:{}".format(diffs))
@@ -535,7 +535,7 @@ class N1QLHelper():
         sql_result = self._gen_dict_n1ql_func_result(sql_result)
         if len(sql_result) == 0 and len(n1ql_result) == 0:
             return
-        diffs = DeepDiff(n1ql_result, sql_result, ignore_order=True, ignore_type_in_groups=[(int, float)])
+        diffs = DeepDiff(n1ql_result, sql_result, ignore_order=True, ignore_numeric_type_changes=True)
         if diffs:
             self.log.info("-->actual vs expected diffs found:{0}".format(diffs))
             raise Exception("mismatch in results:{0}".format(diffs))
