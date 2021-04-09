@@ -8,6 +8,7 @@ import time
 import logging
 import stat
 import json
+import signal
 
 import TestInput
 from subprocess import Popen, PIPE
@@ -330,7 +331,7 @@ class RemoteMachineShellConnection(KeepRefs):
             log.error(
                 "-->No SSH connectivity to {} even after {} times!\n".format(self.ip, attempt))
             if exit_on_failure:
-                exit(1)
+                os.kill(os.getpid(), signal.SIGINT)
             else:
                 return
         log.info("SSH Connected to {} as {}".format(ip, ssh_username))
