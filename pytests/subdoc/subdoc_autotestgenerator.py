@@ -407,7 +407,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         thread_list = []
         for operation in operations:
             client = self.direct_client(self.master, bucket)
-            t = Process(target=self.run_mutation_operation, args=(client, document_key, operation, result_queue))
+            t = threading.Thread(target=self.run_mutation_operation, args=(client, document_key, operation, result_queue))
             t.start()
             thread_list.append(t)
         for t in thread_list:
