@@ -803,6 +803,7 @@ class DataCollector(object):
         def staging_save():
             """ Save staging directory and replace it with a cbriftdump specific staging directory
             """
+            nonlocal previous_staging_directory
             if objstore_provider:
                 backupset.objstore_staging_directory, previous_staging_directory = backupset.objstore_staging_directory + "_cbriftdump", backupset.objstore_staging_directory
                 conn.execute_command(f"rm -rf {backupset.objstore_staging_directory}")
@@ -810,6 +811,7 @@ class DataCollector(object):
         def staging_restore():
             """ Restore the previously saved staging directory
             """
+            nonlocal previous_staging_directory
             if objstore_provider:
                 conn.execute_command(f"rm -rf {backupset.objstore_staging_directory}")
                 backupset.objstore_staging_directory = previous_staging_directory
