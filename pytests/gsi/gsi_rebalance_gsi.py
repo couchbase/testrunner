@@ -723,6 +723,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
         rebalance.result()
         self.run_operation(phase="during")
+        self.sleep(60)
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
@@ -814,7 +815,6 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         else:
             self.log.info("Index alteration succeed as expected")
 
-        self.run_operation(phase="during")
         t1.join()
         self.run_operation(phase="after")
 
@@ -969,7 +969,6 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [], services=services_in)
         rebalance.result()
         self._cbindex_move(index_server, self.servers[self.nodes_init], indexes, alter_index=self.alter_index)
-        self.run_operation(phase="during")
         tasks = self.async_run_doc_ops()
         for task in tasks:
             task.result()
