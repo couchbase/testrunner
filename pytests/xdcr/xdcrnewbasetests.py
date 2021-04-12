@@ -1373,6 +1373,8 @@ class CouchbaseCluster:
                 ClusterOperationHelper.wait_for_ns_servers_or_assert(
                     [node],
                     test_case)
+        except Exception as e:
+            self.__log.warning(e)
         finally:
             if cluster_shutdown:
                 self.__clusterop.shutdown(force=True)
@@ -2800,6 +2802,8 @@ class XDCRNewBaseTest(unittest.TestCase):
             self.log.info(
                 "====  XDCRNewbasetests cleanup is finished for test #{0} {1} ==="
                 .format(self.__case_number, self._testMethodName))
+        except Exception as e:
+            self.log.warning(e)
         finally:
             self.__cluster_op.shutdown(force=True)
             unittest.TestCase.tearDown(self)

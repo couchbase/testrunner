@@ -49,7 +49,7 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
         except Exception as e:
             self.fail(e)
 
-        if len(self._disable_compaction):
+        if len(self._disable_compaction) > 1:
             for cluster_name in self._disable_compaction:
                 self.get_cb_cluster_by_name(cluster_name).disable_compaction()
 

@@ -1424,7 +1424,7 @@ class RestConnection(object):
             log.info("Replication created with id: {0}".format(json_parsed['id']))
             return json_parsed['id']
         elif int(header['status']) == 500 and b'["Unexpected server error, request logged."]' in content:
-            log.warn(
+            log.warning(
                 "/controller/createReplication failed: status:{0},content:{1}, most likely MB-43597".format(status,
                                                                                                              content))
         else:
@@ -1436,9 +1436,10 @@ class RestConnection(object):
         content = self.ns_server_tasks()
         for item in content:
             if not isinstance(item, dict):
-                log.warn("Unexpected error while retrieving pools/default/tasks: {0}".format(content))
-            if item["type"] == "xdcr":
-                replications.append(item)
+                log.warning("Unexpected error while retrieving pools/default/tasks: {0}".format(content))
+            else:
+                if item["type"] == "xdcr":
+                    replications.append(item)
         return replications
 
     def remove_all_replications(self):
@@ -1453,7 +1454,7 @@ class RestConnection(object):
         if status:
             log.info("Replication deleted successfully")
         elif int(header['status']) == 500 and b'["Unexpected server error, request logged."]' in content:
-            log.warn(
+            log.warning(
                 "/controller/cancelXDCR failed: status:{0},content:{1}, most likely MB-43597".format(status, content))
         else:
             log.error("/controller/cancelXDCR failed: status:{0}, content:{1}".format(status, content))
@@ -3140,22 +3141,32 @@ class RestConnection(object):
         api = self.baseUrl[:-1] + replication['settingsURI']
         value = str(value).lower()
         params = urllib.parse.urlencode({param: value})
-        status, _, _ = self._http_request(api, "POST", params)
-        if not status:
+        status, content, header = self._http_request(api, "POST", params)
+        if int(header['status']) == 500 and b'["Unexpected server error, request logged."]' in content:
+            log.warning(
+                "Unable to set replication setting. status:{0},content:{1}, most likely MB-43597".format(status,
+                                                                                                             content))
+        elif not status:
             raise XDCRException("Unable to set replication setting {0}={1} on bucket {2} on node {3}".
                             format(param, value, src_bucket_name, self.ip))
-        log.info("Updated {0}={1} on bucket '{2}' on {3}".format(param, value, src_bucket_name, self.ip))
+        else:
+            log.info("Updated {0}={1} on bucket '{2}' on {3}".format(param, value, src_bucket_name, self.ip))
 
     def set_xdcr_params(self, src_bucket_name,
                                          dest_bucket_name, param_value_map):
         replication = self.get_replication_for_buckets(src_bucket_name, dest_bucket_name)
         api = self.baseUrl[:-1] + replication['settingsURI']
         params = urllib.parse.urlencode(param_value_map)
-        status, content, _ = self._http_request(api, "POST", params)
-        if not status:
+        status, content, header = self._http_request(api, "POST", params)
+        if int(header['status']) == 500 and b'["Unexpected server error, request logged."]' in content:
+            log.warning(
+                "Unable to set replication settings. status:{0},content:{1}, most likely MB-43597".format(status,
+                                                                                                         content))
+        elif not status:
             raise XDCRException("{0} \n Unable to set replication settings {1} on bucket {2} on node {3}".
                             format(content, param_value_map, src_bucket_name, self.ip))
-        log.info("Updated {0} on bucket '{1}' on {2}".format(param_value_map, src_bucket_name, self.ip))
+        else:
+            log.info("Updated {0} on bucket '{1}' on {2}".format(param_value_map, src_bucket_name, self.ip))
 
     def set_global_xdcr_param(self, param, value):
         api = self.baseUrl[:-1] + "/settings/replications"
