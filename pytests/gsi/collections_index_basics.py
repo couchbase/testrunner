@@ -60,12 +60,13 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             if self.defer_build:
                 query = query_gen_1.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-            self.wait_until_indexes_online()
+            result = self.wait_until_indexes_online()
+            self.log.info(result)
+            self.sleep(10, "Waiting before running SELECT Query")
             query = f'SELECT COUNT(*) from {collection_namespace}'
             count = self.run_query_with_retry(query=query, expected_result=self.num_of_docs_per_collection,
                                               is_count_query=True)
             self.assertEqual(count, self.num_of_docs_per_collection, "Docs count not matching")
-            # stat = self.stat.get_collection_stats(bucket=self.buckets[0])
 
             # Checking for named primary index
             query = query_gen_2.generate_primary_index_create_query(namespace=collection_namespace,
@@ -77,6 +78,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                 query = query_gen_2.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
             self.wait_until_indexes_online()
+            self.sleep(10, "Waiting before running SELECT Query")
             query = f'SELECT COUNT(*) from {collection_namespace}'
             count = self.run_query_with_retry(query=query, expected_result=self.num_of_docs_per_collection,
                                               is_count_query=True)
@@ -1008,20 +1010,20 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             err_msg = 'The index idx already exists'
             self.assertTrue(err_msg in str(err), f"Index with duplicate named is create: {err}")
 
-        # invalid name for Primary and GSI
+        # invalid name for GSI
         index_gen_1 = QueryDefinition(index_name='invalid*', index_fields=['age'])
         index_gen_2 = QueryDefinition(index_name='invalid%', index_fields=['age'])
         try:
             query = index_gen_1.generate_index_create_query(namespace=collection_namespace)
             self.run_cbq_query(query=query)
         except Exception as err:
-            err_msg = 'syntax error - at *'
-            self.assertTrue(err_msg in str(err), f"Primary Index with invalid name is created: {err}")
+            err_msg = 'Invalid index name'
+            self.assertTrue(err_msg in str(err), f"Index with invalid name is created: {err}")
         try:
             query = index_gen_2.generate_index_create_query(namespace=collection_namespace)
             self.run_cbq_query(query=query)
         except Exception as err:
-            err_msg = 'syntax error - at %!(NOVERB)'
+            err_msg = 'Invalid index name'
             self.assertTrue(err_msg in str(err), f"Secondary Index with duplicate named is created: {err}")
 
         # index on a non-existent bucket/scope/collection
