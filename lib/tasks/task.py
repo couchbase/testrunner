@@ -1475,15 +1475,15 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
             # only start processing when there resources available
             CONCURRENCY_LOCK.acquire()
 
+            # add child process to wait queue
+            self.wait_queue.put(iterator + 1)
+
             generator_process = Process(
                 target=self.run_generator,
                 args=(generator, iterator))
             generator_process.start()
             iterator += 1
             all_processes.append(generator_process)
-
-            # add child process to wait queue
-            self.wait_queue.put(iterator)
 
         # wait for all child processes to finish
         self.wait_queue.join()
