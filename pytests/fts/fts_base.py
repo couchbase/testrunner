@@ -1502,12 +1502,15 @@ class FTSIndex:
             hits, matches, time_taken, status = \
                 self.__cluster.run_fts_query(self.name, query_dict, timeout=rest_timeout)
         except ServerUnavailableException:
-            if zero_results_ok and expected_hits <= 0:
+            if zero_results_ok and (expected_hits is None or expected_hits <= 0):
                 return hits, doc_ids, time_taken, status
             # query time outs
             raise ServerUnavailableException
         except Exception as e:
             self.__log.error("Error running query: %s" % e)
+
+        if status == 'fail':
+            return hits, matches, time_taken, status
         if hits:
             for doc in matches:
                 doc_ids.append(doc['id'])
@@ -3293,11 +3296,38 @@ class CouchbaseCluster:
         self.__nodes.extend(to_add_node)
         return task
 
+    def async_rebalance_in_node(self, nodes_in=None, services=None, sleep_before_rebalance=0):
+        """Rebalance-in single node into Cluster asynchronously
+        @param node_in: node to rebalance-in to cluster.
+        @param services: services list for a new node
+        @param sleep_before_rebalance: sleep between nede addition and cluster rebalance
+        """
+        if isinstance(nodes_in, list):
+            to_add_nodes = []
+            for n in nodes_in:
+                to_add_nodes.append(n)
+        else:
+            to_add_nodes = [nodes_in]
+        self.__log.info(
+            "Starting rebalance-in nodes:{0} at {1} cluster {2}".format(
+                to_add_nodes, self.__name, self.__master_node.ip))
+        task = self.__clusterop.async_rebalance(self.__nodes, to_add_nodes, [],
+                                                services=services, sleep_before_rebalance=sleep_before_rebalance)
+        self.__nodes.extend(to_add_nodes)
+        return task
+
     def rebalance_in(self, num_nodes=1, services=None):
         """Rebalance-in nodes
         @param num_nodes: number of nodes to add to cluster.
         """
         task = self.async_rebalance_in(num_nodes, services=services)
+        task.result()
+
+    def rebalance_in_node(self, nodes_in=None, services=None, sleep_before_rebalance=0):
+        """Rebalance-in nodes
+        @param num_nodes: number of nodes to add to cluster.
+        """
+        task = self.async_rebalance_in_node(nodes_in=nodes_in, services=services, sleep_before_rebalance=sleep_before_rebalance)
         task.result()
 
     def __async_swap_rebalance(self, master=False, num_nodes=1, services=None):
@@ -4426,11 +4456,6 @@ class FTSBaseTest(unittest.TestCase):
                         if retry_count == 1:
                             fail = True
                             rest = RestConnection(self._cb_cluster.get_random_fts_node())
-                            _, fts_service_stats = rest.get_fts_stats()
-
-                            self.log.error(f"Indexing process seems to be dead for index {index.name}")
-                            self.log.error(f"Index definition: {index.index_definition}")
-                            self.log.error(f"FTS service stats: {fts_service_stats}")
 
                             self.fail(f"FTS index count not matching bucket count even after {retry} tries: "
                                       f"Docs in bucket = {container_doc_count}, "
@@ -4442,11 +4467,6 @@ class FTSBaseTest(unittest.TestCase):
                                       f" {index_doc_count}, docs in ES index: {es_index_count} ")
                         if retry_count == 1:
                             fail = True
-
-                            self.log.error(f"Indexing process seems to be dead for index {index.name}")
-                            self.log.error(f"Index definition: {index.index_definition}")
-                            self.log.error(f"FTS service stats: {fts_service_stats}")
-
                             self.fail(f"FTS/ES index count not matching bucket count even after {retry} tries: "
                                       f"Docs in bucket = {container_doc_count}, "
                                       f"docs in FTS index '{index.name}': {index_doc_count}, "

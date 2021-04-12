@@ -1692,7 +1692,16 @@ class ESRunQueryCompare(Task):
                 fts_hits, fts_doc_ids, fts_time, fts_status = \
                     self.run_fts_query(self.fts_query, self.score)
                 self.log.info("Status: %s" % fts_status)
-                if fts_hits < 0:
+
+                if fts_status == 'fail':
+                    error = fts_doc_ids
+                    if "err: TooManyClauses over field" in str(error):
+                        self.log.info("FTS chose not to run this big query"
+                                      "...skipping ES validation")
+                        self.passed = True
+                        self.es_compare = False
+                        should_verify_n1ql = False
+                elif fts_hits < 0:
                     self.passed = False
                 elif 'errors' in list(fts_status.keys()) and fts_status['errors']:
                     if fts_status['successful'] == 0 and \

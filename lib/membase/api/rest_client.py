@@ -3469,10 +3469,12 @@ class RestConnection(object):
             json.dumps(query_json, ensure_ascii=False).encode('utf8'),
             headers,
             timeout=timeout)
+        content = json.loads(content)
         if status:
-            content = json.loads(content)
             return content['total_hits'], content['hits'], content['took'], \
                    content['status']
+        else:
+            return -1, content['error'], -1, content['status']
 
     def run_fts_query_generalized(self, index_name, query_json, timeout=70):
         """Method run an FTS query through rest api"""

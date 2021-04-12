@@ -38,6 +38,17 @@ class MovingTopFTS(FTSBaseTest):
             NodeHelper.kill_cbft_process(fts_node)
         return fts_node
 
+    def stop_cb_service(self, nodes, timeout=0):
+        self.sleep(timeout)
+        for n in nodes:
+            remote = RemoteMachineShellConnection(n)
+            remote.stop_couchbase()
+
+    def start_cb_service(self, nodes):
+        for n in nodes:
+            remote = RemoteMachineShellConnection(n)
+            remote.start_couchbase()
+
     def kill_erlang_service(self, timeout):
         fts_node = self._cb_cluster.get_random_fts_node()
         self.sleep(timeout)
@@ -168,8 +179,8 @@ class MovingTopFTS(FTSBaseTest):
             self.is_index_partitioned_balanced(index)
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
-                                                expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+                                                expected_hits=self._find_expected_indexed_items_number())
+            self.log.info("SUCCESS! Hits: %s" % hits)
         self.assertTrue(simple_rebalance_time > parallel_rebalance_time,
                         "Rebalance out with maxConcurrentPartitionMovesPerNode={0} takes longer time than "
                         "rebalance out with maxConcurrentPartitionMovesPerNode={1}".
@@ -246,23 +257,43 @@ class MovingTopFTS(FTSBaseTest):
         self.sleep(1)
         self.log.info("Index building has begun...")
         self.sleep(1)
+        node_to_rebalance_in = None
+        for s in self._input.servers:
+            node_in_use = False
+            for s1 in self._cb_cluster.get_nodes():
+                if s.ip == s1.ip:
+                    node_in_use = True
+                    break
+            if not node_in_use:
+                node_to_rebalance_in = s
+                break
+        if node_to_rebalance_in is None:
+            self.fail("Cannot find free node to rebalance-in.")
+
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
                           %(index.name,index.get_indexed_doc_count()))
 
-        reb_thread = Thread(
-            target=self.kill_fts_service,
-            args=[3, 10])
+        stop_CB_thread = Thread(
+            target=self.stop_cb_service,
+            args=[[node_to_rebalance_in], 45])
+
+        rebalance_was_successful = True
         try:
-            reb_thread.start()
-            self._cb_cluster.rebalance_in(num_nodes=1, services=["fts"])
-            self.fail("Rebalance did not fail")
+            stop_CB_thread.start()
+            rebalance_task = self._cb_cluster.async_rebalance_in_node(nodes_in=node_to_rebalance_in, services=["kv"], sleep_before_rebalance=150)
+            rebalance_task.result()
+
         except Exception as e:
+            rebalance_was_successful = False
             self.log.error(str(e))
-            reb_thread.join()
+            self.start_cb_service([node_to_rebalance_in])
             self.sleep(5)
             self._check_retry_rebalance_succeeded()
-
+        finally:
+            self.start_cb_service([node_to_rebalance_in])
+            if rebalance_was_successful:
+                self.fail("Rebalance was successful")
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
@@ -652,9 +683,10 @@ class MovingTopFTS(FTSBaseTest):
             self.is_index_partitioned_balanced(index)
 
         self.wait_for_indexing_complete()
+
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
+                                                expected_hits=self._find_expected_indexed_items_number())
             self.log.info("SUCCESS! Hits: %s" % hits)
 
     def rebalance_out_between_indexing_and_querying(self):
@@ -664,12 +696,13 @@ class MovingTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
         self._cb_cluster.rebalance_out(num_nodes=self.num_rebalance)
+
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+                                             expected_hits=self._find_expected_indexed_items_number())
+            self.log.info("SUCCESS! Hits: %s" % hits)
 
     def rebalance_out_master_between_indexing_and_querying(self):
         #TESTED
@@ -687,8 +720,8 @@ class MovingTopFTS(FTSBaseTest):
         self.validate_index_count(equal_bucket_doc_count=True)
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+                                             expected_hits=self._find_expected_indexed_items_number())
+            self.log.info("SUCCESS! Hits: %s" % hits)
 
     def swap_rebalance_between_indexing_and_querying(self):
         #TESTED
@@ -701,12 +734,13 @@ class MovingTopFTS(FTSBaseTest):
             services.append("fts")
         self._cb_cluster.swap_rebalance(services=services,
                                         num_nodes=self.num_rebalance)
+
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+                                             expected_hits=self._find_expected_indexed_items_number())
+            self.log.info("SUCCESS! Hits: %s" % hits)
 
     def hard_failover_and_remove_between_indexing_and_querying(self):
         #TESTED
@@ -726,10 +760,11 @@ class MovingTopFTS(FTSBaseTest):
             else:
                 raise e
         self.wait_for_indexing_complete()
+
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+                                             expected_hits=self._find_expected_indexed_items_number())
+            self.log.info("SUCCESS! Hits: %s" % hits)
 
     def hard_failover_no_rebalance_between_indexing_and_querying(self):
         #TESTED
@@ -740,9 +775,10 @@ class MovingTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         self._cb_cluster.async_failover().result()
         self.sleep(30)
+
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query)
-            if hits < self._num_items:
+            if hits < self._find_expected_indexed_items_number():
                 self.log.info("SUCCESS: Fewer docs ({0}) returned after "
                               "hard-failover".format(hits))
 
@@ -752,12 +788,13 @@ class MovingTopFTS(FTSBaseTest):
         self.create_fts_indexes_all_buckets()
         self.wait_for_indexing_complete()
         self._cb_cluster.failover_and_rebalance_master()
+
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+                                             expected_hits=self._find_expected_indexed_items_number())
+            self.log.info("SUCCESS! Hits: %s" % hits)
 
     def hard_failover_and_delta_recovery_between_indexing_and_querying(self):
         #TESTED
@@ -770,10 +807,11 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
+
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+                                             expected_hits=self._find_expected_indexed_items_number())
+            self.log.info("SUCCESS! Hits: %s" % hits)
 
     def hard_failover_and_full_recovery_between_indexing_and_querying(self):
         #TESTED
@@ -786,10 +824,11 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
+
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+                                             expected_hits=self._find_expected_indexed_items_number())
+            self.log.info("SUCCESS! Hits: %s" % hits)
 
     def failover_no_rebalance_with_replicas_between_indexing_and_querying(self):
         index = self.create_index_generate_queries()
@@ -804,6 +843,7 @@ class MovingTopFTS(FTSBaseTest):
             else:
                 raise e
         self.wait_for_indexing_complete()
+        self.sleep(30, "Sleep for additional time to make sure, fts index is ready.")
         self.run_query_and_compare(index)
 
     def graceful_failover_and_delta_recovery_between_indexing_and_querying(self):
@@ -818,10 +858,11 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
+
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+                                             expected_hits=self._find_expected_indexed_items_number())
+            self.log.info("SUCCESS! Hits: %s" % hits)
 
     def graceful_failover_and_full_recovery_between_indexing_and_querying(self):
         #TESTED
@@ -835,10 +876,11 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
+
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+                                             expected_hits=self._find_expected_indexed_items_number())
+            self.log.info("SUCCESS! Hits: %s" % hits)
 
     def warmup_between_indexing_and_querying(self):
         #TESTED
@@ -850,10 +892,11 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.sleep(30, "waiting for fts process to start")
+
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+                                             expected_hits=self._find_expected_indexed_items_number())
+            self.log.info("SUCCESS! Hits: %s" % hits)
 
     def warmup_master_between_indexing_and_querying(self):
         #TESTED
@@ -866,10 +909,11 @@ class MovingTopFTS(FTSBaseTest):
         self._cb_cluster.warmup_node(master=True)
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
+
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+                                             expected_hits=self._find_expected_indexed_items_number())
+            self.log.info("SUCCESS! Hits: %s" % hits)
 
     def node_reboot_between_indexing_and_querying(self):
         #TESTED
@@ -885,10 +929,11 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.validate_index_count(equal_bucket_doc_count=True)
+
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+                                             expected_hits=self._find_expected_indexed_items_number())
+            self.log.info("SUCCESS! Hits: %s" % hits)
 
     def memc_crash_between_indexing_and_querying(self):
         self.load_data()
@@ -900,8 +945,8 @@ class MovingTopFTS(FTSBaseTest):
             self.is_index_partitioned_balanced(index)
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+                                             expected_hits=self._find_expected_indexed_items_number())
+            self.log.info("SUCCESS! Hits: %s" % hits)
 
     def erl_crash_between_indexing_and_querying(self):
         #TESTED
@@ -916,8 +961,8 @@ class MovingTopFTS(FTSBaseTest):
             self.is_index_partitioned_balanced(index)
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+                                             expected_hits=self._find_expected_indexed_items_number())
+            self.log.info("SUCCESS! Hits: %s" % hits)
 
     def fts_node_crash_between_indexing_and_querying(self):
         #TESTED
@@ -931,10 +976,11 @@ class MovingTopFTS(FTSBaseTest):
         self.validate_index_count(equal_bucket_doc_count=True)
         NodeHelper.kill_cbft_process(self._cb_cluster.get_random_fts_node())
         self.sleep(60)
+
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+                                             expected_hits=self._find_expected_indexed_items_number())
+            self.log.info("SUCCESS! Hits: %s" % hits)
 
     """ Topology change during querying"""
 
@@ -990,28 +1036,44 @@ class MovingTopFTS(FTSBaseTest):
         self.run_tasks_and_report(tasks, len(index.fts_queries))
         self.is_index_partitioned_balanced(index)
         hits, _, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
+                                             expected_hits=self._find_expected_indexed_items_number())
         self.log.info("SUCCESS! Hits: %s" % hits)
+
+
+
+
 
     def retry_rebalance_in_during_querying(self):
         #TESTED
         self._cb_cluster.enable_retry_rebalance(self.retry_time, self.num_retries)
         index = self.create_index_generate_queries()
         services = []
+
+        node_to_rebalance_in = []
+        for s in self._input.servers:
+            node_in_use = False
+            for s1 in self._cb_cluster.get_nodes():
+                if s.ip == s1.ip:
+                    node_in_use = True
+                    break
+            if not node_in_use:
+                node_to_rebalance_in.append(s)
+            if len(node_to_rebalance_in) == self.num_rebalance:
+                break
+        if len(node_to_rebalance_in) < self.num_rebalance:
+            self.fail("Cannot find free node to rebalance-in.")
+
         for _ in range(self.num_rebalance):
             services.append("fts")
         tasks = []
-        retry_reb_thread = Thread(
-            target=self.retry_rebalance,
-            args=[services])
-        retry_reb_thread.start()
-        #reb_thread = Thread(
-        #    target=self._cb_cluster.reboot_after_timeout,
-        #    args=[5])
-        reb_thread = Thread(
-            target=self.kill_fts_service,
-            args=[5])
-        reb_thread.start()
+
+        stop_CB_thread = Thread(
+            target=self.stop_cb_service,
+            args=[node_to_rebalance_in, 45])
+
+        stop_CB_thread.start()
+        self.retry_rebalance(services=services, nodes_in=node_to_rebalance_in, sleep_before_rebalance=150)
+
         for count in range(0, len(index.fts_queries)):
             tasks.append(self._cb_cluster.async_run_fts_query_compare(
                 fts_index=index,
@@ -1022,7 +1084,7 @@ class MovingTopFTS(FTSBaseTest):
         self.sleep(30)
         self.is_index_partitioned_balanced(index)
         hits, _, _, _ = index.execute_query(query=self.query,
-                                            expected_hits=self._num_items)
+                                            expected_hits=self._find_expected_indexed_items_number())
         self.log.info("SUCCESS! Hits: %s" % hits)
         self._cb_cluster.disable_retry_rebalance()
 
@@ -1043,22 +1105,31 @@ class MovingTopFTS(FTSBaseTest):
         self.is_index_partitioned_balanced(index)
         self.run_query_and_compare(index)
         hits, _, _, _ = index.execute_query(query=self.query,
-                                         expected_hits=self._num_items)
+                                         expected_hits=self._find_expected_indexed_items_number())
         self.log.info("SUCCESS! Hits: %s" % hits)
 
-    def retry_rebalance(self, services=None):
+    def retry_rebalance(self, services=None, nodes_in=[], sleep_before_rebalance=0):
+        rebalance_was_successful = True
         try:
             if services:
-                self._cb_cluster.rebalance_in(
-                    num_nodes=self.num_rebalance,
-                    services=services)
+                self._cb_cluster.rebalance_in_node(
+                    nodes_in = nodes_in,
+                    services=services,
+                    sleep_before_rebalance=sleep_before_rebalance
+                )
             else:
                 self._cb_cluster.rebalance_out()
-            self.fail("Rebalance did not fail")
+            rebalance_was_successful = True
         except Exception as e:
+            rebalance_was_successful = False
             self.log.error(str(e))
+            self.start_cb_service(nodes_in)
             self.sleep(5)
             self._check_retry_rebalance_succeeded()
+        finally:
+            self.start_cb_service(nodes_in)
+            if rebalance_was_successful:
+                self.fail("Rebalance was successful")
 
     def retry_rebalance_out_during_querying(self):
         #TESTED
@@ -1087,7 +1158,7 @@ class MovingTopFTS(FTSBaseTest):
         self.is_index_partitioned_balanced(index)
         self.run_query_and_compare(index)
         hits, _, _, _ = index.execute_query(query=self.query,
-                                            expected_hits=self._num_items)
+                                            expected_hits=self._find_expected_indexed_items_number())
         self.log.info("SUCCESS! Hits: %s" % hits)
         self._cb_cluster.disable_retry_rebalance()
 
@@ -1107,7 +1178,7 @@ class MovingTopFTS(FTSBaseTest):
             args=[self.num_rebalance, services])
         reb_thread.start()
         # wait for a bit before querying
-        self.sleep(8)
+        self.sleep(90)
         for count in range(0, len(index.fts_queries)):
             tasks.append(self._cb_cluster.async_run_fts_query_compare(
                 fts_index=index,
@@ -1118,8 +1189,9 @@ class MovingTopFTS(FTSBaseTest):
         self.sleep(5)
         self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
+        self.sleep(30, "Sleep for additional time to make sure, fts index is ready.")
         hits, _, _, _ = index.execute_query(query=self.query,
-                                         expected_hits=self._num_items)
+                                         expected_hits=self._find_expected_indexed_items_number())
         self.log.info("SUCCESS! Hits: %s" % hits)
 
     def hard_failover_no_rebalance_during_querying(self):
@@ -1132,6 +1204,7 @@ class MovingTopFTS(FTSBaseTest):
         tasks.append(self._cb_cluster.async_failover(
             num_nodes=1,
             graceful=False))
+        self.sleep(60)
         for count in range(0, len(index.fts_queries)):
             tasks.append(self._cb_cluster.async_run_fts_query_compare(
                 fts_index=index,
@@ -1140,8 +1213,9 @@ class MovingTopFTS(FTSBaseTest):
                 query_index=count))
         self.run_tasks_and_report(tasks, len(index.fts_queries))
         self.wait_for_indexing_complete()
+        self.sleep(60, "Sleep for additional time to make sure, fts index is ready")
         hits, _, _, _ = index.execute_query(query=self.query)
-        if hits < self._num_items:
+        if hits < self._find_expected_indexed_items_number():
             self.log.info("SUCCESS! Hits: %s" % hits)
 
     def hard_failover_rebalance_out_during_querying(self):
@@ -1163,8 +1237,9 @@ class MovingTopFTS(FTSBaseTest):
         self.run_tasks_and_report(tasks, len(index.fts_queries))
         self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
+        self.sleep(30, "Sleep for additional time to make sure, fts index is ready.")
         hits, _, _, _ = index.execute_query(query=self.query,
-                                         expected_hits=self._num_items)
+                                         expected_hits=self._find_expected_indexed_items_number())
         self.log.info("SUCCESS! Hits: %s" % hits)
 
     def failover_and_addback_during_querying(self):
@@ -1192,7 +1267,7 @@ class MovingTopFTS(FTSBaseTest):
         self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
         hits, _, _, _ = index.execute_query(query=self.query,
-                                         expected_hits=self._num_items)
+                                         expected_hits=self._find_expected_indexed_items_number())
         self.log.info("SUCCESS! Hits: %s" % hits)
 
     def graceful_failover_during_querying(self):
@@ -1212,7 +1287,7 @@ class MovingTopFTS(FTSBaseTest):
         self.run_tasks_and_report(tasks, len(index.fts_queries))
         self.is_index_partitioned_balanced(index)
         hits, _, _, _ = index.execute_query(query=self.query,
-                                         expected_hits=self._num_items)
+                                         expected_hits=self._find_expected_indexed_items_number())
         self.log.info("SUCCESS! Hits: %s" % hits)
 
     def fts_node_down_with_replicas_during_querying(self):
@@ -1221,7 +1296,7 @@ class MovingTopFTS(FTSBaseTest):
         NodeHelper.stop_couchbase(node)
         try:
             hits, _, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
+                                             expected_hits=self._find_expected_indexed_items_number())
         except Exception as e:
             self.log.info("Expected exception : %s" % e)
         NodeHelper.start_couchbase(node)
@@ -1284,7 +1359,7 @@ class MovingTopFTS(FTSBaseTest):
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
         # wait till indexing is midway...
-        self.wait_for_indexing_complete(self._num_items//2)
+        self.wait_for_indexing_complete(self._find_expected_indexed_items_number()//2)
         reb_thread = Thread(target=self._cb_cluster.rebalance_out_master,
                                    name="rebalance",
                                    args=())
@@ -1328,7 +1403,7 @@ class MovingTopFTS(FTSBaseTest):
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
         # wait till indexing is midway...
-        self.wait_for_indexing_complete(self._num_items//2)
+        self.wait_for_indexing_complete(self._find_expected_indexed_items_number()//2)
         reb_thread = Thread(target=self._cb_cluster.rebalance_out,
                                    name="rebalance",
                                    args=())
@@ -1370,7 +1445,7 @@ class MovingTopFTS(FTSBaseTest):
             self.log.info("Index count for %s: %s"
                           % (index.name, index.get_indexed_doc_count()))
         # wait till indexing is midway...
-        self.wait_for_indexing_complete(self._num_items // 2)
+        self.wait_for_indexing_complete(self._find_expected_indexed_items_number() // 2)
         reb_thread = Thread(target=self._cb_cluster.rebalance_out_master,
                             name="rebalance",
                             args=())
@@ -1402,7 +1477,7 @@ class MovingTopFTS(FTSBaseTest):
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
         # wait till indexing is midway...
-        self.wait_for_indexing_complete(self._num_items//2)
+        self.wait_for_indexing_complete(self._find_expected_indexed_items_number()//2)
         fail_thread = Thread(target=self._cb_cluster.failover,
                                    name="failover",
                                    args=())
@@ -1444,7 +1519,7 @@ class MovingTopFTS(FTSBaseTest):
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
         # wait till indexing is midway...
-        self.wait_for_indexing_complete(self._num_items//2)
+        self.wait_for_indexing_complete(self._find_expected_indexed_items_number()//2)
         fail_thread = Thread(
             target=self._cb_cluster.failover_and_rebalance_nodes,
             name="failover",
@@ -1783,3 +1858,12 @@ class MovingTopFTS(FTSBaseTest):
                       format(self._num_items, rest.get_active_key_count(default_bucket)))
         else:
             self.log.info("SUCCESS: No traces of data loss upon verification")
+
+    def _find_expected_indexed_items_number(self):
+        if self.container_type == 'bucket':
+            return self._num_items
+        else:
+            if isinstance(self.collection, list):
+                return self._num_items * len(self.collection)
+            else:
+                return self._num_items
