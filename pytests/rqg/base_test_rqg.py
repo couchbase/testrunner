@@ -156,14 +156,6 @@ class BaseRQGTests(BaseTestCase):
             self.log.info(ex)
         self.log.info("==============  RQG Teardown Has Completed ==============")
 
-    def suite_setUp(self):
-        self.log.info("==============  RQG suite_setUp has started ==============")
-        self.log.info("==============  RQG suite_setUp has completed ==============")
-
-    def suite_tearDown(self):
-        self.log.info("==============  RQG suite_tearDown has started ==============")
-        self.log.info("==============  RQG suite_tearDown has completed ==============")
-
     def kill_mysql_processes(self, client):
         columns, rows = client._execute_query(query="select concat('KILL ',id,';') from information_schema.processlist where user='root' and time > 0;")
         sql_result = client._gen_json_from_results(columns, rows)
