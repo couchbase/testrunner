@@ -386,8 +386,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         errors = self.check_data(self.master, bucket, num_items=num_items_to_validate)
         if errors:
             self.log.info("Missing keys count : {0}".format(len(errors)))
-        # for error in errors:
-        #     print error
+        self.sleep(60)
         if num_items_to_validate != rest.get_active_key_count(bucket):
             self.fail(
                 "FATAL: Data loss detected!! Docs loaded : {0}, docs present: {1}".
@@ -439,8 +438,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         errors = self.check_data(self.master, bucket, num_items_to_validate, 0, True, self.num_items * 2)
         if errors:
             self.log.info("Missing keys count : {0}".format(len(errors)))
-        # for error in errors:
-        #     print error
+        self.sleep(60)
         if num_items_to_validate != rest.get_active_key_count(bucket):
             self.fail(
                 "FATAL: Data loss detected!! Docs loaded : {0}, docs present: {1}".
