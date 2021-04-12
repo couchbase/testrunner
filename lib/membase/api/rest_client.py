@@ -2768,7 +2768,7 @@ class RestConnection(object):
         init_params = {'name': bucket,
                        'ramQuotaMB': ramQuotaMB,
                        'replicaNumber': replicaNumber,
-                       #'proxyPort': proxyPort,
+                       # 'proxyPort': proxyPort,
                        'bucketType': bucketType,
                        'replicaIndex': replica_index,
                        'threadsNumber': threadsNumber,
@@ -2777,6 +2777,8 @@ class RestConnection(object):
 
         if bucketType == "memcached":
             log.info("Create memcached bucket")
+            # 'replicaNumber' is not valid for memcached buckets
+            init_params.pop("replicaNumber", None)
 
         if lww:
             init_params['conflictResolutionType'] = 'lww'
