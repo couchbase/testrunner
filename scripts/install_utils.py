@@ -210,8 +210,8 @@ class NodeHelper:
                             if self.info.deliverable_type == "msi":
                                 check_if_downgrade, _ = self.shell.execute_command(
                                     "cd " + install_constants.DOWNLOAD_DIR["WINDOWS_SERVER"] +
-                                    "; vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; "
-                                    "grep 'Adding WIX_DOWNGRADE_DETECTED property' install_status.txt")
+                                    "; cat install_status.txt | "
+                                    "grep 'Adding WIX_DOWNGRADE_DETECTED property'")
                                 print((check_if_downgrade * 10))
                             else:
                                 self.shell.execute_command(

@@ -133,8 +133,8 @@ CMDS = {
             "msiexec /i buildbinary /passive /L*V install_status.txt",
         "post_install":
             "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; " +
-            "vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; " +
-            "grep 'buildversion.*Configuration completed successfully.' install_status.txt && echo 1 || echo 0",
+            "cat install_status.txt | " +
+            "grep 'buildversion.*Configuration completed successfully.' && echo 1 || echo 0",
         "post_install_retry":
             "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; " +
             "msiexec /i buildbinary /passive /L*V install_status.txt",
@@ -208,8 +208,8 @@ NON_ROOT_CMDS = {
             "msiexec /i buildbinary /passive /L*V install_status.txt",
         "post_install":
             "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; "
-            "vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; "
-            "grep 'buildversion.*Configuration completed successfully.' install_status.txt && echo 1 || echo 0",
+            "cat install_status.txt | "
+            "grep 'buildversion.*Configuration completed successfully.' && echo 1 || echo 0",
         "post_install_retry":
             "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; "
             "msiexec /i buildbinary /passive /L*V install_status.txt",
