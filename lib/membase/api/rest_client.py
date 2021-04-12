@@ -1417,23 +1417,26 @@ class RestConnection(object):
                      'type': rep_type}
         param_map.update(xdcr_params)
         params = urllib.parse.urlencode(param_map)
-        status, content, _ = self._http_request(api, 'POST', params)
+        status, content, header = self._http_request(api, 'POST', params)
         # response : {"id": "replication_id"}
         if status:
             json_parsed = json.loads(content)
             log.info("Replication created with id: {0}".format(json_parsed['id']))
             return json_parsed['id']
+        elif int(header['status']) == 500 and b'["Unexpected server error, request logged."]' in content:
+            log.warn(
+                "/controller/createReplication failed: status:{0},content:{1}, most likely MB-43597".format(status,
+                                                                                                             content))
         else:
-            log.error("/controller/createReplication failed : status:{0},content:{1}".format(status, content))
-            raise Exception("create replication failed : status:{0},content:{1}".format(status, content))
+            log.error("/controller/createReplication failed: status:{0},content:{1}".format(status, content))
+            raise Exception("create replication failed: status:{0},content:{1}".format(status, content))
 
     def get_replications(self):
         replications = []
         content = self.ns_server_tasks()
         for item in content:
             if not isinstance(item, dict):
-                log.error("Unexpected error while retrieving pools/default/tasks : {0}".format(content))
-                raise Exception("Unexpected error while retrieving pools/default/tasks : {0}".format(content))
+                log.warn("Unexpected error while retrieving pools/default/tasks: {0}".format(content))
             if item["type"] == "xdcr":
                 replications.append(item)
         return replications
@@ -1446,12 +1449,15 @@ class RestConnection(object):
     def stop_replication(self, uri):
         log.info("Deleting replication {0}".format(uri))
         api = self.baseUrl[:-1] + uri
-        status, content, _ = self._http_request(api, 'DELETE')
+        status, content, header = self._http_request(api, 'DELETE')
         if status:
             log.info("Replication deleted successfully")
+        elif int(header['status']) == 500 and b'["Unexpected server error, request logged."]' in content:
+            log.warn(
+                "/controller/cancelXDCR failed: status:{0},content:{1}, most likely MB-43597".format(status, content))
         else:
             log.error("/controller/cancelXDCR failed: status:{0}, content:{1}".format(status, content))
-            raise Exception("delete replication failed : status:{0}, content:{1}".format(status, content))
+            raise Exception("delete replication failed: status:{0}, content:{1}".format(status, content))
 
     def remove_all_recoveries(self):
         recoveries = []

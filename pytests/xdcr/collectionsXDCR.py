@@ -49,8 +49,9 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
         except Exception as e:
             self.fail(e)
 
-        for cluster_name in self._disable_compaction:
-            self.get_cb_cluster_by_name(cluster_name).disable_compaction()
+        if len(self._disable_compaction):
+            for cluster_name in self._disable_compaction:
+                self.get_cb_cluster_by_name(cluster_name).disable_compaction()
 
         if drop_default_scope:
             for cluster in self.get_cluster_objects_for_input(drop_default_scope):
