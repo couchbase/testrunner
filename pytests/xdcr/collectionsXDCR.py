@@ -40,6 +40,7 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
         drop_recreate_collection = self._input.param("drop_recreate_collection", None)
         consistent_metadata = self._input.param("consistent_metadata", None)
         initial_xdcr = self._input.param("initial_xdcr", random.choice([True, False]))
+        skip_verify = False
 
         try:
             if initial_xdcr:
@@ -124,6 +125,7 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                 if True in cluster.get_xdcr_param("collectionsExplicitMapping"):
                     self.fail("collectionsExplicitMapping is true, expected to be false by default")
                 self.log.info("collectionsExplicitMapping is false as expected")
+            skip_verify = True
 
         if mapping_rules:
             explicit_map_index = self._input.param("explicit_map_index", 0)
@@ -132,7 +134,7 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                                       '"_default._default":"a-%s-s%-z.1%-c-%2"',
                                       '"_default":"_default","scope_1":"scope_1"',
                                       '"_default":"_default","scope_1.collection_1":"scope_1.collection_1"',
-                                      '"scope1":"scope1","scope_1.collection_1":"scope_1.collection_1"',
+                                      '"scope_1":"scope_1","scope_2.collection_1":"scope_1.collection_1"',
                                       '"nonexistent":"_default"',
                                       '"_default.nonexistent":"scope_1.nonexistent"'
                                       ]
@@ -148,6 +150,7 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                     if "namespace does not exist" in e._message and \
                             "nonexistent" in explicit_mapping_rules[explicit_map_index]:
                         self.log.info("Replication create failed as expected for nonexistent namespace")
+                        skip_verify = True
                     else:
                         self.fail(str(e))
 
@@ -156,18 +159,21 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                 if True in cluster.get_xdcr_param("collectionsMigrationMode"):
                     self.fail("collectionsMigrationMode is true, expected to be false by default")
                 self.log.info("collectionsMigrationMode is false as expected")
+            skip_verify = True
 
         if mirroring_mode:
             for cluster in self.get_cluster_objects_for_input(mirroring_mode):
                 if True in cluster.get_xdcr_param("collectionsMirroringMode"):
                     self.fail("collectionsMirroringMode is true, expected to be false by default")
                 self.log.info("collectionsMirroringMode is false as expected")
+            skip_verify = True
 
         if oso_mode:
             for cluster in self.get_cluster_objects_for_input(mirroring_mode):
                 if True in cluster.get_xdcr_param("collectionsOSOMode"):
                     self.log.info("collectionsOSOMode is true as expected")
                 self.fail("collectionsOSOMode is false, expected to be true by default")
+            skip_verify = True
 
         if consistent_metadata:
             self._wait_for_replication_to_catchup()
@@ -227,4 +233,5 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
             if task:
                 task.result()
         self.perform_update_delete()
-        self.verify_results()
+        if not skip_verify:
+            self.verify_results()

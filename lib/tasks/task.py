@@ -2550,26 +2550,29 @@ class VerifyCollectionDocCountTask(Task):
                     src_count = self.src_conn.get_scope_item_count(self.bucket, src_scope,
                                                                    self.src.get_nodes(), self.src_stats)
 
-                if map_exp[1] and map_exp[1].lower() == "null":
-                    self.log.info("{} mapped to null, skipping doc count verification"
+                if map_exp[1]:
+                    if map_exp[1].lower() == "null":
+                        self.log.info("{} mapped to null, skipping doc count verification"
                                   .format())
-                    dest_scope = "null"
-                    dest_collection = "null"
-
-                if ':' in map_exp[1]:
-                    dest_scope = map_exp[1].split(':')[0]
-                    dest_collection = map_exp[1].split(':')[1]
-                    dest_count = self.dest_conn.get_collection_item_count(self.bucket,
-                                                                          dest_scope, dest_collection,
-                                                                          self.dest.get_nodes(),
-                                                                          self.dest_stats)
-                else:
-                    dest_scope = map_exp[1]
-                    dest_collection = "all"
-                    dest_count = self.dest_conn.get_scope_item_count(self.bucket, dest_scope,
-                                                                     self.dest.get_nodes(), self.dest_stats)
-
-
+                    dest_collection_specified = False
+                    if ':' in map_exp[1]:
+                        dest_collection_specified = True
+                        dest_scope = map_exp[1].split(':')[0]
+                        dest_collection = map_exp[1].split(':')[1]
+                    elif "colon" in map_exp[1]:
+                        dest_collection_specified = True
+                        dest_scope = map_exp[1].split("colon")[0]
+                        dest_collection = map_exp[1].split("colon")[1]
+                    if dest_collection_specified:
+                        dest_count = self.dest_conn.get_collection_item_count(self.bucket,
+                                                                              dest_scope, dest_collection,
+                                                                              self.dest.get_nodes(),
+                                                                              self.dest_stats)
+                    else:
+                        dest_scope = map_exp[1]
+                        dest_collection = "all"
+                        dest_count = self.dest_conn.get_scope_item_count(self.bucket, dest_scope,
+                                                                         self.dest.get_nodes(), self.dest_stats)
                 self.log.info('-' * 100)
                 if src_count == dest_count:
                     self.log.info("Item count on src:{} {} = {} on dest:{} for "

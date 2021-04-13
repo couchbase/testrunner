@@ -478,11 +478,15 @@ class RestConnection(object):
 
     def ns_server_tasks(self):
         api = self.baseUrl + 'pools/default/tasks'
-        try:
-            status, content, header = self._http_request(api, 'GET', headers=self._create_headers())
-            return json.loads(content)
-        except ValueError:
-            return ""
+        retries = 3
+        while retries:
+            try:
+                status, content, header = self._http_request(api, 'GET', headers=self._create_headers())
+                return json.loads(content)
+            except ValueError:
+                time.sleep(10)
+                retries -= 1
+        return ""
 
     # DEPRECATED: use create_ddoc() instead.
     def create_view(self, design_doc_name, bucket_name, views, options=None):
@@ -1419,29 +1423,29 @@ class RestConnection(object):
                      'type': rep_type}
         param_map.update(xdcr_params)
         params = urllib.parse.urlencode(param_map)
-        status, content, header = self._http_request(api, 'POST', params)
-        # response : {"id": "replication_id"}
-        if status:
-            json_parsed = json.loads(content)
-            log.info("Replication created with id: {0}".format(json_parsed['id']))
-            return json_parsed['id']
-        elif int(header['status']) == 500 and b'["Unexpected server error, request logged."]' in content:
-            log.warning(
-                "/controller/createReplication failed: status:{0},content:{1}, most likely MB-43597".format(status,
-                                                                                                             content))
-        else:
-            log.error("/controller/createReplication failed: status:{0},content:{1}".format(status, content))
-            raise Exception("create replication failed: status:{0},content:{1}".format(status, content))
+        retries = 3
+        while retries:
+            try:
+                status, content, header = self._http_request(api, 'POST', params)
+                # response : {"id": "replication_id"}
+                if status:
+                    json_parsed = json.loads(content)
+                    log.info("Replication created with id: {0}".format(json_parsed['id']))
+                    return json_parsed['id']
+            except ValueError:
+                time.sleep(10)
+                retries -= 1
+        raise Exception("create replication failed: status:{0},content:{1}".format(status, content))
 
     def get_replications(self):
         replications = []
         content = self.ns_server_tasks()
         for item in content:
             if not isinstance(item, dict):
-                log.warning("Unexpected error while retrieving pools/default/tasks: {0}".format(content))
-            else:
-                if item["type"] == "xdcr":
-                    replications.append(item)
+                log.error("Unexpected error while retrieving pools/default/tasks : {0}".format(content))
+                raise Exception("Unexpected error while retrieving pools/default/tasks : {0}".format(content))
+            if item["type"] == "xdcr":
+                replications.append(item)
         return replications
 
     def remove_all_replications(self):
@@ -1452,15 +1456,16 @@ class RestConnection(object):
     def stop_replication(self, uri):
         log.info("Deleting replication {0}".format(uri))
         api = self.baseUrl[:-1] + uri
-        status, content, header = self._http_request(api, 'DELETE')
-        if status:
-            log.info("Replication deleted successfully")
-        elif int(header['status']) == 500 and b'["Unexpected server error, request logged."]' in content:
-            log.warning(
-                "/controller/cancelXDCR failed: status:{0},content:{1}, most likely MB-43597".format(status, content))
-        else:
-            log.error("/controller/cancelXDCR failed: status:{0}, content:{1}".format(status, content))
-            raise Exception("delete replication failed: status:{0}, content:{1}".format(status, content))
+        retries = 3
+        while retries:
+            status, content, header = self._http_request(api, 'DELETE')
+            if status:
+                log.info("Replication deleted successfully")
+                return
+            else:
+                retries -= 1
+                time.sleep(10)
+        raise Exception("delete replication failed: status:{0}, content:{1}".format(status, content))
 
     def remove_all_recoveries(self):
         recoveries = []
@@ -3137,36 +3142,29 @@ class RestConnection(object):
         maxConcurrentReps":32}
         You can override these using set_xdcr_param()
     """
+
     def set_xdcr_param(self, src_bucket_name,
-                                         dest_bucket_name, param, value):
+                       dest_bucket_name, param, value):
         replication = self.get_replication_for_buckets(src_bucket_name, dest_bucket_name)
         api = self.baseUrl[:-1] + replication['settingsURI']
         value = str(value).lower()
         params = urllib.parse.urlencode({param: value})
         status, content, header = self._http_request(api, "POST", params)
-        if int(header['status']) == 500 and b'["Unexpected server error, request logged."]' in content:
-            log.warning(
-                "Unable to set replication setting. status:{0},content:{1}, most likely MB-43597".format(status,
-                                                                                                             content))
-        elif not status:
+        if not status:
             raise XDCRException("Unable to set replication setting {0}={1} on bucket {2} on node {3}".
-                            format(param, value, src_bucket_name, self.ip))
+                                format(param, value, src_bucket_name, self.ip))
         else:
             log.info("Updated {0}={1} on bucket '{2}' on {3}".format(param, value, src_bucket_name, self.ip))
 
     def set_xdcr_params(self, src_bucket_name,
-                                         dest_bucket_name, param_value_map):
+                        dest_bucket_name, param_value_map):
         replication = self.get_replication_for_buckets(src_bucket_name, dest_bucket_name)
         api = self.baseUrl[:-1] + replication['settingsURI']
         params = urllib.parse.urlencode(param_value_map)
         status, content, header = self._http_request(api, "POST", params)
-        if int(header['status']) == 500 and b'["Unexpected server error, request logged."]' in content:
-            log.warning(
-                "Unable to set replication settings. status:{0},content:{1}, most likely MB-43597".format(status,
-                                                                                                         content))
-        elif not status:
+        if not status:
             raise XDCRException("{0} \n Unable to set replication settings {1} on bucket {2} on node {3}".
-                            format(content, param_value_map, src_bucket_name, self.ip))
+                                format(content, param_value_map, src_bucket_name, self.ip))
         else:
             log.info("Updated {0} on bucket '{1}' on {2}".format(param_value_map, src_bucket_name, self.ip))
 
@@ -6159,3 +6157,4 @@ class RestParser(object):
                 node.id = nodeDictionary["otpNode"]
             bucket.nodes.append(node)
         return bucket
+

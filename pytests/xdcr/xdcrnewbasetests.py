@@ -855,7 +855,7 @@ class XDCReplication:
                     self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression'].replace(
                         _, masked_input[_])
         if "colmapping_rules" in self.__test_xdcr_params:
-            masked_input = {"comma": ',', "colon": ':'}
+            masked_input = {"comma": ',', "colon": ':', "dot": '.'}
             for _ in masked_input:
                 self.__test_xdcr_params['colmapping_rules'] = self.__test_xdcr_params[
                     'colmapping_rules'].replace(

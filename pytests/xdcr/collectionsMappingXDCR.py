@@ -23,7 +23,6 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                 self.setup_xdcr_and_load()
         except Exception as e:
             self.fail(str(e))
-        self.dest_cluster.flush_buckets(buckets=["default"])
         if "C1" in self._disable_compaction:
             self.src_cluster.disable_compaction()
         if "C2" in self._disable_compaction:
