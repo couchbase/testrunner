@@ -1540,10 +1540,13 @@ class Lww(XDCRNewBaseTest):
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
+
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
         self.c1_cluster.resume_all_replications_by_id()
+        self.sleep(300)
+        self._wait_for_replication_to_catchup()
 
         max_cas_c1 = self._get_max_cas(node=self.c1_cluster.get_master_node(), bucket='default')
         max_cas_c2 = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default')

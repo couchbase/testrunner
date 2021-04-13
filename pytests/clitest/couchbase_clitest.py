@@ -174,7 +174,6 @@ help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
                             '--worker-batch-size=[500]': 'doc batch size, 500 to 10000.',
                             '--xdcr-clucter-name=CLUSTERNAME': 'remote cluster to replicate to',
                             '--xdcr-from-bucket=BUCKET': 'local bucket name to replicate from',
-                            '--xdcr-replication-mode=[xmem|capi]': 'replication protocol, either capi or xmem.',
                             '--xdcr-replicator=REPLICATOR': ' replication id',
                             '--xdcr-to-bucket=BUCKETNAME': 'remote bucket to replicate to',
                             '--source-nozzle-per-node=[1-10]': 'the number of source nozzles per source node',
@@ -3286,7 +3285,6 @@ class XdcrCLITest(CliBaseTest):
         options += (" --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name), "")[xdcr_cluster_name is None]
         options += (" --xdcr-from-bucket=\'{0}\'".format(from_bucket), "")[from_bucket is None]
         options += (" --xdcr-to-bucket=\'{0}\'".format(to_bucket), "")[to_bucket is None]
-        options += (" --xdcr-replication-mode=\'{0}\'".format(replication_mode), "")[replication_mode is None]
         options += (" --source-nozzle-per-node=\'{0}\'".format(source_nozzles), "")[source_nozzles is None]
         options += (" --target-nozzle-per-node=\'{0}\'".format(target_nozzles), "")[target_nozzles is None]
         options += (" --filter-expression=\'{0}\'".format(filter_expression), "")[filter_expression is None]
