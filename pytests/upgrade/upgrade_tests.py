@@ -369,6 +369,7 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
 
     def upgrade_event(self):
         self.log.info("upgrade_event")
+        self.start_upgrade_server = True
         thread_list = []
         if self.upgrade_type == "online":
             t = threading.Thread(target=self.online_upgrade, args=())

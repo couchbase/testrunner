@@ -85,6 +85,8 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.upgrade_versions = [self.input.param('released_upgrade_version', None)]
 
         self.initial_build_type = self.input.param('initial_build_type', None)
+        self.start_upgrade_server = False
+        self.ce_to_ee = self.input.param('ce_to_ee', False)
         self.stop_persistence = self.input.param('stop_persistence', False)
         self.std_vbucket_dist = self.input.param("std_vbucket_dist", None)
         self.cb_bucket_name = self.input.param('cb_bucket_name', 'travel-sample')
@@ -265,7 +267,13 @@ class NewUpgradeBaseTest(BaseTestCase):
         params['init_nodes'] = self.init_nodes
         params['debug_logs'] = self.debug_logs
         if self.initial_build_type is not None:
-            params['type'] = self.initial_build_type
+            if not self.start_upgrade_server:
+                params['type'] = self.initial_build_type
+            else:
+                if self.ce_to_ee:
+                    params['type'] = "enterprise"
+                else:
+                    params['type'] = self.initial_build_type
         if 5 <= int(self.initial_version[:1]) or 5 <= int(self.upgrade_versions[0][:1]):
             params['fts_query_limit'] = 10000000
 
