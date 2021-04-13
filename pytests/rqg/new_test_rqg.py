@@ -310,7 +310,7 @@ class RQGTestsNew(BaseRQGTests):
                 if self.aggregate_pushdown:
                     sql_result = client._gen_json_from_results_repeated_columns(columns, rows)
                 else:
-                    sql_result = client._gen_json_from_results(columns, rows, self.float_round_level)
+                    sql_result = client._gen_json_from_results(columns, rows, round_level=self.float_round_level)
             client._close_connection()
             self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
             self.log.info(" result from sql query returns {0} items".format(len(sql_result)))

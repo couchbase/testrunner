@@ -34,7 +34,7 @@ class BaseRQGMySQLClient(MySQLClient):
             dict[str(row[primary_key_index])] = map
         return dict
 
-    def _gen_json_from_results(self, columns, rows):
+    def _gen_json_from_results(self, columns, rows, round_level=0):
         data = []
         # Convert to JSON and capture in a dictionary
         for row in rows:
@@ -60,9 +60,9 @@ class BaseRQGMySQLClient(MySQLClient):
             data.append(map)
         return data
 
-    def _convert_to_mysql_json_compatible_val(self, value, datatype):
+    def _convert_to_mysql_json_compatible_val(self, value, datatype, round_level=0):
         if isinstance(value, float):
-            return round(value, 0)
+            return round(value, round_level)
         if "tiny" in str(datatype):
             if value == 0:
                 return False
@@ -82,14 +82,14 @@ class BaseRQGMySQLClient(MySQLClient):
             if value is None:
                 return None
             else:
-                return round(value, 0)
+                return round(value, round_level)
         if "decimal" in str(datatype):
             if value is None:
                 return None
             else:
                 if isinstance(value, float):
-                    return round(value, 0)
-                return int(round(value, 0))
+                    return round(value, round_level)
+                return int(round(value, round_level))
         return str(value)
 
     def _get_table_list(self):
