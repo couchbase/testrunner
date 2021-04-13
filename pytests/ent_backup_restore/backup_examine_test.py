@@ -212,7 +212,7 @@ class ExamineSimulation:
         """ Examines things and check they match the contents of the backup object """
         for cs in backup.get_collection_strings():
             for doc in backup.get_collection(cs).documents.values():
-                examine_results = self.examine.examine(ExamineArguments(self.backup_base.backupset, str(cs), doc.key))
+                examine_results = self.examine.examine(ExamineArguments(self.backup_base.backupset, str(cs), doc.key, objstore_provider=self.backup_base.objstore_provider))
                 self.backup_base.assertEqual(examine_results[-1].document.value, doc.value)
                 # TODO add more checkers
 
@@ -308,7 +308,7 @@ class ExamineArguments:
         # Required arguments
         command = (
             f"{path}/cbbackupmgr examine "
-            f"--archive {self.backupset.directory} "
+            f"--archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
             f"--repo {self.backupset.name} "
             f"--collection-string {self.collection_string} "
             f"--key {self.key}"
