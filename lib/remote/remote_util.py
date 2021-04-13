@@ -328,13 +328,16 @@ class RemoteMachineShellConnection(KeepRefs):
                     backoff_time *= 2
 
         if not is_ssh_ok:
-            log.error(
-                "-->No SSH connectivity to {} even after {} times!\n".format(self.ip, attempt))
+            error_msg = "-->No SSH connectivity to {} even after {} times!\n".format(self.ip, attempt)
+            log.error(error_msg)
             if exit_on_failure:
-                os.kill(os.getpid(), signal.SIGINT)
+                log.error("Exit on failure: killing process")
+                os.kill(os.getpid(), signal.SIGKILL)
             else:
-                return
-        log.info("SSH Connected to {} as {}".format(ip, ssh_username))
+                log.error("No exit on failure, raise exception")
+                raise Exception(error_msg)
+        else:
+            log.info("SSH Connected to {} as {}".format(ip, ssh_username))
 
     def sleep(self, timeout=1, message=""):
         log.info("{0}:sleep for {1} secs. {2} ...".format(self.ip, timeout, message))
