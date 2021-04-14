@@ -376,9 +376,13 @@ class N1QLHelper():
     def _verify_results_rqg(self, subquery, aggregate=False, n1ql_result=[], sql_result=[], hints=["a1"],
                             aggregate_pushdown=False, window_function_test=False, delta=0, use_fts=False):
         new_n1ql_result = []
+        keyspace = '_default'
         for result in n1ql_result:
             if result != {}:
-                new_n1ql_result.append(result)
+                if list(result.keys()) == [keyspace]:
+                    new_n1ql_result.append(result[keyspace])
+                else:
+                    new_n1ql_result.append(result)
 
         n1ql_result = new_n1ql_result
 
