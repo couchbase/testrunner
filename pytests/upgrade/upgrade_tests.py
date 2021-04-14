@@ -612,7 +612,7 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                 self.log.info("remove service '{0}' from service list after "
                         "rebalance done ".format(self.after_upgrade_services_in[0]))
                 self.after_upgrade_services_in.pop(0)
-            self.sleep(10, "wait 10 seconds after rebalance")
+            self.sleep(20, "wait 20 seconds after rebalance")
             if free_node_in and free_node_in[0] not in self.servers:
                 self.servers.append(free_node_in[0])
         except Exception, ex:
