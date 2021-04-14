@@ -1,5 +1,6 @@
 import ast
 import copy
+import crc32
 import itertools
 import json
 import os
@@ -7,9 +8,10 @@ import shutil
 import sys
 
 import couchbase.subdocument as SD
-import crc32
 from clitest.importexporttest import ImportExportTests
-from couchbase.exceptions import NotFoundError, SubdocPathNotFoundError, KeyExistsError
+from couchbase.exceptions import \
+    ArgumentError, CouchbaseInputError, DocumentNotJsonError, NotFoundError, \
+    SubdocPathNotFoundError, KeyExistsError, SubdocPathInvalidError
 from membase.api.exception import DesignDocCreationException
 from couchbase_helper.document import View
 from membase.api.rest_client import RestConnection
@@ -68,7 +70,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_basic_functionality(self):
         k = 'xattrs'
-
         self.client.upsert(k, {})
 
         # Try to upsert a single xattr
@@ -93,16 +94,13 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_multiple_attrs(self):
         k = 'xattrs'
-
         self.client.upsert(k, {})
-
         self.client.mutate_in(k, SD.upsert('my.attr', 'value',
                                            xattr=True,
                                            create_parents=True))
         rv = self.client.mutate_in(k, SD.upsert('new_my.new_attr', 'new_value',
                                                 xattr=True,
                                                 create_parents=True))
-
         self.assertTrue(rv.success)
 
         body = self.client.get(k)
@@ -137,9 +135,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_add_to_parent(self):
         k = 'xattrs'
-
         self.client.upsert(k, {})
-
         self.client.mutate_in(k, SD.upsert('my', {'value': 1},
                                            xattr=True))
         rv = self.client.mutate_in(k, SD.upsert('my.inner', {'value_inner': 2},
@@ -166,13 +162,16 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         k = 'xattrs'
         self.client.upsert(k, {})
 
-        self.client.mutate_in(k, SD.upsert('g' * 15, 1, create_parents=True, xattr=True))
+        self.client.mutate_in(k, SD.upsert('g' * 15, 1, create_parents=True,
+                                           xattr=True))
         # shouldn't be CouchbaseInternalError!
         try:
-            self.client.mutate_in(k, SD.upsert('f' * 16, 2, create_parents=True, xattr=True))
+            self.client.mutate_in(k, SD.upsert('f' * 16, 2,
+                                               create_parents=True,
+                                               xattr=True))
             self.fail("xattr with the key in 16 chars should not be able to create")
         except Exception as e:
-            self.assertEqual("Operational Error", str(e))
+            self.assertTrue("Operational Error" in str(e))
             self.assertEqual("The server replied with an unrecognized status code. "
                               "A newer version of this library may be able to decode it",
                               e.result.errstr)
@@ -215,12 +214,14 @@ class SubdocXattrSdkTest(SubdocBaseTest):
                 self.log.error("xattr %s value: %s" % (key, rv[key]))
                 self.fail("key shouldn't start from " + ch)
             except Exception as e:
-                self.assertEqual("Operational Error", str(e))
+                self.assertTrue("Operational Error" in str(e))
+                self.assertEqual("The server replied with an unrecognized status code. "
+                                 "A newer version of this library may be able to decode it",
+                                 e.result.errstr)
 
     def test_key_inside_characters_negative(self):
         k = 'xattrs'
         self.client.upsert(k, {})
-
         for ch in "\".:;[]`":
             try:
                 key = 'test' + ch + 'test'
@@ -230,15 +231,22 @@ class SubdocXattrSdkTest(SubdocBaseTest):
                 self.log.error("xattr %s exists? %s" % (key, rv.exists(key)))
                 self.log.error("xattr %s value: %s" % (key, rv[key]))
                 self.fail("key must not contain a character: " + ch)
+            except SubdocPathNotFoundError as e:
+                self.assertTrue("Subcommand failure" in str(e))
+                self.assertTrue("Sub-document path does not exist" in str(e))
+            except DocumentNotJsonError as e:
+                self.assertTrue("Subcommand failure" in str(e))
+                self.assertTrue(
+                    "Existing document is not valid JSON" in str(e))
+            except SubdocPathInvalidError as e:
+                self.assertTrue("Subcommand failure" in str(e))
+                self.assertTrue("Malformed sub-document path" in str(e))
             except Exception as e:
-                print(str(e))
-                self.assertTrue(str(e) in ['Subcommand failure',
-                                              'key must not contain a character: ;'])
+                self.fail("Unexpected exception: %s" % e)
 
     def test_key_inside_characters_positive(self):
         k = 'xattrs'
         self.client.upsert(k, {})
-
         for ch in "#!#$%&'()*+,-/;<=>?@\^_{|}~":
             key = 'test' + ch + 'test'
             self.log.info("test '%s' key" % key)
@@ -250,7 +258,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
     def test_key_special_characters(self):
         k = 'xattrs'
         self.client.upsert(k, {})
-
         for key in ["a#!#$%&'()*+,-a", "b/<=>?@\\b^_{|}~"]:
             self.log.info("test '%s' key" % key)
             self.client.mutate_in(k, SD.upsert(key, key, xattr=True))
@@ -264,7 +271,8 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         key = "a!._b!._c!._d!._e!"
         self.log.info("test '%s' key" % key)
-        self.client.mutate_in(k, SD.upsert(key, key, xattr=True, create_parents=True))
+        self.client.mutate_in(k, SD.upsert(key, key, xattr=True,
+                                           create_parents=True))
         rv = self.client.lookup_in(k, SD.get(key, xattr=True))
         self.log.info("xattr %s exists? %s" % (key, rv.exists(key)))
         self.log.info("xattr %s value: %s" % (key, rv[key]))
@@ -272,7 +280,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_delete_doc_with_xattr(self):
         k = 'xattrs'
-
         self.client.upsert(k, {})
 
         # Try to upsert a single xattr
@@ -317,20 +324,21 @@ class SubdocXattrSdkTest(SubdocBaseTest):
     # https://issues.couchbase.com/browse/MB-24104
     def test_delete_doc_with_xattr_access_deleted(self):
         k = 'xattrs'
-
         self.client.upsert(k, {"a": 1})
 
         # Try to upsert a single xattr with _access_deleted
         try:
-            rv = self.client.mutate_in(k, SD.upsert('my_attr', 'value',
-                                                    xattr=True,
-                                                    create_parents=True), _access_deleted=True)
-        except Exception as e:
-            self.assertEqual("couldn't parse arguments", str(e))
+            self.client.mutate_in(k, SD.upsert('my_attr', 'value',
+                                               xattr=True,
+                                               create_parents=True),
+                                  _access_deleted=True)
+            self.fail("xattr upsert succeeded with access_deleted flag")
+        except ArgumentError as e:
+            self.assertTrue("_access_deleted" in str(e))
+            self.assertTrue("couldn't parse arguments" in str(e))
 
     def test_delete_doc_without_xattr(self):
         k = 'xattrs'
-
         self.client.upsert(k, {})
 
         # Try to upsert a single xattr
@@ -373,7 +381,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_delete_xattr(self):
         k = 'xattrs'
-
         self.client.upsert(k, {})
 
         # trying get non-existing xattr
@@ -421,7 +428,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_delete_xattr(self):
         k = 'xattrs'
-
         self.client.upsert(k, {})
 
         # trying get non-existing xattr
@@ -495,7 +501,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_cas_changed_xattr_upsert(self):
         k = 'xattrs'
-
         self.client.upsert(k, {})
 
         rv = self.client.get(k)
@@ -503,8 +508,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         cas_before = rv.cas
         flags_before = rv.flags
 
-        self.client.mutate_in(k, SD.upsert('my', {'value': 1},
-                                           xattr=True))
+        self.client.mutate_in(k, SD.upsert('my', {'value': 1}, xattr=True))
         rv = self.client.get(k)
         self.assertTrue(rv.success)
         cas_after = rv.cas
@@ -523,28 +527,28 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_use_cas_changed_xattr_upsert(self):
         k = 'xattrs'
-
         self.client.upsert(k, 1)
 
         rv = self.client.get(k)
         self.assertTrue(rv.success)
         cas_before = rv.cas
 
-        self.client.mutate_in(k, SD.upsert('my', {'value': 1},
-                                           xattr=True))
+        self.client.mutate_in(k, SD.upsert('my', {'value': 1}, xattr=True))
         rv = self.client.get(k)
         self.assertTrue(rv.success)
         cas_after = rv.cas
 
         try:
             self.client.mutate_in(k, SD.upsert('my.inner', {'value_inner': 2},
-                                               xattr=True), cas=cas_before)
+                                               xattr=True),
+                                  cas=cas_before)
             self.fail("upsert with wrong cas!")
         except KeyExistsError:
             pass
 
         self.client.mutate_in(k, SD.upsert('my.inner', {'value_inner': 2},
-                                           xattr=True), cas=cas_after)
+                                           xattr=True),
+                              cas=cas_after)
         rv = self.client.get(k)
         self.assertTrue(rv.success)
         cas_after2 = rv.cas
@@ -554,7 +558,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_recreate_xattr(self):
         k = 'xattrs'
-
         self.client.upsert(k, {})
 
         for i in range(5):
@@ -581,7 +584,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_update_xattr(self):
         k = 'xattrs'
-
         self.client.upsert(k, {})
         # use xattr like a counters
         for i in range(5):
@@ -597,7 +599,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_delete_child_xattr(self):
         k = 'xattrs'
-
         self.client.upsert(k, {})
 
         rv = self.client.mutate_in(k, SD.upsert('my.attr', 'value',
@@ -616,7 +617,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_delete_xattr_key_from_parent(self):
         k = 'xattrs'
-
         self.client.upsert(k, {})
 
         self.client.mutate_in(k, SD.upsert('my', {'value': 1},
@@ -641,7 +641,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_delete_xattr_parent(self):
         k = 'xattrs'
-
         self.client.upsert(k, {})
 
         self.client.mutate_in(k, SD.upsert('my', {'value': 1},
@@ -665,9 +664,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_xattr_value_none(self):
         k = 'xattrs'
-
         self.client.upsert(k, None)
-
         rv = self.client.mutate_in(k, SD.upsert('my_attr', None,
                                                 xattr=True,
                                                 create_parents=True))
@@ -682,11 +679,8 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_xattr_delete_not_existing(self):
         k = 'xattrs'
-
         self.client.upsert(k, {})
-
-        self.client.mutate_in(k, SD.upsert('my', 1,
-                                           xattr=True))
+        self.client.mutate_in(k, SD.upsert('my', 1, xattr=True))
         try:
             self.client.mutate_in(k, SD.remove('not_my', xattr=True))
             self.fail("operation to delete non existing key should be failed")
@@ -695,7 +689,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_insert_list(self):
         k = 'xattrs'
-
         self.client.upsert(k, {})
 
         # Try to upsert a single xattr
@@ -720,7 +713,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
     # https://issues.couchbase.com/browse/PYCBC-381
     def test_insert_integer_as_key(self):
         k = 'xattr'
-
         self.client.upsert(k, {})
 
         rv = self.client.mutate_in(k, SD.upsert('integer_extra', 1,
@@ -745,7 +737,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
     # https://issues.couchbase.com/browse/PYCBC-381
     def test_insert_double_as_key(self):
         k = 'xattr'
-
         self.client.upsert(k, {})
 
         rv = self.client.mutate_in(k, SD.upsert('double_extra', 1.0,
@@ -770,7 +761,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
     # https://issues.couchbase.com/browse/MB-22691
     def test_multiple_xattrs(self):
         key = 'xattr'
-
         self.client.upsert(key, {})
 
         values = {
@@ -801,9 +791,9 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         size = 0
         for k, v in values.items():
             self.log.info("adding xattr '%s': %s" % (k, v))
-            rv = self.client.mutate_in(key, SD.upsert(k, v,
-                                                      xattr=True))
-            self.log.info("xattr '%s' added successfully?: %s" % (k, rv.success))
+            rv = self.client.mutate_in(key, SD.upsert(k, v, xattr=True))
+            self.log.info("xattr '%s' added successfully: %s"
+                          % (k, rv.success))
             self.assertTrue(rv.success)
 
             rv = self.client.lookup_in(key, SD.exists(k, xattr=True))
@@ -819,15 +809,14 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_multiple_xattrs2(self):
         key = 'xattr'
-
         self.client.upsert(key, {})
 
         size = 0
         for k, v in SubdocXattrSdkTest.VALUES.items():
             self.log.info("adding xattr '%s': %s" % (k, v))
-            rv = self.client.mutate_in(key, SD.upsert(k, v,
-                                                      xattr=True))
-            self.log.info("xattr '%s' added successfully?: %s" % (k, rv.success))
+            rv = self.client.mutate_in(key, SD.upsert(k, v, xattr=True))
+            self.log.info("xattr '%s' added successfully: %s"
+                          % (k, rv.success))
             self.assertTrue(rv.success)
 
             rv = self.client.lookup_in(key, SD.exists(k, xattr=True))
@@ -844,7 +833,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
     # https://issues.couchbase.com/browse/MB-22691
     def test_check_spec_words(self):
         k = 'xattr'
-
         self.client.upsert(k, {})
         ok = True
 
@@ -852,26 +840,23 @@ class SubdocXattrSdkTest(SubdocBaseTest):
                     "for", "try", "as", "while", "else", "end"):
             try:
                 self.log.info("using key %s" % key)
-                rv = self.client.mutate_in(k, SD.upsert(key, 1,
-                                                        xattr=True))
-                print(rv)
+                rv = self.client.mutate_in(k, SD.upsert(key, 1, xattr=True))
                 self.assertTrue(rv.success)
                 rv = self.client.lookup_in(k, SD.get(key, xattr=True))
-                print(rv)
                 self.assertTrue(rv.exists(key))
                 self.assertEqual(1, rv[key])
                 self.log.info("successfully set xattr with key %s" % key)
             except Exception as e:
                 ok = False
                 self.log.info("unable to set xattr with key %s" % key)
-                print(e)
         self.assertTrue(ok, "unable to set xattr with some name. See logs above")
 
     def test_upsert_nums(self):
         k = 'xattr'
         self.client.upsert(k, {})
         for i in range(100):
-            rv = self.client.mutate_in(k, SD.upsert('n' + str(i), i, xattr=True))
+            rv = self.client.mutate_in(k,
+                                       SD.upsert('n' + str(i), i, xattr=True))
             self.assertTrue(rv.success)
         for i in range(100):
             rv = self.client.lookup_in(k, SD.get('n' + str(i), xattr=True))
@@ -880,41 +865,41 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_upsert_order(self):
         k = 'xattr'
-
         self.client.upsert(k, {})
         rv = self.client.mutate_in(k, SD.upsert('integer', 2, xattr=True))
         self.assertTrue(rv.success)
 
         self.client.delete(k)
         self.client.upsert(k, {})
-        rv = self.client.mutate_in(k, SD.upsert('start_end_extra', 1, xattr=True))
+        rv = self.client.mutate_in(k, SD.upsert('start_end_extra', 1,
+                                                xattr=True))
         self.assertTrue(rv.success)
         rv = self.client.mutate_in(k, SD.upsert('integer', 2, xattr=True))
         self.assertTrue(rv.success)
 
         self.client.delete(k)
         self.client.upsert(k, {})
-        rv = self.client.mutate_in(k, SD.upsert('integer_extra', 1, xattr=True))
+        rv = self.client.mutate_in(k, SD.upsert('integer_extra', 1,
+                                                xattr=True))
         self.assertTrue(rv.success)
         rv = self.client.mutate_in(k, SD.upsert('integer', 2, xattr=True))
         self.assertTrue(rv.success)
 
     def test_xattr_expand_macros_true(self):
         k = 'xattrs'
-
         self.client.upsert(k, 1)
 
         rv = self.client.get(k)
         self.assertTrue(rv.success)
         cas_before = rv.cas
 
-        self.client.mutate_in(k, SD.upsert('my', {'value': 1},
-                                           xattr=True))
+        self.client.mutate_in(k, SD.upsert('my', {'value': 1}, xattr=True))
         rv = self.client.get(k)
         self.assertTrue(rv.success)
         cas_after = rv.cas
 
-        self.client.mutate_in(k, SD.upsert('my', '${Mutation.CAS}', _expand_macros=True))
+        self.client.mutate_in(k, SD.upsert('my', '${Mutation.CAS}',
+                                           _expand_macros=True))
 
         rv1 = self.client.get(k)
         self.assertTrue(rv1.success)
@@ -925,7 +910,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_xattr_expand_macros_false(self):
         k = 'xattrs'
-
         self.client.upsert(k, 1)
 
         rv = self.client.get(k)
@@ -939,7 +923,8 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         cas_after = rv.cas
 
         try:
-            self.client.mutate_in(k, SD.upsert('my', '${Mutation.CAS}', _expand_macros=False))
+            self.client.mutate_in(k, SD.upsert('my', '${Mutation.CAS}',
+                                               _expand_macros=False))
         except Exception as e:
             self.assertEqual(e.all_results['xattrs'].errstr,
                               'Could not execute one or more multi lookups or mutations')
@@ -954,7 +939,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_virt_non_xattr_document_exists(self):
         k = 'xattrs'
-
         self.client.upsert(k, 1)
 
         rv = self.client.get(k)
@@ -970,7 +954,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_virt_xattr_document_exists(self):
         k = 'xattrs'
-
         self.client.upsert(k, 1)
 
         rv = self.client.get(k)
@@ -983,60 +966,55 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_virt_xattr_not_exists(self):
         k = 'xattrs'
-
         self.client.upsert(k, 1)
-
         rv = self.client.get(k)
         self.assertTrue(rv.success)
         for vxattr in ['$xattr', '$document1', '$', '$1']:
             try:
                 self.client.lookup_in(k, SD.exists(vxattr, xattr=True))
             except Exception as e:
-                self.assertEqual(e.message, 'Subcommand failure')
-                self.assertEqual(e.result.errstr,
-                                 'The server replied with an unrecognized status code. '
-                                 'A newer version of this library may be able to decode it')
+                if vxattr == "$":
+                    self.assertTrue('Operational Error' in str(e))
+                    self.assertEqual(e.result.errstr,
+                                     'The server replied with an unrecognized status code. '
+                                     'A newer version of this library may be able to decode it')
+                else:
+                    self.assertTrue('Subcommand failure' in str(e))
             else:
                 self.fail("was able to get invalid vxattr?")
 
     def test_virt_xattr_document_modify(self):
         k = 'xattrs'
-
         self.client.upsert(k, 1)
 
         rv = self.client.get(k)
         self.assertTrue(rv.success)
         try:
-            self.client.mutate_in(k, SD.upsert('$document', {'value': 1}, xattr=True))
-        except Exception as e:
-            self.assertEqual(str(e), 'Operational Error')
-            self.assertEqual(e.result.errstr,
-                             'The server replied with an unrecognized status code. '
-                             'A newer version of this library may be able to decode it')
+            self.client.mutate_in(k, SD.upsert('$document', {'value': 1},
+                                               xattr=True))
+        except CouchbaseInputError as e:
+            self.assertTrue('Subcommand failure' in str(e))
+            self.assertTrue('Virtual xattrs cannot be modified' in str(e))
         else:
             self.fail("was able to modify $document vxattr?")
 
     def test_virt_xattr_document_remove(self):
         k = 'xattrs'
-
         self.client.upsert(k, 1)
 
         rv = self.client.get(k)
         self.assertTrue(rv.success)
         try:
             self.client.lookup_in(k, SD.remove('$document', xattr=True))
-        except Exception as e:
-            self.assertEqual(str(e), 'Operational Error')
-            self.assertEqual(e.result.errstr,
-                             'The server replied with an unrecognized status code. '
-                             'A newer version of this library may be able to decode it')
+        except CouchbaseInputError as e:
+            self.assertTrue('Subcommand failure' in str(e))
+            self.assertTrue('Virtual xattrs cannot be modified' in str(e))
         else:
             self.fail("was able to delete $document vxattr?")
 
     # https://issues.couchbase.com/browse/MB-23085
     def test_default_view_mixed_docs_meta_first(self):
         k = 'xattr'
-
         self.client.upsert(k, {"xattr": True})
         self.client.mutate_in(k, SD.upsert('integer', 2, xattr=True))
 
@@ -1062,7 +1040,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
     # https://issues.couchbase.com/browse/MB-23085
     def test_default_view_mixed_docs(self):
         k = 'xattr'
-
         self.client.upsert(k, {"xattr": True})
         self.client.mutate_in(k, SD.upsert('integer', 2, xattr=True))
 
@@ -1087,7 +1064,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_view_one_xattr(self):
         k = 'xattr'
-
         self.client.upsert(k, {"xattr": True})
         self.client.mutate_in(k, SD.upsert('integer', 2, xattr=True))
 
@@ -1096,19 +1072,23 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         view = View(default_view_name, default_map_func, None, False)
 
         ddoc_name = "ddoc1"
-        tasks = self.async_create_views(self.master, ddoc_name, [view], self.buckets[0].name)
+        tasks = self.async_create_views(self.master, ddoc_name, [view],
+                                        self.buckets[0].name)
         for task in tasks:
             task.result()
         rest = RestConnection(self.master)
-        query = {"stale": "false", "full_set": "true", "connection_timeout": 60000}
+        query = {"stale": "false", "full_set": "true",
+                 "connection_timeout": 60000}
 
-        result = rest.query_view(ddoc_name, view.name, self.buckets[0].name, query)
-        self.assertEqual(result['total_rows'], 1, "1 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': 2, 'id': 'xattr', 'key': {'xattr': True}})
+        result = rest.query_view(ddoc_name, view.name, self.buckets[0].name,
+                                 query)
+        self.assertEqual(result['total_rows'], 1,
+                         "1 document should be returned")
+        self.assertEqual(result['rows'][0], {'value': 2, 'id': 'xattr',
+                                             'key': {'xattr': True}})
 
     def test_view_one_xattr_index_xattr_on_deleted_docs(self):
         k = 'xattr'
-
         self.client.upsert(k, {"xattr": True})
         self.client.mutate_in(k, SD.upsert('integer', 2, xattr=True))
 
@@ -1122,18 +1102,21 @@ class SubdocXattrSdkTest(SubdocBaseTest):
     "index_xattr_on_deleted_docs" : true
     }' > /tmp/views_def.json""")
         o, e = shell.execute_command(
-            "curl -X PUT -H 'Content-Type: application/json' http://Administrator:password@127.0.0.1:8092/default/_design/ddoc1 -d @/tmp/views_def.json")
+            "curl -X PUT -H 'Content-Type: application/json' "
+            "http://Administrator:password@127.0.0.1:8092/default/_design/ddoc1 "
+            "-d @/tmp/views_def.json")
         self.log.info(o)
         rest = RestConnection(self.master)
-        query = {"stale": "false", "full_set": "true", "connection_timeout": 60000}
+        query = {"stale": "false", "full_set": "true",
+                 "connection_timeout": 60000}
 
         result = rest.query_view('ddoc1', 'view1', self.buckets[0].name, query)
         self.assertEqual(result['total_rows'], 1, "1 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': 2, 'id': 'xattr', 'key': {'xattr': True}})
+        self.assertEqual(result['rows'][0], {'value': 2, 'id': 'xattr',
+                                             'key': {'xattr': True}})
 
     def test_view_all_xattrs(self):
         k = 'xattr'
-
         self.client.upsert(k, {"xattr": True})
         self.client.mutate_in(k, SD.upsert('integer', 2, xattr=True))
 
@@ -1142,19 +1125,24 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         view = View(default_view_name, default_map_func, None, False)
 
         ddoc_name = "ddoc1"
-        tasks = self.async_create_views(self.master, ddoc_name, [view], self.buckets[0].name)
+        tasks = self.async_create_views(self.master, ddoc_name, [view],
+                                        self.buckets[0].name)
         for task in tasks:
             task.result()
         rest = RestConnection(self.master)
-        query = {"stale": "false", "full_set": "true", "connection_timeout": 60000}
+        query = {"stale": "false", "full_set": "true",
+                 "connection_timeout": 60000}
 
-        result = rest.query_view(ddoc_name, view.name, self.buckets[0].name, query)
-        self.assertEqual(result['total_rows'], 1, "1 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': {'integer': 2}, 'id': 'xattr', 'key': {'xattr': True}})
+        result = rest.query_view(ddoc_name, view.name, self.buckets[0].name,
+                                 query)
+        self.assertEqual(result['total_rows'], 1,
+                         "1 document should be returned")
+        self.assertEqual(result['rows'][0], {'value': {'integer': 2},
+                                             'id': 'xattr',
+                                             'key': {'xattr': True}})
 
     def test_view_all_docs_only_meta(self):
         k = 'xattr'
-
         self.client.upsert(k, {"xattr": True})
 
         default_map_func = "function (doc, meta) {emit(meta.xattrs);}"
@@ -1162,19 +1150,23 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         view = View(default_view_name, default_map_func, None, False)
 
         ddoc_name = "ddoc1"
-        tasks = self.async_create_views(self.master, ddoc_name, [view], self.buckets[0].name)
+        tasks = self.async_create_views(self.master, ddoc_name, [view],
+                                        self.buckets[0].name)
         for task in tasks:
             task.result()
         rest = RestConnection(self.master)
-        query = {"stale": "false", "full_set": "true", "connection_timeout": 60000}
+        query = {"stale": "false", "full_set": "true",
+                 "connection_timeout": 60000}
 
-        result = rest.query_view(ddoc_name, view.name, self.buckets[0].name, query)
-        self.assertEqual(result['total_rows'], 1, "1 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': None, 'id': 'xattr', 'key': {}})
+        result = rest.query_view(ddoc_name, view.name, self.buckets[0].name,
+                                 query)
+        self.assertEqual(result['total_rows'], 1,
+                         "1 document should be returned")
+        self.assertEqual(result['rows'][0], {'value': None, 'id': 'xattr',
+                                             'key': {}})
 
     def test_view_all_docs_without_xattrs(self):
         k = 'xattr'
-
         self.client.upsert(k, {"xattr": True})
 
         default_map_func = "function (doc, meta) {emit(doc, meta.xattrs);}"
@@ -1182,19 +1174,23 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         view = View(default_view_name, default_map_func, None, False)
 
         ddoc_name = "ddoc1"
-        tasks = self.async_create_views(self.master, ddoc_name, [view], self.buckets[0].name)
+        tasks = self.async_create_views(self.master, ddoc_name, [view],
+                                        self.buckets[0].name)
         for task in tasks:
             task.result()
         rest = RestConnection(self.master)
-        query = {"stale": "false", "full_set": "true", "connection_timeout": 60000}
+        query = {"stale": "false", "full_set": "true",
+                 "connection_timeout": 60000}
 
-        result = rest.query_view(ddoc_name, view.name, self.buckets[0].name, query)
-        self.assertEqual(result['total_rows'], 1, "1 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': {}, 'id': 'xattr', 'key': {'xattr': True}})
+        result = rest.query_view(ddoc_name, view.name, self.buckets[0].name,
+                                 query)
+        self.assertEqual(result['total_rows'], 1,
+                         "1 document should be returned")
+        self.assertEqual(result['rows'][0], {'value': {}, 'id': 'xattr',
+                                             'key': {'xattr': True}})
 
     def test_view_all_docs_without_xattrs_only_meta(self):
         k = 'xattr'
-
         self.client.upsert(k, {"xattr": True})
 
         default_map_func = "function (doc, meta) {emit(doc, meta.xattrs);}"
@@ -1202,19 +1198,23 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         view = View(default_view_name, default_map_func, None, False)
 
         ddoc_name = "ddoc1"
-        tasks = self.async_create_views(self.master, ddoc_name, [view], self.buckets[0].name)
+        tasks = self.async_create_views(self.master, ddoc_name, [view],
+                                        self.buckets[0].name)
         for task in tasks:
             task.result()
         rest = RestConnection(self.master)
-        query = {"stale": "false", "full_set": "true", "connection_timeout": 60000}
+        query = {"stale": "false", "full_set": "true",
+                 "connection_timeout": 60000}
 
-        result = rest.query_view(ddoc_name, view.name, self.buckets[0].name, query)
-        self.assertEqual(result['total_rows'], 1, "1 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': {}, 'id': 'xattr', 'key': {'xattr': True}})
+        result = rest.query_view(ddoc_name, view.name, self.buckets[0].name,
+                                 query)
+        self.assertEqual(result['total_rows'], 1,
+                         "1 document should be returned")
+        self.assertEqual(result['rows'][0], {'value': {}, 'id': 'xattr',
+                                             'key': {'xattr': True}})
 
     def test_view_xattr_not_exist(self):
         k = 'xattr'
-
         self.client.upsert(k, {"xattr": True})
         self.client.mutate_in(k, SD.upsert('integer', 2, xattr=True))
 
@@ -1223,32 +1223,39 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         view = View(default_view_name, default_map_func, None, False)
 
         ddoc_name = "ddoc1"
-        tasks = self.async_create_views(self.master, ddoc_name, [view], self.buckets[0].name)
+        tasks = self.async_create_views(self.master, ddoc_name, [view],
+                                        self.buckets[0].name)
         for task in tasks:
             task.result()
         rest = RestConnection(self.master)
-        query = {"stale": "false", "full_set": "true", "connection_timeout": 60000}
+        query = {"stale": "false", "full_set": "true",
+                 "connection_timeout": 60000}
 
-        result = rest.query_view(ddoc_name, view.name, self.buckets[0].name, query)
-        self.assertEqual(result['total_rows'], 1, "1 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': None, 'id': 'xattr', 'key': {'xattr': True}})
+        result = rest.query_view(ddoc_name, view.name, self.buckets[0].name,
+                                 query)
+        self.assertEqual(result['total_rows'], 1,
+                         "1 document should be returned")
+        self.assertEqual(result['rows'][0], {'value': None, 'id': 'xattr',
+                                             'key': {'xattr': True}})
 
     def test_view_all_xattrs_inner_json(self):
         k = 'xattr'
-
         self.client.upsert(k, {"xattr": True})
-        self.client.mutate_in(k, SD.upsert('big', SubdocXattrSdkTest.VALUES, xattr=True))
+        self.client.mutate_in(k, SD.upsert('big', SubdocXattrSdkTest.VALUES,
+                                           xattr=True))
 
         default_map_func = "function (doc, meta) {emit(doc, meta.xattrs);}"
         default_view_name = ("xattr", "default_view")[False]
         view = View(default_view_name, default_map_func, None, False)
 
         ddoc_name = "ddoc1"
-        tasks = self.async_create_views(self.master, ddoc_name, [view], self.buckets[0].name)
+        tasks = self.async_create_views(self.master, ddoc_name, [view],
+                                        self.buckets[0].name)
         for task in tasks:
             task.result()
         rest = RestConnection(self.master)
-        query = {"stale": "false", "full_set": "true", "connection_timeout": 60000}
+        query = {"stale": "false", "full_set": "true",
+                 "connection_timeout": 60000}
 
         result = rest.query_view(ddoc_name, view.name, self.buckets[0].name, query)
         self.assertEqual(result['total_rows'], 1, "1 document should be returned")
@@ -1268,7 +1275,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_view_all_xattrs_many_items(self):
         key = 'xattr'
-
         self.client.upsert(key, {"xattr": True})
         for k, v in SubdocXattrSdkTest.VALUES.items():
             self.client.mutate_in(key, SD.upsert(k, v, xattr=True))
@@ -1311,7 +1317,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_view_all_xattrs_many_items_index_xattr_on_deleted_docs(self):
         key = 'xattr'
-
         self.client.upsert(key, {"xattr": True})
         for k, v in SubdocXattrSdkTest.VALUES.items():
             self.client.mutate_in(key, SD.upsert(k, v, xattr=True))
@@ -1326,7 +1331,9 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         "index_xattr_on_deleted_docs" : true
         }' > /tmp/views_def.json""")
         o, _ = shell.execute_command(
-                "curl -X PUT -H 'Content-Type: application/json' http://Administrator:password@127.0.0.1:8092/default/_design/ddoc1 -d @/tmp/views_def.json")
+            "curl -X PUT -H 'Content-Type: application/json' "
+            "http://Administrator:password@127.0.0.1:8092/default/_design/ddoc1 "
+            "-d @/tmp/views_def.json")
         self.log.info(o)
 
         ddoc_name = "ddoc1"
@@ -1353,13 +1360,11 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_reboot_node(self):
         key = 'xattr'
-
         self.client.upsert(key, {})
 
         for k, v in SubdocXattrSdkTest.VALUES.items():
             self.log.info("adding xattr '%s': %s" % (k, v))
-            rv = self.client.mutate_in(key, SD.upsert(k, v,
-                                                      xattr=True))
+            rv = self.client.mutate_in(key, SD.upsert(k, v, xattr=True))
             self.log.info("xattr '%s' added successfully?: %s" % (k, rv.success))
             self.assertTrue(rv.success)
 
@@ -1387,34 +1392,33 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
     def test_use_persistence(self):
         k = 'xattrs'
-
         self.client.upsert(k, 1)
-
         rv = self.client.get(k)
         self.assertTrue(rv.success)
         cas_before = rv.cas
-
         try:
-            self.client.mutate_in(k, SD.upsert('my', {'value': 1},
-                                               xattr=True), persist_to=1)
-        except:
+            self.client.mutate_in(k, SD.upsert('my', {'value': 1}, xattr=True),
+                                  persist_to=1)
+        except Exception as e:
             if self.bucket_type == 'ephemeral':
                 return
             else:
-                raise
+                raise e
         rv = self.client.get(k)
         self.assertTrue(rv.success)
         cas_after = rv.cas
 
         try:
             self.client.mutate_in(k, SD.upsert('my.inner', {'value_inner': 2},
-                                               xattr=True), cas=cas_before, persist_to=1)
+                                               xattr=True),
+                                  cas=cas_before, persist_to=1)
             self.fail("upsert with wrong cas!")
         except KeyExistsError:
             pass
 
         self.client.mutate_in(k, SD.upsert('my.inner', {'value_inner': 2},
-                                           xattr=True), cas=cas_after, persist_to=1)
+                                           xattr=True),
+                              cas=cas_after, persist_to=1)
         rv = self.client.get(k)
         self.assertTrue(rv.success)
         cas_after2 = rv.cas
@@ -1702,36 +1706,38 @@ class XattrEnterpriseBackupRestoreTest(SubdocBaseTest):
         self.override_data = self.input.param("override_data", False)
         self._load_all_buckets()
         self.shell.execute_command("rm -rf /tmp/backups")
-        output, error = self.shell.execute_command("/opt/couchbase/bin/cbbackupmgr config "
-                                                   "--archive /tmp/backups --repo example")
+        output, error = self.shell.execute_command(
+            "/opt/couchbase/bin/cbbackupmgr config "
+            "--archive /tmp/backups --repo example")
         self.log.info(output)
         self.assertEqual('Backup repository `example` created successfully in archive `/tmp/backups`', output[0])
         output, error = self.shell.execute_command(
             "/opt/couchbase/bin/cbbackupmgr backup --archive /tmp/backups --repo example "
             "--cluster couchbase://127.0.0.1 --username Administrator --password password %s" % self.backup_extra_params)
         self.log.info(output)
-        self.assertEqual('Backup completed successfully', output[1])
+        self.assertEqual('Backup completed successfully', output[-1])
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         imp_rest = RestConnection(self.master)
         info = imp_rest.get_nodes_self()
         if info.memoryQuota and int(info.memoryQuota) > 0:
             self.quota = info.memoryQuota
-        bucket_params = self._create_bucket_params(server=self.master, size=250, replicas=self.num_replicas,
-                                                   enable_replica_index=self.enable_replica_index,
-                                                   eviction_policy=self.eviction_policy)
+        bucket_params = self._create_bucket_params(
+            server=self.master, size=250, replicas=self.num_replicas,
+            enable_replica_index=self.enable_replica_index,
+            eviction_policy=self.eviction_policy)
         self.cluster.create_default_bucket(bucket_params)
         self.sleep(10)
         if self.override_data:
             self._load_all_buckets(postfix_xattr_value='updated')
         output, error = self.shell.execute_command('ls /tmp/backups/example')
         self.log.info(output)
-        output, error = self.shell.execute_command("/opt/couchbase/bin/cbbackupmgr restore --archive /tmp/backups"
-                                                   " --repo example --cluster couchbase://127.0.0.1 "
-                                                   "--username Administrator --password password --start %s %s" % (
-                                                       output[
-                                                           0], self.restore_extra_params))
-        self.log.info(output)
-        self.assertEqual('Restore completed successfully', output[1])
+        output, error = self.shell.execute_command(
+            "/opt/couchbase/bin/cbbackupmgr restore --archive /tmp/backups "
+            "--repo example --cluster couchbase://127.0.0.1 "
+            "--username Administrator --password password "
+            "--start {0} --end {0} {1}"
+            .format(output[0], self.restore_extra_params))
+        self.assertEqual('Restore completed successfully', output[-1])
         # https://issues.couchbase.com/browse/MB-23864
         if self.override_data and '--force-updates' not in self.restore_extra_params:
             self._verify_all_buckets(postfix_xattr_value='updated')
