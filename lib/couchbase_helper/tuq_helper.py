@@ -16,6 +16,7 @@ from membase.api.rest_client import RestConnection
 import copy
 import traceback
 from deepdiff import DeepDiff
+from decimal import Decimal
 
 class N1QLHelper():
     def __init__(self, version=None, master=None, shell=None,  max_verify=0, buckets=[], item_flag=0,
@@ -428,9 +429,16 @@ class N1QLHelper():
                     x['wf'] = 0
                 if not y['wf']:
                     y['wf'] = 0
-                max_val = max([x['wf'], y['wf']])
-                min_val = min([x['wf'], y['wf']])
-                diff = max_val - min_val
+                if type(x['wf']) == list and type(y['wf']) == str:
+                    diffs = DeepDiff(x['wf'], eval(y['wf']), ignore_order=True)
+                    if diffs:
+                        diff = 1
+                    else:
+                        diff = 0
+                else:
+                    max_val = max([x['wf'], y['wf']])
+                    min_val = min([x['wf'], y['wf']])
+                    diff = max_val - min_val
                 if x['char_field1'] != y['char_field1'] or x['decimal_field1'] != y['decimal_field1'] or diff > delta:
                     print("actual_result is %s" % x)
                     print("expected result is %s" % y)
