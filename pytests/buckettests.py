@@ -315,13 +315,14 @@ class CreateBucketTests(BaseTestCase):
         if self.node_version[:5] in COUCHBASE_FROM_VULCAN:
             self.rest.force_eject_node()
             shell = RemoteMachineShellConnection(self.master)
-            set_index_storage_type = ""
             set_index_storage_type = " --index-storage-setting=memopt "
             options = ' --cluster-port=8091 \
                         --cluster-ramsize=300 \
                         --cluster-index-ramsize=300 \
-                        --services=data,index,query %s ' % set_index_storage_type
-            o, e = shell.execute_couchbase_cli(cli_command="cluster-init", options=options)
+                        --services=data,index,query %s ' \
+                      % set_index_storage_type
+            o, e = shell.execute_couchbase_cli(cli_command="cluster-init",
+                                               options=options)
             self.assertEqual(o[0], 'SUCCESS: Cluster initialized')
 
             self.log.info("Add new user after reset node! ")
@@ -329,24 +330,25 @@ class CreateBucketTests(BaseTestCase):
             shell = RemoteMachineShellConnection(self.master)
             bucket_type = self.input.param("bucket_type", "couchbase")
             options = ' --bucket=default \
-                            --bucket-type={0} \
-                            --bucket-ramsize=200 \
-                            --max-ttl=400 \
-                            --wait '.format(bucket_type)
-            o, e = shell.execute_couchbase_cli(cli_command="bucket-create", options=options)
+                        --bucket-type={0} \
+                        --bucket-ramsize=200 \
+                        --max-ttl=400 \
+                        --wait '.format(bucket_type)
+            o, e = shell.execute_couchbase_cli(cli_command="bucket-create",
+                                               options=options)
             self.assertEqual(o[0], 'SUCCESS: Bucket created')
+
+            self.sleep(30, "Sleep before loading doc using cbdocloader")
 
             cluster_flag = "-c"
             bucket_quota_flag = "-m"
             data_set_location_flag = "-d"
-            shell.execute_command("{0}cbdocloader -u Administrator -p password \
-                          {3} {1} -b default {4} 100 {5} {2}travel-sample.zip" \
-                                                          .format(self.bin_path,
-                                                           self.master.ip,
-                                                           self.sample_path,
-                                                           cluster_flag,
-                                                           bucket_quota_flag,
-                                                           data_set_location_flag))
+            shell.execute_command(
+                "{0}cbdocloader -u Administrator -p password "
+                "{3} {1} -b default {4} 100 {5} {2}travel-sample.zip"
+                .format(self.bin_path, self.master.ip, self.sample_path,
+                        cluster_flag, bucket_quota_flag,
+                        data_set_location_flag))
             shell.disconnect()
 
             buckets = RestConnection(self.master).get_buckets()
@@ -356,19 +358,21 @@ class CreateBucketTests(BaseTestCase):
 
             """ check for load data into travel-sample bucket """
             end_time = time.time() + 120
+            num_actual = 0
             while time.time() < end_time:
                 self.sleep(10)
                 num_actual = self.get_item_count(self.master, "default")
                 if int(num_actual) == self.total_items_travel_sample:
                     break
-                self.assertTrue(int(num_actual) == self.total_items_travel_sample,
-                                "Items number expected %s, actual %s" % (
-                                        self.total_items_travel_sample, num_actual))
+            self.assertTrue(int(num_actual) == self.total_items_travel_sample,
+                            "Items number expected %s, actual %s"
+                            % (self.total_items_travel_sample, num_actual))
             self.log.info("Total items %s " % num_actual)
-            self.sleep(400, "waiting for docs to expire per maxttl rule")
+            self.sleep(400, "Waiting for docs to expire as per maxttl")
             self.expire_pager([self.master])
+            self.sleep(20, "Wait for expiry_purger to run")
             num_actual = self.get_item_count(self.master, "default")
-            if int(num_actual) == 0:
+            if int(num_actual) != 0:
                 self.fail("Item count is not 0 after maxttl has elapsed")
             else:
                 self.log.info("SUCCESS: Item count is 0 after maxttl has elapsed")
