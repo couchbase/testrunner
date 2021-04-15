@@ -430,7 +430,7 @@ class N1QLHelper():
                 if not y['wf']:
                     y['wf'] = 0
                 if type(x['wf']) == list and type(y['wf']) == str:
-                    diffs = DeepDiff(x['wf'], eval(y['wf']), ignore_order=True)
+                    diffs = DeepDiff(x['wf'], eval(y['wf']), ignore_order=True, ignore_numeric_type_changes=True)
                     if diffs:
                         diff = 1
                     else:
