@@ -404,7 +404,8 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                         continue
                     else:
                         self.fail(err)
-        self.wait_until_indexes_online(timeout=1800)
+        self.sleep(30, "Waiting before checking for index status")
+        self.wait_until_indexes_online()
         index_meta_info = self.rest.get_indexer_metadata()['status']
         self.log.info(f"Index Metadata: {index_meta_info}")
         self.assertEqual(len(index_meta_info), 10 * (self.num_replicas + 1))
@@ -422,6 +423,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         rebalance_status = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
 
+        self.sleep(30, "Waiting before checking for index status")
         self.wait_until_indexes_online()
         index_meta_info = self.rest.get_indexer_metadata()['status']
         index_hosts = set()
@@ -860,13 +862,13 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
                                                           num_replica=1)
             index_gen_query_list.append(query)
-    
+
         tasks = []
         with ThreadPoolExecutor() as executor:
             for count, query in enumerate(index_gen_query_list):
                 task = executor.submit(self.run_cbq_query, query=query)
                 tasks.append(task)
-            
+
             for task in tasks:
                 try:
                     result = task.result()
@@ -883,7 +885,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         self.wait_until_indexes_online()
         index_meta_info = self.rest.get_indexer_metadata()['status']
         self.assertEqual(len(index_meta_info), 10 * (self.num_replicas + 1))
-        
+
         self.log.info("Swaping out Indexer node B with C and D")
         gen_create = SDKDataLoader(num_ops=10**4, percent_create=100, percent_update=0, percent_delete=0, scope=scope,
                                    collection=collection, json_template='Person', key_prefix="new_doc_")
@@ -911,9 +913,9 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         self.cluster.create_standard_bucket(name=bucket_1, port=11222, bucket_params=self.bucket_params)
         self.cluster.create_standard_bucket(name=bucket_2, port=11222, bucket_params=self.bucket_params)
         collection_namespaces = []
-        scope_prefix = 'test_scope_'
-        collection_prefix = 'test_collection_'
-    
+        scope_prefix = 'test_scope'
+        collection_prefix = 'test_collection'
+
         data_load_tasks = []
         for bucket in (bucket_1, bucket_2):
             for s_item in range(self.num_scopes):
@@ -926,7 +928,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                     gen_create = SDKDataLoader(num_ops=num_of_docs, percent_create=100,
                                                percent_update=0, percent_delete=0, scope=scope,
                                                collection=collection, json_template='Person')
-                    task =self.cluster.async_load_gen_docs(self.master, bucket, gen_create, timeout_secs=300)
+                    task = self.cluster.async_load_gen_docs(self.master, bucket, gen_create, timeout_secs=300)
                     data_load_tasks.append(task)
                     collection_namespaces.append(f'default:{bucket}.{scope}.{collection}')
         for task in data_load_tasks:
@@ -949,13 +951,13 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                 build_query = index_gen.generate_build_query(namespace=collection_namespace)
                 index_gen_query_list.append(query)
                 index_build_query_list.append(build_query)
-    
+
         tasks = []
         with ThreadPoolExecutor() as executor:
             for count, query in enumerate(index_gen_query_list):
                 task = executor.submit(self.run_cbq_query, query=query)
                 tasks.append(task)
-        
+
             for task in tasks:
                 try:
                     result = task.result()
@@ -971,11 +973,12 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                         continue
                     else:
                         self.log.info(err)
+        self.sleep(10, "Giving some time before checking index status")
         self.wait_until_indexes_online(defer_build=self.defer_build)
 
         tasks = []
         self.log.info("Swapping out Indexer node B with C and D")
-        add_nodes = self.servers[2:]
+        add_nodes = self.servers[2:4]
         remove_node = [self.servers[1]]
         tasks.append(self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                                   to_remove=remove_node, services=['index', 'index']))
@@ -986,7 +989,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                                        scope=scope, collection=collection, json_template='Person',
                                        key_prefix="new_doc_")
             tasks.extend(self.data_ops_javasdk_loader_in_batches(sdk_data_loader=gen_create, batch_size=10 ** 4))
-        
+
         for task in tasks:
             try:
                 task.result()
@@ -995,6 +998,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         rebalance_status = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
 
+        self.sleep(30, "Giving some time before checking index status")
         self.wait_until_indexes_online(defer_build=self.defer_build)
         if self.defer_build:
             for build_query in index_build_query_list:
@@ -1002,6 +1006,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                     self.run_cbq_query(query=build_query)
                 except Exception as err:
                     self.log.info(err)
+        self.sleep(30, "Giving some time before checking index status")
         result = self.wait_until_indexes_online(timeout=1800)
         if not result:
             self.wait_until_indexes_online()
