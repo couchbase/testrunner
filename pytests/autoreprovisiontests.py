@@ -724,13 +724,22 @@ class AutoReprovisionTests(unittest.TestCase):
         if num_buckets == 1:
             bucket_name = "default"
             bucket_ram = info.memoryQuota * 2 // 3
-            rest.create_bucket(bucket=bucket_name,
-                               ramQuotaMB=bucket_ram,
-                               replicaNumber=self.replicas,
-                               proxyPort=info.moxi,
-                               bucketType=bucketType,
-                               evictionPolicy=evictionPolicy,
-                               storageBackend=self.bucket_storage)
+            try:
+                rest.create_bucket(bucket=bucket_name,
+                                   ramQuotaMB=bucket_ram,
+                                   replicaNumber=self.replicas,
+                                   proxyPort=info.moxi,
+                                   bucketType=bucketType,
+                                   evictionPolicy=evictionPolicy,
+                                   storageBackend=self.bucket_storage)
+            except Exception:
+                rest.create_bucket(bucket=bucket_name,
+                                   ramQuotaMB=100,
+                                   replicaNumber=self.replicas,
+                                   proxyPort=info.moxi,
+                                   bucketType=bucketType,
+                                   evictionPolicy=evictionPolicy,
+                                   storageBackend=self.bucket_storage)
         else:
             created = BucketOperationHelper.create_multiple_buckets(
                 self.master, self.replicas, howmany=num_buckets,
