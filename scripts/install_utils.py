@@ -109,7 +109,7 @@ class NodeHelper:
                 self.shell.terminate_processes(self.info, \
                                                [s + "-*" for s in testconstants.COUCHBASE_FROM_VERSION_3])
                 installed_version, _ = self.shell.execute_command(
-                    "cat " + install_constants.DEFAULT_INSTALL_DIR["WINDOWS_SERVER"] + "VERSION.txt")
+                    "cat " + install_constants.DEFAULT_INSTALL_DIR["WINDOWS_SERVER"] + "/VERSION.txt")
                 if len(installed_version) == 1:
                     installed_msi, _ = self.shell.execute_command(
                         "cd " + install_constants.DOWNLOAD_DIR["WINDOWS_SERVER"] + "; ls *" + installed_version[
