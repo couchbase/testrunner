@@ -168,7 +168,7 @@ class MemorySanity(BaseTestCase):
                     random_string = self.random_str_generator(str_len)
                     awareness.memcached(key).append(key, random_string)
                     if self.kv_verify:
-                        verify_dict[key] = verify_dict[key] + random_string
+                        verify_dict[key] = "%s%s" % (verify_dict[key], random_string)
                 self.log.info(
                     "for {0} items size was increased to {1} Bytes".format(len(selected_keys) + 1, self.value_size))
                 self.value_size += str_len
@@ -181,10 +181,12 @@ class MemorySanity(BaseTestCase):
             self.log.info("VERIFICATION <" + msg + ">: Phase 0 - Check the gap between "
                           + "mem_used by the bucket and total_allocated_bytes")
             stats = StatsCommon()
-            mem_used_stats = stats.get_stats(self.servers, bucket, 'memory', 'mem_used')
-            total_allocated_bytes_stats = stats.get_stats(self.servers, bucket, 'memory', 'total_allocated_bytes')
-            total_fragmentation_bytes_stats = stats.get_stats(self.servers, bucket, 'memory',
-                                                              'total_fragmentation_bytes')
+            mem_used_stats = stats.get_stats(self.servers, bucket,
+                                             'memory', 'mem_used')
+            total_allocated_bytes_stats = stats.get_stats(
+                self.servers, bucket, 'memory', 'ep_arena:allocated')
+            total_fragmentation_bytes_stats = stats.get_stats(
+                self.servers, bucket, 'memory', 'ep_arena:fragmentation_size')
 
             for server in self.servers:
                 self.log.info("In {0} bucket {1}, total_fragmentation_bytes + the total_allocated_bytes = {2}"
