@@ -942,6 +942,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
             num_replica=self.num_index_replicas
         )
         self.run_cbq_query(query)
+        self.sleep(10, "Giving some time before blocking communication between indexer nodes")
         self.block_incoming_network_from_node(
             indexer_nodes[0], indexer_nodes[1])
         self.sleep(10)
