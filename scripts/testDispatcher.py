@@ -757,8 +757,11 @@ def main():
             print('have an exception')
             print((traceback.format_exc()))
             if descriptor:
-                print('Releasing servers for {} ...'.format(descriptor))
-                release_servers(descriptor)
+                try:
+                    print('Releasing servers for {} ...'.format(descriptor))
+                    release_servers(descriptor)
+                except Exception:
+                    pass
             time.sleep(POLL_INTERVAL)
     # endwhile
 
