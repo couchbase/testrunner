@@ -71,7 +71,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
             'age': 34,
             'country': 'test_country',
             'city': 'test_city',
-            'filler1': ['ut','distinctio','sit','inventore','quo','quos','saepe','doloremque','sed','omnis'],
+            'filler1': ['ut', 'distinctio', 'sit', 'inventore', 'quo', 'quos', 'saepe', 'doloremque', 'sed', 'omnis'],
             'firstName': 'Mitch',
             'lastName': 'Funk',
             'streetAddress': '66877 Williamson Terrace',
@@ -95,7 +95,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
             with ThreadPoolExecutor() as executor:
                 executor.submit(self._load_all_buckets, self.master, gen_create)
                 executor.submit(self.run_cbq_query, query=insert_query)
-                self.sleep(5)
+                self.sleep(20)
                 select_task = executor.submit(self.run_cbq_query, query=select_query, scan_consistency='request_plus')
                 count_task = executor.submit(self.run_cbq_query, query=count_query, scan_consistency='request_plus')
 
@@ -110,7 +110,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
 
     def test_at_plus_index_consistency(self):
         num_of_docs = 10 ** 3
-        self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs,batch_size=100)
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs, batch_size=100)
         collection_namespace = self.namespaces[0]
         _, keyspace = collection_namespace.split(':')
         bucket, scope, collection = keyspace.split('.')
@@ -132,12 +132,13 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
         new_insert_docs_num = 2
         gen_create = SDKDataLoader(num_ops=new_insert_docs_num, percent_create=100,
                                    percent_update=0, percent_delete=0, scope=scope,
-                                   collection=collection, output=True,start_seq_num=num_of_docs+1)
+                                   collection=collection, output=True, start_seq_num=num_of_docs + 1)
         tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=gen_create, batch_size=1000)
         for task in tasks:
             out = task.result()
             self.log.info(out)
 
+        self.sleep(15, "Waiting some time before checking for mutation vectors")
         scan_vectors_after_mutations = self._get_mutation_vectors()
         new_scan_vectors = scan_vectors_after_mutations - scan_vectors_before_mutations
         scan_vector = self._convert_mutation_vector_to_scan_vector(new_scan_vectors)
@@ -149,7 +150,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
                 select_task = executor.submit(self.run_cbq_query, query=select_query, scan_consistency='at_plus',
                                               scan_vector=scan_vector)
                 meta_task = executor.submit(self.run_cbq_query, query=select_meta_id_query, scan_consistency='at_plus',
-                                             scan_vector=scan_vector)
+                                            scan_vector=scan_vector)
                 result = select_task.result()['results'][0]['$1']
                 meta_id_result_after_new_inserts = self.run_cbq_query(query=select_meta_id_query)['results'][0]['$1']
             self.assertTrue(result > 0,
