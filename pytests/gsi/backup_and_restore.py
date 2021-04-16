@@ -71,11 +71,11 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     self.rest.get_scope_collections(bucket.name, scope)]
                 for namespace_id, keyspace in enumerate(
                         bucket_namespaces):
+                    namespace_tokens = keyspace.split(".", 1)
+                    if namespace_tokens[1] == "_default._default":
+                        keyspace = namespace_tokens[0]
                     for idx_id in range(1, self.indexes_per_collection + 1):
-                        namespace_tokens = keyspace.split(".", 1)
-                        if namespace_tokens[1] == "_default._default":
-                            keyspace = namespace_tokens[0]
-                        index_name =\
+                        index_name = \
                             "idx_{0}_{1}_{2}".format(
                                 bucket_id, namespace_id + 1, idx_id)
                         query_def = QueryDefinition(
