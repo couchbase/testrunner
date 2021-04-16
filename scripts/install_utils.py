@@ -130,7 +130,8 @@ class NodeHelper:
                             break
                         self.wait_for_completion(duration, event)
                     except Exception as e:
-                        log.warning("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
+                        log.warning("uninstall_cb: Exception {0} occurred on {1}, "
+                                    "retrying..".format(e, self.ip))
                         self.wait_for_completion(duration, event)
             self.shell.terminate_processes(self.info, install_constants.PROCESSES_TO_TERMINATE)
 
@@ -153,7 +154,8 @@ class NodeHelper:
                                 break
                             self.wait_for_completion(duration, event)
                         except Exception as e:
-                            log.warning("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
+                            log.warning("pre_install_cb: Exception {0} occurred on {1}, "
+                                        "retrying..".format(e, self.ip))
                             self.wait_for_completion(duration, event)
                 else:
                     self.shell.execute_command(cmd, debug=self.params["debug_logs"])
@@ -186,12 +188,14 @@ class NodeHelper:
                 try:
                     o, e = self.shell.execute_command(cmd, debug=self.params["debug_logs"])
                     if is_fatal_error(e):
+                        log.warning("Setting install status to failed due to {}".format(e))
                         self.install_success = False
                     if o == ['1']:
                         break
                     self.wait_for_completion(duration, event)
                 except Exception as e:
-                    log.warning("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
+                    log.warning("install_cb: Exception {0} occurred on {1}, retrying..".format(e,
+                                                                                         self.ip))
                     self.wait_for_completion(duration, event)
         self.post_install_cb()
 
@@ -203,7 +207,7 @@ class NodeHelper:
                 if self.actions_dict[self.info.deliverable_type]["post_install"]:
                     cmd = self.actions_dict[self.info.deliverable_type]["post_install"].replace("buildversion", self.build.version)
                     o, e = self.shell.execute_command(cmd, debug=self.params["debug_logs"])
-                    if o == ['1']:
+                    if o[-1] == '1':
                         break
                     else:
                         if self.actions_dict[self.info.deliverable_type]["post_install_retry"]:
@@ -219,7 +223,8 @@ class NodeHelper:
                                     debug=self.params["debug_logs"])
                         self.wait_for_completion(duration, event)
             except Exception as e:
-                log.warning("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
+                log.warning("post_install_cb: Exception {0} occurred on {1}, retrying..".format(e,
+                                                                                               self.ip))
                 self.wait_for_completion(duration, event)
 
     def set_cbft_env_options(self, name, value, retries=3):
@@ -273,12 +278,12 @@ class NodeHelper:
                                                          self.node.rest_username,
                                                          self.node.rest_password)
         while retries > 0:
-            ret, _ = self.shell.execute_command(cmd)
+            ret, err = self.shell.execute_command(cmd)
             if ret == ['0']:
                 time.sleep(30)
             retries -= 1
         else:
-            log.warning("Unable to init node {0}".format(self.ip))
+            log.warning("Unable to init node {0} due to {1}".format(self.ip, err))
 
     def pre_init_cb(self):
         try:
@@ -286,7 +291,7 @@ class NodeHelper:
             if params["fts_query_limit"] > 0:
                 self.set_cbft_env_options("fts_query_limit", params["fts_query_limit"])
         except Exception as e:
-            log.warning("Exception {0} occurred during pre-init".format(e))
+            log.warning("pre_init_cb: Exception {0} occurred on {1}".format(e, self.ip))
 
     def post_init_cb(self):
         # Optionally change node name and restart server
@@ -374,7 +379,7 @@ class NodeHelper:
                     break
                 self.wait_for_completion(duration, event)
             except Exception as e:
-                log.warning("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
+                log.warning("init_cb: Exception {0} occurred on {1}, retrying..".format(e, self.ip))
                 self.wait_for_completion(duration, event)
         self.post_init_cb()
 

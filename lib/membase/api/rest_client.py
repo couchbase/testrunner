@@ -1022,14 +1022,16 @@ class RestConnection(object):
                 if count < 4:
                     log.error("socket error while connecting to {0} error {1} ".format(api, e))
                 if time.time() > end_time:
-                    log.error("Tried ta connect {0} times".format(count))
+                    log.error("Giving up due to {2}! Tried {0} connect {1} times.".format(
+                        api, count, e))
                     raise ServerUnavailableException(ip=self.ip)
             except (AttributeError, httplib2.ServerNotFoundError) as e:
                 if count < 4:
                     log.error("ServerNotFoundError error while connecting to {0} error {1} "\
                                                                               .format(api, e))
                 if time.time() > end_time:
-                    log.error("Tried ta connect {0} times".format(count))
+                    log.error("Giving up due to {2}! Tried {0} connect {1} times.".\
+                              format(api, count, e))
                     raise ServerUnavailableException(ip=self.ip)
             time.sleep(t1)
             count += 1

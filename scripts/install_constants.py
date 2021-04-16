@@ -133,8 +133,8 @@ CMDS = {
             "msiexec /i buildbinary /passive /L*V install_status.txt",
         "post_install":
             "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; " +
-            "cat install_status.txt | " +
-            "grep 'buildversion.*Configuration completed successfully.' && echo 1 || echo 0",
+            "vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; " +
+            "grep 'buildversion.*[Configuration\|Installation] completed successfully.' install_status.txt && echo 1 || echo 0",
         "post_install_retry":
             "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; " +
             "msiexec /i buildbinary /passive /L*V install_status.txt",
@@ -208,8 +208,8 @@ NON_ROOT_CMDS = {
             "msiexec /i buildbinary /passive /L*V install_status.txt",
         "post_install":
             "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; "
-            "cat install_status.txt | "
-            "grep 'buildversion.*Configuration completed successfully.' && echo 1 || echo 0",
+            "vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; " +
+            "grep 'buildversion.*[Configuration\|Installation] completed successfully.' install_status.txt && echo 1 || echo 0",
         "post_install_retry":
             "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; "
             "msiexec /i buildbinary /passive /L*V install_status.txt",
@@ -269,8 +269,8 @@ WAIT_TIMES = {
     "msi": {
         "download_binary": (20, "Waiting {0}s for download to complete on {1}..", 300),
         "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
-        "install": (50, "Waiting {0}s for install to complete on {1}..", 100),
-        "post_install": (30, "Waiting {0}s for couchbase-service to become active on {1}..", 120),
+        "install": (50, "Waiting {0}s for install to complete on {1}..", 150),
+        "post_install": (30, "Waiting {0}s for couchbase-service to become active on {1}..", 180),
         "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
     },
     "rpm": {
