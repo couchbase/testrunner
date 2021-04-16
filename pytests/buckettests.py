@@ -234,9 +234,11 @@ class CreateBucketTests(BaseTestCase):
                     --services=data,index,query,fts %s ' % set_index_storage_type
         o, e = shell.execute_couchbase_cli(cli_command="cluster-init", options=options)
         if self.node_version[:5] in COUCHBASE_FROM_SPOCK:
-            self.assertEqual(o[0], 'SUCCESS: Cluster initialized')
+            self.assertTrue(self._check_output("SUCCESS: Cluster initialized", o),
+                                               "Failed to initialize cluster")
         else:
-            self.assertEqual(o[0], "SUCCESS: init/edit localhost")
+            self.assertTrue(self._check_output("SUCCESS: init/edit localhost", o),
+                                               "Failed to init/edit localhost")
         self.sleep(7, "wait for services up completely")
 
         self.log.info("Add new user after reset node! ")
@@ -426,3 +428,23 @@ class CreateBucketTests(BaseTestCase):
                     self.input.test_params["stop-on-failure"] = True
                     self.log.error("Couchbase wasn't recovered. All downstream tests will be skipped")
                     self.fail("some nodes were not install successfully!")
+
+    def _check_output(self, word_check, output):
+        found = False
+        if len(output) >= 1:
+            if isinstance(word_check, list):
+                for ele in word_check:
+                    for x in output:
+                        if ele.lower() in str(x.lower()):
+                            self.log.info("Found '{0} in CLI output".format(ele))
+                            found = True
+                            break
+            elif isinstance(word_check, str):
+                for x in output:
+                    if word_check.lower() in str(x.lower()):
+                        self.log.info("Found '{0}' in CLI output".format(word_check))
+                        found = True
+                        break
+            else:
+                self.log.error("invalid {0}".format(word_check))
+        return found
