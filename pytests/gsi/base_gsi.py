@@ -20,6 +20,7 @@ from collection.collections_cli_client import CollectionsCLI
 from tasks.task import ConcurrentIndexCreateTask
 from .newtuq import QueryTests
 from tasks.task import SDKLoadDocumentsTask
+from deepdiff import DeepDiff
 
 log = logging.getLogger(__name__)
 
@@ -722,12 +723,16 @@ class BaseSecondaryIndexingTests(QueryTests):
                         if doc["_id"] == item["docid"]:
                             actual_result.append([doc])
                             doc_id_list.append(item["docid"])
-            self.assertEqual(len(sorted(actual_result)), len(sorted(expected_result)),
-                             "Actual Items {0} are not equal to expected Items {1}".
-                             format(len(sorted(actual_result)), len(sorted(expected_result))))
-            msg = "The number of rows match but the results mismatch, please check"
-            if sorted(actual_result) != sorted(expected_result):
-                raise Exception(msg)
+            diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
+
+            #self.assertEqual(len(sorted(actual_result)), len(sorted(expected_result)),
+            #                 "Actual Items {0} are not equal to expected Items {1}".
+            #                 format(len(sorted(actual_result)), len(sorted(expected_result))))
+            #msg = "The number of rows match but the results mismatch, please check"
+            #if sorted(actual_result) != sorted(expected_result):
+            #    raise Exception(msg)
 
     def run_lookup_gsi_index_with_rest(self, bucket, query_definition):
         pass
