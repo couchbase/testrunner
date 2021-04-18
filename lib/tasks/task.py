@@ -1132,7 +1132,7 @@ class GenericLoadingTask(Thread, Task):
             if value is None:
                 return
             index = random.choice(list(range(len(value))))
-            value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
+            value = value[0:index] + random.choice(string.ascii_uppercase).encode() + value[index + 1:]
         except BaseException as error:
             self.state = FINISHED
             self.set_exception(error)
