@@ -719,7 +719,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.system_failure_task_manager.shutdown(True)
 
         self.wait_until_indexes_online()
-        self.sleep(5, "sleep for 5 secs before validation")
+        self.sleep(120, "sleep for 120 secs before validation")
         self.verify_index_ops_obj()
 
         self.n1ql_helper.drop_all_indexes_on_keyspace()
@@ -780,7 +780,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         system_failure_thread.join()
 
         self.wait_until_indexes_online()
-        self.sleep(5, "sleep for 5 secs before validation")
+        self.sleep(120, "sleep for 120 secs before validation")
         self.verify_index_ops_obj()
 
         self.n1ql_helper.drop_all_indexes_on_keyspace()
