@@ -309,7 +309,7 @@ class EventingSanity(EventingBaseTest):
         self.load_data_to_bucket(self.src_bucket_name, exp=300)
         # set expiry pager interval
         ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 3, bucket=self.src_bucket_name)
-        body = self.create_save_function_body(self.function_name, "handler_code/ABO/curl_timer_insert.js")
+        body = self.create_save_function_body(self.function_name, "handler_code/ABO/insert.js")
         body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
         self.rest.create_function(body['appname'], body)
         self.deploy_function(body)
