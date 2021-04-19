@@ -825,7 +825,7 @@ class EventingBaseTest(QueryHelperTests):
             self.wait_for_handler_state(name, "deployed")
 
     def pause_handler_by_name(self,name,wait_for_pause=True):
-        self.rest.lifecycle_operation(name,"paused")
+        self.rest.lifecycle_operation(name,"pause")
         if wait_for_pause:
             self.wait_for_handler_state(name, "paused")
 
