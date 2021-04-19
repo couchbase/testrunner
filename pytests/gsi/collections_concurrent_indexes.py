@@ -639,7 +639,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         num_of_docs = 10 ** 4
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if len(index_nodes) < 2:
-            self.fail("Need at least 3 nodes")
+            self.fail("Need at least 2 nodes")
         node_a, node_b = index_nodes
         
         node_b_rest = RestConnection(node_b)
@@ -691,6 +691,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             self.sleep(20)
             index_info = node_b_rest.get_indexer_metadata()['status']
             system_index_results = self.run_cbq_query(query=self.system_query)['results']
+            self.log.info(f"System Index results: {system_index_results}")
             for index in index_info:
                 if index['status'] == 'Error':
                     index_name = index['name']
@@ -1114,6 +1115,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                     self.log.info(f"Index {index_name} is schedule for background creation")
                 else:
                     self.log.info(err)
+        self.sleep(10)
         self.wait_until_indexes_online(timeout=2 * 60 * self.num_of_indexes, defer_build=self.defer_build)
         if self.defer_build:
             for build_query in build_query_list:
