@@ -66,6 +66,8 @@ class FailoverTests(FailoverBaseTest):
             self.log.error("Please check configuration parameters: SKIPPING TEST.")
             return
 
+        # See MB-44548
+        self.sleep(120)
         # Find nodes that will under go failover
         if self.failoverMaster:
             self.chosen = RebalanceHelper.pick_nodes(
