@@ -215,6 +215,8 @@ class WarmUpTests(BaseTestCase):
 
 
     def warmup_test(self):
+        rest = RestConnection(self.master)
+        rest.update_autofailover_settings(False, 120)
         self._additional_ops()
 
         # wait for draining of data before restart and warmup
