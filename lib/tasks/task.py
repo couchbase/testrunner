@@ -3193,9 +3193,11 @@ class CreateIndexTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            if not "will retry building in the background for reason" in e:
-                self.log.error(e)
-                self.set_exception(e)
+            self.log.error(e)
+            self.set_exception(e)
+            #if not "will retry building in the background for reason" in e:
+            #    self.log.error(e)
+            #    self.set_exception(e)
 
     def check(self, task_manager):
         try:
