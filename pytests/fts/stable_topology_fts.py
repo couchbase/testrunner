@@ -173,6 +173,7 @@ class StableTopFTS(FTSBaseTest):
 
     def test_match_consistency(self):
         query = {"match_all": {}}
+        expected_hits = int(self._input.param("expected_hits_num", self._num_items))
         self.create_simple_default_index()
         zero_results_ok = True
         for index in self._cb_cluster.get_indexes():
@@ -187,7 +188,7 @@ class StableTopFTS(FTSBaseTest):
                 self.async_perform_update_delete(self.upd_del_fields)
             hits, _, _, _ = index.execute_query(query,
                                                 zero_results_ok=zero_results_ok,
-                                                expected_hits=self._num_items,
+                                                expected_hits=expected_hits,
                                                 consistency_level=self.consistency_level,
                                                 consistency_vectors=self.consistency_vectors)
             self.log.info("Hits: %s" % hits)
