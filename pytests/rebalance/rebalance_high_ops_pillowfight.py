@@ -375,7 +375,9 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                                  self.servers[
                                                  self.nodes_init:self.nodes_init + self.nodes_in],
                                                  [])
-        # rebalance.result()
+        reached = RestHelper(rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
         load_thread.join()
         if self.flusher_total_batch_limit:
@@ -427,7 +429,9 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                                  self.servers[
                                                  self.nodes_init:self.nodes_init + self.nodes_in],
                                                  [])
-        # rebalance.result()
+        reached = RestHelper(rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
         update_thread.join()
         if self.flusher_total_batch_limit:
