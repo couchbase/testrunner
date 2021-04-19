@@ -200,7 +200,8 @@ class CliBaseTest(BaseTestCase):
             self.base_cb_path = WIN_CB_PATH
         if info.distribution_type.lower() == 'mac':
             self.os = 'mac'
-        self.full_v, self.short_v, self.build_number = self.shell.get_cbversion(type)
+        shell = RemoteMachineShellConnection(self.master)
+        self.full_v, self.short_v, self.build_number = shell.get_cbversion(type)
         self.couchbase_usrname = "%s" % (self.input.membase_settings.rest_username)
         self.couchbase_password = "%s" % (self.input.membase_settings.rest_password)
         self.cb_login_info = "%s:%s" % (self.couchbase_usrname,
@@ -220,13 +221,23 @@ class CliBaseTest(BaseTestCase):
             if len(self.servers) > 1 and int(self.nodes_init) == 1 and self.start_with_cluster:
                 servers_in = [self.servers[i + 1] for i in range(self.num_servers - 1)]
                 self.cluster.rebalance(self.servers[:1], servers_in, [])
+        """ Remove these code when bug MB-45741 and MB-45061 are fixed
+            Master node is not available more than 2 minutes after rebalance """
+        if self.os == "windows":
+            status = self.rest.update_autofailover_settings(False, 120)
+            if not status:
+                self.sleep(15)
+                shell.execute_command("wget --user=Administrator --password=password --post-data='rpc:call(mb_master:master_node(), erlang, apply ,[fun () -> erlang:exit(erlang:whereis(mb_master), kill) end, []]).' http://localhost:8091/diag/eval'''")
+            """ ****************** """
         for bucket in self.buckets:
             testuser = [{'id': bucket.name, 'name': bucket.name, 'password': 'password'}]
             rolelist = [{'id': bucket.name, 'name': bucket.name, 'roles': 'admin'}]
             self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
+        shell.disconnect()
 
 
     def tearDown(self):
+        self.shell = RemoteMachineShellConnection(self.master)
         if not self.input.param("skip_cleanup", True):
             if self.times_teardown_called > 1 :
                 self.shell.disconnect()
@@ -1147,11 +1158,13 @@ class CliBaseTest(BaseTestCase):
             return col_stats
 
     def get_collection_names(self):
+        shell = RemoteMachineShellConnection(self.master)
         #collections, error = self.get_collection_stats()
         bucket = self.buckets[0]
-        output, error = self.shell.execute_cbstats(bucket, "collections",
+        output, error = shell.execute_cbstats(bucket, "collections",
                                                    cbadmin_user="Administrator",
                                                    options=" | grep ':name'")
+        shell.disconnect()
         collection_names = []
         if output:
             for x in output:
