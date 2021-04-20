@@ -665,7 +665,11 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
                 check_keys = ['items_count', 'total_scan_duration', 'num_docs_queued',
                  'num_requests', 'num_rows_returned', 'num_docs_queued',
                  'num_docs_pending', 'delete_bytes' ]
-                map = self._create_stats_map(items_count=2016)
+                if 'join_yr' in index_name:
+                    items_count = 1008
+                else:
+                    items_count = 2016
+                map = self._create_stats_map(items_count=items_count)
                 self._verify_index_stats(index_map, index_name, bucket_name, map, check_keys)
 
     def test_index_storage_stats(self):
