@@ -1006,10 +1006,8 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                     self.run_cbq_query(query=build_query)
                 except Exception as err:
                     self.log.info(err)
-        self.sleep(30, "Giving some time before checking index status")
-        result = self.wait_until_indexes_online(timeout=1800)
-        if not result:
-            self.wait_until_indexes_online()
+        self.sleep(120, "Giving some time before checking index status")
+        self.wait_until_indexes_online()
         index_meta_info = self.rest.get_indexer_metadata()['status']
         self.log.info(f"Index Metadata: {index_meta_info}")
         self.assertEqual(len(index_meta_info), self.num_of_indexes * (self.num_replicas + 1) * self.num_scopes * self.num_collections * 2)
