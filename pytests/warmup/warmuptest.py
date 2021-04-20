@@ -233,7 +233,10 @@ class WarmUpTests(BaseTestCase):
             self._create_access_log()
 
         for bucket in self.buckets:
-            self._restart_memcache(bucket.name)
+            try:
+                self._restart_memcache(bucket.name)
+            except:
+                pass
 
         if self._warmup_check():
             generate_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
