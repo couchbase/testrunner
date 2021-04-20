@@ -3244,19 +3244,10 @@ class XdcrCLITest(CliBaseTest):
             if output_error.find("HOSTNAME") != -1:
                 output_error = output_error.replace("HOSTNAME", \
                           (self.servers[xdcr_hostname].ip, "")[xdcr_hostname is None])
-            if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
                 expect_error = ("['ERROR: unknown remote cluster : refName - unknown']")
                 if output_error == expect_error:
                     output_error = "ERROR: unknown remote cluster : refName - unknown"
                 self.assertTrue(self._check_output(output_error, output))
-            else:
-                if output_error == \
-                      "['ERROR: unable to delete xdcr remote site localhost (404) Object Not Found',"\
-                      " 'unknown remote cluster']" and  self.cb_version[:3] == "4.6":
-                    output_error = \
-                      "['ERROR: unable to delete xdcr remote site localhost (400) Bad Request',\
-                                                             '{\"_\":\"unknown remote cluster\"}']"
-                self.assertEqual(output, eval(output_error))
             return
 
     def testXdcrReplication(self):
