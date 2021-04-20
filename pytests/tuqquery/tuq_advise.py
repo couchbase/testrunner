@@ -604,3 +604,12 @@ class QueryAdviseTests(QueryTests):
         self.assertEqual(results['results'][0]['advice']['adviseinfo']['recommended_indexes']['indexes'][0]['index_statement'], 'CREATE INDEX adv_name ON `default`:`default`.`test`.`test1`(`name`)')
         results = self.run_cbq_query(query='advise select * from test1 where name = "new hotel"', query_context='default:default.test2')
         self.assertEqual(results['results'][0]['advice']['adviseinfo']['recommended_indexes']['indexes'][0]['index_statement'], 'CREATE INDEX adv_name ON `default`:`default`.`test2`.`test1`(`name`)')
+
+    def test_advise_set_operator(self):
+        SETOPERATORS = ["UNION", "INTERSECT", "EXCEPT","UNION ALL", "INTERSECT ALL", "EXCEPT ALL"]
+        for setop in SETOPERATORS:
+            query = f"ADVISE SELECT col1, col2 FROM t WHERE a = 1 AND b = 2 {setop} SELECT col1, col2 FROM t WHERE c = 3 AND d = 4"
+            results = self.run_cbq_query(query=query)
+            indexes = self.get_index_statements(results)
+            self.assertTrue(indexes[0] == "CREATE INDEX adv_a_b ON `t`(`a`,`b`)" or indexes[0] == "CREATE INDEX adv_b_a ON `t`(`b`,`a`)")
+            self.assertTrue(indexes[1] == "CREATE INDEX adv_c_d ON `t`(`c`,`d`)" or indexes[1] == "CREATE INDEX adv_d_c ON `t`(`d`,`c`)")
