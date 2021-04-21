@@ -183,12 +183,12 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 restore_result[0],
                 msg="Restore failed for {0} with {1}".format(
                     backup_client.restore_bucket, restore_result[1]))
-
-            if self.use_cbbackupmgr:
-                backup_client.remove_backup()
         indexer_stats_after_restore = self.rest.get_indexer_metadata()
         self._verify_indexes(indexer_stats_before_backup['status'],
                              indexer_stats_after_restore['status'])
+        for backup_client in index_backup_clients:
+            if self.use_cbbackupmgr:
+                backup_client.remove_backup()
 
     def _drop_indexes(self, indexes):
         timeout = time.time() + 600

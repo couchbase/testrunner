@@ -44,6 +44,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
         pass
 
     def _get_mutation_vectors(self):
+        self.log.info("Grepping for 'MutationResult' in java_sdk_loader.log")
         return set(subprocess.check_output(['grep', 'MutationResult', 'java_sdk_loader.log'],
                                            universal_newlines=True).split('\n'))
 

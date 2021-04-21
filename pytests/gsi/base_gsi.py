@@ -1549,7 +1549,8 @@ class BaseSecondaryIndexingTests(QueryTests):
                         self.run_cbq_query(query=query)
                     self.gen_create = SDKDataLoader(num_ops=num_of_docs_per_collection, percent_create=100,
                                                     percent_update=0, percent_delete=0, scope=s_item,
-                                                    collection=c_item, json_template=json_template)
+                                                    collection=c_item, json_template=json_template,
+                                                    output=True)
                     tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
                                                                     batch_size=batch_size)
                     for task in tasks:

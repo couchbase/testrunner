@@ -92,6 +92,7 @@ class IndexBackupClient(object):
         command = "{0}{1}".format(self.cli_command_location, cmd)
         if backup_args:
             command += " {0}".format(backup_args)
+        self.log.info(f"Backing-up using command: {command}")
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if error or not [x for x in output if 'Backup successfully completed'
