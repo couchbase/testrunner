@@ -2413,6 +2413,15 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if self.offline_failover_upgrade:
                 total_nodes = len(upgrade_nodes)
                 for server in upgrade_nodes:
+                    sleep_time = 0
+                    reb_done = self.rest.monitorRebalance()
+                    print("\nrebalance status: ", reb_done)
+                    while not reb_done:
+                        self.sleep(20, "wait for rebalance done")
+                        sleep_time += 20
+                        reb_done = self.rest.monitorRebalance()
+                        if sleep_time == self.wait_timeout:
+                            self.fail("Rebalance status does not update more than 60 secs after finish")
                     self.rest.fail_over('ns_1@' + upgrade_nodes[total_nodes - 1].ip,
                                                                       graceful=True)
                     self.sleep(timeout=60)
