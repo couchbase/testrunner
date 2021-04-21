@@ -689,8 +689,8 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
         verify_data = False
         if self.scan_consistency != "request_plus":
             verify_data = True
-        self.load(self.gens_load, flag=self.item_flag,
-                  verify_data=verify_data, batch_size=self.batch_size)
+        #self.load(self.gens_load, flag=self.item_flag,
+        #          verify_data=verify_data, batch_size=self.batch_size)
         rest = RestConnection(servers[0])
         output, rq_content, header = rest.set_auto_compaction(dbFragmentThresholdPercentage=20, viewFragmntThresholdPercentage=20)
         self.assertTrue(output, "Error in set_auto_compaction... {0}".format(rq_content))
