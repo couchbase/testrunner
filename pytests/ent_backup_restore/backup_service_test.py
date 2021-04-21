@@ -3089,7 +3089,7 @@ class BackupServiceTest(BackupServiceBase):
             '(HTTP Manager) Added plan',
             '(Runner) Running command /opt/couchbase/bin/cbbackupmgr config',
             '(REST) POST /api/v1/cluster/self/repository/active/repo_name0',
-            '(Clockkeeper) Adding job',
+            '(ClockKeeper) Adding job',
             '(Dispatcher) Dispatching task',
             '(Worker) Added task to queue',
             '(Worker) Running task',
