@@ -2177,7 +2177,7 @@ class BackupServiceTest(BackupServiceBase):
             self.assertIn(status, [200] if operation_should_succeed else [403, 400])
             # Check the error message if the status is 400
             if status == 400:
-                self.info.log("Response: " + response_data.data)
+                self.log.info("Response: " + response_data.data)
                 self.assertEqual(json.loads(response_data.data)['message'], 'Forbidden. User needs one of the following permissions')
 
         # Restore configuration so we can tear the test down correctly
