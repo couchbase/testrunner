@@ -971,6 +971,15 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
         self._new_master(self.servers[self.swap_num_servers])
         upgrade_servers = self.servers[:self.swap_num_servers]
+        sleep_time = 0
+        reb_done = self.rest.monitorRebalance()
+        print("\nrebalance status: ", reb_done)
+        while not reb_done:
+            self.sleep(20, "wait for rebalance done")
+            sleep_time += 20
+            reb_done = self.rest.monitorRebalance()
+            if sleep_time == self.wait_timeout:
+                self.fail("Rebalance status does not update more than 60 secs after finish")
         # do a graceful failover of remaining nodes except 1
         self.rest.fail_over('ns_1@' + upgrade_servers[0].ip, graceful=True)
         self.sleep(timeout=60)
