@@ -1495,7 +1495,9 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
             # get partitions created by child process
             rv = self.shared_kvstore_queue.get()
             if rv["err"] is not None:
-                raise Exception(rv["err"])
+                self.state = FINISHED
+                self.set_exception(rv["err"])
+                return
 
             # merge child partitions with parent
             generator_partitions = rv["partitions"]
