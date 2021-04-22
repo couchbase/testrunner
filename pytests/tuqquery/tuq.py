@@ -2681,14 +2681,16 @@ class QueryTests(BaseTestCase):
         if role in ["query_update(default)", "query_delete(default)", "query_insert(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name),"query_insert(`{0}`)".format(self.bucket_name),"query_update(`{0}`)".format(self.bucket_name),"query_delete(`{0}`)".format(self.bucket_name)]:
             self.assertTrue(res['status'] == 'success')
         elif 'test)' in role:
-            self.assertTrue(res['metrics']['resultCount'] == 2)
-        elif role in ['query_select(default:default)', 'query_select(default)'] and self.load_collections == True:
-            self.assertTrue(res['metrics']['resultCount'] == 3)
+            self.assertEqual(res['metrics']['resultCount'], 2)
+        elif role == 'query_select(default:default)' and self.load_collections == True:
+            self.assertEqual(res['metrics']['resultCount'], 7)
+        elif role == 'query_select(default)' and self.load_collections == True:
+            self.assertEqual(res['metrics']['resultCount'], 3)
         elif role.startswith("query_") or role.startswith("select") or role in ["bucket_full_access(default)",
                                                                                 "query_delete(default)"]:
-            self.assertTrue(res['metrics']['resultCount'] == 1)
+            self.assertEqual(res['metrics']['resultCount'], 1)
         else:
-            self.assertTrue(res['metrics']['resultCount'] == 2)
+            self.assertEqual(res['metrics']['resultCount'], 2)
 
         self.query = 'create primary index on `{0}`'.format(self.buckets[0].name)
         try:
@@ -2838,8 +2840,10 @@ class QueryTests(BaseTestCase):
 
         if role == "views_admin(default)":
             self.assertTrue(res['status'] == 'success')
-        elif role in ['query_select(default:default)', 'query_select(default)'] and self.load_collections == True:
-            self.assertTrue(res['metrics']['resultCount'] == 3)
+        elif role == 'query_select(default:default)' and self.load_collections == True:
+            self.assertEqual(res['metrics']['resultCount'], 5)
+        elif role == 'query_select(default)' and self.load_collections == True:
+            self.assertEqual(res['metrics']['resultCount'], 3)
         elif role in ["query_select({0})".format(self.rbac_context)]:
             self.assertTrue(res['metrics']['resultCount'] == 2)
         elif role in ["bucket_admin(standard_bucket0)", "bucket_admin(default)", "select(default)",

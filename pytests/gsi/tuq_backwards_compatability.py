@@ -157,10 +157,9 @@ class UpgradeBackwardsCollections(UpgradeSecondaryIndex):
         result2 = self.n1ql_helper.run_cbq_query(query='SELECT * FROM {0} where join_day = 9'.format(self.bucket_name))
         self.assertEqual(result2['metrics']['resultCount'], 72)
 
-        self.n1ql_helper.run_cbq_query(query='CREATE SCOPE default:{0}.test'.format(self.bucket_name))
-        self.n1ql_helper.run_cbq_query(query='CREATE COLLECTION default:{0}.test.test1'.format(self.bucket_name))
-        self.n1ql_helper.run_cbq_query(query='CREATE COLLECTION default:{0}.test.test2'.format(self.bucket_name))
-
+        self.n1ql_helper.create_scope(bucket_name=self.bucket_name, scope_name="test")
+        self.n1ql_helper.create_collection(bucket_name=self.bucket_name, scope_name="test", collection_name="test1")
+        self.n1ql_helper.create_collection(bucket_name=self.bucket_name, scope_name="test", collection_name="test2")
 
         self.n1ql_helper.run_cbq_query(
             query=('INSERT INTO default:{0}.test.tes1'.format(self.bucket_name) + '(KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "new hotel" })'))
@@ -245,6 +244,10 @@ class UpgradeBackwardsCollections(UpgradeSecondaryIndex):
         except Exception as e:
             self.log.info("indexes already exist")
 
+        # Make sure we are able to create prepared statements after the upgrade on default bucket
+        self.n1ql_helper.run_cbq_query(query='PREPARE p3 as SELECT * FROM {0}.`_default`.`_default` where name = "employee-9"'.format(self.bucket_name))
+        self.n1ql_helper.run_cbq_query(query='PREPARE p4 as SELECT * FROM {0}.`_default`.`_default` where join_day = 9'.format(self.bucket_name))
+
         result = self.n1ql_helper.run_cbq_query(query='EXECUTE p1')
         self.assertEqual(result['metrics']['resultCount'], 72)
 
@@ -257,3 +260,21 @@ class UpgradeBackwardsCollections(UpgradeSecondaryIndex):
         result2 = self.n1ql_helper.run_cbq_query(query='EXECUTE p4')
         self.assertEqual(result2['metrics']['resultCount'], 72)
 
+        self.n1ql_helper.create_scope(bucket_name=self.bucket_name, scope_name="test")
+        self.n1ql_helper.create_collection(bucket_name=self.bucket_name, scope_name="test", collection_name="test1")
+        self.n1ql_helper.create_collection(bucket_name=self.bucket_name, scope_name="test", collection_name="test2")
+
+        self.n1ql_helper.run_cbq_query(
+            query=('INSERT INTO default:{0}.test.tes1'.format(self.bucket_name) + '(KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "new hotel" })'))
+        self.n1ql_helper.run_cbq_query(
+            query=('INSERT INTO default:{0}.test.test1'.format(self.bucket_name) + '(KEY, VALUE) VALUES ("key1", { "type" : "hotel", "name" : "old hotel" })'))
+        time.sleep(20)
+
+
+        self.n1ql_helper.run_cbq_query(
+            query="CREATE INDEX idx1 on default:{0}.test.test1(name) ".format(self.bucket_name))
+        time.sleep(20)
+
+        #Create a prepared statement on a collection and make sure this works post upgrade
+        self.n1ql_helper.run_cbq_query(query='PREPARE p5 as SELECT * FROM {0}.test.test1 where name = "new_hotel"'.format(self.bucket_name))
+        self.assertEqual(result2['metrics']['resultCount'], 1)
