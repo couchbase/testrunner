@@ -826,6 +826,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.cluster.rebalance(self.servers, [], upgrade_servers)
         # install the new version on the swapped out servers
         self._install(self.servers[self.swap_num_servers:self.nodes_init])
+        self.sleep(20, "wait for server is up after install")
         self.n1ql_server = self.get_nodes_from_services_map(
             service_type="n1ql")
         # Run during upgrade operations
@@ -834,14 +835,17 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         for i in range(0, len(upgrade_servers)):
             self.cluster.rebalance(self.servers, [upgrade_servers[i]], [],
                                    services=[upgrade_services[i]])
-        self.sleep(20, "wait for rebalance complete")
+        self.sleep(30, "wait for rebalance complete")
 
         self._new_master(self.servers[self.swap_num_servers])
         # swap out the remaining half of the servers and rebalance
+        self.log.info("start to remove old version nodes")
         upgrade_servers = self.servers[:self.swap_num_servers]
-        self.cluster.rebalance(self.servers, [], upgrade_servers)
+        reb_status  = self.cluster.rebalance(self.servers, [], upgrade_servers)
+        self.assertTrue(reb_status, 'Rebalance out old nodes did not complete')
         # install the new version on the swapped out servers
         self._install(self.servers[:self.swap_num_servers])
+        self.sleep(20, "wait for server is up after install")
         for i in range(0, len(upgrade_servers)):
             self.cluster.rebalance(self.servers[self.swap_num_servers:self.nodes_init],
                                    [upgrade_servers[i]], [],
@@ -2400,11 +2404,13 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.pre_upgrade(self.servers[:nodes_init])
         seqno_expected = 1
         if self.ddocs_num:
+            self.sleep(10)
             self.create_ddocs_and_views()
             if self.input.param('run_index', False):
                 self.verify_all_queries()
         """ from 5.5 we support replica index.  Need to test this feature. """
         if 5.5 <= float(self.initial_version[:3]) and self.num_index_replicas > 0:
+            self.sleep(10)
             self.create_index_with_replica_and_query()
             self.is_replica_index_in_pre_upgrade = True
 
