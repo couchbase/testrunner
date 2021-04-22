@@ -318,23 +318,34 @@ class MovingTopFTS(FTSBaseTest):
         self._cb_cluster.enable_retry_rebalance(self.retry_time, self.num_retries)
         self.load_data()
         self.create_fts_indexes_all_buckets()
-        self.sleep(30)
         self.log.info("Index building has begun...")
-        self.sleep(10)
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
                           %(index.name,index.get_indexed_doc_count()))
+
+        node_to_rebalance_out = self._cb_cluster.get_fts_nodes()[0]
+
+        stop_CB_thread = Thread(
+            target=self.stop_cb_service,
+            args=[[node_to_rebalance_out], 45])
+
+        rebalance_was_successful = True
         try:
-            reb_thread = Thread(
-                target=self.kill_fts_service,
-                args=[5])
-            reb_thread.start()
-            self._cb_cluster.rebalance_out()
-            self.fail("Rebalance did not fail")
+            stop_CB_thread.start()
+            rebalance_task = self._cb_cluster.rebalance_out_node(node=node_to_rebalance_out, sleep_before_rebalance=150)
+            rebalance_task.result()
+
         except Exception as e:
+            rebalance_was_successful = False
             self.log.error(str(e))
+            self.start_cb_service([node_to_rebalance_out])
             self.sleep(5)
             self._check_retry_rebalance_succeeded()
+        finally:
+            self.start_cb_service([node_to_rebalance_out])
+            if rebalance_was_successful:
+                self.fail("Rebalance was successful")
+
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
@@ -1498,8 +1509,8 @@ class MovingTopFTS(FTSBaseTest):
         update_index_thread.join()
         hits, _, _, _ = index.execute_query(self.query)
         self.log.info("Hits: %s" % hits)
-        for index in self._cb_cluster.get_indexes():
-            self.is_index_partitioned_balanced(index)
+        #for index in self._cb_cluster.get_indexes():
+        #    self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
         hits, _, _, _ = index.execute_query(
@@ -1569,11 +1580,12 @@ class MovingTopFTS(FTSBaseTest):
         mem_client = MemcachedClientHelper.direct_client(self._input.servers[1],
                                                          bucket)
         mem_client.stop_persistence()
+        self.sleep(20)
 
         # Perform mutations on the bucket
         self.async_perform_update_delete(self.upd_del_fields)
-        if self._update:
-            self.sleep(60, "Waiting for updates to get indexed...")
+        #if self._update:
+        #    self.sleep(60, "Waiting for updates to get indexed...")
         self.wait_for_indexing_complete()
 
         # Run FTS Query to fetch the initial count of mutated items
@@ -1594,6 +1606,7 @@ class MovingTopFTS(FTSBaseTest):
         self.log.info("Killing memcached on {0}".format(self._master.ip))
         shell = RemoteMachineShellConnection(self._master)
         shell.kill_memcached()
+        self.sleep(20)
 
         # Start persistence on Node B
         self.log.info("Starting persistence on {0}".
@@ -1601,6 +1614,7 @@ class MovingTopFTS(FTSBaseTest):
         mem_client = MemcachedClientHelper.direct_client(self._input.servers[1],
                                                          bucket)
         mem_client.start_persistence()
+        self.sleep(20)
 
         # Failover Node B
         failover_task = self._cb_cluster.async_failover(
@@ -1614,7 +1628,6 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             hits2, _, _, _ = index.execute_query(query)
             self.log.info("Hits after rollback: %s" % hits2)
-
         # Fetch count of docs in index and bucket
         after_index_doc_count = index.get_indexed_doc_count()
         after_bucket_doc_count = index.get_src_bucket_doc_count()

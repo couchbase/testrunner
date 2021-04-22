@@ -3248,6 +3248,24 @@ class CouchbaseCluster:
 
         return task
 
+    def __async_rebalance_out_node(self, node=None, sleep_before_rebalance=None):
+        """Rebalance-out nodes from Cluster
+        @param node: Node to rebalance-out.
+        @param sleep_before_rebalance: Sleep between taking out and rebalance.
+        """
+        raise_if(
+            len(self.__nodes) <= 1,
+            FTSException(
+                "Cluster needs at least 2 nodes for rebalance-out, current: 1"))
+        self.__log.info(
+            "Starting rebalance-out nodes:{0} at {1} cluster {2}".format(
+                node, self.__name, self.__master_node.ip))
+        task = self.__clusterop.async_rebalance(self.__nodes, [], [node], sleep_before_rebalance=sleep_before_rebalance)
+
+        self.__nodes.remove(node)
+
+        return task
+
     def async_rebalance_out_master(self):
         return self.__async_rebalance_out(master=True)
 
@@ -3261,6 +3279,10 @@ class CouchbaseCluster:
     def rebalance_out(self, num_nodes=1):
         task = self.__async_rebalance_out(num_nodes=num_nodes)
         task.result()
+
+    def rebalance_out_node(self, node=None, sleep_before_rebalance=None):
+        task = self.__async_rebalance_out_node(node=node, sleep_before_rebalance=sleep_before_rebalance)
+        return task
 
     def enable_retry_rebalance(self, retry_time, num_retries):
         body = {"enabled": "true", "afterTimePeriod": retry_time, "maxAttempts": num_retries}
