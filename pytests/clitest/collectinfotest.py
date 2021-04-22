@@ -90,11 +90,19 @@ class CollectinfoTests(CliBaseTest):
                 if output_line.find("ERROR") >= 0 or output_line.find("Error") >= 0:
                     if "from http endpoint" in output_line.lower():
                         continue
+
+                    """ remove this code when bug in MB-45867 is fixed """
+                    if "Error occurred getting server guts" in output_line.lower():
+                        continue
+                    """ *************************** """
+
                     raise Exception("Command throw out error: %s " % output_line)
         try:
             if self.node_down:
                 if self.os == 'linux':
+                    self.shell = RemoteMachineShellConnection(self.master)
                     self.shell.start_server()
+                    self.sleep(30, "wait for server up completely")
                     rest = RestConnection(self.master)
                     if RestHelper(rest).is_ns_server_running(timeout_in_seconds=60):
                         cb_server_started = True
