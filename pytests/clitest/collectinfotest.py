@@ -92,7 +92,7 @@ class CollectinfoTests(CliBaseTest):
                         continue
 
                     """ remove this code when bug in MB-45867 is fixed """
-                    if "Error occurred getting server guts" in output_line.lower():
+                    if "error occurred getting server guts" in output_line.lower():
                         continue
                     """ *************************** """
 
