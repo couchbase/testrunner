@@ -184,6 +184,8 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             if 'status' not in indexer_metadata and not result:
                 break
             self.sleep(10, "Waiting for all the indexes to get removed")
+        self.log.info(f"System Indexes: {result}")
+        self.log.info(f"Indexes Metadata: {indexer_metadata}")
         for backup_client in index_backup_clients:
             restore_result = backup_client.restore()
             self.assertTrue(
