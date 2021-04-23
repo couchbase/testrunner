@@ -210,6 +210,10 @@ def main():
         file_path = input.param("path", ".")
         runner = cbcollectRunner(input.servers, file_path)
         runner.run()
+        if len(runner.fail) > 0:
+            for (server, e) in runner.fail:
+                print("NOT POSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}".format(server.ip, str(e)))
+            exit(1)
     else:
         file_name = "%s-%s-diag.zip" % ("local", time_stamp())
         cbcollect_command = WIN_COUCHBASE_BIN_PATH_RAW + "cbcollect_info.exe"
