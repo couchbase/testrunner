@@ -284,12 +284,29 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
 
         if self.os != "windows":
             if len(error) > 0:
+                if self.node_down:
+                    shell = RemoteMachineShellConnection(self.master)
+                    shell.start_server()
+                    self.sleep(15)
+                    shell.disconnect()
                 raise Exception("Command throw out error: %s " % error)
 
             for output_line in output:
                 if output_line.find("ERROR") >= 0 or output_line.find("Error") >= 0:
                     if "from http endpoint" in output_line.lower():
                         continue
+
+                    """ remove this code when bug in MB-45867 is fixed """
+                    if "error occurred getting server guts" in output_line.lower() or \
+                       "error: unable to retrieve statistics" in output_line.lower():
+                        continue
+                    """ *************************** """
+
+                    if self.node_down:
+                        shell = RemoteMachineShellConnection(self.master)
+                        shell.start_server()
+                        self.sleep(15)
+                        shell.disconnect()
                     raise Exception("Command throw out error: %s " % output_line)
         try:
             if self.node_down:
