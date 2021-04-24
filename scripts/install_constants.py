@@ -113,11 +113,13 @@ CMDS = {
             "rm -rf ~/Library/Application\ Support/membase; "
             "rm -rf ~/Library/Python/couchbase-py; "
             "kill -9 `launchctl list | grep couchbase-server | xargs|cut -f1 -d' '`; "
+            "kill -9 `ps -ef |egrep Couchbase | xargs|cut -f1 -d' '`; "
             "umount /Volumes/Couchbase* > /dev/null && echo 1 || echo 0",
         "pre_install": "HDIUTIL_DETACH_ATTACH",
         "install":
             "rm -rf /Applications\Couchbase\ Server.app; "
             "kill -9 `launchctl list | grep couchbase-server | xargs|cut -f1 -d' '`; "
+            "kill -9 `ps -ef |egrep Couchbase | xargs|cut -f1 -d' '`; "
             "cp -R mountpoint/Couchbase\ Server.app /Applications/Couchbase\ Server.app; "
             "open /Applications/Couchbase\ Server.app > /dev/null && echo 1 || echo 0",
         "post_install": "launchctl list | grep couchbase-server > /dev/null && echo 1 || echo 0",
