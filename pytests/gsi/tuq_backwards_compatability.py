@@ -157,9 +157,9 @@ class UpgradeBackwardsCollections(UpgradeSecondaryIndex):
         result2 = self.n1ql_helper.run_cbq_query(query='SELECT * FROM {0} where join_day = 9'.format(self.bucket_name))
         self.assertEqual(result2['metrics']['resultCount'], 72)
 
-        self.n1ql_helper.create_scope(bucket_name=self.bucket_name, scope_name="test")
-        self.n1ql_helper.create_collection(bucket_name=self.bucket_name, scope_name="test", collection_name="test1")
-        self.n1ql_helper.create_collection(bucket_name=self.bucket_name, scope_name="test", collection_name="test2")
+        self.n1ql_helper.create_scope(server=self.master, bucket_name=self.bucket_name, scope_name="test")
+        self.n1ql_helper.create_collection(server=self.master, bucket_name=self.bucket_name, scope_name="test", collection_name="test1")
+        self.n1ql_helper.create_collection(server=self.master, bucket_name=self.bucket_name, scope_name="test", collection_name="test2")
 
         self.n1ql_helper.run_cbq_query(
             query=('INSERT INTO default:{0}.test.tes1'.format(self.bucket_name) + '(KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "new hotel" })'))
@@ -260,9 +260,9 @@ class UpgradeBackwardsCollections(UpgradeSecondaryIndex):
         result2 = self.n1ql_helper.run_cbq_query(query='EXECUTE p4')
         self.assertEqual(result2['metrics']['resultCount'], 72)
 
-        self.n1ql_helper.create_scope(bucket_name=self.bucket_name, scope_name="test")
-        self.n1ql_helper.create_collection(bucket_name=self.bucket_name, scope_name="test", collection_name="test1")
-        self.n1ql_helper.create_collection(bucket_name=self.bucket_name, scope_name="test", collection_name="test2")
+        self.n1ql_helper.create_scope(server=self.master, bucket_name=self.bucket_name, scope_name="test")
+        self.n1ql_helper.create_collection(server=self.master, bucket_name=self.bucket_name, scope_name="test", collection_name="test1")
+        self.n1ql_helper.create_collection(server=self.master, bucket_name=self.bucket_name, scope_name="test", collection_name="test2")
 
         self.n1ql_helper.run_cbq_query(
             query=('INSERT INTO default:{0}.test.tes1'.format(self.bucket_name) + '(KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "new hotel" })'))
