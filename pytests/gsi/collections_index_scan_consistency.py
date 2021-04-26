@@ -96,7 +96,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
             with ThreadPoolExecutor() as executor:
                 executor.submit(self._load_all_buckets, self.master, gen_create)
                 executor.submit(self.run_cbq_query, query=insert_query)
-                self.sleep(20)
+                self.sleep(30, "Giving some time so the mutations start")
                 select_task = executor.submit(self.run_cbq_query, query=select_query, scan_consistency='request_plus')
                 count_task = executor.submit(self.run_cbq_query, query=count_query, scan_consistency='request_plus')
 

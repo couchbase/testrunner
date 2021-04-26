@@ -316,6 +316,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+        self.sleep(60, "Waiting before checking for Index map and stats")
         index_map_after_rebalance = self.get_index_map()
         stats_map_after_rebalance = self.get_index_stats(perNode=False)
 
