@@ -16,6 +16,7 @@ class RbacFTS(FTSBaseTest):
         self.master = self._cb_cluster.get_master_node()
         self.users = self.get_user_list()
         self.roles = self.get_user_role_list()
+        self.collection_test = TestInputSingleton.input.param("container_type", "") == "collection"
 
     def tearDown(self):
         self.delete_role()
@@ -48,7 +49,7 @@ class RbacFTS(FTSBaseTest):
         #Assign roles to users
         if not roles:
             roles = self.roles
-        RbacBase().add_user_role(roles, rest, 'builtin')
+        RbacBase().add_user_role(roles, rest, 'builtin', collection_rbac=self.collection_test)
         for user_role in roles:
             self.log.info("SUCCESS: Role(s) %s assigned to %s"
                           %(user_role['roles'], user_role['id']))
