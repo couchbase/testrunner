@@ -24,9 +24,9 @@ class QueryWhitelistTests(QueryTests):
         self.cbqpath = '%scbq' % self.path + " -e %s:%s -q -u %s -p %s"\
                                              % (self.master.ip, self.n1ql_port, self.rest.username, self.rest.password)
         #Whitelist error messages
-        self.query_error_msg = "URLendpointisntpresentinallowedlisthttp://%s:%s/query/service"  % (self.master.ip, self.n1ql_port)
-        self.jira_error_msg ="URLendpointisntpresentinallowedlisthttps://jira.atlassian.com/rest/api/latest/issue/JRA-9."
-        self.google_error_msg = "URLendpointisntpresentincurlallowedlisthttps://maps.googleapis.com/maps/api/geocode/json."
+        self.query_error_msg = "http://%s:%s/query/serviceisnotpermitted"% (self.master.ip, self.n1ql_port)
+        self.jira_error_msg ="https://jira.atlassian.com/rest/api/latest/issue/JRA-9isnotpermitted"
+        self.google_error_msg = "https://maps.googleapis.com/maps/api/geocode/jsonisnotpermitted"
         #End of whitelist error messages
         self.query_service_url = "'http://%s:%s/query/service'" % (self.master.ip, self.n1ql_port)
         self.api_port = self.input.param("api_port", 8094)
@@ -403,7 +403,7 @@ class QueryWhitelistTests(QueryTests):
     '''Should not be able to curl localhost even if you are on the localhost unless whitelisted'''
     def test_localhost(self):
         self.rest.create_whitelist(self.master, {"all_access": False})
-        error_msg ="URLendpointisntpresentinallowedlisthttp://localhost:8093/query/service."
+        error_msg ="http://localhost:8093/query/serviceisnotpermitted"
 
         n1ql_query = 'select * from ' + self.query_bucket + ' limit 5'
         query = "select curl('http://localhost:8093/query/service', {'data' : 'statement=%s'," \
