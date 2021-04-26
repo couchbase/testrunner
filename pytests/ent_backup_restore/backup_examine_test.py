@@ -484,6 +484,16 @@ class SetDocumentMutation:
         backup_base.clients.get_client(self.collection_string.bucket_name).set(self.key, 0, 0, self.value, collection=uid)
         backup.set_document(self.collection_string, self.key, self.value)
 
+class DeleteDocumentMutation:
+    """ Delete a document from a collection given a key """
+
+    def __init__(self, collection_string, key):
+        self.collection_string, self.key = CollectionString(collection_string), key
+
+    def apply(self, backup_base, backup):
+        uid = backup.get_collection_uid(self.collection_string)
+        backup_base.clients.get_client(self.collection_string.bucket_name).delete(self.key, collection=uid)
+        backup.delete_document(self.collection_string, self.key)
 
 class Clients:
     """ Gets you a MemcachedClient given a bucket """
