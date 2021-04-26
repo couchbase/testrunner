@@ -289,15 +289,15 @@ class AdvancedQueryTests(QueryTests):
                 #wrong port
                 queries = ['\connect http://localhost:8097;', 'create primary index on bucketname;']
                 o = self.execute_commands_inside(self.cbqpath, '', queries, '', '', bucket.name, '' )
-                self.assertTrue("Connection failed" in o)
+                self.assertTrue("Unable to connect to endpoint" in o)
                 #wrong url including http
                 queries = ['\connect http://localhost345:8097;', 'create primary index on bucketname;']
                 o = self.execute_commands_inside(self.cbqpath, '', queries, '', '', bucket.name, '' )
-                self.assertTrue("Connection failed" in o)
+                self.assertTrue("Unable to connect to endpoint" in o)
                 #wrong url not including http
                 queries = ['\connect localhost3458097;', 'create primary index on bucketname;']
                 o = self.execute_commands_inside(self.cbqpath, '', queries, '', '', bucket.name, '' )
-                self.assertTrue("Connection failed" in o)
+                self.assertTrue("Unable to connect to endpoint" in o)
                 queries = ['\disconnect', 'drop primary index on bucketname;']
                 o = self.execute_commands_inside(self.cbqpath, '', queries, '', '', bucket.name, '' )
                 self.assertTrue("Too many input arguments to command" in o)
