@@ -78,15 +78,24 @@ class Collection(Taggable):
 
     def set_document(self, key, value):
         if key in self.documents:
-            self.documents[key].value = value
-
-        self.documents[key] = Document(key, value)
+            self.documents[key] = Document(key, value, tag=Tag.CHANGED)
+        else:
+            self.documents[key] = Document(key, value)
 
     def get_document(self, key):
         if key not in self.documents:
             raise ValueError(f"The document key {key} does not exist")
 
         return self.documents[key]
+
+    def delete_document(self, key):
+        if key not in self.documents:
+            raise ValueError(f"The document key {key} does not exist")
+
+        self.documents[key] = Document(key, self.documents[key].value, tag=Tag.DELETED)
+
+    def mark_unchanged(self, key):
+        self.documents[key].tag = Tag.UNCHANGED
 
 
 class Bucket(Taggable):
@@ -154,6 +163,9 @@ class Backup:
     def get_document(self, collection_string, key, value):
         return self.get_collection(collection_string).get_document(key)
 
+    def delete_document(self, collection_string, key):
+        return self.get_collection(collection_string).delete_document(key)
+
     @classmethod
     def from_backup(cls, previous_backup):
         """ Copy construct from the previous Backup object """
@@ -176,10 +188,14 @@ class ExamineSimulation:
         # An object to run cbbackupmgr examine
         self.examine = Examine(self.backup_base.backupset.backup_host)
 
-    def run(self, mutations):
+    def run(self, mutations, optional_args={}):
         """ Advance a step in the simulation """
         # Create a new backup, copy construct from the previous backup if it exists
         backup = Backup.from_backup(self.backups[-1]) if self.backups else Backup()
+
+        for cs in backup.get_collection_strings():
+            for doc in backup.get_collection(cs).documents.values():
+                backup.get_collection(cs).mark_unchanged(doc.key)
 
         # Mutate the cluster to reflect what we want in the backup
         for mutation in mutations:
@@ -200,7 +216,7 @@ class ExamineSimulation:
         self.backups.append(backup)
 
         # Run examine
-        self.run_examine(backup)
+        self.run_examine(backup, optional_args)
 
         return True, None
 
@@ -208,12 +224,37 @@ class ExamineSimulation:
         """ The number of steps that have taken place in the simulation """
         return len(self.backups)
 
-    def run_examine(self, backup):
-        """ Examines things and check they match the contents of the backup object """
+    def run_examine(self, backup, optional_args={}):
+        """ Examines things and check they match the contents of the backup object 
+        Event types (THESE MAY CHANGE):
+        1: Created
+        2: Full Backup
+        3: Rollback
+        4: Changed
+        5: Deleted
+        6: Unchanged
+        """
+        final = dict(optional_args)
+        if "start" in final and "end" in final:
+            for s in ["start", "end"]:
+                if final[s].isdigit():
+                    final[s] = str(min(int(final[s]), self.steps()))
+
         for cs in backup.get_collection_strings():
             for doc in backup.get_collection(cs).documents.values():
-                examine_results = self.examine.examine(ExamineArguments(self.backup_base.backupset, str(cs), doc.key, objstore_provider=self.backup_base.objstore_provider))
-                self.backup_base.assertEqual(examine_results[-1].document.value, doc.value)
+                examine_results = self.examine.examine(ExamineArguments(self.backup_base.backupset, str(cs), doc.key, objstore_provider=self.backup_base.objstore_provider, **final))
+                unchanged_value = re.compile("Document with key .* has not changed")
+                print(examine_results[-1].__dict__)
+                    
+                if doc.tag == Tag.DELETED:
+                    self.backup_base.assertTrue(examine_results[-1].document.deleted)
+                elif doc.tag == Tag.UNCHANGED:
+                    self.backup_base.assertEqual(examine_results[-1].event_type, 6)
+                else:
+                    if isinstance(examine_results[-1].document.value, dict):
+                        self.backup_base.assertEqual(examine_results[-1].document.value, json.loads(doc.value))
+                    else:
+                        self.backup_base.assertEqual(examine_results[-1].document.value, doc.value)
                 # TODO add more checkers
 
 
@@ -371,7 +412,7 @@ class BackupExamineTest(EnterpriseBackupRestoreBase):
         self.log.info(f"Setting memoryQuota to: {memory}")
         RestConnection(self.master).set_service_memoryQuota(service='memoryQuota', memoryQuota=memory)
 
-    def run_simulation(self, mutations):
+    def run_simulation(self, mutations, optional_args={}):
         """ Runs a simulation given a list of a list of mutations.
 
         The i'th element in the list `mutations` contains a list of mutation at the i'th simulation step.
