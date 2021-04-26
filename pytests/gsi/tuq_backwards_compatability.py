@@ -162,7 +162,7 @@ class UpgradeBackwardsCollections(UpgradeSecondaryIndex):
         self.n1ql_helper.create_collection(server=self.master, bucket_name=self.bucket_name, scope_name="test", collection_name="test2")
 
         self.n1ql_helper.run_cbq_query(
-            query=('INSERT INTO default:{0}.test.tes1'.format(self.bucket_name) + '(KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "new hotel" })'))
+            query=('INSERT INTO default:{0}.test.test1'.format(self.bucket_name) + '(KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "new hotel" })'))
         self.n1ql_helper.run_cbq_query(
             query=('INSERT INTO default:{0}.test.test1'.format(self.bucket_name) + '(KEY, VALUE) VALUES ("key1", { "type" : "hotel", "name" : "old hotel" })'))
         self.n1ql_helper.run_cbq_query(
@@ -265,11 +265,10 @@ class UpgradeBackwardsCollections(UpgradeSecondaryIndex):
         self.n1ql_helper.create_collection(server=self.master, bucket_name=self.bucket_name, scope_name="test", collection_name="test2")
 
         self.n1ql_helper.run_cbq_query(
-            query=('INSERT INTO default:{0}.test.tes1'.format(self.bucket_name) + '(KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "new hotel" })'))
+            query=('INSERT INTO default:{0}.test.test1'.format(self.bucket_name) + '(KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "new hotel" })'))
         self.n1ql_helper.run_cbq_query(
             query=('INSERT INTO default:{0}.test.test1'.format(self.bucket_name) + '(KEY, VALUE) VALUES ("key1", { "type" : "hotel", "name" : "old hotel" })'))
         time.sleep(20)
-
 
         self.n1ql_helper.run_cbq_query(
             query="CREATE INDEX idx1 on default:{0}.test.test1(name) ".format(self.bucket_name))
