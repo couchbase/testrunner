@@ -710,7 +710,8 @@ class N1QLHelper():
                 self.query += " USING VIEW "
             if self.use_rest:
                 try:
-                    self.log.info("Check if index existed")
+                    self.log.info("Check if index existed in {0} on server {1}".format(bucket.name, server.ip))
+                    time.sleep(15)
                     check = self._is_index_in_list(bucket.name, "#primary", server=server)
                     if not check:
                         self.log.info("Create primary index")
@@ -866,6 +867,7 @@ class N1QLHelper():
         if server is None:
             server = self.master
         try:
+            self.log.info("get index list from server {}".format(server.ip))
             res = self.run_cbq_query(query=query, server=server)
             for item in res['results']:
                 if 'keyspace_id' not in item['indexes']:
