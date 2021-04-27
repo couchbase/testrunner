@@ -869,13 +869,16 @@ class N1QLHelper():
         try:
             self.log.info("get index list from server {}".format(server.ip))
             res = self.run_cbq_query(query=query, server=server)
-            for item in res['results']:
-                if 'keyspace_id' not in item['indexes']:
-                    return False
-                if item['indexes']['keyspace_id'] == str(bucket) and item['indexes']['name'] == index_name and item['indexes']['state'] not in index_state:
-                    return True
+            if res and res['results']:
+                for item in res['results']:
+                    if 'keyspace_id' not in item['indexes']:
+                        return False
+                    if item['indexes']['keyspace_id'] == str(bucket) and item['indexes']['name'] == index_name and item['indexes']['state'] not in index_state:
+                        return True
+            else:
+                self.log.error("Fail to get index list.  List output: {0}".format(res))
         except Exception as e:
-            self.log.info(str(e))
+            self.log.error("Query index in list throws exception: {0}".format(str(e)))
             raise Exception(str(e))
         return False
 
