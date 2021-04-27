@@ -2139,6 +2139,7 @@ class RestConnection(object):
     def node_statuses(self, timeout=120):
         nodes = []
         api = self.baseUrl + 'nodeStatuses'
+        time.sleep(120)
         status, content, header = self._http_request(api, timeout=timeout)
         json_parsed = json.loads(content)
         if status:
