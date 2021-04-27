@@ -869,9 +869,10 @@ class N1QLHelper():
         try:
             self.log.info("get index list from server {}".format(server.ip))
             res = self.run_cbq_query(query=query, server=server)
+            print("\nList of indexes in server: ", res)
             if res and res['results']:
                 for item in res['results']:
-                    if 'keyspace_id' not in item['indexes']:
+                    if item['indexes'] and 'keyspace_id' not in item['indexes']:
                         return False
                     if item['indexes']['keyspace_id'] == str(bucket) and item['indexes']['name'] == index_name and item['indexes']['state'] not in index_state:
                         return True
