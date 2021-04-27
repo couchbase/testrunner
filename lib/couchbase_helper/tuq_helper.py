@@ -873,7 +873,7 @@ class N1QLHelper():
                 if item['indexes']['keyspace_id'] == str(bucket) and item['indexes']['name'] == index_name and item['indexes']['state'] not in index_state:
                     return True
         except Exception as e:
-            self.log.info(str(e)
+            self.log.info(str(e))
             raise Exception(str(e))
         return False
 
