@@ -51,10 +51,9 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.user_xattr_data = []
             self.meta_ids = []
         if self.feature == "curl-whitelist":
-            self.google_error_msg = "Errorevaluatingprojection.-cause:URLendpointisntpresentincurlallowedlist" \
-                                    "https://maps.googleapis.com/maps/api/geocode/json."
-            self.jira_error_msg ="Errorevaluatingprojection.-cause:URLendpointisntpresentinallowedlisthttps://jira.atlassian." \
-                                 "com/rest/api/latest/issue/JRA-9.PleasemakesuretoaddtheURLtothecurlallowedlistontheUI."
+            self.google_error_msg = "Errorevaluatingprojection.-cause:Theendpointhttps://maps.googleapis.com/maps/api/geocode/json.isnotpermitted"
+            self.jira_error_msg = "Errorevaluatingprojection.-cause:Theendpointhttps://jira.atlassian.com/rest/api/latest/issue/JRA-9" \
+                                  ".isnotpermitted.Listallowedendpointsintheconfiguration."
             self.cbqpath = '%scbq' % self.path + " -e %s:%s -q -u %s -p %s" \
                                                  % (self.master.ip, self.n1ql_port, self.rest.username, self.rest.password)
         if self.feature == "auditing":
