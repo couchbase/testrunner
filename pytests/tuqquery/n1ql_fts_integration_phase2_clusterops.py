@@ -16,6 +16,10 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         self.query_bucket = self.query_buckets[1]
         self.log.info("==============  N1qlFTSIntegrationPhase2ClusteropsTest setup has started ==============")
         self.log_config_info()
+        cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
+        fts_node = cbcluster.get_fts_nodes()
+        RestConnection(fts_node[0]).set_fts_ram_quota(1000)
+
         self.log.info("==============  N1qlFTSIntegrationPhase2ClusteropsTest setup has completed ==============")
 
     def tearDown(self):
@@ -202,16 +206,8 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
 
     def _create_fts_index(self, index_name='', doc_count=0, source_name=''):
         fts_index = self.cbcluster.create_fts_index(name=index_name, source_name=source_name)
-        rest = self.get_rest_client(self.servers[0].rest_username, self.servers[0].rest_password)
         self.sleep(10)
-        indexed_doc_count = fts_index.get_indexed_doc_count(rest)
-        # indexed_doc_count = rest.get_fts_stats(index_name, source_name, "doc_count")
-        while indexed_doc_count < doc_count:
-            try:
-                indexed_doc_count = fts_index.get_indexed_doc_count(rest)
-                # indexed_doc_count = rest.get_fts_stats(index_name, source_name, "doc_count")
-            except KeyError:
-                continue
+        self.wait_for_fts_indexing_complete(fts_index, doc_count)
 
         return fts_index
 
