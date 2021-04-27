@@ -1,12 +1,15 @@
 import copy
 import json
 import math
+import re
+import couchbase.subdocument as SD
+from couchbase.collection import MutateInOptions
 from enum import (
     Enum
 )
 
 from ent_backup_restore.enterprise_backup_restore_base import (
-    EnterpriseBackupRestoreBase
+    EnterpriseBackupMergeBase
 )
 from membase.api.rest_client import (
     RestConnection
@@ -20,7 +23,6 @@ from remote.remote_util import (
 from testconstants import (
     CLUSTER_QUOTA_RATIO
 )
-
 from lib import (
     memcacheConstants
 )
@@ -30,6 +32,19 @@ from lib.memcached.helper.data_helper import (
 from TestInput import (
     TestInputSingleton
 )
+from couchbase.cluster import (
+    Cluster
+)
+from couchbase.auth import (
+    PasswordAuthenticator
+)
+from couchbase.durability import (
+    Durability,
+    ServerDurability,
+    ClientDurability,
+    ReplicateTo,
+    PersistTo
+)
 
 
 class Tag(Enum):
@@ -38,6 +53,7 @@ class Tag(Enum):
     CHANGED = 3
     UNCHANGED = 4
     IMMUTABLE = 5
+    XATTR_CHANGED = 6
 
 
 class Taggable:
@@ -50,7 +66,7 @@ class Taggable:
 class Document(Taggable):
     """ Represents a Couchbase document """
 
-    def __init__(self, key, value, **kwargs):
+    def __init__(self, key, value, xattrs={}, **kwargs):
         """ Represents a document
 
         Args:
@@ -59,6 +75,7 @@ class Document(Taggable):
         super().__init__(**kwargs)
         self.key = key
         self.value = value
+        self.xattrs = xattrs
 
 
 class Collection(Taggable):
@@ -76,9 +93,9 @@ class Collection(Taggable):
         self.documents = {}
         self.collection_string = collection_string
 
-    def set_document(self, key, value):
+    def set_document(self, key, value, new_tag=Tag.CHANGED):
         if key in self.documents:
-            self.documents[key] = Document(key, value, tag=Tag.CHANGED)
+            self.documents[key] = Document(key, value, tag=new_tag)
         else:
             self.documents[key] = Document(key, value)
 
@@ -93,6 +110,19 @@ class Collection(Taggable):
             raise ValueError(f"The document key {key} does not exist")
 
         self.documents[key] = Document(key, self.documents[key].value, tag=Tag.DELETED)
+
+    def set_subdoc(self, key, path, value, tag=Tag.CHANGED):
+        subdoc_path_split = path.split('.')
+        if key not in self.documents:
+            raise ValueError(f"The document key {key} does not exist")
+        else:
+            tmp = self.documents[key].xattrs
+            for level in subdoc_path_split[:-1]:
+                tmp.setdefault(level, {})
+                tmp = tmp[level]
+            tmp[subdoc_path_split[-1]] = value
+
+            self.documents[key].tag = tag
 
     def mark_unchanged(self, key):
         self.documents[key].tag = Tag.UNCHANGED
@@ -157,14 +187,17 @@ class Backup:
     def get_collection_uid(self, collection_string):
         return self.get_collection(collection_string).uid
 
-    def set_document(self, collection_string, key, value):
-        return self.get_collection(collection_string).set_document(key, value)
+    def set_document(self, collection_string, key, value, tag=Tag.CHANGED):
+        return self.get_collection(collection_string).set_document(key, value, tag)
 
     def get_document(self, collection_string, key, value):
         return self.get_collection(collection_string).get_document(key)
 
     def delete_document(self, collection_string, key):
         return self.get_collection(collection_string).delete_document(key)
+
+    def set_subdoc(self, collection_string, key, path, value, tag=Tag.CHANGED):
+        return self.get_collection(collection_string).set_subdoc(key, path, value, tag)
 
     @classmethod
     def from_backup(cls, previous_backup):
@@ -250,6 +283,8 @@ class ExamineSimulation:
                     self.backup_base.assertTrue(examine_results[-1].document.deleted)
                 elif doc.tag == Tag.UNCHANGED:
                     self.backup_base.assertEqual(examine_results[-1].event_type, 6)
+                elif doc.tag == Tag.XATTR_CHANGED:
+                    self.backup_base.assertEqual(examine_results[-1].document.xattrs, doc.xattrs)
                 else:
                     if isinstance(examine_results[-1].document.value, dict):
                         self.backup_base.assertEqual(examine_results[-1].document.value, json.loads(doc.value))
@@ -295,12 +330,13 @@ class ExamineMetadata:
 
 class ExamineDocument:
 
-    def __init__(self, key=None, sequence_number=None, value=None, metadata=None, deleted=None):
+    def __init__(self, key=None, sequence_number=None, value=None, metadata=None, deleted=None, extended_attributes=None):
         self.key = key
         self.sequence_number = sequence_number
         self._value = value
         self.metadata = metadata if metadata is None else ExamineMetadata(**metadata)
         self.deleted = deleted
+        self.xattrs = extended_attributes
 
     @property
     def value(self):
@@ -370,7 +406,7 @@ class ExamineArguments:
         return command.strip()
 
 
-class BackupExamineTest(EnterpriseBackupRestoreBase):
+class BackupExamineTest(EnterpriseBackupMergeBase):
 
     def setUp(self):
         """ The setup. """
@@ -394,7 +430,7 @@ class BackupExamineTest(EnterpriseBackupRestoreBase):
         super().tearDown()
 
     def populate_config(self):
-        """ Populates the config dictionary"""
+        """ Populates the config dictionary """
         self.config = {}
         # The memory available on the node with the lowest memory
         self.config['memory'] = self.get_available_memory()
@@ -423,26 +459,65 @@ class BackupExamineTest(EnterpriseBackupRestoreBase):
         simulation = ExamineSimulation(self)
 
         for mutations in mutations:
-            success, error_message = simulation.run(mutations)
+            success, error_message = simulation.run(mutations, optional_args)
             self.assertTrue(success, error_message)
 
     def test_sample(self):
         """ Single key test """
         mutations = []
 
-        mutations.append([ \
+        mutations.append([ 
             CreateBucketMutation("default"),
             CreateCollectionMutation("default.fruit.red_fruit"),
             CreateCollectionMutation("default.fruit.green_fruit"),
             SetDocumentMutation("default.fruit.red_fruit", "my_key", "my_value")
         ])
 
-        mutations.append([ \
+        mutations.append([ 
             SetDocumentMutation("default.fruit.red_fruit", "my_key", "a_different_value")
         ])
 
         self.run_simulation(mutations)
 
+class SetSubDocMutation:
+    """ Set a sub-document 
+    TODO: Add support for create_as_deleted
+    As of 27/04/21 does not exist in python SDK
+    Main point of contact is Jared Casey """
+    
+
+    def __init__(self, collection_string, key, path, value):
+        self.collection_string, self.key, self.path, self.value = CollectionString(collection_string), key, path, value
+
+    def apply(self, backup_base, backup):
+        uid = backup.get_collection_uid(self.collection_string)
+        cluster = Cluster(
+            "couchbase://" + backup_base.master.ip,
+            authenticator=PasswordAuthenticator(
+            "Administrator",
+            "password")
+        )
+        bucket = cluster.bucket(self.collection_string.bucket_name)
+        scope = bucket.scope(self.collection_string.scope_name)
+        collection = scope.collection(self.collection_string.collection_name)
+
+        set_result = collection.mutate_in(self.key,
+            [SD.upsert(self.path, self.value, xattr=True, create_parents=True)]
+        )
+        backup.set_subdoc(self.collection_string, self.key, self.path, self.value, Tag.XATTR_CHANGED)
+
+        #SDK options utilising existing testrunner implementations
+        #Not recommended, do not support all operations
+        #bucketIn = backup_base.buckets[-1]
+        #sdk_client = backup_base._get_python_sdk_client(backup_base.master.ip, bucketIn, backup_base.backupset.cluster_host)
+        #client2 = SDKClient(bucket=self.collection_string.bucket_name, hosts=[backup_base.master.ip])
+        #set_result = sdk_client.mutate_in(self.key,
+        #                                  [SD.upsert(self.path, self.value, xattr=True, create_parents=True)],
+        #                                  create_as_deleted=True,
+        #                                  collection=self.collection_string.collection_name,
+        #                                  scope=self.collection_string.scope_name
+        #                                  )
+            
 
 class CreateBucketMutation:
     """ Create a bucket """
@@ -474,7 +549,7 @@ class CreateCollectionMutation:
 
 
 class SetDocumentMutation:
-    """ Set a document in a collection given a key and value"""
+    """ Set a document in a collection given a key and value """
 
     def __init__(self, collection_string, key, value):
         self.collection_string, self.key, self.value = CollectionString(collection_string), key, value
