@@ -119,19 +119,6 @@ class EventingRebalance(EventingBaseTest):
         #     pass
         super(EventingRebalance, self).tearDown()
 
-    def create_n_handlers(self,n):
-        for i in range(1, n+1):
-            self.create_save_function_body(self.function_name + str(i), self.handler_code, worker_count=1)
-
-    def deploy_n_handlers(self,n):
-        for i in range(1,n+1):
-            self.deploy_handler_by_name(self.function_name + str(i), wait_for_bootstrap=False)
-
-    def wait_for_deployment_n_handlers(self,n):
-        for i in range(1, n + 1):
-            self.wait_for_handler_state(self.function_name + str(i), "deployed")
-
-
     def test_eventing_rebalance_in_when_existing_eventing_node_is_processing_mutations(self):
         sock_batch_size = self.input.param('sock_batch_size', 1)
         worker_count = self.input.param('worker_count', 3)

@@ -1179,3 +1179,15 @@ class EventingBaseTest(QueryHelperTests):
         self.rest.create_function(body['appname'], body)
         self.log.info("saving function {}".format(body['appname']))
         return body
+
+    def create_n_handlers(self,n):
+        for i in range(1, n+1):
+            self.create_save_function_body(self.function_name + str(i), self.handler_code, worker_count=1)
+
+    def deploy_n_handlers(self,n):
+        for i in range(1,n+1):
+            self.deploy_handler_by_name(self.function_name + str(i), wait_for_bootstrap=False)
+
+    def wait_for_deployment_n_handlers(self,n):
+        for i in range(1, n + 1):
+            self.wait_for_handler_state(self.function_name + str(i), "deployed")

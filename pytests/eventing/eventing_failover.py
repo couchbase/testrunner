@@ -363,8 +363,9 @@ class EventingFailover(EventingBaseTest):
 
     def test_failover_rebalance_failed(self):
         eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
-        body = self.create_save_function_body(self.function_name, self.handler_code)
-        self.deploy_function(body)
+        self.create_n_handlers(5)
+        self.deploy_n_handlers(5)
+        self.wait_for_deployment_n_handlers(5)
         # load some data
         if self.non_default_collection:
             task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
@@ -391,7 +392,7 @@ class EventingFailover(EventingBaseTest):
         else:
             self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs,
                                               expected_duplicate=True)
-        self.undeploy_and_delete_function(body)
+        self.undeploy_delete_all_functions()
 
     def test_failover_rebalance_out(self):
         eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
