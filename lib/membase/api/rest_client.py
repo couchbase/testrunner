@@ -3944,7 +3944,11 @@ class RestConnection(object):
 
         if 'query_context' in query_params and query_params['query_context']:
             log.info(f"Running Query with query_context: {query_params['query_context']}")
-        status, content, header = self._http_request(api, 'POST', timeout=timeout, headers=headers)
+        try:
+            status, content, header = self._http_request(api, 'POST', timeout=timeout, headers=headers)
+        except Exception as ex:
+            print("\nException error: ", str(ex))
+
         try:
             return json.loads(content)
         except ValueError:
