@@ -865,12 +865,16 @@ class N1QLHelper():
         query = "SELECT * FROM system:indexes where name = \'{0}\'".format(index_name)
         if server is None:
             server = self.master
-        res = self.run_cbq_query(query=query, server=server)
-        for item in res['results']:
-            if 'keyspace_id' not in item['indexes']:
-                return False
-            if item['indexes']['keyspace_id'] == str(bucket) and item['indexes']['name'] == index_name and item['indexes']['state'] not in index_state:
-                return True
+        try:
+            res = self.run_cbq_query(query=query, server=server)
+            for item in res['results']:
+                if 'keyspace_id' not in item['indexes']:
+                    return False
+                if item['indexes']['keyspace_id'] == str(bucket) and item['indexes']['name'] == index_name and item['indexes']['state'] not in index_state:
+                    return True
+        except Exception as e:
+            self.log.info(str(e)
+            raise Exception(str(e))
         return False
 
     def _is_index_in_list_bulk(self, bucket, index_names=[], server=None, index_state=["pending","building"]):
