@@ -37,6 +37,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.n1ql_op_dst=self.input.param('n1ql_op_dst', 'n1ql_op_dst')
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.upgrade_version = self.input.param("upgrade_version")
+        self.exported_handler_version = self.input.param("exported_handler_version", '6.6.1')
         log.info("==============  EventingUpgrade setup has completed ==============")
 
     def tearDown(self):
@@ -305,14 +306,67 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.verify_doc_count_collections("dst_bucket._default._default", 0)
         self.verify_doc_count_collections("dst_bucket1._default._default", 0)
 
+    def test_cross_version_import_export_of_handlers(self):
+        self.create_buckets()
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
+                                      item_flag=self.item_flag, n1ql_port=self.n1ql_port,
+                                      full_docs_list=self.full_docs_list, log=self.log, input=self.input,
+                                      master=self.master, use_rest=True)
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket._default._default")
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket_sbm._default._default")
+        # import handlers exported from older version
+        self.import_function("exported_functions/" + self.exported_handler_version + "/bucket_op.json")
+        self.import_function("exported_functions/" + self.exported_handler_version + "/curl.json")
+        self.import_function("exported_functions/" + self.exported_handler_version + "/n1ql.json")
+        self.import_function("exported_functions/" + self.exported_handler_version + "/sbm.json")
+        self.import_function("exported_functions/" + self.exported_handler_version + "/timer.json")
+        # deploy handlers
+        self.deploy_handler_by_name("bucket_op")
+        self.deploy_handler_by_name("timer")
+        self.deploy_handler_by_name("n1ql")
+        self.deploy_handler_by_name("curl")
+        self.deploy_handler_by_name("sbm")
+        # validate mutations for all handlers
+        self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
+        self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
+        self.validate_eventing(self.dst_bucket_curl, self.docs_per_day * 2016)
+        self.validate_eventing(self.n1ql_op_dst, self.docs_per_day * 2016)
+        self.validate_eventing(self.source_bucket_mutation, 2 * self.docs_per_day * 2016)
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket._default._default", is_delete=True)
+        self.validate_eventing(self.dst_bucket_name, 0)
+        self.validate_eventing(self.dst_bucket_name1, 0)
+        self.validate_eventing(self.dst_bucket_curl, 0)
+        self.validate_eventing(self.n1ql_op_dst, 0)
+        self.pause_handler_by_name("bucket_op")
+        self.pause_handler_by_name("timer")
+        self.pause_handler_by_name("n1ql")
+        self.pause_handler_by_name("curl")
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket._default._default")
+        self.resume_handler_by_name("bucket_op")
+        self.resume_handler_by_name("timer")
+        self.resume_handler_by_name("n1ql")
+        self.resume_handler_by_name("curl")
+        self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
+        self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
+        self.validate_eventing(self.dst_bucket_curl, self.docs_per_day * 2016)
+        self.validate_eventing(self.n1ql_op_dst, self.docs_per_day * 2016)
+        self.undeploy_and_delete_function("bucket_op")
+        self.undeploy_and_delete_function("timer")
+        self.undeploy_and_delete_function("n1ql")
+        self.undeploy_and_delete_function("curl")
+        self.undeploy_and_delete_function("sbm")
+
     def import_function(self, function):
         script_dir = os.path.dirname(__file__)
         abs_file_path = os.path.join(script_dir, function)
         fh = open(abs_file_path, "r")
-        body = json.loads(fh.read())
+        body = fh.read()
         # import the previously exported function
-        self.rest.save_function(body["appname"], body)
-        self.deploy_function(body)
+        self.rest.import_function(body)
 
     def online_upgrade(self, services=None):
         servers_in = self.servers[self.nodes_init:self.num_servers]
@@ -454,11 +508,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
             self.wait_for_handler_state(body['appname'], "deployed")
 
     def undeploy_and_delete_function(self, function):
-        log.info("Undeploying function : {0}".format(function))
-        content = self.rest.undeploy_function(function)
-        self.wait_for_handler_state(function,"undeployed")
-        self.sleep(180)
-        log.info("Deleting function : {0}".format(function))
+        self.undeploy_function_by_name(function)
         content1 = self.rest.delete_single_function(function)
 
     def pause_function(self, function):
