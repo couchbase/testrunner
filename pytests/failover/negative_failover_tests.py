@@ -17,6 +17,7 @@ class NegativeFailoverTests(FailoverBaseTest):
     def graceful_failover_when_rebalance_running(self):
         try:
             self.rest = RestConnection(self.master)
+            self.sleep(120)
             nodes = self.rest.node_statuses()
             chosen = RebalanceHelper.pick_nodes(self.master, howmany=1)
             status = self.rest.rebalance(otpNodes=[node.id for node in nodes],
@@ -156,6 +157,7 @@ class NegativeFailoverTests(FailoverBaseTest):
             # Mark Node for full recovery
             if success_failed_over:
                 self.rest.set_recovery_type(otpNode=chosen[0].id, recoveryType="delta")
+            self.sleep(120)
             self.nodes = self.rest.node_statuses()
             self.rest.rebalance(otpNodes=[node.id for node in self.nodes], ejectedNodes=[])
             self.assertFalse(self.rest.monitorRebalance(stop_if_loop=True), msg="Rebalance did not fail as expected")
@@ -173,6 +175,7 @@ class NegativeFailoverTests(FailoverBaseTest):
             # Mark Node for full recovery
             if success_failed_over:
                 self.rest.set_recovery_type(otpNode=chosen[0].id, recoveryType="delta")
+            self.sleep(120)
             self.nodes = self.rest.node_statuses()
             self.rest.rebalance(otpNodes=[node.id for node in self.nodes], ejectedNodes=[chosen[0].id, eject_out_node.id])
             self.assertFalse(self.rest.monitorRebalance(stop_if_loop=True), msg="Rebalance did not fail as expected")
@@ -193,6 +196,7 @@ class NegativeFailoverTests(FailoverBaseTest):
                 self.servers[self.nodes_init].ip, self.servers[self.nodes_init].port)
             self.rest.add_node(self.master.rest_username, self.master.rest_password,
                 self.servers[self.nodes_init+1].ip, self.servers[self.nodes_init+1].port)
+            self.sleep(120)
             self.nodes = self.rest.node_statuses()
             for server in self.nodes:
                 if server.ip == self.servers[self.nodes_init].ip:
