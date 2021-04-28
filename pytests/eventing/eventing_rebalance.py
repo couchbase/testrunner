@@ -1784,7 +1784,7 @@ class EventingRebalance(EventingBaseTest):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
                                                      [],
                                                      services=services_in)
-            self.sleep(15)
+
             reached = RestHelper(self.rest).rebalance_reached(percentage=30)
             # reboot kv and eventing when eventing is processing mutations
             for node in [kv_node, eventing_node]:
