@@ -57,6 +57,7 @@ class MovingTopFTS(FTSBaseTest):
     def swap_rebalance_parallel_partitions_move(self):
         rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         rest.set_maxConcurrentPartitionMovesPerNode(self.default_concurrent_partition_moves_per_node)
+        rest.set_maxFeedsPerDCPAgent(1)
 
         self.load_data()
         self.create_fts_indexes_all_buckets()
@@ -105,6 +106,8 @@ class MovingTopFTS(FTSBaseTest):
     def rebalance_in_parallel_partitions_move_add_node(self):
         rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         rest.set_maxConcurrentPartitionMovesPerNode(self.default_concurrent_partition_moves_per_node)
+        rest.set_maxFeedsPerDCPAgent(1)
+
         self.load_data()
         self.create_fts_indexes_all_buckets()
         for index in self._cb_cluster.get_indexes():
@@ -150,6 +153,7 @@ class MovingTopFTS(FTSBaseTest):
     def rebalance_out_parallel_partitions_move(self):
         rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         rest.set_maxConcurrentPartitionMovesPerNode(self.default_concurrent_partition_moves_per_node)
+        rest.set_maxFeedsPerDCPAgent(1)
 
         self.load_data()
         self.create_fts_indexes_all_buckets()
@@ -175,6 +179,8 @@ class MovingTopFTS(FTSBaseTest):
         self.log.info("Delta between simple and concurrent partitions move rebalance is {0} sec.".
                       format(simple_rebalance_time - parallel_rebalance_time))
 
+        self.wait_for_indexing_complete()
+        
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         for index in self._cb_cluster.get_indexes():
@@ -190,6 +196,7 @@ class MovingTopFTS(FTSBaseTest):
     def failover_non_master_parallel_partitions_move(self):
         rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         rest.set_maxConcurrentPartitionMovesPerNode(self.default_concurrent_partition_moves_per_node)
+        rest.set_maxFeedsPerDCPAgent(1)
 
         self.load_data()
         self.create_fts_indexes_all_buckets()
