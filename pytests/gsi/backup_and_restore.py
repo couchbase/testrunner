@@ -166,8 +166,9 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         """Test for basic functionality of the backup api without any query
         params"""
         indexer_stats_before_backup = self.rest.get_indexer_metadata()
+        index_node = self.get_nodes_from_services_map(service_type="index")
         index_backup_clients = [
-            IndexBackupClient(self.master, self.use_cbbackupmgr, bucket.name)
+            IndexBackupClient(index_node, self.use_cbbackupmgr, bucket.name)
             for bucket in self.buckets]
         for backup_client in index_backup_clients:
             backup_result = backup_client.backup()
@@ -177,6 +178,12 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     backup_client.backup_bucket, backup_result[1]))
         self.rest.delete_all_buckets()
         self._recreate_bucket_structure()
+        while True:
+            result = self.run_cbq_query("select * from system:indexes")['results']
+            indexer_metadata = self.rest.get_indexer_metadata()
+            if 'status' not in indexer_metadata and not result:
+                break
+            self.sleep(10, "Waiting for all the indexes to get removed")
         for backup_client in index_backup_clients:
             restore_result = backup_client.restore()
             self.assertTrue(
