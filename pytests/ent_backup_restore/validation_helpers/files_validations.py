@@ -53,14 +53,16 @@ class BackupRestoreFilesValidations(BackupRestoreValidationBase):
         if self.backupset.disable_analytics:
             expected_meta_json['disable_analytics'] = True
         actual_meta_json = self.get_backup_meta_json()
+
         if self.backupset.cluster_version[:5] == "6.5.2":
-            del expected_meta_json["auto_delete_collections"]
-            del expected_meta_json["create_missing_collections"]
-            del expected_meta_json["exclude_data"]
-            del expected_meta_json["include_data"]
-            expected_meta_json["disable_cluster_config"] = True
-            expected_meta_json["include_collections"] = []
-            expected_meta_json["exclude_collections"] = []
+            if self.backupset.current_bkrs_client_version[:3] < "6.6":
+                del expected_meta_json["auto_delete_collections"]
+                del expected_meta_json["create_missing_collections"]
+                del expected_meta_json["exclude_data"]
+                del expected_meta_json["include_data"]
+                expected_meta_json["disable_cluster_config"] = True
+                expected_meta_json["include_collections"] = []
+                expected_meta_json["exclude_collections"] = []
         print "Verify meta json files"
         is_equal, not_equal, extra, not_present = self.compare_dictionary(expected_meta_json, actual_meta_json)
         return self.compare_dictionary_result_analyser(is_equal, not_equal, extra, not_present, "Backup Meta data json")

@@ -7,6 +7,16 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from upgrade.newupgradebasetest import NewUpgradeBaseTest
 
+"""
+#  To install cb server before testing, need extra param like
+#      cluster_version=6.6.1-9213 (old cluster version)
+#      Ex: python scripts/new_install.py -i 5-perdebug-bkrs-bwc.ini -p version=6.6.2-9588,cluster_version=6.6.1-9213
+#
+#  To run test, need extra params like bwc_version=6.6.1-9213,latest_bkrs_version=6.6.2-9588
+#      bwc_version is cluster version (old version)
+#      latest_bkrs_version is cbbackupmgr version used to test on old cluster
+#      Ex: -t ent_backup_restore.enterprise_backup_restore_bwc.EnterpriseBackupRestoreBWCTest.test_backup_restore_sanity_bwc,bwc_version=6.5.2-6634,latest_bkrs_version=6.6.2-9588
+"""
 
 class EnterpriseBackupRestoreBWCTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTest):
     def setUp(self):
@@ -88,6 +98,12 @@ class EnterpriseBackupRestoreBWCTest(EnterpriseBackupRestoreBase, NewUpgradeBase
         """
 
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        if self.debug_logs:
+            print "\n bkrs_client_version: " , self.backupset.bkrs_client_version
+            print "\n current_bkrs_client_version: " , self.backupset.current_bkrs_client_version
+            print "\n bkrs_client_upgrade: " , self.backupset.bkrs_client_upgrade
+            print "\n bwc_version: " , self.backupset.bwc_version
+
         self.log.info("*** start to load items to all buckets")
         self._load_all_buckets(self.master, gen, "create", self.expires)
         self.log.info("*** done to load items to all buckets")
