@@ -1741,7 +1741,7 @@ class EventingRebalance(EventingBaseTest):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
                                                      [],
                                                      services=services_in)
-            self.sleep(15)
+
             reached = RestHelper(self.rest).rebalance_reached(percentage=30)
             # kill erlang process on kv and eventing when eventing rebalance is going on
             for node in [kv_node, eventing_node]:
