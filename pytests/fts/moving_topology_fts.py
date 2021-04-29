@@ -1468,7 +1468,7 @@ class MovingTopFTS(FTSBaseTest):
                             name="rebalance",
                             args=())
         reb_thread.start()
-        self.sleep(1)
+        self.sleep(25)
         for bucket in self._cb_cluster.get_buckets():
             self.log.info("Deleting bucket {0}".format(bucket.name))
             if not RestConnection(self._cb_cluster.get_master_node()).delete_bucket(bucket.name):
