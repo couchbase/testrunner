@@ -72,6 +72,14 @@ class x509main:
         return ipAddress
         '''
 
+    def get_data_path(self,node):
+        """Gets couchbase log directory, even for cluster_run
+                """
+        _, dir = RestConnection(node).diag_eval(
+            'filename:absname(element(2, application:get_env(ns_server,path_config_datadir))).')
+        dir = dir.strip('"')
+        return str(dir)
+
     def _generate_cert(self, servers, root_cn='Root\ Authority', type='go', encryption="", key_length=1024, client_ip=None, alt_names='default', dns=None, uri=None,wildcard_dns=None):
         shell = RemoteMachineShellConnection(self.slave_host)
         shell.execute_command("rm -rf " + x509main.CACERTFILEPATH)
@@ -238,7 +246,8 @@ class x509main:
         elif os_type == 'Mac':
             install_path = x509main.MACINSTALLPATH
         else:
-            install_path = x509main.LININSTALLPATH
+            #install_path = x509main.LININSTALLPATH
+            install_path = str(self.get_data_path(host)) + "/"
         return install_path
 
     # create inbox folder for host

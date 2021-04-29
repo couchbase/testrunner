@@ -177,7 +177,7 @@ class x509tests(BaseTestCase):
         elif self.sdk_version == 'vulcan':
             key_file = x509main.CACERTFILEPATH + self.ip_address + ".key"
             chain_file = x509main.CACERTFILEPATH + "/long_chain" + self.ip_address + ".pem"
-            connection_string = 'couchbases://' + host_ip + '/?certpath=' + chain_file + "&keypath=" + key_file
+            connection_string = 'couchbases://' + host_ip + '/?ipv6=allow&certpath=' + chain_file + "&keypath=" + key_file
             self.log.info("Connection string is -{0}".format(connection_string))
             try:
                 cluster = Cluster(connection_string);
