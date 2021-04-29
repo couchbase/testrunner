@@ -4032,7 +4032,12 @@ class FTSBaseTest(unittest.TestCase):
             self.es.restart_es()
         else:
             self.es = None
-        self.run_via_n1ql = self._input.param("run_via_n1ql", False)
+
+        #todo: combine skip_n1ql and run_via_n1ql params into single parameter.
+        self.run_via_n1ql = False
+        if not self._input.param("skip_n1ql", False):
+            self.run_via_n1ql = self._input.param("run_via_n1ql", False)
+
         if self.run_via_n1ql:
             self.n1ql = N1QLHelper(version="sherlock", shell=None,
                                    item_flag=None, n1ql_port=8903,
