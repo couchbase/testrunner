@@ -820,11 +820,13 @@ class EventingBaseTest(QueryHelperTests):
             self.log.info("no handler is available")
 
     def deploy_handler_by_name(self,name,wait_for_bootstrap=True):
+        self.refresh_rest_server()
         self.rest.lifecycle_operation(name,"deploy")
         if wait_for_bootstrap:
             self.wait_for_handler_state(name, "deployed")
 
     def pause_handler_by_name(self,name,wait_for_pause=True):
+        self.refresh_rest_server()
         self.rest.lifecycle_operation(name,"pause")
         if wait_for_pause:
             self.wait_for_handler_state(name, "paused")
@@ -958,7 +960,8 @@ class EventingBaseTest(QueryHelperTests):
 
 
     def create_scope_collection(self,bucket,scope,collection):
-        self.collection_rest.create_scope_collection(bucket=bucket, scope=scope, collection=collection)
+        collection_rest = CollectionsRest(self.master)
+        collection_rest.create_scope_collection(bucket=bucket, scope=scope, collection=collection)
 
     def create_n_scope(self,bucket,num=1):
         for i in range(num):

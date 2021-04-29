@@ -74,7 +74,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         # Validate the data
         self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
         self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
-        self.create_collections()
+        self.create_collections_on_all_buckets()
         self.post_upgrade_handlers()
         self.add_built_in_server_user()
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
@@ -116,7 +116,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self._install(self.servers[:self.nodes_init])
         self.initial_version = self.upgrade_version
         self._install(self.servers[self.nodes_init:self.num_servers])
-        self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
+        self.operations(self.servers[:self.nodes_init], services="kv,kv,eventing,index,n1ql")
         self.create_buckets()
         # Load the data in older version
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
@@ -127,7 +127,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.pre_upgrade_handlers()
         self.print_eventing_stats_from_all_eventing_nodes()
         # swap and rebalance the servers
-        self.online_upgrade(services=["kv", "eventing", "index", "n1ql"])
+        self.online_upgrade(services=["kv","kv", "eventing", "index", "n1ql"])
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
         self.add_built_in_server_user()
@@ -137,7 +137,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         # Validate the data
         self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
         self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
-        self.create_collections()
+        self.create_collections_on_all_buckets()
         self.post_upgrade_handlers()
         self.add_built_in_server_user()
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
@@ -146,14 +146,17 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.load_data_to_collection(self.docs_per_day * 2016, namespace="source_bucket_mutation.event.coll_0")
         self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0")
         self.verify_count(self.docs_per_day * 2016)
+        self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", self.docs_per_day * 2016 * 2)
         ### delete data in all collections
         self.load_data_to_collection(self.docs_per_day * 2016, namespace="source_bucket_mutation.event.coll_0",
                                      is_delete=True)
         self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0", is_delete=True)
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket._default._default", is_delete=True)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
         # Delete the data on SBM bucket
         self.load(self.gens_load, buckets=self.sbm, verify_data=False, op_type='delete')
         self.verify_count(0)
+        self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", self.docs_per_day * 2016)
         self.verify_doc_count_collections("dst_bucket._default._default", 0)
         self.verify_doc_count_collections("dst_bucket1._default._default", 0)
         ## pause handler
@@ -172,9 +175,12 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.resume_handler_by_name("curl")
         self.resume_handler_by_name("sbm")
         # Validate the data for both the functions
-        self.verify_count(0)
-        self.verify_doc_count_collections("dst_bucket._default._default", 0)
-        self.verify_doc_count_collections("dst_bucket1._default._default", 0)
+        self.verify_count(self.docs_per_day * 2016)
+        self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", self.docs_per_day * 2016 * 3)
+        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
+        self.sleep(600)  ## wait for timers to fire
+        self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
+        self.skip_metabucket_check=True
 
     def test_online_upgrade_with_swap_rebalance_with_eventing(self):
         self._install(self.servers[:self.nodes_init])
@@ -202,7 +208,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         # Validate the data
         self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
         self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
-        self.create_collections()
+        self.create_collections_on_all_buckets()
         self.post_upgrade_handlers()
         self.add_built_in_server_user()
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
@@ -267,7 +273,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         # Validate the data
         self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
         self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
-        self.create_collections()
+        self.create_collections_on_all_buckets()
         self.post_upgrade_handlers()
         self.add_built_in_server_user()
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
@@ -372,7 +378,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         servers_in = self.servers[self.nodes_init:self.num_servers]
         servers_out = self.servers[:self.nodes_init]
         self.cluster.rebalance(self.servers[:self.nodes_init], servers_in, servers_out, services=services)
-        self.sleep(600)
+        self.sleep(300)
         self.log.info("Rebalance in all {0} nodes" \
                       .format(self.input.param("upgrade_version", "")))
         self.log.info("Rebalanced out all old version nodes")
@@ -387,6 +393,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
                 FIND_MASTER = True
                 self.log.info("%s node %s becomes the master" \
                               % (self.input.param("upgrade_version", ""), new_server.ip))
+                self.master=new_server
                 break
         if self.input.param("initial_version", "")[:5] in COUCHBASE_VERSION_2 \
                 and not FIND_MASTER and not self.is_downgrade:
@@ -573,19 +580,20 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
 
     def post_upgrade_handlers(self):
         self.create_function_with_collection("sbm","handler_code/ABO/insert_sbm.js",src_namespace="source_bucket_mutation.event.coll_0",
-                                             collection_bindings=["dst_bucket.source_bucket_mutation.event.coll_0.rw"])
+                                             collection_bindings=["src_bucket.source_bucket_mutation.event.coll_0.rw"])
+        self.hostname="http://qa.sc.couchbase.com/"
         self.create_function_with_collection("curl","handler_code/ABO/curl_get.js",src_namespace="src_bucket.event.coll_0",
-                                             collection_bindings=["dst_bucket.dst_bucket_curl.event.coll_0.rw"])
+                                             collection_bindings=["dst_bucket.dst_bucket_curl.event.coll_0.rw"],is_curl=True)
         self.create_function_with_collection("n1ql", "handler_code/collections/n1ql_insert_update.js",
                                              src_namespace="src_bucket.event.coll_0")
         self.deploy_handler_by_name("sbm")
         self.deploy_handler_by_name("curl")
         self.deploy_handler_by_name("n1ql")
 
-    def create_collections(self):
+    def create_collections_on_all_buckets(self):
         buckets=RestConnection(self.master).get_buckets()
         for bucket in buckets:
-            self.create_scope_collections(bucket.name,"event","coll_0")
+            self.create_scope_collection(bucket.name,"event","coll_0")
 
     def create_handler(self,appname,appcode,meta_bucket="metadata",src_bucket="src_bucket",
                        bucket_bindings=["dst_bucket.dst_bucket.rw"],dcp_stream_boundary="everything"):
@@ -617,9 +625,5 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         return body
 
     def verify_count(self,count):
-        if count !=0:
-            self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", count*2)
-        else:
-            self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", count)
         self.verify_doc_count_collections("dst_bucket_curl.event.coll_0",count)
         self.verify_doc_count_collections("n1ql_op_dst.event.coll_0", count)
