@@ -71,6 +71,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
     def tearDown(self):
         self.log.info("==============  QueriesUpgradeTests tearDown has started ==============")
+        if not hasattr(self, 'rest'):
+            self.rest = RestConnection(self.master)
         self.upgrade_servers = self.servers
         if hasattr(self, 'upgrade_versions') and self.initial_version is '6.5.1-6296':
             self.log.info("checking upgrade version")

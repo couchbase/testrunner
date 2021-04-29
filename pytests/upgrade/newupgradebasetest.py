@@ -218,6 +218,15 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.log.info("==============  NewUpgradeBaseTest setup has completed ==============")
 
     def tearDown(self):
+        self.product = self.input.param('product', 'couchbase-server')
+        self.initial_version = self.input.param('initial_version', '6.6.2-9596')
+        self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
+        self.upgrade_versions = self.input.param('upgrade_version', '7.0.0-5075')
+        self.debug_logs = self.input.param("debug_logs", False)
+        self.init_nodes = self.input.param('init_nodes', True)
+        self.initial_build_type = self.input.param('initial_build_type', None)
+        self.use_hostnames = self.input.param("use_hostnames", False)
+
         self.log.info("==============  NewUpgradeBaseTest tearDown has started ==============")
         test_failed = (hasattr(self, '_resultForDoCleanups') and \
                        len(self._resultForDoCleanups.failures or \
@@ -255,6 +264,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             super(NewUpgradeBaseTest, self).tearDown()
             if self.upgrade_servers:
                 self._install(self.upgrade_servers)
+                self.servers = self.upgrade_servers
         self.sleep(20, "sleep 20 seconds before run next test")
         self.log.info("==============  NewUpgradeBaseTest tearDown has completed ==============")
 
