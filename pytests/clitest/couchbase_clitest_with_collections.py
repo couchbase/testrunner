@@ -37,7 +37,7 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
         """ check collection enable """
         for x in output:
             if x.replace(" ", "") != "ep_collections_enabled:true":
-                raise("collection does not enable by default")
+                raise Exception("collection does not enable by default")
 
     def test_cbstats_with_collection(self):
         """
@@ -67,7 +67,7 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
         output, error = shell.execute_command(cmd)
         if not self.custom_scopes:
             if not self._check_output("_default", output):
-                raise("No _default scope in cluster")
+                raise Exception("No _default scope in cluster")
         else:
             custom_scopes = self.get_bucket_scope()
             if not custom_scopes:
@@ -77,17 +77,17 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
                 custom_scopes = custom_scopes[0]
             for scope in custom_scopes:
                 if not self._check_output(scope, output):
-                    raise("No scope: {0} in cluster".format(scope))
+                    raise Exception("No scope: {0} in cluster".format(scope))
         if not self.custom_collections:
             if not self._check_output("_default", output):
-                raise("No _default collection in cluster")
+                raise Exception("No _default collection in cluster")
         else:
             custom_collections = self.get_bucket_collection()
             if isinstance(custom_collections, tuple):
                 custom_collections = self._extract_collection_names(custom_collections)
             for collection in custom_collections:
                 if not self._check_output(collection, output):
-                    raise("No collection: {0} in cluster".format(scope))
+                    raise Exception("No collection: {0} in cluster".format(scope))
 
     def test_cbworkloadgen_with_collection(self):
         """
@@ -101,26 +101,31 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
         if self.custom_collections:
             self.create_collection(self.col_per_scope)
         scopes = self.get_bucket_scope()
+        if scopes[0][:4] == "\x1b[6n":
+            scopes[0] = scopes[0][4:]
         scopes_id = []
         for scope in scopes:
-            if scope == "_default" and self.custom_scopes:
+            if (scope[4:] == "_default" or scope == "_default") and self.custom_scopes:
                 scopes.remove(scope)
                 continue
             self.log.info("get scope id of scope: {0}".format(scope))
             scopes_id.append(self.get_scopes_id(scope))
         collections = self.get_bucket_collection()
         if isinstance(collections, tuple):
+            remove_list = []
             collections = collections[0]
-            for col in collections:
-                if ":" in col:
-                    collections.remove(col)
-                col = col.replace("-", "")
+            for i in range(len(collections)):
+                collections[i] = collections[i].replace("-", "")
+                if ":" in collections[i]:
+                    remove_list.append(collections[i])
+            for item in remove_list:
+                collections.remove(item)
         collections_id = []
         for collection in collections:
             if collection == "_default" and self.custom_collections:
                 collections.remove(collection)
                 continue
-            collections_id.append(self.get_collections_id(scope[0],collection))
+            collections_id.append(self.get_collections_id(scopes[0],collection))
 
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%scbworkloadgen%s -n %s:8091 -u Administrator -p password -b %s "\
@@ -144,7 +149,7 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
         if error or "Error" in output:
             if (not self.cbwg_no_value_in_col_flag or not self.cbwg_invalid_value_in_col_flag)\
                 and not self.should_fail:
-                raise("Failed to load data to cluster using cbworkloadgen")
+                raise Exception("Failed to load data to cluster using cbworkloadgen")
 
     def test_create_sc_with_existing_sc(self):
         bucket_name = self.buckets[0].name
@@ -176,7 +181,7 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
                     if error in str(e):
                         error_expected = True
                 if not error_expected:
-                    raise("Rest failed to block create scope with same name. Error: {0}"\
+                    raise Exception("Rest failed to block create scope with same name. Error: {0}"\
                                                                           .format(str(e)))
         if self.create_existing_collection:
             collection_name = collections[0]
@@ -198,7 +203,7 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
                     if error in str(e):
                         error_expected = True
                 if not error_expected:
-                    raise("Rest failed to block create collection with same name")
+                    raise Exception("Rest failed to block create collection with same name")
 
     def test_drop_sc(self):
         bucket_name = self.buckets[0].name
@@ -226,7 +231,7 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
                                                   collection="_{0}".format(bucket_name))
             except Exception as e:
                 if error in str(e):
-                    raise("Failed to drop collection with error: {0}".format(str(e)))
+                    raise Exception("Failed to drop collection with error: {0}".format(str(e)))
         if self.drop_scopes:
             try:
                 if self.use_rest:
@@ -235,7 +240,7 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
                     self.cli_col.delete_scope(scope_name, bucket=bucket_name)
             except Exception as e:
                 if error in str(e):
-                    raise("Failed to drop scope with error: {0}".format(str(e)))
+                    raise Exception("Failed to drop scope with error: {0}".format(str(e)))
 
     def test_drop_non_exist_sc(self):
         bucket_name = self.buckets[0].name
@@ -823,7 +828,7 @@ class XdcrCLITest(CliBaseTest):
                     options = "--resume"
                     options += (" --xdcr-replicator={0}".format(replicator))
                     output, _ = self.__execute_cli(cli_command, options)
-                    self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["resume"], output[0])
+                    self.assertIn(XdcrCLITest.XDCR_REPLICATE_SUCCESS["resume"], output[0])
                     # check if status of replication is "running"
                     options = "--list"
                     output, _ = self.__execute_cli(cli_command, options)
@@ -851,13 +856,13 @@ class XdcrCLITest(CliBaseTest):
                 options = "--delete"
                 options += (" --xdcr-replicator={0}".format(replicator))
                 output, _ = self.__execute_cli(cli_command, options)
-                self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["delete"], output[0])
+                self.assertIn(XdcrCLITest.XDCR_REPLICATE_SUCCESS["delete"], output[0])
 
         # Remove rbac users in dest_nodes
         role_del = ['cbadminbucket']
         RbacBase().remove_user_role(role_del, RestConnection(self.dest_nodes[0]))
         if not items_match:
-            if self.custom_collections and self.custom_collections:
+            if self.custom_scopes and self.custom_collections:
                 self.fail("Items in des cluster don't match with src")
             else:
                 self.log.info("This is negative test which not create custom collections")

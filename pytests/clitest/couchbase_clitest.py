@@ -522,8 +522,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                         cluster_host="localhost", cluster_port=8091,
                         user="Administrator", password="password")
                 if len(output) == 2:
-                    self.assertEqual(output, ["SUCCESS: Server failed over",
-                                              ""])
+                    self.assertIn("SUCCESS: Server failed over", output[0])
                 else:
                     self.assertTrue("SUCCESS: Server failed over" in output)
             else:
@@ -586,7 +585,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                     cluster_port=8091,
                                                                     user=cluster_user,
                                                                     password=cluster_pwd)
-                self.assertTrue("SUCCESS: Server added" in output)
+                self.assertTrue("SUCCESS: Server added" in output[0])
         else:
              raise Exception("Node add should be smaller total number vms in ini file")
 
@@ -642,7 +641,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                 cluster_host="localhost",
                                                                 user=cluster_user,
                                                                 password=cluster_pwd)
-            self.assertTrue("SUCCESS: Servers recovered" in output)
+            self.assertIn("SUCCESS: Servers recovered", output[0])
 
         for num in range(nodes_recovery):
             cli_command = "server-readd"
@@ -683,8 +682,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                 user=cluster_user,
                                                                 password=cluster_pwd)
             self.assertTrue("DEPRECATED: Please use the recovery command "
-                            "instead" in output and "SUCCESS: Servers "
-                                                    "recovered" in output,
+                            "instead" in output[0] and "SUCCESS: Servers "
+                                                    "recovered" in output[2],
                             "Server readd failed")
             self.sleep(5)
 
@@ -735,7 +734,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                               options=options, cluster_host="localhost", \
                                                 user="Administrator", password="password")
             output_msg = "SUCCESS: Server added"
-            self.assertEqual(output[0], output_msg)
+            self.assertIn(output_msg, output[0])
 
         cli_command = "rebalance-status"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
@@ -3169,7 +3168,7 @@ class XdcrCLITest(CliBaseTest):
         output, _, xdcr_cluster_name, xdcr_hostname, cli_command, options = \
                                                          self.__xdcr_setup_create()
         if error_expected_in_command != "create":
-            self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["create"].replace("CLUSTERNAME",\
+            self.assertIn(XdcrCLITest.XDCR_SETUP_SUCCESS["create"].replace("CLUSTERNAME",\
                               (xdcr_cluster_name, "")[xdcr_cluster_name is None]), output[0])
         else:
             output_error = self.input.param("output_error", "[]")
@@ -3192,7 +3191,7 @@ class XdcrCLITest(CliBaseTest):
                     self.log.info("match {0}".format(element))
                     return True
                 elif self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-                    if "ERROR: _ - Error checking if target cluster supports SANs in cerificates." \
+                    if "Error checking if target cluster supports SANs in cerificates." \
                             in element:
                         self.log.info("match {0}".format(element))
                         return True
@@ -3204,7 +3203,7 @@ class XdcrCLITest(CliBaseTest):
                             in element:
                         self.log.info("match {0}".format(element))
                         return True
-                    elif "ERROR: _ - certificate must be a single, PEM-encoded x509 certificate" \
+                    elif "Certificate must be a single, PEM-encoded x509 certificate" \
                             in element:
                         self.log.info("match {0}".format(element))
                         return True
@@ -3218,7 +3217,7 @@ class XdcrCLITest(CliBaseTest):
         if xdcr_cluster_name:
             options = options.replace("--create ", "--edit ")
             output, _ = self.__execute_cli(cli_command=cli_command, options=options)
-            self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["edit"]\
+            self.assertIn(XdcrCLITest.XDCR_SETUP_SUCCESS["edit"]\
                                      .replace("CLUSTERNAME", (xdcr_cluster_name, "")\
                                             [xdcr_cluster_name is None]), output[0])
         if not xdcr_cluster_name:
@@ -3230,7 +3229,7 @@ class XdcrCLITest(CliBaseTest):
             options = "--delete --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name)
         output, _ = self.__execute_cli(cli_command=cli_command, options=options)
         if error_expected_in_command != "delete":
-            self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["delete"]\
+            self.assertIn(XdcrCLITest.XDCR_SETUP_SUCCESS["delete"]\
                         .replace("CLUSTERNAME", (xdcr_cluster_name, "remote cluster")\
                                              [xdcr_cluster_name is None]), output[0])
         else:
@@ -3306,7 +3305,7 @@ class XdcrCLITest(CliBaseTest):
         self.sleep(10)
         output, _ = self.__execute_cli(cli_command, options)
         if not error_expected:
-            self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["create"], output[0])
+            self.assertIn(XdcrCLITest.XDCR_REPLICATE_SUCCESS["create"], output[0])
         else:
             return
 
@@ -3322,7 +3321,7 @@ class XdcrCLITest(CliBaseTest):
                     options += (" --xdcr-replicator={0}".format(replicator))
                     output, _ = self.__execute_cli(cli_command, options)
                     # validate output message
-                    self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["pause"], output[0])
+                    self.assertIn(XdcrCLITest.XDCR_REPLICATE_SUCCESS["pause"], output[0])
                     self.sleep(20)
                     options = "--list"
                     output, _ = self.__execute_cli(cli_command, options)
@@ -3335,7 +3334,7 @@ class XdcrCLITest(CliBaseTest):
                     options = "--resume"
                     options += (" --xdcr-replicator={0}".format(replicator))
                     output, _ = self.__execute_cli(cli_command, options)
-                    self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["resume"], output[0])
+                    self.assertIn(XdcrCLITest.XDCR_REPLICATE_SUCCESS["resume"], output[0])
                     # check if status of replication is "running"
                     options = "--list"
                     output, _ = self.__execute_cli(cli_command, options)
@@ -3345,7 +3344,7 @@ class XdcrCLITest(CliBaseTest):
                 options = "--delete"
                 options += (" --xdcr-replicator={0}".format(replicator))
                 output, _ = self.__execute_cli(cli_command, options)
-                self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["delete"], output[0])
+                self.assertIn(XdcrCLITest.XDCR_REPLICATE_SUCCESS["delete"], output[0])
 
         # Remove rbac users in dest_nodes
         role_del = ['cbadminbucket']
@@ -3381,14 +3380,14 @@ class XdcrCLITest(CliBaseTest):
         if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
                 self.assertTrue(self._check_output("-----END CERTIFICATE-----", output))
         else:
-           self.assertEqual(XdcrCLITest.SSL_MANAGE_SUCCESS["retrieve"]\
+           self.assertIn(XdcrCLITest.SSL_MANAGE_SUCCESS["retrieve"]\
                                           .replace("PATH", xdcr_cert), output[0])
         self.shell.execute_command("rm {0}".format(xdcr_cert))
 
         options = "--regenerate-cert={0}".format(xdcr_cert)
         output, error = self.__execute_cli(cli_command=cli_command, options=options)
         self.assertFalse(error, "Error thrown during CLI execution %s" % error)
-        self.assertEqual(XdcrCLITest.SSL_MANAGE_SUCCESS["regenerate"]\
+        self.assertIn(XdcrCLITest.SSL_MANAGE_SUCCESS["regenerate"]\
                                         .replace("PATH", xdcr_cert), output[0])
         self.shell.execute_command("rm {0}".format(xdcr_cert))
 

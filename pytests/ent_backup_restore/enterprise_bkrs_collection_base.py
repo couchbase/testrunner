@@ -598,7 +598,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         if bucket_name is None:
             bucket_name = self.buckets[0].name
         if scope is None:
-            raise("Need scope name to get collection")
+            raise Exception("Need scope name to get collection")
         collections = None
         if self.use_rest:
             collections = self.rest_bk.get_scope_collections(bucket_name, scope)
@@ -610,7 +610,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         if bucket_name is None:
             bucket_name = self.buckets[0].name
         if scope is None:
-            raise("Need scope name to get collection")
+            raise Exception("Need scope name to get collection")
         collections = None
         if self.use_rest:
             collections = self.rest_rs.get_scope_collections(bucket_name, scope)

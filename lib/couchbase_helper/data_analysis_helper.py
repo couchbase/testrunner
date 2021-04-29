@@ -734,7 +734,7 @@ class DataCollector(object):
                     bucketMap[values[index]] = value
             except Exception as e:
                 if e:
-                    raise(str(e))
+                    raise Exception(str(e))
         return bucketMap
 
     def get_local_data_map_using_cbtransfer(self, server, buckets, data_path=None,
