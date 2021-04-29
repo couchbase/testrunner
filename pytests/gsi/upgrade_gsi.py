@@ -639,7 +639,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         if status:
             log.info("====== Indexer Mode Set to {0}=====".format(self.post_upgrade_gsi_type))
         else:
-            self.info("====== Indexer Mode is not set to {0}=====".format(self.post_upgrade_gsi_type))
+            log.info("====== Indexer Mode is not set to {0}=====".format(self.post_upgrade_gsi_type))
         for th in upgrade_th:
             th.join()
         self._run_tasks([kv_ops])
