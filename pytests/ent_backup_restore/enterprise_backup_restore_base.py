@@ -739,6 +739,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 if key in self.backupset.filter_values:
                     self.backupset.filter_values = self.backupset.filter_values.replace(key,
                                                                                         filter_chars[key])
+            if self.backupset.current_bkrs_client_version[:3] == "6.6" and ':' in self.backupset.filter_values:
+                self.backupset.filter_values = self.backupset.filter_values.replace(':', ': ')
             args += " --filter-values '{0}'".format(self.backupset.filter_values)
         if self.backupset.force_updates:
             args += " --force-updates"

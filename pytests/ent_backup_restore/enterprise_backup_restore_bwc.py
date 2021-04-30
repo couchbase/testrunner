@@ -328,6 +328,7 @@ class EnterpriseBackupRestoreBWCTest(EnterpriseBackupRestoreBase, NewUpgradeBase
                     if backup_name in strip_backupset:
                         backup_count += 1
                         self.log.info("{0} matched in list command output".format(backup_name))
+            self.assertEqual(backup_count, len(strip_backupset), "Initial number of backups did not match")
         else:
             if output and output[0]:
                 bk_info = json.loads(output[0])
@@ -343,7 +344,7 @@ class EnterpriseBackupRestoreBWCTest(EnterpriseBackupRestoreBase, NewUpgradeBase
                     if backup_name in self.backups:
                         backup_count += 1
                         self.log.info("{0} matched in info command output".format(backup_name))
-        self.assertEqual(backup_count, len(strip_backupset), "Initial number of backups did not match")
+            self.assertEqual(backup_count, len(self.backups), "Initial number of backups did not match")
         self.log.info("Initial number of backups matched")
         self.backupset.start = randrange(1, self.backupset.number_of_backups)
         self.backupset.end = randrange(self.backupset.start + 1, self.backupset.number_of_backups + 1)
@@ -354,22 +355,40 @@ class EnterpriseBackupRestoreBWCTest(EnterpriseBackupRestoreBase, NewUpgradeBase
         if not status:
             self.fail(message)
         backup_count = 0
-        """ remove last 6 chars of offset time in backup name"""
-        if self.backups and self.backups[0][-3:] == "_00":
-            strip_backupset = [s[:-6] for s in self.backups]
 
-        for line in output:
-            if "entbackup" in line:
-                continue
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line):
-                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line).group()
-                if self.debug_logs:
-                    print "backup name ", backup_name
-                    print "backup set  ", strip_backupset
-                if backup_name in strip_backupset:
-                    backup_count += 1
-                    self.log.info("{0} matched in list command output".format(backup_name))
-        self.assertEqual(backup_count, len(strip_backupset), "Merged number of backups did not match")
+        if self.backupset.current_bkrs_client_version[:3] < "6.6":
+            """ remove last 6 chars of offset time in backup name"""
+            if self.backups and self.backups[0][-3:] == "_00":
+                strip_backupset = [s[:-6] for s in self.backups]
+
+            for line in output:
+                if "entbackup" in line:
+                    continue
+                if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line):
+                    backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line).group()
+                    if self.debug_logs:
+                        print "backup name ", backup_name
+                        print "backup set  ", strip_backupset
+                    if backup_name in strip_backupset:
+                        backup_count += 1
+                        self.log.info("{0} matched in list command output".format(backup_name))
+            self.assertEqual(backup_count, len(strip_backupset), "Merged number of backups did not match")
+        else:
+            if output and output[0]:
+                bk_info = json.loads(output[0])
+                bk_info = bk_info["repos"][0]
+            else:
+                return False, "No output content"
+            if bk_info["backups"]:
+                for i in range(0, len(bk_info["backups"])):
+                    backup_name = bk_info["backups"][i]["date"]
+                    if self.debug_logs:
+                        print("backup name ", backup_name)
+                        print("backup set  ", self.backups)
+                    if backup_name in self.backups:
+                        backup_count += 1
+                        self.log.info("{0} matched in info command output".format(backup_name))
+            self.assertEqual(backup_count, len(self.backups), "Initial number of backups did not match")
         self.log.info("Merged number of backups matched")
 
     def test_backup_merge_with_restore_bwc(self):
