@@ -499,6 +499,9 @@ class StableTopFTS(FTSBaseTest):
         self.log.info(defn['indexDef'])
 
     def test_metrics_endpoint_availability(self):
+        # todo: use [global] section value instead of hardcode
+        fts_port = 8094
+
         fts_node = self._cb_cluster.get_random_fts_node()
         endpoint = self._input.param("endpoint", None)
 
@@ -510,7 +513,7 @@ class StableTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete(self._num_items//2)
 
         rest = RestConnection(self._cb_cluster.get_random_fts_node())
-        status, content = rest.get_rest_endpoint_data(endpoint, ip=fts_node.ip, port=fts_node.fts_port)
+        status, content = rest.get_rest_endpoint_data(endpoint, ip=fts_node.ip, port=fts_port)
         self.assertTrue(status, f"Endpoint {endpoint} is not accessible.")
 
     def update_index_during_large_indexing(self):
