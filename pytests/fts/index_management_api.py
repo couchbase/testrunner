@@ -208,6 +208,7 @@ class IndexManagementAPI(FTSBaseTest):
 
         self.fts_rest.unfreeze_fts_index_partitions(fts_index.name)
         fts_index.update_index_partitions(1)
+        self.sleep(5)
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
 
