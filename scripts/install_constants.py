@@ -89,9 +89,12 @@ CBFT_ENV_OPTIONS = \
 PROCESSES_TO_TERMINATE = ["beam.smp", "memcached", "moxi", "vbucketmigrator", "couchdb", "epmd", "memsup", "cpu_sup",
                           "goxdcr", "erlang", "eventing", "erl", "godu", "goport", "gosecrets", "projector"]
 
+UNMOUNT_NFS_CMD = "umount -a -t nfs,nfs4 -f -l;"
+
 CMDS = {
     "deb": {
         "uninstall":
+            UNMOUNT_NFS_CMD +
             "dpkg --purge couchbase-server; kill -9 `ps -ef |egrep couchbase|cut -f3 -d' '`; "
             "rm /var/lib/dpkg/info/couchbase-server.*; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
@@ -147,6 +150,7 @@ CMDS = {
     },
     "rpm": {
         "uninstall":
+            UNMOUNT_NFS_CMD +
             "systemctl stop couchbase-server; " +
             "rpm -e couchbase-server; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; " +
@@ -169,6 +173,7 @@ CMDS = {
 NON_ROOT_CMDS = {
     "deb": {
         "uninstall":
+            UNMOUNT_NFS_CMD +
             "dpkg -r couchbase-server; "
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0;"
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0;",
@@ -226,6 +231,7 @@ NON_ROOT_CMDS = {
         "pre_install":
             "ls -l "+DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"]+"bin/",
         "uninstall":
+            UNMOUNT_NFS_CMD +
             DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"]+"bin/couchbase-server -k; kill -9 `ps "
                                                          "-ef |egrep couchbase|cut -f3 -d' '`; " +
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0; ",
