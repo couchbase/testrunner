@@ -59,18 +59,23 @@ class StableTopFTS(FTSBaseTest):
             scope=index_scope, collections=index_collections)
         self.load_data()
         self.wait_for_indexing_complete()
-        if float(self.get_zap_docvalue_disksize()) != float(0):
-            self.fail("zap files size with docvalue not empty with docValues = False")
-        else:
-            self.log.info(" zap files size found to be : {0}".format(self.get_zap_docvalue_disksize()))
+        for node in self._cb_cluster.get_fts_nodes():
+            ds = self.get_zap_docvalue_disksize(node)
+            if ds:
+                if float(ds) != float(0):
+                    self.fail("zap files size with docvalue not empty with docValues = False")
+                else:
+                    self.log.info(" zap files size found to be : {0}".format(ds))
 
         index.update_docvalues_email_custom_index(True)
         self.wait_for_indexing_complete()
-
-        if float(self.get_zap_docvalue_disksize()) == float(0):
-            self.fail("zap files size with docvalue found to be empty with docValues = True")
-        else:
-            self.log.info(" zap files size found to be : {0}".format(self.get_zap_docvalue_disksize()))
+        for node in self._cb_cluster.get_fts_nodes():
+            ds = self.get_zap_docvalue_disksize(node)
+            if ds:
+                if float(ds) == float(0):
+                    self.fail("zap files size with docvalue found to be empty with docValues = True")
+                else:
+                    self.log.info(" zap files size found to be : {0}".format(ds))
 
     def test_maxttl_setting(self):
         self.create_simple_default_index()

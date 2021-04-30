@@ -4913,16 +4913,20 @@ class FTSBaseTest(unittest.TestCase):
                               doc['_type'],
                               key)
 
-    def get_zap_docvalue_disksize(self):
-        shell = RemoteMachineShellConnection(self._cb_cluster.get_random_fts_node())
+    def get_zap_docvalue_disksize(self, fts_node):
+        shell = RemoteMachineShellConnection(fts_node)
         command = 'cd /opt/couchbase/var/lib/couchbase/data/\\@fts; find . -name "*.zap"|  sort -n | ' \
-                  'tail -1 | xargs -I {} sh -c "/opt/couchbase/bin/cbft-bleve zap docvalue {} | tail -1"'
+                  'tail -1 | xargs -I {} sh -c "/opt/couchbase/bin/cbft-bleve zap v15 docvalue {} | tail -1"'
         output, error = shell.execute_command(command)
         if error and "remoteClients registered for tls config updates" not in error[0]:
             self.fail("error running command : {0} , error : {1}".format(command, error))
         self.log.info(output)
-        self.log.info(re.findall(r"\d+\.\d+", output[0]))
-        return re.findall(r"\d+\.\d+", output[0])[0]
+        if output:
+            self.log.info(re.findall(r"\d+\.\d+", output[0]))
+            ds = re.findall(r"\d+\.\d+", output[0])[0]
+        else:
+            ds = None
+        return ds
 
     def create_geo_index_and_load(self):
         """
