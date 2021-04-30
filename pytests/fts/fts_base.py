@@ -2658,7 +2658,7 @@ class CouchbaseCluster:
         """
         if not node:
             node = self.get_random_n1ql_node()
-        res = RestConnection(node).query_tool(query)
+        res = RestConnection(node).query_tool(query, timeout=timeout)
         return res
 
     def run_fts_query_with_facets(self, index_name, query_dict, node=None):
