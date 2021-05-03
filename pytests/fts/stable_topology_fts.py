@@ -36,9 +36,9 @@ class StableTopFTS(FTSBaseTest):
         except ServerUnavailableException as e:
             raise FTSException("FTS service has not started: %s" %e)
 
-    def create_simple_default_index(self):
+    def create_simple_default_index(self, data_loader_output=False):
         plan_params = self.construct_plan_params()
-        self.load_data(generator=None)
+        self.load_data(generator=None, data_loader_output=data_loader_output)
         self.wait_till_items_in_bucket_equal(self._num_items//2)
         self.create_fts_indexes_all_buckets(plan_params=plan_params)
         if self._update or self._delete:
@@ -174,7 +174,9 @@ class StableTopFTS(FTSBaseTest):
     def test_match_consistency(self):
         query = {"match_all": {}}
         expected_hits = int(self._input.param("expected_hits_num", self._num_items))
-        self.create_simple_default_index()
+        self.create_simple_default_index(data_loader_output=True)
+        if self.container_type == "collection":
+            scan_vectors_before_mutations = self._get_mutation_vectors()
         zero_results_ok = True
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query,
@@ -186,6 +188,12 @@ class StableTopFTS(FTSBaseTest):
             self.log.info("Hits: %s" % hits)
             for i in range(list(list(self.consistency_vectors.values())[0].values())[0]):
                 self.async_perform_update_delete(self.upd_del_fields)
+            if self.container_type == "collection":
+                scan_vectors_after_mutations = self._get_mutation_vectors()
+                new_scan_vectors = scan_vectors_after_mutations - scan_vectors_before_mutations
+                self.consistency_vectors = {}
+                self.consistency_vectors[self._cb_cluster.get_indexes()[0].name] = self._convert_mutation_vector_to_scan_vector(new_scan_vectors)
+                self.log.info(self.consistency_vectors)
             hits, _, _, _ = index.execute_query(query,
                                                 zero_results_ok=zero_results_ok,
                                                 expected_hits=expected_hits,
@@ -242,6 +250,8 @@ class StableTopFTS(FTSBaseTest):
         timeout = self._input.param("timeout", None)
         query = {"match_all": {}}
         self.create_simple_default_index()
+        if self.container_type == "collection":
+            scan_vectors_before_mutations = self._get_mutation_vectors()
         zero_results_ok = True
         self.sleep(10)
         for index in self._cb_cluster.get_indexes():
@@ -252,6 +262,7 @@ class StableTopFTS(FTSBaseTest):
                                                 consistency_vectors=self.consistency_vectors)
             self.log.info("Hits: %s" % hits)
             tasks = []
+            tasks.append(Thread(target=self.async_perform_update_delete, args=(self.upd_del_fields,)))
             for i in range(list(list(self.consistency_vectors.values())[0].values())[0]):
                 tasks.append(Thread(target=self.async_perform_update_delete, args=(self.upd_del_fields,)))
             for task in tasks:
@@ -263,6 +274,13 @@ class StableTopFTS(FTSBaseTest):
                 # with None we have 60s by default
                 num_items = 0
             try:
+                if self.container_type == "collection":
+                    self.sleep(20)
+                    scan_vectors_after_mutations = self._get_mutation_vectors()
+                    self.log.info(scan_vectors_after_mutations)
+                    new_scan_vectors = scan_vectors_after_mutations - scan_vectors_before_mutations
+                    self.consistency_vectors = {}
+                    self.consistency_vectors[self._cb_cluster.get_indexes()[0].name] = self._convert_mutation_vector_to_scan_vector(new_scan_vectors)
                 hits, _, _, _ = index.execute_query(query,
                                                     zero_results_ok=zero_results_ok,
                                                     expected_hits=num_items,

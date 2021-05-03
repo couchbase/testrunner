@@ -12,6 +12,7 @@ import re
 import json
 import math
 import random
+import subprocess
 
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, Bucket
@@ -4085,6 +4086,20 @@ class FTSBaseTest(unittest.TestCase):
         self.ntonencrypt = self._input.param('ntonencrypt','disable')
         self.ntonencrypt_level = self._input.param('ntonencrypt_level','control')
 
+    def _get_mutation_vectors(self):
+        self.log.info("Grepping for 'MutationResult' in java_sdk_loader.log")
+        return set(subprocess.check_output(['grep', 'MutationResult', 'java_sdk_loader.log'],
+                                              universal_newlines=True).split('\n'))
+
+    def _convert_mutation_vector_to_scan_vector(self, mvectors):
+        vectors = re.findall(r'.*?vbID=(.*?), vbUUID=(.*?), seqno=(.*?),', str(mvectors))
+        scan_vector = {}
+        for vector in vectors:
+            vector = list(vector)
+            if len(vector) == 3:
+                scan_vector[f'{vector[0]}/{vector[1]}'] = int(vector[2])
+        return scan_vector
+
     def __cleanup_previous(self):
         self._cb_cluster.cleanup_cluster(self, cluster_shutdown=False)
 
@@ -5002,7 +5017,7 @@ class FTSBaseTest(unittest.TestCase):
                       % index_name)
 
     def get_generator(self, dataset, num_items, start=0, encoding="utf-8",
-                      lang="EN"):
+                      lang="EN", data_loader_output=False):
         """
            Returns a generator depending on the dataset
         """
@@ -5039,10 +5054,10 @@ class FTSBaseTest(unittest.TestCase):
                                            start=start, end=start+num_items,
                                            es_compare=self.compare_es, es_host=elastic_ip, es_port=elastic_port,
                                            es_login=elastic_username, es_password=elastic_password, key_prefix=dataset+"_",
-                                           upd_del_shift=self._num_items
+                                           upd_del_shift=self._num_items, output=data_loader_output
                                  )
 
-    def populate_create_gen(self):
+    def populate_create_gen(self,data_loader_output=False):
         if self.dataset == "all":
             # only emp and wiki
             self.create_gen = []
@@ -5052,7 +5067,7 @@ class FTSBaseTest(unittest.TestCase):
                 "wiki", num_items=self._num_items // 2))
         else:
             self.create_gen = self.get_generator(
-                self.dataset, num_items=self._num_items)
+                self.dataset, num_items=self._num_items, data_loader_output=data_loader_output)
 
     def populate_update_gen(self, fields_to_update=None, expiration=0):
         if self.dataset == "emp":
@@ -5134,7 +5149,7 @@ class FTSBaseTest(unittest.TestCase):
                                                          end=self.create_gen[1].end,
                                                          op_type=OPS.DELETE))
 
-    def load_data(self, generator=None):
+    def load_data(self, generator=None, data_loader_output=False):
         """
          Blocking call to load data to Couchbase and ES
         """
@@ -5143,17 +5158,17 @@ class FTSBaseTest(unittest.TestCase):
                 self._active_resident_ratio,
                 self.compare_es)
             return
-        load_tasks = self.async_load_data(generator=generator)
+        load_tasks = self.async_load_data(generator=generator, data_loader_output=data_loader_output)
         for task in load_tasks:
             task.result()
         self.log.info("Loading phase complete!")
 
-    def async_load_data(self, generator=None):
+    def async_load_data(self, generator=None, data_loader_output=False):
         """
          For use to run with parallel tasks like rebalance, failover etc
         """
         load_tasks = []
-        self.populate_create_gen()
+        self.populate_create_gen(data_loader_output=data_loader_output)
         if self.compare_es and self.container_type != 'collection':
             if self.container_type == 'bucket':
                 gen = copy.deepcopy(self.create_gen)
