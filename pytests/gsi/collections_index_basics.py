@@ -105,7 +105,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             if self.defer_build:
                 query = query_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-            self.wait_until_indexes_online(defer_build=self.defer_build)
+            self.wait_until_indexes_online()
             # todo (why it's failing even though build is complete)
             self.sleep(5)
 
@@ -114,7 +114,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             if self.defer_build:
                 query = indx_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-            self.wait_until_indexes_online(defer_build=self.defer_build)
+            self.wait_until_indexes_online()
             # todo (why it's failing even though build is complete)
             self.sleep(5)
 
@@ -126,7 +126,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             if self.defer_build:
                 query = primary_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-            self.wait_until_indexes_online(defer_build=self.defer_build)
+            self.wait_until_indexes_online()
             # todo (why it's failing even though build is complete)
             self.sleep(5)
 
