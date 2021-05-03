@@ -168,7 +168,7 @@ class MemorySanity(BaseTestCase):
                     random_string = self.random_str_generator(str_len)
                     awareness.memcached(key).append(key, random_string)
                     if self.kv_verify:
-                        verify_dict[key] = "%s%s" % (verify_dict[key], random_string)
+                        verify_dict[key] = verify_dict[key].__add__(bytes(random_string, 'utf-8'))
                 self.log.info(
                     "for {0} items size was increased to {1} Bytes".format(len(selected_keys) + 1, self.value_size))
                 self.value_size += str_len
