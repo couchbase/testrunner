@@ -247,8 +247,6 @@ class IndexBackupClient(object):
         self.backup_data = {}
 
     def set_backup_node(self, backup_node):
-        if "index" not in backup_node.services.split(","):
-            raise Exception("Index service is not available on the node")
         self.backup_rest = RestConnection(backup_node)
         self.backup_node = backup_node
         self.backup_api =\
@@ -272,8 +270,6 @@ class IndexBackupClient(object):
             raise Exception("OS not supported.")
 
     def set_restore_node(self, restore_node):
-        if "index" not in restore_node.services.split(","):
-            raise Exception("Index service is not available on the node")
         self.restore_rest = RestConnection(restore_node)
         self.restore_node = restore_node
         self.restore_api =\
