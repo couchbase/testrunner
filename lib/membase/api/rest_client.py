@@ -1428,10 +1428,9 @@ class RestConnection(object):
             try:
                 status, content, header = self._http_request(api, 'POST', params)
                 # response : {"id": "replication_id"}
-                if status:
-                    json_parsed = json.loads(content)
-                    log.info("Replication created with id: {0}".format(json_parsed['id']))
-                    return json_parsed['id']
+                json_parsed = json.loads(content)
+                log.info("Replication created with id: {0}".format(json_parsed['id']))
+                return json_parsed['id']
             except ValueError:
                 time.sleep(10)
                 retries -= 1
