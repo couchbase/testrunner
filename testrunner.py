@@ -460,7 +460,7 @@ def get_server_logs(input, path):
             req.headers = create_headers(input.membase_settings.rest_username,
                                          input.membase_settings.rest_password)
             filename = "{0}/{1}-diag.txt".format(path, server.ip)
-            page = urllib.request.urlopen(req)
+            page = urllib.request.urlopen(req, timeout=60)
             with open(filename, 'wb') as output:
                 os.write(1, "downloading {0} ...".format(str(server.ip)).encode())
                 while True:
