@@ -48,7 +48,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
     ### for this to work upgrade_version > 5.5
     def test_offline_upgrade_with_eventing(self):
         self._install(self.servers[:self.nodes_init])
-        self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
+        self.operations(self.servers[:self.nodes_init], services="kv,kv,eventing,index,n1ql")
         self.create_buckets()
         # Load the data in older version
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
@@ -68,8 +68,8 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
             success_upgrade &= self.queue.get()
         if not success_upgrade:
             self.fail("Upgrade failed!")
-        self.wait_for_handler_state("bucket_op","undeployed")
-        self.wait_for_handler_state("timers","deployed")
+        self.wait_for_handler_state("bucket_op", "undeployed")
+        self.wait_for_handler_state("timers", "deployed")
         self.deploy_handler_by_name("bucket_op")
         # Validate the data
         self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
@@ -80,18 +80,22 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
         # Load the data in collections
-        self.load_data_to_collection(self.docs_per_day * 2016,namespace="source_bucket_mutation.event.coll_0")
-        self.load_data_to_collection(self.docs_per_day * 2016,namespace="src_bucket.event.coll_0")
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="source_bucket_mutation.event.coll_0")
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0")
         self.verify_count(self.docs_per_day * 2016)
+        self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", self.docs_per_day * 2016 * 2)
         ### delete data in all collections
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="source_bucket_mutation.event.coll_0",is_delete=True)
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0",is_delete=True)
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket._default._default",is_delete=True)
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="source_bucket_mutation.event.coll_0",
+                                     is_delete=True)
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0", is_delete=True)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
         # Delete the data on SBM bucket
         self.load(self.gens_load, buckets=self.sbm, verify_data=False, op_type='delete')
         self.verify_count(0)
+        self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", self.docs_per_day * 2016)
         self.verify_doc_count_collections("dst_bucket._default._default", 0)
-        self.verify_doc_count_collections("dst_bucket1._default._default",0)
+        self.verify_doc_count_collections("dst_bucket1._default._default", 0)
         ## pause handler
         self.pause_handler_by_name("bucket_op")
         self.pause_handler_by_name("timers")
@@ -108,9 +112,13 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.resume_handler_by_name("curl")
         self.resume_handler_by_name("sbm")
         # Validate the data for both the functions
-        self.verify_count(0)
-        self.verify_doc_count_collections("dst_bucket._default._default", 0)
-        self.verify_doc_count_collections("dst_bucket1._default._default", 0)
+        self.verify_count(self.docs_per_day * 2016)
+        self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", self.docs_per_day * 2016 * 3)
+        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
+        self.sleep(300)  ## wait for timers to fire
+        self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
+        self.print_eventing_stats_from_all_eventing_nodes()
+        self.skip_metabucket_check = True
 
     def test_online_upgrade_with_regular_rebalance_with_eventing(self):
         self._install(self.servers[:self.nodes_init])
@@ -128,6 +136,148 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.print_eventing_stats_from_all_eventing_nodes()
         # swap and rebalance the servers
         self.online_upgrade(services=["kv","kv", "eventing", "index", "n1ql"])
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        self.add_built_in_server_user()
+        self.wait_for_handler_state("bucket_op", "undeployed")
+        self.wait_for_handler_state("timers", "deployed")
+        self.deploy_handler_by_name("bucket_op")
+        # Validate the data
+        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
+        self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
+        self.create_collections_on_all_buckets()
+        self.post_upgrade_handlers()
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        # Load the data in collections
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="source_bucket_mutation.event.coll_0")
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0")
+        self.verify_count(self.docs_per_day * 2016)
+        self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", self.docs_per_day * 2016 * 2)
+        ### delete data in all collections
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="source_bucket_mutation.event.coll_0",
+                                     is_delete=True)
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0", is_delete=True)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Delete the data on SBM bucket
+        self.load(self.gens_load, buckets=self.sbm, verify_data=False, op_type='delete')
+        self.verify_count(0)
+        self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", self.docs_per_day * 2016)
+        self.verify_doc_count_collections("dst_bucket._default._default", 0)
+        self.verify_doc_count_collections("dst_bucket1._default._default", 0)
+        ## pause handler
+        self.pause_handler_by_name("bucket_op")
+        self.pause_handler_by_name("timers")
+        self.pause_handler_by_name("n1ql")
+        self.pause_handler_by_name("curl")
+        self.pause_handler_by_name("sbm")
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="source_bucket_mutation.event.coll_0")
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0")
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket._default._default")
+        # resume function
+        self.resume_handler_by_name("bucket_op")
+        self.resume_handler_by_name("timers")
+        self.resume_handler_by_name("n1ql")
+        self.resume_handler_by_name("curl")
+        self.resume_handler_by_name("sbm")
+        # Validate the data for both the functions
+        self.verify_count(self.docs_per_day * 2016)
+        self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", self.docs_per_day * 2016 * 3)
+        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
+        self.sleep(300)  ## wait for timers to fire
+        self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
+        self.print_eventing_stats_from_all_eventing_nodes()
+        self.skip_metabucket_check=True
+
+    def test_online_upgrade_with_swap_rebalance_with_eventing(self):
+        self._install(self.servers[:self.nodes_init])
+        self.initial_version = self.upgrade_version
+        self._install(self.servers[self.nodes_init:self.num_servers])
+        self.operations(self.servers[:self.nodes_init], services="kv,kv,eventing,index,n1ql")
+        self.create_buckets()
+        # Load the data in older version
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        # Deploy the bucket op function
+        log.info("Deploy the function in the initial version")
+        self.pre_upgrade_handlers()
+        # offline upgrade all the nodes
+        self.print_eventing_stats_from_all_eventing_nodes()
+        # swap and rebalance the servers
+        self.online_upgrade_swap_rebalance(services=["kv","kv", "eventing","index","n1ql"])
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        self.add_built_in_server_user()
+        self.wait_for_handler_state("bucket_op", "undeployed")
+        self.wait_for_handler_state("timers", "deployed")
+        self.deploy_handler_by_name("bucket_op")
+        # Validate the data
+        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
+        self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
+        self.create_collections_on_all_buckets()
+        self.post_upgrade_handlers()
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        # Load the data in collections
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="source_bucket_mutation.event.coll_0")
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0")
+        self.verify_count(self.docs_per_day * 2016)
+        self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", self.docs_per_day * 2016 * 2)
+        ### delete data in all collections
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="source_bucket_mutation.event.coll_0",
+                                     is_delete=True)
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0", is_delete=True)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Delete the data on SBM bucket
+        self.load(self.gens_load, buckets=self.sbm, verify_data=False, op_type='delete')
+        self.verify_count(0)
+        self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", self.docs_per_day * 2016)
+        self.verify_doc_count_collections("dst_bucket._default._default", 0)
+        self.verify_doc_count_collections("dst_bucket1._default._default", 0)
+        ## pause handler
+        self.pause_handler_by_name("bucket_op")
+        self.pause_handler_by_name("timers")
+        self.pause_handler_by_name("n1ql")
+        self.pause_handler_by_name("curl")
+        self.pause_handler_by_name("sbm")
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="source_bucket_mutation.event.coll_0")
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0")
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket._default._default")
+        # resume function
+        self.resume_handler_by_name("bucket_op")
+        self.resume_handler_by_name("timers")
+        self.resume_handler_by_name("n1ql")
+        self.resume_handler_by_name("curl")
+        self.resume_handler_by_name("sbm")
+        # Validate the data for both the functions
+        self.verify_count(self.docs_per_day * 2016)
+        self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", self.docs_per_day * 2016 * 3)
+        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
+        self.sleep(300)  ## wait for timers to fire
+        self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
+        self.print_eventing_stats_from_all_eventing_nodes()
+        self.skip_metabucket_check = True
+
+    def test_online_upgrade_with_failover_rebalance_with_eventing(self):
+        self._install(self.servers[:self.nodes_init])
+        self.initial_version = self.upgrade_version
+        self._install(self.servers[self.nodes_init:self.num_servers])
+        self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
+        self.create_buckets()
+        # Load the data in older version
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        # Deploy the bucket op function
+        log.info("Deploy the function in the initial version")
+        self.pre_upgrade_handlers()
+        # offline upgrade all the nodes
+        self.print_eventing_stats_from_all_eventing_nodes()
+        # online upgrade with failover
+        self.online_upgrade_with_failover(services=["kv", "eventing", "index", "n1ql"])
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
         self.add_built_in_server_user()
@@ -178,139 +328,10 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.verify_count(self.docs_per_day * 2016)
         self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", self.docs_per_day * 2016 * 3)
         self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
-        self.sleep(600)  ## wait for timers to fire
+        self.sleep(300)  ## wait for timers to fire
         self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
-        self.skip_metabucket_check=True
-
-    def test_online_upgrade_with_swap_rebalance_with_eventing(self):
-        self._install(self.servers[:self.nodes_init])
-        self.initial_version = self.upgrade_version
-        self._install(self.servers[self.nodes_init:self.num_servers])
-        self.operations(self.servers[:self.nodes_init], services="kv,kv,eventing,index,n1ql")
-        self.create_buckets()
-        # Load the data in older version
-        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
-        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
-        self.rest = RestConnection(self.restServer)
-        # Deploy the bucket op function
-        log.info("Deploy the function in the initial version")
-        self.pre_upgrade_handlers()
-        # offline upgrade all the nodes
         self.print_eventing_stats_from_all_eventing_nodes()
-        # swap and rebalance the servers
-        self.online_upgrade_swap_rebalance(services=["kv","kv", "eventing","index","n1ql"])
-        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
-        self.rest = RestConnection(self.restServer)
-        self.add_built_in_server_user()
-        self.wait_for_handler_state("bucket_op", "undeployed")
-        self.wait_for_handler_state("timers", "deployed")
-        self.deploy_handler_by_name("bucket_op")
-        # Validate the data
-        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
-        self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
-        self.create_collections_on_all_buckets()
-        self.post_upgrade_handlers()
-        self.add_built_in_server_user()
-        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
-        self.rest = RestConnection(self.restServer)
-        # Load the data in collections
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="source_bucket_mutation.event.coll_0")
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0")
-        self.verify_count(self.docs_per_day * 2016)
-        ### delete data in all collections
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="source_bucket_mutation.event.coll_0",
-                                     is_delete=True)
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0", is_delete=True)
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket._default._default", is_delete=True)
-        # Delete the data on SBM bucket
-        self.load(self.gens_load, buckets=self.sbm, verify_data=False, op_type='delete')
-        self.verify_count(0)
-        self.verify_doc_count_collections("dst_bucket._default._default", 0)
-        self.verify_doc_count_collections("dst_bucket1._default._default", 0)
-        ## pause handler
-        self.pause_handler_by_name("bucket_op")
-        self.pause_handler_by_name("timers")
-        self.pause_handler_by_name("n1ql")
-        self.pause_handler_by_name("curl")
-        self.pause_handler_by_name("sbm")
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="source_bucket_mutation.event.coll_0")
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0")
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket._default._default")
-        # resume function
-        self.resume_handler_by_name("bucket_op")
-        self.resume_handler_by_name("timers")
-        self.resume_handler_by_name("n1ql")
-        self.resume_handler_by_name("curl")
-        self.resume_handler_by_name("sbm")
-        # Validate the data for both the functions
-        self.verify_count(0)
-        self.verify_doc_count_collections("dst_bucket._default._default", 0)
-        self.verify_doc_count_collections("dst_bucket1._default._default", 0)
-
-    def test_online_upgrade_with_failover_rebalance_with_eventing(self):
-        self._install(self.servers[:self.nodes_init])
-        self.initial_version = self.upgrade_version
-        self._install(self.servers[self.nodes_init:self.num_servers])
-        self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
-        self.create_buckets()
-        # Load the data in older version
-        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
-        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
-        self.rest = RestConnection(self.restServer)
-        # Deploy the bucket op function
-        log.info("Deploy the function in the initial version")
-        self.pre_upgrade_handlers()
-        # offline upgrade all the nodes
-        self.print_eventing_stats_from_all_eventing_nodes()
-        # online upgrade with failover
-        self.online_upgrade_with_failover(services=["kv", "eventing", "index", "n1ql"])
-        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
-        self.rest = RestConnection(self.restServer)
-        self.add_built_in_server_user()
-        self.wait_for_handler_state("bucket_op", "undeployed")
-        self.wait_for_handler_state("timers", "deployed")
-        self.deploy_handler_by_name("bucket_op")
-        # Validate the data
-        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
-        self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
-        self.create_collections_on_all_buckets()
-        self.post_upgrade_handlers()
-        self.add_built_in_server_user()
-        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
-        self.rest = RestConnection(self.restServer)
-        # Load the data in collections
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="source_bucket_mutation.event.coll_0")
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0")
-        self.verify_count(self.docs_per_day * 2016)
-        ### delete data in all collections
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="source_bucket_mutation.event.coll_0",
-                                     is_delete=True)
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0", is_delete=True)
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket._default._default", is_delete=True)
-        # Delete the data on SBM bucket
-        self.load(self.gens_load, buckets=self.sbm, verify_data=False, op_type='delete')
-        self.verify_count(0)
-        self.verify_doc_count_collections("dst_bucket._default._default", 0)
-        self.verify_doc_count_collections("dst_bucket1._default._default", 0)
-        ## pause handler
-        self.pause_handler_by_name("bucket_op")
-        self.pause_handler_by_name("timers")
-        self.pause_handler_by_name("n1ql")
-        self.pause_handler_by_name("curl")
-        self.pause_handler_by_name("sbm")
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="source_bucket_mutation.event.coll_0")
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0")
-        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket._default._default")
-        # resume function
-        self.resume_handler_by_name("bucket_op")
-        self.resume_handler_by_name("timers")
-        self.resume_handler_by_name("n1ql")
-        self.resume_handler_by_name("curl")
-        self.resume_handler_by_name("sbm")
-        # Validate the data for both the functions
-        self.verify_count(0)
-        self.verify_doc_count_collections("dst_bucket._default._default", 0)
-        self.verify_doc_count_collections("dst_bucket1._default._default", 0)
+        self.skip_metabucket_check = True
 
     def test_cross_version_import_export_of_handlers(self):
         self.create_buckets()
