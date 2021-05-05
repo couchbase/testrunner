@@ -683,7 +683,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                 password=cluster_pwd)
             self.assertTrue("DEPRECATED: Please use the recovery command "
                             "instead" in output[0] and "SUCCESS: Servers "
-                                                    "recovered" in output[2],
+                                                    "recovered" in output[1],
                             "Server readd failed")
             self.sleep(5)
 
