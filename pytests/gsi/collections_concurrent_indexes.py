@@ -336,6 +336,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                         continue
                     else:
                         self.fail(err)
+        self.rest.set_index_settings(self.schedule_index_enable)
         self.sleep(120)
         self.wait_until_indexes_online()
         self.sleep(300)
