@@ -2,8 +2,12 @@ import os as OS
 import subprocess
 import sys
 from couchbase.cluster import Cluster
-from couchbase.cluster import PasswordAuthenticator
-from couchbase.n1ql import N1QLQuery
+try:
+    from couchbase.cluster import PasswordAuthenticator
+    from couchbase.n1ql import N1QLQuery
+except ImportError:
+    from couchbase.auth import PasswordAuthenticator
+    from couchbase.cluster import ClusterOptions
 try:
     import requests
 except ImportError:
@@ -71,6 +75,27 @@ def build_args(build_version, executor_jenkins_job=False,
     """
     return locals()
 
+def get_cluster():
+    try:
+        cluster = Cluster('couchbase://{}'.format(host))
+        authenticator = PasswordAuthenticator('Administrator', 'password')
+        cluster.authenticate(authenticator)
+        return cluster
+    except Exception:
+        cluster = Cluster('couchbase://{}'.format(host), ClusterOptions(PasswordAuthenticator('Administrator', 'password')))
+        return cluster
+
+def get_bucket(cluster, name):
+    try:
+        return cluster.open_bucket(name)
+    except Exception:
+        return cluster.bucket(name).default_collection()
+
+def run_query(bucket, query):
+    try:
+        return bucket.n1ql_query(N1QLQuery(query))
+    except Exception:
+        return bucket.query(query)
 
 def find_rerun_job(args):
     """
@@ -104,10 +129,8 @@ def find_rerun_job(args):
         version_build = args['build_version']
     if not name or not version_build:
         return False, {}
-    cluster = Cluster('couchbase://{}'.format(host))
-    authenticator = PasswordAuthenticator('Administrator', 'password')
-    cluster.authenticate(authenticator)
-    rerun_jobs = cluster.open_bucket(bucket_name)
+    cluster = get_cluster()
+    rerun_jobs = get_bucket(cluster, bucket_name)
     rerun = False
     doc_id = "{}_{}".format(name, version_build)
     try:
@@ -160,16 +183,14 @@ def should_dispatch_job(os, component, sub_component, version):
     """
     doc_id = "{0}_{1}_{2}_{3}".format(os, component, sub_component,
                                     version)
-    cluster = Cluster('couchbase://{}'.format(host))
-    authenticator = PasswordAuthenticator('Administrator', 'password')
-    cluster.authenticate(authenticator)
-    rerun_jobs = cluster.open_bucket(bucket_name)
+    cluster = get_cluster()
+    rerun_jobs = get_bucket(cluster, bucket_name)
     user_name = "{0}-{1}%{2}".format(component, sub_component, version)
     query = "select * from `QE-server-pool` where username like " \
             "'{0}' and state = 'booked'".format(user_name)
-    qe_server_pool = cluster.open_bucket("QE-server-pool")
-    n1ql_result = qe_server_pool.n1ql_query(N1QLQuery(query))
-    if n1ql_result.buffered_remainder.__len__():
+    qe_server_pool = get_bucket(cluster, "QE-server-pool")
+    n1ql_result = run_query(qe_server_pool, query)
+    if list(n1ql_result):
         print("Tests are already running. Not dispatching another job")
         return False
     run_document = rerun_jobs.get(doc_id, quiet=True)
