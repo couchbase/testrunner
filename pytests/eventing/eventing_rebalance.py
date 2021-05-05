@@ -1240,7 +1240,8 @@ class EventingRebalance(EventingBaseTest):
                                                      services=services_in)
             self.sleep(2)
             reached = RestHelper(self.rest).rebalance_reached(percentage=60)
-            for node in [eventing_node]:
+            self.wait_for_failover_or_rebalance()
+            for node in [kv_node, eventing_node]:
                 self.kill_erlang_service(node)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
@@ -1743,6 +1744,7 @@ class EventingRebalance(EventingBaseTest):
                                                      services=services_in)
 
             reached = RestHelper(self.rest).rebalance_reached(percentage=30)
+            self.wait_for_failover_or_rebalance()
             # kill erlang process on kv and eventing when eventing rebalance is going on
             for node in [kv_node, eventing_node]:
                 self.kill_erlang_service(node)
