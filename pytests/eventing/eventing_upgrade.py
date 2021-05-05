@@ -236,6 +236,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.verify_count(0)
         self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", self.docs_per_day * 2016)
         self.verify_doc_count_collections("dst_bucket._default._default", 0)
+        self.sleep(300)  ## wait for timers to fire
         self.verify_doc_count_collections("dst_bucket1._default._default", 0)
         ## pause handler
         self.pause_handler_by_name("bucket_op")
@@ -265,7 +266,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self._install(self.servers[:self.nodes_init])
         self.initial_version = self.upgrade_version
         self._install(self.servers[self.nodes_init:self.num_servers])
-        self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
+        self.operations(self.servers[:self.nodes_init], services="kv,kv,eventing,index,n1ql")
         self.create_buckets()
         # Load the data in older version
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
@@ -277,7 +278,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         # offline upgrade all the nodes
         self.print_eventing_stats_from_all_eventing_nodes()
         # online upgrade with failover
-        self.online_upgrade_with_failover(services=["kv", "eventing", "index", "n1ql"])
+        self.online_upgrade_with_failover(services=["kv","kv", "eventing", "index", "n1ql"])
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
         self.add_built_in_server_user()
@@ -308,6 +309,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.verify_count(0)
         self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", self.docs_per_day * 2016)
         self.verify_doc_count_collections("dst_bucket._default._default", 0)
+        self.sleep(300)
         self.verify_doc_count_collections("dst_bucket1._default._default", 0)
         ## pause handler
         self.pause_handler_by_name("bucket_op")
