@@ -7,15 +7,18 @@ from couchbase.collection import MutateInOptions
 from enum import (
     Enum
 )
-
 from ent_backup_restore.enterprise_backup_restore_base import (
-    EnterpriseBackupMergeBase
+    EnterpriseBackupRestoreBase
 )
 from membase.api.rest_client import (
     RestConnection
 )
 from membase.helper.rebalance_helper import (
     RebalanceHelper
+)
+from couchbase_helper.documentgenerator import (
+    BlobGenerator,
+    DocumentGenerator
 )
 from remote.remote_util import (
     RemoteMachineShellConnection
@@ -95,9 +98,9 @@ class Collection(Taggable):
 
     def set_document(self, key, value, new_tag=Tag.CHANGED):
         if key in self.documents:
-            self.documents[key] = Document(key, value, tag=new_tag)
+            self.documents[key].append(Document(key, value, tag=new_tag, xattrs=self.documents[key][-1].xattrs))
         else:
-            self.documents[key] = Document(key, value)
+            self.documents[key] = [Document(key, value)]
 
     def get_document(self, key):
         if key not in self.documents:
@@ -109,23 +112,26 @@ class Collection(Taggable):
         if key not in self.documents:
             raise ValueError(f"The document key {key} does not exist")
 
-        self.documents[key] = Document(key, self.documents[key].value, tag=Tag.DELETED)
+        self.documents[key].append(Document(key, self.documents[key][-1].value, tag=Tag.DELETED))
 
     def set_subdoc(self, key, path, value, tag=Tag.CHANGED):
         subdoc_path_split = path.split('.')
         if key not in self.documents:
+            # TODO: Add support for creating keys with xattrs
             raise ValueError(f"The document key {key} does not exist")
         else:
-            tmp = self.documents[key].xattrs
+            self.documents[key].append(copy.deepcopy(self.documents[key][-1]))
+            # Build a dictionary tree using the path provided
+            tmp = self.documents[key][-1].xattrs
             for level in subdoc_path_split[:-1]:
                 tmp.setdefault(level, {})
                 tmp = tmp[level]
             tmp[subdoc_path_split[-1]] = value
 
-            self.documents[key].tag = tag
+            self.documents[key][-1].tag = tag
 
-    def mark_unchanged(self, key):
-        self.documents[key].tag = Tag.UNCHANGED
+    def mark_unchanged(self, key, entry=-1):
+        self.documents[key][entry].tag = Tag.UNCHANGED
 
 
 class Bucket(Taggable):
@@ -228,7 +234,7 @@ class ExamineSimulation:
 
         for cs in backup.get_collection_strings():
             for doc in backup.get_collection(cs).documents.values():
-                backup.get_collection(cs).mark_unchanged(doc.key)
+                backup.get_collection(cs).mark_unchanged(doc[-1].key)
 
         # Mutate the cluster to reflect what we want in the backup
         for mutation in mutations:
@@ -268,20 +274,25 @@ class ExamineSimulation:
         6: Unchanged
         """
         final = dict(optional_args)
+        stop = None
+        # Make sure that we don't try to read from backups we haven't taken yet
         if "start" in final and "end" in final:
             for s in ["start", "end"]:
                 if final[s].isdigit():
                     final[s] = str(min(int(final[s]), self.steps()))
+                    stop = final[s]
 
         for cs in backup.get_collection_strings():
             for doc in backup.get_collection(cs).documents.values():
+                # Grab the "end" document if we've specified "end"
+                doc = doc[stop] if stop else doc[-1]
                 examine_results = self.examine.examine(ExamineArguments(self.backup_base.backupset, str(cs), doc.key, objstore_provider=self.backup_base.objstore_provider, **final))
-                unchanged_value = re.compile("Document with key .* has not changed")
                 print(examine_results[-1].__dict__)
                     
                 if doc.tag == Tag.DELETED:
                     self.backup_base.assertTrue(examine_results[-1].document.deleted)
                 elif doc.tag == Tag.UNCHANGED:
+                    # May not be the most effective method of checking, could do with looking into further
                     self.backup_base.assertEqual(examine_results[-1].event_type, 6)
                 elif doc.tag == Tag.XATTR_CHANGED:
                     self.backup_base.assertEqual(examine_results[-1].document.xattrs, doc.xattrs)
@@ -353,7 +364,8 @@ class ExamineDocument:
 class ExamineResult:
     """ Represents a single entry in the examine sub-command's output """
 
-    def __init__(self, backup=None, event_type=None, event_description=None, cluster_uuid=None, bucket_uuid=None, scope_id=None, collection_id=None, document=None):
+    def __init__(self, version=None, backup=None, event_type=None, event_description=None, cluster_uuid=None, bucket_uuid=None, scope_id=None, collection_id=None, document=None):
+        self.version = version
         self.backup = backup
         self.event_type = event_type
         self.event_description = event_description
@@ -406,7 +418,7 @@ class ExamineArguments:
         return command.strip()
 
 
-class BackupExamineTest(EnterpriseBackupMergeBase):
+class BackupExamineTest(EnterpriseBackupRestoreBase):
 
     def setUp(self):
         """ The setup. """
@@ -518,6 +530,11 @@ class SetSubDocMutation:
         #                                  scope=self.collection_string.scope_name
         #                                  )
             
+class MergeBackupMutation:
+    """ Merge backups """
+
+    def apply(self, backup_base, backup):
+        backup_base.backup_merge()
 
 class CreateBucketMutation:
     """ Create a bucket """
