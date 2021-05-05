@@ -318,7 +318,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             for query in index_gen_query_list:
                 task = executor.submit(self.run_cbq_query, query=query)
                 tasks.append(task)
-            
+            self.sleep(120, "Waiting before dropping indexes")
             for task in tasks:
                 try:
                     task.result()
@@ -336,8 +336,9 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                         continue
                     else:
                         self.fail(err)
-        self.wait_until_indexes_online()
         self.sleep(120)
+        self.wait_until_indexes_online()
+        self.sleep(300)
         result = self.run_cbq_query(query=self.system_query)['results']
         self.log.info(result)
         self.assertEqual(len(result), len(index_gen_list) - len(scheduled_indexes),
