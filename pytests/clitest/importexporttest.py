@@ -816,6 +816,8 @@ class ImportExportTests(CliBaseTest):
                 secure_conn = "--no-ssl-verify"
         col_cmd = " -j "
         self.load_scope_name = None
+        if scopes[0][:4] == "\x1b[6n":
+            scopes[0] = scopes[0][4:]
         if self.load_to_collection:
             self.load_scope_name = scopes[0]
             for collection in collections:
@@ -834,12 +836,16 @@ class ImportExportTests(CliBaseTest):
         else:
             shell.execute_command("rm -rf {0}export{1}".format(self.tmp_path, self.master.ip))
             shell.execute_command("mkdir {0}export{1}".format(self.tmp_path, self.master.ip))
-            export_file = self.tmp_path + "export{0}/".format(self.master.ip) + "default"
+            if self.os == "windows":
+                export_file = "c:/tmp/export{0}/".format(self.master.ip) + "default"
+            else:
+                export_file = self.tmp_path + "export{0}/".format(self.master.ip) + "default"
         ex_cmd_str = "%scbexport%s %s -c http%s://%s:%s8091 -u Administrator -p password " \
                                   " -b %s -f %s %s -o %s -t 4"\
                                   % (self.cli_command_path, self.cmd_ext,
                                      self.imex_type, url_format, self.master.ip, secure_port,
                                      "default", self.format_type, secure_conn, export_file)
+        export_file = self.tmp_path + "export{0}/".format(self.master.ip) + "default"
         if self.custom_scopes:
             ex_cmd_str += " --scope-field {0}".format(scopes[0])
         if self.custom_collections:
@@ -858,7 +864,7 @@ class ImportExportTests(CliBaseTest):
         if self.custom_scopes:
             scope_o, _ = shell.execute_command("cat {0} | grep {1}".format(export_file, "scope"))
             if self.custom_collections and not self._check_output("scope", scope_o):
-                raise("Failed to export scope")
+                raise Exception("Failed to export scope")
             else:
                 self.log.info("Found scope in export file")
         if self.custom_collections:
@@ -870,7 +876,7 @@ class ImportExportTests(CliBaseTest):
             else:
                 col_o, _ = shell.execute_command("cat {0} | grep {1}".format(export_file, "mycollection"))
                 if not self._check_output("collection", col_o):
-                    raise("Failed to export collection")
+                    raise Exception("Failed to export collection")
                 else:
                     self.log.info("Found collection in export file")
 

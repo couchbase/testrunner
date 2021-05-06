@@ -1069,6 +1069,8 @@ class CliBaseTest(BaseTestCase):
             cli_client = self.cli_col
 
         scopes = self.get_bucket_scope(rest_client, cli_client)
+        if scopes[0][:4] == "\x1b[6n":
+            scopes[0] = scopes[0][4:]
         if scopes:
             for x in range(num_collection):
                 for scope in scopes:

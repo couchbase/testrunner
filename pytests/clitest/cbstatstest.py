@@ -41,7 +41,8 @@ class cbstatsTests(CliBaseTest):
                         self.sleep(5)
                 for bucket in self.buckets:
                     if "allocator" in self.command:
-                        output, error = self.shell.execute_mcstat(bucket, self.command)
+                        output, error = self.shell.execute_mcstat(bucket,"",
+                                keyname=self.command, vbid="")
                     else:
                         output, error = self.shell.execute_cbstats(bucket, self.command)
                     self.verify_results(output, error)

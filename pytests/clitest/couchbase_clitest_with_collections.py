@@ -76,6 +76,8 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
             if isinstance(custom_scopes, tuple):
                 custom_scopes = custom_scopes[0]
             for scope in custom_scopes:
+                if scope[:4] == "\x1b[6n":
+                    scope = scope[4:]
                 if not self._check_output(scope, output):
                     raise Exception("No scope: {0} in cluster".format(scope))
         if not self.custom_collections:
@@ -86,6 +88,8 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
             if isinstance(custom_collections, tuple):
                 custom_collections = self._extract_collection_names(custom_collections)
             for collection in custom_collections:
+                if collection[:4] == "\x1b[6n":
+                    collection = collection[4:]
                 if not self._check_output(collection, output):
                     raise Exception("No collection: {0} in cluster".format(scope))
 

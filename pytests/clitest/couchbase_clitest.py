@@ -319,6 +319,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         if not error:
             content = ""
             for line in output:
+                if line[:4] == "\x1b[6n":
+                    line = line[4:]
                 content += line
             return json.loads(content)
         else:
@@ -404,6 +406,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cli_command = "bucket-list"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                   cluster_host="localhost", user="Administrator", password="password")
+        if output[0] == "\x1b[6n":
+            del output[0]
         self.assertEqual([], output)
         remote_client.disconnect()
 
@@ -550,8 +554,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                           cluster_port=8091, user="Administrator",
                                                                               password="password")
             self.assertTrue("DEPRECATED: Please use the recovery command "
-                            "instead" in output and "SUCCESS: Servers "
-                                                  "recovered" in output,
+                            "instead" in output[0] and "SUCCESS: Servers "
+                                                  "recovered" in output[2],
                                                   "Server readd failed")
         cli_command = "rebalance"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
@@ -655,8 +659,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                 user=cluster_user,
                                                                 password=cluster_pwd)
             self.assertTrue("DEPRECATED: Please use the recovery command "
-                            "instead" in output and "SUCCESS: Servers "
-                                                    "recovered" in output,
+                            "instead" in output[0] and "SUCCESS: Servers "
+                                                    "recovered" in output[2],
                             "Server readd failed")
 
             cli_command = "recovery"
@@ -3017,8 +3021,8 @@ class XdcrCLITest(CliBaseTest):
     def tearDown(self):
         for server in self.servers:
             rest = RestConnection(server)
-            rest.remove_all_remote_clusters()
             rest.remove_all_replications()
+            rest.remove_all_remote_clusters()
             rest.remove_all_recoveries()
         super(XdcrCLITest, self).tearDown()
 
@@ -3060,6 +3064,8 @@ class XdcrCLITest(CliBaseTest):
                 cert_info = "--cluster-cert-info"
                 output, _ = self.__execute_cli(cli_command="ssl-manage", options="{0} "\
                                          .format(cert_info), cluster_host=cluster_host)
+                if output[0][:4] == "\x1b[6n":
+                    output[0] = output[0][4:]
                 cert_file = open("cert.pem", "w")
                 """ cert must be in format PEM-encoded x509.  Need to add newline
                     at the end of each line. """
@@ -3072,6 +3078,8 @@ class XdcrCLITest(CliBaseTest):
             else:
                 output, _ = self.__execute_cli(cli_command="ssl-manage", options="{0}={1}"\
                               .format(cert_info, xdcr_cert), cluster_host=cluster_host)
+                if output[0][:4] == "\x1b[6n":
+                    output[0] = output[0][4:]
             options += (" --xdcr-certificate={0}".format(xdcr_cert),\
                                                "")[xdcr_cert is None]
             if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
