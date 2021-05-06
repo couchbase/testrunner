@@ -209,7 +209,7 @@ class RQGTestsNew(BaseRQGTests):
             extra_msg = self._get_failure_message(expected_result, actual_result)
             raise Exception("Results are incorrect. Actual num %s. Expected num: %s. :: %s \n" % (len(actual_result), len(expected_result), extra_msg))
 
-        diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+        diffs = DeepDiff(actual_result, expected_result, ignore_order=True, ignore_string_case=True)
         if diffs:
             self.log.error(diffs)
             raise Exception("Results are incorrect")
