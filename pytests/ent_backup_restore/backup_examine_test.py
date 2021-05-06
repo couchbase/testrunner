@@ -491,6 +491,143 @@ class BackupExamineTest(EnterpriseBackupRestoreBase):
 
         self.run_simulation(mutations)
 
+    def test_start_end(self):
+        """ Collection string at collection level """
+        mutations = []
+
+        optional_args = {
+            "start": "1",
+            "end": "3"
+        }
+
+        mutations.append([ 
+            CreateBucketMutation("default"),
+            CreateCollectionMutation("default.fruit.red_fruit"),
+            SetDocumentMutation("default.fruit.red_fruit", "my_key", "my_value")
+        ])
+
+        mutations.append([ 
+            SetDocumentMutation("default.fruit.red_fruit", "my_key", "a_different_value"),
+            SetDocumentMutation("default.fruit.red_fruit", "my_key2", "another_one"),
+            CreateCollectionMutation("default.fruit.green_fruit")
+        ])
+
+        mutations.append([
+            SetDocumentMutation("default.fruit.green_fruit", "eyes", "twoofem")
+        ])
+
+        self.run_simulation(mutations, optional_args)
+
+    def test_delete_document(self):
+        """ Add document then delete in a later backup """
+        mutations = []
+
+        mutations.append([ 
+            CreateBucketMutation("default"),
+            CreateCollectionMutation("default.fruit.red_fruit"),
+            SetDocumentMutation("default.fruit.red_fruit", "my_key", "my_value")
+        ])
+
+        mutations.append([
+            DeleteDocumentMutation("default.fruit.red_fruit", "my_key")
+        ])
+
+        mutations.append([
+            SetDocumentMutation("default.fruit.red_fruit", "another_key", "another_value")
+        ])
+        
+        self.run_simulation(mutations)
+
+    def test_reinsert_document(self):
+        """ Add a document, delete it then reinsert it """
+        mutations = []
+
+        mutations.append([ 
+            CreateBucketMutation("default"),
+            CreateCollectionMutation("default.fruit.red_fruit"),
+            SetDocumentMutation("default.fruit.red_fruit", "my_key", "my_value")
+        ])
+
+        mutations.append([
+            DeleteDocumentMutation("default.fruit.red_fruit", "my_key")
+        ])
+
+        mutations.append([
+            SetDocumentMutation("default.fruit.red_fruit", "my_key", "my_value")
+        ])
+
+        self.run_simulation(mutations)
+
+    def test_with_merge(self):
+        mutations = []
+
+        mutations.append([ 
+            CreateBucketMutation("default"),
+            CreateCollectionMutation("default.fruit.red_fruit"),
+            SetDocumentMutation("default.fruit.red_fruit", "my_key", "my_value")
+        ])
+
+        mutations.append([
+            SetDocumentMutation("default.fruit.red_fruit", "my_key", "new_value"),
+            MergeBackupMutation(),
+            SetDocumentMutation("default.fruit.red_fruit", "my_key2", "my_value2")
+        ])
+
+
+        self.run_simulation(mutations)
+
+    def test_change_document_type(self):
+        mutations = []
+        jsonIn = {
+            "my": "value",
+            "number": 15,
+            "another": "one"
+        }
+
+        mutations.append([
+            CreateBucketMutation("default"),
+            CreateCollectionMutation("default.fruit.red_fruit"),
+            SetDocumentMutation("default.fruit.red_fruit", "my_key", "my_value")
+        ])
+
+
+        mutations.append([
+            SetDocumentMutation("default.fruit.red_fruit", "my_key", json.dumps(jsonIn)),
+            SetSubDocMutation("default.fruit.red_fruit", "my_key", "my_subdoc")
+        ])
+
+        self.run_simulation(mutations)
+
+    def test_set_xattr(self):
+        mutations = []
+        jsonIn = {
+            "name": "jef"
+        }
+
+        mutations.append([
+            CreateBucketMutation("default"),
+            CreateCollectionMutation("default.fruit.red_fruit"),
+            SetDocumentMutation("default.fruit.red_fruit", "my_key", json.dumps(jsonIn))
+        ])
+
+        mutations.append([
+            SetSubDocMutation("default.fruit.red_fruit", "my_key", "xattr_path.subdoc1", "sdval1")
+        ])
+
+        self.run_simulation(mutations)
+
+    def test_large_value(self):
+        mutations = []
+        gen = BlobGenerator("examine-test", "examine-test-", 20, end=1)
+
+        mutations.append([
+            CreateBucketMutation("default"),
+            CreateCollectionMutation("default.fruit.red_fruit"),
+            SetDocumentMutation("default.fruit.red_fruit", *next(gen))
+        ])
+
+        self.run_simulation(mutations)
+
 class SetSubDocMutation:
     """ Set a sub-document 
     TODO: Add support for create_as_deleted
