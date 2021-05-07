@@ -1189,10 +1189,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if "Compaction succeeded," not in output[0]:
-            return False, output, "Compacting backup failed."
-        else:
-            return True, output, "Compaction of backup success"
+        for line in output:
+            if "Compaction succeeded," in line:
+                return True, output, "Compaction of backup success"
+        return False, output, "Compacting backup failed."
         remote_client.disconnect()
 
     def backup_remove(self, backup_range=None, verify_cluster_stats=True):
@@ -3111,7 +3111,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             RbacBase().remove_user_role(role_del, RestConnection(cluster_host))
         except Exception as ex:
             self.log.info(str(ex))
-            self.assertTrue(str(ex) == '"User was not found."', str(ex))
+            self.assertIn("User was not found", str(ex), str(ex))
 
         testuser = [{'id': bucket.name, 'name': bucket.name, 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', cluster_host)
