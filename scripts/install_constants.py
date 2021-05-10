@@ -187,7 +187,7 @@ NON_ROOT_CMDS = {
             "./bin/couchbase-server -- -noinput -detached",
         "post_install_retry": "./bin/couchbase-server -- -noinput -detached",
         "init": None,
-        "cleanup": "ls -td " + DOWNLOAD_DIR["LINUX_DISTROS"] + "couchbase*.deb | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
+        "cleanup": "ls -td " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "couchbase*.deb | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
     },
     "dmg": {
         "uninstall":
@@ -247,7 +247,7 @@ NON_ROOT_CMDS = {
         "post_install": NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "opt/couchbase/bin/couchbase-server \-- -noinput -detached",
         "post_install_retry": None,
         "init": None,
-        "cleanup": "rm -f *-diag.zip"
+        "cleanup": "rm -f *-diag.zip; ls -td " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "couchbase*.rpm | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
     }
 }
 
