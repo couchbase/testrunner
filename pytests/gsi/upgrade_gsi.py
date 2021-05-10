@@ -1,8 +1,11 @@
 import copy
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import random
 from threading import Thread
+
+from couchbase_helper.documentgenerator import SDKDataLoader
 
 from .base_gsi import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
@@ -121,9 +124,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                                 stats_after_upgrade=post_upgrade_index_stats)
         self._post_upgrade_task(task='create_collection')
         self._post_upgrade_task(task='create_indexes')
+        self._post_upgrade_task(task='run_query')
+        self._post_upgrade_task(task='request_plus_scans')
         if self.enable_dgm:
             self.assertTrue(self._is_dgm_reached())
-        self._post_upgrade_task(task='run_query')
         self._post_upgrade_task(task='rebalance_in', node=self.servers[4])
         self._post_upgrade_task(task='rebalance_out', node=self.servers[4])
         self._post_upgrade_task(task='drop_all_indexes')
@@ -134,6 +138,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                            node=None):
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
         index_rest = RestConnection(index_node)
+        system_query = 'select * from system:indexes;'
         if task == 'create_collection':
             self.prepare_collection_for_indexing(bucket_name=self.buckets[0].name, num_scopes=3, num_collections=3,
                                                  num_of_docs_per_collection=1000)
@@ -280,7 +285,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
 
         elif task == 'drop_all_indexes':
             self.log.info("Dropping all indexes")
-            system_query = 'select * from system:indexes;'
             result = self.run_cbq_query(server=self.n1ql_node, query=system_query)['results']
             for index_dict in result:
                 index = index_dict['indexes']
@@ -295,6 +299,40 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             self.sleep(10, "Waiting before checking for Index traces")
             result = self.run_cbq_query(server=self.n1ql_node, query=system_query)['results']
             self.assertTrue(len(result) == 0, f"Not all indexes has been dropped. System query result: {result}")
+
+        elif task == 'request_plus_scans':
+            self.log.info("Running query to check index count")
+            index_count_dict = {}
+            for namespace in self.namespaces:
+                count_query = f"Select count(*) from {namespace}"
+                result = self.run_cbq_query(server=self.n1ql_node, query=count_query)['results'][0]['$1']
+                index_count_dict[namespace] = result
+
+            self.log.info("Adding new docs and running request plus scans")
+            tasks = []
+            num_ops = 10 ** 3
+            with ThreadPoolExecutor() as executor:
+                self.log.info("Loading new docs to collection")
+                for namespace in self.namespaces:
+                    _, keyspace = namespace.split(':')
+                    bucket, scope, collection = keyspace.split('.')
+                    gen_create = SDKDataLoader(num_ops=num_ops, percent_create=100,
+                                               percent_update=0, percent_delete=0, scope=scope,
+                                               collection=collection, key_prefix='request_plus_docs')
+                    task = executor.submit(self._load_all_buckets, self.master, gen_create)
+                    tasks.append(task)
+
+                self.log.info("Running request plus scan till indexes index all the newly added docs")
+                for namespace in self.namespaces:
+                    while True:
+                        count_query = f"Select count(*) from {namespace}"
+                        result = self.run_cbq_query(server=self.n1ql_node, query=count_query,
+                                                    scan_consistency='request_plus')['results'][0]['$1']
+                        if result == (index_count_dict['namespace'] + num_ops):
+                            self.log.info(f"Select count result for request_plus scan:{result}")
+                            break
+                        self.sleep(10, f"Query result is not matching the expected value. Actual: {result}, Expected:"
+                                       f"{index_count_dict['namespace'] + num_ops}")
 
     def test_online_upgrade(self):
         services_in = []
@@ -769,8 +807,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         if self.enable_dgm:
             self.assertTrue(self._is_dgm_reached())
         self._post_upgrade_task(task='run_query')
-        # self.log.infor(f"Rebalancing in new node - {self.servers[self.nodes_init]}")
-        # self._post_upgrade_task(task='rebalance_in', node=self.servers[self.nodes_init])
+        self._post_upgrade_task(task='request_plus_scans')
+        self.log.info(f"Rebalancing in new node - {self.servers[self.nodes_init]}")
+        self._post_upgrade_task(task='rebalance_in', node=self.servers[self.nodes_init])
         if len(index_nodes) > 1:
             self._post_upgrade_task(task='rebalance_out', node=index_nodes[0])
         self._post_upgrade_task(task='drop_all_indexes')
