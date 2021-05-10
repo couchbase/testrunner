@@ -237,11 +237,22 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
     def _check_output(self, word_check, output):
         found = False
-        if len(output) >=1 :
-            for x in output:
-                if word_check in x:
-                    self.log.info("Found \"%s\" in CLI output" % word_check)
-                    found = True
+        if len(output) >= 1:
+            if isinstance(word_check, list):
+                for ele in word_check:
+                    for x in output:
+                        if ele.lower() in str(x.lower()):
+                            self.log.info("Found '{0} in CLI output".format(ele))
+                            found = True
+                            break
+            elif isinstance(word_check, str):
+                for x in output:
+                    if word_check.lower() in str(x.lower()):
+                        self.log.info("Found '{0}' in CLI output".format(word_check))
+                        found = True
+                        break
+            else:
+                self.log.error("invalid {0}".format(word_check))
         return found
 
     def _convert_server_to_url(self, server):
@@ -406,7 +417,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cli_command = "bucket-list"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                   cluster_host="localhost", user="Administrator", password="password")
-        if output[0] == "\x1b[6n":
+        if output and output[0] == "\x1b[6n":
             del output[0]
         self.assertEqual([], output)
         remote_client.disconnect()
@@ -553,10 +564,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                         options=options, cluster_host="localhost",
                                                           cluster_port=8091, user="Administrator",
                                                                               password="password")
-            self.assertTrue("DEPRECATED: Please use the recovery command "
-                            "instead" in output[0] and "SUCCESS: Servers "
-                                                  "recovered" in output[2],
-                                                  "Server readd failed")
+            self.assertTrue(self._check_output(["DEPRECATED: Please use the recovery command ",
+                                 "SUCCESS: Servers recovered"], output), "Server readd failed")
         cli_command = "rebalance"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                             cluster_host="localhost", cluster_port=8091,
@@ -658,10 +667,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                 cluster_host="localhost",
                                                                 user=cluster_user,
                                                                 password=cluster_pwd)
-            self.assertTrue("DEPRECATED: Please use the recovery command "
-                            "instead" in output[0] and "SUCCESS: Servers "
-                                                    "recovered" in output[2],
-                            "Server readd failed")
+            self.assertTrue(self._check_output(["DEPRECATED: Please use the recovery command ",
+                                 "SUCCESS: Servers recovered"], output), "Server readd failed")
 
             cli_command = "recovery"
             options = "--server-recovery={0}:{1} --recovery-type=delta"\
@@ -3401,11 +3408,22 @@ class XdcrCLITest(CliBaseTest):
 
     def _check_output(self, word_check, output):
         found = False
-        if len(output) >=1 :
-            for x in output:
-                if word_check in x:
-                    self.log.info("Found \"%s\" in CLI output" % word_check)
-                    found = True
+        if len(output) >= 1:
+            if isinstance(word_check, list):
+                for ele in word_check:
+                    for x in output:
+                        if ele.lower() in str(x.lower()):
+                            self.log.info("Found '{0} in CLI output".format(ele))
+                            found = True
+                            break
+            elif isinstance(word_check, str):
+                for x in output:
+                    if word_check.lower() in str(x.lower()):
+                        self.log.info("Found '{0}' in CLI output".format(word_check))
+                        found = True
+                        break
+            else:
+                self.log.error("invalid {0}".format(word_check))
         return found
 
     def _convert_server_to_url(self, server):
