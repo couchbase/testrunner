@@ -584,6 +584,14 @@ def main():
                     for o in options.dashboardReportedParameters.split(','):
                         dashboardDescriptor += '_' + o.split('=')[1]
 
+                dispatch_job = True
+                if not options.fresh_run:
+                    dispatch_job = \
+                        find_rerun_job.should_dispatch_job(
+                            options.os, testsToLaunch[i][
+                                'component'], dashboardDescriptor
+                            , options.version)
+
                 # and this is the Jenkins descriptor
                 descriptor = urllib.parse.quote(
                     testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] +
@@ -702,13 +710,6 @@ def main():
                 if options.job_params:
                     url = update_url_with_job_params(url, options.job_params)
                 print('\n', time.asctime( time.localtime(time.time()) ), 'launching ', url)
-                dispatch_job = True
-                if not options.fresh_run:
-                    dispatch_job = \
-                        find_rerun_job.should_dispatch_job(
-                            options.os, testsToLaunch[i][
-                                'component'], dashboardDescriptor
-                            , options.version)
 
                 if options.noLaunch or not dispatch_job:
                     # free the VMs

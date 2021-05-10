@@ -89,7 +89,7 @@ def get_bucket(cluster, name):
     try:
         return cluster.open_bucket(name)
     except Exception:
-        return cluster.bucket(name).default_collection()
+        return cluster.bucket(name)
 
 def run_query(bucket, query):
     try:
