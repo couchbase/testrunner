@@ -15,7 +15,7 @@ log = logging.getLogger()
 class EventingRebalance(EventingBaseTest):
     def setUp(self):
         super(EventingRebalance, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=1200)
         if self.create_functions_buckets:
             self.replicas = self.input.param("replicas", 0)
             self.bucket_size = 100
