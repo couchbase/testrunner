@@ -417,6 +417,71 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             else:
                 self.backup_cluster()
 
+    def test_backup_info_with_start_end_flag(self):
+        """
+        1. Create default bucket and load items to bucket
+        2. Run number of backups pass by param number_of_backups=x
+        3. Run subcommand info with random start and end values.  Value could be index, date or bk nam
+        4. conf file name: bkrs-info-with-start-end-flag.conf
+        """
+        if self.bkinfo_date_start_ago:
+            conn = RemoteMachineShellConnection(self.backupset.backup_host)
+            start_date_cmd = "date --date=\"{} days ago\" '+%d-%m-%Y' "\
+                                        .format(self.bkinfo_date_start_ago)
+            output, error = conn.execute_command(start_date_cmd)
+            start_date = output[0]
+            end_date_cmd =  "date '+%d-%m-%Y' "
+            output, error = conn.execute_command(end_date_cmd)
+            end_date = output[0]
+            conn.disconnect()
+
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
+                                                      end=self.num_items)
+        initial_gen = copy.deepcopy(gen)
+        self.log.info("Start to load items to all buckets")
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.log.info("Create backup repo ")
+        self.backup_create()
+        for i in range(1, self.backupset.number_of_backups + 1):
+            self.backup_cluster()
+        self.log.info("done running backup")
+
+        if self.bkinfo_start_end_with_bkname:
+            bkname_start_index = int(self.bkinfo_start_end_with_bkname.split(":")[0])
+            bkname_start = self.backups[bkname_start_index]
+            bkname_end_index = int(self.bkinfo_start_end_with_bkname.split(":")[1])
+            bkname_end = self.backups[bkname_end_index]
+
+        if self.bkinfo_date_start_ago:
+            o, e = self.backup_info(start=start_date,end=end_date)
+        elif self.bkinfo_start_end_with_bkname:
+            o, e = self.backup_info(start=bkname_start,end=bkname_end)
+        else:
+            o, e = self.backup_info(start=self.bkinfo_start,end=self.bkinfo_end)
+        if o and o[0]:
+            bk_info = json.loads(o[0])
+            bk_info = bk_info["backups"]
+            if self.debug_logs:
+                print("\nbk info : ", bk_info)
+                print("\n bkinfo len: ", len(bk_info))
+                print("\nbk info date : ", bk_info[0]["date"])
+                print("\nbk info type : ", bk_info[0]["type"])
+                print("\nnubmer backup : ", self.backups)
+        if self.bkinfo_start == 1 and self.bkinfo_end == 1:
+            if "FULL" not in bk_info[0]["type"]:
+                self.fail("First backup is not full backup")
+        elif self.bkinfo_start > 1 and self.bkinfo_end > 1:
+            if "INCR" not in bk_info[0]["type"]:
+                self.fail("> 0th backup is not incr backup")
+        if self.bkinfo_date_start_ago:
+            if len(bk_info) != len(self.backups):
+                self.fail("bkrs info failed to show all backups today")
+        elif self.bkinfo_start_end_with_bkname:
+            if len(bk_info) != (bkname_end_index - bkname_start_index + 1):
+                self.fail("bkrs info does not show correct nubmer of backups with backup name")
+        elif len(bk_info) != (self.bkinfo_end - self.bkinfo_start + 1):
+            self.fail("bkrs info does not show correct nubmer of backups")
+
     def test_backup_compact(self):
         """
         1. Creates specified bucket on the cluster and loads it with given number of items

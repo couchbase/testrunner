@@ -200,6 +200,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.restore_only = self.input.param("restore-only", False)
         self.replace_ttl = self.input.param("replace-ttl", None)
         self.vbucket_filter = self.input.param("vbucket-filter", None)
+        self.bkinfo_start = self.input.param("bkinfo_start", 0)
+        self.bkinfo_date_start_ago = self.input.param("bkinfo_date_start_ago", 0)
+        self.bkinfo_end = self.input.param("bkinfo_end", 0)
+        self.bkinfo_start_end_with_bkname = self.input.param("bkinfo_start_end_with_bkname", None)
         self.restore_compression_mode = self.input.param("restore-compression-mode", None)
         self.force_version_upgrade = self.input.param("force-version-upgrade", None)
         if self.non_master_host:
@@ -512,7 +516,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         remote_client.disconnect()
         return output, error
 
-    def backup_info(self, json_out=True):
+    def backup_info(self, json_out=True, start=None, end=None):
         args = (
             f"info --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
             f" --repo {self.backupset.name} "
@@ -520,6 +524,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             f"{' --json' if json_out else ''}"
         )
 
+        if start is not None:
+            args += " --start {}".format(start)
+            if end is not None:
+                args += " --end {}".format(end)
+            else:
+                self.fail("start flag needs end flag to work")
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
