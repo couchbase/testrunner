@@ -424,7 +424,7 @@ def get_node_helper(ip):
     return None
 
 
-def print_result_and_exit(err=None, install_started=True):
+def print_result_and_exit(err=None):
     if err:
         log.error(err)
     success = []
@@ -433,7 +433,7 @@ def print_result_and_exit(err=None, install_started=True):
     for server in params["servers"]:
         node = get_node_helper(server.ip)
         if not node or not node.install_success:
-            if install_started:
+            if node.install_success is False:
                 fail.append(server.ip)
             else:
                 install_not_started.append(server.ip)
@@ -465,18 +465,18 @@ def _parse_user_input():
         (opts, args) = getopt.getopt(sys.argv[1:], 'hi:p:', [])
         for o, a in opts:
             if o == "-h":
-                print_result_and_exit(install_constants.USAGE, install_started=False)
+                print_result_and_exit(install_constants.USAGE)
         if len(sys.argv) <= 1:
-            print_result_and_exit(install_constants.USAGE, install_started=False)
+            print_result_and_exit(install_constants.USAGE)
         userinput = TestInput.TestInputParser.get_test_input(sys.argv)
     except IndexError:
-        print_result_and_exit(install_constants.USAGE, install_started=False)
+        print_result_and_exit(install_constants.USAGE)
     except getopt.GetoptError as err:
-        print_result_and_exit(str(err), install_started=False)
+        print_result_and_exit(str(err))
 
     # Mandatory params
     if not userinput.servers:
-        print_result_and_exit("No servers specified. Please use the -i parameter." + "\n" + install_constants.USAGE, install_started=False)
+        print_result_and_exit("No servers specified. Please use the -i parameter." + "\n" + install_constants.USAGE)
     else:
         params["servers"] = userinput.servers
         params["clusters"] = userinput.clusters
@@ -524,7 +524,7 @@ def _parse_user_input():
                     if re.match('\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', server.ip):
                         print_result_and_exit(
                             "Cannot enable IPv6 on an IPv4 machine: {0}. Please run without enable_ipv6=True.".format(
-                                server.ip), install_started=False)
+                                server.ip))
                 params["enable_ipv6"] = True
         if key == "fts_quota" and int(value) >= 256:
             params["fts_quota"] = int(value)
@@ -540,10 +540,10 @@ def _parse_user_input():
             params["init_clusters"] = True if value.lower() == "true" else False
 
     if userinput.bkrs_client and not params["cluster_version"]:
-        print_result_and_exit("Need 'cluster_version' in params to proceed", install_started=False)
+        print_result_and_exit("Need 'cluster_version' in params to proceed")
 
     if not params["version"] and not params["url"]:
-        print_result_and_exit("Need valid build version or url to proceed", install_started=False)
+        print_result_and_exit("Need valid build version or url to proceed")
 
     return params
 
@@ -582,7 +582,7 @@ def _params_validation():
     node_os = []
     for node in NodeHelpers:
         if node.get_os() not in install_constants.SUPPORTED_OS:
-            print_result_and_exit("Install on {0} OS is not supported".format(node.get_os()), install_started=False)
+            print_result_and_exit("Install on {0} OS is not supported".format(node.get_os()))
         else:
             node_os.append(node.get_os())
     if len(set(node_os)) == 1:
@@ -619,14 +619,14 @@ def pre_install_steps():
                     filepath = __get_download_dir(node) + build_binary
                     node.build = build(build_binary, build_url, filepath)
             else:
-                print_result_and_exit("URL {0} is not live. Exiting.".format(params["url"]), install_started=False)
+                print_result_and_exit("URL {0} is not live. Exiting.".format(params["url"]))
         else:
             for node in NodeHelpers:
                 build_binary = __get_build_binary_name(node)
                 build_url = __get_build_url(node, build_binary)
                 if not build_url:
                     print_result_and_exit(
-                        "Build is not present in latestbuilds or release repos, please check {0}".format(build_binary), install_started=False)
+                        "Build is not present in latestbuilds or release repos, please check {0}".format(build_binary))
                 filepath = __get_download_dir(node) + build_binary
                 node.build = build(build_binary, build_url, filepath)
         _download_build()
@@ -693,9 +693,13 @@ def _download_build():
     if params["all_nodes_same_os"] and not params["skip_local_download"]:
         check_and_retry_download_binary_local(NodeHelpers[0])
         _copy_to_nodes(NodeHelpers[0].build.path, NodeHelpers[0].build.path)
+        ok = True
         for node in NodeHelpers:
             if not check_file_exists(node, node.build.path) or not check_file_size(node):
-                print_result_and_exit("Unable to copy build to {}, exiting".format(node.build.path), install_started=False)
+                node.install_success = False
+                ok = False
+        if not ok:
+            print_result_and_exit("Unable to copy build to {}, exiting".format(node.build.path))
     else:
         for node in NodeHelpers:
             build_url = node.build.url
@@ -729,7 +733,7 @@ def check_and_retry_download_binary_local(node):
             time.sleep(duration)
     else:
         print_result_and_exit("Unable to download build in {0}s on {1}, exiting".format(timeout,
-                                                                                        node.build.path), install_started=False)
+                                                                                        node.build.path))
 
 def check_file_exists(node, filepath):
     output, _ = node.shell.execute_command("ls -lh {0}".format(filepath), debug=params["debug_logs"])
@@ -773,7 +777,7 @@ def check_and_retry_download_binary(cmd, node):
             log.warning("Unable to download build: {0}, retrying..".format(e))
             time.sleep(duration)
     else:
-        print_result_and_exit("Unable to download build in {0}s on {1}, exiting".format(timeout, node.ip), install_started=False)
+        print_result_and_exit("Unable to download build in {0}s on {1}, exiting".format(timeout, node.ip))
 
 
 def __get_download_dir(node):
