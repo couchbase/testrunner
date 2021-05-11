@@ -280,8 +280,11 @@ class NodeHelper:
         while retries > 0:
             ret, err = self.shell.execute_command(cmd)
             if ret == ['0']:
+                log.error(err)
                 time.sleep(30)
-            retries -= 1
+                retries -= 1
+            else:
+                break
         else:
             log.warning("Unable to init node {0} due to {1}".format(self.ip, err))
 
