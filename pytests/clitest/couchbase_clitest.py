@@ -679,7 +679,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                 cluster_host="localhost",
                                                                 user=cluster_user,
                                                                 password=cluster_pwd)
-            self.assertTrue("SUCCESS: Servers recovered" in output)
+            self.assertTrue("SUCCESS: Servers recovered" in output[0], str(output))
 
         cli_command = "server-readd"
         for num in range(nodes_failover):
@@ -692,10 +692,13 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                 cluster_host="localhost",
                                                                 user=cluster_user,
                                                                 password=cluster_pwd)
-            self.assertTrue("DEPRECATED: Please use the recovery command "
-                            "instead" in output[0] and "SUCCESS: Servers "
-                                                    "recovered" in output[1],
-                            "Server readd failed")
+            found_deprecated, found_success = False, False
+            for message in output:
+                if "DEPRECATED: Please use the recovery command" in message:
+                    found_deprecated = True
+                if "SUCCESS: Servers recovered" in message:
+                    found_success = True
+            self.assertTrue(found_success and found_deprecated, "Server readd failed")
             self.sleep(5)
 
         """ in spock, server-readd does not work to add a node not

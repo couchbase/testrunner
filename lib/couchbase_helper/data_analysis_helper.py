@@ -724,6 +724,8 @@ class DataCollector(object):
         revIdIndex = 5
         for value in dataInCSV:
             values = value.split(",")
+            if values == ['\n']:
+                continue
             try:
                 if values[index] in list(bucketMap.keys()):
                     prev_revId =  int(bucketMap[values[index]][revIdIndex])

@@ -107,6 +107,8 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
         if len(backup_scopes) < 2:
             self.sleep(4)
             backup_scopes = self.get_bucket_scope_cluster_host()
+        if backup_scopes[0][:4] == "\x1b[6n":
+            backup_scopes[0] = backup_scopes[0][4:]
         self.log.info("scopes in backup cluster: {0}".format(backup_scopes))
         scopes_id = []
         for scope in backup_scopes:

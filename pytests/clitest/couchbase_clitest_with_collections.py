@@ -754,6 +754,8 @@ class XdcrCLITest(CliBaseTest):
                 self.create_collection(self.col_per_scope)
             self.sleep(10)
             scopes = self.get_bucket_scope()
+            if scopes[0][:4] == "\x1b[6n":
+                scopes[0] = scopes[0][4:]
             scopes_id = []
             for scope in scopes:
                 if scope == "_default" and self.custom_scopes:
@@ -766,6 +768,8 @@ class XdcrCLITest(CliBaseTest):
             collections = self.get_bucket_collection()
             if isinstance(collections, tuple):
                 collections = self._extract_collection_names(collections)
+            if collections[0][:4] == "\x1b[6n":
+                collections[0] = collections[0][4:]
             collections_id = []
             for collection in collections:
                 if collection == "_default":
@@ -810,6 +814,8 @@ class XdcrCLITest(CliBaseTest):
         options = "--list"
         items_match = False
         output, _ = self.__execute_cli(cli_command, options)
+        if output[0][:4] == "\x1b[6n":
+            output[0] = output[0][4:]
         for value in output:
             if value.startswith("stream id"):
                 replicator = value.split(":")[1].strip()

@@ -626,6 +626,9 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         if isinstance(restore_scopes, tuple):
             restore_scopes = restore_scopes[0]
         not_found_scopes = []
+        for l in [backup_scopes, restore_scopes]:
+            if l[0][:4] == "\x1b[6n":
+                l[0] = l[0][4:]
         for restore_scope in restore_scopes:
             if isinstance(restore_scope, list):
                 for ele in backup_scopes:
@@ -665,6 +668,9 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             restore_collections = self.get_bucket_collection_restore_cluster_host(bucket_name, scope)
             if isinstance(restore_collections, tuple):
                 restore_collections = restore_collections[0]
+            for l in [backup_collections, restore_collections]:
+                if l[0][:4] == "\x1b[6n":
+                    l[0] = l[0][4:]
             for backup_collection in backup_collections:
                 if backup_collection in restore_collections:
                     self.log.info("Collection {0} restored".format(backup_collection))
