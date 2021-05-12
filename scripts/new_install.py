@@ -55,6 +55,7 @@ def validate_install(params):
     for node in install_utils.NodeHelpers:
         version = params["version"]
         if node.install_success is None:
+            node.install_success = False
             if params["cluster_version"]:
                 if node.ip != params["bkrs_client"].ip:
                     version = params["cluster_version"]
