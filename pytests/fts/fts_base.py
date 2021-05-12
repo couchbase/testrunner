@@ -1290,10 +1290,10 @@ class FTSIndex:
         self.index_definition['uuid'] = self.get_uuid()
         self.update()
 
-    def update_docvalues_email_custom_index(self, new):
+    def update_docvalues_email_custom_index(self, new, type):
         status, index_def = self.get_index_defn()
         self.index_definition = index_def["indexDef"]
-        self.index_definition['params']['mapping']['types']['emp']['properties']['join_date']['fields'][0][
+        self.index_definition['params']['mapping']['types'][type]['properties']['join_date']['fields'][0][
             'docvalues'] = new
         self.index_definition['uuid'] = self.get_uuid()
         self.update()

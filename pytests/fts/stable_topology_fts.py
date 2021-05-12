@@ -66,8 +66,11 @@ class StableTopFTS(FTSBaseTest):
                     self.fail("zap files size with docvalue not empty with docValues = False")
                 else:
                     self.log.info(" zap files size found to be : {0}".format(ds))
-
-        index.update_docvalues_email_custom_index(True)
+        if self.container_type == "collection":
+            type = "scope1.collection1.emp"
+        else:
+            type = "emp"
+        index.update_docvalues_email_custom_index(True, type)
         self.wait_for_indexing_complete()
         for node in self._cb_cluster.get_fts_nodes():
             ds = self.get_zap_docvalue_disksize(node)
