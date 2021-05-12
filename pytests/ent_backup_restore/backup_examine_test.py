@@ -69,7 +69,7 @@ class Taggable:
 class Document(Taggable):
     """ Represents a Couchbase document """
 
-    def __init__(self, key, value, xattrs={}, **kwargs):
+    def __init__(self, key, value, xattrs=None, **kwargs):
         """ Represents a document
 
         Args:
@@ -79,6 +79,8 @@ class Document(Taggable):
         self.key = key
         self.value = value
         self.xattrs = xattrs
+        if self.xattrs is None:
+            self.xattrs = {}
 
 
 class Collection(Taggable):
@@ -137,10 +139,12 @@ class Collection(Taggable):
 class Bucket(Taggable):
     """ Represents a bucket """
 
-    def __init__(self, bucket_name, collections={}, **kwargs):
+    def __init__(self, bucket_name, collections=None, **kwargs):
         super().__init__(**kwargs)
         self.bucket_name = bucket_name
         self.collections = collections
+        if self.collections is None:
+            self.collections = {}
 
         self.add_collection(Collection(CollectionString(f"{self.bucket_name}._default._default"), 0))
 
@@ -164,9 +168,11 @@ class Bucket(Taggable):
 class Backup:
     """ Describes a backup which turns into a physical backup on disk """
 
-    def __init__(self, previous_backup=None, buckets={}):
+    def __init__(self, previous_backup=None, buckets=None):
         """ Forms a linked list of backups """
         self.buckets = buckets
+        if self.buckets is None:
+            self.buckets = {}
         self.previous_backup = previous_backup
 
     def add_bucket(self, bucket):
@@ -227,10 +233,13 @@ class ExamineSimulation:
         # An object to run cbbackupmgr examine
         self.examine = Examine(self.backup_base.backupset.backup_host)
 
-    def run(self, mutations, optional_args={}):
+    def run(self, mutations, optional_args=None):
         """ Advance a step in the simulation """
         # Create a new backup, copy construct from the previous backup if it exists
-        backup = Backup.from_backup(self.backups[-1]) if self.backups else Backup()
+        if self.backups:
+            backup = Backup.from_backup(self.backups[-1])
+        else:
+            backup = Backup()
 
         for cs in backup.get_collection_strings():
             for doc in backup.get_collection(cs).documents.values():
@@ -263,7 +272,7 @@ class ExamineSimulation:
         """ The number of steps that have taken place in the simulation """
         return len(self.backups)
 
-    def run_examine(self, backup, optional_args={}):
+    def run_examine(self, backup, optional_args=None):
         """ Examines things and check they match the contents of the backup object 
         Event types (THESE MAY CHANGE):
         1: Created
@@ -273,19 +282,25 @@ class ExamineSimulation:
         5: Deleted
         6: Unchanged
         """
-        final = dict(optional_args)
+        if optional_args is None:
+            final = {}
+        else:
+            final = dict(optional_args)
         stop = None
         # Make sure that we don't try to read from backups we haven't taken yet
         if "start" in final and "end" in final:
             for s in ["start", "end"]:
                 if final[s].isdigit():
                     final[s] = str(min(int(final[s]), self.steps()))
-                    stop = final[s]
+                    stop = int(final[s]) - 1
 
         for cs in backup.get_collection_strings():
             for doc in backup.get_collection(cs).documents.values():
                 # Grab the "end" document if we've specified "end"
-                doc = doc[stop] if stop else doc[-1]
+                if stop and stop < len(doc):
+                    doc = doc[stop]
+                else:
+                    doc = doc[-1]
                 examine_results = self.examine.examine(ExamineArguments(self.backup_base.backupset, str(cs), doc.key, objstore_provider=self.backup_base.objstore_provider, **final))
                 print(examine_results[-1].__dict__)
                     
@@ -460,7 +475,7 @@ class BackupExamineTest(EnterpriseBackupRestoreBase):
         self.log.info(f"Setting memoryQuota to: {memory}")
         RestConnection(self.master).set_service_memoryQuota(service='memoryQuota', memoryQuota=memory)
 
-    def run_simulation(self, mutations, optional_args={}):
+    def run_simulation(self, mutations, optional_args=None):
         """ Runs a simulation given a list of a list of mutations.
 
         The i'th element in the list `mutations` contains a list of mutation at the i'th simulation step.
@@ -593,7 +608,6 @@ class BackupExamineTest(EnterpriseBackupRestoreBase):
 
         mutations.append([
             SetDocumentMutation("default.fruit.red_fruit", "my_key", json.dumps(jsonIn)),
-            SetSubDocMutation("default.fruit.red_fruit", "my_key", "my_subdoc")
         ])
 
         self.run_simulation(mutations)
