@@ -3422,9 +3422,19 @@ class RemoteMachineShellConnection(KeepRefs):
 
         return self.execute_command_raw(command, debug=debug, use_channel=use_channel, timeout=timeout, get_exit_code=get_exit_code)
 
+    def reconnect_if_inactive(self):
+        """
+        If the SSH channel is inactive, retry the connection
+        """
+        tp = self._ssh_client.get_transport()
+        if tp and not tp.active:
+            log.warning("SSH connection to {} inactive, reconnecting...".format(self.ip))
+            self.ssh_connect_with_retries(self.ip, self.username, self.password, self.ssh_key)
+
     def execute_command_raw(self, command, debug=True, use_channel=False, timeout=600, get_exit_code=False):
         if debug:
             log.info("running command.raw on {0}: {1}".format(self.ip, command))
+        self.reconnect_if_inactive()
         output = []
         error = []
         temp = ''
@@ -3520,6 +3530,7 @@ class RemoteMachineShellConnection(KeepRefs):
         # use sftp to if certain types exists or not
         if getattr(self, "info", None) is not None and isinstance(self.info, RemoteMachineInfo):
             return self.info
+        self.reconnect_if_inactive()
         mac_check_cmd = "sw_vers | grep ProductVersion | awk '{ print $2 }'"
         if self.remote:
             stdin, stdout, stderro = self._ssh_client.exec_command(mac_check_cmd)
