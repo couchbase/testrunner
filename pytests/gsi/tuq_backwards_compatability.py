@@ -276,4 +276,5 @@ class UpgradeBackwardsCollections(UpgradeSecondaryIndex):
 
         #Create a prepared statement on a collection and make sure this works post upgrade
         self.n1ql_helper.run_cbq_query(query='PREPARE p5 as SELECT * FROM {0}.test.test1 where name = "new_hotel"'.format(self.bucket_name))
+        result2 = self.n1ql_helper.run_cbq_query(query='EXECUTE p5')
         self.assertEqual(result2['metrics']['resultCount'], 1)
