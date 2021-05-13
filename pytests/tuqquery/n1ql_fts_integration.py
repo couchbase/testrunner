@@ -496,7 +496,11 @@ class N1qlFTSIntegrationTest(QueryTests):
                              + operator + a_d + \
                              "select * from ( select raw meta().id from test_bucket where string_field like '"+right_set_value+"') q1) a order by q1"
                 for node in self.get_nodes_in_cluster():
-                    test_result = self._validate_query_against_node(node, services_map, fts_query, n1ql_query)
+                    try:
+                        test_result = self._validate_query_against_node(node, services_map, fts_query, n1ql_query)
+                    except AssertionError as err:
+                        self.log.info(err)
+                        test_result = False
                     self.assertEqual(test_result, False, "Node " + str(node) + " test is not failed.")
 
 
