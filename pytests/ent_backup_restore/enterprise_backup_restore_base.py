@@ -1412,6 +1412,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self._check_output("Error backing up cluster", output):
             backup_failed = True
         conn.disconnect()
+        self.sleep(30, "Waiting for couchbase to come back up...")
         if backup_failed:
             backup_result = self.cluster.async_backup_cluster(
                 backupset=self.backupset,
