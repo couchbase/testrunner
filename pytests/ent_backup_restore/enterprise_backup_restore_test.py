@@ -4573,7 +4573,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.start = 2
         self.backupset.end = 3
         self._all_buckets_flush()
-        self.backup_restore_validate()
+        self.backup_restore_validate(seqno_compare_function=">=")
 
     def test_cbbackup_with_big_rev(self):
         # automation ticket MB-38683
