@@ -34,12 +34,14 @@ class IndexManagementAPI(FTSBaseTest):
         new_fts_memory_quota = initial_fts_memory_quota + 100
         new_slow_query_timeout = "30s"
 
-        verification_rest = RestConnection(self._cb_cluster.get_fts_nodes()[1])
         rest.set_node_setting("bleveMaxResultWindow", new_bleve_max_result_window)
         rest.set_node_setting("feedAllotment", new_feed_allotment)
         rest.set_node_setting("ftsMemoryQuota", new_fts_memory_quota)
         rest.set_node_setting("slowQueryLogTimeout", new_slow_query_timeout)
 
+        self.sleep(5)
+
+        verification_rest = RestConnection(self._cb_cluster.get_fts_nodes()[1])
         verification_bleve_max_result_window = int(verification_rest.get_node_settings("bleveMaxResultWindow"))
         verification_feed_allotment = verification_rest.get_node_settings("feedAllotment")
         verification_fts_memory_quota = int(verification_rest.get_node_settings("ftsMemoryQuota"))
@@ -53,16 +55,19 @@ class IndexManagementAPI(FTSBaseTest):
 
         error = ""
         if new_bleve_max_result_window != verification_bleve_max_result_window:
-            error = error + "\nbleveMaxResultWindow is not reflected."
+            error = f'{error}\n bleve_max_result_window new setting: {new_bleve_max_result_window} ' \
+                f'but actual bleve_max_result_window set {verification_bleve_max_result_window}'
         if new_feed_allotment != verification_feed_allotment:
-            error = error + "\nfeedAllotment is not reflected."
+            error = f'{error}\n feed_allotment new setting: {new_feed_allotment} ' \
+                f'but actual feed_allotment set {verification_feed_allotment}'
         if new_fts_memory_quota != verification_fts_memory_quota:
-            error = error + "\nftsMemoryQuota is not reflected."
+            error = f'{error}\n fts_memory_quota new setting: {new_fts_memory_quota} ' \
+                f'but actual fts_memory_quota set {verification_fts_memory_quota}'
         if new_slow_query_timeout != verification_slow_query_timeout:
-            error = error + "\nslowQueryLogTimeout is not reflected."
+            error = f'{error}\n slow_query_timeout new setting: {new_slow_query_timeout} ' \
+                f'but actual slow_query_timeout set {verification_slow_query_timeout}'
 
         self.assertEqual(error, "", error)
-
 
     def test_config_settings_after_reboot(self):
         rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
@@ -81,7 +86,11 @@ class IndexManagementAPI(FTSBaseTest):
         rest.set_node_setting("ftsMemoryQuota", new_fts_memory_quota)
         rest.set_node_setting("slowQueryLogTimeout", new_slow_query_timeout)
 
+        self.sleep(5)
+
         NodeHelper.reboot_server(self._cb_cluster.get_fts_nodes()[0], test_case=self)
+
+        self.sleep(5)
 
         verification_bleve_max_result_window = int(rest.get_node_settings("bleveMaxResultWindow"))
         verification_feed_allotment = rest.get_node_settings("feedAllotment")
@@ -95,13 +104,17 @@ class IndexManagementAPI(FTSBaseTest):
 
         error = ""
         if new_bleve_max_result_window != verification_bleve_max_result_window:
-            error = error + "\nbleveMaxResultWindow is not restored after reboot."
+            error = f'{error}\n bleve_max_result_window new setting: {new_bleve_max_result_window} ' \
+                f'but actual bleve_max_result_window set {verification_bleve_max_result_window} after reboot'
         if new_feed_allotment != verification_feed_allotment:
-            error = error + "\nfeedAllotment is not restored after reboot."
+            error = f'{error}\n feed_allotment new setting: {new_feed_allotment} ' \
+                f'but actual feed_allotment set {verification_feed_allotment} after reboot'
         if new_fts_memory_quota != verification_fts_memory_quota:
-            error = error + "\nftsMemoryQuota is not restored after reboot."
+            error = f'{error}\n fts_memory_quota new setting: {new_fts_memory_quota} ' \
+                f'but actual fts_memory_quota set {verification_fts_memory_quota} after reboot'
         if new_slow_query_timeout != verification_slow_query_timeout:
-            error = error + "\nslowQueryLogTimeout is not restored after reboot."
+            error = f'{error}\n slow_query_timeout new setting: {new_slow_query_timeout} ' \
+                f'but actual slow_query_timeout set {verification_slow_query_timeout} after reboot'
 
         self.assertEqual(error, "", error)
 
