@@ -190,6 +190,7 @@ class IndexManagementAPI(FTSBaseTest):
             self.log.info("index still paused and number of docs at present : {0}. Now resuming".format(index_count_after_pause))
 
         self.fts_rest.resume_fts_index_update(fts_index.name)
+        self.sleep(10)
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
 
@@ -304,5 +305,6 @@ class IndexManagementAPI(FTSBaseTest):
         self.log.info("Updating the plan")
 
         fts_index.update_index_partitions(1)
+        self.sleep(10)
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
