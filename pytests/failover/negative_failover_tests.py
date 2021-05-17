@@ -31,6 +31,7 @@ class NegativeFailoverTests(FailoverBaseTest):
     def graceful_failover_when_graceful_failover_running(self):
         try:
             self.rest = RestConnection(self.master)
+            self.sleep(120)
             nodes = self.get_nodes(self.master)
             chosen = RebalanceHelper.pick_nodes(self.master, howmany=1)
             success_failed_over = self.rest.fail_over(chosen[0].id, graceful=True)
@@ -101,6 +102,7 @@ class NegativeFailoverTests(FailoverBaseTest):
     def addback_an_unfailed_node(self):
         try:
             self.rest = RestConnection(self.master)
+            self.sleep(120)
             nodes = self.get_nodes(self.master)
             chosen = RebalanceHelper.pick_nodes(self.master, howmany=1)
             self.rest.set_recovery_type(otpNode=chosen[0].id, recoveryType="delta")
@@ -156,6 +158,7 @@ class NegativeFailoverTests(FailoverBaseTest):
     def failure_recovery_delta_node_after_add_node(self):
         try:
             self.rest = RestConnection(self.master)
+            self.sleep(120)
             chosen = RebalanceHelper.pick_nodes(self.master, howmany=1)
             self.rest.add_node(self.master.rest_username, self.master.rest_password, self.servers[self.nodes_init].ip, self.servers[self.nodes_init].port)
             # Mark Node for failover
@@ -173,6 +176,7 @@ class NegativeFailoverTests(FailoverBaseTest):
     def failure_recovery_delta_node_after_eject_node(self):
         try:
             self.rest = RestConnection(self.master)
+            self.sleep(120)
             eject_out_node = self.find_node_info(self.master, self.servers[self.nodes_init-1])
             chosen = RebalanceHelper.pick_nodes(self.master, howmany=1)
             self.rest.eject_node(self.master.rest_username, self.master.rest_password, self.servers[self.nodes_init-1])
@@ -191,6 +195,7 @@ class NegativeFailoverTests(FailoverBaseTest):
     def failure_recovery_delta_node_before_rebalance_in_out(self):
         try:
             self.rest = RestConnection(self.master)
+            self.sleep(120)
             chosen = RebalanceHelper.pick_nodes(self.master, howmany=1)
             # Mark Node for failover
             success_failed_over = self.rest.fail_over(chosen[0].id, graceful=False)
@@ -215,6 +220,7 @@ class NegativeFailoverTests(FailoverBaseTest):
     def graceful_failover_unhealthy_node_not_allowed(self):
         try:
             self.rest = RestConnection(self.master)
+            self.sleep(120)
             nodes = self.get_nodes(self.master)
             self.stop_server(self.servers[1])
             # Mark Node for failover
