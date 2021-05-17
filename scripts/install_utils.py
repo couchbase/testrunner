@@ -690,7 +690,8 @@ def __get_build_url(node, build_binary):
 
 
 def _download_build():
-    if params["all_nodes_same_os"] and not params["skip_local_download"]:
+    all_nodes_same_version = len(set([node.build.url for node in NodeHelpers])) == 1
+    if params["all_nodes_same_os"] and all_nodes_same_version and not params["skip_local_download"]:
         check_and_retry_download_binary_local(NodeHelpers[0])
         _copy_to_nodes(NodeHelpers[0].build.path, NodeHelpers[0].build.path)
         ok = True
