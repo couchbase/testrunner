@@ -3845,18 +3845,18 @@ class StableTopFTS(FTSBaseTest):
         test_scope = "scope_"+str(num_scopes)
         test_collection = "test_collection"
         self._cb_cluster._create_collection(bucket="default", scope=test_scope, collection=test_collection, cli_client=self.cli_client)
-        self._fill_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=1000)
+        self._fill_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=15000)
 
         test_index = self.create_index(self._cb_cluster.get_bucket_by_name('default'),
                                        "test_index", collection_index=True, _type=f"{test_scope}.{test_collection}",
                                        scope=test_scope, collections=[test_collection])
-        self.wait_for_indexing_complete_simple(item_count=1000, index=test_index)
+        self.wait_for_indexing_complete_simple(item_count=15000, index=test_index)
 
         multi_collections = []
         for i in range(1, 4):
             coll_name = test_collection + "_" + str(i)
             self._cb_cluster._create_collection(bucket="default", scope=test_scope, collection=coll_name, cli_client=self.cli_client)
-            self._fill_collection(bucket=bucket, scope=test_scope, collection=coll_name, num_docs=1000, start_seq_num=1000*i+1)
+            self._fill_collection(bucket=bucket, scope=test_scope, collection=coll_name, num_docs=15000)
             multi_collections.append(coll_name)
         _type_multi = []
         index_collections = []
@@ -3866,8 +3866,7 @@ class StableTopFTS(FTSBaseTest):
         test_index_multi = self.create_index(self._cb_cluster.get_bucket_by_name('default'),
                                              "test_index_multi", collection_index=True, _type=_type_multi,
                                              scope=test_scope, collections=index_collections)
-        self.wait_for_indexing_complete_simple(item_count=3000, index=test_index_multi)
-
+        self.wait_for_indexing_complete_simple(item_count=45000, index=test_index_multi)
 
         additional_collections_per_scope = TestInputSingleton.input.param("additional_collections_per_scope", 2)
 
@@ -3895,19 +3894,18 @@ class StableTopFTS(FTSBaseTest):
         mem_client.stop_persistence()
 
         # Perform mutations on the bucket
-        if self._update:
+        if self._input.param("update", False):
             self._update_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=300)
             for i in range(1, 4):
                 self._update_collection(bucket=bucket, scope=test_scope, collection=test_collection + "_" + str(i),
                                         num_docs=300, start=1000 * i + 1)
 
-        if self._delete:
-            self._delete_from_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=100)
+        if self._input.param("delete", False):
+            self._delete_from_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=5000)
             for i in range(1, 4):
-                self._update_collection(bucket=bucket, scope=test_scope, collection=test_collection + "_" + str(i),
-                                        num_docs=100, start=1000 * i + 1)
-
+                self._delete_from_collection(bucket=bucket, scope=test_scope, collection="test_collection_"+str(i), num_docs=5000)
         self.wait_for_indexing_complete_simple(item_count=900, index=test_index)
+
         self.wait_for_indexing_complete_simple(item_count=2700, index=test_index_multi)
 
         # Run FTS Query to fetch the initial count of mutated items
@@ -3915,10 +3913,8 @@ class StableTopFTS(FTSBaseTest):
 
         hits1_simple_index, _, _, _ = test_index.execute_query(query)
         self.log.info("Hits for simple index before rollback: %s" % hits1_simple_index)
-
         hits1_multi_index, _, _, _ = test_index_multi.execute_query(query)
         self.log.info("Hits for multi index before rollback: %s" % hits1_multi_index)
-
         # Fetch count of docs in index and bucket
         before_simple_index_doc_count = test_index.get_indexed_doc_count()
         before_multi_index_doc_count = test_index_multi.get_indexed_doc_count()
@@ -3951,10 +3947,8 @@ class StableTopFTS(FTSBaseTest):
         # Run FTS query to fetch count of mutated items post rollback.
         hits2_simple_index, _, _, _ = test_index.execute_query(query)
         self.log.info("Hits for simple index after rollback: %s" % hits2_simple_index)
-
         hits2_multi_index, _, _, _ = test_index_multi.execute_query(query)
         self.log.info("Hits for multi index after rollback: %s" % hits2_multi_index)
-
         # Fetch count of docs in index and bucket
         after_simple_index_doc_count = test_index.get_indexed_doc_count()
         after_multi_index_doc_count = test_index_multi.get_indexed_doc_count()
@@ -3987,23 +3981,22 @@ class StableTopFTS(FTSBaseTest):
 
         if failover_fts_node:
             failover_task = self._cb_cluster.async_failover(
-                node=self._input.servers[2])
+                num_nodes=1)
             failover_task.result()
             self.sleep(10)
 
             # Run FTS query to fetch count of mutated items post FTS node failover.
-            for index in self._cb_cluster.get_indexes():
-                hits3_simple_index, _, _, _ = test_index.execute_query(query)
-                hits3_multi_index, _, _, _ = test_index_multi.execute_query(query)
+            hits3_simple_index, _, _, _ = test_index.execute_query(query)
+            hits3_multi_index, _, _, _ = test_index_multi.execute_query(query)
 
-                self.log.info(
-                    "Hits after rollback and failover of primary FTS node for simple index: %s" % hits3_simple_index)
-                self.log.info(
-                    "Hits after rollback and failover of primary FTS node for multi index: %s" % hits3_multi_index)
-                self.assertEqual(hits2_simple_index, hits3_simple_index,
-                                 "Mutated items after FTS node failover are not equal to that after rollback for simple index")
-                self.assertEqual(hits2_multi_index, hits3_multi_index,
-                                 "Mutated items after FTS node failover are not equal to that after rollback for multi index")
+            self.log.info(
+                "Hits after rollback and failover of primary FTS node for simple index: %s" % hits3_simple_index)
+            self.log.info(
+                "Hits after rollback and failover of primary FTS node for multi index: %s" % hits3_multi_index)
+            self.assertEqual(hits2_simple_index, hits3_simple_index,
+                                "Mutated items after FTS node failover are not equal to that after rollback for simple index")
+            self.assertEqual(hits2_multi_index, hits3_multi_index,
+                                "Mutated items after FTS node failover are not equal to that after rollback for multi index")
 
     def test_flush_bucket_oso(self):
         rest = RestConnection(self._cb_cluster.get_random_fts_node())
@@ -4064,6 +4057,8 @@ class StableTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete_simple(item_count=3000, index=test_index_multi)
 
         self._cb_cluster.flush_buckets([bucket])
+        self.sleep(60, "Waiting for flush to be happened.")
+
 
         simple_index_doc_count = test_index.get_indexed_doc_count()
         multi_index_doc_count = test_index_multi.get_indexed_doc_count()

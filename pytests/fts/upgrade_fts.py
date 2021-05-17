@@ -869,8 +869,6 @@ class UpgradeFTS(NewUpgradeBaseTest):
             except Exception as e:
                 self.log.info("Expected exception while updating index: %s"
                                 % e)
-                self.log.info("Index count: %s"
-                                %index.get_indexed_doc_count())
                 self.query_index_with_credentials(index=index,
                                                   username=user['id'],
                                                   password=user['password'])
