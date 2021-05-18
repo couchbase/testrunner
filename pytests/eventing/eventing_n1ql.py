@@ -364,7 +364,7 @@ class EventingN1QL(EventingBaseTest):
         stats = self.rest.get_all_eventing_stats()
         log.info("Stats {0}".format(json.dumps(stats, sort_keys=True, indent=4)))
         if stats[0]["failure_stats"]["timeout_count"] !=1:
-            if stats[0]["lcb_exception_stats"]["23"]==1:
+            if stats[0]["lcb_exception_stats"]["201"]==1:
                 pass
             else:
                 raise Exception("Timeout not happened for the long running query")
