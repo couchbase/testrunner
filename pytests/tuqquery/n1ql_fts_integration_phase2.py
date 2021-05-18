@@ -725,11 +725,14 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         fts_name_index.index_definition['uuid'] = fts_name_index.get_uuid()
         fts_name_index.update()
 
+        self.wait_for_fts_indexing_complete(fts_name_index, 7303)
+
         fts_state_index = self._create_fts_index(index_name="idx_beer_sample_fts_state", doc_count=7303,
                                                  source_name=self.sample_bucket)
         fts_state_index.add_child_field_to_default_mapping(field_name="state", field_type="text")
         fts_state_index.index_definition['uuid'] = fts_state_index.get_uuid()
         fts_state_index.update()
+        self.wait_for_fts_indexing_complete(fts_state_index, 7303)
 
         # fts_job_index =  self._create_fts_index(index_name="idx_default_fts_job_title",
         # doc_count=2016, source_name='default')

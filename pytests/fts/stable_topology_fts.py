@@ -252,7 +252,7 @@ class StableTopFTS(FTSBaseTest):
     def test_match_consistency_long_timeout(self):
         timeout = self._input.param("timeout", None)
         query = {"match_all": {}}
-        self.create_simple_default_index()
+        self.create_simple_default_index(data_loader_output=True)
         if self.container_type == "collection":
             scan_vectors_before_mutations = self._get_mutation_vectors()
         zero_results_ok = True
@@ -869,9 +869,11 @@ class StableTopFTS(FTSBaseTest):
         Index and query index, update map, query again, uses RQG
         """
         fail = False
+        collection_index, type, index_scope, index_collections = self.define_index_parameters_collection_related()
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
-            index_name="custom_index")
+            index_name="custom_index", collection_index=collection_index, _type=type,
+            scope=index_scope, collections=index_collections)
         self.create_es_index_mapping(index.es_custom_map, index.index_definition)
         self.load_data()
         self.wait_for_indexing_complete()
@@ -883,7 +885,7 @@ class StableTopFTS(FTSBaseTest):
             self.log.error(err)
             fail = True
         self.log.info("Editing custom index with new map...")
-        index.generate_new_custom_map(seed=index.cm_id+10)
+        index.generate_new_custom_map(seed=index.cm_id+10, collection_index=collection_index, type_mapping=type)
         index.index_definition['uuid'] = index.get_uuid()
         index.update()
         # updating mapping on ES is not easy, often leading to merge issues
