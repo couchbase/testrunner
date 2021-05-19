@@ -88,21 +88,15 @@ class QuerySystemKeyspacesTests(QueryTests):
         self.verify_all_keyspaces(keyspace_names)
 
     def test_drop_scope(self):
-        found = False
-        found_keyspace = ()
         for x in range(0, 10):
             self.collections_helper.create_scope(bucket_name="default", scope_name='scope' + str(x))
             for y in range(0, 10):
                 self.collections_helper.create_collection(bucket_name="default", scope_name='scope' + str(x), collection_name="collection" + str(y))
         self.collections_helper.delete_scope(bucket_name="default", scope_name='scope1')
+        results = self.run_cbq_query(query="select * from system:all_keyspaces where `scope` = 'scope1'")
+        self.assertTrue(results['metrics']['resultCount'] == 0, "Found a keyspace from the scope that was dropped! {0}".format(results))
         results = self.run_cbq_query(query="select * from system:all_keyspaces")
-        for result in results['results']:
-            if 'scope' in result['all_keyspaces']:
-                if result['all_keyspaces']['scope'] == "scope1":
-                    found = True
-                    found_keyspace = (result['all_keyspaces']['scope'], result['all_keyspaces']['name'])
-                    break
-        self.assertFalse(found, "Found a keyspace from the scope that was dropped! {0}".format(found_keyspace))
+        self.assertFalse(results['metrics']['resultCount'] == 0, "There should be keyspaces in the system!".format(results))
 
     def test_delete_bucket(self):
         found = False
