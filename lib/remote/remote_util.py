@@ -3585,7 +3585,7 @@ class RemoteMachineShellConnection(KeepRefs):
                         'amazon linux ami': 'amzn2', 'centos': 'centos', 'opensuse': 'suse',
                         'red': 'rhel', 'suse': 'suse', 'oracle': 'oel', 'openshift' : 'centos'}
                     log.debug("os_pretty_name:" + os_pretty_name)
-                    if os_pretty_name:
+                    if os_pretty_name and "Amazon Linux 2" not in os_pretty_name:
                         os_name = os_pretty_name.split(' ')[0].lower()
                         os_distro = os_distro_dict[os_name]
                         if os_name != 'ubuntu':
@@ -3633,7 +3633,8 @@ class RemoteMachineShellConnection(KeepRefs):
                         os_version = "oel{}".format(dist_version)
                         is_linux_distro = True
                         break
-                    elif etc_issue.lower().find('Amazon Linux 2') != -1:
+                    elif etc_issue.lower().find('amazon linux 2') != -1 or \
+                         etc_issue.lower().find('amazon linux release 2') != -1:
                         etc_issue = etc_issue.rstrip('\n').rstrip(' ').rstrip('\\l').rstrip(' ').rstrip('\\n').rstrip(
                             ' ')
                         os_distro = 'Amazon Linux 2'

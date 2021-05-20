@@ -96,6 +96,7 @@ class AltAddrBaseTest(BaseTestCase):
                                                               self.master.rest_password)
         cmd += '-d "path_config:component_path(bin)."'
         bin_path  = check_output(cmd, shell=True)
+        bin_path = bin_path.decode()
         if "bin" not in bin_path:
             self.fail("Check if cb server install on %s" % self.master.ip)
         else:
