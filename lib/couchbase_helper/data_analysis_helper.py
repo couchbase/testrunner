@@ -728,8 +728,13 @@ class DataCollector(object):
                 continue
             try:
                 if values[index] in list(bucketMap.keys()):
-                    prev_revId =  int(bucketMap[values[index]][revIdIndex])
-                    new_revId = int(values[revIdIndex])
+                    if values[revIdIndex].isdigit():
+                        prev_revId =  int(bucketMap[values[index]][revIdIndex])
+                        new_revId = int(values[revIdIndex])
+                    else:
+                        revIdIndex = 8
+                        prev_revId = int.from_bytes(str.encode(bucketMap[values[index]].split(",")[revIdIndex][2:-1]), "big")
+                        new_revId = int.from_bytes(str.encode(values[revIdIndex][2:-1]), "big")
                     if prev_revId < new_revId:
                         bucketMap[values[index]] = value
                 else:
