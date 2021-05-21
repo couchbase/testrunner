@@ -719,7 +719,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                     cluster_port=8091,
                                                                     user=cluster_user,
                                                                     password=cluster_pwd)
-                self.assertTrue("SUCCESS: Server added" in output)
+                self.assertTrue("SUCCESS: Server added" in output[0])
                 self.sleep(5)
         cli_command = "rebalance"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
