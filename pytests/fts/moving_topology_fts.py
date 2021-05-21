@@ -84,11 +84,17 @@ class MovingTopFTS(FTSBaseTest):
         rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         rest.set_maxConcurrentPartitionMovesPerNode(self.max_concurrent_partition_moves_per_node)
 
+        self.sleep(30, "Addtional sleep between 2 rebalance sessions.")
+
         start_parallel_rebalance_time = time.time()
         self._cb_cluster.swap_rebalance(services=services)
         end_parallel_rebalance_time = time.time()
         parallel_rebalance_time = end_parallel_rebalance_time - start_parallel_rebalance_time
 
+        self.log.info("Simple rebalance took {0} sec.".
+                      format(simple_rebalance_time))
+        self.log.info("Concurrent partitions move rebalance took {0} sec.".
+                      format(parallel_rebalance_time))
         self.log.info("Delta between simple and concurrent partitions move rebalance is {0} sec.".
                       format(simple_rebalance_time - parallel_rebalance_time))
 
