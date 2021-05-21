@@ -7,7 +7,10 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase.bucket import Bucket
 from couchbase.cluster import Cluster
-from couchbase.exceptions import NotFoundError
+try:
+    from couchbase.exceptions import DocumentNotFoundException
+except:
+    from couchbase.exceptions import NotFoundError as DocumentNotFoundException
 
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.memcached.helper.data_helper import VBucketAwareMemcached
@@ -331,7 +334,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                 try:
                     for key in keys:
                         bkt.get(key)
-                except NotFoundError:
+                except DocumentNotFoundException:
                     vBucketId = VBucketAware._get_vBucket_id(key)
                     errors.append("Missing key: {0}, VBucketId: {1}".
                                   format(key, vBucketId))
