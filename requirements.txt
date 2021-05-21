@@ -12,5 +12,5 @@ paramiko==2.7.1
 pycparser==2.20
 urllib3==1.26.2
 requests==2.25.0
-httplib2==0.18.1
+httplib2==0.19.0
 typing-extensions==3.7.4.3
