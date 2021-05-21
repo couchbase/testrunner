@@ -327,19 +327,19 @@ class QueryUpdateStatsTests(QueryTests):
             {"bucket": "travel-sample", "collection": "_default", "histogramKey": "city", "scope": "_default"}
         ]
         update_stats = "UPDATE STATISTICS `travel-sample`(city) WITH {'update_statistics_timeout':600}"
+        self.run_cbq_query(query=update_stats, query_params={'timeout':'600s'})
+        # drop scope
+        self.run_cbq_query(query="DROP SCOPE `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`")
+        self.sleep(1)
+        # update stats after drop system scope
         try:
-            stats = self.run_cbq_query(query=update_stats, query_params={'timeout':'600s'})
-            # drop scope
-            self.run_cbq_query(query="DROP SCOPE `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`")
-            self.sleep(1)
-            # update stats after drop system scope
-            stats = self.run_cbq_query(query=update_stats, query_params={'timeout':'600s'})
-            # check stats
-            histogram = self.run_cbq_query(query=histogram_query)
-            self.assertEqual(histogram['results'],histogram_expected)
-        except Exception as e:
-            self.log.error(f"Update statistics failed: {e}")
-            self.fail()
+            self.run_cbq_query(query=update_stats, query_params={'timeout':'600s'})
+        except CBQError as ex:
+            self.log.info("Let's try update stas again at least once more as you might get exception first time")
+            self.run_cbq_query(query=update_stats, query_params={'timeout':'600s'})
+        # check stats
+        histogram = self.run_cbq_query(query=histogram_query)
+        self.assertEqual(histogram['results'],histogram_expected)
 
     def test_drop_sys_bucket(self):
         histogram_query = "SELECT `bucket`, `scope`, `collection`, `histogramKey` FROM `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'"
