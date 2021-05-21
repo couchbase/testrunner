@@ -132,48 +132,44 @@ class MemcachedClient(KeepRefs):
                           len(key) + len(extraHeader) + len(val) + len(extended_meta_data), opaque, cas)
         self.pollerObject = select.poll()
         self.pollerObject.register(self.s, select.POLLOUT)
-        fdVsEvent = self.pollerObject.poll(1000)
-        for w, _ in fdVsEvent:
-            # _, w, _ = select.select([], [self.s], [], self.timeout)
-            if w:
-                try:
-                    key = key.encode()
-                except AttributeError:
-                    pass
+        fdVsEvent = self.pollerObject.poll(30000)
+        if fdVsEvent:
+            try:
+                key = key.encode()
+            except AttributeError:
+                pass
 
-                try:
-                    extraHeader = extraHeader.encode()
-                except AttributeError:
-                    pass
+            try:
+                extraHeader = extraHeader.encode()
+            except AttributeError:
+                pass
 
-                try:
-                    val = val.encode()
-                except AttributeError:
-                    pass
+            try:
+                val = val.encode()
+            except AttributeError:
+                pass
 
-                try:
-                    extended_meta_data = extended_meta_data.encode()
-                except AttributeError:
-                    pass
-                self.s.sendall(msg + extraHeader + key + val + extended_meta_data)
-            else:
-                raise exceptions.EOFError("Timeout waiting for socket send. from {0}".format(self.host))
+            try:
+                extended_meta_data = extended_meta_data.encode()
+            except AttributeError:
+                pass
+            self.s.sendall(msg + extraHeader + key + val + extended_meta_data)
+        else:
+            raise exceptions.EOFError("Timeout waiting for socket send. from {0}".format(self.host))
 
     def _recvMsg(self):
         response = b""
         self.pollerObject = select.poll()
         self.pollerObject.register(self.s, select.POLLIN)
         while len(response) < MIN_RECV_PACKET:
-            fdVsEvent = self.pollerObject.poll(1000)
-            for r, _ in fdVsEvent:
-                # r, _, _ = select.select([self.s], [], [], self.timeout)
-                if r:
-                    data = self.s.recv(MIN_RECV_PACKET - len(response))
-                    if data == b'':
-                        raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
-                    response += data
-                else:
-                    raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
+            fdVsEvent = self.pollerObject.poll(30000)
+            if fdVsEvent:
+                data = self.s.recv(MIN_RECV_PACKET - len(response))
+                if data == b'':
+                    raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
+                response += data
+            else:
+                raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
 
         assert len(response) == MIN_RECV_PACKET
 
@@ -199,17 +195,15 @@ class MemcachedClient(KeepRefs):
 
         rv = b""
         while remaining > 0:
-            fdVsEvent = self.pollerObject.poll(1000)
-            for r, _ in fdVsEvent:
-                # r, _, _ = select.select([self.s], [], [], self.timeout)
-                if r:
-                    data = self.s.recv(remaining)
-                    if data == b'':
-                        raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
-                    rv += data
-                    remaining -= len(data)
-                else:
-                    raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
+            fdVsEvent = self.pollerObject.poll(30000)
+            if fdVsEvent:
+                data = self.s.recv(remaining)
+                if data == b'':
+                    raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
+                rv += data
+                remaining -= len(data)
+            else:
+                raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
 
         return cmd, errcode, opaque, cas, keylen, extralen, dtype, rv
 
