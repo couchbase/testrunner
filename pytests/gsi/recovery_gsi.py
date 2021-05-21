@@ -451,7 +451,12 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             try:
                 self.run_cbq_query(query=query, server=n1ql_node, scan_consistency="request_plus")
             except Exception as err:
-                self.fail(f'{query} failed with {err}')
+                self.log.error(f'{query} failed with {err}')
+                self.log.info("Retrying the query")
+                try:
+                    self.run_cbq_query(query=query, server=n1ql_node, scan_consistency="request_plus")
+                except Exception as err:
+                    self.fail(f'{query} failed with {err}')
 
     def test_basic_oso_feature_mutations(self):
 
@@ -610,6 +615,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.fail("some indexes did not process mutations on time")
 
+        self.sleep(10)
         self.scan_indexes(self.index_ops_obj.get_defer_index_list())
         self.verify_query_results_from_new_index()
 
