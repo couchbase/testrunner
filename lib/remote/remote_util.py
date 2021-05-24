@@ -30,7 +30,7 @@ from testconstants import COUCHBASE_FROM_VERSION_3,\
 from testconstants import COUCHBASE_RELEASE_VERSIONS_3, CB_RELEASE_BUILDS
 from testconstants import SHERLOCK_VERSION, WIN_PROCESSES_KILLED
 from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON,\
-                          COUCHBASE_FROM_SPOCK
+                          COUCHBASE_FROM_SPOCK, COUCHBASE_FROM_662
 from testconstants import RPM_DIS_NAME
 from testconstants import LINUX_DISTRIBUTION_NAME, LINUX_CB_PATH, \
                           LINUX_COUCHBASE_BIN_PATH
@@ -4096,7 +4096,7 @@ class RemoteMachineShellConnection:
         command = "%s %s %s %s" % (transfer_command, source, destination, command_options)
         uncompress_flag = ""
         f, s, b = self.get_cbversion(self.info.type.lower())
-        if f[:5] == "6.6.2":
+        if f[:5] in COUCHBASE_FROM_662:
             uncompress_flag = " -x uncompress=1 "
             """ need to uncompress data to compare value in bkrs from 6.6.2"""
         if self.info.type.lower() == 'windows':
