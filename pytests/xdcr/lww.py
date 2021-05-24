@@ -7,7 +7,10 @@ from .xdcrnewbasetests import NodeHelper
 from membase.api.rest_client import RestConnection
 from testconstants import STANDARD_BUCKET_PORT
 from remote.remote_util import RemoteMachineShellConnection
-from sdk_client3 import SDKClient
+try:
+    from sdk_client3 import SDKClient
+except:
+    from lib.sdk_client import SDKClient
 
 try:
     from couchbase.exceptions import DocumentNotFoundException
