@@ -3093,8 +3093,12 @@ class XdcrCLITest(CliBaseTest):
             options += (" --xdcr-certificate={0}".format(xdcr_cert),\
                                                "")[xdcr_cert is None]
             if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-                self.assertTrue(self._check_output("-----END CERTIFICATE-----",
+                if "enterprise" in self.cb_version:
+                    self.assertTrue(self._check_output("-----END CERTIFICATE-----",
                                                                        output))
+                else:
+                    self.assertTrue(self._check_output("ERROR: This http API"\
+                                " endpoint requires enterprise edition", output))
             else:
                 self.assertNotEqual(output[-1].find("SUCCESS"), -1,\
                      "ssl-manage CLI failed to retrieve certificate")
