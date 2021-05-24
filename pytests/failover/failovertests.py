@@ -614,7 +614,7 @@ class FailoverTests(FailoverBaseTest):
         query["connectionTimeout"] = 60000
         query["full_set"] = "true"
         expected_rows = None
-        timeout = None
+        timeout = 1200
         if self.active_resident_threshold == 0:
             timeout = 2400
         if self.max_verify:
