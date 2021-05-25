@@ -111,7 +111,9 @@ class LogRedactionBase(BaseTestCase):
         command = "zipgrep -h -o \"<ud>.+</ud>\" " + remotepath + nonredactFileName + " " + log_file_name
         match_output, _ = shell.execute_command(command=command)
         if len(ln_output) == 0 and len(match_output) == 0:
-            self.fail("No user data tags found in " + remotepath + nonredactFileName)
+            if "fts" not in logFileName:
+                """ No credentials in fts log """
+                self.fail("No user data tags found in " + remotepath + nonredactFileName)
         nonredact_dict = dict(list(zip(ln_output, match_output)))
 
         command = "zipgrep -n -o \"<ud>.+</ud>\" " + remotepath + redactFileName + " " + log_file_name + " | cut -f2 -d:"
@@ -119,7 +121,9 @@ class LogRedactionBase(BaseTestCase):
         command = "zipgrep -h -o \"<ud>.+</ud>\" " + remotepath + redactFileName + " " + log_file_name
         match_output, _ = shell.execute_command(command=command)
         if len(ln_output) == 0 and len(match_output) == 0:
-            self.fail("No user data tags found in " + remotepath + redactFileName)
+            if "fts" not in logFileName:
+                """ No credentials in fts redacted log """
+                self.fail("No user data tags found in " + remotepath + redactFileName)
         redact_dict = dict(list(zip(ln_output, match_output)))
 
         self.log.info("Number of tagged items in non-redacted log: " + str(len(list(nonredact_dict.items()))))
