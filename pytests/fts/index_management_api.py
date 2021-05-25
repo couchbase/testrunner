@@ -90,7 +90,7 @@ class IndexManagementAPI(FTSBaseTest):
 
         NodeHelper.reboot_server(self._cb_cluster.get_fts_nodes()[0], test_case=self)
 
-        self.sleep(5)
+        self.sleep(10)
 
         verification_bleve_max_result_window = int(rest.get_node_settings("bleveMaxResultWindow"))
         verification_feed_allotment = rest.get_node_settings("feedAllotment")

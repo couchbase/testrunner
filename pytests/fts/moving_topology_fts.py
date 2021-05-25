@@ -1474,7 +1474,7 @@ class MovingTopFTS(FTSBaseTest):
                             name="rebalance",
                             args=())
         reb_thread.start()
-        self.sleep(25)
+        self.sleep(10)
         for bucket in self._cb_cluster.get_buckets():
             self.log.info("Deleting bucket {0}".format(bucket.name))
             if not RestConnection(self._cb_cluster.get_master_node()).delete_bucket(bucket.name):
@@ -1510,7 +1510,7 @@ class MovingTopFTS(FTSBaseTest):
         new_plan_param = {"maxPartitionsPerPIndex": 64}
         index.index_definition['planParams'] = \
             index.build_custom_plan_params(new_plan_param)
-        index.index_definition['planParams']['numReplicas'] = 0
+        index.index_definition['planParams']['indexPartitions'] = 15
         index.index_definition['uuid'] = index.get_uuid()
         update_index_thread = Thread(target=index.update,
                                    name="update_index",
@@ -1597,8 +1597,8 @@ class MovingTopFTS(FTSBaseTest):
 
         # Perform mutations on the bucket
         self.async_perform_update_delete(self.upd_del_fields)
-        #if self._update:
-        #    self.sleep(60, "Waiting for updates to get indexed...")
+        if self._update:
+            self.sleep(60, "Waiting for updates to get indexed...")
         self.wait_for_indexing_complete()
 
         # Run FTS Query to fetch the initial count of mutated items

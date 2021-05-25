@@ -271,6 +271,8 @@ class StableTopFTS(FTSBaseTest):
             for task in tasks:
                 task.start()
             num_items = self._num_items
+            if self.container_type == "collection":
+                num_items = index.get_src_collections_doc_count()
             if timeout is None or timeout <= 60000:
                 # Here we assume that the update takes more than 60 seconds
                 # when we use timeout <= 60 sec we get timeout error
@@ -3480,6 +3482,7 @@ class StableTopFTS(FTSBaseTest):
         index.update()
 
         self.wait_for_indexing_complete(len(self.test_data))
+        self.sleep(5)
 
         cluster = index.get_cluster()
 
@@ -3555,7 +3558,7 @@ class StableTopFTS(FTSBaseTest):
         index.update()
 
         self.wait_for_indexing_complete(len(self.test_data))
-
+        self.sleep(5)
 
         cluster = index.get_cluster()
 
