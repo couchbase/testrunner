@@ -143,12 +143,10 @@ class cbstatsTests(CliBaseTest):
 
     def verify_results(self, output, error):
         if len(error) > 0 and '\n'.join(error).find("DeprecationWarning") == -1:
-            raise Exception("Command throw out error message.\
-                             Please check the output of remote_util")
+            raise Exception("Please see error of remote_util: " + '\n'.join(error))
         else:
             if '\n'.join(output).lower().find("not found") != -1:
-                raise Exception("Command throw out error message.\
-                                 Please check the output of remote_util")
+                raise Exception("Please see output of remote_util: " + '\n'.join(output))
             elif output.__len__() < 1:
                 raise Exception("Command does not throw out error message \
                                  but the output is empty. \
