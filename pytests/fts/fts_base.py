@@ -1304,6 +1304,9 @@ class FTSIndex:
         self.index_definition['uuid'] = self.get_uuid()
         self.update()
 
+    def get_num_replicas(self):
+        return self.index_definition['planParams']['numReplicas']
+
     def delete(self, rest=None):
         if not rest:
             rest = RestConnection(self.__cluster.get_random_fts_node())
@@ -1474,7 +1477,7 @@ class FTSIndex:
                       return_raw_hits=False, sort_fields=None,
                       explain=False, show_results_from_item=0, highlight=False,
                       highlight_style=None, highlight_fields=None, consistency_level='',
-                      consistency_vectors={}, timeout=60000, rest=None, score='', expected_no_of_results=None):
+                      consistency_vectors={}, timeout=60000, rest=None, score='', expected_no_of_results=None, node=None):
         """
         Takes a query dict, constructs a json, runs and returns results
         """
@@ -1502,7 +1505,7 @@ class FTSIndex:
             else:
                 rest_timeout = timeout // 1000 + 10
             hits, matches, time_taken, status = \
-                self.__cluster.run_fts_query(self.name, query_dict, timeout=rest_timeout)
+                self.__cluster.run_fts_query(self.name, query_dict, node=node, timeout=rest_timeout)
         except ServerUnavailableException:
             if zero_results_ok and (expected_hits is None or expected_hits <= 0):
                 return hits, doc_ids, time_taken, status
@@ -2218,8 +2221,12 @@ class CouchbaseCluster:
             node_services = []
             node_num = 0
             for index, node_service in enumerate(cluster_services):
+                print(f"index ::{index}:: node_service ::{node_service}::")
+                print(f"cluster_services ::{cluster_services}::")
                 if index == 0 and node_service == "kv":
                     continue
+                print(f"available nodes ::{available_nodes}::")
+                print(f"node_num {node_num}")
                 node_to_add = available_nodes[node_num]
                 self.__log.info("%s will be configured with services %s" % (
                     node_to_add.ip,
@@ -3284,6 +3291,7 @@ class CouchbaseCluster:
 
     def rebalance_out_node(self, node=None, sleep_before_rebalance=None):
         task = self.__async_rebalance_out_node(node=node, sleep_before_rebalance=sleep_before_rebalance)
+        task.result()
         return task
 
     def enable_retry_rebalance(self, retry_time, num_retries):
@@ -3435,7 +3443,7 @@ class CouchbaseCluster:
         return tasks
 
     def failover(self, master=False, num_nodes=1,
-                 graceful=False):
+                 graceful=False, node=None):
         """synchronously failover nodes from Cluster
         @param master: True if failover master node only.
         @param num_nodes: number of nodes to rebalance-out from cluster.
@@ -3443,7 +3451,7 @@ class CouchbaseCluster:
         """
         task = self.__async_failover(master=master,
                                      num_nodes=num_nodes,
-                                     graceful=graceful)
+                                     graceful=graceful, node=node)
         task.result()
 
     def __async_failover(self, master=False, num_nodes=1, graceful=False, node=None):
