@@ -256,6 +256,17 @@ class EventingCurl(EventingBaseTest):
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
             self.undeploy_and_delete_function(body)
 
+        def test_curl_restrict_access_to_diag_eval_endpoint_via_eventing(self):
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+            body = self.create_save_function_body(self.function_name, self.handler_code,
+                                                  worker_count=3)
+            self.deploy_function(body)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.undeploy_and_delete_function(body)
 
 
 

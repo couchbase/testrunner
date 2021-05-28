@@ -632,3 +632,54 @@ class EventingBucket(EventingBaseTest):
             self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
         # Undeploy and delete the function
         self.undeploy_and_delete_function(body)
+
+    def test_function_undeployment_on_bucket_delete_and_recreate(self):
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket", is_delete=True)
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default", is_delete=True)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", 0)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", 0)
+        # delete and recreate bucket
+        self.rest.delete_bucket(self.src_bucket_name)
+        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
+                                                   replicas=self.num_replicas)
+        self.cluster.async_create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
+                                                  bucket_params=bucket_params)
+        if self.non_default_collection:
+            self.create_scope_collection(bucket=self.src_bucket_name, scope=self.src_bucket_name,
+                                         collection=self.src_bucket_name)
+        # handler should undeploy since src bucket is deleted
+        self.wait_for_handler_state(body['appname'], "undeployed")
+        self.deploy_function(body)
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                         is_delete=True)
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                         is_delete=True)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", 0)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", 0)
+        self.undeploy_and_delete_function(body)

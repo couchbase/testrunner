@@ -17,7 +17,7 @@ class EventingLifeCycle(EventingBaseTest):
         self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
         if self.create_functions_buckets:
             self.bucket_size = 100
-            self.metadata_bucket_size = 400
+            self.metadata_bucket_size = 100
             log.info(self.bucket_size)
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                        replicas=self.num_replicas)
@@ -486,3 +486,30 @@ class EventingLifeCycle(EventingBaseTest):
             assert "ERR_APP_NOT_UNDEPLOYED" in str(e), True
         finally:
             self.undeploy_and_delete_function(body)
+
+    def test_update_appcode_when_handler_is_paused(self):
+        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
+                                                   replicas=self.num_replicas)
+        self.cluster.create_standard_bucket(name=self.dst_bucket_name1, port=STANDARD_BUCKET_PORT + 1,
+                                            bucket_params=bucket_params)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, "handler_code/appcode_before_update.js")
+        body1 = self.create_save_function_body(self.function_name + "1", "handler_code/appcode_after_update.js")
+        body['depcfg']['buckets'].append(
+            {"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1, "access": "rw"})
+        self.rest.create_function(body['appname'], body)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.pause_function(body)
+        self.rest.update_function_appcode(body1['appcode'], self.function_name)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        self.resume_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True, bucket=self.dst_bucket_name1)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                          batch_size=self.batch_size, op_type='delete')
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, bucket=self.dst_bucket_name1)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.undeploy_and_delete_function(body)
+        self.delete_function(body1)

@@ -5522,6 +5522,32 @@ class RestConnection(object):
         return content
 
     '''
+            Update function appcode
+    '''
+    def update_function_appcode(self, body, name):
+        authorization = self.get_authorization(self.username, self.password)
+        url = "api/v1/functions/" + name + "/appcode"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'POST', headers=headers, params=body)
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
+            Get function appcode
+    '''
+    def get_function_appcode(self, name):
+        authorization = self.get_authorization(self.username, self.password)
+        url = "api/v1/functions/" + name + "/appcode"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers, params='')
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
           Get eventing rebalance status
     '''
     def get_eventing_rebalance_status(self):
