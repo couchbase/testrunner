@@ -63,6 +63,7 @@ class cbstatsTests(CliBaseTest):
                 keys_map["test_docs-%s" % i] = vb_id
             for key, vb_id in keys_map.items():
                 output, error = self.shell.execute_cbstats(self.buckets[0], self.command, key, vb_id)
+                self.sleep(20)
                 self.verify_results(output, error)
 
     def test_software_version(self):
