@@ -286,9 +286,9 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                                 self.log.info("check items in collection")
                                 print("\nitems number: ", bk_scopes[scope_id]["collections"][str(self.backupset.load_scope_id[2:])]["mutations"])
                                 if bk_scopes[scope_id]["collections"][str(self.backupset.load_scope_id[2:])]["mutations"] != self.num_items:
-                                    raise("collection items not in backup")
+                                    raise Exception("collection items not in backup")
                 if len(found_collections) != len(collections):
-                    raise("collection may not in backup repo.  Found cols: {0} != check cols: {1}"\
+                    raise Exception("collection may not in backup repo.  Found cols: {0} != check cols: {1}"\
                                                            .format(found_collections, collections))
                 if not found_scope and isinstance(scopes, str):
                     return False, "scope {0} not in backup repo".format(scopes)

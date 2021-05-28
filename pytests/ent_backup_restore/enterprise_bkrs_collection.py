@@ -207,7 +207,7 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
             self.log.info("*** start restore validation")
             data_map_collection = []
             for scope in backup_scopes:
-                if "default" in scope:
+                if "default" in scope or scope == '':
                     continue
                 data_map_collection.append(self.buckets[0].name + "." + scope + "=" + \
                                            self.buckets[0].name + "." + scope)
@@ -348,6 +348,7 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
         self.create_collection_cluster_host(self.backupset.col_per_scope)
         self.sleep(5)
         scopes = self.get_bucket_scope_cluster_host()
+        scopes = [i for i in scopes if i]
         scopes_id = []
         for scope in scopes:
             if scope == "_default":
@@ -377,11 +378,16 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
             scopes = self.get_bucket_scope_cluster_host()
             if isinstance(scopes, tuple):
                 scopes = scopes[0]
+            if scopes[0][:4] == "\x1b[6n":
+                scopes[0] = scopes[0][4:]
             for scope in scopes:
+                if scope == '':
+                    continue
                 collections = self.get_bucket_collection_cluster_host(scope=scope)
                 if isinstance(collections, tuple):
                     collections = self._extract_collection_names(collections)
                     collections = [x.strip() for x in collections]
+                collections = [i for i in collections if i]
                 self.backup_info_validate(scope, collections)
 
     def test_restore_with_auto_create_buckets(self):
@@ -465,7 +471,7 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
             self.log.info("*** start restore validation")
             data_map_collection = []
             for scope in backup_scopes:
-                if "default" in scope:
+                if "default" in scope or scope == '':
                     continue
                 data_map_collection.append(self.buckets[0].name + "." + scope + "=" + \
                                            self.buckets[0].name + "." + scope)
