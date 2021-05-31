@@ -295,6 +295,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self.run_doc_ops()
             if self.scan_vector_per_values:
                 scan_vector_ranges = self._generate_scan_vector_ranges(self.scan_vector_per_values)
+            self.sleep(60)
             self._verify_primary_index_count()
             # verify results
             if len(scan_vector_ranges) > 0:
