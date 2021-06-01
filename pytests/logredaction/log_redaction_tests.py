@@ -569,6 +569,22 @@ class LogRedactionTests(LogRedactionBase):
             "sourceName": "default"
         }
         rest = RestConnection(self.master)
+        node_services = list(rest.get_nodes_services().values())
+        self.log.info("services in node: {0}".format(node_services[0]))
+        if "fts" not in node_services[0]:
+            self.log.info("No fts in services.  Reset node and add services in ini files")
+            rest.force_eject_node()
+            rest = RestConnection(self.master)
+            ready = RestHelper(rest).is_ns_server_running()
+            if ready:
+                shell = RemoteMachineShellConnection(self.master)
+                shell.enable_diag_eval_on_non_local_hosts()
+                shell.disconnect()
+                rest.init_node()
+                rest.set_indexer_storage_mode(username='Administrator',
+                                              password='password')
+                rest.create_bucket(bucket="default", ramQuotaMB=256)
+                self.sleep(15)
         status = rest.create_fts_index("index1", index_definition)
         if status:
             log.info("Index 'index1' created")
@@ -585,7 +601,10 @@ class LogRedactionTests(LogRedactionBase):
         try:
             logs_path = result["perNode"]["ns_1@" + str(self.master.ip)]["path"]
         except KeyError:
-            logs_path = result["perNode"]["ns_1@cb.local"]["path"]
+            if "ns_1@127.0.0.1" in result["perNode"]:
+                logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+            else:
+                logs_path = result["perNode"]["ns_1@cb.local"]["path"]
         redactFileName = logs_path.split('/')[-1]
         nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
         remotepath = logs_path[0:logs_path.rfind('/') + 1]
