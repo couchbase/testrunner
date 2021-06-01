@@ -14,6 +14,7 @@ import install_constants
 import TestInput
 import logging.config
 import os.path
+import urllib.request
 
 logging.config.fileConfig("scripts.logging.conf")
 log = logging.getLogger()
@@ -745,8 +746,8 @@ def check_file_exists(node, filepath):
 
 
 def get_remote_build_size(node):
-    output, _ = node.shell.execute_command(install_constants.REMOTE_BUILD_SIZE_CMD.format(node.build.url))
-    remote_build_size = int(output[0].strip().split(" ")[1])
+    response = urllib.request.urlopen(node.build.url)
+    remote_build_size = int(response.info()["Content-Length"])
     return remote_build_size
 
 
