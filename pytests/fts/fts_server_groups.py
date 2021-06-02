@@ -18,6 +18,7 @@ class FTSServerGroups(FTSBaseTest):
         super(FTSServerGroups, self).tearDown()
 
     def test_nodes_ejection(self):
+        eject_nodes_structure = self._input.param("eject_nodes", None)
         eject_type = self._input.param("eject_type", None)
         initial_query_zones = self._input.param("query_zone_before_eject", None).split("|")
         post_eject_query_zones = self._input.param("query_zone_after_eject", None).split("|")
@@ -36,7 +37,7 @@ class FTSServerGroups(FTSBaseTest):
             hits = self.query_node(index=idx, node=node)
             self.assertEqual(initial_hits, hits, "Difference in search results before node eject detected.")
 
-        ejected_nodes = self.eject_nodes()
+        ejected_nodes = self.eject_nodes(eject_nodes_structure=eject_nodes_structure, eject_type=eject_type)
 
         post_eject_query_nodes = []
         for post_eject_query_zone in post_eject_query_zones:
@@ -74,7 +75,7 @@ class FTSServerGroups(FTSBaseTest):
         idx = self.build_index()
 
         idx.update_num_replicas(final_replicas)
-        self.wait_for_indexing_complete()
+        self.wait_for_indexing_complete(item_count=1000)
         index_replica = idx.get_num_replicas()
         zones_with_replica = self.calculate_zones_with_replica(index=idx)
         self.assertEqual(index_replica + 1, zones_with_replica,
@@ -87,7 +88,7 @@ class FTSServerGroups(FTSBaseTest):
         self.build_cluster()
         self.load_data()
         idx = self.build_index()
-        self.wait_for_indexing_complete()
+        self.wait_for_indexing_complete(item_count=1000)
 
         for zone in self.rest.get_zone_names():
             zone_fts_nodes = self.get_zone_healthy_fts_nodes(zone=zone)
@@ -102,13 +103,16 @@ class FTSServerGroups(FTSBaseTest):
 
     def test_server_groups_modification(self):
         index_partitions = int(self._input.param("partitions", 1))
+        final_replicas = self._input.param("final_replicas", None)
         self.build_cluster()
         available_nodes = self.rebuild_cluster_to_initial_state()
         self.load_data()
         idx = self.build_index()
-        self.wait_for_indexing_complete()
+        self.wait_for_indexing_complete(item_count=1000)
         self.modify_server_groups(available_nodes=available_nodes)
-        self.wait_for_indexing_complete()
+        if final_replicas:
+            idx.update_num_replicas(final_replicas)
+        self.wait_for_indexing_complete(item_count=1000)
 
         for zone in self.rest.get_zone_names():
             zone_fts_nodes = self.get_zone_healthy_fts_nodes(zone=zone)
@@ -119,7 +123,7 @@ class FTSServerGroups(FTSBaseTest):
                     _, num_pindexes = rest_client.get_fts_stats(index_name=idx.name, bucket_name=idx.source_bucket.name,
                                                                 stat_name="num_pindexes_actual")
                     zone_partitions_count = zone_partitions_count + num_pindexes
-                self.assertEqual(zone_partitions_count, index_partitions, "Actual initial partitions distribution differs from expected.")
+                self.assertEqual(zone_partitions_count, index_partitions, "Actual post server groups update partitions distribution differs from expected.")
 
         fts_nodes = self._cb_cluster.get_fts_nodes()
         initial_hits = self.query_node(index=idx, node=fts_nodes[0])
@@ -135,12 +139,18 @@ class FTSServerGroups(FTSBaseTest):
         if 'groups_first' == ordering:
             self.build_cluster()
             idx = self.build_index()
-            self.wait_for_indexing_complete()
+            self.wait_for_indexing_complete(item_count=1000)
+        elif 'index_in_between' == ordering:
+            self.build_cluster()
+            available_nodes = self.rebuild_cluster_to_initial_state()
+            idx = self.build_index()
+            self.wait_for_indexing_complete(item_count=1000)
+            self.modify_server_groups(available_nodes=available_nodes)
         else:
             idx = self.build_index()
-            self.wait_for_indexing_complete()
+            self.wait_for_indexing_complete(item_count=1000)
             self.build_cluster()
-            self.wait_for_indexing_complete()
+            self.wait_for_indexing_complete(item_count=1000)
 
         for zone in self.rest.get_zone_names():
             zone_fts_nodes = self.get_zone_healthy_fts_nodes(zone=zone)
@@ -160,42 +170,115 @@ class FTSServerGroups(FTSBaseTest):
             self.assertEqual(initial_hits, hits, "Difference in search results after server groups modification is detected.")
 
     def test_best_effort_distribution(self):
-        index_partitions = int(self._input.param("partitions", 1))
+        eject_nodes_structure = self._input.param("eject_nodes", None)
+        eject_type = self._input.param("eject_type", None)
 
         self.build_cluster()
         self.load_data()
         idx = self.build_index()
-        self.wait_for_indexing_complete()
-
-        self.eject_nodes()
-
-        self.wait_for_indexing_complete()
+        self.wait_for_indexing_complete(item_count=1000)
 
         fts_nodes = self._cb_cluster.get_fts_nodes()
         initial_hits = self.query_node(index=idx, node=fts_nodes[0])
-        for node in fts_nodes[1:]:
+
+        self.eject_nodes(eject_nodes_structure=eject_nodes_structure, eject_type=eject_type)
+
+        self.wait_for_indexing_complete(item_count=1000)
+
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        for node in fts_nodes:
             hits = self.query_node(index=idx, node=node)
             self.assertEqual(initial_hits, hits, "Difference in search results after server group failover is detected.")
+
+    def test_best_effort_distribution_max_group(self):
+        eject_nodes_structure = self._input.param("eject_nodes", None)
+        eject_type = self._input.param("eject_type", None)
+        initial_server_groups = {}
+        sg_structure = self._input.param("server_groups", None)
+        server_groups = sg_structure.split("|")
+
+        for server_group in server_groups:
+            group_name = server_group.split("-")[0]
+            group_structure = server_group.split("-")[1]
+            initial_server_groups[group_name] = group_structure
+
+        self.build_cluster()
+        self.load_data()
+        idx = self.build_index()
+        self.wait_for_indexing_complete(item_count=1000)
+
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        initial_hits = self.query_node(index=idx, node=fts_nodes[0])
+
+        self.eject_nodes(eject_nodes_structure=eject_nodes_structure, eject_type=eject_type)
+
+        self.wait_for_indexing_complete(item_count=1000)
+
+        # server group having maximum number of partitions
+        max_server_group = self.find_max_server_group(idx=idx)
+
+        # Let only maximal server group to stay alive
+        for zone in initial_server_groups:
+            if zone != max_server_group:
+                self.eject_nodes(eject_nodes_structure=f"{zone}-{initial_server_groups[zone].replace('D:','')}", eject_type="failover")
+
+        max_group_fts_nodes = self.get_zone_healthy_fts_nodes(max_server_group)
+
+        # find fts node in maximal server group holding min index partitions
+        min_fts_node = None
+        min_num_partitions = 1000
+        for i in range(len(max_group_fts_nodes)):
+            curr_partitions = self.get_num_partitions_distribution(index=idx, node=max_group_fts_nodes[i])
+            if curr_partitions < min_num_partitions:
+                min_fts_node = max_group_fts_nodes[i]
+                min_num_partitions = curr_partitions
+
+        # testing min fts node from maximal server group individually, failing over all the rest fts nodes from maximal server group
+        for i in range(len(max_group_fts_nodes)):
+            if max_group_fts_nodes[i].ip != min_fts_node.ip:
+                self._cb_cluster.failover(graceful=False, node=max_group_fts_nodes[i])
+
+        min_fts_node_hints = self.query_node(index=idx, node=min_fts_node)
+        self.assertEqual(initial_hits, min_fts_node_hints, "Best effort distribution test is failed.")
+
+    def test_best_effort_distribution_negative(self):
+        eject_nodes_structure = self._input.param("eject_nodes", None)
+        eject_type = self._input.param("eject_type", None)
+        self.build_cluster()
+        self.load_data()
+        idx = self.build_index()
+        self.wait_for_indexing_complete(item_count=1000)
+
+        self.eject_nodes(eject_nodes_structure=eject_nodes_structure, eject_type=eject_type)
+
+        self.wait_for_indexing_complete(item_count=1000)
+
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        for node in fts_nodes:
+            hits = self.query_node(index=idx, node=node)
+            self.assertGreater(hits, 0, "Partial search results were not returned by alive fts node.")
 
     def test_replicas_distribution_negative(self):
         self.build_cluster()
         self.load_data()
         try:
             idx = self.build_index()
-            self.wait_for_indexing_complete()
+            self.wait_for_indexing_complete(item_count=1000)
             self.fail("Was able to create index having 2 replicas for a cluster containing just 2 fts nodes but 3 server groups.")
         except Exception as e:
             self.assertTrue("cluster needs 3 search nodes to support the requested replica count of 2" in str(e), "Unexpected error message while trying to create index with incorrect number of replicas.")
 
 
     def test_group_autofailover(self):
+        eject_nodes_structure = self._input.param("eject_nodes", None)
+        eject_type = self._input.param("eject_type", None)
         self.build_cluster()
         self.load_data()
         idx = self.build_index()
-        self.wait_for_indexing_complete()
+        self.wait_for_indexing_complete(item_count=1000)
         self.rest.update_autofailover_settings(True, 60, enableServerGroup=True)
 
-        ejected_nodes = self.eject_nodes()
+        ejected_nodes = self.eject_nodes(eject_nodes_structure=eject_nodes_structure, eject_type=eject_type)
         try:
             self.sleep(120, "Waiting for server group auto failover to be started.")
             initial_hits = self.query_node(index=idx, node=self._cb_cluster.get_fts_nodes()[0])
@@ -229,6 +312,9 @@ class FTSServerGroups(FTSBaseTest):
         return max_group
 
     def modify_server_groups(self, available_nodes=None):
+        eject_nodes_structure = self._input.param("eject_nodes", None)
+        eject_type = self._input.param("eject_type", None)
+
         operation = self._input.param("operation", None)
         if 'add_group' == operation:
             add_group = self._input.param("add_server_group", None)
@@ -248,7 +334,7 @@ class FTSServerGroups(FTSBaseTest):
                     self.fail(f"Unsupported node type found {node}!")
             self.rest.shuffle_nodes_in_zones(moved_nodes=nodes_to_move, source_zone=self.default_group_name, target_zone=group_name)
         elif 'remove_group' == operation:
-            self.eject_nodes()
+            self.eject_nodes(eject_nodes_structure=eject_nodes_structure, eject_type=eject_type)
         elif 'add_nodes' == operation:
             extend_groups = self._input.param("groups_additions", None).split("|")
             for extended_group in extend_groups:
@@ -292,6 +378,7 @@ class FTSServerGroups(FTSBaseTest):
         rest_client = RestConnection(node)
         _, num_pindexes = rest_client.get_fts_stats(index_name=index.name, bucket_name=index.source_bucket.name,
                                                         stat_name="num_pindexes_actual")
+        return num_pindexes
 
     def calculate_zones_with_replica(self, index=None):
         zones_list = self.rest.get_all_zones_info()
@@ -350,7 +437,7 @@ class FTSServerGroups(FTSBaseTest):
             index.update()
         elif "delete" == mod_type:
             self._cb_cluster.delete_fts_index(index.name)
-        self.wait_for_indexing_complete()
+        self.wait_for_indexing_complete(item_count=1000)
 
     def rebuild_cluster_to_initial_state(self):
         cleanup_nodes = self.rest.get_nodes_in_zone(self.default_group_name)
@@ -400,7 +487,7 @@ class FTSServerGroups(FTSBaseTest):
             collections=index_collections)
         idx.update_index_partitions(partitions)
         idx.update_num_replicas(replicas)
-        self.wait_for_indexing_complete()
+        self.wait_for_indexing_complete(item_count=1000)
         return idx
 
     def get_zone_healthy_fts_nodes(self, zone=None):
@@ -418,10 +505,8 @@ class FTSServerGroups(FTSBaseTest):
         hits, _, _, _ = index.execute_query(self.fts_query, node=node)
         return hits
 
-    def eject_nodes(self):
-        eject_nodes_structure = self._input.param("eject_nodes", None)
+    def eject_nodes(self, eject_nodes_structure=None, eject_type=None):
         eject_server_groups = eject_nodes_structure.split("|")
-        eject_type = self._input.param("eject_type", None)
         eject_nodes = []
 
         for eject_server_group in eject_server_groups:
@@ -450,7 +535,7 @@ class FTSServerGroups(FTSBaseTest):
                 self._cb_cluster.rebalance_out_node(node=node)
             elif "failover" == eject_type:
                 self._cb_cluster.failover(graceful=False, node=node)
-                self._cb_cluster.rebalance_failover_nodes()
+                #self._cb_cluster.rebalance_failover_nodes()
             elif "shutdown" == eject_type:
                 remote = RemoteMachineShellConnection(node)
                 remote.stop_couchbase()

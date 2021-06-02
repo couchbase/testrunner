@@ -3526,6 +3526,26 @@ class CouchbaseCluster:
         [self.__nodes.remove(node) for node in self.__fail_over_nodes]
         self.__fail_over_nodes = []
 
+    def add_back_specific_node(self, recovery_type=None, services=None, node=None):
+        """add-back failed-over node to the cluster.
+            @param recovery_type: delta/full
+        """
+        rest = RestConnection(self.__master_node)
+        if recovery_type:
+            rest.set_recovery_type(otpNode=node.id, recoveryType=recovery_type)
+
+        server_nodes = rest.node_statuses()
+        for server_node in server_nodes:
+            if node.ip == server_node.ip:
+                rest.add_back_node(server_node.id)
+                break
+        for nd in self.__fail_over_nodes:
+            if nd not in self.__nodes:
+                self.__nodes.append(nd)
+        self.__clusterop.rebalance(self.__nodes, [], [], services=services)
+        self.__fail_over_nodes = []
+
+
     def add_back_node(self, recovery_type=None, services=None):
         """add-back failed-over node to the cluster.
             @param recovery_type: delta/full
