@@ -374,11 +374,11 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 if cli in excluded_commands:
                     self.log.info("command {0} test will be skipped.".format(cli))
                     continue
-            if self.os == "windows":
-                cli = '.'.join([cli, "exe"])
             option = " -h"
             if cli == "erl":
                 option = " -version"
+            if self.os == "windows":
+                cli = '.'.join([cli, "exe"])
             command = ''.join([self.cli_command_path, cli, option])
             self.log.info("test -h of command {0}".format(cli))
             output, error = shell.execute_command(command, use_channel=True)
