@@ -1434,7 +1434,7 @@ class RestConnection(object):
             except ValueError:
                 time.sleep(10)
                 retries -= 1
-            finally:
+            except:
                 raise Exception("create replication failed: status:{0},content:{1}".format(status, content))
 
     def get_replications(self):
