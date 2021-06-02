@@ -499,6 +499,7 @@ class BaseRQGTests(BaseTestCase):
             n1ql_query = n1ql_query.replace("._default._default", '')
             if self.use_query_context:
                 n1ql_query = n1ql_query.replace("_default", self.advise_dict[bucket])
+            n1ql_query = n1ql_query.replace("PREPARE", "")
         return n1ql_query
 
     def translate_index_statement(self, n1ql_query=""):
@@ -507,59 +508,79 @@ class BaseRQGTests(BaseTestCase):
         return n1ql_query
 
     def create_secondary_index(self, n1ql_query=""):
-        if self.count_secondary_indexes() >= self.index_limit:
-            self.remove_all_secondary_indexes()
-        self.n1ql_helper.wait_for_all_indexes_online()
-        advise_query = self.prepare_advise_query(n1ql_query=n1ql_query)
+        use_partitioned = False
+        if "EXECUTE" not in n1ql_query:
+            if self.count_secondary_indexes() >= self.index_limit:
+                self.remove_all_secondary_indexes()
+            self.n1ql_helper.wait_for_all_indexes_online()
+            advise_query = self.prepare_advise_query(n1ql_query=n1ql_query)
 
-        advise_result = self.n1ql_helper.run_cbq_query(query="ADVISE " + advise_query,
-                                                       server=self.advise_server)
-        if len(advise_result["results"][0]["advice"]["adviseinfo"]) == 0:
-            self.log.info("No advise for index")
-            return
-        if "index recommendation at this time" not in str(advise_result["results"][0]["advice"]["adviseinfo"]["recommended_indexes"]):
-            if "indexes" in advise_result["results"][0]["advice"]["adviseinfo"][
-                "recommended_indexes"].keys():
-                for index_statement_array in advise_result["results"][0]["advice"]["adviseinfo"]["recommended_indexes"]["indexes"]:
-                    index_statement = index_statement_array["index_statement"]
-                    if index_statement != "":
-                        if self.use_txns:
-                            self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
-                        else:
-                            self.n1ql_helper.wait_for_all_indexes_online()
-                        try:
-                            prepared_index_statement = self.translate_index_statement(index_statement)
-                            # insert randomization logic for partitioned vs non_partitioned indexes
+            advise_result = self.n1ql_helper.run_cbq_query(query="ADVISE " + advise_query,
+                                                           server=self.advise_server)
+            if len(advise_result["results"][0]["advice"]["adviseinfo"]) == 0:
+                self.log.info("No advise for index")
+                return
+            if "index recommendation at this time" not in str(advise_result["results"][0]["advice"]["adviseinfo"]["recommended_indexes"]):
+                if "indexes" in advise_result["results"][0]["advice"]["adviseinfo"][
+                    "recommended_indexes"].keys():
+                    for index_statement_array in advise_result["results"][0]["advice"]["adviseinfo"]["recommended_indexes"]["indexes"]:
+                        index_statement = index_statement_array["index_statement"]
+                        if index_statement != "":
                             if self.use_txns:
-                                self.n1ql_helper.run_cbq_query(prepared_index_statement)
                                 self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
                             else:
-                                self.n1ql_helper.run_cbq_query(prepared_index_statement)
-                                self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
-                        except CBQError as ex:
-                            if "already exists" in str(ex):
-                                continue
+                                self.n1ql_helper.wait_for_all_indexes_online()
+                            try:
+                                prepared_index_statement = self.translate_index_statement(index_statement)
+                                # insert randomization logic for partitioned vs non_partitioned indexes
+                                chance_of_partitioned = random.randint(1, 100)
+                                if chance_of_partitioned <= 30:
+                                    use_partitioned = True
+                                    self.log.info("Using partitioned index for this query: {0}".format(n1ql_query))
+                                if self.use_txns:
+                                    if use_partitioned:
+                                        prepared_index_statement = prepared_index_statement + " PARTITION BY HASH(META().id)"
+                                    self.n1ql_helper.run_cbq_query(prepared_index_statement)
+                                    self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
+                                else:
+                                    if use_partitioned:
+                                        prepared_index_statement = prepared_index_statement + " PARTITION BY HASH(META().id)"
+                                        self.log.info(prepared_index_statement)
+                                    self.n1ql_helper.run_cbq_query(prepared_index_statement)
+                                    self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
+                            except CBQError as ex:
+                                if "already exists" in str(ex):
+                                    continue
 
-            if "covering_indexes" in advise_result["results"][0]["advice"]["adviseinfo"][
-                "recommended_indexes"].keys():
-                for index_statement_array in advise_result["results"][0]["advice"]["adviseinfo"]["recommended_indexes"]["covering_indexes"]:
-                    index_statement = index_statement_array["index_statement"]
-                    if index_statement != "":
-                        if self.use_txns:
-                            self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
-                        else:
-                            self.n1ql_helper.wait_for_all_indexes_online()
-                        try:
-                            prepared_index_statement = self.translate_index_statement(index_statement)
+                if "covering_indexes" in advise_result["results"][0]["advice"]["adviseinfo"][
+                    "recommended_indexes"].keys():
+                    for index_statement_array in advise_result["results"][0]["advice"]["adviseinfo"]["recommended_indexes"]["covering_indexes"]:
+                        index_statement = index_statement_array["index_statement"]
+                        if index_statement != "":
                             if self.use_txns:
-                                self.n1ql_helper.run_cbq_query(prepared_index_statement)
                                 self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
                             else:
-                                self.n1ql_helper.run_cbq_query(prepared_index_statement)
-                                self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
-                        except CBQError as ex:
-                            if "already exists" in str(ex):
-                                continue
+                                self.n1ql_helper.wait_for_all_indexes_online()
+                            try:
+                                prepared_index_statement = self.translate_index_statement(index_statement)
+                                chance_of_partitioned = random.randint(1, 100)
+                                if chance_of_partitioned <= 30:
+                                    use_partitioned = True
+                                    self.log.info("Using partitioned index for this query: {0}".format(n1ql_query))
+                                if self.use_txns:
+                                    if use_partitioned:
+                                        prepared_index_statement = prepared_index_statement + " PARTITION BY HASH(META().id)"
+                                    self.n1ql_helper.run_cbq_query(prepared_index_statement)
+                                    self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
+                                else:
+                                    if use_partitioned:
+                                        prepared_index_statement = prepared_index_statement + " PARTITION BY HASH(META().id)"
+                                        self.log.info(prepared_index_statement)
+                                    self.n1ql_helper.run_cbq_query(prepared_index_statement)
+                                    self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
+                            except CBQError as ex:
+                                if "already exists" in str(ex):
+                                    continue
 
 
 
@@ -985,10 +1006,16 @@ class BaseRQGTests(BaseTestCase):
     def _run_queries_and_verify(self, aggregate=False, subquery=False, n1ql_query=None, sql_query=None, expected_result=None):
         query_context = ""
         skip = False
+        use_prepared = False
+        chance_of_prepared = random.randint(1, 100)
+        if chance_of_prepared <= 20:
+            use_prepared = True
+            self.log.info("Preparing query {0}".format(n1ql_query))
         if not self.create_primary_index:
             n1ql_query = n1ql_query.replace("USE INDEX(`#primary` USING GSI)", " ")
-        if self.prepared:
+        if self.prepared or use_prepared:
             n1ql_query = "PREPARE " + n1ql_query
+            self.log.info("Prepared query {0}".format(n1ql_query))
         if self.use_default_collection:
             n1ql_query = n1ql_query.replace("table_10", "table_010")
             for bucket in self.advise_dict.keys():
@@ -1029,7 +1056,7 @@ class BaseRQGTests(BaseTestCase):
                         new_n1ql = new_n1ql + " JOIN " + items
                     i = i + 1
                 fts_query = new_n1ql
-            if self.prepared:
+            if self.prepared or use_prepared:
                 fts_query = "PREPARE " + fts_query
             self.log.info(" FTS QUERY :: {0}".format(fts_query))
         else:
@@ -1057,7 +1084,7 @@ class BaseRQGTests(BaseTestCase):
                     return {"success": False, "result": str("Query does not use fts index {0}".format(fts_explain))}
 
             actual_result = self.n1ql_query_runner_wrapper(n1ql_query=n1ql_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus",query_context=query_context)
-            if self.prepared:
+            if self.prepared or use_prepared:
                 name = actual_result["results"][0]['name']
                 prepared_query = "EXECUTE '%s'" % name
                 self.log.info(" N1QL QUERY :: {0}".format(prepared_query))
