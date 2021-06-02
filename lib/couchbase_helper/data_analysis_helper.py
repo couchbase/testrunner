@@ -727,7 +727,7 @@ class DataCollector(object):
             if values == ['\n']:
                 continue
             try:
-                if values[index] in list(bucketMap.keys()):
+                if values[index] in bucketMap:
                     if values[revIdIndex].isdigit():
                         prev_revId =  int(bucketMap[values[index]][revIdIndex])
                         new_revId = int(values[revIdIndex])
