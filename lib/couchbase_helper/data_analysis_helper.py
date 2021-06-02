@@ -719,7 +719,7 @@ class DataCollector(object):
         bucketMap = {}
         for doc in dataInCSV:
             key = doc.split(",")[index]
-            if key in bucketMap.keys():
+            if key in bucketMap:
                 prev_revId = int(bucketMap[key].split(",")[revIdIndex])
                 curr_revId = int(doc.split(",")[revIdIndex])
                 if prev_revId < curr_revId:
