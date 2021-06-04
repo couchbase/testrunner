@@ -208,7 +208,8 @@ class DocumentGenerator:
         :return: (dict) key-value pair of all documents that should be retried
         """
         items = {}
-        for item in self.retry_batches:
+        while len(items) < self.batch_size and self.retry_batches:
+            item = self.retry_batches.pop()
             doc_num = int(item.split('_')[1])
             document = Document(doc_num, self.size)
             document.update = self.current_update_counter
@@ -395,7 +396,6 @@ class DocumentGenerator:
             self.num_completed += res
         while self.retry_batches:
             items = self.get_retry_upsert_items()
-            self.retry_batches = []
             completed = self.upsert_items(self.connections[0], items)
             self.num_completed += completed
 
