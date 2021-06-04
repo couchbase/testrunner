@@ -445,7 +445,7 @@ class N1QLHelper():
                     extra_msg = self._get_failure_message(expected_result, actual_result)
                     raise Exception(msg + "\n " + extra_msg)
         else:
-            diffs = DeepDiff(actual_result, expected_result, ignore_order=True, ignore_numeric_type_changes=True)
+            diffs = DeepDiff(actual_result, expected_result, ignore_order=True, ignore_numeric_type_changes=True, ignore_string_case=True)
             if diffs:
                 self.log.info("-->actual vs expected diffs found:{}".format(diffs))
                 raise Exception("-->actual vs expected diffs found:{}".format(diffs))
