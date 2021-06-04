@@ -324,15 +324,22 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
 
                 self.log.info("Running request plus scan till indexes index all the newly added docs")
                 for namespace in self.namespaces:
-                    while True:
+                    count = 0
+                    while count < 30:
                         count_query = f"Select count(*) from {namespace}"
                         result = self.run_cbq_query(server=self.n1ql_node, query=count_query,
                                                     scan_consistency='request_plus')['results'][0]['$1']
-                        if result == (index_count_dict['namespace'] + num_ops):
+                        if result == (index_count_dict[namespace] + num_ops):
                             self.log.info(f"Select count result for request_plus scan:{result}")
                             break
                         self.sleep(10, f"Query result is not matching the expected value. Actual: {result}, Expected:"
-                                       f"{index_count_dict['namespace'] + num_ops}")
+                                       f"{index_count_dict[namespace] + num_ops}")
+                        count += 1
+                    else:
+                        index_stats = self.index_rest.get_all_index_stats(text=True)
+                        self.log.info(f"Index Stats: {index_stats}")
+                        self.fail("Indexer not able to index all docs.")
+
 
     def test_online_upgrade(self):
         services_in = []
