@@ -1660,8 +1660,23 @@ class BaseTestCase(unittest.TestCase):
         server_set = []
         for node in nodes:
             for server in self.servers:
-                if server.ip == node.ip:
-                    server_set.append(server)
+                if ":" not in server.ip and ":" not in node.ip:
+                    """ server.ip maybe Ipv4 or hostname and node.ip is Ipv4 or hostname """
+                    if server.ip == node.ip:
+                        server_set.append(server)
+                elif ":" not in server.ip and ":" in node.ip:
+                    """ server.ip maybe Ipv4 or hostname and node.ip is raw Ipv6 """
+                    shell = RemoteMachineShellConnection(server)
+                    serverIP = shell.get_ip_address()
+                    self.log.info("get raw IP from hostname. Hostname: {0} ; its IPs: {1}" \
+                                      .format(server.ip, serverIP))
+                    if node.ip in serverIP:
+                        server_set.append(server)
+                    shell.disconnect()
+                elif ":" in server.ip and ":" in node.ip:
+                    """ both server.ip and node.ip are raw Ipv6 """
+                    if server.ip == node.ip:
+                        server_set.append(server)
         return server_set
 
     def change_checkpoint_params(self):
