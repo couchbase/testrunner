@@ -3343,8 +3343,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.log.info("\n****** view does not support on ephemeral bucket ******")
             return
         rest_src = RestConnection(self.backupset.cluster_host)
-        rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
-                          self.servers[1].ip, services=['index', 'kv'])
+        if "community" in self.cb_version:
+            rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
+                            self.servers[1].ip, services=['kv', 'index', 'n1ql'])
+        else:
+            rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
+                            self.servers[1].ip, services=['index', 'kv'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
         rebalance.result()
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
@@ -3390,8 +3394,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.cluster_storage_mode = \
                      rest_src.get_index_settings()["indexer.settings.storage_mode"]
         self.log.info("index storage mode: {0}".format(self.cluster_storage_mode))
-        rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
-                          self.servers[1].ip, services=['kv', 'index'])
+        if "community" in self.cb_version:
+            rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
+                            self.servers[1].ip, services=['kv', 'index', 'n1ql'])
+        else:
+            rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
+                            self.servers[1].ip, services=['kv', 'index'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
         rebalance.result()
         self.test_storage_mode = self.cluster_storage_mode
@@ -3552,8 +3560,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         """
         self.test_fts = True
         rest_src = RestConnection(self.backupset.cluster_host)
-        rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
-                          self.servers[1].ip, services=['kv', 'fts'])
+        if "community" in self.cb_version:
+            rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
+                            self.servers[1].ip, services=['kv', 'index', 'n1ql', 'fts'])
+        else:
+            rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
+                            self.servers[1].ip, services=['kv', 'fts'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
         rebalance.result()
         gen = DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100)), start=0,
@@ -4694,6 +4706,63 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         # Delete a bucket
         self.backup_remove(self.backups.pop(-2), verify_cluster_stats=False)
 
+    def test_ee_only_features(self):
+        """ Test that EE only features do not work on CE servers
+
+        NOTE: PITR currently does nothing, so succeeds on CE.
+        This should be included when PITR is added properly
+        This is also true for:
+        Backing up users,
+        Auto rebuild of indexes
+
+        Params:
+            examine (bool): Whether to test examine.
+            merge (bool): Whether to test merge.
+            s3 (bool): Whether to test s3 cloud backup.
+            consistency_check (bool): Whether to test consistency_check.
+            coll_restore (bool): Whether to test collection/scope level restore.
+        """
+        examine = self.input.param('examine', False)
+        merge = self.input.param('merge', False)
+        s3 = self.input.param('s3', False)
+        consistency_check = self.input.param('consistency_check', False)
+        coll_restore = self.input.param('coll_restore', False)
+
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        command = f"{self.cli_command_location}/cbbackupmgr"
+        sub_command = ""
+
+        self.backup_create()
+
+        if examine:
+            sub_command = 'examine -a archive -r repo -k asdf --collection-string asdf.asdf.asdf'
+        elif merge:
+            sub_command = 'merge -a archive -r repo'
+        elif s3:
+            sub_command = f'backup -a s3://backup -r {self.backupset.name}\
+            -c {self.backupset.backup_host.ip}:{self.backupset.backup_host.port}\
+            -u Administrator -p password'
+        elif consistency_check:
+            sub_command = f'backup -a {self.backupset.directory} -r {self.backupset.name}\
+            -c {self.backupset.backup_host.ip}:{self.backupset.backup_host.port}\
+            -u Administrator -p password --consistency-check 1'
+        elif coll_restore:
+            sub_command = f'restore -a {self.backupset.directory} -r {self.backupset.name}\
+            -c {self.backupset.backup_host.ip}:{self.backupset.backup_host.port}\
+            -u Administrator -p password --include-data asdf.asdf.asdf'
+
+        if not sub_command:
+            self.fail("Must provide a subcommand!")
+
+        output, error = remote_client.execute_command(f"{command} {sub_command}")
+        self.log.info(f"ERROR from command: {error}")
+        self.log.info(f"OUTPUT from command: {output}")
+        if s3 and "7.0.0" in self.cb_version:
+            # The s3 error message differs slightly in 7.0.0
+            self.assertIn("an enterprise only feature", output[0])
+        else:
+            self.assertIn("an Enterprise Edition feature", output[0])
+
     def test_analytics_synonyms(self):
         """ Test analytics synonyms can be restored
 
@@ -5139,3 +5208,4 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                             backup=back_name, collection_string=buck_name, all_flag=all_flag))
                         print_tree(buck)
                         check_buck(buck)
+

@@ -301,9 +301,9 @@ class CommunityTests(CommunityBaseTest):
         found = self.remote.file_exists(self.bin_path, command)
         if found:
             self.log.info("found {0} in {1} directory".format(command, self.bin_path))
-            self.fail("CE from Watson should not contain {0}".format(command))
+            self.log.info("Ent. backup in CE is in bin!")
         elif not found:
-            self.log.info("Ent. backup in CE is enforced, not in bin!")
+            self.fail("CE from Cheshire Cat should contain {0}".format(command))
         self.remote.disconnect()
 
     def check_memory_optimized_storage_mode(self):
