@@ -3285,6 +3285,15 @@ class RestConnection(object):
             log.info("SUCCESS: FTS maxFeedsPerDCPAgent set to {0}".format(value))
         return status
 
+    def set_maxDCPAgents(self, value):
+        api = self.fts_baseUrl + "api/managerOptions"
+        params = {"maxDCPAgents": str(value)}
+        status, content, _ = self._http_request(api, "PUT", params=json.dumps(params, ensure_ascii=False),
+                                                     headers=self._create_capi_headers())
+        if status:
+            log.info("SUCCESS: FTS maxDCPAgents set to {0}".format(value))
+        return status
+
     def create_fts_index(self, index_name, params):
         """create or edit fts index , returns {"status":"ok"} on success"""
         api = self.fts_baseUrl + "api/index/{0}".format(index_name)

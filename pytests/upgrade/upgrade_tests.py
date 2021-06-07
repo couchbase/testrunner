@@ -56,6 +56,7 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
         self.final_events = []
         self.n1ql_helper = None
         self.total_buckets = 1
+        self.fts_port = 8094
         self.in_servers_pool = self._convert_server_map(self.servers[:self.nodes_init])
         """ Init nodes to not upgrade yet """
         for key in list(self.in_servers_pool.keys()):
@@ -215,6 +216,8 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
            doc-per-day=1,upgrade_type=offline,offline_upgrade_type=offline_failover
     """
     def test_upgrade(self):
+        from pytests.fts.fts_callable import FTSCallable
+        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
         self.event_threads = []
         self.after_event_threads = []
         try:

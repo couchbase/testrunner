@@ -58,6 +58,7 @@ class MovingTopFTS(FTSBaseTest):
         rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         rest.set_maxConcurrentPartitionMovesPerNode(self.default_concurrent_partition_moves_per_node)
         rest.set_maxFeedsPerDCPAgent(1)
+        rest.set_maxDCPAgents(3)
 
         self.load_data()
         self.create_fts_indexes_all_buckets()
@@ -113,6 +114,7 @@ class MovingTopFTS(FTSBaseTest):
         rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         rest.set_maxConcurrentPartitionMovesPerNode(self.default_concurrent_partition_moves_per_node)
         rest.set_maxFeedsPerDCPAgent(1)
+        rest.set_maxDCPAgents(3)
 
         self.load_data()
         self.create_fts_indexes_all_buckets()
@@ -125,7 +127,7 @@ class MovingTopFTS(FTSBaseTest):
             self.log.info("Index count for %s: %s"
                           % (index.name, index.get_indexed_doc_count()))
         start_rebalance_time = time.time()
-        self._cb_cluster.rebalance_in(num_nodes=1, services=["kv,fts"])
+        self._cb_cluster.rebalance_in(num_nodes=1, services=["fts"])
         end_rebalance_time = time.time()
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
@@ -141,7 +143,7 @@ class MovingTopFTS(FTSBaseTest):
         rest.set_maxConcurrentPartitionMovesPerNode(self.max_concurrent_partition_moves_per_node)
 
         start_parallel_rebalance_time = time.time()
-        self._cb_cluster.rebalance_in(num_nodes=1, services=["kv,fts"])
+        self._cb_cluster.rebalance_in(num_nodes=1, services=["fts"])
         end_parallel_rebalance_time = time.time()
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
@@ -160,6 +162,7 @@ class MovingTopFTS(FTSBaseTest):
         rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         rest.set_maxConcurrentPartitionMovesPerNode(self.default_concurrent_partition_moves_per_node)
         rest.set_maxFeedsPerDCPAgent(1)
+        rest.set_maxDCPAgents(3)
 
         self.load_data()
         self.create_fts_indexes_all_buckets()
@@ -193,6 +196,7 @@ class MovingTopFTS(FTSBaseTest):
             hits, _, _, _ = index.execute_query(query=self.query,
                                                 expected_hits=self._find_expected_indexed_items_number())
             self.log.info("SUCCESS! Hits: %s" % hits)
+
         self.assertTrue(simple_rebalance_time > parallel_rebalance_time,
                         "Rebalance out with maxConcurrentPartitionMovesPerNode={0} takes longer time than "
                         "rebalance out with maxConcurrentPartitionMovesPerNode={1}".

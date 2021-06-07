@@ -71,6 +71,7 @@ class IndexManagementAPI(FTSBaseTest):
 
     def test_config_settings_after_reboot(self):
         rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+
         initial_bleve_max_result_window = int(rest.get_node_settings("bleveMaxResultWindow"))
         initial_feed_allotment = rest.get_node_settings("feedAllotment")
         initial_fts_memory_quota = int(rest.get_node_settings("ftsMemoryQuota"))
@@ -86,6 +87,14 @@ class IndexManagementAPI(FTSBaseTest):
         rest.set_node_setting("ftsMemoryQuota", new_fts_memory_quota)
         rest.set_node_setting("slowQueryLogTimeout", new_slow_query_timeout)
 
+        self.log.info(f"Getting updated settings before reboot using node {rest.ip}")
+        self.log.info("#"*80)
+        self.log.info(f"bleveMaxResultWindow: {rest.get_node_settings('bleveMaxResultWindow')}")
+        self.log.info(f"feedAllotment: {rest.get_node_settings('feedAllotment')}")
+        self.log.info(f"ftsMemoryQuota: {rest.get_node_settings('ftsMemoryQuota')}")
+        self.log.info(f"slowQueryLogTimeout: {rest.get_node_settings('slowQueryLogTimeout')}")
+        self.log.info("#"*80)
+
         self.sleep(5)
 
         NodeHelper.reboot_server(self._cb_cluster.get_fts_nodes()[0], test_case=self)
@@ -97,10 +106,13 @@ class IndexManagementAPI(FTSBaseTest):
         verification_fts_memory_quota = int(rest.get_node_settings("ftsMemoryQuota"))
         verification_slow_query_timeout = rest.get_node_settings("slowQueryLogTimeout")
 
-        rest.set_node_setting("feedAllotment", initial_feed_allotment)
-        rest.set_node_setting("slowQueryLogTimeout", initial_slow_query_timeout)
-        rest.set_node_setting("ftsMemoryQuota", initial_fts_memory_quota)
-        rest.set_node_setting("bleveMaxResultWindow", initial_bleve_max_result_window)
+        self.log.info(f"Getting updated settings after reboot using node {rest.ip}")
+        self.log.info("#"*80)
+        self.log.info(f"bleveMaxResultWindow: {verification_bleve_max_result_window}")
+        self.log.info(f"feedAllotment: {verification_feed_allotment}")
+        self.log.info(f"ftsMemoryQuota: {verification_fts_memory_quota}")
+        self.log.info(f"slowQueryLogTimeout: {verification_slow_query_timeout}")
+        self.log.info("#"*80)
 
         error = ""
         if new_bleve_max_result_window != verification_bleve_max_result_window:
@@ -116,6 +128,11 @@ class IndexManagementAPI(FTSBaseTest):
             error = f'{error}\n slow_query_timeout new setting: {new_slow_query_timeout} ' \
                 f'but actual slow_query_timeout set {verification_slow_query_timeout} after reboot'
 
+        rest.set_node_setting("feedAllotment", initial_feed_allotment)
+        rest.set_node_setting("slowQueryLogTimeout", initial_slow_query_timeout)
+        rest.set_node_setting("ftsMemoryQuota", initial_fts_memory_quota)
+        rest.set_node_setting("bleveMaxResultWindow", initial_bleve_max_result_window)
+
         self.assertEqual(error, "", error)
 
     def test_config_settings_new_node(self):
@@ -124,6 +141,14 @@ class IndexManagementAPI(FTSBaseTest):
         initial_feed_allotment = rest.get_node_settings("feedAllotment")
         initial_fts_memory_quota = int(rest.get_node_settings("ftsMemoryQuota"))
         initial_slow_query_timeout = rest.get_node_settings("slowQueryLogTimeout")
+
+        self.log.info(f"Getting initial settings using node {rest.ip}")
+        self.log.info("#"*80)
+        self.log.info(f"bleveMaxResultWindow: {initial_bleve_max_result_window}")
+        self.log.info(f"feedAllotment: {initial_feed_allotment}")
+        self.log.info(f"ftsMemoryQuota: {initial_fts_memory_quota}")
+        self.log.info(f"slowQueryLogTimeout: {initial_slow_query_timeout}")
+        self.log.info("#"*80)
 
         new_bleve_max_result_window = initial_bleve_max_result_window + 1000
         new_feed_allotment = "twoFeedsPerPIndex"
@@ -135,13 +160,32 @@ class IndexManagementAPI(FTSBaseTest):
         rest.set_node_setting("ftsMemoryQuota", new_fts_memory_quota)
         rest.set_node_setting("slowQueryLogTimeout", new_slow_query_timeout)
 
-        self._cb_cluster.rebalance_in(num_nodes=1)
+        self.log.info(f"Getting updated settings using node {rest.ip}")
+        self.log.info("#"*80)
+        self.log.info(f"bleveMaxResultWindow: {new_bleve_max_result_window}")
+        self.log.info(f"feedAllotment: {new_feed_allotment}")
+        self.log.info(f"ftsMemoryQuota: {new_fts_memory_quota}")
+        self.log.info(f"slowQueryLogTimeout: {new_slow_query_timeout}")
+        self.log.info("#"*80)
+
+        self._cb_cluster.rebalance_in(num_nodes=1, services=["kv,fts"])
+        self.log.info("Rebalanced in new node.")
+        self.sleep(30)
 
         verification_rest = RestConnection(self._cb_cluster.get_fts_nodes()[1])
         verification_bleve_max_result_window = int(verification_rest.get_node_settings("bleveMaxResultWindow"))
         verification_feed_allotment = verification_rest.get_node_settings("feedAllotment")
         verification_fts_memory_quota = int(verification_rest.get_node_settings("ftsMemoryQuota"))
         verification_slow_query_timeout = verification_rest.get_node_settings("slowQueryLogTimeout")
+
+        self.log.info(f"Getting new node settings using node {verification_rest.ip}")
+        self.log.info("#"*80)
+        self.log.info(f"bleveMaxResultWindow: {verification_bleve_max_result_window}")
+        self.log.info(f"feedAllotment: {verification_feed_allotment}")
+        self.log.info(f"ftsMemoryQuota: {verification_fts_memory_quota}")
+        self.log.info(f"slowQueryLogTimeout: {verification_slow_query_timeout}")
+        self.log.info("#"*80)
+
 
         rest.set_node_setting("feedAllotment", initial_feed_allotment)
         rest.set_node_setting("slowQueryLogTimeout", initial_slow_query_timeout)
