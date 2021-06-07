@@ -840,10 +840,19 @@ class ImportExportTests(CliBaseTest):
                 export_file = "c:/tmp/export{0}/".format(self.master.ip) + "default"
             else:
                 export_file = self.tmp_path + "export{0}/".format(self.master.ip) + "default"
+
+        master_ip = self.master.ip
+        if self.enable_ipv6:
+            raw_master_ip = shell.get_ip_address()
+            nodes = RestConnection(self.master).node_statuses()
+            for node in nodes:
+                if node.ip in raw_master_ip:
+                    master_ip = node.ip
+                    break
         ex_cmd_str = "%scbexport%s %s -c http%s://%s:%s8091 -u Administrator -p password " \
                                   " -b %s -f %s %s -o %s -t 4"\
                                   % (self.cli_command_path, self.cmd_ext,
-                                     self.imex_type, url_format, self.master.ip, secure_port,
+                                     self.imex_type, url_format, master_ip, secure_port,
                                      "default", self.format_type, secure_conn, export_file)
         export_file = self.tmp_path + "export{0}/".format(self.master.ip) + "default"
         if self.custom_scopes:
