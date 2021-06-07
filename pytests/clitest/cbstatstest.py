@@ -42,7 +42,7 @@ class cbstatsTests(CliBaseTest):
                 for bucket in self.buckets:
                     if "allocator" in self.command:
                         output, error = self.shell.execute_mcstat(bucket,"",
-                                keyname=self.command, vbid="")
+                                keyname=self.command, vbid="", enable_ipv6=self.enable_ipv6)
                     else:
                         output, error = self.shell.execute_cbstats(bucket, self.command)
                     self.verify_results(output, error)

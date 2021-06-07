@@ -4626,7 +4626,11 @@ class RemoteMachineShellConnection(KeepRefs):
     def execute_mcstat(self, bucket, command, keyname="", vbid=0,
                                       cbadmin_user="cbadminbucket",
                                       cbadmin_password="password",
-                                      print_results=False):
+                                      print_results=False,
+                                      enable_ipv6=False):
+        connection_method = ""
+        if enable_ipv6:
+            connection_method = " -6 "
         cbstat_command = "%smcstat" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
             cbstat_command = "/home/%s%smcstat" % (self.username,
@@ -4638,17 +4642,19 @@ class RemoteMachineShellConnection(KeepRefs):
             cbstat_command = "%smcstat" % (MAC_COUCHBASE_BIN_PATH)
 
         if command != "key" and command != "raw":
-            command = "%s -h %s:11210 %s -u %s -P %s -b %s " % (cbstat_command,
+            command = "%s -h %s:11210 %s -u %s -P %s -b %s %s " % (cbstat_command,
                                                              self.ip, command,
                                                              cbadmin_user,
                                                              cbadmin_password,
-                                                             bucket.name)
+                                                             bucket.name,
+                                                             connection_method)
         else:
-            command = "%s -h %s:11210 %s -u %s -P %s %s %s " % (cbstat_command,
+            command = "%s -h %s:11210 %s -u %s -P %s %s %s %s " % (cbstat_command,
                                                              self.ip, command,
                                                              cbadmin_user,
                                                              cbadmin_password,
-                                                             keyname, vbid)
+                                                             keyname, vbid,
+                                                             connection_method)
 
 
         output, error = self.execute_command(command)

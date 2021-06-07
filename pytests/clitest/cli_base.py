@@ -124,6 +124,7 @@ class CliBaseTest(BaseTestCase):
         self.drop_default_collection = self.input.param("drop_default_collection", False)
         self.log_filename = self.input.param("filename", "loginfo_collecion")
         self.node_down = self.input.param("node_down", False)
+        self.enable_ipv6 = self.input.param('enable_ipv6', False)
 
 
 
