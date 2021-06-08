@@ -148,8 +148,44 @@ def do_install(params):
         validate_install(params)
 
 
+def do_uninstall(params):
+    # Per node, spawn one thread, which will process a queue of
+    # uninstall tasks
+    for server in params["servers"]:
+        node_helper = install_utils.get_node_helper(server.ip)
+        install_tasks = ['uninstall']
+        q = queue.Queue()
+        for _ in install_tasks:
+            q.put(_)
+        t = threading.Thread(target=node_installer,
+                             args=(node_helper, q))
+        t.daemon = True
+        t.start()
+        node_helper.queue = q
+        node_helper.thread = t
+    force_stop = start_time + params["timeout"]
+    for node in install_utils.NodeHelpers:
+        try:
+            while node.queue.unfinished_tasks and time.time() < \
+                    force_stop:
+                time.sleep(install_constants.INSTALL_POLL_INTERVAL)
+            else:
+                raise InstallException
+        except InstallException:
+            if time.time() >= force_stop:
+                log.error(
+                    "Uninstall TIMED OUT AFTER {0}s. "
+                    "VALIDATING..".format(
+                        params["timeout"]))
+                break
+
 def main():
     params = install_utils.process_user_input()
+    if 'uninstall' in params['install_tasks']:
+        # Do uninstallation of products first before any
+        # pre_install_steps i.e downloading the builds.
+        do_uninstall(params)
+        params['install_tasks'].remove('uninstall')
     install_utils.pre_install_steps()
     do_install(params)
 
