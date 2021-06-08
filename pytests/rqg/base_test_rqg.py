@@ -375,13 +375,13 @@ class BaseRQGTests(BaseTestCase):
                                         break
                                 if not rollback_exists:
                                     self.log.info("ROLLING BACK")
-                                    results = self.n1ql_helper.run_cbq_query(query="ROLLBACK", txnid=txn_id)
-                                    txn_queries.append("ROLLBACK")
+                                    results = self.n1ql_helper.run_cbq_query(query=f"ROLLBACK TO SAVEPOINT s{savepoint}", txnid=txn_id)
+                                    txn_queries.append(f"ROLLBACK TO SAVEPOINT s{savepoint}")
 
                     self.log.info("-----------------------------------------------------------------COMMITING TRANSACTION {0}-----------------------------------------------------------------".format(x))
                     results = self.n1ql_helper.run_cbq_query(query="COMMIT TRANSACTION", txnid=txn_id)
-                    self.log.info("txn {0} : {1}".format(x, txn_queries))
                     txn_queries.append("COMMIT")
+                    self.log.info("txn {0} : {1}".format(x, txn_queries))
 
                     client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id,
                                                 password=self.password)
