@@ -312,7 +312,7 @@ class BaseRQGTests(BaseTestCase):
                         random.seed(uuid.uuid4())
                         percentage = random.randint(1, 100)
                         if percentage <= 50:
-                            query_type = random.choice(['select','select','select','select','select','select','update','update','delete'])
+                            query_type = random.choice(['select','select','select','select','select','select','update','update','update', 'update'])
                             if query_type == 'select':
                                 test_batch = select_batch
                             elif query_type == 'update':
