@@ -243,15 +243,17 @@ class x509tests(BaseTestCase):
     def test_error_without_node_chain_certificates(self):
         x509main(self.master)._upload_cluster_ca_certificate("Administrator", 'password')
         status, content = x509main(self.master)._reload_node_certificate(self.master)
+        content = str(content)
         self.assertEqual(status['status'], '400', "Issue with status with node certificate are missing")
-        self.assertTrue('Unable to read certificate chain file' in content, "Incorrect message from the system")
+        self.assertTrue('Unable to read certificate chain file' in str(content), "Incorrect message from the system")
 
     def test_error_without_chain_cert(self):
         x509main(self.master)._upload_cluster_ca_certificate("Administrator", 'password')
         x509main(self.master)._setup_node_certificates(chain_cert=False)
         status, content = x509main(self.master)._reload_node_certificate(self.master)
+        content = str(content)
         self.assertEqual(status['status'], '400', "Issue with status with node certificate are missing")
-        self.assertTrue('Unable to read certificate chain file' in content, "Incorrect message from the system")
+        self.assertTrue('Unable to read certificate chain file' in str(content) , "Incorrect message from the system")
 
     def test_error_without_node_key(self):
         x509main(self.master)._upload_cluster_ca_certificate("Administrator", 'password')
