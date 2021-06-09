@@ -630,7 +630,6 @@ def pre_install_steps():
                         "Build is not present in latestbuilds or release repos, please check {0}".format(build_binary))
                 filepath = __get_download_dir(node) + build_binary
                 node.build = build(build_binary, build_url, filepath)
-        _download_build()
 
 
 def _execute_local(command, timeout):
@@ -690,7 +689,8 @@ def __get_build_url(node, build_binary):
     return None
 
 
-def _download_build():
+def download_build():
+    log.debug("Downloading the builds now")
     all_nodes_same_version = len(set([node.build.url for node in NodeHelpers])) == 1
     if params["all_nodes_same_os"] and all_nodes_same_version and not params["skip_local_download"]:
         check_and_retry_download_binary_local(NodeHelpers[0])
@@ -873,7 +873,7 @@ def init_clusters(timeout=60, retries=3):
             cluster.shutdown(force=True)
 
         retries -= 1
-    
+
     # set cluster name using the first node in each cluster
     for [i, cluster] in enumerate(params["clusters"].values()):
         retries = 3

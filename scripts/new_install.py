@@ -181,12 +181,13 @@ def do_uninstall(params):
 
 def main():
     params = install_utils.process_user_input()
+    install_utils.pre_install_steps()
     if 'uninstall' in params['install_tasks']:
-        # Do uninstallation of products first before any
-        # pre_install_steps i.e downloading the builds.
+        # Do uninstallation of products first before downloading the
+        # builds.
         do_uninstall(params)
         params['install_tasks'].remove('uninstall')
-    install_utils.pre_install_steps()
+    install_utils.download_build()
     do_install(params)
 
 
