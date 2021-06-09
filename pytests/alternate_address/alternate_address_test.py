@@ -1,6 +1,7 @@
 import copy
 import json, ast, filecmp, itertools
 import os, shutil, ast
+from pathlib import Path
 from threading import Thread
 from subprocess import Popen, PIPE, check_output, STDOUT, CalledProcessError
 
@@ -430,6 +431,9 @@ class AlternateAddressTests(AltAddrBaseTest):
         return cert_file_location
 
     def kv_loader(self, server = None, client_os = "linux"):
+        cbworkloadgen_path = Path("/opt/couchbase/bin/cbworkloadgen")
+        if not cbworkloadgen_path.exists():
+            raise Exception("Need to install couchbase server 7.x.x to get cbworkloadgen")
         if server is None:
             server = self.master
         buckets = RestConnection(server).get_buckets()
@@ -446,14 +450,13 @@ class AlternateAddressTests(AltAddrBaseTest):
             if output:
                 self.log.info("Output from kv loader: {0}".format(output))
         except CalledProcessError as e:
-            print("Error return code: ", e.returncode)
             if e.output:
                 if self.all_alt_addr_set:
-                    if "No alternate address information found" in e.output:
+                    if "No alternate address information found" in str(e.output):
                         self.fail("Failed to set alternate address.")
                     else:
                         self.fail("Failed to load to remote cluster.{0}"\
-                                  .format(e.output))
+                                  .format(str(e.output)))
                 else:
                     self.log.info("Error is expected due to alt addre not set yet")
 
