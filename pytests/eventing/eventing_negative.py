@@ -632,3 +632,21 @@ class EventingNegative(EventingBaseTest):
         # Validation of any issues like panic will be taken care by teardown method
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+    def test_src_bucket_deletion_when_function_is_in_deploying_state(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
+        self.deploy_function(body, wait_for_bootstrap=False)
+        # delete src bucket
+        for bucket in self.buckets:
+            if bucket.name == "src_bucket":
+                self.log.info("deleting bucket: %s", bucket.name)
+                self.rest.delete_bucket(bucket.name)
+        # Wait for function to get undeployed automatically
+        self.wait_for_handler_state(body['appname'], "undeployed")
+        # Delete the function
+        self.delete_function(body)
+        self.sleep(10)
+        # check if all the eventing-consumers are cleaned up
+        # Validation of any issues like panic will be taken care by teardown method
+        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")

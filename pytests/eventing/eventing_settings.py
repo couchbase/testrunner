@@ -333,12 +333,11 @@ class EventingSettings(EventingBaseTest):
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
-
-
-
-
-
-
-
-
-
+    def test_create_function_without_settings(self):
+        try:
+            body = self.create_save_function_body(self.function_name, self.handler_code)
+            del body['settings']
+            self.rest.create_function(body['appname'], body)
+        except Exception as e:
+            self.log.info(e)
+            assert "ERR_INVALID_CONFIG" in str(e) and "processing_status is required" in str(e), True

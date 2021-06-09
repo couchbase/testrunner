@@ -1244,3 +1244,45 @@ class EventingRecovery(EventingBaseTest):
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+
+    def test_killing_eventing_consumer_for_dcp_stream_boundary_from_now(self):
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        body = self.create_save_function_body(self.function_name, self.handler_code, dcp_stream_boundary="from_now")
+        # load some data
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", 0)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", 0)
+        # load some more data
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
+        # kill eventing consumer when eventing is processing mutations
+        self.kill_consumer(eventing_node)
+        self.wait_for_handler_state(body['appname'], "deployed")
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
+        # delete all documents
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                         is_delete=True, wait_for_loading=False)
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                         is_delete=True, wait_for_loading=False)
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        if self.non_default_collection:
+            self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", 0)
+        else:
+            self.verify_doc_count_collections("src_bucket._default._default", 0)
+        self.undeploy_and_delete_function(body)
+        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")
