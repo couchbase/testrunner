@@ -510,6 +510,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.objstore_provider.teardown(remote_client.extract_remote_info().type.lower(), remote_client)
 
             remote_client.execute_command("rm -rf {0}".format(self.backupset.directory))
+            if self.os_info == "windows":
+                remote_client.execute_command("rm -rf /cygdrive/c/tmp/cbbackupmgr-staging")
 
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
