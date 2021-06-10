@@ -1782,47 +1782,50 @@ class ESRunQueryCompare(Task):
                 else:
                     kv_container = "default"
 
-                n1ql_query = f"select meta().id from {kv_container} where type='" + str(
+                n1ql_queries = [f"select meta().id from {kv_container} where type='" + str(
                     query_type) + "' and search(default, " + str(
-                    json.dumps(self.fts_query, ensure_ascii=False)) + ")"
-                self.log.info("Running N1QL query: " + str(n1ql_query))
-                n1ql_result = self.n1ql_executor.run_n1ql_query(query=n1ql_query)
-                if n1ql_result['status'] == 'success':
-                    n1ql_hits = n1ql_result['metrics']['resultCount']
-                    n1ql_doc_ids = []
-                    for res in n1ql_result['results']:
-                        n1ql_doc_ids.append(res['id'])
-                    n1ql_time = n1ql_result['metrics']['elapsedTime']
+                    json.dumps(self.fts_query, ensure_ascii=False)) + ")", f"select meta().id,* from {kv_container} where type='" + str(
+                    query_type) + "' and search(default, " + str(
+                    json.dumps(self.fts_query, ensure_ascii=False)) + ",{\"index\": \"" + self.fts_index.name + "\"})"]
+                for n1ql_query in n1ql_queries:
+                    self.log.info("Running N1QL query: " + str(n1ql_query))
+                    n1ql_result = self.n1ql_executor.run_n1ql_query(query=n1ql_query)
+                    if n1ql_result['status'] == 'success':
+                        n1ql_hits = n1ql_result['metrics']['resultCount']
+                        n1ql_doc_ids = []
+                        for res in n1ql_result['results']:
+                            n1ql_doc_ids.append(res['id'])
+                        n1ql_time = n1ql_result['metrics']['elapsedTime']
 
-                    self.log.info("N1QL hits for query: %s is %s (took %s)" % \
-                                  (json.dumps(n1ql_query, ensure_ascii=False),
-                                   n1ql_hits,
-                                   n1ql_time))
-                    if self.passed:
-                        if int(n1ql_hits) != int(fts_hits):
-                            msg = "FAIL: FTS hits: %s, while N1QL hits: %s" \
-                                  % (fts_hits, n1ql_hits)
-                            self.log.error(msg)
-                        n1ql_but_not_fts = list(set(n1ql_doc_ids) - set(fts_doc_ids))
-                        fts_but_not_n1ql = list(set(fts_doc_ids) - set(n1ql_doc_ids))
-                        if not (n1ql_but_not_fts or fts_but_not_n1ql):
-                            self.log.info("SUCCESS: Docs returned by FTS = docs"
-                                          " returned by N1QL, doc_ids verified")
-                        else:
-                            if fts_but_not_n1ql:
-                                msg = "FAIL: Following %s doc(s) were not returned" \
-                                      " by N1QL,but FTS, printing 50: %s" \
-                                      % (len(fts_but_not_n1ql), fts_but_not_n1ql[:50])
+                        self.log.info("N1QL hits for query: %s is %s (took %s)" % \
+                                      (json.dumps(n1ql_query, ensure_ascii=False),
+                                       n1ql_hits,
+                                       n1ql_time))
+                        if self.passed:
+                            if int(n1ql_hits) != int(fts_hits):
+                                msg = "FAIL: FTS hits: %s, while N1QL hits: %s" \
+                                      % (fts_hits, n1ql_hits)
+                                self.log.error(msg)
+                            n1ql_but_not_fts = list(set(n1ql_doc_ids) - set(fts_doc_ids))
+                            fts_but_not_n1ql = list(set(fts_doc_ids) - set(n1ql_doc_ids))
+                            if not (n1ql_but_not_fts or fts_but_not_n1ql):
+                                self.log.info("SUCCESS: Docs returned by FTS = docs"
+                                              " returned by N1QL, doc_ids verified")
                             else:
-                                msg = "FAIL: Following %s docs were not returned" \
-                                      " by FTS, but N1QL, printing 50: %s" \
-                                      % (len(n1ql_but_not_fts), n1ql_but_not_fts[:50])
-                            self.log.error(msg)
-                            self.passed = False
-                else:
-                    self.passed = False
-                    self.log.info("N1QL query execution is failed.")
-                    self.log.error(n1ql_result["errors"][0]['msg'])
+                                if fts_but_not_n1ql:
+                                    msg = "FAIL: Following %s doc(s) were not returned" \
+                                          " by N1QL,but FTS, printing 50: %s" \
+                                          % (len(fts_but_not_n1ql), fts_but_not_n1ql[:50])
+                                else:
+                                    msg = "FAIL: Following %s docs were not returned" \
+                                          " by FTS, but N1QL, printing 50: %s" \
+                                          % (len(n1ql_but_not_fts), n1ql_but_not_fts[:50])
+                                self.log.error(msg)
+                                self.passed = False
+                    else:
+                        self.passed = False
+                        self.log.info("N1QL query execution is failed.")
+                        self.log.error(n1ql_result["errors"][0]['msg'])
             self.state = CHECKING
             task_manager.schedule(self)
 
