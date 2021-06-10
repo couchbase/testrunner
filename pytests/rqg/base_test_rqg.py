@@ -36,6 +36,8 @@ class BaseRQGTests(BaseTestCase):
             self.check_covering_index = self.input.param("check_covering_index", True)
             self.skip_setup_cleanup = True
             self.crud_ops = self.input.param("crud_ops", False)
+            self.use_fts = self.input.param("use_fts", False)
+            self.shell = RemoteMachineShellConnection(self.master)
             self.ansi_joins = self.input.param("ansi_joins", False)
             self.with_let = self.input.param("with_let", False)
             self.ansi_transform = self.input.param("ansi_transform", False)
@@ -115,7 +117,6 @@ class BaseRQGTests(BaseTestCase):
             self.float_round_level = self.input.param("float_round_level", 0)
             self.delta = self.input.param("delta", 0)
             self.window_function_test = self.input.param("window_function_test", False)
-            self.use_fts = self.input.param("use_fts", False)
             self.randomize = self.input.param("randomize", False)
             self.advise_server = self.input.advisor
             self.advise_buckets = ["bucket_01", "bucket_02", "bucket_03", "bucket_04", "bucket_05", "bucket_06", "bucket_07", "bucket_08", "bucket_09", "bucket_10"]
@@ -509,6 +510,8 @@ class BaseRQGTests(BaseTestCase):
 
     def create_secondary_index(self, n1ql_query=""):
         use_partitioned = False
+        index_name = ""
+        index_bucket = ""
         if "EXECUTE" not in n1ql_query:
             if self.count_secondary_indexes() >= self.index_limit:
                 self.remove_all_secondary_indexes()
@@ -516,7 +519,7 @@ class BaseRQGTests(BaseTestCase):
             advise_query = self.prepare_advise_query(n1ql_query=n1ql_query)
 
             advise_result = self.n1ql_helper.run_cbq_query(query="ADVISE " + advise_query,
-                                                           server=self.advise_server)
+                                                           server=self.n1ql_server)
             if len(advise_result["results"][0]["advice"]["adviseinfo"]) == 0:
                 self.log.info("No advise for index")
                 return
@@ -526,12 +529,22 @@ class BaseRQGTests(BaseTestCase):
                     for index_statement_array in advise_result["results"][0]["advice"]["adviseinfo"]["recommended_indexes"]["indexes"]:
                         index_statement = index_statement_array["index_statement"]
                         if index_statement != "":
-                            if self.use_txns:
-                                self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
-                            else:
-                                self.n1ql_helper.wait_for_all_indexes_online()
                             try:
                                 prepared_index_statement = self.translate_index_statement(index_statement)
+                                # remote util shell strips all spaces out of returns, need to readd them
+                                if not self.use_rest:
+                                    prepared_index_statement = prepared_index_statement.replace("CREATE", "CREATE ")
+                                    prepared_index_statement = prepared_index_statement.replace("INDEX", "INDEX ")
+                                    prepared_index_statement = prepared_index_statement.replace("ON", " ON ")
+                                    prepared_index_statement = prepared_index_statement.replace("(", " ( ")
+                                    prepared_index_statement = prepared_index_statement.replace(")", " ) ")
+                                    prepared_index_statement = prepared_index_statement.replace("`", "\`")
+                                index_parts = prepared_index_statement.split("ON")
+                                for statement in index_parts:
+                                    if "adv" in statement:
+                                        index_name = statement.replace("CREATE INDEX ", "").strip()
+                                    elif "`" in statement:
+                                        index_bucket = statement.split("(")[0].replace("\`","").strip()
                                 # insert randomization logic for partitioned vs non_partitioned indexes
                                 chance_of_partitioned = random.randint(1, 100)
                                 if chance_of_partitioned <= 30:
@@ -541,15 +554,15 @@ class BaseRQGTests(BaseTestCase):
                                     if use_partitioned:
                                         prepared_index_statement = prepared_index_statement + " PARTITION BY HASH(META().id)"
                                     self.n1ql_helper.run_cbq_query(prepared_index_statement)
-                                    self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
+                                    self.n1ql_helper._wait_for_index_online(index_bucket,index_name)
                                 else:
                                     if use_partitioned:
                                         prepared_index_statement = prepared_index_statement + " PARTITION BY HASH(META().id)"
                                         self.log.info(prepared_index_statement)
                                     self.n1ql_helper.run_cbq_query(prepared_index_statement)
-                                    self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
+                                    self.n1ql_helper._wait_for_index_online(index_bucket,index_name)
                             except CBQError as ex:
-                                if "already exists" in str(ex):
+                                if "already exists" in str(ex) or "alreadyexists" in str(ex):
                                     continue
 
                 if "covering_indexes" in advise_result["results"][0]["advice"]["adviseinfo"][
@@ -557,12 +570,21 @@ class BaseRQGTests(BaseTestCase):
                     for index_statement_array in advise_result["results"][0]["advice"]["adviseinfo"]["recommended_indexes"]["covering_indexes"]:
                         index_statement = index_statement_array["index_statement"]
                         if index_statement != "":
-                            if self.use_txns:
-                                self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
-                            else:
-                                self.n1ql_helper.wait_for_all_indexes_online()
                             try:
                                 prepared_index_statement = self.translate_index_statement(index_statement)
+                                if not self.use_rest:
+                                    prepared_index_statement = prepared_index_statement.replace("CREATE", "CREATE ")
+                                    prepared_index_statement = prepared_index_statement.replace("INDEX", "INDEX ")
+                                    prepared_index_statement = prepared_index_statement.replace("ON", " ON ")
+                                    prepared_index_statement = prepared_index_statement.replace("(", " ( ")
+                                    prepared_index_statement = prepared_index_statement.replace(")", " ) ")
+                                    prepared_index_statement = prepared_index_statement.replace("`", "\`")
+                                index_parts = prepared_index_statement.split("ON")
+                                for statement in index_parts:
+                                    if "adv" in statement:
+                                        index_name = statement.replace("CREATE INDEX ", "").strip()
+                                    elif "`" in statement:
+                                        index_bucket = statement.split("(")[0].replace("\`","").strip()
                                 chance_of_partitioned = random.randint(1, 100)
                                 if chance_of_partitioned <= 30:
                                     use_partitioned = True
@@ -571,18 +593,16 @@ class BaseRQGTests(BaseTestCase):
                                     if use_partitioned:
                                         prepared_index_statement = prepared_index_statement + " PARTITION BY HASH(META().id)"
                                     self.n1ql_helper.run_cbq_query(prepared_index_statement)
-                                    self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
+                                    self.n1ql_helper._wait_for_index_online(index_bucket,index_name)
                                 else:
                                     if use_partitioned:
                                         prepared_index_statement = prepared_index_statement + " PARTITION BY HASH(META().id)"
                                         self.log.info(prepared_index_statement)
                                     self.n1ql_helper.run_cbq_query(prepared_index_statement)
-                                    self.n1ql_helper.wait_for_all_indexes_online(verbose=False)
+                                    self.n1ql_helper._wait_for_index_online(index_bucket,index_name)
                             except CBQError as ex:
-                                if "already exists" in str(ex):
+                                if "already exists" in str(ex) or "alreadyexists" in str(ex):
                                     continue
-
-
 
     def count_secondary_indexes(self):
         count = self.n1ql_helper.run_cbq_query("select count(*) from system:indexes")
@@ -1007,6 +1027,7 @@ class BaseRQGTests(BaseTestCase):
         query_context = ""
         skip = False
         use_prepared = False
+        fts_explain_query = ""
         chance_of_prepared = random.randint(1, 100)
         if chance_of_prepared <= 20:
             use_prepared = True
@@ -1056,8 +1077,7 @@ class BaseRQGTests(BaseTestCase):
                         new_n1ql = new_n1ql + " JOIN " + items
                     i = i + 1
                 fts_query = new_n1ql
-            if self.prepared or use_prepared:
-                fts_query = "PREPARE " + fts_query
+            fts_explain_query = fts_query
             self.log.info(" FTS QUERY :: {0}".format(fts_query))
         else:
             self.log.info(" SQL QUERY :: {0}".format(sql_query))
@@ -1076,10 +1096,14 @@ class BaseRQGTests(BaseTestCase):
                 fts_result = self.n1ql_query_runner_wrapper(n1ql_query=fts_query, server=self.n1ql_server,
                                                                query_params=query_params,query_context=query_context)
                 if self.use_query_context:
-                    fts_explain = self.n1ql_helper.run_cbq_query(query="EXPLAIN " + fts_query, server=self.n1ql_server,
+                    if "PREPARE" in fts_query:
+                        fts_explain_query = fts_query.replace("PREPARE","")
+                    fts_explain = self.n1ql_helper.run_cbq_query(query="EXPLAIN " + fts_explain_query, server=self.n1ql_server,
                                                                  query_params=query_params,query_context=query_context)
                 else:
-                    fts_explain = self.n1ql_helper.run_cbq_query(query="EXPLAIN " + fts_query, server=self.n1ql_server,query_params=query_params)
+                    if "PREPARE" in fts_query:
+                        fts_explain_query = fts_query.replace("PREPARE","")
+                    fts_explain = self.n1ql_helper.run_cbq_query(query="EXPLAIN " + fts_explain_query, server=self.n1ql_server,query_params=query_params)
                 if not (fts_explain['results'][0]['plan']['~children'][0]['#operator'] == 'IndexFtsSearch' or fts_explain['results'][0]['plan']['~children'][0]['~children'][0]['#operator'] == 'IndexFtsSearch'):
                     return {"success": False, "result": str("Query does not use fts index {0}".format(fts_explain))}
 
@@ -1089,6 +1113,8 @@ class BaseRQGTests(BaseTestCase):
                 prepared_query = "EXECUTE '%s'" % name
                 self.log.info(" N1QL QUERY :: {0}".format(prepared_query))
                 actual_result = self.n1ql_query_runner_wrapper(n1ql_query=prepared_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus",query_context=query_context)
+                if self.use_fts:
+                    fts_result = self.n1ql_query_runner_wrapper(n1ql_query=prepared_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus",query_context=query_context)
             n1ql_result = actual_result["results"]
             if self.use_fts:
                 fts_result = fts_result["results"]
@@ -1338,7 +1364,14 @@ class BaseRQGTests(BaseTestCase):
     def _load_bulk_data_in_buckets_using_n1ql(self, bucket, data_set):
         try:
             n1ql_query = self.query_helper._builk_insert_statement_n1ql(bucket.name, data_set)
-            self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_server, verbose=False)
+            if not self.use_rest:
+                new_query_helper = N1QLHelper(version="sherlock", shell=self.shell, max_verify=self.max_verify,
+                           buckets=self.buckets, item_flag=None, n1ql_port=getattr(self.n1ql_server, 'n1ql_port', 8903),
+                           full_docs_list=[], log=self.log, input=self.input, master=self.master,
+                           database=self.database, use_rest=True)
+                new_query_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_server, verbose=False)
+            else:
+                self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_server, verbose=False)
         except Exception as ex:
             self.log.info('WARN=======================')
             self.log.info(ex)
@@ -1356,7 +1389,11 @@ class BaseRQGTests(BaseTestCase):
         return RQGQueryHelper()
 
     def _initialize_n1ql_helper(self):
-        return N1QLHelper(version="sherlock", shell=None, max_verify=self.max_verify,
+        use_rest = random.randint(1, 100)
+        if use_rest <= 20:
+            self.use_rest = False
+            self.log.info("We are using the CBQ engine to run queries for this run")
+        return N1QLHelper(version="sherlock", shell=self.shell, max_verify=self.max_verify,
                                       buckets=self.buckets, item_flag=None, n1ql_port=getattr(self.n1ql_server, 'n1ql_port', 8903),
                                       full_docs_list=[], log=self.log, input=self.input, master=self.master,
                                       database=self.database, use_rest=self.use_rest)

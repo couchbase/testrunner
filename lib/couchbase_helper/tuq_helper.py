@@ -284,12 +284,16 @@ class N1QLHelper():
             result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params,
                                                        is_prepared=is_prepared, verbose=verbose, timeout=rest_timeout)
         else:
-            shell = RemoteMachineShellConnection(server)
+            if not self.shell:
+                shell = RemoteMachineShellConnection(server)
             cmd = f"{testconstants.LINUX_COUCHBASE_BIN_PATH}/cbq  -engine=http://{server.ip}:8093/ -u {rest.username} -p {rest.password} "
             query = query.replace('"', '\\"')
             if "#primary" in query:
                 query = query.replace("'#primary'", '\\"#primary\\"')
-            output = shell.execute_commands_inside(cmd, query, "", "", "", "", "")
+            if not self.shell:
+                output = shell.execute_commands_inside(cmd, query, "", "", "", "", "")
+            else:
+                output = self.shell.execute_commands_inside(cmd, query, "", "", "", "", "")
             output = output[output.find('{"requestID":'):]
             try:
                 result = json.loads(output)
@@ -309,6 +313,7 @@ class N1QLHelper():
     def wait_for_all_indexes_online(self,verbose=True):
         cur_indexes = self.get_parsed_indexes()
         for index in cur_indexes:
+            self.log.info("Indexes {0}".format(index))
             self._wait_for_index_online(index['bucket'], index['name'],verbose=verbose)
 
     def get_parsed_indexes(self):
