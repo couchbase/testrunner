@@ -254,7 +254,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         finally:
             self.log.info("Starting Couchbase on {0}".format(kv_node.ip))
             remote.start_server()
-            self.sleep(60)
+            self.sleep(120)
             self._verify_bucket_count_with_index_count(self.load_query_definitions)
             self.multi_query_using_index(buckets=self.buckets, query_definitions=self.load_query_definitions)
 
@@ -329,7 +329,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
             task.result()
         if self.defer_build:
             self.log.info("Building Indexes...")
-            for key, val in index_info.iteritems():
+            for key, val in index_info.items():
                 task = self.async_build_index(bucket=key, index_list=val)
                 build_tasks.append(task)
         self.sleep(10)
