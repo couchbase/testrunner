@@ -187,7 +187,7 @@ def should_dispatch_job(os, component, sub_component, version):
     rerun_jobs = get_bucket(cluster, bucket_name)
     user_name = "{0}-{1}%{2}".format(component, sub_component, version)
     query = "select * from `QE-server-pool` where username like " \
-            "'{0}' and state = 'booked'".format(user_name)
+            "'{0}' and state = 'booked' and os = '{1}'".format(user_name, os)
     qe_server_pool = get_bucket(cluster, "QE-server-pool")
     n1ql_result = run_query(qe_server_pool, query)
     if list(n1ql_result):
