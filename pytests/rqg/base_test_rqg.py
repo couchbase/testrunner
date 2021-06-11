@@ -504,14 +504,31 @@ class BaseRQGTests(BaseTestCase):
         return n1ql_query
 
     def translate_index_statement(self, n1ql_query=""):
+        index_name = ""
+        index_bucket = ""
         for key in self.advise_dict.keys():
             n1ql_query = n1ql_query.replace(self.advise_dict[key], key)
-        return n1ql_query
+        # remote util shell strips all spaces out of returns, need to readd them
+        if not self.use_rest:
+            n1ql_query = n1ql_query.replace("CREATE", "CREATE ")
+            n1ql_query = n1ql_query.replace("INDEX", "INDEX ")
+            n1ql_query = n1ql_query.replace("ON", " ON ")
+            n1ql_query = n1ql_query.replace("(", " ( ")
+            n1ql_query = n1ql_query.replace(")", " ) ")
+            n1ql_query = n1ql_query.replace("`", "\`")
+        index_parts = n1ql_query.split("ON")
+        for statement in index_parts:
+            if "adv" in statement:
+                index_name = statement.replace("CREATE INDEX ", "").strip()
+            elif "`" in statement:
+                if not self.use_rest:
+                    index_bucket = statement.split("(")[0].replace("\`", "").strip()
+                else:
+                    index_bucket = statement.split("(")[0].replace("`", "").strip()
+        return n1ql_query,index_name,index_bucket
 
     def create_secondary_index(self, n1ql_query=""):
         use_partitioned = False
-        index_name = ""
-        index_bucket = ""
         if "EXECUTE" not in n1ql_query:
             if self.count_secondary_indexes() >= self.index_limit:
                 self.remove_all_secondary_indexes()
@@ -530,21 +547,7 @@ class BaseRQGTests(BaseTestCase):
                         index_statement = index_statement_array["index_statement"]
                         if index_statement != "":
                             try:
-                                prepared_index_statement = self.translate_index_statement(index_statement)
-                                # remote util shell strips all spaces out of returns, need to readd them
-                                if not self.use_rest:
-                                    prepared_index_statement = prepared_index_statement.replace("CREATE", "CREATE ")
-                                    prepared_index_statement = prepared_index_statement.replace("INDEX", "INDEX ")
-                                    prepared_index_statement = prepared_index_statement.replace("ON", " ON ")
-                                    prepared_index_statement = prepared_index_statement.replace("(", " ( ")
-                                    prepared_index_statement = prepared_index_statement.replace(")", " ) ")
-                                    prepared_index_statement = prepared_index_statement.replace("`", "\`")
-                                index_parts = prepared_index_statement.split("ON")
-                                for statement in index_parts:
-                                    if "adv" in statement:
-                                        index_name = statement.replace("CREATE INDEX ", "").strip()
-                                    elif "`" in statement:
-                                        index_bucket = statement.split("(")[0].replace("\`","").strip()
+                                prepared_index_statement, index_name, index_bucket = self.translate_index_statement(index_statement)
                                 # insert randomization logic for partitioned vs non_partitioned indexes
                                 chance_of_partitioned = random.randint(1, 100)
                                 if chance_of_partitioned <= 30:
@@ -571,20 +574,7 @@ class BaseRQGTests(BaseTestCase):
                         index_statement = index_statement_array["index_statement"]
                         if index_statement != "":
                             try:
-                                prepared_index_statement = self.translate_index_statement(index_statement)
-                                if not self.use_rest:
-                                    prepared_index_statement = prepared_index_statement.replace("CREATE", "CREATE ")
-                                    prepared_index_statement = prepared_index_statement.replace("INDEX", "INDEX ")
-                                    prepared_index_statement = prepared_index_statement.replace("ON", " ON ")
-                                    prepared_index_statement = prepared_index_statement.replace("(", " ( ")
-                                    prepared_index_statement = prepared_index_statement.replace(")", " ) ")
-                                    prepared_index_statement = prepared_index_statement.replace("`", "\`")
-                                index_parts = prepared_index_statement.split("ON")
-                                for statement in index_parts:
-                                    if "adv" in statement:
-                                        index_name = statement.replace("CREATE INDEX ", "").strip()
-                                    elif "`" in statement:
-                                        index_bucket = statement.split("(")[0].replace("\`","").strip()
+                                prepared_index_statement, index_name, index_bucket = self.translate_index_statement(index_statement)
                                 chance_of_partitioned = random.randint(1, 100)
                                 if chance_of_partitioned <= 30:
                                     use_partitioned = True
