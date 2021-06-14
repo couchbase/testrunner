@@ -5244,7 +5244,7 @@ class FTSBaseTest(unittest.TestCase):
                     'Authorization': 'Basic %s' % authorization,
                     'Accept': '*/*'}
                 filename = "{0}_fts_diag.json".format(serverInfo.ip)
-                page = urllib.request.urlopen(req)
+                page = urllib.request.urlopen(req, timeout=60)
                 with open(path + '/' + filename, 'wb') as output:
                     os.write(1, "downloading {0} ...".format(serverInfo.ip))
                     while True:
