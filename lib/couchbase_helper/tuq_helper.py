@@ -247,7 +247,8 @@ class N1QLHelper():
             return False
 
     def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False,
-                      scan_consistency=None, scan_vector=None, verbose=True, timeout=None, rest_timeout=None, query_context=None,txnid=None,txtimeout=None, use_sdk = False):
+                      scan_consistency=None, scan_vector=None, scan_vectors=None, verbose=True, timeout=None,
+                      rest_timeout=None, query_context=None,txnid=None,txtimeout=None, use_sdk = False):
         if query is None:
             query = self.query
         if server is None:
@@ -306,6 +307,8 @@ class N1QLHelper():
                 query_params['scan_consistency']= scan_consistency
             if scan_vector:
                 query_params['scan_vector']= str(scan_vector).replace("'", '"')
+            if scan_vectors:
+                query_params['scan_vectors'] = str(scan_vectors).replace("'", '"')
             if timeout:
                 query_params['timeout'] = timeout
             if query_context:
