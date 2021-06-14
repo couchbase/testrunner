@@ -16,6 +16,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from .newupgradebasetest import NewUpgradeBaseTest
 from rebalance.rebalance_base import RebalanceBaseTest
 from couchbase_helper.documentgenerator import BlobGenerator
+from testconstants import COUCHBASE_FROM_SPOCK, COUCHBASE_FROM_CHESHIRE_CAT
 
 
 
@@ -574,6 +575,8 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                 self.sasl_buckets = 1
                 self.sasl_bucket_name = self.sasl_bucket_name + "_" \
                                             + str(self.total_buckets)
+            else:
+                self.bucket_size = 512
             self.rest = RestConnection(self.master)
             self._bucket_creation()
             self.sleep(5, "sleep after create bucket")
@@ -636,7 +639,13 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                 self.after_upgrade_services_in.pop(0)
             self.sleep(10, "wait 10 seconds after rebalance")
             if free_node_in and free_node_in[0] not in self.servers:
-                self.servers.append(free_node_in[0])
+                found_node = False
+                for server in self.servers:
+                    if free_node_in[0].ip in server.ip:
+                        found_node = True
+                        break
+                if not found_node:
+                    self.servers.append(free_node_in[0])
         except Exception as ex:
             self.log.info(ex)
             if queue is not None:
@@ -885,8 +894,12 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                 if node.ip not in kv_maps:
                     del kv_nodes[i]
             self.cbas_node = cbas_node
+            items_travel_sample = 63182
+            if cb_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT:
+                items_travel_sample = 63288
             self.load_sample_buckets(servers=kv_nodes, bucketName="travel-sample",
-                                              total_items=31591, rest=cbas_rest)
+                                                  total_items=items_travel_sample,
+                                                  rest=cbas_rest)
             self.test_create_dataset_on_bucket()
         except Exception as e:
             self.log.info(e)
@@ -1090,7 +1103,13 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                 self.after_upgrade_services_in.pop(0)
             self.sleep(10, "wait 10 seconds after rebalance")
             if free_node_in and free_node_in[0] not in self.servers:
-                self.servers.append(free_node_in[0])
+                found_node = False
+                for server in self.servers:
+                    if free_node_in[0].ip in server.ip:
+                        found_node = True
+                        break
+                if not found_node:
+                    self.servers.append(free_node_in[0])
         except Exception as ex:
             self.log.info("Rebalance failed with : {0}".format(str(ex)))
             self.check_retry_rebalance_succeeded()

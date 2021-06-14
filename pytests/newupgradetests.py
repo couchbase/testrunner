@@ -15,7 +15,7 @@ from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_VERSION_3
 from testconstants import SHERLOCK_VERSION, COUCHBASE_FROM_SHERLOCK,\
                           COUCHBASE_FROM_SPOCK, COUCHBASE_FROM_WATSON,\
-                          COUCHBASE_FROM_VULCAN
+                          COUCHBASE_FROM_VULCAN, COUCHBASE_FROM_CHESHIRE_CAT
 from couchbase.cluster import Cluster, PasswordAuthenticator
 from couchbase.exceptions import CouchbaseError, CouchbaseNetworkError, CouchbaseTransientError
 from security.rbac_base import RbacBase
@@ -2550,9 +2550,13 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                         RestConnection(self.master).delete_bucket("travel-sample")
                         self.sleep(10)
                         break
+                items_travel_sample = 63182
+                if cb_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT:
+                    items_travel_sample = 63288
                 self.load_sample_buckets(servers=self.servers[:nodes_init],
                                          bucketName="travel-sample",
-                                         total_items=31591, rest=cbas_rest)
+                                         total_items=items_travel_sample,
+                                         rest=cbas_rest)
                 self.test_create_dataset_on_bucket()
         if after_upgrade_buckets_in is not False:
             self.bucket_size = 100

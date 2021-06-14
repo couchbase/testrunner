@@ -347,7 +347,13 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
             appropriate_build = self._get_build(server, upgrade_version, remote, info=info)
             self.assertTrue(appropriate_build.url,
                             msg="unable to find build {0}".format(upgrade_version))
-            self.assertTrue(remote.download_build(appropriate_build), "Build wasn't downloaded!")
+            download_file = remote.download_build(appropriate_build)
+            if not download_file:
+                self.sleep(10)
+                self.log.info("Try to download again")
+                download_file = remote.download_build(appropriate_build)
+                if not download_file:
+                    raise Exception("Build wasn't downloaded!")
             o, e = remote.couchbase_upgrade(appropriate_build,
                                             save_upgrade_config=save_upgrade_config,
                                             forcefully=self.is_downgrade,
@@ -374,15 +380,6 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
             print((traceback.extract_stack()))
             if queue is not None:
                 queue.put(False)
-                if not self.is_linux:
-                    remote = RemoteMachineShellConnection(server)
-                    output, error = remote.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
-                    remote.log_command_output(output, error)
-                    output, error = remote.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
-                    remote.log_command_output(output, error)
-                    output, error = remote.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
-                    remote.log_command_output(output, error)
-                    remote.disconnect()
                 raise e
         if queue is not None:
             queue.put(True)
@@ -996,10 +993,15 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
         To call after (preferably) upgrade
         :param fts_obj: the FTS object created in create_fts_index_query_compare()
         """
-        fts_obj.async_perform_update_delete()
-        self.fts_obj.wait_for_indexing_complete()
-        for index in fts_obj.fts_indexes:
-            fts_obj.run_query_and_compare(index)
+        try:
+            if not fts_obj:
+                fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
+            fts_obj.async_perform_update_delete()
+            fts_obj.wait_for_indexing_complete()
+            for index in fts_obj.fts_indexes:
+                fts_obj.run_query_and_compare(index)
+        except Exception as ex:
+            print(ex)
 
     def delete_all_fts_artifacts(self, fts_obj):
         """
@@ -1035,10 +1037,10 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
                     bucket_maps = RestConnection(servers[0]).get_buckets_itemCount()
                     num_actual = bucket_maps[bucketName]
                 if int(num_actual) == total_items:
-                    self.log.info("{0} items are loaded in the {1} bucket"\
+                    self.log.info("all {0} items are loaded in the {1} bucket"\
                                             .format(num_actual, bucketName))
                     break
-                self.log.info("{0} items are loaded in the {1} bucket"\
+                self.log.info("{0} items are loaded in the {1} bucket.  Wait ..."\
                                            .format(num_actual, bucketName))
             if int(num_actual) != total_items:
                 return False

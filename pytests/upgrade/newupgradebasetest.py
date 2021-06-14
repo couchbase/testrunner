@@ -448,13 +448,19 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.assertTrue(appropriate_build.url,
                             msg="unable to find build {0}" \
                             .format(upgrade_version))
-            self.assertTrue(remote.download_build(appropriate_build),
-                            "Build wasn't downloaded!")
+            download_file = remote.download_build(appropriate_build)
+            if not download_file:
+                self.sleep(10)
+                self.log.info("Try to download again")
+                download_file = remote.download_build(appropriate_build)
+                if not download_file:
+                    raise Exception("Build wasn't downloaded!")
             o, e = remote.couchbase_upgrade(appropriate_build,
                                             save_upgrade_config=False,
                                             forcefully=self.is_downgrade,
                                             fts_query_limit=fts_query_limit,
                                             debug_logs=debug_logs)
+            remote.log_command_output(o, e)
             self.log.info("upgrade {0} to version {1} is completed"
                           .format(server.ip, upgrade_version))
             if 5.0 > float(self.initial_version[:3]) and self.is_centos7:
@@ -478,15 +484,6 @@ class NewUpgradeBaseTest(BaseTestCase):
             print(traceback.extract_stack())
             if queue is not None:
                 queue.put(False)
-                if not self.is_linux:
-                    remote = RemoteMachineShellConnection(server)
-                    output, error = remote.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
-                    remote.log_command_output(output, error)
-                    output, error = remote.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
-                    remote.log_command_output(output, error)
-                    output, error = remote.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
-                    remote.log_command_output(output, error)
-                    remote.disconnect()
                 raise e
         if queue is not None:
             queue.put(True)
@@ -1216,10 +1213,15 @@ class NewUpgradeBaseTest(BaseTestCase):
         To call after (preferably) upgrade
         :param fts_obj: the FTS object created in create_fts_index_query_compare()
         """
-        self.fts_obj.async_perform_update_delete()
-        self.fts_obj.wait_for_indexing_complete()
-        for index in self.fts_obj.fts_indexes:
-            self.fts_obj.run_query_and_compare(index)
+        try:
+            if not self.fts_obj:
+                self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
+            self.fts_obj.async_perform_update_delete()
+            self.fts_obj.wait_for_indexing_complete()
+            for index in self.fts_obj.fts_indexes:
+                self.fts_obj.run_query_and_compare(index)
+        except Exception as ex:
+            print(ex)
 
     def delete_all_fts_artifacts(self, queue=None):
         """
@@ -1393,10 +1395,10 @@ class NewUpgradeBaseTest(BaseTestCase):
                     for server in servers:
                         num_actual += self.get_item_count(server, bucketName)
                 if int(num_actual) == total_items:
-                    self.log.info("{0} items are loaded in the {1} bucket" \
+                    self.log.info("{0} all items are loaded in the {1} bucket" \
                                   .format(num_actual, bucketName))
                     break
-                self.log.info("{0} items are loaded in the {1} bucket" \
+                self.log.info("{0} items are loaded in the {1} bucket.  Wait.." \
                               .format(num_actual, bucketName))
             if int(num_actual) != total_items:
                 return False

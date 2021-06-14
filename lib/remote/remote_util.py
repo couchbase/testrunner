@@ -1220,21 +1220,22 @@ class RemoteMachineShellConnection(KeepRefs):
                 tmp.reverse()
                 version = tmp[1] + "-" + tmp[0]
 
-            exist = self.file_exists('/cygdrive/c/tmp/', '{0}.exe'.format(version))
+            exist = self.file_exists('/cygdrive/c/tmp/', version)
             command = "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe "\
                                         "--no-check-certificate"\
-                                        " -q {0} -O {1}.exe';ls -lh;".format(url, version)
+                                        " -q {0} -O {1}.msi';ls -lh;".format(url, version)
             file_location = "/cygdrive/c/tmp/"
-            deliverable_type = "exe"
+            deliverable_type = "msi"
             if not exist:
                 output, error = self.execute_command(command)
                 self.log_command_output(output, error)
-                if not self.file_exists(file_location, '{0}.exe'.format(version)):
+                self.sleep(5, "wait 5 seconds to complete download binary")
+                if not self.file_exists(file_location, version):
                     file_status = self.check_and_retry_download_binary(command,
                                                              file_location, version)
                 return file_status
             else:
-                log.info('File {0}.exe exist in tmp directory'.format(version))
+                log.info('File {0}.msi exist in tmp directory'.format(version))
                 return True
 
         elif self.info.distribution_type.lower() == 'mac':
@@ -1539,10 +1540,7 @@ class RemoteMachineShellConnection(KeepRefs):
         self.terminate_processes(self.info, \
                                  [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
         self.disable_firewall()
-        version = version.replace("-rel", "")
-        deliverable_type = "exe"
-        if url and url.split(".")[-1] == "msi":
-            deliverable_type = "msi"
+        deliverable_type = "msi"
         exist = self.file_exists('/cygdrive/c/tmp/', version)
         log.info('**** about to do the wget ****')
         command = "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe "\
@@ -1635,24 +1633,26 @@ class RemoteMachineShellConnection(KeepRefs):
         sftp.close()
 
     def find_build_version(self, path_to_version, version_file, product):
-        sftp = self._ssh_client.open_sftp()
-        ex_type = "exe"
         if self.file_exists(WIN_CB_PATH, VERSION_FILE):
             path_to_version = WIN_CB_PATH
         else:
             path_to_version = testconstants.WIN_MB_PATH
         try:
             log.info(path_to_version)
-            f = sftp.open(os.path.join(path_to_version, VERSION_FILE), 'r+')
-            tmp_str = f.read().strip()
-            full_version = tmp_str.replace("-rel", "")
-            if full_version == "1.6.5.4-win64":
-                full_version = "1.6.5.4"
-            build_name = short_version = full_version
+            output, error = self.execute_command("cat {0}{1}".format(path_to_version,
+                                                                     VERSION_FILE))
+            if output and output[0]:
+                if "-" in output[0]:
+                    tmp_str = output[0].strip()
+                else:
+                    raise Exception("Version file does not have build number")
+            else:
+                raise Exception("No CB build in VERSION file")
+            full_version = build_name = tmp_str
+            short_version = tmp_str.split("-")[0]
             return build_name, short_version, full_version
         except IOError:
             log.error('Can not read version file')
-        sftp.close()
 
     def find_windows_info(self):
         if self.remote:
@@ -1940,12 +1940,10 @@ class RemoteMachineShellConnection(KeepRefs):
 
         """ re-register new setup to cb server """
         o, r = self.execute_command(WIN_COUCHBASE_BIN_PATH + "install/cb_winsvc_stop_{0}.bat ".format(build))
-        self.log_command_output(o, r)
         cmd = WIN_COUCHBASE_BIN_PATH + "install/cb_winsvc_start_{0}.bat".format(build)
         if ipv6:
             cmd += " true"
         o, r = self.execute_command(cmd)
-        self.log_command_output(o, r)
         self.wait_for_couchbase_started(num_retries=num_retries, poll_interval=poll_interval,
                                         message="wait for cb server start completely after setting CBFT_ENV_OPTIONS")
 
@@ -2022,8 +2020,7 @@ class RemoteMachineShellConnection(KeepRefs):
         log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
         command = ''
         if self.info.type.lower() == 'windows':
-                print(("build name in couchbase upgrade    ", build.product_version))
-                self.couchbase_upgrade_win(self.info.architecture_type, \
+                output, error = self.couchbase_upgrade_win(self.info.architecture_type, \
                                      self.info.windows_name, build.product_version)
                 log.info('********* continue upgrade process **********')
 
@@ -2048,7 +2045,8 @@ class RemoteMachineShellConnection(KeepRefs):
                 command = 'dpkg -i /tmp/{0}'.format(build.name)
                 if forcefully:
                     command = 'dpkg -i --force /tmp/{0}'.format(build.name)
-        output, error = self.execute_command(command, use_channel=True)
+        if self.info.type.lower() != 'windows':
+            output, error = self.execute_command(command, use_channel=True)
         if debug_logs:
             self.log_command_output(output, error)
         else:
@@ -2086,66 +2084,31 @@ class RemoteMachineShellConnection(KeepRefs):
         task = "upgrade"
         bat_file = "upgrade.bat"
         deleted = False
-        self.modify_bat_file('/cygdrive/c/automation', bat_file, 'cb',\
-                                                         version, task)
-        self.stop_schedule_tasks()
         self.remove_win_backup_dir()
         self.remove_win_collect_tmp()
         output, error = self.execute_command("cat "
                         "'/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
         log.info("version to upgrade from: {0} to {1}".format(output, version))
-        log.info('before running task schedule upgrademe')
-        if '1.8.0' in str(output):
-            """ run installer in second time as workaround for upgrade 1.8.0 only:
-            #   Installer needs to update registry value in order to upgrade
-            #   from the previous version.
-            #   Please run installer again to continue."""
-            output, error = \
-                        self.execute_command("cmd /c schtasks /run /tn upgrademe")
-            self.log_command_output(output, error)
-            # todo: TBD
-            self.sleep(200, "because upgrade version is {0}".format(output))
-            output, error = self.execute_command("cmd /c "
-                                      "schtasks /Query /FO LIST /TN upgrademe /V")
-            self.log_command_output(output, error)
-            self.stop_schedule_tasks()
-        # run task schedule to upgrade Membase server
-        output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
+        output, error = self.execute_command("cd /cygdrive/c/tmp;"
+                                                     "msiexec /i {0}.msi /qn " \
+                                                     .format(version))
         self.log_command_output(output, error)
-        deleted = self.wait_till_file_deleted(WIN_CB_PATH, \
-                       VERSION_FILE, timeout_in_seconds=600)
-        if not deleted:
-            log.error("Uninstall was failed at node {0}".format(self.ip))
-            sys.exit()
-        self.wait_till_file_added(WIN_CB_PATH, VERSION_FILE, \
-                                       timeout_in_seconds=600)
+        self.sleep(25)
         log.info("installed version: {0}".format(version))
         output, error = self.execute_command("cat "
                        "'/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
-        ended = self.wait_till_process_ended(version[:10])
-        if not ended:
-            sys.exit("*****  Node %s failed to upgrade  *****" % (self.ip))
+        self.log_command_output(output, error)
         self.wait_for_couchbase_started(num_retries=startup_retries, poll_interval=startup_poll_interval,
                                         message="wait for server to start up completely")
-        ct = time.time()
-        while time.time() - ct < 10800:
-            output, error = self.execute_command("cmd /c "
-                      "schtasks /Query /FO LIST /TN upgrademe /V| findstr Status ")
-            if "Ready" in str(output):
-                log.info("upgrademe task complteted")
-                break
-            elif "Could not start":
-                log.exception("Ugrade failed!!!")
-                break
-            else:
-                log.info("upgrademe task still running:{0}".format(output))
-                self.sleep(30)
-        output, error = self.execute_command("cmd /c "
-                                       "schtasks /Query /FO LIST /TN upgrademe /V")
-        self.log_command_output(output, error)
-        """ need to remove binary after done upgrade.  Since watson, current binary
-            could not reused to uninstall or install cb server """
-        self.delete_file(WIN_TMP_PATH, version[:10] + ".exe")
+        if output and output[0]:
+            if version in output[0]:
+                mesg = "You have successfully installed Couchbase Server."
+                output = []
+                output.append(mesg)
+        else:
+            error = []
+            error.append("Failed to install/upgrade Couchbase server.")
+        return output, error
 
     """
         This method install Couchbase Server
@@ -2783,7 +2746,7 @@ class RemoteMachineShellConnection(KeepRefs):
                                                                   full_version,
                             distribution_version=self.info.distribution_version.lower(),
                                   distribution_type=self.info.distribution_type.lower())
-                    downloaded = self.download_binary_in_win(build.url, short_version)
+                    downloaded = self.download_binary_in_win(build.url, full_version)
                     if downloaded:
                         log.info('Successful download {0}.exe on {1} server'
                                              .format(short_version, self.ip))
@@ -2807,11 +2770,6 @@ class RemoteMachineShellConnection(KeepRefs):
                 log.info('sleep for 5 seconds before running task '
                                     'schedule uninstall on {0}'.format(self.ip))
                 """ End remove this workaround when bug MB-14504 is fixed """
-
-                """ Remove this workaround when bug MB-28775 is fixed """
-                # log.info("Kill any eventing-consumer.exe in vulcan")
-                # self.execute_command('taskkill /F /T /IM eventing*')
-                """ End remove this workaround when bug MB-28775 is fixed """
 
                 self.stop_couchbase()
                 time.sleep(5)
@@ -2859,40 +2817,9 @@ class RemoteMachineShellConnection(KeepRefs):
                         if not ended:
                             sys.exit("****  Node %s failed to uninstall  ****"
                                                               % (self.ip))
-                if full_version[:3] == "2.5":
-                    # todo: probably this is dead code
-                    self.sleep(20, "next step is to install")
-                else:
-                    # todo: not sure, what are we waiting for here
-                    self.sleep(10, "next step is to install")
+                self.sleep(25, "next step is to install")
                 """ delete binary after uninstall """
                 self.delete_file(WIN_TMP_PATH, build_name)
-                """ the code below need to remove when bug MB-11328
-                                                           is fixed in 3.0.1 """
-                output, error = self.kill_erlang(os="windows")
-                self.log_command_output(output, error)
-                """ end remove code """
-
-
-                """ the code below need to remove when bug MB-11985
-                                                           is fixed in 3.0.1 """
-                if full_version[:5] in COUCHBASE_VERSION_2 or \
-                   full_version[:5] in COUCHBASE_FROM_VERSION_3:
-                    log.info("due to bug MB-11985, we need to delete below registry")
-                    output, error = self.execute_command("reg delete \
-                            'HKLM\Software\Wow6432Node\Ericsson\Erlang\ErlSrv' /f ")
-                    self.log_command_output(output, error)
-                """ end remove code """
-                if capture_iss_file and not windows_msi:
-                    log.info("Delete {0} in windows automation directory" \
-                                                          .format(capture_iss_file))
-                    output, error = self.execute_command("rm -f \
-                               /cygdrive/c/automation/{0}".format(capture_iss_file))
-                    self.log_command_output(output, error)
-                    log.info("Delete {0} in slave resources/windows/automation dir" \
-                             .format(capture_iss_file))
-                    os.system("rm -f resources/windows/automation/{0}" \
-                                                          .format(capture_iss_file))
             else:
                 log.info("*****No couchbase server on {0} server. Free to install" \
                                                                  .format(self.ip))
@@ -3698,7 +3625,7 @@ class RemoteMachineShellConnection(KeepRefs):
             info.architecture_type = win_info['os_arch']
             info.ip = self.ip
             info.distribution_version = win_info['os']
-            info.deliverable_type = 'exe'
+            info.deliverable_type = 'msi'
             info.cpu = self.get_cpu_info(win_info)
             info.disk = self.get_disk_info(win_info)
             info.ram = self.get_ram_info(win_info)
