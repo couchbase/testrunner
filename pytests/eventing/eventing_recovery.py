@@ -21,9 +21,9 @@ log = logging.getLogger()
 class EventingRecovery(EventingBaseTest):
     def setUp(self):
         super(EventingRecovery, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=1500)
         if self.create_functions_buckets:
-            self.bucket_size = 100
+            self.bucket_size = 200
             self.metadata_bucket_size = 400
             log.info(self.bucket_size)
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
