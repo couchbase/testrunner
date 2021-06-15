@@ -927,12 +927,10 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cli = CouchbaseCLI(server, "cbadminbucket", "password")
         output_add, error, msg = cli.server_add(add_server, "Administrator",
                                                 "password", None, "data", None)
-        if "SUCCESS: Server added" not in output_add[0]:
+        if "SUCCESS" not in output_add[0] and "Server added" not in output_add[0]:
             self.fail("Could not add node %s to cluster" % add_server.ip)
 
         reb_result = ""
-        reb_bar = ""
-        ansi_escape = re.compile(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]')
 
         if not stop_rebalance:
             output, error, msg = cli.rebalance(None)
@@ -948,21 +946,19 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 if stop_status:
                     output, error, msg = cli.rebalance(None)
                 else:
-                    self.fail("Fail sto stop rebalance")
+                    self.fail("Fail to stop rebalance")
             else:
                 print("Fail to rebalance using rest call")
         if output:
             reb_result = output[-1]
-            """ remove ANSI code """
-            reb_bar = ansi_escape.sub('', output[-2])
-            if "SUCCESS: Rebalance complete" not in reb_result:
+            if "SUCCESS" not in reb_result and "Rebalance complete" not in reb_result:
                 self.fail("Rebalance failed")
 
-            if "100.0%" not in reb_bar:
+            if "100.0%" not in reb_result:
                 self.fail("Rebalance failed.  It not reach 100%")
-            reb_bar = reb_bar.replace(" 100.0%", "").strip(" ")
-            print("rebalance bar: %s" % reb_bar)
-            if " " in reb_bar:
+            reb_result = reb_result.replace(" 100.0%", "").strip(" ")
+            print("rebalance bar: %s" % reb_result)
+            if " " in reb_result:
                 self.fail("rebalance bar did not display correctly")
         else:
             self.fail("output is empty %s " % output)
