@@ -830,9 +830,12 @@ class ImportExportTests(CliBaseTest):
                                              command_options=col_cmd)
         shell = RemoteMachineShellConnection(self.master)
         if self.relative_path:
-            export_file = "~/export{0}/".format(self.master.ip) + "default"
-            shell.execute_command("rm -rf ~/export{0}".format(self.master.ip))
-            shell.execute_command("mkdir ~/export{0}".format(self.master.ip))
+            tilde = "~/"
+            if self.os == "windows":
+                tilde = ""
+            export_file = "{0}export{1}/".format(tilde, self.master.ip) + "default"
+            shell.execute_command("rm -rf {0}export{1}".format(tilde, self.master.ip))
+            shell.execute_command("mkdir {0}export{1}".format(tilde, self.master.ip))
         else:
             shell.execute_command("rm -rf {0}export{1}".format(self.tmp_path, self.master.ip))
             shell.execute_command("mkdir {0}export{1}".format(self.tmp_path, self.master.ip))
