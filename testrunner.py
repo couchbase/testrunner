@@ -759,29 +759,18 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
             result = unittest.TextTestRunner(verbosity=2).run(suite)
         except AttributeError as ex:
             pass
-    if "makefile" in TestInputSingleton.input.test_params:
-        # print out fail for those tests which failed and do sys.exit() error code
-        fail_count = 0
-        for result in results:
-            if result["result"] == "fail":
-                print((result["name"], " fail "))
-                fail_count += 1
-            else:
-                print((result["name"], " pass"))
-        if fail_count > 0:
-            sys.exit(1)
+    if "makefile" not in TestInputSingleton.input.test_params:
+        print("During the test, Remote Connections: %s, Disconnections: %s" %
+                (RemoteMachineShellConnection.connections,
+                RemoteMachineShellConnection.disconnections))
 
-    print("During the test, Remote Connections: %s, Disconnections: %s" %
-              (RemoteMachineShellConnection.connections,
-               RemoteMachineShellConnection.disconnections))
-
-    if TestInputSingleton.input.param("get-delays", False):
-        sd.stop_measure_sched_delay()
-        sd.fetch_logs()
+        if TestInputSingleton.input.param("get-delays", False):
+            sd.stop_measure_sched_delay()
+            sd.fetch_logs()
 
     # terminate any non main thread - these were causing hangs
     for t in threading.enumerate():
-        if t.name != 'MainThread' and t.isAlive():
+        if t.name != 'MainThread' and t.is_alive():
             print(('Thread', t, 'was not properly terminated, will be terminated now.'))
             if hasattr(t, 'shutdown'):
                 print("Shutting down the thread...")
@@ -793,6 +782,18 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
                 except Exception as e:
                     print("Unable to stop hung thread, killing python process")
                     os.kill(os.getpid(), signal.SIGKILL)
+    
+    if "makefile" in TestInputSingleton.input.test_params:
+        # print out fail for those tests which failed and do sys.exit() error code
+        fail_count = 0
+        for result in results:
+            if result["result"] == "fail":
+                print((result["name"], " fail "))
+                fail_count += 1
+            else:
+                print((result["name"], " pass"))
+        if fail_count > 0:
+            sys.exit(1)
 
     return results, xunit, "{0}{2}report-{1}".format(os.path.dirname(logs_folder), str_time, os.sep)
 
