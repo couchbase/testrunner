@@ -289,26 +289,20 @@ class CliBaseTest(BaseTestCase):
         """
         if expect_error:
             for line in output:
-                if line[:4] == "\x1b[6n":
-                    line = line[4:]
-                if line == "ERROR: " + message:
+                if "ERROR" in line and message in line:
                     return True
             log.info("Did not receive expected error message `ERROR: %s`", message)
             return False
         else:
             for line in output:
-                if line[:4] == "\x1b[6n":
-                    line = line[4:]
-                if line == "SUCCESS: " + message:
+                if "SUCCESS" in line and message in line:
                     return True
             log.info("Did not receive expected success message `SUCCESS: %s`", message)
             return False
 
     def verifyWarningOutput(self, output, message):
         for line in output:
-            if line[:4] == "\x1b[6n":
-                line = line[4:]
-            if line == "WARNING: " + message:
+            if "WARNING" in line and message in line:
                 return True
         log.info("Did not receive expected error message `WARNING: %s`", message)
         return False
