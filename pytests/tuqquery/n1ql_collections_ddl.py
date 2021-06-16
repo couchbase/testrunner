@@ -1654,6 +1654,7 @@ class QueryCollectionsDDLTests(QueryTests):
         scope_created = self.cli_client.create_scope(bucket=bucket_name, scope=scope_name)
         if scope_created:
             self.collections_helper.delete_scope(keyspace=keyspace_name, bucket_name=bucket_name, scope_name=scope_name)
+            self.sleep(5,"Wait before checking for scope deletion")
 
             scope_exists = self.collections_helper.check_if_scope_exists_in_scopes(keyspace=keyspace_name, bucket=bucket_name,
                                                       scope=scope_name)
