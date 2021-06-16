@@ -408,7 +408,7 @@ class JoinTests(QuerySanityTests):
             self.query = "CREATE PRIMARY INDEX ON %s" % query_bucket
             self.run_cbq_query()
             self.sleep(15, 'wait for index')
-            self.query = "SELECT employee.join_day, employee.tasks_ids, new_project_full.job_title new_project " + \
+            self.query = "SELECT employee.join_day, employee.tasks_ids, new_project_full.project new_project " + \
                          "FROM %s as employee %s JOIN %s as new_project_full " % (query_bucket, self.type_join, self.query_buckets[0]) + \
                          "ON KEYS employee.tasks_ids WHERE employee.join_day <= 2  order by employee.join_day limit 10"
             result = self.run_cbq_query()
