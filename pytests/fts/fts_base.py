@@ -45,6 +45,7 @@ from lib.mc_bin_client import MemcachedClient as MC_MemcachedClient
 from security.SecretsMasterBase import SecretsMasterBase
 from lib.collection.collections_cli_client import CollectionsCLI
 from scripts.java_sdk_setup import JavaSdkSetup
+from couchbase_cli import CouchbaseCLI
 
 
 class RenameNodeException(FTSException):
@@ -3911,6 +3912,13 @@ class FTSBaseTest(unittest.TestCase):
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(master), 'builtin')
+
+        self.enable_dp = self._input.param("enable_dp", False)
+        if self.enable_dp:
+            for node in self._input.servers:
+                print("Enabling DP for %s" % node)
+                cli = CouchbaseCLI(node)
+                cli.enable_dp()
 
         self._set_bleve_max_result_window()
 

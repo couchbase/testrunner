@@ -237,7 +237,7 @@ class CouchbaseCLI:
     def enable_dp(self):
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.execute_couchbase_cli("enable-developer-preview", self.hostname,
-                                                     "--enable", additional_input="yes")
+                                                             "--enable", _stdin="y")
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Developer mode enabled")
 

@@ -27,6 +27,7 @@ from lib.membase.api.exception import XDCRException
 from security.auditmain import audit
 from security.rbac_base import RbacBase
 from collection.collections_rest_client import CollectionsRest
+from couchbase_cli import CouchbaseCLI
 
 class RenameNodeException(XDCRException):
 
@@ -2866,7 +2867,14 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.builtin_user_password = self._input.param("builtin_user_password", "password")
         self.builtin_user_roles = self._input.param("builtin_user_roles", "admin")
         self.add_user(self.builtin_user_id, self.builtin_user_name,
-                        self.builtin_user_password, self.builtin_user_roles)
+                      self.builtin_user_password, self.builtin_user_roles)
+
+        self.enable_dp = self._input.param("enable_dp", False)
+        if self.enable_dp:
+            for node in self._input.servers:
+                print("Enabling DP for %s" % node)
+                cli = CouchbaseCLI(node)
+                cli.enable_dp()
 
         self.__set_free_servers()
         if str(self.__class__).find('upgradeXDCR') == -1 and str(self.__class__).find('lww') == -1:

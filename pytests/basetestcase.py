@@ -207,7 +207,7 @@ class BaseTestCase(unittest.TestCase):
             self.disable_ipv6_grub = self.input.param("disable_ipv6_grub",False)
             self.upgrade_addr_family = self.input.param("upgrade_addr_family",None)
             self.skip_metabucket_check = False
-
+            self.enable_dp = self.input.param("enable_dp", False)
 
             if self.skip_setup_cleanup or self.skip_bucket_setup:
                 self.buckets = RestConnection(self.master).get_buckets()
@@ -343,6 +343,11 @@ class BaseTestCase(unittest.TestCase):
             if self.input.param("port", None):
                 self.port = str(self.input.param("port", None))
 
+            if self.enable_dp:
+                for node in self.servers:
+                    print("Enabling DP for %s" % node)
+                    cli = CouchbaseCLI(node)
+                    cli.enable_dp()
             # Perform a custom rebalance by setting input param `custom_rebalance` to True
             # and implement the make_cluster method in a child class. This works by setting
             # skip_rebalance to True and then calling your custom rebalance method.
