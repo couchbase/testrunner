@@ -994,6 +994,7 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
         :param fts_obj: the FTS object created in create_fts_index_query_compare()
         """
         fts_obj.async_perform_update_delete()
+        self.fts_obj.wait_for_indexing_complete()
         for index in fts_obj.fts_indexes:
             fts_obj.run_query_and_compare(index)
 

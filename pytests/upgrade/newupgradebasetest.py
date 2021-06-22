@@ -1043,6 +1043,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         :param fts_obj: the FTS object created in create_fts_index_query_compare()
         """
         self.fts_obj.async_perform_update_delete()
+        self.fts_obj.wait_for_indexing_complete()
         for index in self.fts_obj.fts_indexes:
             self.fts_obj.run_query_and_compare(index)
 
@@ -1097,6 +1098,7 @@ class NewUpgradeBaseTest(BaseTestCase):
     def modify_num_replicas(self, queue=None):
         for index in self.fts_obj.fts_indexes:
             index.update_num_replicas(1)
+        self.fts_obj.wait_for_indexing_complete()
 
     def update_index_to_scorch(self, queue=None):
         try:

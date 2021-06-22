@@ -569,6 +569,9 @@ class RemoteMachineShellConnection:
                     break
         else:
             o, r = self.execute_command("killall -9 beam.smp")
+            if r and r[0] and "command not found" in r[0]:
+                o, r = self.execute_command("pkill beam.smp")
+                self.log_command_output(o, r)
             self.log_command_output(o, r, debug=False)
             all_killed = False
             count = 0
@@ -583,6 +586,9 @@ class RemoteMachineShellConnection:
                     all_killed = True
                 if count == 3:
                     o, r = self.execute_command("killall -9 beam.smp")
+                    if r and r[0] and "command not found" in r[0]:
+                        o, r = self.execute_command("pkill beam.smp")
+                        self.log_command_output(o, r)
                 count += 1
             if not all_killed:
                 raise Exception("Could not kill erlang process")
@@ -595,6 +601,9 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
         else:
             o, r = self.execute_command("killall -9 cbft")
+            if r and r[0] and "command not found" in r[0]:
+                o, r = self.execute_command("pkill cbft")
+                self.log_command_output(o, r)
             self.log_command_output(o, r)
         return o, r
 
@@ -836,6 +845,7 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
         else:
             raise Exception("stopping standalone moxi is not supported on windows")
+
     def is_url_live(self, url, exit_if_not_live=True):
         live_url = False
         #log.info("Check if url {0} is ok".format(url))

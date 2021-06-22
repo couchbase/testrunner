@@ -2141,7 +2141,18 @@ class RestConnection(object):
     def get_active_key_count(self, bucket):
         """Fetch bucket stats and return the bucket's curr_items count"""
         bucket_stats = self.fetch_bucket_stats(bucket)
-        return bucket_stats['op']['samples']['curr_items'][-1]
+        ret_val = -1
+        retries = 10
+        while retries > 0:
+            try:
+                ret_val = bucket_stats['op']['samples']['curr_items'][-1]
+                return ret_val
+            except KeyError as err:
+                log.error("get_active_key_count() function for bucket {0} reported an error {1}".format(bucket, err))
+                log.error("Corresponding bucket stats JSON is {0}".format(bucket_stats))
+                time.sleep(2)
+                retries = retries - 1
+        return ret_val
 
     def get_replica_key_count(self, bucket):
         """Fetch bucket stats and return the bucket's replica count"""
@@ -3139,7 +3150,7 @@ class RestConnection(object):
             return content['total_hits'], content['hits'], content['took'], \
                    content['status']
         else:
-            return -1, content, -1, status
+            return -1, content['error'], -1, content['status']
 
     def run_fts_query_with_facets(self, index_name, query_json):
         """Method run an FTS query through rest api"""
