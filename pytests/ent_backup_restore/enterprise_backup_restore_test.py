@@ -2978,8 +2978,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
             output, error = remote_client.execute_command(command)
             remote_client.log_command_output(output, error)
-            self.assertTrue("Error restoring cluster: Backup backup doesn't contain any backups" in output[-1],
-                            "Expected error message not thrown")
+            self.assertIn("Error restoring cluster: Repository 'backup' doesn't contain any backups", output[-1])
             self.backup_cluster()
         cmd = cmd_to_test
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
@@ -2998,8 +2997,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue(self._check_output("archive directory '{0}abc' does not exist"\
-                                           .format(self.root_path), output), "Expected error message not thrown")
+        self.assertTrue(self._check_output("archive directory '{0}abc' does not exist".format(self.root_path), output))
         cmd = cmd_to_test + " --archive {0} -c http://localhost:8091 -u Administrator -p password".format(
             self.backupset.directory)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
@@ -3123,9 +3121,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         remote_client.disconnect()
-        self.assertTrue("Error getting archive information: archive directory '{0}abc' does not exist"\
-                        .format(self.root_path) in output[-1],
-                        "Expected error message not thrown")
+        self.assertTrue(self._check_output("archive directory '{0}abc' does not exist".format(self.root_path), output))
 
     def test_backup_compact_negative_args(self):
         """
@@ -3177,9 +3173,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Error opening archive at {0}abc due to `Not an archive directory"\
-                        .format(self.root_path) in output[-1],
-                        "Expected error message not thrown")
+        self.assertIn("not a directory", output[-1])
         cmd = "compact --archive {0} --repo abc --backup {1}" \
             .format(self.backupset.directory, self.backups[0])
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
@@ -3229,7 +3223,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1} --start start --end end".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Error merging data: Backup backup doesn't contain any backups",
+        self.assertEqual(output[0], "Error merging data: Repository 'backup' doesn't contain any backups",
                          "Expected error message not thrown")
         self._take_n_backups(n=2)
         cmd = "merge --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
@@ -3327,8 +3321,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         remote_client.disconnect()
-        self.assertTrue("Backup Repository `abc` not found" in output[-1],
-                        "Expected error message not thrown")
+        self.assertIn("not a directory", output[-1])
 
     def test_backup_restore_with_views(self):
         """
