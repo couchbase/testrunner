@@ -1323,12 +1323,13 @@ class SambaServer(Server):
                 f"security = user\n"
                 f"map to guest = bad user\n"
                 f"netbios name = TEST\n"
+                f"guest account = couchbase\n"
+                f"hide dot files = no\n"
                 f"[Anonymous]\n"
                 f"path = {directory_to_share}\n"
                 f"browsable = yes\n"
                 f"writable = yes\n"
                 f"guest ok = yes\n"
-                f"guest account = couchbase\n"
                 f"read only = no")
 
         self.remote_shell.execute_command(f"rm -rf {directory_to_share}")
