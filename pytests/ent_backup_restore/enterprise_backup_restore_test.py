@@ -3933,8 +3933,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         cluster_client.disconnect()
         backup_result.result(timeout=200)
 
-        expected_message = "Stream has been inactive for 60s"
-        command = "cat {}/logs/backup-*.log | grep '{}' "\
+        expected_message = "(timed out after 3m0s|Stream has been inactive for 1m0s)"
+        command = "cat {}/logs/backup-*.log | grep -E '{}' "\
                          .format(self.backupset.directory, expected_message)
         output, _ = backup_client.execute_command(command)
         if not output:
