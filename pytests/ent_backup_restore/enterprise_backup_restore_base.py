@@ -954,6 +954,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                             .format(self.replace_ttl)
                     else:
                         ttl_date, _ = shell.execute_command(self.rfc3339_date)
+                        if ttl_date[0] == '':
+                            ttl_date, _ = shell.execute_command("date --date='{0}\
+                                    seconds' --rfc-3339=seconds".format(self.replace_ttl_with))
+                            if (not ttl_date) or (ttl_date[0] == ''):
+                                self.fail("Could not fetch date for ttl")
+                            ttl_date[0] = ttl_date[0].replace(" ","T")
                         self.seconds_with_ttl, _ = shell.execute_command(self.seconds_with_ttl)
                         if self.seconds_with_ttl:
                             self.ttl_value = self.seconds_with_ttl[0]
