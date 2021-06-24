@@ -2074,6 +2074,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
         if bk_info["backups"]:
             for i in range(0, len(bk_info["backups"])):
+                backup_name =  bk_info["backups"][i]["date"]
                 if self.debug_logs:
                     print("backup name ", backup_name)
                     print("backup set  ", strip_backupset)
