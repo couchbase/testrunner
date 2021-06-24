@@ -780,10 +780,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.start = randrange(1, self.backupset.number_of_backups)
         self.backupset.end = 3
         self.merged = True
-        status, output, _ = self.backup_merge()
+        status, output, error = self.backup_merge()
         if status:
             self.fail("This merge should fail due to last backup killed, not complete yet")
-        elif "Error merging data: Unable to merge" in output[0]:
+        elif "Merging backup failed" in error:
             self.log.info("Test failed as expected as last backup failed to complete")
         status, output, message = self.backup_list()
         if not status:
@@ -1508,7 +1508,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.enable_firewall = True
         try:
             output, error = self.backup_cluster()
-            self.assertTrue(self._check_output("connect: connection refused", output),
+            self.assertTrue(self._check_output("connection refused", output),
                             "Expected error not thrown by backup cluster when firewall enabled")
         finally:
             self.log.info("Disabling firewall on cluster host to take backup")
