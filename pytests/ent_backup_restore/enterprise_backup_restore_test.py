@@ -4724,7 +4724,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.start = 2
         self.backupset.end = 2
         self._all_buckets_flush()
-        self.backup_restore_validate()
+        self.backup_restore_validate(seqno_compare_function=">=")
 
     def test_start_full_end_incr(self):
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
@@ -4736,7 +4736,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.start = 1
         self.backupset.end = 2
         self._all_buckets_flush()
-        self.backup_restore_validate()
+        self.backup_restore_validate(seqno_compare_function=">=")
 
     def test_start_incr_end_full(self):
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
@@ -4750,4 +4750,4 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.start = 2
         self.backupset.end = 3
         self._all_buckets_flush()
-        self.backup_restore_validate()
+        self.backup_restore_validate(seqno_compare_function=">=")
