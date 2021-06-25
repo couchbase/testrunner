@@ -704,7 +704,7 @@ class QueryAdvisorTests(QueryTests):
 
     def test_negative_query_syntax_error(self):
         query_syntax = f'SELECT airportname FROM `{self.bucket_name}` WERE type = \\"airport\\"'
-        error = "syntax error - at type"
+        error = "syntax error - line 1, column 53, near '`travel-sample` WERE', at: type"
         try:
             advise = self.run_cbq_query(query=f"SELECT ADVISOR(\"{query_syntax}\") as Advisor", server=self.master)
             self.assertEqual(advise["results"][0]["Advisor"]["errors"][0]["error"], error)
@@ -738,7 +738,7 @@ class QueryAdvisorTests(QueryTests):
 
     def test_negative_array(self):
         query=f'SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
-        error = "Number of arguments to function ADVISOR must be 1. - at "
+        error = "Number of arguments to function ADVISOR (near line 1, column 14) must be 1."
         try:
             results = self.run_cbq_query(query=f"SELECT ADVISOR('{query}','{query}')", server=self.master)
             self.fail("Start session did not fail. Error expected: {0}".format(error))
