@@ -55,7 +55,7 @@ class audit:
         self.pathDescriptor = self.getAuditConfigElement("descriptors_path") + "/"
         self.pathLogFile = self.getAuditLogPath()
         self.defaultFields = ['id', 'name', 'description']
-        if (eventID is not None):
+        if eventID is not None:
             self.eventID = eventID
             self.eventDef = self.returnEventsDef()
         try:
@@ -405,7 +405,7 @@ class audit:
                         if tempStr[0] == items:
                             for items in data[items]:
                                 #log.info ("Second Level Mandatory Field Default getting checked is - {0}".format(items))
-                                if (items not in tempStr and method is not 'REST'):
+                                if (items not in tempStr and method != 'REST'):
                                     #log.info (" Second level Mandatory field not matching with expected expected value is - {0}".format(items))
                                     flag = False
             else:
@@ -422,7 +422,7 @@ class audit:
                         if tempStr[0] == items:
                             for items in data[items]:
                                 #log.info ("Second Level Optional Field Default getting checked is - {0}".format(items))
-                                if (items not in tempStr and method is not 'REST'):
+                                if (items not in tempStr and method != 'REST'):
                                     log.info (" Second level Optional field not matching with expected expected value is - {0}".format(items))
                                     #flag = False
             else:
