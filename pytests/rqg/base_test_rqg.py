@@ -37,6 +37,8 @@ class BaseRQGTests(BaseTestCase):
             self.skip_setup_cleanup = True
             self.crud_ops = self.input.param("crud_ops", False)
             self.use_fts = self.input.param("use_fts", False)
+            self.use_sdk = self.input.param("use_sdk", False)
+            self.use_analytics = self.input.param("use_analytics", False)
             self.shell = RemoteMachineShellConnection(self.master)
             self.ansi_joins = self.input.param("ansi_joins", False)
             self.with_let = self.input.param("with_let", False)
@@ -249,6 +251,30 @@ class BaseRQGTests(BaseTestCase):
                     results = self.n1ql_helper.run_cbq_query(query="CREATE PRIMARY INDEX ON {0}".format(self.database + "_" + table_name))
             if self.remove_alias:
                 table_map = self.remove_aliases_from_table_map(table_map)
+            if self.use_analytics:
+                data = 'use Default;'
+                bucket_username = "cbadminbucket"
+                bucket_password = "password"
+                for bucket in self.buckets:
+                    data = 'create dataset {1} on {0}; '.format(bucket.name,
+                                                                bucket.name + "_shadow")
+                    filename = "file.txt"
+                    f = open(filename, 'w')
+                    f.write(data)
+                    f.close()
+                    url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
+                    cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url + " -u " + bucket_username + ":" + bucket_password
+                    os.system(cmd)
+                    os.remove(filename)
+                data = 'connect link Local;'
+                filename = "file.txt"
+                f = open(filename, 'w')
+                f.write(data)
+                f.close()
+                url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
+                cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url + " -u " + bucket_username + ":" + bucket_password
+                os.system(cmd)
+                os.remove(filename)
 
             if self.crud_ops:
                 table_list.remove("copy_simple_table")
@@ -489,9 +515,9 @@ class BaseRQGTests(BaseTestCase):
                 self.create_secondary_index(n1ql_query=query)
         if self.use_query_context:
             result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=server, query_params=query_params,
-                                                    scan_consistency=scan_consistency, verbose=verbose,query_context=query_context)
+                                                    scan_consistency=scan_consistency, verbose=verbose,query_context=query_context,use_sdk=self.use_sdk)
         else:
-            result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=server, query_params=query_params, scan_consistency=scan_consistency, verbose=verbose)
+            result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=server, query_params=query_params, scan_consistency=scan_consistency, verbose=verbose,use_sdk=self.use_sdk)
         return result
 
     def prepare_advise_query(self, n1ql_query=""):
@@ -1045,6 +1071,7 @@ class BaseRQGTests(BaseTestCase):
             n1ql_query = n1ql_query.replace("table_010", "table_10._default._default")
 
         fts_query = n1ql_query
+        cbas_query = n1ql_query
         if self.use_fts:
             if not "JOIN" in n1ql_query:
                 add_hint = n1ql_query.split("WHERE")
@@ -1069,6 +1096,12 @@ class BaseRQGTests(BaseTestCase):
                 fts_query = new_n1ql
             fts_explain_query = fts_query
             self.log.info(" FTS QUERY :: {0}".format(fts_query))
+        elif self.use_analytics:
+            cbas_query = cbas_query.replace("ANY ", "(ANY ")
+            cbas_query = cbas_query.replace("EVERY ", "(EVERY ")
+            cbas_query = cbas_query.replace("SOME ", "(SOME ")
+            cbas_query = cbas_query.replace("END", "END)")
+            cbas_query = cbas_query.replace("type", "`type`")
         else:
             self.log.info(" SQL QUERY :: {0}".format(sql_query))
         self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
@@ -1089,13 +1122,16 @@ class BaseRQGTests(BaseTestCase):
                     if "PREPARE" in fts_query:
                         fts_explain_query = fts_query.replace("PREPARE","")
                     fts_explain = self.n1ql_helper.run_cbq_query(query="EXPLAIN " + fts_explain_query, server=self.n1ql_server,
-                                                                 query_params=query_params,query_context=query_context)
+                                                                 query_params=query_params,query_context=query_context,use_sdk=self.use_sdk)
                 else:
                     if "PREPARE" in fts_query:
                         fts_explain_query = fts_query.replace("PREPARE","")
-                    fts_explain = self.n1ql_helper.run_cbq_query(query="EXPLAIN " + fts_explain_query, server=self.n1ql_server,query_params=query_params)
+                    fts_explain = self.n1ql_helper.run_cbq_query(query="EXPLAIN " + fts_explain_query, server=self.n1ql_server,query_params=query_params,use_sdk=self.use_sdk)
                 if not (fts_explain['results'][0]['plan']['~children'][0]['#operator'] == 'IndexFtsSearch' or fts_explain['results'][0]['plan']['~children'][0]['~children'][0]['#operator'] == 'IndexFtsSearch'):
                     return {"success": False, "result": str("Query does not use fts index {0}".format(fts_explain))}
+            elif self.use_analytics:
+                analytics_result = self.n1ql_query_runner_wrapper(n1ql_query=cbas_query, server=self.n1ql_server,
+                                                               query_params=query_params,query_context=query_context)
 
             actual_result = self.n1ql_query_runner_wrapper(n1ql_query=n1ql_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus",query_context=query_context)
             if self.prepared or use_prepared:
@@ -1108,9 +1144,11 @@ class BaseRQGTests(BaseTestCase):
             n1ql_result = actual_result["results"]
             if self.use_fts:
                 fts_result = fts_result["results"]
+            elif self.use_analytics:
+                analytics_result = analytics_result['results']
 
             # Run SQL Query
-            if not self.use_fts:
+            if not self.use_fts and not self.use_analytics:
                 sql_result = expected_result
                 client = None
                 if self.use_mysql:
@@ -1126,8 +1164,10 @@ class BaseRQGTests(BaseTestCase):
                         sql_result = client._gen_json_from_results(columns, rows)
                 client._close_connection()
                 self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
-            else:
+            elif self.use_fts:
                 self.log.info(" result from fts query returns {0} items".format(len(fts_result)))
+            elif self.use_analytics:
+                self.log.info(" result from analytics query returns {0} items".format(len(analytics_result)))
             self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
 
             if self.use_fts:
@@ -1138,6 +1178,16 @@ class BaseRQGTests(BaseTestCase):
 
                     if (len(fts_result) == 0 and len(n1ql_result) == 1) or (
                             len(n1ql_result) == 0 and len(fts_result) == 1) or (len(fts_result) == 0):
+                        return {"success": True, "result": "Pass"}
+                    return {"success": False, "result": str("different results")}
+            elif self.use_analytics:
+                if len(n1ql_result) != len(analytics_result):
+                    self.log.info("number of results returned from analytics and n1ql are different")
+                    self.log.info("analytics query is {0}".format(cbas_query))
+                    self.log.info("n1ql query is {0}".format(n1ql_query))
+
+                    if (len(analytics_result) == 0 and len(n1ql_result) == 1) or (
+                            len(n1ql_result) == 0 and len(analytics_result) == 1) or (len(analytics_result) == 0):
                         return {"success": True, "result": "Pass"}
                     return {"success": False, "result": str("different results")}
             else:
@@ -1152,6 +1202,8 @@ class BaseRQGTests(BaseTestCase):
             try:
                 if self.use_fts:
                     self.n1ql_helper._verify_results_rqg(subquery, aggregate, sql_result=fts_result, n1ql_result=n1ql_result, hints=hints, aggregate_pushdown=self.aggregate_pushdown,use_fts=self.use_fts)
+                elif self.use_analytics:
+                    self.n1ql_helper._verify_results_rqg(subquery, aggregate, sql_result=analytics_result, n1ql_result=n1ql_result, hints=hints, aggregate_pushdown=self.aggregate_pushdown)
                 else:
                     self.n1ql_helper._verify_results_rqg(subquery, aggregate, sql_result=sql_result, n1ql_result=n1ql_result, hints=hints, aggregate_pushdown=self.aggregate_pushdown)
             except Exception as ex:
@@ -1356,7 +1408,7 @@ class BaseRQGTests(BaseTestCase):
             n1ql_query = self.query_helper._builk_insert_statement_n1ql(bucket.name, data_set)
             if not self.use_rest:
                 new_query_helper = N1QLHelper(version="sherlock", shell=self.shell, max_verify=self.max_verify,
-                           buckets=self.buckets, item_flag=None, n1ql_port=getattr(self.n1ql_server, 'n1ql_port', 8903),
+                           buckets=self.buckets, item_flag=None, n1ql_port=getattr(self.n1ql_server, 'n1ql_port', 8093),
                            full_docs_list=[], log=self.log, input=self.input, master=self.master,
                            database=self.database, use_rest=True)
                 new_query_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_server, verbose=False)
@@ -1379,8 +1431,10 @@ class BaseRQGTests(BaseTestCase):
         return RQGQueryHelper()
 
     def _initialize_n1ql_helper(self):
-        use_rest = random.randint(1, 100)
-        if use_rest <= 20:
+        use_engine = random.randint(1, 100)
+        if use_engine <= 20 and not self.use_analytics:
+            self.use_sdk = True
+        elif use_engine <= 40 and not self.use_analytics:
             self.use_rest = False
             self.log.info("We are using the CBQ engine to run queries for this run")
         return N1QLHelper(version="sherlock", shell=self.shell, max_verify=self.max_verify,
