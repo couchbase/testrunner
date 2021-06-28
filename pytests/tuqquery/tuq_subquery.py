@@ -175,7 +175,7 @@ class QuerySubqueryTests(QueryTests):
             self.fail("Query should have failed")
         except CBQError as e:
             self.assertTrue('Expression (correlated (select raw sum((`VMs`.`memory`)) from '
-                            '(`d`.`VMs`) as `VMs`)[0]) must depend only on group keys or aggregates.' in str(e),
+                            '(`d`.`VMs`) as `VMs`)[0]) (near line 1, column 119) must depend only on group keys or aggregates.' in str(e),
                             "Incorrect error message: \n" + str(e))
 
     def test_update_unset(self):

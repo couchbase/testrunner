@@ -206,7 +206,7 @@ class QueryAutoPrepareTests(QueryTests):
                                server=self.servers[0])
         except CBQError as ex:
             self.log.error(ex)
-            self.assertTrue(str(ex).find("syntax error - at fro") != -1,
+            self.assertTrue(str(ex).find("syntax error - line 1, column 26, near 'ARE P1 FROM select *', at: fro") != -1,
                             "Error is incorrect.")
 
     ''' Change query settings so that normal queries are automatically cached'''

@@ -1739,7 +1739,8 @@ class QuerySanityTests(QueryTests):
                 try:
                     self.run_cbq_query(self.query)
                 except CBQError as ex:
-                    self.assertTrue(str(ex).find("Duplicate variable o already in scope") != -1,
+                    self.assertTrue(str(ex).find("Duplicate variable o (near line 1, column 57) already in scope.") != -1 or
+                                    str(ex).find("Duplicate variable o (near line 1, column 66) already in scope.") != -1,
                                     "Error is incorrect.")
                 else:
                     self.fail("There was no errors.")

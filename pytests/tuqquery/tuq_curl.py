@@ -1011,7 +1011,7 @@ class QueryCurlTests(QueryTests):
     '''MB-22110: Tokenizer should throw a syntax error if invalid tokens are passed in'''
 
     def test_invalid_paramerterized_query(self):
-        error_msg = "syntaxerror-at#"
+        error_msg = "syntaxerror-line1,column8,near'select',at:#"
         query = "select curl(" + self.query_service_url + ", "
         options = "{'data':'statement=select ##3 from " + self.sample_bucket + " b limit 1'})"
         curl = self.shell.execute_commands_inside(self.cbqpath, query + options, '', '', '', '', '')

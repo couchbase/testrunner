@@ -556,7 +556,7 @@ class QueryUpdateStatsTests(QueryTests):
     def test_missing_keyspace(self):
         error_code = 12003
         fake_keyspaces = {
-            "`fake-bucket`": "Keyspace not found in CB datastore: default:fake-bucket - cause: No bucket named fake-bucket",
+            "`fake-bucket`": "Keyspace not found in CB datastore: default:fake-bucket - cause: No bucket named 'fake-bucket'",
             "`travel-sample`.inventory.`fake-collection`": "Keyspace not found in CB datastore: default:travel-sample.inventory.fake-collection"
         }
         for keyspace in fake_keyspaces:
