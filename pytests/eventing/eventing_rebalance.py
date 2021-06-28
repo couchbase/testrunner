@@ -721,11 +721,11 @@ class EventingRebalance(EventingBaseTest):
             # delete json/binary documents
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_del,
                                                     self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
+            task.result()
         except:
             pass
         if self.pause_resume:
             self.resume_function(body)
-        task.result()
         try :
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after failover/recovery/rebalance goes through successfully
@@ -1445,9 +1445,9 @@ class EventingRebalance(EventingBaseTest):
             # delete json documents
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_del,
                                                     self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
+            task.result()
         except:
             pass
-        task.result()
         try:
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after rebalance goes through successfully
