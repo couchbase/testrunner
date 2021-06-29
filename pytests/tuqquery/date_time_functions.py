@@ -133,6 +133,8 @@ class DateTimeFunctionClass(QueryTests):
                 query = self._generate_date_format_str_query(temp_expression, first_expression)
                 result = self.run_cbq_query(query)
                 second_expression = result["results"][0]["$1"]
+                if (first_expression == "2006-01-02T15:04:05" or first_expression == "2006-01-02 15:04:05") and part == "millisecond":
+                    expect_null_result = 1
                 if part in local_parts[:8]:
                     if not (self._is_date_part_present(first_expression) and
                                 self._is_date_part_present(second_expression)):
