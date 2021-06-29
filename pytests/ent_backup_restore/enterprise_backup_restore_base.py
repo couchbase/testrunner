@@ -981,7 +981,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.restore_outputs.append(output)
         self.restore_errors.append(error)
         shell.log_command_output(output, error)
-        if (not self.enable_firewall) and ("community" not in self.cb_version):
+        if (not self.enable_firewall) and ("community" not in getattr(self, 'cb_version', '')):
             self._verify_bucket_compression_mode(bucket_compression_mode)
 
         eventing_service_in = False
