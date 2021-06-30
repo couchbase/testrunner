@@ -585,7 +585,7 @@ class ScalarFunctionsTests(QueryTests):
         except CBQError as e:
             is_err_detected = True
             is_err_message_correct = str(e).lower().find(
-                'Number of arguments to function coalesce must be between 2 and 32767. - at'.lower()) > -1
+                'Number of arguments to function coalesce (near line 1, column 15) must be between 2 and 32767.'.lower()) > -1
 
         self.assertTrue(is_err_detected)
         self.assertTrue(is_err_message_correct)
@@ -599,7 +599,7 @@ class ScalarFunctionsTests(QueryTests):
         except CBQError as e:
             is_err_detected = True
             is_err_message_correct = str(e).lower().find(
-                'Number of arguments to function coalesce must be between 2 and 32767. - at'.lower()) > -1
+                'Number of arguments to function coalesce (near line 1, column 15) must be between 2 and 32767.'.lower()) > -1
 
         self.assertTrue(is_err_detected)
         self.assertTrue(is_err_message_correct)
@@ -613,7 +613,7 @@ class ScalarFunctionsTests(QueryTests):
         except CBQError as e:
             is_err_detected = True
             is_err_message_correct = str(e).lower().find(
-                'Number of arguments to function nvl2 must be 3. - at'.lower()) > -1
+                'Number of arguments to function nvl2 (near line 1, column 11) must be 3.'.lower()) > -1
 
         self.assertTrue(is_err_detected)
         self.assertTrue(is_err_message_correct)
@@ -627,7 +627,7 @@ class ScalarFunctionsTests(QueryTests):
         except CBQError as e:
             is_err_detected = True
             is_err_message_correct = str(e).lower().find(
-                'Number of arguments to function nvl must be 2. - at'.lower()) > -1
+                'Number of arguments to function nvl (near line 1, column 10) must be 2.'.lower()) > -1
 
         self.assertTrue(is_err_detected)
         self.assertTrue(is_err_message_correct)
@@ -641,7 +641,7 @@ class ScalarFunctionsTests(QueryTests):
         except CBQError as e:
             is_err_detected = True
             is_err_message_correct = str(e).lower().find(
-                'Number of arguments to function nvl2 must be 3. - at'.lower()) > -1
+                'Number of arguments to function nvl2 (near line 1, column 11) must be 3.'.lower()) > -1
 
         self.assertTrue(is_err_detected)
         self.assertTrue(is_err_message_correct)
@@ -655,7 +655,7 @@ class ScalarFunctionsTests(QueryTests):
         except CBQError as e:
             is_err_detected = True
             is_err_message_correct = str(e).lower().find(
-                'Number of arguments to function nvl must be 2. - at'.lower()) > -1
+                'Number of arguments to function nvl (near line 1, column 10) must be 2.'.lower()) > -1
 
         self.assertTrue(is_err_detected)
         self.assertTrue(is_err_message_correct)
@@ -669,7 +669,7 @@ class ScalarFunctionsTests(QueryTests):
         except CBQError as e:
             is_err_detected = True
             is_err_message_correct = str(e).lower().find(
-                'Number of arguments to function nvl2 must be 3. - at'.lower()) > -1
+                'Number of arguments to function nvl2 (near line 1, column 11) must be 3.'.lower()) > -1
 
         self.assertTrue(is_err_detected)
         self.assertTrue(is_err_message_correct)
@@ -683,7 +683,7 @@ class ScalarFunctionsTests(QueryTests):
         except CBQError as e:
             is_err_detected = True
             is_err_message_correct = str(e).lower().find(
-                'Number of arguments to function nvl must be 2. - at'.lower()) > -1
+                'Number of arguments to function nvl (near line 1, column 10) must be 2.'.lower()) > -1
 
         self.assertTrue(is_err_detected)
         self.assertTrue(is_err_message_correct)
@@ -697,7 +697,7 @@ class ScalarFunctionsTests(QueryTests):
         except CBQError as e:
             is_err_detected = True
             is_err_message_correct = str(e).lower().find(
-                'Number of arguments to function nvl2 must be 3. - at'.lower()) > -1
+                'Number of arguments to function nvl2 (near line 1, column 11) must be 3.'.lower()) > -1
 
         self.assertTrue(is_err_detected)
         self.assertTrue(is_err_message_correct)

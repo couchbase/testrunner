@@ -11,7 +11,7 @@ class QueryANSIMERGETests(QueryTests):
             self.cluster.bucket_flush(self.master, bucket=bucket,
                                       timeout=self.wait_timeout * 5)
         # Adding sleep after flushing buckets (see CBQE-5838)
-        self.sleep(210)
+        self.sleep(60)
         self.query_buckets = self.get_query_buckets(check_all_buckets=True)
         self.query_bucket0 = self.query_buckets[0]
         self.query_bucket1 = self.query_buckets[1]
@@ -658,7 +658,7 @@ class QueryANSIMERGETests(QueryTests):
             self.run_cbq_query()
             self.assertFalse(True, "The query should have errored")
         except CBQError as e:
-            self.assertTrue("syntax error - at VALUE" in str(e))
+            self.assertTrue("syntax error - line 1, column 101, near 'atched then insert (', at: VALUE" in str(e))
         finally:
             self.run_cbq_query(query="Drop index name ON {0}".format(self.query_bucket0))
 
@@ -763,7 +763,7 @@ class QueryANSIMERGETests(QueryTests):
             self.assertFalse(True, "The query should have errored")
 
         except CBQError as e:
-            self.assertTrue("syntax error - at (" in str(e))
+            self.assertTrue("syntax error - line 1, column 12, near 'MERGE INTO', at: (" in str(e))
 
     '''Test if you can use a subquery as the target of a merge, the targer of a merge MUST be a keyspace'''
 
@@ -775,7 +775,7 @@ class QueryANSIMERGETests(QueryTests):
             self.run_cbq_query()
             self.assertFalse(True, "The query should have errored")
         except CBQError as e:
-            self.assertTrue("syntax error - at (" in str(e))
+            self.assertTrue("syntax error - line 1, column 12, near 'MERGE INTO', at: (" in str(e))
 
     '''Test if you can use the index hint on a non keyspace json value, use index hint only works with keyspaces'''
 
@@ -792,7 +792,7 @@ class QueryANSIMERGETests(QueryTests):
             self.run_cbq_query()
             self.assertFalse(True, "The query should have errored")
         except CBQError as e:
-            self.assertTrue("FROM Expression cannot have USE KEYS or USE INDEX." in str(e))
+            self.assertTrue("FROM Expression cannot have USE KEYS or USE INDEX (near line 1, column 43)." in str(e))
         finally:
             self.run_cbq_query(query="Drop index name ON {0}".format(self.query_bucket0))
 
@@ -812,7 +812,7 @@ class QueryANSIMERGETests(QueryTests):
             self.run_cbq_query()
             self.assertFalse(True, "The query should have errored")
         except CBQError as e:
-            self.assertTrue("FROM Subquery cannot have USE KEYS or USE INDEX." in str(e))
+            self.assertTrue("FROM Subquery cannot have USE KEYS or USE INDEX (near line 1, column 62)." in str(e))
         finally:
             self.run_cbq_query(query="Drop index name ON {0}".format(self.query_bucket0))
 
@@ -834,8 +834,7 @@ class QueryANSIMERGETests(QueryTests):
             self.run_cbq_query()
             self.assertFalse(True, "The query should have errored")
         except CBQError as e:
-            self.assertTrue("Keyspace reference cannot have join hint (USE HASH or USE NL)in MERGE"
-                            " statement." in str(e))
+            self.assertTrue("Keyspace reference cannot have join hint (USE HASH or USE NL) in MERGE statement - line 1, column 39, near 't b1 use hash(probe)', at: USING" in str(e))
         finally:
             self.run_cbq_query(query="DROP INDEX name ON {0}".format(self.query_bucket0))
 
@@ -857,4 +856,4 @@ class QueryANSIMERGETests(QueryTests):
             self.run_cbq_query()
             self.assertFalse(True, "The query should have errored")
         except CBQError as e:
-            self.assertTrue("Keyspace reference cannot have USE KEYS hint in MERGE statement." in str(e))
+            self.assertTrue("Keyspace reference cannot have USE KEYS hint in MERGE statement - line 1, column 40, near" in str(e))
