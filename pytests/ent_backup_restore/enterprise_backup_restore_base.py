@@ -954,6 +954,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         self.ttl_value = "0"
                         args += " --replace-ttl {0} --replace-ttl-with 0" \
                             .format(self.replace_ttl)
+                    elif isinstance(self.replace_ttl_with, str):
+                        args += " --replace-ttl {0} --replace-ttl-with {1}" \
+                            .format(self.replace_ttl, self.replace_ttl_with)
                     else:
                         ttl_date, _ = shell.execute_command(self.rfc3339_date)
                         if ttl_date[0] == '':
@@ -966,9 +969,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         if ttl_date and ttl_date[0]:
                             args += " --replace-ttl {0} --replace-ttl-with {1}" \
                                 .format(self.replace_ttl, ttl_date[0])
-                        elif isinstance(self.replace_ttl_with, str):
-                            args += " --replace-ttl {0} --replace-ttl-with {1}" \
-                                .format(self.replace_ttl, self.replace_ttl_with)
             elif self.replace_ttl == "add-none":
                 args += " "
             elif self.replace_ttl == "empty-flag":
