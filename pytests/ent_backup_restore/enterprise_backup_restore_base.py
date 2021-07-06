@@ -2683,7 +2683,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if wait_for_resume:
             self.bkrs_wait_for_handler_state(body['appname'], "deployed", rest)
 
-    def bkrs_wait_for_handler_state(self, name, status, rest, iterations=20):
+    def bkrs_wait_for_handler_state(self, name, status, rest, iterations=20, server=None):
         self.sleep(20, message="Waiting for {} to {}...".format(name, status))
         result = rest.get_composite_eventing_status()
         count = 0
@@ -2695,18 +2695,26 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 if result['apps'][i]['name'] == name:
                     composite_status = result['apps'][i]['composite_status']
             count += 1
+            """ ******************* remove these codes below when ticket MB-47236 is fixed. """
+            if count == 5 and "undeployed" in status:
+                if server is not None:
+                    print("\nserver: ", server)
+                    BucketOperationHelper.delete_all_buckets_or_assert([server], self)
+                else:
+                    raise Exception('Need to pass server to delete buckets')
+            """ *******************  end remove here """
         if count == iterations:
             raise Exception('Eventing took lot of time for handler {} to {}'.format(name, status))
 
-    def bkrs_undeploy_and_delete_function(self, body, rest):
-        self.bkrs_undeploy_function(body, rest)
+    def bkrs_undeploy_and_delete_function(self, body, rest, server=None):
+        self.bkrs_undeploy_function(body, rest, server)
         self.sleep(5)
         self.bkrs_delete_function(body, rest)
 
-    def bkrs_undeploy_function(self, body, rest):
+    def bkrs_undeploy_function(self, body, rest, server):
         content = rest.undeploy_function(body['appname'])
         self.log.info("Undeploy Application : {0}".format(body['appname']))
-        self.bkrs_wait_for_handler_state(body['appname'], "undeployed", rest)
+        self.bkrs_wait_for_handler_state(body['appname'], "undeployed", rest, server=server)
         return content
 
     def bkrs_delete_function(self, body, rest):

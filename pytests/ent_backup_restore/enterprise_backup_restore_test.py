@@ -3952,7 +3952,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.docs_per_day = self.input.param("doc-per-day", 1)
         self.use_memory_manager = self.input.param('use_memory_manager', True)
         self.backup_before_eventing = self.input.param('backup_before_eventing', False)
-        bucket_params = self._create_bucket_params(server=self.master, size=128,
+        bucket_params = self._create_bucket_params(server=self.master, size=256,
                                                        replicas=self.num_replicas)
         self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
@@ -4014,8 +4014,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                             self.backupset.restore_cluster_host]
             for node in master_nodes:
                 rest = RestConnection(node)
-                self.bkrs_undeploy_and_delete_function(body, rest)
+                self.bkrs_undeploy_and_delete_function(body, rest, node)
             self.rest = RestConnection(self.master)
+            raise Exception('Test failed.  Just clean up eventing function until MB-47236 fixed')
 
     def test_bkrs_logs_when_no_mutations_received(self):
         """
