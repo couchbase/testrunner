@@ -173,7 +173,13 @@ class cbstatsTests(CliBaseTest):
                                      but cbstats gives no output. \
                                      Please check the output manually")
             else:
-                collect_stats = mc_conn.stats(command)[stats[0].strip()]
+                try:
+                    if "magma" in stats[0]:
+                        """ skip to check magma stats.  Will check in other test """
+                        continue
+                    collect_stats = mc_conn.stats(command)[stats[0].strip()]
+                except Exception as e:
+                    print("\n Exception error: ", e)
             self.log.info("CbStats###### for {0}:::{1}=={2}" \
                           .format(stats[0].strip(), collect_stats, stats[1].strip()))
             if stats[1].strip() == collect_stats:
