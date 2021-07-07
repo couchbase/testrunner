@@ -976,12 +976,13 @@ class ImportExportTests(CliBaseTest):
                                           % self.active_resident_threshold)
                             self.shell.execute_command("{0}{1}{2} bucket-edit -c {3}:8091 "\
                                                        " -u Administrator -p password "\
-                                                       "--bucket {4} --bucket-ramsize 100"\
+                                                       "--bucket {4} --bucket-ramsize 180"\
                                                        .format(self.cli_command_path,
                                                         "couchbase-cli", self.cmd_ext,
                                                         server.ip, bucket.name))
-                            self._load_all_buckets(self.master, kv_gen, "create", 0)
+                            self._load_all_buckets(self.master, kv_gen, "create", 0, batch_size=110)
                         self.log.info("load sample data to bucket")
+                        self.sleep(15)
                         self.shell.execute_command(load_cmd)
             """ remove previous export directory at tmp dir and re-create it
                 in linux:   /tmp/export
@@ -1023,13 +1024,10 @@ class ImportExportTests(CliBaseTest):
                             res_status = stats_all_buckets[bucket.name].get_stats([self.master],
                                          bucket, '',
                                          'vb_active_perc_mem_resident')[self.master]
-                        if int(res_status) <= self.active_resident_threshold:
-                            self.log.info("Clear terminal")
-                            self.shell.execute_command('printf "\033c"')
                     output = ""
                     try:
                         output, error = self.shell.execute_command_raw(exe_cmd_str,
-                                                                        timeout=60)
+                                                                        timeout=90)
                     except Exception as e:
                         if not output:
                             self.fail("MB-31432 is fixed.  This must be other issue {0}"
@@ -1203,11 +1201,11 @@ class ImportExportTests(CliBaseTest):
                                           % self.active_resident_threshold)
                         self.shell.execute_command("{0}{1}{2} bucket-edit -c {3}:8091 "\
                                                        " -u Administrator -p password "\
-                                                       "--bucket {4} --bucket-ramsize 100"\
+                                                       "--bucket {4} --bucket-ramsize 180"\
                                                        .format(self.cli_command_path,
                                                         "couchbase-cli", self.cmd_ext,
                                                         server.ip, bucket.name))
-                        self._load_all_buckets(self.master, kv_gen, "create", 0)
+                        self._load_all_buckets(self.master, kv_gen, "create", 0, batch_size=110)
                     self.cluster_helper.wait_for_stats([self.master], bucket.name, "",
                                                              "ep_queue_size", "==", 0)
                     if self.check_preload_keys:
