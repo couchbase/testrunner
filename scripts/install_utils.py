@@ -44,12 +44,14 @@ params = {
 
 
 class build:
-    def __init__(self, name, url, path, product="cb",  debug_name=None,
+    def __init__(self, name, url, path, product="cb",
+                 debug_build_present=False, debug_name=None,
                  debug_url=None, debug_path=None):
         self.name = name
         self.url = url
         self.path = path
         self.product = product
+        self.debug_build_present = debug_build_present
         self.debug_name = debug_name
         self.debug_url = debug_url
         self.debug_path = debug_path
@@ -196,7 +198,9 @@ class NodeHelper:
             cmd = cmd.replace("buildbinary", self.build.name)
             cmd = cmd.replace("buildpath", self.build.path)
             cmd = cmd.replace("mountpoint", "/tmp/couchbase-server-" + params["version"])
-            if self.get_os() in install_constants.DEBUG_INFO_SUPPORTED and cmd_d is not None:
+            if self.get_os() in \
+                    install_constants.DEBUG_INFO_SUPPORTED and cmd_d \
+                    is not None and self.build.debug_build_present:
                 cmd_debug = cmd_d.replace("buildpath",
                                           self.build.debug_path)
             duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["install"]
@@ -214,7 +218,7 @@ class NodeHelper:
                     log.warning("install_cb: Exception {0} occurred on {1}, retrying..".format(e,
                                                                                          self.ip))
                     self.wait_for_completion(duration, event)
-            if cmd_debug is not None:
+            if cmd_debug is not None and self.build.debug_build_present:
                 start_time = time.time()
                 while time.time() < start_time + timeout:
                     try:
@@ -659,12 +663,18 @@ def pre_install_steps():
                 debug_binary = __get_debug_binary_name(node)
                 build_url = __get_build_url(node, build_binary)
                 debug_url = __get_build_url(node, debug_binary)
+                debug_build_present = True
                 if not build_url:
                     print_result_and_exit(
                         "Build is not present in latestbuilds or release repos, please check {0}".format(build_binary))
+                if not debug_url:
+                    print("Debug info build not present. Debug info "
+                          "build will not be installed for this run.")
+                    debug_build_present = False
                 filepath = __get_download_dir(node) + build_binary
                 filepath_debug = __get_download_dir(node) + debug_binary
                 node.build = build(build_binary, build_url, filepath,
+                                   debug_build_present=debug_build_present,
                                    debug_name=debug_binary,
                                    debug_url=debug_url,
                                    debug_path=filepath_debug)
@@ -733,24 +743,35 @@ def download_build():
     if params["all_nodes_same_os"] and all_nodes_same_version and not params["skip_local_download"]:
         check_and_retry_download_binary_local(NodeHelpers[0])
         _copy_to_nodes(NodeHelpers[0].build.path, NodeHelpers[0].build.path)
-        _copy_to_nodes(NodeHelpers[0].build.debug_path,
-                       NodeHelpers[0].build.debug_path)
-        ok = True
+        if NodeHelpers[0].build.debug_build_present:
+            _copy_to_nodes(NodeHelpers[0].build.debug_path,
+                           NodeHelpers[0].build.debug_path)
         for node in NodeHelpers:
+            ok = True
             if not check_file_exists(node, node.build.path) \
-                    or not check_file_size(node) \
-                    or not check_file_exists(node, node.build.debug_path)\
-                    or not check_file_size(node, debug_build=True):
+                    or not check_file_size(node):
                 node.install_success = False
                 ok = False
-        if not ok:
-            print_result_and_exit("Unable to copy build to {}, exiting".format(node.build.path))
+            if not ok:
+                print_result_and_exit("Unable to copy build to {}, exiting".format(node.build.path))
+            ok = True
+            if node.build.debug_build_present:
+                if not not check_file_exists(node,
+                                             node.build.debug_path) \
+                        or not check_file_size(node, debug_build=True):
+                    node.install_success = False
+                    ok = False
+            if not ok:
+                print_result_and_exit("Unable to copy debug build to "
+                                      "{}, exiting".format(node.build.debug_path))
     else:
         for node in NodeHelpers:
             build_url = node.build.url
             filepath = node.build.path
-            debug_url = node.build.debug_url
-            filepath_debug = node.build.debug_path
+            debug_url = node.build.debug_url if \
+                node.build.debug_build_present else None
+            filepath_debug = node.build.debug_path if \
+                node.build.debug_build_present else None
             cmd_master = install_constants.DOWNLOAD_CMD[
                 node.info.deliverable_type]
             cmd = None
@@ -760,22 +781,28 @@ def download_build():
                                         install_constants.WAIT_TIMES[
                                             node.info.deliverable_type]
                                         ["download_binary"])
-                cmd_debug = cmd_master.format(debug_url, filepath_debug,
-                                              install_constants.WAIT_TIMES[
-                                                  node.info.deliverable_type]
-                                              ["download_binary"])
+                if node.build.debug_build_present:
+                    cmd_debug = cmd_master.format(debug_url, filepath_debug,
+                                                  install_constants.WAIT_TIMES[
+                                                      node.info.deliverable_type]
+                                                  ["download_binary"])
+                else:
+                    cmd_debug = None
 
 
             elif "wget" in cmd_master:
 
                 cmd = cmd_master.format(__get_download_dir(node),
                                         build_url)
-                cmd_debug = cmd_master.format(__get_download_dir(node),
-                                              debug_url)
+                if node.build.debug_build_present:
+                    cmd_debug = cmd_master.format(__get_download_dir(node),
+                                                  debug_url)
+                else:
+                    cmd_debug = None
             if cmd:
                 check_and_retry_download_binary(cmd, node,
                                                 node.build.path)
-            if cmd_debug:
+            if cmd_debug and node.build.debug_build_present:
                 check_and_retry_download_binary(cmd_debug, node,
                                                 node.build.debug_path
                                                 , debug_build=True)
@@ -783,21 +810,21 @@ def download_build():
 
 def check_and_retry_download_binary_local(node):
     log.info("Downloading build binary to {0}..".format(node.build.path))
-    log.info("Downloading debug binary to {0}..".format(
-        node.build.debug_path))
+    if node.build.debug_build_present:
+        log.info("Downloading debug binary to {0}..".format(
+            node.build.debug_path))
     duration, event, timeout = install_constants.WAIT_TIMES[node.info.deliverable_type][
         "download_binary"]
     cmd = install_constants.WGET_CMD.format(__get_download_dir(node), node.build.url)
-    cmd_debug = install_constants.WGET_CMD.format(
-        __get_download_dir(node), node.build.debug_url)
+    cmd_debug = None
+    if node.build.debug_build_present:
+        cmd_debug = install_constants.WGET_CMD.format(
+            __get_download_dir(node), node.build.debug_url)
     start_time = time.time()
     while time.time() < start_time + timeout:
         try:
             exit_code = _execute_local(cmd, timeout)
-            exit_code_debug = _execute_local(cmd_debug, timeout)
-            if exit_code == 0 and os.path.exists(node.build.path) and\
-                    exit_code_debug == 0 and os.path.exists(
-                node.build.debug_path):
+            if exit_code == 0 and os.path.exists(node.build.path):
                 break
             time.sleep(duration)
         except Exception as e:
@@ -806,6 +833,27 @@ def check_and_retry_download_binary_local(node):
     else:
         print_result_and_exit("Unable to download build in {0}s on {1}, exiting".format(timeout,
                                                                                         node.build.path))
+    if node.build.debug_build_present:
+        # Download debug info build
+        start_time = time.time()
+        while time.time() < start_time + timeout:
+            try:
+                exit_code_debug = 1
+                if cmd_debug:
+                    exit_code_debug = _execute_local(cmd_debug, timeout)
+                if exit_code_debug == 0 and os.path.exists(
+                        node.build.debug_path):
+                    break
+                time.sleep(duration)
+            except Exception as e:
+                log.warn("Unable to download build: {0}, "
+                         "retrying..".format(e))
+                time.sleep(duration)
+        else:
+            print_result_and_exit("Unable to download debug build in "
+                                  "{0}s on {1}, exiting".format(
+                timeout, node.build.debug_path))
+
 
 def check_file_exists(node, filepath):
     output, _ = node.shell.execute_command("ls -lh {0}".format(filepath), debug=params["debug_logs"])
