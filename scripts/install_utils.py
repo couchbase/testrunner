@@ -756,7 +756,7 @@ def download_build():
                 print_result_and_exit("Unable to copy build to {}, exiting".format(node.build.path))
             ok = True
             if node.build.debug_build_present:
-                if not not check_file_exists(node,
+                if not check_file_exists(node,
                                              node.build.debug_path) \
                         or not check_file_size(node, debug_build=True):
                     node.install_success = False
