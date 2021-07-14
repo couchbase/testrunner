@@ -80,10 +80,14 @@ CBFT_ENV_OPTIONS = \
 PROCESSES_TO_TERMINATE = ["beam.smp", "memcached", "moxi", "vbucketmigrator", "couchdb", "epmd", "memsup", "cpu_sup",
                           "goxdcr", "erlang", "eventing", "erl", "godu", "goport", "gosecrets", "projector"]
 
+UNMOUNT_NFS_CMD = "umount -a -t nfs,nfs4 -f -l;"
+
 CMDS = {
     "deb": {
         "uninstall":
-            "dpkg -r couchbase-server; " +
+            UNMOUNT_NFS_CMD +
+            "dpkg --purge $(dpkg -l | grep couchbase | awk '{print $2}' | xargs echo); kill -9 `ps -ef |egrep couchbase|cut -f3 -d' '`; " +
+            "rm /var/lib/dpkg/info/couchbase-server.*; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
         "pre_install": None,
         "install":
@@ -128,7 +132,7 @@ CMDS = {
         "post_install":
             "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; " +
             "vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; " +
-            "grep 'buildversion.*Configuration completed successfully.' install_status.txt && echo 1 || echo 0",
+            "grep 'buildversion.*[Configuration\|Installation] completed successfully.' install_status.txt && echo 1 || echo 0",
         "post_install_retry":
             "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; " +
             "msiexec /i buildbinary /passive /L*V install_status.txt",
@@ -137,11 +141,13 @@ CMDS = {
     },
     "rpm": {
         "uninstall":
+            UNMOUNT_NFS_CMD +
             "systemctl stop couchbase-server; " +
             "rpm -e couchbase-server; " +
+            "rpm -e couchbase-server-debuginfo; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "> /dev/null && echo 1 || echo 0; " +
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + "> /dev/null && echo 1 || echo 0; ",
-        "pre_install": None,
+        "pre_install": "yes | yum remove `rpm -qa | grep couchbase`",
         "install": "yes | yum localinstall -y buildpath > /dev/null && echo 1 || echo 0",
         # "install": "yes | INSTALL_DONT_START_SERVER=1 yum localinstall -y buildpath",
         "suse_install": "rpm -i buildpath",
@@ -155,7 +161,9 @@ CMDS = {
 NON_ROOT_CMDS = {
     "deb": {
         "uninstall":
-            "dpkg -r couchbase-server; "
+            UNMOUNT_NFS_CMD +
+            "dpkg --purge $(dpkg -l | grep couchbase | awk '{print $2}' | xargs echo); kill -9 `ps -ef |egrep couchbase|cut -f3 -d' '`; " +
+            "rm /var/lib/dpkg/info/couchbase-server.*; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0;"
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0;",
         "pre_install": None,
@@ -168,7 +176,7 @@ NON_ROOT_CMDS = {
             "./bin/couchbase-server -- -noinput -detached",
         "post_install_retry": "./bin/couchbase-server -- -noinput -detached",
         "init": None,
-        "cleanup": "ls -td " + DOWNLOAD_DIR["LINUX_DISTROS"] + "couchbase*.deb | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
+        "cleanup": "ls -td " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "couchbase*.deb | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
     },
     "dmg": {
         "uninstall":
@@ -200,8 +208,8 @@ NON_ROOT_CMDS = {
             "msiexec /i buildbinary /passive /L*V install_status.txt",
         "post_install":
             "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; "
-            "vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; "
-            "grep 'buildversion.*Configuration completed successfully.' install_status.txt && echo 1 || echo 0",
+            "vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; " +
+            "grep 'buildversion.*[Configuration\|Installation] completed successfully.' install_status.txt && echo 1 || echo 0",
         "post_install_retry":
             "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; "
             "msiexec /i buildbinary /passive /L*V install_status.txt",
@@ -209,11 +217,14 @@ NON_ROOT_CMDS = {
         "cleanup": "ls -td " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "couchbase*.msi | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
     },
     "rpm": {
-        "pre_install": None,
+        "pre_install": "yes | yum remove `rpm -qa | grep couchbase`",
         "uninstall":
             "systemctl stop couchbase-server; " +
             "rpm -e couchbase-server; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0; " +
+            UNMOUNT_NFS_CMD +
+            DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"]+"bin/couchbase-server -k; kill -9 `ps "
+                                                         "-ef |egrep couchbase|cut -f3 -d' '`; " +
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0; ",
         "install":
             "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; " 
