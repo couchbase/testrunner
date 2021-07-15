@@ -886,3 +886,10 @@ class JoinTests(QuerySanityTests):
         self.query = "select 1 from system:dual"
         expected_result = self.run_cbq_query()
         self._verify_results(actual_result['results'], expected_result['results'])
+
+    def test_cartesian_join(self):
+        self.run_cbq_query("CREATE INDEX adv_job_title ON `default`(`job_title`)")
+        join_query = 'select a.name from default as a, default as b where a.job_title = b.job_title and a.join_yr = 2011 and a.join_mo = 1 and a.job_title = "Engineer" order by a.`_id` limit 3'
+        expected_result = [{"name": "employee-1"}, {"name": "employee-1"}, {"name": "employee-1"}]
+        actual_result = self.run_cbq_query(join_query)
+        self._verify_results(actual_result['results'], expected_result)
