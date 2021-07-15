@@ -15,7 +15,7 @@ from ent_backup_restore.validation_helpers.backup_restore_validations \
                                                  import BackupRestoreValidations
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from remote.remote_util import RemoteMachineShellConnection
+from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from membase.api.rest_client import RestHelper, RestConnection, \
                                     Bucket as CBBucket
 from couchbase_helper.document import View
