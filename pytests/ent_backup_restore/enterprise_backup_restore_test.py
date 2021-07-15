@@ -2978,7 +2978,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
             output, error = remote_client.execute_command(command)
             remote_client.log_command_output(output, error)
-            self.assertIn("Error restoring cluster: Repository 'backup' doesn't contain any backups", output[-1])
+            if "7.0.1" in self.cb_version:
+                self.assertIn("Error restoring cluster: Backup backup doesn't contain any backups", output[-1])
+            else:
+                self.assertIn("Error restoring cluster: Repository 'backup' doesn't contain any backups", output[-1])
             self.backup_cluster()
         cmd = cmd_to_test
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
