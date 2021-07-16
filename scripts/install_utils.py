@@ -672,7 +672,8 @@ def pre_install_steps():
                           "build will not be installed for this run.")
                     debug_build_present = False
                 filepath = __get_download_dir(node) + build_binary
-                filepath_debug = __get_download_dir(node) + debug_binary
+                filepath_debug = __get_download_dir(node) + \
+                                 debug_binary if debug_binary else None
                 node.build = build(build_binary, build_url, filepath,
                                    debug_build_present=debug_build_present,
                                    debug_name=debug_binary,
@@ -1044,3 +1045,4 @@ def __get_debug_binary_name(node):
             node.get_os(),
             "amd64",
             node.info.deliverable_type)
+    return ""
