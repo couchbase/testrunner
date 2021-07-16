@@ -2703,7 +2703,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         except Exception as e:
             if e:
                 print("Exception error: ", str(e))
-                raise("Need index service in node {0}".format(self.backupset.cluster_host.ip))
+                raise Exception("Need index service in node {0}".format(self.backupset.cluster_host.ip))
         eventing_service_in = False
         bk_cluster_services = list(rest_bk.get_nodes_services().values())
         for srv in bk_cluster_services:
