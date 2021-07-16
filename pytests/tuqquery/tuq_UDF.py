@@ -537,7 +537,7 @@ class QueryUDFTests(QueryTests):
             except Exception as e:
                 self.log.error(str(e))
                 if self.reserved_word and not self.namespace:
-                    self.assertTrue('syntax error - at join' in str(e))
+                    self.assertTrue('syntax error - line 1, column 17' in str(e))
                 else:
                     self.fail()
         finally:
