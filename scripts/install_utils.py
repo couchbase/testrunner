@@ -39,7 +39,8 @@ params = {
     "fts_query_limit": 0,
     "cluster_version": None,
     "bkrs_client": None,
-    "ntp": False
+    "ntp": False,
+    "install_debug_info": False
 }
 
 
@@ -575,6 +576,9 @@ def _parse_user_input():
             params["ntp"] = value
         if key == "init_clusters":
             params["init_clusters"] = True if value.lower() == "true" else False
+        if key == "install_debug_info":
+            params['install_debug_info'] = True if value.lower() == \
+                                                   "true" else False
 
     if userinput.bkrs_client and not params["cluster_version"]:
         print_result_and_exit("Need 'cluster_version' in params to proceed")
@@ -658,16 +662,19 @@ def pre_install_steps():
             else:
                 print_result_and_exit("URL {0} is not live. Exiting.".format(params["url"]))
         else:
+            install_debug_info = params["install_debug_info"]
             for node in NodeHelpers:
                 build_binary = __get_build_binary_name(node)
-                debug_binary = __get_debug_binary_name(node)
+                debug_binary = __get_debug_binary_name(node) if \
+                    install_debug_info else None
                 build_url = __get_build_url(node, build_binary)
-                debug_url = __get_build_url(node, debug_binary)
-                debug_build_present = True
+                debug_url = __get_build_url(node, debug_binary) if \
+                    install_debug_info else None
+                debug_build_present = install_debug_info
                 if not build_url:
                     print_result_and_exit(
                         "Build is not present in latestbuilds or release repos, please check {0}".format(build_binary))
-                if not debug_url:
+                if not debug_url and install_debug_info:
                     print("Debug info build not present. Debug info "
                           "build will not be installed for this run.")
                     debug_build_present = False
@@ -747,24 +754,24 @@ def download_build():
         if NodeHelpers[0].build.debug_build_present:
             _copy_to_nodes(NodeHelpers[0].build.debug_path,
                            NodeHelpers[0].build.debug_path)
+        ok = True
         for node in NodeHelpers:
-            ok = True
             if not check_file_exists(node, node.build.path) \
                     or not check_file_size(node):
                 node.install_success = False
                 ok = False
-            if not ok:
-                print_result_and_exit("Unable to copy build to {}, exiting".format(node.build.path))
-            ok = True
+        if not ok:
+            print_result_and_exit("Unable to copy build to {}, exiting".format(node.build.path))
+        for node in NodeHelpers:
             if node.build.debug_build_present:
                 if not check_file_exists(node,
                                              node.build.debug_path) \
                         or not check_file_size(node, debug_build=True):
                     node.install_success = False
                     ok = False
-            if not ok:
-                print_result_and_exit("Unable to copy debug build to "
-                                      "{}, exiting".format(node.build.debug_path))
+        if not ok:
+            print_result_and_exit("Unable to copy debug build to "
+                                  "{}, exiting".format(node.build.debug_path))
     else:
         for node in NodeHelpers:
             build_url = node.build.url
