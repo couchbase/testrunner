@@ -3847,6 +3847,7 @@ class RestConnection(object):
         if not status:
             raise BucketFlushFailed(self.ip, bucket_name)
         log.info("Flush for bucket '%s' was triggered" % bucket_name)
+        return True
 
     def update_notifications(self, enable):
         api = self.baseUrl + 'settings/stats'
@@ -3868,6 +3869,13 @@ class RestConnection(object):
         status, content, header = self._http_request(api)
         json_parsed = json.loads(content)
         num_rollback = json_parsed["MAINT_STREAM:{}:num_rollbacks".format(bucket)]
+        return num_rollback
+
+    def get_num_rollback_to_zero_stat(self, bucket):
+        api = self.index_baseUrl + 'stats'
+        status, content, header = self._http_request(api)
+        json_parsed = json.loads(content)
+        num_rollback = json_parsed["MAINT_STREAM:{}:num_rollbacks_to_zero".format(bucket)]
         return num_rollback
 
     def get_logs(self, last_n=10, contains_text=None):
@@ -6342,4 +6350,3 @@ class RestParser(object):
                 node.id = nodeDictionary["otpNode"]
             bucket.nodes.append(node)
         return bucket
-
