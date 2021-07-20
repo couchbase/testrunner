@@ -60,7 +60,7 @@ class QueryDefinition(object):
 
     def generate_index_create_query(self, namespace="default", use_gsi_for_secondary=True,
                                     deploy_node_info=None, defer_build=None, index_where_clause=None, gsi_type=None,
-                                    num_replica=None, desc=None, partition_by_fields=None):
+                                    num_replica=None, desc=None, partition_by_fields=None, num_partition=8):
 
         if partition_by_fields:
             self.partition_by_fields = partition_by_fields
@@ -98,6 +98,8 @@ class QueryDefinition(object):
             deployment_plan["defer_build"] = defer_build
         if num_replica:
             deployment_plan["num_replica"] = num_replica
+        if self.partition_by_fields:
+            deployment_plan["num_partition"] = num_partition
         if len(deployment_plan) != 0 and use_gsi_for_secondary:
             query += " WITH " + str(deployment_plan)
         return query
