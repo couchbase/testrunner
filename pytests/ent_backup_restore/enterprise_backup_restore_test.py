@@ -3319,12 +3319,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         remote_client.log_command_output(output, error)
         self.assertTrue("Removing backup repository failed: archive directory '{0}abc' does not exist".format(self.root_path) in output[-1],
                         "Expected error message not thrown")
-        cmd = "remove --archive {0} --repo abc".format(self.backupset.directory)
+        cmd = "remove --archive {0} --repo xyz".format(self.backupset.directory)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         remote_client.disconnect()
-        self.assertIn("not a directory", output[-1])
+        self.assertIn("Backup Repository `xyz` not found", output[-1])
 
     def test_backup_restore_with_views(self):
         """
