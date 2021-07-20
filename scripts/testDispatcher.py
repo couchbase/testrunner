@@ -10,6 +10,7 @@ import traceback
 import os as OS
 import paramiko
 import ipaddress
+import subprocess
 
 from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
@@ -365,6 +366,15 @@ def main():
                             framework = data["framework"]
                         else:
                             framework = 'testrunner'
+
+                        # checkout the ini file at the specified branch
+                        # raises an exception if the ini file does not exist on that branch
+                        if options.branch != "master":
+                            try:
+                                subprocess.run(["git", "checkout", options.branch, "--", data['config']], check=True)
+                            except Exception:
+                                print('Git error: Did not find {} in {} branch'.format(data['config'], options.branch))
+
                         # if there's an additional pool, get the number
                         # of additional servers needed from the ini
                         addPoolServerCount = getNumberOfAddpoolServers(
