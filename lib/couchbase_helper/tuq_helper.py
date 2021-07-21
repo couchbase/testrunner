@@ -18,6 +18,9 @@ import traceback
 from deepdiff import DeepDiff
 from decimal import Decimal
 
+from lib.Cb_constants.CBServer import CbServer
+
+
 class N1QLHelper():
     def __init__(self, version=None, master=None, shell=None,  max_verify=0, buckets=[], item_flag=0,
                  n1ql_port=8093, full_docs_list=[], log=None, input=None, database=None, use_rest=None):
@@ -287,6 +290,8 @@ class N1QLHelper():
             if not self.shell:
                 shell = RemoteMachineShellConnection(server)
             cmd = f"{testconstants.LINUX_COUCHBASE_BIN_PATH}/cbq  -engine=http://{server.ip}:8093/ -u {rest.username} -p {rest.password} "
+            if CbServer.use_https:
+                cmd = f"{testconstants.LINUX_COUCHBASE_BIN_PATH}/cbq  -engine=https://{server.ip}:18093/ -u {rest.username} -p {rest.password} "
             query = query.replace('"', '\\"')
             if "#primary" in query:
                 query = query.replace("'#primary'", '\\"#primary\\"')

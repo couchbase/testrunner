@@ -18,6 +18,7 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_helper.documentgenerator import DocumentGenerator
 from couchbase_helper.stats_tools import StatsCommon
 
+from lib.Cb_constants.CBServer import CbServer
 from lib.couchbase_helper.documentgenerator import SDKDataLoader
 from lib.ep_mc_bin_client import MemcachedClient
 from lib.mc_bin_client import MemcachedClient as MC_MemcachedClient
@@ -208,6 +209,10 @@ class BaseTestCase(unittest.TestCase):
             self.upgrade_addr_family = self.input.param("upgrade_addr_family",None)
             self.skip_metabucket_check = False
             self.enable_dp = self.input.param("enable_dp", False)
+            self.use_https = self.input.param("use_https", False)
+            self.enforce_tls = self.input.param("enforce_tls", False)
+            if self.use_https:
+                CbServer.use_https = True
 
             if self.skip_setup_cleanup or self.skip_bucket_setup:
                 self.buckets = RestConnection(self.master).get_buckets()
@@ -348,6 +353,10 @@ class BaseTestCase(unittest.TestCase):
                     print("Enabling DP for %s" % node)
                     cli = CouchbaseCLI(node)
                     cli.enable_dp()
+            if self.use_https:
+                if self.enforce_tls:
+                    self.log.info("#####Enforcing TLS########")
+                    ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
             # Perform a custom rebalance by setting input param `custom_rebalance` to True
             # and implement the make_cluster method in a child class. This works by setting
             # skip_rebalance to True and then calling your custom rebalance method.
@@ -522,6 +531,9 @@ class BaseTestCase(unittest.TestCase):
         return keyword_count_diff
 
     def tearDown(self):
+        if self.input.param("enforce_tls", False):
+            self.log.info('###################### Disabling n2n encryption')
+            ntonencryptionBase().disable_nton_cluster([self.master])
         self.print_cluster_stats()
 
         self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.case_number}'
@@ -753,6 +765,8 @@ class BaseTestCase(unittest.TestCase):
             bucket_params - A dictionary containing the parameters needed to create a bucket."""
 
         bucket_params = dict()
+        if CbServer.use_https:
+            port = CbServer.ssl_memcached_port
         bucket_params['server'] = server or self.master
         bucket_params['replicas'] = replicas
         bucket_params['size'] = size
@@ -3039,7 +3053,9 @@ class BaseTestCase(unittest.TestCase):
             servers_to_check = []
             for node in nodes:
                 for server in self.servers:
-                    if node.ip == server.ip and str(node.port) == str(server.port):
+                    if node.ip == server.ip and (str(node.port) == str(server.port) or
+                                                 str(node.port) ==
+                                                 CbServer.ssl_port_map.get(str(server.port), str(server.port))):
                         servers_to_check.append(server)
         self.log.info("Servers to check bucket-seqno: {0}"
                       .format(servers_to_check))

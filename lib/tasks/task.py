@@ -17,6 +17,8 @@ from threading import Thread
 import crc32
 import logger
 import testconstants
+from cb_tools.cbstats import Cbstats
+from remote.remote_util import RemoteMachineShellConnection
 from collection.collections_rest_client import CollectionsRest
 from collection.collections_stats import CollectionsStats
 from couchbase_helper.document import DesignDocument
@@ -930,19 +932,23 @@ class StatsWaitTask(Task):
         stat_result = 0
         for server in self.servers:
             try:
-                client = self._get_connection(server)
-                stats = client.stats(self.param)
+                shell = RemoteMachineShellConnection(server)
+                cbstat = Cbstats(shell)
+                stats = cbstat.all_stats(self.bucket, stat_name=self.param)
                 if self.stat not in stats:
                     self.state = FINISHED
                     self.set_exception(Exception("Stat {0} not found".format(self.stat)))
+                    shell.disconnect()
                     return
                 if stats[self.stat].isdigit():
                     stat_result += int(stats[self.stat])
                 else:
                     stat_result = stats[self.stat]
+                shell.disconnect()
             except EOFError as ex:
                 self.state = FINISHED
                 self.set_exception(ex)
+                shell.disconnect()
                 return
         if not self._compare(self.comparison, str(stat_result), self.value):
             self.log.warning("Not Ready: %s %s %s %s expected on %s, %s bucket" % (self.stat, stat_result,
@@ -1032,7 +1038,6 @@ class GenericLoadingTask(Thread, Task):
                  scope=None, collection=None):
         Thread.__init__(self)
         Task.__init__(self, "load_gen_task")
-
         self.kv_store = kv_store
         self.batch_size = batch_size
         self.pause = pause_secs

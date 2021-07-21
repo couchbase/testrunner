@@ -2,6 +2,7 @@ import os, time, datetime
 import os.path
 import uuid
 import json
+from cb_tools.cbstats import Cbstats
 from remote.remote_util import RemoteMachineShellConnection
 from lib.mc_bin_client import MemcachedClient
 from memcached.helper.data_helper import MemcachedClientHelper
@@ -475,10 +476,10 @@ class DataCollector(object):
                     completeMap[bucket].update(newMap)
         return headerInfo,completeMap
 
-    def collect_vbucket_stats(self, buckets, servers, collect_vbucket = True,
-                                                      collect_vbucket_seqno = True,
-                                                      collect_vbucket_details = True,
-                                                      perNode = True):
+    def collect_vbucket_stats(self,buckets, servers, collect_vbucket = True,
+                              collect_vbucket_seqno = True,
+                              collect_vbucket_details = True,
+                              perNode = True):
         """
             Method to extract the vbuckets stats given by cbstats tool
 
@@ -513,24 +514,26 @@ class DataCollector(object):
             dataMap = {}
             for server in servers:
                 map_data = {}
-                client = MemcachedClientHelper.direct_client(server, bucket)
+                shell = RemoteMachineShellConnection(server)
+                cbstat = Cbstats(shell)
                 if collect_vbucket:
-                    vbucket=client.stats('vbucket')
+                    vbucket = cbstat.all_stats(bucket, stat_name='vbucket')
                     self.createMapVbucket(vbucket,map_data)
                 if collect_vbucket_seqno:
-                    vbucket_seqno=client.stats('vbucket-seqno')
+                    vbucket_seqno = cbstat.all_stats(bucket, stat_name='vbucket-seqno')
                     self.createMapVbucket(vbucket_seqno,map_data)
                 if collect_vbucket_details:
-                    vbucket_details=client.stats('vbucket-details')
+                    vbucket_details = cbstat.all_stats(bucket, stat_name='vbucket-details')
                     self.createMapVbucket(vbucket_details,map_data)
                 if perNode:
                     dataMap[server.ip] = map_data
                 else:
                     dataMap.update(map_data)
+                shell.disconnect()
             bucketMap[bucket.name] = dataMap
         return bucketMap
 
-    def collect_failovers_stats(self,buckets,servers,perNode = True):
+    def collect_failovers_stats(self, buckets, servers, perNode = True):
         """
             Method to extract the failovers stats given by cbstats tool
 
@@ -551,8 +554,9 @@ class DataCollector(object):
             bucketMap[bucket.name] = dict()
             dataMap = dict()
             for server in servers:
-                client = MemcachedClientHelper.direct_client(server, bucket)
-                stats = client.stats('failovers')
+                shell = RemoteMachineShellConnection(server)
+                cbstat = Cbstats(shell)
+                stats = cbstat.all_stats(bucket, stat_name='failovers')
                 map_data = dict()
                 num_map = dict()
                 for o in list(stats.keys()):
@@ -579,12 +583,13 @@ class DataCollector(object):
                     dataMap[server.ip] = map_data
                 else:
                     dataMap.update(map_data)
+                shell.disconnect()
             bucketMap[bucket.name] = dataMap
         return bucketMap
 
-    def collect_vbucket_num_stats(self,servers, buckets):
+    def collect_vbucket_num_stats(self, servers, buckets):
         """
-            Method to extract the failovers stats given by cbstats tool
+            Method to extract the vbucket num stats given by cbstats tool
 
             Paramters:
 
@@ -603,13 +608,15 @@ class DataCollector(object):
             active_map_data = {}
             replica_map_data = {}
             for server in servers:
-                client = MemcachedClientHelper.direct_client(server, bucket)
-                stats = client.stats('')
+                shell = RemoteMachineShellConnection(server)
+                cbstat = Cbstats(shell)
+                stats = cbstat.all_stats(bucket)
                 for key in list(stats.keys()):
                     if key == 'vb_active_num':
                         active_map_data[server.ip] = int(stats[key])
                     if key == 'vb_replica_num':
                         replica_map_data[server.ip] = int(stats[key])
+                shell.disconnect()
             active_bucketMap[bucket.name] = active_map_data
             replica_bucketMap[bucket.name] = replica_map_data
         return active_bucketMap,replica_bucketMap
@@ -639,8 +646,9 @@ class DataCollector(object):
         for bucket in buckets:
             dataMap = {}
             for server in servers:
-                client = MemcachedClientHelper.direct_client(server, bucket)
-                stats = client.stats('dcp')
+                shell = RemoteMachineShellConnection(server)
+                cbstat = Cbstats(shell)
+                stats = cbstat.all_stats(bucket, stat_name='dcp')
                 map_data = {}
                 for key in list(stats.keys()):
                     filter = False
@@ -656,10 +664,12 @@ class DataCollector(object):
                                         bucketMap[bucket] = False
                                 else:
                                     bucketMap[bucket] = False
+                shell.disconnect()
         return bucketMap
 
-    def collect_dcp_stats(self, buckets, servers, stat_names = [],
-                                extra_key_condition = "replication"):
+    @staticmethod
+    def collect_dcp_stats(buckets, servers, stat_names = [],
+                          extra_key_condition = "replication"):
         """
             Method to extract the failovers stats given by cbstats tool
 
@@ -681,7 +691,9 @@ class DataCollector(object):
         for bucket in buckets:
             dataMap = {}
             for server in servers:
-                stats = MemcachedClientHelper.direct_client(server, bucket).stats('dcp')
+                shell = RemoteMachineShellConnection(server)
+                cbstat = Cbstats(shell)
+                stats = cbstat.all_stats(bucket, stat_name='dcp')
                 for key in list(stats.keys()):
                     for stat_name in stat_names:
                         if stat_name in key and extra_key_condition in key:
@@ -691,10 +703,12 @@ class DataCollector(object):
                             if vb_no not in dataMap:
                                 dataMap[vb_no] = {}
                             dataMap[vb_no][stat_name] = value
+                shell.disconnect()
             bucketMap[bucket.name] = dataMap
         return bucketMap
 
-    def createMapVbucket(self,details,map_data):
+    @staticmethod
+    def createMapVbucket(details, map_data):
         """ Helper method for vbucket information data collection """
         for o in list(details.keys()):
             tokens = o.split(":")
@@ -718,7 +732,8 @@ class DataCollector(object):
                     m["state"] = value
                     map_data[vb] = m
 
-    def translateDataFromCSVToMap(self, index, dataInCSV):
+    @staticmethod
+    def translateDataFromCSVToMap(index, dataInCSV):
         """ Helper method to translate cbtransfer per line data into key: value pairs"""
         bucketMap = {}
         revIdIndex = 5

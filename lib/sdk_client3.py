@@ -14,6 +14,9 @@ from couchbase.cluster import Cluster, ClusterOptions
 from couchbase.cluster import _N1QLQuery
 from couchbase.exceptions import CouchbaseException, BucketNotFoundException, AuthenticationException
 from couchbase_core.cluster import PasswordAuthenticator
+
+from lib.Cb_constants import CBServer
+from lib.Cb_constants.CBServer import CbServer
 from mc_bin_client import MemcachedError
 from memcached.helper.old_kvstore import ClientKeyValueStore
 from couchbase_core.connstr import ConnectionString
@@ -28,7 +31,8 @@ class SDKClient(object):
                  ssl_path=None, uhm_options=None, username= None, password=None,
                  quiet=True, certpath=None, transcoder=None, ipv6=False, compression=True,
                  sasl_mech=True):
-
+        if CbServer.use_https:
+            scheme = "couchbases"
         self.connection_string = \
             self._createString(scheme=scheme, bucket=bucket, hosts=hosts,
                                certpath=certpath, uhm_options=uhm_options, ipv6=ipv6, compression=compression, sasl_mech=sasl_mech)
@@ -61,7 +65,9 @@ class SDKClient(object):
         conn_string = ConnectionString.parse(connection_string)
         
         if scheme == "couchbases":
-            conn_string.set_option('certpath',certpath)
+            conn_string.set_option('certpath', certpath)
+            if not certpath:
+                conn_string.set_option('ssl', 'no_verify')
         
         if sasl_mech is not None:
             conn_string.set_option('sasl_mech_force',sasl_mech)
@@ -969,6 +975,8 @@ class SDKSmartClient(object):
         else:
             self.host = rest.ip
             self.scheme = "couchbase"
+            if CbServer.use_https:
+                self.scheme = "couchbases"
         self.client = SDKClient(self.bucket, hosts=[self.host], scheme=self.scheme,
                                 compression=compression)
 

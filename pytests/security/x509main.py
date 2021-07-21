@@ -1,4 +1,7 @@
 import logger
+
+from lib.Cb_constants.CBServer import CbServer
+
 log = logger.Logger.get_logger()
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
@@ -11,6 +14,7 @@ import os
 import copy
 import subprocess
 import json
+from pytests.security.ntonencryptionBase import ntonencryptionBase
 
 
 class ServerInfo():
@@ -59,6 +63,9 @@ class x509main:
         if host is not None:
             self.host = host
             self.install_path = self._get_install_path(self.host)
+        self.disable_ssl_certificate_validation = False
+        if CbServer.use_https:
+            self.disable_ssl_certificate_validation = True
         self.slave_host = x509main.SLAVE_HOST
 
     def getLocalIPAddress(self):
@@ -84,7 +91,7 @@ class x509main:
         shell = RemoteMachineShellConnection(self.slave_host)
         shell.execute_command("rm -rf " + x509main.CACERTFILEPATH)
         shell.execute_command("mkdir " + x509main.CACERTFILEPATH)
-        
+
         if type == 'go':
             files = []
             cert_file = "./pytests/security/" + x509main.GOCERTGENFILE
@@ -131,38 +138,38 @@ class x509main:
                     fin.write("\nIP.0 = {0}".format(server.ip.replace('[', '').replace(']', '')))
 
                 fin.close()
-                    
+
                 import fileinput
                 import sys
                 for line in fileinput.input("./pytests/security/clientconf3.conf", inplace=1):
                     if "ip_address" in line:
                         line = line.replace("ip_address", server.ip)
                     sys.stdout.write(line)
-    
+
                 # print file contents for easy debugging
                 fout = open("./pytests/security/clientconf3.conf", "r")
                 print((fout.read()))
                 fout.close()
-                
+
                 output, error = shell.execute_command("openssl genrsa " + encryption + " -out " + x509main.CACERTFILEPATH + server.ip + ".key " + str(key_length))
                 log.info ('Output message is {0} and error message is {1}'.format(output, error))
                 output, error = shell.execute_command("openssl req -new -key " + x509main.CACERTFILEPATH + server.ip + ".key -out " + x509main.CACERTFILEPATH + server.ip + ".csr -config ./pytests/security/clientconf3.conf")
                 log.info ('Output message is {0} and error message is {1}'.format(output, error))
                 output, error = shell.execute_command("openssl x509 -req -in " + x509main.CACERTFILEPATH + server.ip + ".csr -CA " + x509main.CACERTFILEPATH + "int.pem -CAkey " + \
-                                x509main.CACERTFILEPATH + "int.key -CAcreateserial -CAserial " + x509main.CACERTFILEPATH + "intermediateCA.srl -out " + x509main.CACERTFILEPATH + server.ip + ".pem -days 365 -sha256 -extfile ./pytests/security/clientconf3.conf -extensions req_ext")                
+                                x509main.CACERTFILEPATH + "int.key -CAcreateserial -CAserial " + x509main.CACERTFILEPATH + "intermediateCA.srl -out " + x509main.CACERTFILEPATH + server.ip + ".pem -days 365 -sha256 -extfile ./pytests/security/clientconf3.conf -extensions req_ext")
                 log.info ('Output message is {0} and error message is {1}'.format(output, error))
                 output, error = shell.execute_command("cat " + x509main.CACERTFILEPATH + server.ip + ".pem " + x509main.CACERTFILEPATH + "int.pem " + x509main.CACERTFILEPATH + "ca.pem > " + x509main.CACERTFILEPATH + "long_chain" + server.ip + ".pem")
                 log.info ('Output message is {0} and error message is {1}'.format(output, error))
 
             output, error = shell.execute_command("cp " + x509main.CACERTFILEPATH + "ca.pem " + x509main.CACERTFILEPATH + "root.crt")
             log.info ('Output message is {0} and error message is {1}'.format(output, error))
-            
+
             os.remove("./pytests/security/clientconf3.conf")
             # Check if client_ip is ipv6, remove []
-            
+
             if "[" in client_ip:
                 client_ip = client_ip.replace("[", "").replace("]", "")
-            
+
             from shutil import copyfile
             copyfile("./pytests/security/clientconf.conf", "./pytests/security/clientconf2.conf")
             fin = open("./pytests/security/clientconf2.conf", "a+")
@@ -186,7 +193,7 @@ class x509main:
             fout = open("./pytests/security/clientconf2.conf", "r")
             print((fout.read()))
             fout.close()
-            
+
             # Generate Certificate for the client
             output, error = shell.execute_command("openssl genrsa " + encryption + " -out " + x509main.CACERTFILEPATH + client_ip + ".key " + str(key_length))
             log.info ('Output message is {0} and error message is {1}'.format(output, error))
@@ -206,7 +213,7 @@ class x509main:
         # For each server in cluster, setup a node certificates, create inbox folders and copy + chain cert
         for server in copy_servers:
             x509main(server)._setup_node_certificates(reload_cert=reload_cert, host=server)
-    
+
     # Create inbox folder and copy node cert and chain cert
     def _setup_node_certificates(self, chain_cert=True, node_key=True, reload_cert=True, host=None):
         if host == None:
@@ -226,14 +233,13 @@ class x509main:
         if reload_cert:
             status, content = self._reload_node_certificate(host)
             return status, content
-    
+
     # Reload cert for self signed certificate
     def _reload_node_certificate(self, host):
         rest = RestConnection(host)
         api = rest.baseUrl + "node/controller/reloadCertificate"
-        http = httplib2.Http()
-        status, content = http.request(api, 'POST', headers=self._create_rest_headers('Administrator', 'password'))
-        # status, content, header = rest._http_request(api, 'POST')
+        http = httplib2.Http(disable_ssl_certificate_validation=self.disable_ssl_certificate_validation)
+        status, content, header = rest._http_request(api, 'POST', headers=self._create_rest_headers('Administrator', 'password'))
         return status, content
 
     # Get the install path for different operating system
@@ -282,11 +288,11 @@ class x509main:
         return {'Content-Type': 'application/octet-stream',
             'Authorization': 'Basic %s' % authorization,
             'Accept': '*/*'}
-    
+
     # Function that will upload file via rest
     def _rest_upload_file(self, URL, file_path_name, username=None, password=None):
         data = open(file_path_name, 'rb').read()
-        http = httplib2.Http()
+        http = httplib2.Http(disable_ssl_certificate_validation=self.disable_ssl_certificate_validation)
         status, content = http.request(URL, 'POST', headers=self._create_rest_headers(username, password), body=data)
         log.info (" Status from rest file upload command is {0}".format(status))
         log.info (" Content from rest file upload command is {0}".format(content))
@@ -298,7 +304,7 @@ class x509main:
         url = "controller/uploadClusterCA"
         api = rest.baseUrl + url
         self._rest_upload_file(api, x509main.CACERTFILEPATH + "/" + x509main.CACERTFILE, "Administrator", 'password')
-    
+
     # Upload security setting for client cert
     def _upload_cluster_ca_settings(self, username, password):
         temp = self.host
@@ -318,7 +324,7 @@ class x509main:
     4. Return text of the response to the calling function
     Capture any exception in the code and return error
     '''
-   
+
     def _validate_ssl_login(self, final_url=None, header=None, client_cert=False, verb='GET', data='', plain_curl=False, username='Administrator', password='password', host=None):
         if verb == 'GET' and plain_curl:
             r = requests.get(final_url, data=data)
@@ -345,7 +351,7 @@ class x509main:
                 r = requests.get("https://" + str(self.host.ip) + ":18091", verify=x509main.CERT_FILE)
                 if r.status_code == 200:
                     header = {'Content-type': 'application/x-www-form-urlencoded'}
-                    params = urllib.parse.urlencode({'user':'{0}'.format(username), 'password':'{0}'.format(password)})               
+                    params = urllib.parse.urlencode({'user':'{0}'.format(username), 'password':'{0}'.format(password)})
                     r = requests.post("https://" + str(self.host.ip) + ":18091/uilogin", data=params, headers=header, verify=x509main.CERT_FILE)
                     return r.status_code
             except Exception as ex:
@@ -366,21 +372,21 @@ class x509main:
     '''
 
     def _validate_curl(self, final_url=None, headers=None, client_cert=False, verb='GET', data='', plain_curl=False, username='Administrator', password='password'):
-        
+
         if verb == 'GET':
             final_verb = 'curl -v'
         elif verb == 'POST':
             final_verb = 'curl -v -X POST'
         elif verb == 'DELETE':
             final_verb = 'curl -v -X DELETE'
-        
+
         if plain_curl:
             main_url = final_verb
         elif client_cert:
             main_url = final_verb + " --cacert " + x509main.SRC_CHAIN_FILE + " --cert-type PEM --cert " + x509main.CLIENT_CERT_PEM + " --key-type PEM --key " + x509main.CLIENT_CERT_KEY
         else:
             main_url = final_verb + "  --cacert " + x509main.CERT_FILE
-         
+
         cmd = str(main_url) + " " + str(headers) + " " + str(final_url)
         if data is not None:
             cmd = cmd + " -d " + data
@@ -400,32 +406,35 @@ class x509main:
                                     plain_curl=False, username='Administrator', password='password'):
         if host is None:
             host = self.host.ip
-        
+
         if plain_curl:
             final_url = "http://" + str(host) + ":" + str(port) + str(url)
         else:
             final_url = "https://" + str(host) + ":" + str(port) + str(url)
-        
+
         if curl:
             result = self._validate_curl(final_url, headers, client_cert, verb, data, plain_curl, username, password)
             return result
         else:
             status, result = self._validate_ssl_login(final_url, headers, client_cert, verb, data, plain_curl, username, password)
             return status, result
-    
+
     # Get current root cert from the cluster
     def _get_cluster_ca_cert(self):
         rest = RestConnection(self.host)
         api = rest.baseUrl + "pools/default/certificate?extended=true"
         status, content, header = rest._http_request(api, 'GET')
         return status, content, header
-    
+
     # Setup master node
     # 1. Upload Cluster cert i.e
     # 2. Setup other nodes for certificates
     # 3. Create the cert.json file which contains state, path, prefixes and delimeters
     # 4. Upload the cert.json file
     def setup_master(self, state=None, paths=None, prefixs=None, delimeters=None, mode='rest', user='Administrator', password='password'):
+        level = ntonencryptionBase().get_encryption_level_cli(self.host)
+        if level:
+            ntonencryptionBase().disable_nton_cluster([self.host])
         copy_host = copy.deepcopy(self.host)
         x509main(copy_host)._upload_cluster_ca_certificate(user, password)
         x509main(copy_host)._setup_node_certificates()
@@ -435,7 +444,9 @@ class x509main:
                 x509main(copy_host)._upload_cluster_ca_settings(user, password)
             elif mode == 'cli':
                 x509main(copy_host)._upload_cert_file_via_cli(user, password)
-        
+        if level:
+            ntonencryptionBase().setup_nton_cluster([self.host], clusterEncryptionLevel=level)
+
     # write a new config json file based on state, paths, perfixes and delimeters
     def write_client_cert_json_new(self, state, paths, prefixs, delimeters):
         template_path = './pytests/security/' + x509main.CLIENT_CERT_AUTH_TEMPLATE
@@ -452,10 +463,10 @@ class x509main:
                 client_cert = client_cert + temp_client_cert
         client_cert = client_cert.replace("'", '"')
         client_cert = client_cert[:-1]
-        client_cert = client_cert + " ]}" 
+        client_cert = client_cert + " ]}"
         log.info ("-- Log current config json file ---{0}".format(client_cert))
         target_file.write(client_cert)
-        
+
     #upload new config file via commandline.
     def _upload_cert_file_via_cli(self, user='Administrator', password='password'):
         src_cert_file =  x509main.CACERTFILEPATH + x509main.CLIENT_CERT_AUTH_JSON
