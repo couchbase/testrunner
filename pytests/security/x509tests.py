@@ -828,13 +828,13 @@ class x509tests(BaseTestCase):
         self.sleep(20)
         
         if self.client_cert_state == 'enable':
-            output = x509main()._execute_command_clientcert(host.ip, url='/query/service', port=18093, headers='--http1.1', client_cert=True, curl=True, verb='GET', data="statement='create index idx1 on default(name)'")
+            output = x509main()._execute_command_clientcert(host.ip, url='/query/service', port=18093, client_cert=True, curl=True, verb='GET', data="statement='create index idx1 on default(name)'")
         else:
-            output = x509main()._execute_command_clientcert(host.ip, url='/query/service', port=18093, headers='--http1.1 -u Administrator:password ', client_cert=False, curl=True, verb='GET', data="statement='create index idx1 on default(name)'")
+            output = x509main()._execute_command_clientcert(host.ip, url='/query/service', port=18093, headers='-u Administrator:password ', client_cert=False, curl=True, verb='GET', data="statement='create index idx1 on default(name)'")
         
         self.assertEqual(json.loads(output)['status'], "success", "Create Index Failed on port 18093")
         
-        output = x509main()._execute_command_clientcert(host.ip, url='/query/service', port=8093, headers='--http1.1 -u Administrator:password ', client_cert=False, curl=True, verb='GET', plain_curl=True, data="statement='create index idx2 on default(name)'")
+        output = x509main()._execute_command_clientcert(host.ip, url='/query/service', port=8093, headers='-u Administrator:password ', client_cert=False, curl=True, verb='GET', plain_curl=True, data="statement='create index idx2 on default(name)'")
         self.assertEqual(json.loads(output)['status'], "success", "Create Index Failed on port 8093")
 
     def check_fts_service(self, host):
