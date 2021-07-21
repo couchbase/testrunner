@@ -16,6 +16,8 @@ from couchbase.n1ql import N1QLQuery, N1QLRequest
 import couchbase
 import json
 
+from lib.Cb_constants.CBServer import CbServer
+
 
 class SDKClient(object):
     """Python SDK Client Implementation for testrunner - master branch Implementation"""
@@ -23,6 +25,8 @@ class SDKClient(object):
     def __init__(self, bucket, hosts=["localhost"], scheme="couchbase",
                  ssl_path=None, uhm_options=None, password=None,
                  quiet=True, certpath=None, transcoder=None, ipv6=False, compression=True):
+        if CbServer.use_https:
+            scheme = "couchbases"
         self.connection_string = \
             self._createString(scheme=scheme, bucket=bucket, hosts=hosts,
                                certpath=certpath, uhm_options=uhm_options, ipv6=ipv6, compression=compression)
@@ -58,9 +62,16 @@ class SDKClient(object):
                 connection_string = "{0}?compression=off".format(connection_string)
         if scheme == "couchbases":
             if "?" in connection_string:
-                connection_string = "{0},certpath={1}".format(connection_string, certpath)
+                if not certpath:
+                    connection_string = "{0}&ssl=no_verify".format(connection_string)
+                else:
+                    connection_string = "{0}&certpath={1}".format(connection_string, certpath)
             else:
-                connection_string = "{0}?certpath={1}".format(connection_string, certpath)
+                if not certpath:
+                    connection_string = "{0}?ssl=no_verify".format(connection_string)
+                else:
+                    connection_string = "{0}?certpath={1}".format(connection_string, certpath)
+
         return connection_string
 
     def _createConn(self):
@@ -592,6 +603,8 @@ class SDKSmartClient(object):
         else:
             self.host = rest.ip
             self.scheme = "couchbase"
+            if CbServer.use_https:
+                self.scheme = "couchbases"
         self.client = SDKClient(self.bucket, hosts=[self.host], scheme=self.scheme,
                                 compression=compression)
 

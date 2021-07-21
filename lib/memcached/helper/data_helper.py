@@ -24,6 +24,7 @@ from perf_engines import mcsoda
 
 from TestInput import TestInputServer
 from TestInput import TestInputSingleton
+from lib.Cb_constants.CBServer import CbServer
 
 log = logger.Logger.get_logger()
 try:
@@ -306,7 +307,8 @@ class MemcachedClientHelper(object):
             for n in nodes:
                 if n.ip == server.ip and n.port == server.port:
                     node = n
-
+        if CbServer.use_https:
+            node.memcached = CbServer.ssl_memcached_port
         if isinstance(server, dict):
             log.info("dict:{0}".format(server))
             log.info("creating direct client {0}:{1} {2}".format(server["ip"], node.memcached, bucket))
@@ -818,6 +820,8 @@ class VBucketAwareMemcached(object):
                         if node.ip == masterIp and node.memcached == masterPort:
                             server.port = node.port
                     server.ip = masterIp
+                    if CbServer.use_https:
+                        server.port = CbServer.ssl_port_map.get(str(server.port), str(server.port))
                     self.log.info("Received forward map, reset vbucket map, new direct_client")
                     self.memcacheds[vBucket.master] = MemcachedClientHelper.direct_client(server, self.bucket,
                                                                                           admin_user=admin_user,
@@ -867,9 +871,12 @@ class VBucketAwareMemcached(object):
             server.rest_password = rest.password
             try:
                 for node in nodes:
-                    if node.ip == serverIp and node.memcached == serverPort:
+                    if node.ip == serverIp and (node.memcached == serverPort or
+                                                node.memcached == CbServer.ssl_memcached_port):
                         if server_str not in memcacheds:
                             server.port = node.port
+                            if CbServer.use_https:
+                                server.port = CbServer.ssl_port_map.get(str(server.port), str(server.port))
                             memcacheds[server_str] = \
                                 MemcachedClientHelper.direct_client(server, bucket, admin_user=admin_user,
                                                                     admin_pass=admin_pass)

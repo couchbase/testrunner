@@ -18,6 +18,7 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_helper.documentgenerator import DocumentGenerator
 from couchbase_helper.stats_tools import StatsCommon
 
+from lib.Cb_constants.CBServer import CbServer
 from lib.couchbase_helper.documentgenerator import SDKDataLoader
 from lib.ep_mc_bin_client import MemcachedClient
 from lib.mc_bin_client import MemcachedClient as MC_MemcachedClient
@@ -211,6 +212,10 @@ class BaseTestCase(unittest.TestCase):
             self.enable_dp = self.input.param("enable_dp", False)
             self.ipv4_only = self.input.param("ipv4_only", False)
             self.ipv6_only = self.input.param("ipv6_only", False)
+            self.use_https = self.input.param("use_https", False)
+            self.enforce_tls = self.input.param("enforce_tls", False)
+            if self.use_https:
+                CbServer.use_https = True
 
             if self.skip_setup_cleanup or self.skip_bucket_setup:
                 self.buckets = RestConnection(self.master).get_buckets()
@@ -371,6 +376,10 @@ class BaseTestCase(unittest.TestCase):
                 cli.setting_autofailover(1, 60)
                 self.sleep(2)
                 self.check_ip_family_enforcement(ip_family="ipv6_only")
+            if self.use_https:
+                if self.enforce_tls:
+                    self.log.info("#####Enforcing TLS########")
+                    ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
             # Perform a custom rebalance by setting input param `custom_rebalance` to True
             # and implement the make_cluster method in a child class. This works by setting
             # skip_rebalance to True and then calling your custom rebalance method.
@@ -563,6 +572,9 @@ class BaseTestCase(unittest.TestCase):
             #output = cli.get_ip_family()
             cli.setting_autofailover(1, 60)
             #self.assertEqual(output[0][0]], "Cluster using ipv6", "Failed to change IP family")
+        if self.input.param("enforce_tls", False):
+            self.log.info('###################### Disabling n2n encryption')
+            ntonencryptionBase().disable_nton_cluster([self.master])
         self.print_cluster_stats()
 
         self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.case_number}'
@@ -794,6 +806,8 @@ class BaseTestCase(unittest.TestCase):
             bucket_params - A dictionary containing the parameters needed to create a bucket."""
 
         bucket_params = dict()
+        if CbServer.use_https:
+            port = CbServer.ssl_memcached_port
         bucket_params['server'] = server or self.master
         bucket_params['replicas'] = replicas
         bucket_params['size'] = size
@@ -3055,7 +3069,9 @@ class BaseTestCase(unittest.TestCase):
             servers_to_check = []
             for node in nodes:
                 for server in self.servers:
-                    if node.ip == server.ip and str(node.port) == str(server.port):
+                    if node.ip == server.ip and (str(node.port) == str(server.port) or
+                                                 str(node.port) ==
+                                                 CbServer.ssl_port_map.get(str(server.port), str(server.port))):
                         servers_to_check.append(server)
         self.log.info("Servers to check bucket-seqno: {0}"
                       .format(servers_to_check))

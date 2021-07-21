@@ -13,11 +13,13 @@ import random
 import re
 import select
 import socket
+import ssl
 import struct
 import sys
 import time
 import zlib
 
+from lib.Cb_constants.CBServer import CbServer
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE, ALT_REQ_MAGIC_BYTE, ALT_RES_MAGIC_BYTE, ALT_RES_PKT_FMT
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET, REQ_PKT_SD_EXTRAS, SUBDOC_FLAGS_MKDIR_P
 from memcacheConstants import SET_PKT_FMT, DEL_PKT_FMT, INCRDECR_RES_FMT, INCRDECR_RES_WITH_UUID_AND_SEQNO_FMT, \
@@ -75,6 +77,8 @@ class MemcachedClient(KeepRefs):
         super(MemcachedClient, self).__init__()
         self.host = host
         self.port = port
+        if CbServer.use_https:
+            self.port = CbServer.ssl_memcached_port
         self.timeout = timeout
         self._createConn()
         self.r = random.Random()
@@ -92,6 +96,9 @@ class MemcachedClient(KeepRefs):
             # IPv4
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            if CbServer.use_https:
+                context = ssl._create_unverified_context(ssl.PROTOCOL_TLS_CLIENT)
+                self.s = context.wrap_socket(self.s, server_hostname=self.host)
             return self.s.connect_ex((self.host, self.port))
         except:
             # IPv6
