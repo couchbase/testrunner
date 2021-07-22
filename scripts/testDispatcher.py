@@ -371,7 +371,7 @@ def main():
                         # raises an exception if the ini file does not exist on that branch
                         if options.branch != "master":
                             try:
-                                subprocess.run(["git", "checkout", options.branch, "--", data['config']], check=True)
+                                subprocess.run(["git", "checkout", "origin/" + options.branch, "--", data['config']], check=True)
                             except Exception:
                                 print('Git error: Did not find {} in {} branch'.format(data['config'], options.branch))
 
