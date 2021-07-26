@@ -1505,6 +1505,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.sleep(3)
             rest = RestConnection(self.master)
             actual_keys = rest.get_active_key_count("default")
+            if int(actual_keys) < 1000:
+                self.sleep(10)
+                actual_keys = rest.get_active_key_count("default")
             print(("\nActual keys in default bucket: %s \n" % actual_keys))
             if self.cluster_new_role in users_can_restore_all:
                 if not self._check_output(success_msg, output):
