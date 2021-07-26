@@ -2664,7 +2664,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                         range.json views.json """
                 backup_folder_content = ["bucket-config.json", "data",
                                          "full-text.json", "gsi.json",
-                                          "range.json", "views.json"]
+                                          "range.json", "views.json",
+                                          "query.json"]
                 for bucket in self.buckets:
                     out, err = self.shell.execute_command("ls %s%s/%s*/%s-*"
                                                 % (self.backup_path, backup_repo,
