@@ -1391,6 +1391,8 @@ class ImportExportTests(CliBaseTest):
                     bucket_data[0] = bucket_data[0].replace("[", "")
                     bucket_data[len(bucket_data) - 1] = \
                     bucket_data[len(bucket_data) - 1].replace("]", "")
+                    """ remove any empty element in list """
+                    bucket_data = [s for s in bucket_data if s]
                 if self.debug_logs:
                     print("\nsource data  \n", src_data)
                     print("\nbucket data  \n", bucket_data)
