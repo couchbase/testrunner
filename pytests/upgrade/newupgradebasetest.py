@@ -774,10 +774,13 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self.rest_helper = RestHelper(self.rest)
             self.log.info("No need to do DCP rebalance upgrade")
 
-    def _offline_upgrade(self, skip_init=False):
+    def _offline_upgrade(self, skip_init=False, nodes_to_upgrade=None):
         try:
             self.log.info("offline_upgrade")
-            stoped_nodes = self.servers[:self.nodes_init]
+            if nodes_to_upgrade:
+                stoped_nodes = nodes_to_upgrade
+            else:
+                stoped_nodes = self.servers[:self.nodes_init]
             for upgrade_version in self.upgrade_versions:
                 self.sleep(self.sleep_time, "Pre-setup of old version is done. "
                                             " Wait for upgrade to {0} version".format(upgrade_version))

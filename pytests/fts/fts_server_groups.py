@@ -3,8 +3,10 @@
 from .fts_base import FTSBaseTest
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
+from pytests.upgrade.newupgradebasetest import NewUpgradeBaseTest
+import queue
 
-class FTSServerGroups(FTSBaseTest):
+class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
 
     def setUp(self):
         super(FTSServerGroups, self).setUp()
@@ -16,6 +18,28 @@ class FTSServerGroups(FTSBaseTest):
 
     def tearDown(self):
         super(FTSServerGroups, self).tearDown()
+
+    def test_mixed_cluster(self):
+        self.initial_version = self._input.param('kv_build', '6.6.3-9700')
+
+        self.product = self._input.param('product', 'couchbase-server')
+        self.initial_vbuckets = 1024
+
+        self.debug_logs = False
+        self.init_nodes = True
+        self.initial_build_type = None
+        self.use_hostnames = False
+
+        kv_nodes = self._cb_cluster.get_kv_nodes()
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        self._install(servers=kv_nodes)
+
+        self.initial_version = self._input.param('upgrade_version', '7.1.0-1092')
+
+        self._install(servers=fts_nodes)
+
+        super(FTSServerGroups, self).setUp()
+        self.test_nodes_ejection()
 
     def test_nodes_ejection(self):
         eject_nodes_structure = self._input.param("eject_nodes", None)
