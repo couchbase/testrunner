@@ -169,6 +169,9 @@ class ImportExportTests(CliBaseTest):
                                                  % (self.cmd_ext, export_file))
             output, _ = self.shell.execute_command("gawk%s 'END {print NR}' %s"
                                                      % (self.cmd_ext, export_file))
+            if self.format_type == "list":
+                """ From Neo, list format put square bracket in separate line. """
+                output[0] = int(output[0]) - 2
             self.assertTrue(int(total_items) == int(output[0]),
                                      "doc in bucket: %s != doc in export file: %s"
                                       % (total_items, output[0]))
