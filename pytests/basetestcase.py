@@ -346,7 +346,7 @@ class BaseTestCase(unittest.TestCase):
             if self.input.param("port", None):
                 self.port = str(self.input.param("port", None))
 
-            if self.enable_dp:
+            if self.enable_dp or self.bucket_storage == "magma":
                 for node in self.servers:
                     print("Enabling DP for %s" % node)
                     cli = CouchbaseCLI(node)
@@ -1169,6 +1169,20 @@ class BaseTestCase(unittest.TestCase):
                                                               timeout_secs=300))
         return tasks
 
+    def _async_load_all_buckets_till_dgm(self, server, poll_dgm_mins=1, timeout_mins=60,
+                                         scope=None, collection=None):
+        tasks = []
+        for bucket in self.buckets:
+            tasks.append(self.cluster.async_load_gen_docs_till_dgm(server,
+                                                                   self.active_resident_threshold,
+                                                                   bucket,
+                                                                   scope=scope, collection=collection,
+                                                                   exp=self.expiry,
+                                                                   value_size=self.value_size,
+                                                                   java_sdk_client=self.java_sdk_client))
+
+        return tasks
+
     def data_ops_javasdk_loader_in_batches(self, sdk_data_loader, batch_size):
         start_document = sdk_data_loader.get_start_seq_num()
         tot_num_items_in_collection = sdk_data_loader.get_num_ops()
@@ -1196,7 +1210,7 @@ class BaseTestCase(unittest.TestCase):
         self.log.info("done")
         return tasks
 
-    """Synchronously applys load generation to all bucekts in the cluster.
+    """Synchronously applys load generation to all buckets in the cluster.
     Args:
         server - A server in the cluster. (TestInputServer)
         kv_gen - The generator to use to generate load. (DocumentGenerator)
@@ -1213,57 +1227,18 @@ class BaseTestCase(unittest.TestCase):
                 ClusterOperationHelper.flushctl_set(self.master,
                                                     "bfilter_enabled", 'true', bucket)
 
-        tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag,
+        if self.active_resident_threshold < 100.0:
+            tasks = self._async_load_all_buckets_till_dgm(server, kv_gen, op_type, exp, kv_store, flag,
+                                                 only_store_hash, batch_size, pause_secs,
+                                                 timeout_secs, scope=scope, collection=collection)
+        else:
+            tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag,
                                              only_store_hash, batch_size, pause_secs,
                                              timeout_secs, proxy_client, scope=scope, collection=collection)
 
         for task in tasks:
-            task.result()
-
-        """
-           Load bucket to DGM if params active_resident_threshold is passed
-        """
-        if self.active_resident_threshold < 100.0:
-            use_to_check_generator = kv_gen
-            if isinstance(kv_gen, list):
-                # Assuming all generators in list are of the same type
-                use_to_check_generator = kv_gen[0]
-            if use_to_check_generator.isGenerator():
-                stats_all_buckets = {}
-                for bucket in self.buckets:
-                    stats_all_buckets[bucket.name] = StatsCommon()
-
-                rest = RestConnection(self.master)
-                for bucket in self.buckets:
-                    threshold_reached = False
-                    while not threshold_reached:
-                        active_resident = \
-                            rest.get_bucket_stats(bucket)['vb_active_resident_items_ratio']
-                        if active_resident >= self.active_resident_threshold:
-                            self.log.info(
-                                "resident ratio is %s > %s for %s in bucket %s.\n" \
-                                " Continue loading to the cluster" %
-                                (active_resident,
-                                 self.active_resident_threshold,
-                                 self.master.ip,
-                                 bucket.name))
-                            random_key = self.key_generator()
-                            generate_load = BlobGenerator(random_key,
-                                                          '%s-' % random_key,
-                                                          self.value_size,
-                                                          end=batch_size * 50)
-                            self._load_bucket(bucket, self.master, generate_load,
-                                              "create", exp=0, kv_store=1, flag=0,
-                                              only_store_hash=True,
-                                              batch_size=batch_size,
-                                              pause_secs=5, timeout_secs=60, scope=scope, collection=collection)
-                        else:
-                            threshold_reached = True
-                            self.log.info("\n DGM state achieved at %s %% for %s in bucket %s!" \
-                                          % (active_resident,
-                                             self.master.ip,
-                                             bucket.name))
-                            break
+            if task:
+                task.result()
 
     def _async_load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True,
                            batch_size=1000, pause_secs=1, timeout_secs=30, scope=None, collection=None):

@@ -283,10 +283,7 @@ class BucketCreateTask(Task):
         self.enable_replica_index = bucket_params['enable_replica_index']
         self.eviction_policy = bucket_params['eviction_policy']
         self.lww = bucket_params['lww']
-
-        self.storageBackend = 'couchstore'
-        if self.bucket_type == 'membase' and 'bucket_storage' in bucket_params:
-            self.storageBackend = bucket_params['bucket_storage']
+        self.storageBackend = bucket_params['bucket_storage']
 
         if 'maxTTL' in bucket_params:
             self.maxttl = bucket_params['maxTTL']

@@ -93,7 +93,7 @@ class auditTest(BaseTestCase):
                                "flush_enabled": False, "num_threads": 3, "source": source,
                                "user": user, "local:ip": self.master.ip, "local:port": 8091, 'sessionid': '',
                                'conflict_resolution_type': 'seqno',
-                               'storage_mode': 'couchstore', 'max_ttl': 400, 'compression_mode': 'passive',
+                               'storage_mode': self.bucket_storage, 'max_ttl': 400, 'compression_mode': 'passive',
                                'remote:ip': self.ipAddress}
             rest.create_bucket(bucket=expectedResults['bucket_name'],
                                ramQuotaMB=expectedResults['ram_quota'] // 1048576,
@@ -109,7 +109,7 @@ class auditTest(BaseTestCase):
                                "autocompaction": 'false', "purge_interval": "undefined", "flush_enabled": 'true',
                                "num_threads": 3, "source": source,
                                "user": user, "ip": self.ipAddress, "port": 57457, 'sessionid': '',
-                               'storage_mode': 'couchstore', 'max_ttl': 400}
+                               'storage_mode': self.bucket_storage, 'max_ttl': 400}
             rest.create_bucket(bucket=expectedResults['bucket_name'],
                                ramQuotaMB=expectedResults['ram_quota'] // 1048576,
                                replicaNumber=expectedResults['num_replicas'], proxyPort='11211', bucketType='membase',
@@ -120,7 +120,7 @@ class auditTest(BaseTestCase):
                                'replica_index': True, 'eviction_policy': 'value_only', 'type': 'membase',
                                "autocompaction": 'false', "purge_interval": "undefined", "flush_enabled": True,
                                "num_threads": 3, "source": source,
-                               "user": user, "ip": self.ipAddress, "port": 57457, 'storage_mode': 'couchstore',
+                               "user": user, "ip": self.ipAddress, "port": 57457, 'storage_mode': self.bucket_storage,
                                'max_ttl': 200}
             rest.change_bucket_props(bucket=expectedResults['bucket_name'],
                                      ramQuotaMB=expectedResults['ram_quota'] // 1048576,
@@ -147,7 +147,7 @@ class auditTest(BaseTestCase):
                                'eviction_policy': 'value_only', 'type': 'membase',
                                "autocompaction": 'false', "purge_interval": "undefined", "flush_enabled": True,
                                "num_threads": 3, "source": source,
-                               "user": user, "ip": self.ipAddress, "port": 57457, 'storage_mode': 'couchstore'}
+                               "user": user, "ip": self.ipAddress, "port": 57457, 'storage_mode': self.bucket_storage}
             rest.create_bucket(bucket=expectedResults['bucket_name'], ramQuotaMB=expectedResults['ram_quota'],
                                replicaNumber=expectedResults['num_replicas'],
                                proxyPort='11211', bucketType='membase', replica_index=1,

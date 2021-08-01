@@ -1738,76 +1738,15 @@ class CouchbaseCluster:
             )
         return tasks
 
-    def load_all_buckets_till_dgm(self, active_resident_threshold, items=0,
-                                  value_size=512, exp=0, kv_store=1, flag=0,
-                                  only_store_hash=True, batch_size=1000,
-                                  pause_secs=1, timeout_secs=30):
-        """Load data synchronously on all buckets till dgm (Data greater than memory)
-        for given active_resident_threshold
-        @param active_resident_threshold: Dgm threshold.
-        @param value_size: size of the one item.
-        @param exp: expiration value.
-        @param kv_store: kv store index.
-        @param flag:
-        @param only_store_hash: True to store hash of item else False.
-        @param batch_size: batch size for load data at a time.
-        @param pause_secs: pause for next batch load.
-        @param timeout_secs: timeout
-        """
-        items = int(items)
-        self.__log.info("First loading \"items\" {0} number keys to handle "
-                      "update/deletes in dgm cases".format(items))
-        self.load_all_buckets(items)
-
-        self.__log.info("Now loading extra keys to reach dgm limit")
-        seed = "%s-key-" % self.__name
-        end = 0
+    def load_all_buckets_till_dgm(self, active_resident_threshold, value_size, expiry):
+        tasks = []
         for bucket in self.__buckets:
-            current_active_resident = StatsCommon.get_stats(
-                [self.__master_node],
-                bucket,
-                '',
-                'vb_active_perc_mem_resident')[self.__master_node]
-            start = items
-            end = start + batch_size * 10
-            while int(current_active_resident) > active_resident_threshold:
-                self.__log.info("loading %s keys ..." % (end-start))
-
-                kv_gen = BlobGenerator(
-                    seed,
-                    seed,
-                    value_size,
-                    start=start,
-                    end=end)
-
-                tasks = []
-                tasks.append(self.__clusterop.async_load_gen_docs(
-                    self.__master_node, bucket.name, kv_gen, bucket.kvs[kv_store],
-                    OPS.CREATE, exp, flag, only_store_hash, batch_size,
-                    pause_secs, timeout_secs, compression=self.sdk_compression))
-
-                for task in tasks:
-                    task.result()
-                start = end
-                end = start + batch_size * 10
-                current_active_resident = StatsCommon.get_stats(
-                    [self.__master_node],
-                    bucket,
-                    '',
-                    'vb_active_perc_mem_resident')[self.__master_node]
-                self.__log.info(
-                    "Current resident ratio: %s, desired: %s bucket %s" % (
-                        current_active_resident,
-                        active_resident_threshold,
-                        bucket.name))
-            self.__log.info("Loaded a total of %s keys into bucket %s"
-                            % (end, bucket.name))
-        self.__kv_gen[OPS.CREATE] = BlobGenerator(
-                seed,
-                seed,
-                value_size,
-                start = 0,
-                end=end)
+            tasks.append(self.__clusterop.async_load_gen_docs_till_dgm(server=self.__master_node, bucket=bucket,
+                                                                       active_resident_threshold=active_resident_threshold,
+                                                                       value_size=value_size,
+                                                                       exp=expiry,
+                                                                       java_sdk_client=self.use_java_sdk))
+        return tasks
 
     def async_update_delete(
             self, op_type, perc=30, expiration=0, kv_store=1, num_items=1000):
@@ -2842,6 +2781,8 @@ class XDCRNewBaseTest(unittest.TestCase):
         sdk_compression = self._input.param("sdk_compression", True)
 
         collection_density = self._input.param("collection_density", "low")
+        if self._dgm_run:
+            collection_density = "medium"
         scope_num = BUCKET_COLLECTIONS_DENSITY(collection_density).num_scopes
         collection_num = BUCKET_COLLECTIONS_DENSITY(collection_density).num_collections
         if scope_num or collection_num:
@@ -2849,6 +2790,11 @@ class XDCRNewBaseTest(unittest.TestCase):
         counter = 1
         for _, nodes in self._input.clusters.items():
             cluster_nodes = copy.deepcopy(nodes)
+            if self.__bucket_storage == "magma":
+                for node in cluster_nodes:
+                    print("Enabling DP for %s" % node)
+                    cli = CouchbaseCLI(node)
+                    cli.enable_dp()
             if len(self.__cb_clusters) == int(self.__chain_length):
                 break
             self.__cb_clusters.append(
@@ -3288,10 +3234,9 @@ class XDCRNewBaseTest(unittest.TestCase):
                                                       self._value_size,
                                                       self._expires)
             else:
-                #TODO: async this!
-                cluster.load_all_buckets_till_dgm(
-                    active_resident_threshold=self._active_resident_threshold,
-                    items=self._num_items)
+                cluster.load_all_buckets_till_dgm(self._active_resident_threshold,
+                                              self._value_size,
+                                              self._expires)
 
     def __load_chain(self):
         for i, cluster in enumerate(self.__cb_clusters):
@@ -3304,26 +3249,25 @@ class XDCRNewBaseTest(unittest.TestCase):
             if not self._dgm_run:
                 cluster.load_all_buckets(self._num_items, self._value_size, self._expires)
             else:
-                cluster.load_all_buckets_till_dgm(
-                    active_resident_threshold=self._active_resident_threshold,
-                    items=self._num_items)
+                cluster.load_all_buckets_till_dgm(self._active_resident_threshold,
+                                              self._value_size,
+                                              self._expires)
 
     def __load_star(self):
         hub = self.__cb_clusters[0]
         if self._dgm_run:
-            hub.load_all_buckets_till_dgm(
-                active_resident_threshold=self._active_resident_threshold,
-                item=self._num_items)
+            hub.load_all_buckets_till_dgm(self._active_resident_threshold,
+                                          self._value_size,
+                                          self._expires)
         else:
             hub.load_all_buckets(self._num_items, self._value_size, self._expires)
 
     def __async_load_star(self):
         hub = self.__cb_clusters[0]
         if self._dgm_run:
-            #TODO: async this
-            hub.load_all_buckets_till_dgm(
-                active_resident_threshold=self._active_resident_threshold,
-                item=self._num_items)
+            hub.load_all_buckets_till_dgm(self._active_resident_threshold,
+                                          self._value_size,
+                                          self._expires)
         else:
             return hub.async_load_all_buckets(self._num_items, self._value_size, self._expires)
 
@@ -3366,6 +3310,10 @@ class XDCRNewBaseTest(unittest.TestCase):
                     self.__topology))
 
     def perform_update_delete(self):
+        # Number of docs is very large for dgm run, so adjust update, delete percentages
+        if self._dgm_run:
+            self._perc_upd = self._perc_upd / 10
+            self._perc_del = self._perc_del / 10
         # UPDATES
         for doc_ops_cluster in self._upd_clusters:
             cb_cluster = self.get_cb_cluster_by_name(doc_ops_cluster)

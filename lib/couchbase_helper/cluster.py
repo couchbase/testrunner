@@ -1,6 +1,7 @@
 from tasks.future import Future
 from tasks.taskmanager import TaskManager
 from tasks.task import *
+from couchbase_helper.documentgenerator import BlobGenerator, SDKDataLoader
 import types
 
 """An API for scheduling tasks that run against Couchbase Server
@@ -182,6 +183,80 @@ class Cluster(object):
 
         self.task_manager.schedule(_task)
         return _task
+
+    def async_load_gen_docs_till_dgm(self, server, active_resident_threshold, bucket, scope=None, collection=None, exp=0,
+                                     poll_dgm_mins=1, timeout_mins=60, value_size=512, java_sdk_client=True):
+        from couchbase_helper.stats_tools import StatsCommon
+        import time
+        import random
+        import string
+        if java_sdk_client:
+            if scope and collection:
+                kv_gen = SDKDataLoader(doc_size=value_size, doc_expiry=exp, num_ops=10000, percent_create=100,
+                                       percent_update=0,
+                                       percent_delete=0, scope=scope, collection=collection)
+            else:
+                kv_gen = SDKDataLoader(doc_size=value_size, doc_expiry=exp, num_ops=10000, percent_create=100,
+                                   percent_update=0,
+                                   percent_delete=0, all_collections=True)
+            print("Loading keys to reach dgm limit using catapult")
+        else:
+            random_key = ''.join(random.choice(string.ascii_uppercase + string.digits) for x in range(6))
+            kv_gen = BlobGenerator(random_key,
+                                   '%s-' % random_key,
+                                   value_size,
+                                   start=0,
+                                   end=10000)
+            print("Loading keys to reach dgm limit using python sdk")
+        timeout = time.time() + timeout_mins * 60
+        items = 10000
+        start = items
+        loop = 1
+        tasks = []
+
+        while time.time() < timeout:
+            items = items * loop
+            if java_sdk_client:
+                kv_gen.num_ops = items
+                kv_gen.start_seq_num = start
+            else:
+                random_key = ''.join(random.choice(string.ascii_uppercase + string.digits) for x in range(6))
+                kv_gen = BlobGenerator(random_key,
+                                       '%s-' % random_key,
+                                       value_size,
+                                       start=start,
+                                       end=start+items)
+            tasks.append(self.async_load_gen_docs(server, bucket.name, kv_gen,
+                                                  bucket.kvs[1], op_type="create",
+                                                  exp=exp, flag=0, only_store_hash=True,
+                                                  batch_size=10000, pause_secs=60, timeout_secs=600,
+                                                  scope=scope, collection=collection))
+            time.sleep(poll_dgm_mins * 60)
+            current_active_resident = StatsCommon.get_stats([server], bucket.name, '','vb_active_perc_mem_resident')[server]
+            print(
+                "Current resident ratio: %s, desired: %s bucket %s" % (
+                    current_active_resident,
+                    active_resident_threshold,
+                    bucket))
+            if int(current_active_resident) <= active_resident_threshold:
+                print("Doc size={0} bytes, Number of docs={1}".format(value_size,
+                                                                StatsCommon.get_stats([server], bucket.name, '',
+                                                                'curr_items')[server]))
+                try:
+                    for task in tasks:
+                        if task:
+                            task.terminate()
+                except:
+                    pass
+                break
+            start += items
+            loop += 1
+        else:
+            print(
+                "Timed out waiting for desired dgm%. Current resident ratio: %s, desired: %s bucket %s" % (
+                    current_active_resident,
+                    active_resident_threshold,
+                    bucket))
 
     def async_workload(self, server, bucket, kv_store, num_ops, create, read, update,
                        delete, exp, compression=True, scope=None, collection=None):
