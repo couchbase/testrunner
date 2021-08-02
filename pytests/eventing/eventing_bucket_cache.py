@@ -62,7 +62,12 @@ class EventingBucketCache(EventingBaseTest):
 
     def test_compare_cached_doc_with_kv_bucket_doc(self):
         body = self.create_save_function_body(self.function_name, "handler_code/ABO/cache_compare_values.js")
-        body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1, "access": "rw"})
+        if self.non_default_collection:
+            body['depcfg']['buckets'].append(
+                {"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1, "scope_name": self.dst_bucket_name1,
+                 "collection_name": self.dst_bucket_name1, "access": "rw"})
+        else:
+            body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1, "access": "rw"})
         self.rest.update_function(body['appname'], body)
         if self.non_default_collection:
             self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
@@ -89,7 +94,12 @@ class EventingBucketCache(EventingBaseTest):
 
     def test_read_your_own_write_bucket_cache(self):
         body = self.create_save_function_body(self.function_name, "handler_code/ABO/cache_ryow.js")
-        body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1, "access": "rw"})
+        if self.non_default_collection:
+            body['depcfg']['buckets'].append(
+                {"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1, "scope_name": self.dst_bucket_name1,
+                 "collection_name": self.dst_bucket_name1, "access": "rw"})
+        else:
+            body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1, "access": "rw"})
         self.rest.update_function(body['appname'], body)
         if self.non_default_collection:
             self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
@@ -115,9 +125,14 @@ class EventingBucketCache(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_cache_overflow_when_total_docs_size_greater_than_cache_size(self):
-        body = self.create_save_function_body(self.function_name, "handler_code/ABO/cache_overflow.js")
-        body['depcfg']['buckets'].append(
-            {"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1, "access": "rw"})
+        if self.non_default_collection:
+            body = self.create_save_function_body(self.function_name, "handler_code/ABO/cache_overflow_non_default_collection.js")
+            body['depcfg']['buckets'].append(
+                {"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1,"scope_name": self.dst_bucket_name1,
+                 "collection_name": self.dst_bucket_name1, "access": "rw"})
+        else:
+            body = self.create_save_function_body(self.function_name, "handler_code/ABO/cache_overflow.js")
+            body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1, "access": "rw"})
         # set cache age to 1 min to ensure no expiry
         body['settings']['bucket_cache_age'] = 60000
         self.rest.update_function(body['appname'], body)
@@ -148,9 +163,14 @@ class EventingBucketCache(EventingBaseTest):
         assert stats[0]["failure_stats"]["bucket_op_cache_miss_count"] > 8, "No cache miss occurred."
 
     def test_all_docs_are_fetched_from_cache_when_total_doc_size_less_than_cache_size(self):
-        body = self.create_save_function_body(self.function_name, "handler_code/ABO/cache_underflow.js")
-        body['depcfg']['buckets'].append(
-            {"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1, "access": "rw"})
+        if self.non_default_collection:
+            body = self.create_save_function_body(self.function_name, "handler_code/ABO/cache_underflow_non_default_collection.js")
+            body['depcfg']['buckets'].append(
+                {"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1,"scope_name": self.dst_bucket_name1,
+                 "collection_name": self.dst_bucket_name1, "access": "rw"})
+        else:
+            body = self.create_save_function_body(self.function_name, "handler_code/ABO/cache_underflow.js")
+            body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1, "access": "rw"})
         # set cache age to 1 min to ensure no expiry
         body['settings']['bucket_cache_age'] = 60000
         self.rest.update_function(body['appname'], body)
