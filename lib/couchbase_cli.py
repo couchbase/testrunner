@@ -623,6 +623,28 @@ class CouchbaseCLI:
         else:
             return stdout, stderr, self._no_error_in_output(stdout)
 
+    def set_ip_family(self, ip_family):
+        options = self._get_default_options()
+        options += " --set "
+        options += " --{0} ".format(ip_family)
+
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("ip-family",
+                                                     self.hostname, options)
+        remote_client.disconnect()
+        return stdout, stderr, self._was_success(stdout, "SUCCESS: "
+                                                         "Switched IP family of the cluster")
+
+    def get_ip_family(self):
+        options = self._get_default_options()
+        options += " --get "
+
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("ip-family",
+                                                     self.hostname, options)
+        remote_client.disconnect()
+        return stdout, stderr, self._was_success(stdout, "Cluster using ")
+
     def _setting_cluster(self, cmd, data_ramsize, index_ramsize, fts_ramsize,
                          cluster_name, cluster_username,
                          cluster_password, cluster_port):
