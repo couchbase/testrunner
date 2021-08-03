@@ -1,11 +1,14 @@
 from basetestcase import BaseTestCase
 from security.IPv6_IPv4_grub_level import IPv6_IPv4
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
+from lib.membase.api.rest_client import RestConnection, RestHelper
 from security.x509main import x509main
 import json
 import subprocess
 from couchbase.cluster import PasswordAuthenticator
-from couchbase.cluster import Cluster,ClusterOptions
+from couchbase.cluster import Cluster
+from couchbase_helper.documentgenerator import BlobGenerator
+
 
 class ipv6_ipv4_tests(BaseTestCase):
     REST_PORT = "8091"
@@ -151,11 +154,12 @@ class ipv6_ipv4_tests(BaseTestCase):
             self.assertEqual(json.loads(output)['num_eventing_nodes'], 1, "Eventing Node is not up")
 
         elif service == "kv":
-            cluster = Cluster.connect("couchbase://{0}".format(nodes.ip),
-                                      ClusterOptions(PasswordAuthenticator("Administrator", "password")))
-            cb = cluster.bucket("default")
-            cb.upsert("key1","value1")
-            self.assertEqual(cb.get("key1").value,"value1")
+            cluster = Cluster("couchbase://{0}".format(nodes.ip))
+            authenticator = PasswordAuthenticator("Administrator", "password")
+            cluster.authenticate(authenticator)
+            cb = cluster.open_bucket("default")
+            cb.upsert("key1", "value1")
+            self.assertEqual(cb.get("key1").value, "value1")
 
     def check_ports_for_service(self,ports,nodes):
         nodes_obj = IPv6_IPv4(nodes)
@@ -305,3 +309,52 @@ class ipv6_ipv4_tests(BaseTestCase):
             self.check_ports_on_blocking([self.FTS_PORT],fts_node,[query_str1],"fts.log")
             self.check_ports_on_blocking([self.FTS_SSL_PORT],fts_node,[query_str2],"fts.log")
             self.sleep(10)
+
+
+class IPv4_IPv6_only(BaseTestCase):
+    def setUp(self):
+        super(IPv4_IPv6_only, self).setUp()
+        gen_initial_create = BlobGenerator('IPv4_IPv6_only', 'IPv4_IPv6_only', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen_initial_create, "create", 0)
+
+    def tearDown(self):
+        super(IPv4_IPv6_only,self).tearDown()
+
+    def suite_setUp(self):
+        pass
+
+    def suite_tearDown(self):
+        pass
+
+    def test_opposite_address_family_is_blocked(self):
+        services_in = []
+        for service in self.services_in.split("-"):
+            services_in.append(service.split(":")[0])
+        # Validate before the test starts
+        self._validate_ip_addrress_family()
+        nodes_in = self.servers[self.nodes_init:]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], nodes_in, [],
+                                                 services=services_in)
+        self.sleep(2)
+        rest = RestConnection(self.master)
+        reached = RestHelper(rest).rebalance_reached(percentage=30)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        # Validate during rebalance
+        self._validate_ip_addrress_family()
+        rebalance.result()
+        self.sleep(20)
+        # Validate post rebalance
+        self._validate_ip_addrress_family()
+        # Reboot the master node
+        shell = RemoteMachineShellConnection(self.master)
+        shell.reboot_node()
+        self.sleep(180)
+        # Validate post reboot
+        self._validate_ip_addrress_family()
+
+    def _validate_ip_addrress_family(self):
+        if self.ipv4_only:
+            self.check_ip_family_enforcement(ip_family="ipv4_only")
+        elif self.ipv6_only:
+            self.check_ip_family_enforcement(ip_family="ipv6_only")
+

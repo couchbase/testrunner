@@ -3821,6 +3821,17 @@ class RemoteMachineShellConnection(KeepRefs):
         output, error = self.execute_couchbase_cli('ip-family', cluster_host=self.ip, options="--set --ipv6", user=username, password=password)
         self.log_command_output(output, error)
 
+    def get_processes_binding_to_ip_family(self, ip_family="ipv4"):
+        """ Get all the processes binding to a particular ip family"""
+        self.extract_remote_info()
+        if self.info.type.lower() == "windows":
+            pass
+        else:
+            output, error = self.execute_command("lsof -i -P -n | grep LISTEN | grep couchbase| grep -i {0}".
+                                                 format(ip_family), debug=True)
+            self.log_command_output(output, error, debug=True)
+            return output
+
     def cleanup_all_configuration(self, data_path):
         """ Deletes the contents of the parent folder that holds the data and config directories.
 

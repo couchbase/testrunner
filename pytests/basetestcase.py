@@ -29,6 +29,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import VBucketAwareMemcached
 from remote.remote_util import RemoteUtilHelper
+
 from scripts.collect_server_info import cbcollectRunner
 from security.ntonencryptionBase import ntonencryptionBase
 from security.rbac_base import RbacBase
@@ -213,6 +214,8 @@ class BaseTestCase(unittest.TestCase):
             self.enforce_tls = self.input.param("enforce_tls", False)
             if self.use_https:
                 CbServer.use_https = True
+            self.ipv4_only = self.input.param("ipv4_only", False)
+            self.ipv6_only = self.input.param("ipv6_only", False)
 
             if self.skip_setup_cleanup or self.skip_bucket_setup:
                 self.buckets = RestConnection(self.master).get_buckets()
@@ -357,6 +360,14 @@ class BaseTestCase(unittest.TestCase):
                 if self.enforce_tls:
                     self.log.info("#####Enforcing TLS########")
                     ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
+            if self.ipv4_only:
+                self.log.info("Enforcing IPv4 only")
+                rest = RestConnection(self.master)
+                rest.enable_ip_version(afamily='ipv4', afamilyOnly='true')
+            if self.ipv6_only:
+                self.log.info("Enforcing IPv6 only")
+                rest = RestConnection(self.master)
+                rest.enable_ip_version(afamily='ipv6', afamilyOnly='true')
             # Perform a custom rebalance by setting input param `custom_rebalance` to True
             # and implement the make_cluster method in a child class. This works by setting
             # skip_rebalance to True and then calling your custom rebalance method.
@@ -534,6 +545,24 @@ class BaseTestCase(unittest.TestCase):
         if self.input.param("enforce_tls", False):
             self.log.info('###################### Disabling n2n encryption')
             ntonencryptionBase().disable_nton_cluster([self.master])
+        if self.input.param("ipv4_only", False):
+            self.check_ip_family_enforcement(ip_family="ipv4_only")
+            cli = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password)
+            cli.setting_autofailover(0, 60)
+            # TODO : teardown is getting invoked in setup hence disrupting the flow of the tc
+            # cli.set_ip_family("ipv4")
+            # output = cli.get_ip_family()
+            cli.setting_autofailover(1, 60)
+            #self.assertEqual(output[0][0], "Cluster using ipv4", "Failed to change IP family")
+        if self.input.param("ipv6_only", False):
+            self.check_ip_family_enforcement(ip_family="ipv6_only")
+            cli = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password)
+            cli.setting_autofailover(0, 60)
+            # TODO : teardown is getting invoked in setup hence disrupting the flow of the tc
+            # cli.set_ip_family("ipv6")
+            #output = cli.get_ip_family()
+            cli.setting_autofailover(1, 60)
+            #self.assertEqual(output[0][0]], "Cluster using ipv6", "Failed to change IP family")
         self.print_cluster_stats()
 
         self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.case_number}'
@@ -3066,6 +3095,15 @@ class BaseTestCase(unittest.TestCase):
         if corruption:
             self.fail("snap_start and snap_end corruption found !!! . {0}"
                       .format(failure_dict))
+
+    def check_ip_family_enforcement(self, ip_family="ipv4_only"):
+        for server in self.get_nodes_in_cluster():
+                shell = RemoteMachineShellConnection(server)
+                if ip_family == "ipv4_only":
+                    processes = shell.get_processes_binding_to_ip_family(ip_family="ipv6")
+                else:
+                    processes = shell.get_processes_binding_to_ip_family(ip_family="ipv4")
+                self.log.info("{0} : {1} \n {2} \n\n".format(server.ip, len(processes), processes))
 
     def set_flusher_total_batch_limit(self, flusher_total_batch_limit=3, buckets=None):
         self.log.info("Changing the bucket properties by changing flusher_total_batch_limit to {0}".
