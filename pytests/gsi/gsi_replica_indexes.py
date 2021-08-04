@@ -52,7 +52,6 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         self.expected_nodes = self.input.param("expected_nodes", None)
         self.failure_in_node = self.input.param("failure_in_node", None)
         self.alter_index = self.input.param("alter_index", None)
-        self.server_group_map = {}
 
     def tearDown(self):
         super(GSIReplicaIndexesTests, self).tearDown()
@@ -3364,45 +3363,6 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             self.log.info("No nodes in list")
 
         return nodes
-
-    def _create_server_groups(self):
-        if self.server_grouping:
-            server_groups = self.server_grouping.split(":")
-            self.log.info("server groups : %s", server_groups)
-
-            zones = list(self.rest.get_zone_names().keys())
-
-            # Delete Server groups
-            for zone in zones:
-                if zone != "Group 1":
-                    nodes_in_zone = self.rest.get_nodes_in_zone(zone)
-                    if nodes_in_zone:
-                        self.rest.shuffle_nodes_in_zones(list(nodes_in_zone.keys()),
-                                                         zone, "Group 1")
-                    self.rest.delete_zone(zone)
-
-            zones = list(self.rest.get_zone_names().keys())
-            source_zone = zones[0]
-
-            # Create Server groups
-            for i in range(1, len(server_groups) + 1):
-                server_grp_name = "ServerGroup_" + str(i)
-                if not self.rest.is_zone_exist(server_grp_name):
-                    self.rest.add_zone(server_grp_name)
-
-            # Add nodes to Server groups
-            i = 1
-            for server_grp in server_groups:
-                server_list = []
-                server_grp_name = "ServerGroup_" + str(i)
-                i += 1
-                nodes_in_server_group = server_grp.split("-")
-                for node in nodes_in_server_group:
-                    self.rest.shuffle_nodes_in_zones(
-                        [self.servers[int(node)].ip], source_zone,
-                        server_grp_name)
-                    server_list.append(self.servers[int(node)].ip + ":" + self.servers[int(node)].port)
-                self.server_group_map[server_grp_name] = server_list
 
     def run_operation(self, phase="before"):
         if phase == "before":
