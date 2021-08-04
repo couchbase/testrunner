@@ -71,7 +71,7 @@ class RestHelper(object):
         progress = 0
         previous_progress = 0
         retry = 0
-        while progress is not -1 and progress < percentage and retry < retry_count:
+        while progress != -1 and progress < percentage and retry < retry_count:
             # -1 is error , -100 means could not retrieve progress
             progress = self.rest._rebalance_progress()
             if progress == -100:

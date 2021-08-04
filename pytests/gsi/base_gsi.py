@@ -66,6 +66,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.num_of_docs_per_collection = self.input.param('num_of_docs_per_collection', 1000)
         self.deploy_node_info = None
         self.server_grouping = self.input.param("server_grouping", None)
+        self.server_group_map = {}
         if not self.use_rest:
             query_definition_generator = SQLDefinitionGenerator()
             if self.dataset == "default" or self.dataset == "employee":
@@ -102,6 +103,45 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
+
+    def _create_server_groups(self):
+        if self.server_grouping:
+            server_groups = self.server_grouping.split(":")
+            self.log.info("server groups : %s", server_groups)
+
+            zones = list(self.rest.get_zone_names().keys())
+
+            # Delete Server groups
+            for zone in zones:
+                if zone != "Group 1":
+                    nodes_in_zone = self.rest.get_nodes_in_zone(zone)
+                    if nodes_in_zone:
+                        self.rest.shuffle_nodes_in_zones(list(nodes_in_zone.keys()),
+                                                         zone, "Group 1")
+                    self.rest.delete_zone(zone)
+
+            zones = list(self.rest.get_zone_names().keys())
+            source_zone = zones[0]
+
+            # Create Server groups
+            for i in range(1, len(server_groups) + 1):
+                server_grp_name = "ServerGroup_" + str(i)
+                if not self.rest.is_zone_exist(server_grp_name):
+                    self.rest.add_zone(server_grp_name)
+
+            # Add nodes to Server groups
+            i = 1
+            for server_grp in server_groups:
+                server_list = []
+                server_grp_name = "ServerGroup_" + str(i)
+                i += 1
+                nodes_in_server_group = server_grp.split("-")
+                for node in nodes_in_server_group:
+                    self.rest.shuffle_nodes_in_zones(
+                        [self.servers[int(node)].ip], source_zone,
+                        server_grp_name)
+                    server_list.append(self.servers[int(node)].ip + ":" + self.servers[int(node)].port)
+                self.server_group_map[server_grp_name] = server_list
 
     def create_index(self, bucket, query_definition, deploy_node_info=None, desc=None):
         create_task = self.async_create_index(bucket, query_definition, deploy_node_info, desc=desc)
@@ -1633,11 +1673,11 @@ class ConCurIndexOps():
 
     def all_indexes_metadata(self, index_meta=None, operation="create", defer_build=False):
         with self._lock_queue:
-            if operation is "create" and defer_build:
+            if operation == "create" and defer_build:
                 self.all_indexes_state["defer_build"].append(index_meta)
-            elif operation is "create":
+            elif operation == "create":
                 self.all_indexes_state["created"].append(index_meta)
-            elif operation is "delete" and defer_build:
+            elif operation == "delete" and defer_build:
                 try:
                     index = self.all_indexes_state["defer_build"]. \
                         pop(random.randrange(len(self.all_indexes_state["defer_build"])))
@@ -1645,7 +1685,7 @@ class ConCurIndexOps():
                 except Exception as e:
                     index = None
                 return index
-            elif operation is "delete":
+            elif operation == "delete":
                 try:
                     index = self.all_indexes_state["created"]. \
                         pop(random.randrange(len(self.all_indexes_state["created"])))
@@ -1653,13 +1693,13 @@ class ConCurIndexOps():
                 except Exception as e:
                     index = None
                 return index
-            elif operation is "scan":
+            elif operation == "scan":
                 try:
                     index = random.choice(self.all_indexes_state["created"])
                 except Exception as e:
                     index = None
                 return index
-            elif operation is "build":
+            elif operation == "build":
                 try:
                     index = self.all_indexes_state["defer_build"]. \
                         pop(random.randrange(len(self.all_indexes_state["defer_build"])))
