@@ -14,11 +14,16 @@ class MovingTopFTS(FTSBaseTest):
         self.num_rebalance = TestInputSingleton.input.param("num_rebalance", 1)
         self.retry_time = TestInputSingleton.input.param("retry_time", 300)
         self.num_retries = TestInputSingleton.input.param("num_retries", 1)
+        self.rebalance_in = TestInputSingleton.input.param("rebalance_in", False)
+        self.rebalance_out = TestInputSingleton.input.param("rebalance_out", False)
+        self.disable_file_transfer_rebalance = TestInputSingleton.input.param("disableFileTransferRebalance", True)
         self.max_concurrent_partition_moves_per_node = TestInputSingleton.input.param(
             "maxConcurrentPartitionMovesPerNode", 1)
         self.default_concurrent_partition_moves_per_node = 1
         self.query = {"match": "emp", "field": "type"}
         super(MovingTopFTS, self).setUp()
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        rest.set_disableFileTransferRebalance(self.disable_file_transfer_rebalance)
 
     def tearDown(self):
         super(MovingTopFTS, self).tearDown()
@@ -330,6 +335,92 @@ class MovingTopFTS(FTSBaseTest):
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
+
+    def rebalance_2_nodes_during_index_building(self):
+        index = self.create_index_generate_queries(wait_idx=False)
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        if self.rebalance_out:
+            self._cb_cluster.rebalance_out(2)
+        if self.rebalance_in:
+            self._cb_cluster.rebalance_in(2, services=["fts", "fts"])
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        tasks = []
+        for count in range(0, len(index.fts_queries)):
+            tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                fts_index=index,
+                es=self.es,
+                es_index_name=None,
+                query_index=count))
+        self.run_tasks_and_report(tasks, len(index.fts_queries))
+
+    def rebalance_kill_fts_existing_fts_node(self):
+        index = self.create_index_generate_queries(wait_idx=False)
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        if self.rebalance_out:
+            rebalance_task = self._cb_cluster.async_rebalance_out_node(node=fts_nodes[0])
+            self.sleep(5)
+            NodeHelper.kill_cbft_process(fts_nodes[1])
+            rebalance_task.result()
+        if self.rebalance_in:
+            rebalance_task = self._cb_cluster.async_rebalance_in(1, services=["fts"])
+            self.sleep(5)
+            NodeHelper.kill_cbft_process(fts_nodes[0])
+            rebalance_task.result()
+        #Add stat validation
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        tasks = []
+        for count in range(0, len(index.fts_queries)):
+            tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                fts_index=index,
+                es=self.es,
+                es_index_name=None,
+                query_index=count))
+        self.run_tasks_and_report(tasks, len(index.fts_queries))
+
+    def rebalance_during_kv_mutations(self):
+        index = self.create_index_generate_queries(wait_idx=False)
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        load_tasks = self.async_perform_update_delete(self.upd_del_fields, async_run=True)
+        self.sleep(10)
+        rebalance_task = None
+        if self.rebalance_out:
+            node_to_rebalance_out = self._cb_cluster.get_fts_nodes()[0]
+            rebalance_task = self._cb_cluster.async_rebalance_out_node(node=node_to_rebalance_out)
+        if self.rebalance_in:
+            rebalance_task = self._cb_cluster.async_rebalance_in(1, services=["fts"])
+        [task.result() for task in load_tasks]
+        rebalance_task.result()
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        tasks = []
+        for count in range(0, len(index.fts_queries)):
+            tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                fts_index=index,
+                es=self.es,
+                es_index_name=None,
+                query_index=count))
+        self.run_tasks_and_report(tasks, len(index.fts_queries))
 
     def retry_rebalance_out_during_index_building(self):
         self._cb_cluster.enable_retry_rebalance(self.retry_time, self.num_retries)
@@ -1012,7 +1103,7 @@ class MovingTopFTS(FTSBaseTest):
 
     """ Topology change during querying"""
 
-    def create_index_generate_queries(self):
+    def create_index_generate_queries(self, wait_idx=True):
         collection_index, _type, index_scope, index_collections =  self.define_index_parameters_collection_related()
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
@@ -1023,7 +1114,8 @@ class MovingTopFTS(FTSBaseTest):
             collections=index_collections
         )
         self.load_data()
-        self.wait_for_indexing_complete()
+        if wait_idx:
+            self.wait_for_indexing_complete()
         self.generate_random_queries(index, self.num_queries, self.query_types)
         return index
 

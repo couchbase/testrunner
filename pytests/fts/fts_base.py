@@ -3290,6 +3290,10 @@ class CouchbaseCluster:
         task.result()
         return task
 
+    def async_rebalance_out_node(self, node=None, sleep_before_rebalance=None):
+        task = self.__async_rebalance_out_node(node=node, sleep_before_rebalance=sleep_before_rebalance)
+        return task
+
     def enable_retry_rebalance(self, retry_time, num_retries):
         body = {"enabled": "true", "afterTimePeriod": retry_time, "maxAttempts": num_retries}
         rest = RestConnection(self.get_master_node())
@@ -4355,7 +4359,7 @@ class FTSBaseTest(unittest.TestCase):
             self.log.info("Deleting keys @ {0}".format(self._cb_cluster.get_name()))
             self._cb_cluster.update_delete_data(OPS.DELETE, perc=self._perc_del)
 
-    def async_perform_update_delete(self, fields_to_update=None):
+    def async_perform_update_delete(self, fields_to_update=None, async_run=False):
         """
           Call this method to perform updates/deletes on your cluster.
           It checks if update=True or delete=True params were passed in
@@ -4401,7 +4405,8 @@ class FTSBaseTest(unittest.TestCase):
                 ops=OPS.UPDATE,
                 exp=self._expires)
 
-        [task.result() for task in load_tasks]
+        if not async_run:
+            [task.result() for task in load_tasks]
         if load_tasks:
             self.log.info("Batched updates loaded to cluster(s)")
 
@@ -4425,16 +4430,18 @@ class FTSBaseTest(unittest.TestCase):
                         op_type=OPS.DELETE))
             load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(
                 self.delete_gen, OPS.DELETE)
-
-        [task.result() for task in load_tasks]
+        if not async_run:
+            [task.result() for task in load_tasks]
         if load_tasks:
             self.log.info("Batched deletes sent to cluster(s)")
 
-        if self._wait_for_expiration and self._expires:
-            self.sleep(
-                self._expires,
-                "Waiting for expiration of updated items")
-            self._cb_cluster.run_expiry_pager()
+        if not async_run:
+            if self._wait_for_expiration and self._expires:
+                self.sleep(
+                    self._expires,
+                    "Waiting for expiration of updated items")
+                self._cb_cluster.run_expiry_pager()
+        return load_tasks
 
     def print_crash_stacktrace(self, node, error):
         """ Prints panic stacktrace from goxdcr.log*
