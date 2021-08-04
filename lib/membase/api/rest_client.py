@@ -3276,6 +3276,14 @@ class RestConnection(object):
             log.info("SUCCESS: FTS maxConcurrentPartitionMovesPerNode set to {0}".format(value))
         return status
 
+    def set_disableFileTransferRebalance(self, value):
+        api = self.fts_baseUrl + "api/managerOptions"
+        params = {"disableFileTransferRebalance": str(value)}
+        status, content, _ = self._http_request(api, "PUT", params=json.dumps(params, ensure_ascii=False), headers=self._create_capi_headers())
+        if status:
+            log.info("SUCCESS: FTS disableFileTransferRebalance set to {0}".format(value))
+        return status
+
     def set_maxFeedsPerDCPAgent(self, value):
         api = self.fts_baseUrl + "api/managerOptions"
         params = {"maxFeedsPerDCPAgent": str(value)}
