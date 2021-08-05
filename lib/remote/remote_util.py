@@ -56,6 +56,7 @@ from testconstants import LINUX_NONROOT_CB_BIN_PATH,\
 from membase.api.rest_client import RestConnection, RestHelper
 from cluster_run_manager import KeepRefs
 
+from Cb_constants.CBServer import CbServer
 
 log = logger.Logger.get_logger()
 logging.getLogger("paramiko").setLevel(logging.WARNING)
@@ -3691,6 +3692,22 @@ class RemoteMachineShellConnection(KeepRefs):
         info['hostname'] = self.get_hostname()
         return info
 
+    def get_port_recvq(self, port):
+        """
+        Given a port, extracts address:port of services
+        listening on that port (only ipv4)
+        """
+        # TODo add commands for windows and mac
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            pass
+        elif self.info.type.lower() == "linux":
+            command = "ss -4anpe | grep :%s | grep 'LISTEN' | awk -F ' ' '{print $5}'" % port
+            o, r = self.execute_command(command)
+            self.log_command_output(o, r)
+            return o
+        return []
+
     def get_hostname(self, win_info=None):
         if win_info:
             if 'Host Name' not in win_info:
@@ -4601,6 +4618,8 @@ class RemoteMachineShellConnection(KeepRefs):
         return output, error
 
     def couchbase_cli(self, subcommand, cluster_host, options):
+        if CbServer.use_https:
+            options += " --no-ssl-verify"
         cb_client = "{0}couchbase-cli".format(LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
             cb_client = "/home/{0}{1}couchbase-cli".format(self.username,
@@ -4623,6 +4642,8 @@ class RemoteMachineShellConnection(KeepRefs):
     def execute_couchbase_cli(self, cli_command, cluster_host='localhost', options='',
                               cluster_port=None, user='Administrator', password='password',
                               _stdin=None):
+        if CbServer.use_https:
+            options += " --no-ssl-verify"
         cb_client = "%scouchbase-cli" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
             cb_client = "/home/%s%scouchbase-cli" % (self.username,

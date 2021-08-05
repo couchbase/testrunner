@@ -14,6 +14,8 @@ import queue
 from threading import Thread
 import traceback
 
+from Cb_constants.CBServer import CbServer
+
 
 class ClusterOperationHelper(object):
     # the first ip is taken as the master ip
@@ -530,3 +532,47 @@ class ClusterOperationHelper(object):
         command = "rpc:eval_everywhere(ns_config, set, [couchbase_num_vbuckets_default, {0}]).".format(vbuckets)
         status, content = rest.diag_eval(command)
         return status, content
+
+    @staticmethod
+    def check_if_services_obey_tls(servers, port_map=CbServer.ssl_port_map):
+        """
+        Parameters:
+        servers - list of servers on which to check
+        port_map (optional) - a dict with key as non-ssl port
+            and its value as tls-port. If not given, it will take the port map from
+            CbServer.ssl_port_map
+
+        Returns False if
+        a. the non-ssl port is open on any other address other than localhost
+        b. the tls port is not open on all (*) addresses
+        else True
+        """
+        # TODO uncomment return False statements after FTS and index finishes TLS work
+        log = logger.Logger.get_logger()
+        for server in servers:
+            shell = RemoteMachineShellConnection(server)
+            # service should listen on non-ssl port only on localhost/no-address
+            for port in port_map.keys():
+                addresses = shell.get_port_recvq(port)
+                for address in addresses:
+                    expected_address = "127.0.0.1:" + port
+                    if address != expected_address:
+                        log.error("On Server {0} Expected {1} Actual {2} !!!!!!!!!!!!!!!!".
+                                  format(server.ip, expected_address, address))
+                        # shell.disconnect()
+                        # return False
+            # service should listen on tls_port(if there is one) for all outside addresses
+            for port in port_map.keys():
+                ssl_port = CbServer.ssl_port_map.get(port)
+                if ssl_port is None:
+                    continue
+                addresses = shell.get_port_recvq(ssl_port)
+                for address in addresses:
+                    expected_address = "*:" + ssl_port
+                    if address != expected_address:
+                        log.error("On Server {0} Expected {1} Actual {2} !!!!!!!!!!!!!!!!".
+                                  format(server.ip, expected_address, address))
+                        # shell.disconnect()
+                        # return False
+            shell.disconnect()
+            return True

@@ -380,6 +380,10 @@ class BaseTestCase(unittest.TestCase):
                 if self.enforce_tls:
                     self.log.info("#####Enforcing TLS########")
                     ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
+                    status = ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master])
+                    if not status:
+                        # TODO Fail the test instead of logging here after FTS and Index finish TLS work
+                        self.log.critical("Port binding after enforcing TLS incorrect")
             # Perform a custom rebalance by setting input param `custom_rebalance` to True
             # and implement the make_cluster method in a child class. This works by setting
             # skip_rebalance to True and then calling your custom rebalance method.
