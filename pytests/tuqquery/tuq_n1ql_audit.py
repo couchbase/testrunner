@@ -31,18 +31,17 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             self.sample_bucket = 'travel-sample'
         self.rest.load_sample(self.sample_bucket)
         self.wait_for_all_indexes_online()
-        testuser = [{'id': 'no_select', 'name': 'no_select', 'password': 'password'},
+        testuser = [{'id': 'no_query', 'name': 'no_query', 'password': 'password'},
                     {'id': 'query', 'name': 'query', 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', self.master)
 
-        no_select_permissions = 'query_update[*]:query_insert[*]:query_delete[*]:query_manage_index[' \
-                                '*]:query_system_catalog '
+        no_query_permissions = 'query_system_catalog'
         query_permissions = 'bucket_full_access[*]:query_select[*]:query_update[*]:' \
                             'query_insert[*]:query_delete[*]:query_manage_index[*]:' \
                             'query_system_catalog'
 
         role_list = [
-            {'id': 'no_select', 'name': 'no_select', 'roles': '%s' % no_select_permissions, 'password': 'password'},
+            {'id': 'no_query', 'name': 'no_query', 'roles': '%s' % no_query_permissions, 'password': 'password'},
             {'id': 'query', 'name': 'query', 'roles': '%s' % query_permissions, 'password': 'password'}]
         RbacBase().add_user_role(role_list, self.rest, 'builtin')
         self.log.info("==============  QueryN1QLAuditTests suite_setup has completed ==============")
@@ -85,7 +84,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             self.run_cbq_query(
                 query="ALTER INDEX idx4 ON " + self.query_buckets[0] + " WITH {'action':'move','nodes':['%s:%s']}" % (
                     self.servers[1].ip, self.servers[1].port))
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'ALTER INDEX statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': "ALTER INDEX idx4 ON " + self.query_buckets[0] + " WITH {'action':'move',"
@@ -100,7 +99,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             self.run_cbq_query(
                 query="CREATE INDEX idx3 on " + self.query_buckets[0] + "(join_yr) WITH {'defer_build':true}")
             self.run_cbq_query(query="BUILD INDEX on " + self.query_buckets[0] + "(idx3)")
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'BUILD INDEX statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'BUILD INDEX on ' + self.query_buckets[0] + '(idx3)',
@@ -112,7 +111,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
                 self.execute_filtered_query()
             self.run_cbq_query(query='CREATE INDEX idx2 on ' + self.query_buckets[0] + '(fake1)')
             self.run_cbq_query(query='DROP INDEX idx2 ON ' + self.query_buckets[0])
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'DROP INDEX statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'DROP INDEX idx2 ON ' + self.query_buckets[0],
@@ -127,7 +126,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             self.run_cbq_query(query="CREATE PRIMARY INDEX on " + self.query_buckets[0])
             if self.filter:
                 self.run_cbq_query(query="delete from " + self.query_buckets[0] + " limit 1")
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'CREATE PRIMARY INDEX statement',
                                 'real_userid': {'source': source, 'user': user},
@@ -139,7 +138,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             if self.filter:
                 self.execute_filtered_query()
             self.run_cbq_query(query="SELECT * FROM " + self.query_buckets[0] + " LIMIT 100")
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'SELECT statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'SELECT * FROM ' + self.query_buckets[0] + ' LIMIT 100',
@@ -150,7 +149,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             if self.filter:
                 self.execute_filtered_query()
             self.run_cbq_query(query="EXPLAIN SELECT * FROM " + self.query_buckets[0])
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'EXPLAIN statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'EXPLAIN SELECT * FROM ' + self.query_buckets[0],
@@ -162,7 +161,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             if self.filter:
                 self.execute_filtered_query()
             self.run_cbq_query(query="prepare {0} from select * from {1}".format(prepared_name, self.query_buckets[0]))
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'PREPARE statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'prepare {0} from select * from {1}'.format(prepared_name,
@@ -177,7 +176,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             self.run_cbq_query(query='prepare {0}'.format(prepared_name) + ' from INFER ' + self.query_buckets[
                 0] + ' WITH {"sample_size":10000,"num_sample_values":1,"similarity_metric":0.0}')
             self.run_cbq_query(query="execute {0}".format(prepared_name))
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': False,
                                 'name': 'INFER statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'prepare {0}'.format(prepared_name) + ' from INFER ' + self.query_buckets[
@@ -208,7 +207,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
                                                                '"order", "customer_id":"24601", "total_price": 30.3, '
                                                                '"lineitems": '
                                                                '[ "11", "12", "13" ] })')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'INSERT statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'INSERT INTO ' + self.query_buckets[0] +
@@ -227,7 +226,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
                                                                '"order", "customer_id":"24601", "total_price": 30.3, '
                                                                '"lineitems": '
                                                                '[ "11", "12", "13" ] })')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'UPSERT statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'UPSERT INTO ' + self.query_buckets[0] +
@@ -247,7 +246,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
                 except CBQError:
                     self.log.info("Query is unrecognized (expected)")
             self.run_cbq_query(query='DELETE FROM ' + self.query_buckets[1] + ' WHERE type = "hotel"', server=self.servers[1])
-            expected_results = {'node': '%s:%s' % (self.servers[1].ip, self.servers[1].port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.servers[1].ip, self.servers[1].port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'DELETE statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'DELETE FROM ' + self.query_buckets[1] + ' WHERE type = "hotel"',
@@ -258,7 +257,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             if self.filter:
                 self.execute_filtered_query()
             self.run_cbq_query(query='UPDATE ' + self.query_buckets[1] + ' SET foo = 5')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'UPDATE statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'UPDATE ' + self.query_buckets[1] + ' SET foo = 5',
@@ -272,7 +271,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
                                      'ON KEY "hotel_"|| source.id WHEN MATCHED THEN UPDATE SET t.old_vacancy = '
                                      't.vacancy '
                                      ', t.vacancy = false RETURNING meta(t).id, t.old_vacancy, t.vacancy')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'MERGE statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'MERGE INTO ' + self.query_buckets[1] + ' t USING [{"id":"21728"},{"id":"21730"}] '
@@ -287,7 +286,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             if self.filter:
                 self.execute_filtered_query()
             self.run_cbq_query(query="GRANT query_external_access TO query")
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'GRANT ROLE statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'GRANT query_external_access TO query',
@@ -298,25 +297,12 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             if self.filter:
                 self.execute_filtered_query()
             self.run_cbq_query(query="REVOKE query_system_catalog FROM query")
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'REVOKE ROLE statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'REVOKE query_system_catalog FROM query',
                                 'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
                                 'description': 'A N1QL REVOKE ROLE statement was executed'}
-
-        elif query_type == 'no_select':
-            cbqpath = '%scbq' % self.path + " -e %s:%s -u 'no_select' -p 'password' -q " % (
-                self.master.ip, self.n1ql_port)
-            query = 'select * from ' + self.query_buckets[0] + ' limit 100'
-            self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal',
-                                'isAdHoc': True,
-                                'statement': 'select * from ' + self.query_buckets[0] + ' limit 100;',
-                                'description': 'A N1QL SELECT statement was executed',
-                                'real_userid': {'source': 'local', 'user': 'no_select'},
-                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
-                                'id': self.eventID, 'name': 'SELECT statement'}
         else:
             self.fail("Unexpected query_type value")
         if query_type == 'delete':
@@ -328,6 +314,204 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             if self.filter:
                 self.checkFilter(self.unauditedID, self.master)
 
+    def test_audit_denied_events(self):
+        query_type = self.input.param("ops", None)
+        user = self.master.rest_username
+        source = 'ns_server'
+        cbqpath = '%scbq' % self.path + " -e %s:%s -u 'no_query' -p 'password' -q " % (
+            self.master.ip, self.n1ql_port)
+
+        if query_type == 'no_select':
+            query = 'select * from ' + self.query_buckets[0] + ' limit 100'
+            self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run SELECT queries on default:{0}. Add role query_select on default:{0} to allow the query to run.".format(self.query_buckets[0])}],
+                                'isAdHoc': True,
+                                'statement': 'select * from ' + self.query_buckets[0] + ' limit 100;',
+                                'description': 'A N1QL SELECT statement was executed',
+                                'real_userid': {'source': 'local', 'user': 'no_query'},
+                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'id': self.eventID, 'name': 'SELECT statement'}
+        elif query_type == "no_insert":
+            query = "INSERT INTO " + self.query_buckets[0] + " ( KEY, VALUE ) VALUES ('1',{ 'order_id': '1', 'type': 'order', 'customer_id':'24601', 'total_price': 30.3,'lineitems':[ '11', '12', '13' ] })"
+            self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run INSERT queries on default:{0}. Add role query_insert on default:{0} to allow the query to run.".format(self.query_buckets[0])}],
+                                'isAdHoc': True,
+                                'statement': "INSERT INTO " + self.query_buckets[0] + " ( KEY, VALUE ) VALUES ('1',{ 'order_id': '1', 'type': 'order', 'customer_id':'24601', 'total_price': 30.3,'lineitems':[ '11', '12', '13' ] });",
+                                'description': 'A N1QL INSERT statement was executed',
+                                'real_userid': {'source': 'local', 'user': 'no_query'},
+                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'id': self.eventID, 'name': 'INSERT statement'}
+
+        elif query_type == 'no_upsert':
+            query = "UPSERT INTO " + self.query_buckets[0] + " ( KEY, VALUE ) VALUES ('1',{ 'order_id': '1', 'type': 'order', 'customer_id':'24601', 'total_price': 30.3, 'lineitems': [ '11', '12', '13' ] })"
+            self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run INSERT queries on default:default. Add role query_insert on default:default to allow the query to run.".format(self.query_buckets[0])}],
+                                'isAdHoc': True,
+                                'statement': "UPSERT INTO " + self.query_buckets[0] + " ( KEY, VALUE ) VALUES ('1',{ 'order_id': '1', 'type': 'order', 'customer_id':'24601', 'total_price': 30.3, 'lineitems': [ '11', '12', '13' ] });",
+                                'description': 'A N1QL UPSERT statement was executed',
+                                'real_userid': {'source': 'local', 'user': 'no_query'},
+                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'id': self.eventID, 'name': 'UPSERT statement'}
+        elif query_type == "no_delete":
+            bucket_name = self.query_buckets[1].replace('`','\`')
+            stripped_name = self.query_buckets[1].replace('`','')
+            query = "DELETE FROM " + bucket_name + " WHERE type = 'hotel'"
+            self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run DELETE queries on default:{0}. Add role query_delete on default:{0} to allow the query to run.".format(stripped_name)}],
+                                'isAdHoc': True,
+                                'statement': "DELETE FROM " + self.query_buckets[1] + " WHERE type = 'hotel';",
+                                'description': 'A N1QL DELETE statement was executed',
+                                'real_userid': {'source': 'local', 'user': 'no_query'},
+                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'id': self.eventID, 'name': 'DELETE statement'}
+
+        elif query_type == "no_update":
+            bucket_name = self.query_buckets[1].replace('`','\`')
+            stripped_name = self.query_buckets[1].replace('`','')
+            query = "UPDATE " + bucket_name + " SET foo = 5"
+            self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run UPDATE queries on default:{0}. Add role query_update on default:{0} to allow the query to run.".format(stripped_name)}],
+                                'isAdHoc': True,
+                                'statement': "UPDATE " + self.query_buckets[1] + " SET foo = 5;",
+                                'description': 'A N1QL UPDATE statement was executed',
+                                'real_userid': {'source': 'local', 'user': 'no_query'},
+                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'id': self.eventID, 'name': 'UPDATE statement'}
+
+        elif query_type == "no_merge":
+            bucket_name = self.query_buckets[1].replace('`','\`')
+            stripped_name = self.query_buckets[1].replace('`','')
+            query = "MERGE INTO " + bucket_name + " t USING [{'id':'21728'},{'id':'21730'}] source ON KEY 'hotel_'|| source.id WHEN MATCHED THEN UPDATE SET t.old_vacancy = t.vacancy , t.vacancy = false RETURNING meta(t).id, t.old_vacancy, t.vacancy"
+            self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run SELECT queries on default:{0}. Add role query_select on default:{0} to allow the query to run.".format(stripped_name)}],
+                                'isAdHoc': True,
+                                'statement': "MERGE INTO " + self.query_buckets[1] + " t USING [{'id':'21728'},{'id':'21730'}] source ON KEY 'hotel_'|| source.id WHEN MATCHED THEN UPDATE SET t.old_vacancy = t.vacancy , t.vacancy = false RETURNING meta(t).id, t.old_vacancy, t.vacancy;",
+                                'description': 'A N1QL MERGE statement was executed',
+                                'real_userid': {'source': 'local', 'user': 'no_query'},
+                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'id': self.eventID, 'name': 'MERGE statement'}
+        elif query_type == "no_grant":
+            query = "GRANT query_external_access TO query"
+            self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run queries updating user information. Add role admin to allow the query to run."}],
+                                'isAdHoc': True,
+                                'statement': "GRANT query_external_access TO query;",
+                                'description': 'A N1QL GRANT ROLE statement was executed',
+                                'real_userid': {'source': 'local', 'user': 'no_query'},
+                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'id': self.eventID, 'name': 'GRANT ROLE statement'}
+
+        elif query_type == "no_revoke":
+            query="REVOKE query_system_catalog FROM query"
+            self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run queries updating user information. Add role admin to allow the query to run."}],
+                                'isAdHoc': True,
+                                'statement': "REVOKE query_system_catalog FROM query;",
+                                'description': 'A N1QL REVOKE ROLE statement was executed',
+                                'real_userid': {'source': 'local', 'user': 'no_query'},
+                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'id': self.eventID, 'name': 'REVOKE ROLE statement'}
+        elif query_type == "no_explain":
+            query="EXPLAIN SELECT * FROM " + self.query_buckets[0]
+            self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run SELECT queries on default:{0}. Add role query_select on default:{0} to allow the query to run.".format(self.query_buckets[0])}],
+                                'isAdHoc': True,
+                                'statement': "EXPLAIN SELECT * FROM " + self.query_buckets[0] + ";",
+                                'description': 'A N1QL EXPLAIN statement was executed',
+                                'real_userid': {'source': 'local', 'user': 'no_query'},
+                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'id': self.eventID, 'name': 'EXPLAIN statement'}
+
+        elif query_type == "no_prepare":
+            prepared_name = self.gen_vacant_prepared_name("a")
+
+            query="prepare {0} from select * from {1}".format(prepared_name, self.query_buckets[0])
+            self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run SELECT queries on default:{0}. Add role query_select on default:{0} to allow the query to run.".format(self.query_buckets[0])}],
+                                'isAdHoc': True,
+                                'statement': "prepare {0} from select * from {1};".format(prepared_name, self.query_buckets[0]),
+                                'description': 'A N1QL PREPARE statement was executed',
+                                'real_userid': {'source': 'local', 'user': 'no_query'},
+                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'id': self.eventID, 'name': 'PREPARE statement'}
+
+        elif query_type == "no_create_index":
+            query="CREATE INDEX idx on " + self.query_buckets[0] + "(join_day)"
+            self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run index operations. Add role query_manage_index on default:{0} to allow the query to run.".format(self.query_buckets[0])}],
+                                'isAdHoc': True,
+                                'statement': "CREATE INDEX idx on " + self.query_buckets[0] + "(join_day);",
+                                'description': 'A N1QL CREATE INDEX statement was executed',
+                                'real_userid': {'source': 'local', 'user': 'no_query'},
+                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'id': self.eventID, 'name': 'CREATE INDEX statement'}
+
+        elif query_type == "no_alter_index":
+            self.run_cbq_query(
+                query="CREATE INDEX idx4 on " + self.query_buckets[0] + "(join_day) WITH {'nodes':['%s:%s']}" % (
+                    self.servers[0].ip, self.servers[0].port))
+            query = "ALTER INDEX idx4 ON " + self.query_buckets[0] + " WITH {'action':'move','nodes':['%s:%s']}" % (
+                self.servers[1].ip, self.servers[1].port)
+            self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
+
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run index operations. Add role query_manage_index on default:{0} to allow the query to run.".format(self.query_buckets[0])}],
+                                'isAdHoc': True,
+                                'statement': "ALTER INDEX idx4 ON " + self.query_buckets[0] + " WITH {'action':'move','nodes':['%s:%s']};" % (
+                self.servers[1].ip, self.servers[1].port),
+                                'description': 'A N1QL ALTER INDEX statement was executed',
+                                'real_userid': {'source': 'local', 'user': 'no_query'},
+                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'id': self.eventID, 'name': 'ALTER INDEX statement'}
+
+        elif query_type == "no_build_index":
+            self.run_cbq_query(
+                query="CREATE INDEX idx3 on " + self.query_buckets[0] + "(join_yr) WITH {'defer_build':true}")
+            query = "BUILD INDEX on " + self.query_buckets[0] + "(idx3)"
+            self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run index operations. Add role query_manage_index on default:{0} to allow the query to run.".format(self.query_buckets[0])}],
+                                'isAdHoc': True,
+                                'statement': 'BUILD INDEX on ' + self.query_buckets[0] + '(idx3);',
+                                'description': 'A N1QL BUILD INDEX statement was executed',
+                                'real_userid': {'source': 'local', 'user': 'no_query'},
+                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'id': self.eventID, 'name': 'BUILD INDEX statement'}
+
+        elif query_type == "no_drop_index":
+            self.run_cbq_query(query='CREATE INDEX idx2 on ' + self.query_buckets[0] + '(fake1)')
+            query='DROP INDEX idx2 ON ' + self.query_buckets[0]
+            self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run index operations. Add role query_manage_index on default:{0} to allow the query to run.".format(self.query_buckets[0])}],
+                                'isAdHoc': True,
+                                'statement': 'DROP INDEX idx2 ON ' + self.query_buckets[0] + ";",
+                                'description': 'A N1QL DROP INDEX statement was executed',
+                                'real_userid': {'source': 'local', 'user': 'no_query'},
+                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'id': self.eventID, 'name': 'DROP INDEX statement'}
+        elif query_type == "no_primary_index":
+            query="CREATE PRIMARY INDEX on " + self.query_buckets[0]
+            self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run index operations. Add role query_manage_index on default:{0} to allow the query to run.".format(self.query_buckets[0])}],
+                                'isAdHoc': True,
+                                'statement': "CREATE PRIMARY INDEX on " + self.query_buckets[0] + ";",
+                                'description': 'A N1QL CREATE PRIMARY INDEX statement was executed',
+                                'real_userid': {'source': 'local', 'user': 'no_query'},
+                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'id': self.eventID, 'name': 'CREATE PRIMARY INDEX statement'}
+
+        elif query_type == "incorrect_auth":
+            cbqpath = '%scbq' % self.path + " -e %s:%s -u 'no_query' -p 'incorrect_password' -q " % (
+                self.master.ip, self.n1ql_port)
+            query = 'select * from ' + self.query_buckets[0] + ' limit 100'
+            self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"Unable to authorize user. - cause: Authentication failure".format(self.query_buckets[0])}],
+                                'isAdHoc': True,
+                                'statement': 'select * from ' + self.query_buckets[0] + ' limit 100;',
+                                'description': 'A N1QL SELECT statement was executed',
+                                'real_userid': {'source': 'local', 'user': 'no_select'},
+                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'id': self.eventID, 'name': 'SELECT statement'}
+        self.checkConfig(self.eventID, self.master, expected_results, n1ql_audit=True)
+
     def test_audit_create_scope_event(self):
         query_type = self.input.param("ops", None)
         user = self.master.rest_username
@@ -335,7 +519,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
 
         self.run_cbq_query(query="CREATE SCOPE default:default.test2")
         self.sleep(10)
-        expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+        expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                             'isAdHoc': True,
                             'name': 'CREATE SCOPE statement', 'real_userid': {'source': source, 'user': user},
                             'statement': "CREATE SCOPE default:default.test2",
@@ -354,7 +538,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
         except Exception as e:
             self.log.info("scope already exists")
         self.run_cbq_query(query="DROP SCOPE default:default.test2")
-        expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+        expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                             'isAdHoc': True,
                             'name': 'DROP SCOPE statement', 'real_userid': {'source': source, 'user': user},
                             'statement': "DROP SCOPE default:default.test2",
@@ -374,7 +558,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             self.log.info("scope already exists")
         self.run_cbq_query(query="CREATE COLLECTION default:default.test2.test1")
         self.sleep(10)
-        expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+        expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                             'isAdHoc': True,
                             'name': 'CREATE COLLECTION statement', 'real_userid': {'source': source, 'user': user},
                             'statement': "CREATE COLLECTION default:default.test2.test1",
@@ -397,7 +581,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
 
         self.run_cbq_query(query="DROP COLLECTION default:default.test2.test1")
         self.sleep(10)
-        expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+        expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                             'isAdHoc': True,
                             'name': 'DROP COLLECTION statement', 'real_userid': {'source': source, 'user': user},
                             'statement': "DROP COLLECTION default:default.test2.test1",
@@ -430,7 +614,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
                 query='INSERT INTO default:default.test.test1 (KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "old hotel" })')
         self.sleep(10)
         self.run_cbq_query(query="select name from test1 where name = 'old hotel'", query_context='default:default.test')
-        expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+        expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                             'isAdHoc': True,
                             'name': 'SELECT statement', 'real_userid': {'source': source, 'user': user},
                             'statement': "select name from test1 where name = 'old hotel'",
@@ -461,28 +645,28 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
         if not (query_type == 'start'):
             self.run_cbq_query(query='COMMIT TRANSACTION', txnid=txid)
         if query_type == 'select':
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'SELECT statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'select * from ' + self.query_buckets[0] + ' where name = "employee-9"',
                                 'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID, 'txId': txid,
                                 'description': 'A N1QL SELECT statement was executed'}
         elif query_type == 'start':
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'START TRANSACTION statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'START TRANSACTION',
                                 'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID, 'txId': txid,
                                 'description': 'A N1QL START TRANSACTION statement was executed'}
         elif query_type == 'commit':
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'COMMIT TRANSACTION statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'COMMIT TRANSACTION',
                                 'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID, 'txId': txid,
                                 'description': 'A N1QL COMMIT TRANSACTION statement was executed'}
         elif query_type == 'update':
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'UPDATE statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'update ' + self.query_buckets[0] + ' SET name = "employee-9000" where name = "employee-9"',
@@ -490,7 +674,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
                                 'description': 'A N1QL UPDATE statement was executed'}
             self.checkConfig("28679", self.master, expected_results, n1ql_audit=True)
         elif query_type == 'insert':
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'INSERT statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'INSERT INTO ' + self.query_buckets[0] +
@@ -502,7 +686,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
                                 'description': 'A N1QL INSERT statement was executed'}
 
         elif query_type == 'delete':
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None,
                                 'isAdHoc': True,
                                 'name': 'DELETE statement', 'real_userid': {'source': source, 'user': user},
                                 'statement': 'DELETE FROM ' + self.query_buckets[0] + ' WHERE type = "hotel"',
