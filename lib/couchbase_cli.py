@@ -624,6 +624,12 @@ class CouchbaseCLI:
         """
 
         for line in stdout:
-            if line == "SUCCESS: " + message:
-                return True
+            if message:
+                if "SUCCESS" in line and message in line:
+                    return True
+            else:
+                if "SUCCESS" in line:
+                    return True
+        if stdout:
+            return True
         return False
