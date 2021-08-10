@@ -40,12 +40,6 @@ class QueryBackupUDFTests(QueryTests):
 
     def tearDown(self):
         self.log.info("==============  QueryBackupUDFTests tearDown has started ==============")
-        # bucket1 = self.get_bucket_from_name("bucket1")
-        # if bucket1:
-        #     self.delete_bucket(bucket1)
-        # bucket2 = self.get_bucket_from_name("bucket2")
-        # if bucket2:
-        #     self.delete_bucket(bucket2)
         self.log.info("==============  QueryBackupUDFTests tearDown has completed ==============")
         super(QueryBackupUDFTests, self).tearDown()
 
@@ -67,7 +61,7 @@ class QueryBackupUDFTests(QueryTests):
     def backup_merge(self, archive="/backup-1", repo="my_backup", start=1, end=2):
         shell = RemoteMachineShellConnection(self.master)
         output = shell.execute_command(f"{self.path}/cbbackupmgr merge -a {archive} -r {repo} --start {start} --end {end}")
-        return self.convert_list_to_json(output[0])
+        return output
 
     def backup(self, archive="/backup-1", repo="my_backup"):
         shell = RemoteMachineShellConnection(self.master)
@@ -166,7 +160,8 @@ class QueryBackupUDFTests(QueryTests):
             'bucket1.scope1': [{'name': 'func_global'}, {'name': 'scope1_func'}],
             'bucket2.scope2a': [{'name': 'func_global'}, {'name': 'scope2a_func'}],
             'bucket2.scope2b': [{'name': 'func_global'}, {'name': 'scope2b_func'}],
-            'bucket2.scope2a,bucket2.scope2b': [{'name': 'func_global'}, {'name': 'scope2a_func'}, {'name': 'scope2b_func'}]
+            'bucket2.scope2a,bucket2.scope2b': [{'name': 'func_global'}, {'name': 'scope2a_func'}, {'name': 'scope2b_func'}],
+            'bucket1.scope1.collection1': [{'name': 'func_global'}]
         }
         self.include = self.include.strip('"')
         self.assertEqual(result['results'], expected_udf[self.include])
@@ -187,7 +182,8 @@ class QueryBackupUDFTests(QueryTests):
             'bucket1.scope1': [{'name': 'func_global'}, {'name': 'scope2a_func'}, {'name': 'scope2b_func'}],
             'bucket2.scope2a': [{'name': 'func_global'}, {'name': 'scope1_func'}, {'name': 'scope2b_func'}],
             'bucket2.scope2b': [{'name': 'func_global'}, {'name': 'scope1_func'}, {'name': 'scope2a_func'}],
-            'bucket2.scope2a,bucket2.scope2b': [{'name': 'func_global'}, {'name': 'scope1_func'}]
+            'bucket2.scope2a,bucket2.scope2b': [{'name': 'func_global'}, {'name': 'scope1_func'}],
+            'bucket1.scope1.collection1': [{'name': 'func_global'}, {'name': 'scope1_func'}, {'name': 'scope2a_func'}, {'name': 'scope2b_func'}]
         }
         self.exclude = self.exclude.strip('"')
         self.assertEqual(result['results'], expected_udf[self.exclude])
@@ -267,7 +263,7 @@ class QueryBackupUDFTests(QueryTests):
         # Incremental backup 3
         self.backup()
         # Merge backups
-        self.backup_merge(start=1, end=3)
+        output = self.backup_merge(start=1, end=3)
         info = self.backuo_info()
         self.assertEqual(info['backups'][0]['type'], 'MERGE-FULL')
         # Restore merged backup
