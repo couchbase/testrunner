@@ -7,8 +7,7 @@ import os
 
 
 class CbCmdBase:
-    def __init__(self, shell_conn, binary_name,
-                 username="Administrator", password="password"):
+    def __init__(self, shell_conn, binary_name):
         self.shellConn = shell_conn
         self.port = shell_conn.port
         self.mc_port = CbServer.memcached_port
@@ -16,15 +15,18 @@ class CbCmdBase:
                                          9000 + 10):
             multiplier = 2 * (int(shell_conn.port) - 9000)
             self.mc_port = CbServer.cr_memcached_port + multiplier
-        self.username = username
-        self.password = password
+        self.username = TestInputSingleton.input.servers[0].rest_username
+        self.password = TestInputSingleton.input.servers[0].rest_password
         self.binaryName = binary_name
         self.cbstatCmd = "%s%s" % (LINUX_COUCHBASE_BIN_PATH, self.binaryName)
         if int(shell_conn.port) in range(9000,
                                          9000 + 10):
             # Cluster run case
-            self.cbstatCmd = os.path.join(TestInputSingleton.input.servers[0].cli_path,
-                                          "build", "kv_engine", self.binaryName)
+            # self.cbstatCmd = os.path.join(TestInputSingleton.input.servers[0].cli_path,
+            #                               "build", "kv_engine", self.binaryName)
+            #TODo take this input from ini file for cluster_run
+            self.cbstatCmd = "../install/bin/" + \
+                             self.binaryName
         elif self.shellConn.extract_remote_info().type.lower() == 'windows':
             # Windows case
             self.cbstatCmd = "%s%s.exe" % (WIN_COUCHBASE_BIN_PATH,

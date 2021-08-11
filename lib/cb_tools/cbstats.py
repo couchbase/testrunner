@@ -4,13 +4,12 @@ import json
 
 from cb_tools.cb_tools_base import CbCmdBase
 
+from TestInput import TestInputSingleton
+
 
 class Cbstats(CbCmdBase):
-    def __init__(self, shell_conn, username="Administrator",
-                 password="password"):
-
-        CbCmdBase.__init__(self, shell_conn, "cbstats",
-                           username=username, password=password)
+    def __init__(self, shell_conn):
+        CbCmdBase.__init__(self, shell_conn, "cbstats")
 
     def __calculate_vbucket_num(self, doc_key, total_vbuckets):
         """
@@ -349,6 +348,9 @@ class Cbstats(CbCmdBase):
             raise Exception("\n".join(error))
 
         if type(output) is str:
+            output = output.split("\n")
+        elif type(output) is not list:
+            output = str(output, 'utf-8')
             output = output.split("\n")
 
         pattern = "[ \t]*([0-9A-Za-z_]+)[ \t]*:[ \t]+([a-zA-Z0-9\-\.\: ]+)"
