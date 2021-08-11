@@ -29,6 +29,7 @@ from TestInput import TestInputSingleton
 from lib.couchbase_helper.documentgenerator import GeoSpatialDataLoader, WikiJSONGenerator
 from lib.collection.collections_stats import CollectionsStats
 from lib.memcached.helper.data_helper import KVStoreAwareSmartClient
+from lib.Cb_constants.CBServer import CbServer
 from scripts.collect_server_info import cbcollectRunner
 from couchbase_helper.documentgenerator import *
 from tasks.taskmanager import TaskManager
@@ -3688,6 +3689,13 @@ class FTSBaseTest(unittest.TestCase):
         self.scope = TestInputSingleton.input.param("scope", "scope1")
         self.skip_log_scan = self._input.param("skip_log_scan", False)
         self.collection = str(TestInputSingleton.input.param("collection", "collection1"))
+        self.enable_dp = self._input.param("enable_dp", False)
+        self.use_https = self._input.param("use_https", False)
+        self.enforce_tls = self._input.param("enforce_tls", False)
+        if self.use_https:
+            CbServer.use_https = True
+        self.ipv4_only = self._input.param("ipv4_only", False)
+        self.ipv6_only = self._input.param("ipv6_only", False)
         if self.collection.startswith("["):
             self.collection = eval(self.collection)
         use_hostanames = self._input.param("use_hostnames", False)
@@ -3822,8 +3830,37 @@ class FTSBaseTest(unittest.TestCase):
 
         return keyword_count_diff
 
+    def check_ip_family_enforcement(self, ip_family="ipv4_only"):
+        for server in self._cb_cluster.get_nodes():
+            shell = RemoteMachineShellConnection(server)
+            if ip_family == "ipv4_only":
+                processes = shell.get_processes_binding_to_ip_family(ip_family="ipv6")
+            else:
+                processes = shell.get_processes_binding_to_ip_family(ip_family="ipv4")
+            self.log.info("{0} : {1} \n {2} \n\n".format(server.ip, len(processes), processes))
+
     def tearDown(self):
         """Clusters cleanup"""
+        if self._input.param("enforce_tls", False):
+            self.log.info('###################### Disabling n2n encryption')
+            ntonencryptionBase().disable_nton_cluster([self.master])
+        if self._input.param("ipv4_only", False):
+            self.check_ip_family_enforcement(ip_family="ipv4_only")
+            cli = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password)
+            cli.setting_autofailover(0, 60)
+            # TODO : teardown is getting invoked in setup hence disrupting the flow of the tc
+            # cli.set_ip_family("ipv4")
+            # output = cli.get_ip_family()
+            cli.setting_autofailover(1, 60)
+            #self.assertEqual(output[0][0], "Cluster using ipv4", "Failed to change IP family")
+        if self._input.param("ipv6_only", False):
+            self.check_ip_family_enforcement(ip_family="ipv6_only")
+            cli = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password)
+            cli.setting_autofailover(0, 60)
+            # TODO : teardown is getting invoked in setup hence disrupting the flow of the tc
+            # cli.set_ip_family("ipv6")
+            #output = cli.get_ip_family()
+            cli.setting_autofailover(1, 60)
         self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.__case_number}'
         collect_logs = False
         keyword_count_diff = {}
@@ -3968,6 +4005,23 @@ class FTSBaseTest(unittest.TestCase):
             
         if self.ntonencrypt == 'enable':
             self.setup_nton_encryption()
+        if self.enable_dp:
+            for node in self._input.servers:
+                print("Enabling DP for %s" % node)
+                cli = CouchbaseCLI(node)
+                cli.enable_dp()
+        if self.use_https:
+            if self.enforce_tls:
+                self.log.info("#####Enforcing TLS########")
+                ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
+        if self.ipv4_only:
+            self.log.info("Enforcing IPv4 only")
+            rest = RestConnection(self.master)
+            rest.enable_ip_version(afamily='ipv4', afamilyOnly='true')
+        if self.ipv6_only:
+            self.log.info("Enforcing IPv6 only")
+            rest = RestConnection(self.master)
+            rest.enable_ip_version(afamily='ipv6', afamilyOnly='true')
 
     def _enable_diag_eval_on_non_local_hosts(self):
         """
