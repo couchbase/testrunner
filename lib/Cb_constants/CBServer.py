@@ -21,6 +21,7 @@ class CbServer(object):
     moxi_port = 11211
 
     ssl_memcached_port = 11207
+    cr_memcached_port = 12000
 
     # map of {non-ssl,ssl} ports
     ssl_port_map = {str(port): str(ssl_port),

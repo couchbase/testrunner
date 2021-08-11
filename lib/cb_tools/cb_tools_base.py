@@ -12,6 +12,10 @@ class CbCmdBase:
         self.shellConn = shell_conn
         self.port = shell_conn.port
         self.mc_port = CbServer.memcached_port
+        if int(shell_conn.port) in range(9000,
+                                         9000 + 10):
+            multiplier = 2 * (int(shell_conn.port) - 9000)
+            self.mc_port = CbServer.cr_memcached_port + multiplier
         self.username = username
         self.password = password
         self.binaryName = binary_name
