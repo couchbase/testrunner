@@ -497,7 +497,7 @@ class QueryTests(BaseTestCase):
                 self.sleep(10)
                 indexed_doc_count = fts_index.get_indexed_doc_count()
             except KeyError as k:
-                continue
+                pass
             retry_count -= 1
 
         if indexed_doc_count != doc_count:

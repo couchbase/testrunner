@@ -93,6 +93,7 @@ class TestInput(object):
 class TestInputServer(object):
     def __init__(self):
         self.ip = ''
+        self.internal_ip = ''
         self.hostname = ''
         self.ssh_username = ''
         self.ssh_password = ''
@@ -127,6 +128,9 @@ class TestInputServer(object):
         ssh_username_str = "ssh_username:{0}".format(self.ssh_username)
         return "{0} {1}".format(ip_str, ssh_username_str)
 
+    @property
+    def cluster_ip(self):
+        return self.internal_ip or self.ip
 
 class TestInputMembaseSetting(object):
 
@@ -502,6 +506,8 @@ class TestInputParser():
                         server.port = config.get(section, option)
                     if option == 'ip':
                         server.ip = config.get(section, option)
+                    if option == 'internal_ip':
+                        server.internal_ip = config.get(section, option)
                     if option == 'services':
                         server.services = config.get(section, option)
                     if option == 'n1ql_port':

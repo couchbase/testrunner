@@ -481,7 +481,7 @@ class RebalanceHelper():
 
         for server in toBeAdded:
             otpNode = rest.add_node(master.rest_username, master.rest_password,
-                                    server.ip, server.port)
+                                    server.cluster_ip, server.port)
         otpNodes = [node.id for node in rest.node_statuses()]
         started = rest.rebalance(otpNodes, [])
         msg = "rebalance operation started ? {0}"
@@ -496,6 +496,13 @@ class RebalanceHelper():
                 return False, servers_rebalanced
             msg = "successfully rebalanced in selected nodes from the cluster ? {0}"
             log.info(msg.format(result))
+
+            for added in servers_rebalanced:
+                if added.internal_ip:
+                    log.info("Adding alternate address {} after rebalance in using internal ip {}".format(added.ip, added.internal_ip))
+                    rest = RestConnection(added)
+                    rest.set_alternate_address(added.ip)
+
             return result, servers_rebalanced
         return False, servers_rebalanced
 
@@ -549,7 +556,7 @@ class RebalanceHelper():
         try:
             list(map(lambda server: rest.add_node(servers[0].rest_username,
                                              servers[0].rest_password,
-                                             server.ip, server.port), additions))
+                                             server.cluster_ip, server.port), additions))
         except (ServerAlreadyJoinedException,
                 ServerSelfJoinException, AddNodeException) as e:
             log.error("failed to swap rebalance - addition failed %s: %s"
@@ -583,7 +590,7 @@ class RebalanceHelper():
                 continue
             log.info("adding node {0}:{1} to cluster".format(server.ip, server.port))
             try:
-                otpNode = rest.add_node(master.rest_username, master.rest_password, server.ip, server.port)
+                otpNode = rest.add_node(master.rest_username, master.rest_password, server.cluster_ip, server.port)
                 msg = "unable to add node {0}:{1} to the cluster"
                 assert otpNode, msg.format(server.ip, server.port)
             except ServerAlreadyJoinedException:

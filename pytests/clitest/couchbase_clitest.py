@@ -259,9 +259,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
     def _convert_server_to_url(self, server):
         """From 6.5.x, add, remove, failover... need to prefix server with
            http/https and postfix with 8091/18091 """
-        url_server = "http://{0}:{1}".format(server.ip, server.port)
+        url_server = "http://{0}:{1}".format(server.cluster_ip, server.port)
         if self.secure_conn:
-            url_server = "https://{0}:1{1}".format(server.ip, server.port)
+            url_server = "https://{0}:1{1}".format(server.cluster_ip, server.port)
         return url_server
 
 

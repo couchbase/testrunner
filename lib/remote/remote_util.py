@@ -254,6 +254,7 @@ class RemoteMachineShellConnection(KeepRefs):
             self.nonroot = True
         self._ssh_client = paramiko.SSHClient()
         self.ip = serverInfo.ip
+        self.internal_ip = serverInfo.internal_ip if hasattr(serverInfo, "internal_ip") else None
         self.remote = (self.ip != "localhost" and self.ip != "127.0.0.1")
         self.port = serverInfo.port
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -302,11 +303,11 @@ class RemoteMachineShellConnection(KeepRefs):
                 if self.remote and ssh_key == '':
                     self._ssh_client.connect(
                         hostname=ip.replace('[', '').replace(']', ''),
-                        username=ssh_username, password=ssh_password)
+                        username=ssh_username, password=ssh_password, look_for_keys=False)
                 elif self.remote:
                     self._ssh_client.connect(
                         hostname=ip.replace('[', '').replace(']', ''),
-                        username=ssh_username, key_filename=ssh_key)
+                        username=ssh_username, key_filename=ssh_key, look_for_keys=False)
                 is_ssh_ok = True
             except paramiko.BadHostKeyException as bhke:
                 log.error(
@@ -4582,14 +4583,14 @@ class RemoteMachineShellConnection(KeepRefs):
 
         if command != "key" and command != "raw":
             command = "%s %s:11210 %s -u %s -p %s -b %s %s " % (cbstat_command,
-                                                             self.ip, command,
+                                                             self.internal_ip, command,
                                                              cbadmin_user,
                                                              cbadmin_password,
                                                              bucket.name,
                                                              options)
         else:
             command = "%s %s:11210 %s -u %s -p %s %s %s %s " % (cbstat_command,
-                                                             self.ip, command,
+                                                             self.internal_ip, command,
                                                              cbadmin_user,
                                                              cbadmin_password,
                                                              keyname, vbid,
@@ -4621,14 +4622,14 @@ class RemoteMachineShellConnection(KeepRefs):
 
         if command != "key" and command != "raw":
             command = "%s -h %s:11210 %s -u %s -P %s -b %s %s " % (cbstat_command,
-                                                             self.ip, command,
+                                                             self.internal_ip, command,
                                                              cbadmin_user,
                                                              cbadmin_password,
                                                              bucket.name,
                                                              connection_method)
         else:
             command = "%s -h %s:11210 %s -u %s -P %s %s %s %s " % (cbstat_command,
-                                                             self.ip, command,
+                                                             self.internal_ip, command,
                                                              cbadmin_user,
                                                              cbadmin_password,
                                                              keyname, vbid,
@@ -4733,7 +4734,7 @@ class RemoteMachineShellConnection(KeepRefs):
         cbworkloadgen_command = self._get_cbworkloadgen_command()
 
         command = "%s -n %s:%s -r %s -i %s -b %s -c %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
-                                                                          self.ip, self.port,
+                                                                          "localhost", self.port,
                                                                           ratio, num_items, bucket,
                                                                           collection_id,
                                                                           item_size, command_options,
@@ -4746,7 +4747,7 @@ class RemoteMachineShellConnection(KeepRefs):
                               item_size, command_options, timeout=1200):
         cbworkloadgen_command = self._get_cbworkloadgen_command()
         command = "%s -n %s:%s -r %s -i %s -b %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
-                                                                          self.ip, self.port,
+                                                                          "localhost", self.port,
                                                                           ratio, num_items, bucket,
                                                                           item_size, command_options,
                                                                           username, password)

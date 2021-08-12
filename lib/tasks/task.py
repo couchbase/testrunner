@@ -236,6 +236,9 @@ class NodeInitializeTask(Task):
         if self.maxParallelReplicaIndexers is not None:
             rest.set_max_parallel_replica_indexers(self.maxParallelReplicaIndexers)
 
+        if self.server.internal_ip:
+            rest.set_alternate_address(self.server.ip)
+
         rest.init_cluster(username, password, self.port)
         remote_shell = RemoteMachineShellConnection(self.server)
         remote_shell.enable_diag_eval_on_non_local_hosts()
@@ -370,7 +373,7 @@ class BucketCreateTask(Task):
                 self.set_result(True)
                 self.state = FINISHED
                 return
-            if BucketOperationHelper.wait_for_memcached(self.server, self.bucket, self.alt_addr):
+            if BucketOperationHelper.wait_for_memcached(self.server, self.bucket):
                 self.log.info("bucket '{0}' was created with per node RAM quota: {1}".format(self.bucket, self.size))
                 self.set_result(True)
                 self.state = FINISHED
@@ -770,14 +773,14 @@ class RebalanceTask(Task):
                 services_for_node = [self.services[node_index]]
                 node_index += 1
             if self.use_hostnames:
-                self.rest.add_node(master.rest_username, master.rest_password,
-                                   node.hostname, node.port, services=services_for_node)
+                remote_ip = node.hostname
             else:
-                try:
-                    self.rest.add_node(master.rest_username, master.rest_password,
-                                   node.ip, node.port, services=services_for_node)
-                except ServerAlreadyJoinedException:
-                    pass
+                remote_ip = node.cluster_ip
+            try:
+                self.rest.add_node(master.rest_username, master.rest_password,
+                                remote_ip, node.port, services=services_for_node)
+            except ServerAlreadyJoinedException:
+                pass
 
     def start_rebalance(self, task_manager):
         nodes = self.rest.node_statuses()
@@ -895,6 +898,14 @@ class RebalanceTask(Task):
 
             self.log.info("rebalancing was completed with progress: {0}% in {1} sec".
                           format(progress, time.time() - self.start_time))
+
+            for added in self.to_add:
+                if added.internal_ip:
+                    self.log.info("Adding alternate address {} after rebalance in using internal ip {}".format(added.ip, added.internal_ip))
+                    rest = RestConnection(added)
+                    rest.set_alternate_address(added.ip)
+
+
             self.state = FINISHED
             self.set_result(result)
 

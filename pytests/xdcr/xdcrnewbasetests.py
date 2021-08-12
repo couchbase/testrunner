@@ -665,7 +665,7 @@ class XDCRRemoteClusterRef:
 
         if not self.__use_scramsha:
             self.__rest_info = rest_conn_src.add_remote_cluster(
-                dest_master.ip, dest_master.port,
+                dest_master.cluster_ip, dest_master.port,
                 self.dest_user,
                 self.dest_pass, self.__name,
                 demandEncryption=self.__encryption,
@@ -673,7 +673,7 @@ class XDCRRemoteClusterRef:
         else:
             print("Using scram-sha authentication")
             self.__rest_info = rest_conn_src.add_remote_cluster(
-                dest_master.ip, dest_master.port,
+                dest_master.cluster_ip, dest_master.port,
                 self.dest_user,
                 self.dest_pass, self.__name,
                 demandEncryption=self.__encryption,

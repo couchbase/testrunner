@@ -46,6 +46,9 @@ class SwapRebalanceBase(unittest.TestCase):
         self.do_access = self.input.param("do-access", True)
         self.load_started = False
         self.loaders = []
+        for node in self.servers:
+            if node.internal_ip:
+                RestConnection(node).set_alternate_address(node.ip)
         try:
             # Clear the state from Previous invalid run
             if rest._rebalance_progress_status() == 'running':
@@ -319,7 +322,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
         new_swap_servers = self.servers[num_initial_servers:num_initial_servers + self.num_swap]
         for server in new_swap_servers:
-            otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip, server.port)
+            otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.cluster_ip, server.port)
             msg = "unable to add node {0} to the cluster"
             self.assertTrue(otpNode, msg.format(server.ip))
 

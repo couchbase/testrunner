@@ -3341,10 +3341,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rest_src = RestConnection(self.backupset.cluster_host)
         if "community" in self.cb_version:
             rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
-                            self.servers[1].ip, services=['kv', 'index', 'n1ql'])
+                            self.servers[1].cluster_ip, services=['kv', 'index', 'n1ql'])
         else:
             rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
-                            self.servers[1].ip, services=['index', 'kv'])
+                            self.servers[1].cluster_ip, services=['index', 'kv'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
         rebalance.result()
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
@@ -3363,7 +3363,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rest_target = RestConnection(self.backupset.restore_cluster_host)
         rest_target.add_node(self.input.clusters[0][1].rest_username,
                              self.input.clusters[0][1].rest_password,
-                             self.input.clusters[0][1].ip, services=['kv', 'index'])
+                             self.input.clusters[0][1].cluster_ip, services=['kv', 'index'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
         rebalance.result()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
@@ -3392,10 +3392,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.log.info("index storage mode: {0}".format(self.cluster_storage_mode))
         if "community" in self.cb_version:
             rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
-                            self.servers[1].ip, services=['kv', 'index', 'n1ql'])
+                            self.servers[1].cluster_ip, services=['kv', 'index', 'n1ql'])
         else:
             rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
-                            self.servers[1].ip, services=['kv', 'index'])
+                            self.servers[1].cluster_ip, services=['kv', 'index'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
         rebalance.result()
         self.test_storage_mode = self.cluster_storage_mode
@@ -3404,7 +3404,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.test_storage_mode = "memory_optimized"
             self.quota = self._reset_storage_mode(rest_src, self.test_storage_mode)
             rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
-                          self.servers[1].ip, services=['kv', 'index'])
+                          self.servers[1].cluster_ip, services=['kv', 'index'])
             rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
             rebalance.result()
             rest_src.create_bucket(bucket='default', ramQuotaMB=int(self.quota) - 1,
@@ -3434,7 +3434,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rest_target = RestConnection(self.backupset.restore_cluster_host)
         rest_target.add_node(self.input.clusters[0][1].rest_username,
                              self.input.clusters[0][1].rest_password,
-                             self.input.clusters[0][1].ip, services=['kv', 'index'])
+                             self.input.clusters[0][1].cluster_ip, services=['kv', 'index'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
         rebalance.result()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
@@ -3484,7 +3484,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rest_src = RestConnection(self.backupset.cluster_host)
         rest_src.add_node(self.servers[1].rest_username,
                           self.servers[1].rest_password,
-                          self.servers[1].ip, services=['index'])
+                          self.servers[1].cluster_ip, services=['index'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [],
                                                  [])
         rebalance.result()
@@ -3521,7 +3521,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rest_target = RestConnection(self.backupset.restore_cluster_host)
         rest_target.add_node(self.input.clusters[0][1].rest_username,
                              self.input.clusters[0][1].rest_password,
-                             self.input.clusters[0][1].ip, services=['index'])
+                             self.input.clusters[0][1].cluster_ip, services=['index'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [],
                                                  [])
         rebalance.result()
@@ -3558,10 +3558,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rest_src = RestConnection(self.backupset.cluster_host)
         if "community" in self.cb_version:
             rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
-                            self.servers[1].ip, services=['kv', 'index', 'n1ql', 'fts'])
+                            self.servers[1].cluster_ip, services=['kv', 'index', 'n1ql', 'fts'])
         else:
             rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
-                            self.servers[1].ip, services=['kv', 'fts'])
+                            self.servers[1].cluster_ip, services=['kv', 'fts'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
         rebalance.result()
         gen = DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100)), start=0,

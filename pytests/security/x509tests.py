@@ -108,7 +108,7 @@ class x509tests(BaseTestCase):
             remote_client = RemoteMachineShellConnection(servers)
             options = "--regenerate-cert={0}".format(tmp_path)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options,
-                                                                cluster_host=servers.ip, user="Administrator",
+                                                                cluster_host=servers.cluster_ip, user="Administrator",
                                                                 password="password")
             x509main(servers)._delete_inbox_folder()
 

@@ -14,6 +14,7 @@ def main():
     usage = '%prog -i inifile -o outputfile -s servers'
     parser = OptionParser(usage)
     parser.add_option('-s', '--servers', dest='servers')
+    parser.add_option('-x', '--internal_servers', dest='internal_servers', default=None)
     parser.add_option('-d', '--addPoolServerId', dest='addPoolServerId', default=None)
     parser.add_option('-a', '--addPoolServers', dest='addPoolServers', default=None)
     parser.add_option('-i', '--inifile', dest='inifile')
@@ -35,12 +36,19 @@ def main():
     if options.servers:
         if not options.servers.startswith('['):
             options.servers='['+options.servers+']'
+        if options.internal_servers and not options.internal_servers.startswith('['):
+            options.internal_servers='['+options.internal_servers+']'
         servers = json.loads(options.servers)
+        internal_servers = json.loads(options.internal_servers) if options.internal_servers else None
+        internal_servers_map = {}
         # Sort servers by total memory
         test_servers = []
-        for server_ip in servers:
+        for i, server_ip in enumerate(servers):
             server = TestInputServer()
             server.ip = server_ip
+            if internal_servers:
+                server.internal_ip = internal_servers[i]
+                internal_servers_map[server.ip] = server.internal_ip
             server.os = options.os
             if options.os == 'windows':
                 server.ssh_username = DEFAULT_WIN_USER
@@ -99,38 +107,41 @@ def main():
     data = f.readlines()
 
     for i in range( len(data) ):
-          if 'dynamic' in data[i] and servers:
-             data[i] = data[i].replace('dynamic', servers[0])
-             servers.pop(0)
-          elif addPoolServers:
-              if options.addPoolServerId == "localstack" and "endpoint:" in data[i]:
-                  endpoint = data[i].split(":", 1)[1]
-                  data[i] = data[i].replace(endpoint, "http://" + addPoolServers[0] + ":4572\n")
-                  addPoolServers.pop(0)
-              elif options.addPoolServerId in data[i]:
+        if 'dynamic' in data[i] and servers:
+            ip = servers[0]
+            data[i] = data[i].replace('dynamic', ip)
+            servers.pop(0)
+            if internal_servers_map:
+                data[i] += f"internal_ip:{internal_servers_map[ip]}\n"
+        elif addPoolServers:
+            if options.addPoolServerId == "localstack" and "endpoint:" in data[i]:
+                endpoint = data[i].split(":", 1)[1]
+                data[i] = data[i].replace(endpoint, "http://" + addPoolServers[0] + ":4572\n")
+                addPoolServers.pop(0)
+            elif options.addPoolServerId in data[i]:
                 data[i] = data[i].replace(options.addPoolServerId, addPoolServers[0])
                 addPoolServers.pop(0)
 
-          if options.os == 'windows':
-              if 'username:root' in data[i]:
-                  data[i] = data[i].replace('root', DEFAULT_WIN_USER)
-              if 'password:couchbase' in data[i]:
-                  data[i] = data[i].replace('couchbase', DEFAULT_WIN_PWD)
+        if options.os == 'windows':
+            if 'username:root' in data[i]:
+                data[i] = data[i].replace('root', DEFAULT_WIN_USER)
+            if 'password:couchbase' in data[i]:
+                data[i] = data[i].replace('couchbase', DEFAULT_WIN_PWD)
 
-          if 'es_ssh_username:root' in data[i]:
-              data[i] = data[i].replace('es_ssh_username:root', 'username:'+DEFAULT_LINUX_USER)
-          if 'es_ssh_password:couchbase' in data[i]:
-              data[i] = data[i].replace('es_ssh_password:couchbase', 'password:'+DEFAULT_LINUX_PWD)
+        if 'es_ssh_username:root' in data[i]:
+            data[i] = data[i].replace('es_ssh_username:root', 'username:'+DEFAULT_LINUX_USER)
+        if 'es_ssh_password:couchbase' in data[i]:
+            data[i] = data[i].replace('es_ssh_password:couchbase', 'password:'+DEFAULT_LINUX_PWD)
 
-          if 'es_ssh_username:Administrator' in data[i]:
-              data[i] = data[i].replace('es_ssh_username:Administrator', 'username:'+DEFAULT_LINUX_USER)
-          if 'es_ssh_password:Membase123' in data[i]:
-              data[i] = data[i].replace('es_ssh_password:Membase123', 'password:'+DEFAULT_LINUX_PWD)
+        if 'es_ssh_username:Administrator' in data[i]:
+            data[i] = data[i].replace('es_ssh_username:Administrator', 'username:'+DEFAULT_LINUX_USER)
+        if 'es_ssh_password:Membase123' in data[i]:
+            data[i] = data[i].replace('es_ssh_password:Membase123', 'password:'+DEFAULT_LINUX_PWD)
 
-          if options.replaceValue:
-              for oldnew in options.replaceValue.split(','):
-                  old, new = oldnew.split("=")
-                  if old in data[i]:
+        if options.replaceValue:
+            for oldnew in options.replaceValue.split(','):
+                old, new = oldnew.split("=")
+                if old in data[i]:
                     data[i] = data[i].replace(old, new)
 
 

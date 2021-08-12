@@ -824,7 +824,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
 
         args = "backup --archive {0} --repo {1} {6} http{7}://{2}:{8}{3} " \
                "{4} {5}".format(self.backupset.directory, self.backupset.name,
-                                self.backupset.cluster_host.ip,
+                                self.backupset.cluster_host.cluster_ip,
                                 self.backupset.cluster_host.port,
                                 user_input,
                                 password_input,
@@ -965,7 +965,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             .format(self.backupset.directory,
                     self.backupset.name,
                     self.cluster_flag,
-                    self.backupset.restore_cluster_host.ip,
+                    self.backupset.restore_cluster_host.cluster_ip,
                     self.backupset.restore_cluster_host.port,
                     user_input,
                     password_input,
@@ -1190,7 +1190,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                 args += " --replace-ttl {0}".format(self.replace_ttl)
         """ rename restore node to ip """
         RestConnection(self.backupset.restore_cluster_host).rename_node(
-                                            self.backupset.restore_cluster_host.ip)
+                                            self.backupset.restore_cluster_host.cluster_ip)
         if self.backupset.secure_conn:
             cacert = self.get_cluster_certificate_info(self.backupset.backup_host,
                                                        self.backupset.restore_cluster_host)
@@ -2556,10 +2556,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             if not bk_cluster_services:
                 bk_cluster_services = bk_cluster_services.append(self.input.clusters[0][1].services)
             self.sleep(12, "time needs for index service is up (MB-39859)")
-            rest_rs.add_node(self.input.clusters[0][1].rest_username,
-                             self.input.clusters[0][1].rest_password,
-                             self.input.clusters[0][1].ip, services=bk_cluster_services[0])
-            rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
+            rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [self.input.clusters[0][1]], [], services=bk_cluster_services[0])
             rebalance.result()
             count = 0
             while count < 15:

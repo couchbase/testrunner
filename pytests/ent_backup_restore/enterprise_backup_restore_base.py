@@ -629,7 +629,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         args = (
             f"backup --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
             f" --repo {self.backupset.name}"
-            f" {self.cluster_flag} http{url_format}://{self.backupset.cluster_host.ip}:{secure_port}{self.backupset.cluster_host.port}"
+            f" {self.cluster_flag} http{url_format}://{self.backupset.cluster_host.cluster_ip}:{secure_port}{self.backupset.cluster_host.port}"
             f" {user_input}"
             f" {password_input}"
             f"{' --full-backup' if self.backupset.full_backup else ''}"
@@ -776,7 +776,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         args = (
             f"restore --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
             f" --repo {self.backupset.name}"
-            f" {self.cluster_flag} http{url_format}://{self.backupset.restore_cluster_host.ip}:{secure_port}{self.backupset.restore_cluster_host.port}"
+            f" {self.cluster_flag} http{url_format}://{self.backupset.restore_cluster_host.cluster_ip}:{secure_port}{self.backupset.restore_cluster_host.port}"
             f" {user_input}"
             f" {password_input}"
             f" --start {backup_start}"
@@ -2965,10 +2965,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if len(self.input.clusters[0]) > 1:
             if not bk_cluster_services:
                 bk_cluster_services = bk_cluster_services.append(self.input.clusters[0][1].services)
-            rest_rs.add_node(self.input.clusters[0][1].rest_username,
-                             self.input.clusters[0][1].rest_password,
-                             self.input.clusters[0][1].ip, services=bk_cluster_services[0])
-            rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
+            rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [self.input.clusters[0][1]], [], services=bk_cluster_services[0])
             rebalance.result()
             count = 0
             while count < 15:

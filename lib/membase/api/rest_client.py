@@ -255,6 +255,7 @@ class RestConnection(object):
         # serverInfo can be a json object/dictionary
         if isinstance(serverInfo, dict):
             self.ip = serverInfo["ip"]
+            self.internal_ip = serverInfo.get("internal_ip")
             self.username = serverInfo["username"]
             self.password = serverInfo["password"]
             self.port = serverInfo["port"]
@@ -279,6 +280,7 @@ class RestConnection(object):
                 self.services = serverInfo["services"]
         else:
             self.ip = serverInfo.ip
+            self.internal_ip = serverInfo.internal_ip if hasattr(serverInfo, "internal_ip") else None
             self.username = serverInfo.rest_username
             self.password = serverInfo.rest_password
             self.port = serverInfo.port
@@ -391,6 +393,8 @@ class RestConnection(object):
                             self.capiBaseUrl = http_res["couchApiBaseHTTPS"]
                         else:
                             self.capiBaseUrl = http_res["couchApiBase"]
+                        if self.internal_ip and "alternateAddresses" in http_res and "external" in http_res["alternateAddresses"]:
+                            self.capiBaseUrl = self.capiBaseUrl.replace(self.internal_ip, http_res["alternateAddresses"]["external"]["hostname"])
                         return
                 raise ServerUnavailableException("couchApiBase doesn't exist in nodes/self: %s " % http_res)
 
@@ -1674,6 +1678,7 @@ class RestConnection(object):
     def force_eject_node(self):
         self.diag_eval("gen_server:cast(ns_cluster, leave).")
         self.check_delay_restart_coucbase_server()
+        self.set_alternate_address(self.ip)
 
     """ when we do reset couchbase server by force reject, couchbase server will not
         down right away but delay few seconds to be down depend on server spec.
@@ -2184,7 +2189,26 @@ class RestConnection(object):
         """ in alternate address, we need to get hostname from ini file """
         return self.ip
 
+
+    def set_alternate_address(self, alternate_address, alternate_ports={}, network_type="external"):
+        api = self.baseUrl + 'node/controller/setupAlternateAddresses/' + network_type
+        params_dict = {}
+        params_dict["hostname"] = alternate_address
+        for service, port in alternate_ports.items():
+            params_dict[service] = port
+        params = urllib.parse.urlencode(params_dict)
+        status, _, _ = self._http_request(api, 'PUT', params)
+        if not status:
+            raise Exception("Couldn't set alternate address")
+
+
     def node_statuses(self, timeout=120):
+
+        id_to_ip_map = {}
+        real_nodes = self.get_nodes()
+        for node in real_nodes:
+            id_to_ip_map[node.id] = node.ip
+
         nodes = []
         api = self.baseUrl + 'nodeStatuses'
         status, content, header = self._http_request(api, timeout=timeout)
@@ -2207,6 +2231,10 @@ class RestConnection(object):
                 # provided.
                 if node.ip in ['127.0.0.1', '[::1]']:
                     node.ip = self.ip
+
+                if node.id in id_to_ip_map:
+                    node.ip = id_to_ip_map[node.id]
+
                 node.port = int(key[key.rfind(":") + 1:])
                 node.replication = value['replication']
                 if 'gracefulFailoverPossible' in list(value.keys()):
@@ -2363,7 +2391,7 @@ class RestConnection(object):
             return None
         stats = {}
         api = "{0}{1}{2}{3}{4}:{5}{6}".format(self.baseUrl, 'pools/default/buckets/',
-                                     bucket, "/nodes/", node.ip, node.port, "/stats")
+                                     bucket, "/nodes/", node.cluster_ip, node.port, "/stats")
         status, content, header = self._http_request(api)
         if status:
             json_parsed = json.loads(content)
@@ -6058,6 +6086,7 @@ class Node(object):
         self.memcached = 11210
         self.id = ""
         self.ip = ""
+        self.internal_ip = ""
         self.rest_username = ""
         self.rest_password = ""
         self.port = 8091
@@ -6101,6 +6130,10 @@ class Node(object):
         """ Returns the minor version of the node (e.g. 0)
         """
         return self.complete_version.rsplit('.', 1)[1]
+
+    @property
+    def cluster_ip(self):
+        return self.internal_ip or self.ip
 
 class AutoFailoverSettings(object):
     def __init__(self):
@@ -6240,6 +6273,10 @@ class RestParser(object):
             # should work for both: ipv4 and ipv6
             node.ip = parsed["hostname"].rsplit(":", 1)[0]
 
+            if "alternateAddresses" in parsed and "external" in parsed["alternateAddresses"]:
+                node.internal_ip = node.ip
+                node.ip = parsed["alternateAddresses"]["external"]["hostname"]
+
         # memoryQuota
         if 'memoryQuota' in parsed:
             node.memoryQuota = parsed['memoryQuota']
@@ -6300,6 +6337,22 @@ class RestParser(object):
         parsed = json.loads(response)
         return self.parse_get_bucket_json(parsed)
 
+    def get_alt_addr_map(self, nodes):
+        # map of kv ip:port to alt ip/host:port
+        alt_addr_map = {}
+        for node in nodes:
+            if "alternateAddresses" in node and "external" in node["alternateAddresses"]:
+                kv_host = node["hostname"].split(":")[0]
+                kv_port = node["ports"]["direct"]
+
+                alt_host = node["alternateAddresses"]["external"]["hostname"]
+                alt_port = node["alternateAddresses"]["external"]["ports"]["kv"]
+
+                alt_addr_map[f"{kv_host}:{kv_port}"] = f"{alt_host}:{alt_port}"
+
+        return alt_addr_map
+
+
     def parse_get_bucket_json(self, parsed):
         bucket = Bucket()
         bucket.name = parsed['name']
@@ -6311,6 +6364,14 @@ class RestParser(object):
         if 'vBucketServerMap' in parsed:
             vBucketServerMap = parsed['vBucketServerMap']
             serverList = vBucketServerMap['serverList']
+
+            if "nodes" in parsed and parsed["nodes"] is not None:
+                alt_addr_map = self.get_alt_addr_map(parsed["nodes"])
+
+                for i, server in enumerate(serverList):
+                    if server in alt_addr_map:
+                        serverList[i] = alt_addr_map[server]
+
             bucket.servers.extend(serverList)
             if "numReplicas" in vBucketServerMap:
                 bucket.numReplicas = vBucketServerMap["numReplicas"]

@@ -142,31 +142,34 @@ class CBASBaseTest(BaseTestCase):
             self.log.info("successfully rebalanced cluster {0}".format(result))
         else:
             self.assertTrue(started, "Rebalance operation started and in progress,"%self.cbas_servers)
-        
+
     def remove_all_cbas_node_then_rebalance(self,cbas_otpnodes=None, rebalance=True ):
         return self.remove_node(cbas_otpnodes, rebalance) 
-        
+
     def add_node(self, node=None, services=None, rebalance=True, wait_for_rebalance_completion=True):
         if not node:
             self.fail("There is no node to add to cluster.")
         if not services:
-            services = node.services.split(",")        
+            services = node.services.split(",")
         otpnode = self.rest.add_node(user=node.rest_username,
                                password=node.rest_password,
-                               remoteIp=node.ip,
+                               remoteIp=node.cluster_ip,
                                port=8091,
                                services=services
                                )
+        if node.internal_ip:
+            rest = RestConnection(node)
+            rest.set_alternate_address(node.ip)
         if rebalance:
             self.rebalance(wait_for_completion=wait_for_rebalance_completion)
         return otpnode
-    
+
     def remove_node(self,otpnode=None, wait_for_rebalance=True):
         nodes = self.rest.node_statuses()
         '''This is the case when master node is running cbas service as well'''
         if len(nodes) <= len(otpnode):
             return
-        
+
         helper = RestHelper(self.rest)
         try:
             removed = helper.remove_nodes(knownNodes=[node.id for node in nodes],

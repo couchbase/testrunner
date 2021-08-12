@@ -159,7 +159,7 @@ class ImportExportTests(CliBaseTest):
                 export_file = export_file.replace("/cygdrive/c", "c:")
             exe_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -f %s -o %s"\
                          % (self.cli_command_path, "cbexport", self.cmd_ext, self.imex_type,
-                                     server.ip, username, password, bucket.name,
+                                     server.cluster_ip, username, password, bucket.name,
                                                     self.format_type, export_file)
             output, error = self.shell.execute_command(exe_cmd_str)
             self._check_output("successfully", output)
@@ -305,7 +305,7 @@ class ImportExportTests(CliBaseTest):
                             exp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password"\
                                                             " -b %s -f %s -o %s"\
                                   % (self.cli_command_path, self.test_type, self.cmd_ext,
-                                         self.imex_type, self.servers[0].ip, bucket.name,
+                                         self.imex_type, self.servers[0].cluster_ip, bucket.name,
                                                                self.format_type, export_file)
                             output, error = self.shell.execute_command(exp_cmd_str)
                             self.log.info("Output from execute command %s " % output)
@@ -344,7 +344,7 @@ class ImportExportTests(CliBaseTest):
                             imp_cmd_str = "%s%s%s %s -c %s:%s -u Administrator -p password "\
                                                                  "-b %s -d %s%s -f %s -g %s"\
                                      % (self.cli_command_path, self.test_type, self.cmd_ext,
-                                           self.imex_type, server.ip, new_port, bucket.name,
+                                           self.imex_type, server.cluster_ip, new_port, bucket.name,
                                     import_method, self.des_file, self.format_type, key_gen)
                             output, error = self.shell.execute_command(imp_cmd_str)
                             self.log.info("Output from execute command %s " % output)
@@ -356,7 +356,7 @@ class ImportExportTests(CliBaseTest):
                         load_cmd = "%s%s%s -n %s:%s -u Administrator -p password "\
                                                                  "-j -i %s -b %s "\
                             % (self.cli_command_path, "cbworkloadgen", self.cmd_ext,
-                               server.ip, new_port, options["docs"], bucket.name)
+                               server.cluster_ip, new_port, options["docs"], bucket.name)
                         self.shell.execute_command(load_cmd)
                 self.shell.execute_command("rm -rf {0}export{1}"\
                                            .format(self.tmp_path, self.master.ip))
@@ -372,7 +372,7 @@ class ImportExportTests(CliBaseTest):
                         exe_cmd_str = "%s%s%s %s -c %s:%s -u Administrator "\
                                              "-p password -b %s -f %s -o %s"\
                                     % (self.cli_command_path, self.test_type,
-                                       self.cmd_ext, self.imex_type, server.ip,
+                                       self.cmd_ext, self.imex_type, server.cluster_ip,
                                        new_port, bucket.name, self.format_type,
                                                                    export_file)
                         self.shell.execute_command(exe_cmd_str)
@@ -424,7 +424,7 @@ class ImportExportTests(CliBaseTest):
             cmd_str = "%s%s%s %s %s %s %s Administrator %s password %s default %s "\
                                      "file://%sdefault  %s lines %s key::%%index%%"\
                             % (self.cli_command_path, cmd, self.cmd_ext,
-                           self.imex_type, self.cluster_flag, server.ip,
+                           self.imex_type, self.cluster_flag, server.cluster_ip,
                            self.user_flag, self.password_flag, self.bucket_flag,
                            self.dataset_flag, data_path, self.format_flag,
                            self.generate_flag)
@@ -438,7 +438,7 @@ class ImportExportTests(CliBaseTest):
             cmd_str = "%s%s%s %s %s %s %s Administrator %s password %s default "\
                                                              "  %s lines %s %s "\
                             % (self.cli_command_path, cmd, self.cmd_ext,
-                           self.imex_type, self.cluster_flag, server.ip,
+                           self.imex_type, self.cluster_flag, server.cluster_ip,
                            self.user_flag, self.password_flag, self.bucket_flag,
                            self.format_flag, self.output_flag, export_file)
         output, error = self.shell.execute_command(cmd_str)
@@ -630,7 +630,7 @@ class ImportExportTests(CliBaseTest):
                     load_cmd = "%s%s%s -n %s:8091 -u Administrator -p password -j "\
                                                                      "-i %s -b %s "\
                             % (self.cli_command_path, "cbworkloadgen", self.cmd_ext,
-                                             server.ip, self.num_items, bucket.name)
+                                             server.cluster_ip, self.num_items, bucket.name)
                     self.shell.execute_command(load_cmd)
                     export_file = self.ex_path + bucket.name
                     export_file_cmd = export_file
@@ -847,7 +847,7 @@ class ImportExportTests(CliBaseTest):
             else:
                 export_file = self.tmp_path + "export{0}/".format(self.master.ip) + "default"
 
-        master_ip = self.master.ip
+        master_ip = self.master.cluster_ip
         if self.enable_ipv6:
             raw_master_ip = shell.get_ip_address()
             nodes = RestConnection(self.master).node_statuses()
@@ -968,7 +968,7 @@ class ImportExportTests(CliBaseTest):
                         self.log.info("load json to bucket %s " % bucket.name)
                         load_cmd = "%s%s%s -n %s:8091 -u %s -p '%s' -j -i %s -b %s "\
                             % (self.cli_command_path, "cbworkloadgen", self.cmd_ext,
-                               server.ip, username, password, options["docs"],
+                               server.cluster_ip, username, password, options["docs"],
                                bucket.name)
                         if self.dgm_run and self.active_resident_threshold:
                             """ disable auto compaction so that bucket could
@@ -1016,7 +1016,7 @@ class ImportExportTests(CliBaseTest):
                     exe_cmd_str = "%s%s%s %s -c http%s://%s:%s8091 -u %s -p '%s' " \
                                   " -b %s -f %s %s -o %s -t 4"\
                                   % (self.cli_command_path, cmd, self.cmd_ext,
-                                     self.imex_type, url_format, server.ip,
+                                     self.imex_type, url_format, server.cluster_ip,
                                      secure_port, username, password, bucket.name,
                                      self.format_type, secure_conn, export_file)
                     if self.dgm_run:
@@ -1181,7 +1181,7 @@ class ImportExportTests(CliBaseTest):
                                   " %s%s %s %s %s %s %s %s %s"\
                                        % (self.cli_command_path, cmd, self.cmd_ext,
                                           self.imex_type,
-                                          url_format, server.ip, secure_port,
+                                          url_format, server.cluster_ip, secure_port,
                                           username, password,
                                           bucket.name,
                                           import_method, des_file,
@@ -1330,7 +1330,7 @@ class ImportExportTests(CliBaseTest):
                 cmd = "%scbexport%s %s -c %s -u %s -p '%s' -b %s -f %s -o %s"\
                               % (self.cli_command_path, self.cmd_ext,
                                  self.imex_type,
-                                 self.master.ip, "cbadminbucket", "password",
+                                 self.master.cluster_ip, "cbadminbucket", "password",
                                  "default", self.format_type, export_file_cmd)
                 output, error = self.shell.execute_command(cmd)
                 if self.debug_logs:

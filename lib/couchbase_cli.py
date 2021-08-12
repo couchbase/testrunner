@@ -5,7 +5,8 @@ from testconstants import COUCHBASE_FROM_4DOT6
 class CouchbaseCLI:
     def __init__(self, server, username=None, password=None, cb_version=None):
         self.server = server
-        self.hostname = "%s:%s" % (server.ip, server.port)
+        # Use the internal ip if it's defined when running a command on the remote server
+        self.hostname = "%s:%s" % (server.cluster_ip, server.port)
         self.username = username
         self.password = password
         self.cb_version = cb_version

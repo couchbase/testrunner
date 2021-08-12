@@ -48,6 +48,7 @@ import testconstants
 
 from TestInput import TestInputSingleton, TestInputServer
 from scripts.java_sdk_setup import JavaSdkSetup
+from tasks.future import Future
 
 
 class BaseTestCase(unittest.TestCase):
@@ -242,6 +243,9 @@ class BaseTestCase(unittest.TestCase):
 
             self.log.info("==============  basetestcase setup was started for test #{0} {1}==============" \
                           .format(self.case_number, self._testMethodName))
+
+            self.set_alternate_address_all_nodes()
+
             if not self.input.param("skip_cleanup", False) and not self.skip_buckets_handle and not self.skip_init_check_cbserver:
                 self._cluster_cleanup()
 
@@ -313,6 +317,7 @@ class BaseTestCase(unittest.TestCase):
             if not self.skip_init_check_cbserver:
                 self.log.info("initializing cluster")
                 self.reset_cluster()
+                self.set_alternate_address_all_nodes()
                 cli_command = 'node-init'
                 if self.hostname is True:
                     for server in self.servers:
@@ -387,6 +392,9 @@ class BaseTestCase(unittest.TestCase):
                 cli.setting_autofailover(1, 60)
                 self.sleep(2)
                 self.check_ip_family_enforcement(ip_family="ipv6_only")
+
+            self.set_alternate_address_all_nodes()
+
             # Perform a custom rebalance by setting input param `custom_rebalance` to True
             # and implement the make_cluster method in a child class. This works by setting
             # skip_rebalance to True and then calling your custom rebalance method.
@@ -502,6 +510,19 @@ class BaseTestCase(unittest.TestCase):
             traceback.print_exc()
             self.cluster.shutdown(force=True)
             self.fail(e)
+
+    def set_alternate_address_all_nodes(self):
+        for node in self.servers:
+            if node.internal_ip:
+                rest = RestConnection(node)
+                rest.set_alternate_address(node.ip)
+                Future.wait_until(
+                    lambda: rest.get_nodes_self(),
+                    lambda self_node: self_node.ip == node.ip,
+                    10,
+                    interval_time=0.1,
+                    exponential_backoff=False
+                )
 
     def custom_rebalance(self):
         """ Override this method to perform a custom rebalance
@@ -3242,7 +3263,7 @@ class BaseTestCase(unittest.TestCase):
             options = "--regenerate-cert={0}".format(tmp_path)
             output, error = remote_client.execute_couchbase_cli(
                 cli_command=cli_command, options=options,
-                cluster_host=server.ip, user="Administrator",
+                cluster_host=server.cluster_ip, user="Administrator",
                 password="password")
             x509main(server)._delete_inbox_folder()
 

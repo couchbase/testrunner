@@ -32,7 +32,10 @@ class ClusterOperationHelper(object):
             for serverInfo in servers[1:]:
                 log.info('adding node : {0}:{1} to the cluster'.format(
                         serverInfo.ip, serverInfo.port))
-                otpNode = rest.add_node(master.rest_username, master.rest_password, serverInfo.ip, port=serverInfo.port)
+                if serverInfo.internal_ip:
+                    rest = RestConnection(serverInfo)
+                    rest.set_alternate_address(serverInfo.ip)
+                otpNode = rest.add_node(master.rest_username, master.rest_password, serverInfo.cluster_ip, port=serverInfo.port)
                 if otpNode:
                     log.info('added node : {0} to the cluster'.format(otpNode.id))
                 else:
@@ -55,10 +58,13 @@ class ClusterOperationHelper(object):
         for serverInfo in all_servers:
             if serverInfo.ip != master.ip:
                 log.info('adding node : {0}:{1} to the cluster'.format(
-                        serverInfo.ip, serverInfo.port))
+                        serverInfo.cluster_ip, serverInfo.port))
+                if serverInfo.internal_ip:
+                    rest = RestConnection(serverInfo)
+                    rest.set_alternate_address(serverInfo.ip)
                 otpNode = rest.add_node(rest_settings.rest_username,
                                         rest_settings.rest_password,
-                                        serverInfo.ip)
+                                        serverInfo.cluster_ip)
                 if otpNode:
                     log.info('added node : {0} to the cluster'.format(otpNode.id))
                     otpNodes.append(otpNode)
@@ -313,7 +319,7 @@ class ClusterOperationHelper(object):
                                 rest = RestConnection(server)
                                 break
                     else:
-                        rest = RestConnection(node)
+                        rest = RestConnection(removed)
                     if not alt_addr:
                         rest.force_eject_node()
                 except Exception as ex:
