@@ -31,7 +31,7 @@ class CbCmdBase:
             # Windows case
             self.cbstatCmd = "%s%s.exe" % (WIN_COUCHBASE_BIN_PATH,
                                            self.binaryName)
-        elif self.shellConn.extract_remote_info().type.lower() == 'mac':
+        elif self.shellConn.extract_remote_info().distribution_type.lower() == 'mac':
             # MacOS case
             self.cbstatCmd = "%s%s" % (MAC_COUCHBASE_BIN_PATH,
                                        self.binaryName)
