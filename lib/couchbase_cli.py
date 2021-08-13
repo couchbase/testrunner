@@ -635,7 +635,7 @@ class CouchbaseCLI:
         return stdout, stderr, self._was_success(stdout, "SUCCESS: "
                                                          "Switched IP family of the cluster")
 
-    def get_ip_family(self, ):
+    def get_ip_family(self):
         options = self._get_default_options()
         options += " --get "
 
