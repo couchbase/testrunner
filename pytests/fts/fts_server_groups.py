@@ -2,6 +2,7 @@
 
 from .fts_base import FTSBaseTest
 from lib.membase.api.rest_client import RestConnection
+from lib.membase.api.rest_client import RestHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.upgrade.newupgradebasetest import NewUpgradeBaseTest
 import queue
@@ -11,6 +12,7 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
     def setUp(self):
         super(FTSServerGroups, self).setUp()
         self.rest = RestConnection(self._cb_cluster.get_master_node())
+        self.helper = RestHelper(self.rest)
         self.default_group_name = "Group 1"
         self.fts_query = {"match": "emp", "field": "type"}
 
@@ -68,6 +70,8 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
             fts_nodes = self.get_zone_healthy_fts_nodes(zone=post_eject_query_zone)
             post_eject_query_nodes.extend(fts_nodes)
 
+        self._maybe_rebalance()
+
         try:
             for healthy_fts_node in post_eject_query_nodes:
                 post_eject_hits, _, _, _ = idx.execute_query(self.fts_query, node=healthy_fts_node)
@@ -86,6 +90,8 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
 
         self.update_index(index=idx, mod_type=mod_type)
 
+        self._maybe_rebalance()
+
         fts_nodes = self._cb_cluster.get_fts_nodes()
         etalon_hits = self.query_node(index=idx, node=fts_nodes[0])
         for node in fts_nodes[1:]:
@@ -99,7 +105,10 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
         idx = self.build_index()
 
         idx.update_num_replicas(final_replicas)
+
         self.wait_for_indexing_complete(item_count=1000)
+        self._maybe_rebalance()
+
         index_replica = idx.get_num_replicas()
         zones_with_replica = self.calculate_zones_with_replica(index=idx)
         self.assertEqual(index_replica + 1, zones_with_replica,
@@ -113,6 +122,8 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
         self.load_data()
         idx = self.build_index()
         self.wait_for_indexing_complete(item_count=1000)
+
+        self._maybe_rebalance()
 
         for zone in self.rest.get_zone_names():
             zone_fts_nodes = self.get_zone_healthy_fts_nodes(zone=zone)
@@ -138,6 +149,8 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
             idx.update_num_replicas(final_replicas)
         self.wait_for_indexing_complete(item_count=1000)
 
+        self._maybe_rebalance()
+
         for zone in self.rest.get_zone_names():
             zone_fts_nodes = self.get_zone_healthy_fts_nodes(zone=zone)
             if len(zone_fts_nodes) > 0:
@@ -150,6 +163,9 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
                 self.assertEqual(zone_partitions_count, index_partitions, "Actual post server groups update partitions distribution differs from expected.")
 
         fts_nodes = self._cb_cluster.get_fts_nodes()
+
+        self._maybe_rebalance()
+
         initial_hits = self.query_node(index=idx, node=fts_nodes[0])
         for node in fts_nodes[1:]:
             hits = self.query_node(index=idx, node=node)
@@ -175,6 +191,8 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
             self.wait_for_indexing_complete(item_count=1000)
             self.build_cluster()
             self.wait_for_indexing_complete(item_count=1000)
+
+        self._maybe_rebalance()
 
         for zone in self.rest.get_zone_names():
             zone_fts_nodes = self.get_zone_healthy_fts_nodes(zone=zone)
@@ -209,6 +227,8 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
 
         self.wait_for_indexing_complete(item_count=1000)
 
+        self._maybe_rebalance()
+
         fts_nodes = self._cb_cluster.get_fts_nodes()
         for node in fts_nodes:
             hits = self.query_node(index=idx, node=node)
@@ -238,6 +258,8 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
 
         self.wait_for_indexing_complete(item_count=1000)
 
+        self._maybe_rebalance()
+
         # server group having maximum number of partitions
         max_server_group = self.find_max_server_group(idx=idx)
 
@@ -262,6 +284,8 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
             if max_group_fts_nodes[i].ip != min_fts_node.ip:
                 self._cb_cluster.failover(graceful=False, node=max_group_fts_nodes[i])
 
+        self._maybe_rebalance()
+
         min_fts_node_hints = self.query_node(index=idx, node=min_fts_node)
         self.assertEqual(initial_hits, min_fts_node_hints, "Best effort distribution test is failed.")
 
@@ -277,6 +301,8 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
 
         self.wait_for_indexing_complete(item_count=1000)
 
+        self._maybe_rebalance()
+
         fts_nodes = self._cb_cluster.get_fts_nodes()
         for node in fts_nodes:
             hits = self.query_node(index=idx, node=node)
@@ -285,6 +311,8 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
     def test_replicas_distribution_negative(self):
         self.build_cluster()
         self.load_data()
+        self._maybe_rebalance()
+
         try:
             idx = self.build_index()
             self.wait_for_indexing_complete(item_count=1000)
@@ -303,6 +331,7 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
         self.rest.update_autofailover_settings(True, 60, enableServerGroup=True)
 
         ejected_nodes = self.eject_nodes(eject_nodes_structure=eject_nodes_structure, eject_type=eject_type)
+
         try:
             self.sleep(120, "Waiting for server group auto failover to be started.")
             initial_hits = self.query_node(index=idx, node=self._cb_cluster.get_fts_nodes()[0])
@@ -341,22 +370,23 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
 
         operation = self._input.param("operation", None)
         if 'add_group' == operation:
-            add_group = self._input.param("add_server_group", None)
-            group_name = add_group.split("-")[0]
-            group_nodes = add_group.split("-")[1].split(":")
-            self.rest.add_zone(group_name)
-            nodes_to_move = []
-            for node in group_nodes:
-                node_to_shuffle = available_nodes.pop(0)
-                nodes_to_move.append(node_to_shuffle.ip)
-                if 'D' == node:
-                    self._cb_cluster.rebalance_in_node(nodes_in=[node_to_shuffle], services=['kv'], sleep_before_rebalance=0)
-                elif 'F' == node:
-                    self._cb_cluster.rebalance_in_node(nodes_in=[node_to_shuffle], services=['fts'],
-                                                       sleep_before_rebalance=0)
-                else:
-                    self.fail(f"Unsupported node type found {node}!")
-            self.rest.shuffle_nodes_in_zones(moved_nodes=nodes_to_move, source_zone=self.default_group_name, target_zone=group_name)
+            add_groups = self._input.param("add_server_group", None).split("|")
+            for add_group in add_groups:
+                group_name = add_group.split("-")[0]
+                group_nodes = add_group.split("-")[1].split(":")
+                self.rest.add_zone(group_name)
+                nodes_to_move = []
+                for node in group_nodes:
+                    node_to_shuffle = available_nodes.pop(0)
+                    nodes_to_move.append(node_to_shuffle.ip)
+                    if 'D' == node:
+                        self._cb_cluster.rebalance_in_node(nodes_in=[node_to_shuffle], services=['kv'], sleep_before_rebalance=0)
+                    elif 'F' == node:
+                        self._cb_cluster.rebalance_in_node(nodes_in=[node_to_shuffle], services=['fts'],
+                                                           sleep_before_rebalance=0)
+                    else:
+                        self.fail(f"Unsupported node type found {node}!")
+                self.rest.shuffle_nodes_in_zones(moved_nodes=nodes_to_move, source_zone=self.default_group_name, target_zone=group_name)
         elif 'remove_group' == operation:
             self.eject_nodes(eject_nodes_structure=eject_nodes_structure, eject_type=eject_type)
         elif 'add_nodes' == operation:
@@ -482,6 +512,7 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
             group_name = server_group.split("-")[0]
             group_nodes = server_group.split("-")[1].split(":")
             self.rest.add_zone(group_name)
+            self.rest.get_all_zones_info()
             nodes_to_move = []
 
             for node in group_nodes:
@@ -585,3 +616,7 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
                         nodes_to_move.append(key)
                     self.rest.shuffle_nodes_in_zones(moved_nodes=nodes_to_move, source_zone=g, target_zone=self.default_group_name)
                 self.rest.delete_zone(g)
+
+    def _maybe_rebalance(self):
+        if not self.helper.is_cluster_rebalanced():
+            self._cb_cluster.rebalance_failover_nodes()
