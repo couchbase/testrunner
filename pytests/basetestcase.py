@@ -366,12 +366,24 @@ class BaseTestCase(unittest.TestCase):
                         self.log.critical("Port binding after enforcing TLS incorrect")
             if self.ipv4_only:
                 self.log.info("Enforcing IPv4 only")
-                rest = RestConnection(self.master)
-                rest.enable_ip_version(afamily='ipv4', afamilyOnly='true')
+                cli = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password)
+                cli.setting_autofailover(0, 60)
+                _, _, success = cli.set_ip_family("ipv4only")
+                if not success:
+                    self.fail("Unable to change ip-family to ipv4only")
+                cli.setting_autofailover(1, 60)
+                self.sleep(2)
+                self.check_ip_family_enforcement(ip_family="ipv4_only")
             if self.ipv6_only:
                 self.log.info("Enforcing IPv6 only")
-                rest = RestConnection(self.master)
-                rest.enable_ip_version(afamily='ipv6', afamilyOnly='true')
+                cli = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password)
+                cli.setting_autofailover(0, 60)
+                _, _, success = cli.set_ip_family("ipv6only")
+                if not success:
+                    self.fail("Unable to change ip-family to ipv4oipv6onlynly")
+                cli.setting_autofailover(1, 60)
+                self.sleep(2)
+                self.check_ip_family_enforcement(ip_family="ipv6_only")
             # Perform a custom rebalance by setting input param `custom_rebalance` to True
             # and implement the make_cluster method in a child class. This works by setting
             # skip_rebalance to True and then calling your custom rebalance method.
@@ -3108,6 +3120,8 @@ class BaseTestCase(unittest.TestCase):
                 else:
                     processes = shell.get_processes_binding_to_ip_family(ip_family="ipv4")
                 self.log.info("{0} : {1} \n {2} \n\n".format(server.ip, len(processes), processes))
+                if len(processes) != 0:
+                    self.fail("Ports are still binding to the opposite ip-family")
 
     def set_flusher_total_batch_limit(self, flusher_total_batch_limit=3, buckets=None):
         self.log.info("Changing the bucket properties by changing flusher_total_batch_limit to {0}".

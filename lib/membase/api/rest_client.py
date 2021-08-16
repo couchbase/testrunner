@@ -5798,6 +5798,12 @@ class RestConnection(object):
             log.error("Failed to set 'enableExternalListener' on this node {0}"
                       .format(self.baseUrl))
             raise Exception(content)
+        if afamilyOnly == 'true':
+            api = "{0}node/controller/disableUnusedExternalListeners".format(self.baseUrl)
+            status, _, _ = self._http_request(api, 'POST', params)
+            if not status:
+                log.error("Failed to set 'disableUnusedExternalListeners' on this node {0}"
+                          .format(self.baseUrl))
         self.update_autofailover_settings(True, 60)
 
     # These methods are added for Auto-Rebalance On Failure tests
