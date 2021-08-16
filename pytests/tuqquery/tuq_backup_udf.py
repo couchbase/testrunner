@@ -211,6 +211,12 @@ class QueryBackupUDFTests(QueryTests):
                 {'bucket': 'bucket1', 'name': 'scope1_func', 'scope': 'scope1b'},
                 {'bucket': 'bucket2', 'name': 'scope2a_func', 'scope': 'scope2a'}, 
                 {'bucket': 'bucket2', 'name': 'scope2b_func', 'scope': 'scope2b'} 
+            ],
+            'bucket1.scope1.collection1=bucket1.scope1.collection1b': [
+                {'name': 'func_global'},
+                {'bucket': 'bucket1', 'name': 'scope1_func', 'scope': 'scope1'},
+                {'bucket': 'bucket2', 'name': 'scope2a_func', 'scope': 'scope2a'}, 
+                {'bucket': 'bucket2', 'name': 'scope2b_func', 'scope': 'scope2b'}
             ]
         }
         self.map = self.map.strip('"')
@@ -280,4 +286,25 @@ class QueryBackupUDFTests(QueryTests):
         self.assertEqual(result['results'], expected_udf)
 
     def test_restore_replace(self):
-        pass
+        self.create_udf()
+        result = self.run_cbq_query("execute function default:bucket2.scope2a.scope2a_func()")
+        self.assertEqual(result['results'], [0])
+
+        self.backup_config()
+        self.backup()
+        self.drop_udf()
+        result = self.run_cbq_query("select f.identity.name from system:functions as f order by f.identity.name")
+        self.log.info(result['results'])
+        self.assertEqual(result['results'], [])
+
+        result = self.run_cbq_query("CREATE FUNCTION default:bucket2.scope2a.scope2a_func() { 10 }")
+        result = self.run_cbq_query("execute function default:bucket2.scope2a.scope2a_func()")
+        self.assertEqual(result['results'], [10])
+
+        output = self.restore()
+        result = self.run_cbq_query("select f.identity.name from system:functions as f order by f.identity.name")
+        expected_udf = [{'name': 'func_global'}, {'name': 'scope1_func'}, {'name': 'scope2a_func'}, {'name': 'scope2b_func'}]
+        self.assertEqual(result['results'], expected_udf)
+
+        result = self.run_cbq_query("execute function default:bucket2.scope2a.scope2a_func()")
+        self.assertEqual(result['results'], [0])
