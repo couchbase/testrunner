@@ -4698,6 +4698,23 @@ class FTSBaseTest(unittest.TestCase):
                            num_node_partitions))
         return True
 
+    def validate_file_copy_rebalance_stats(self):
+        file_copy_transfer_found = False
+        file_transfer_success = True
+        failed_file_transfer = []
+        for serverInfo in self._cb_cluster.get_fts_nodes():
+            self.log.info("Validating stats for node...".format(serverInfo.ip))
+            rest = RestConnection(serverInfo)
+            pindex_stats = rest.get_fts_pindex_stats()
+            for key in pindex_stats.keys():
+                if pindex_stats[key]['copyPartitionStats']['TotCopyPartitionStart'] == 1:
+                    file_copy_transfer_found = True
+                if pindex_stats[key]['copyPartitionStats']['TotCopyPartitionStart'] \
+                        != pindex_stats[key]['copyPartitionStats']['TotCopyPartitionFinished']:
+                    file_transfer_success = False
+                    failed_file_transfer.append(key)
+        return file_copy_transfer_found, file_transfer_success, failed_file_transfer
+
     def generate_random_queries(self, index, num_queries=1, query_type=["match"],
                                 seed=0):
         """
