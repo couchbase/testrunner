@@ -380,7 +380,7 @@ class BaseTestCase(unittest.TestCase):
                 cli.setting_autofailover(0, 60)
                 _, _, success = cli.set_ip_family("ipv6only")
                 if not success:
-                    self.fail("Unable to change ip-family to ipv4oipv6onlynly")
+                    self.fail("Unable to change ip-family to ipv6only")
                 cli.setting_autofailover(1, 60)
                 self.sleep(2)
                 self.check_ip_family_enforcement(ip_family="ipv6_only")
