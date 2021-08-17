@@ -1679,14 +1679,15 @@ class RestConnection(object):
         down right away but delay few seconds to be down depend on server spec.
         This fx will detect that delay and return true when couchbase server down and
         up again after force reject """
-    def check_delay_restart_coucbase_server(self):
+    def check_delay_restart_coucbase_server(self,disable_ssl_certificate_validation=True):
         api = self.baseUrl + 'nodes/self'
         headers = self._create_headers()
         break_out = 0
         count_cbserver_up = 0
         while break_out < 60 and count_cbserver_up < 2:
             try:
-                response, content = httplib2.Http(timeout=120).request(api, 'GET', '', headers)
+                response, content = httplib2.Http(timeout=120,disable_ssl_certificate_validation=disable_ssl_certificate_validation\
+                                                                                                ).request(api, 'GET', '', headers)
                 if response['status'] in ['200', '201', '202'] and count_cbserver_up == 0:
                     log.info("couchbase server is up but down soon.")
                     time.sleep(1)

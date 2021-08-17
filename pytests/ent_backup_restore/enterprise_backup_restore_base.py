@@ -81,9 +81,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.merge_should_fail = self.input.param("merge_should_fail", False)
         self.database_path = COUCHBASE_DATA_PATH
 
-        cmd = 'curl -g {0}:8091/diag/eval -u {1}:{2} '.format(self.master.ip,
+        if self.enforce_tls:
+            self.master.port = '18091'
+            for server in self.servers:
+                server.port = '18091'
+
+        cmd = 'curl -g -k https://{0}:{3}/diag/eval -u {1}:{2} '.format(self.master.ip,
                                                               self.master.rest_username,
-                                                              self.master.rest_password)
+                                                              self.master.rest_password,
+                                                              self.master.port)
         cmd += '-d "path_config:component_path(bin)."'
         bin_path = subprocess.check_output(cmd, shell=True)
         try:
@@ -580,6 +586,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                        self.backupset.cluster_host)
             secure_port = "1"
             url_format = "s"
+        if self.enforce_tls:
+            url_format = "s"
 
         user_input = "--username %s " % self.backupset.cluster_host_username
         password_input = "--password %s " % self.backupset.cluster_host_password
@@ -731,6 +739,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                        self.backupset.restore_cluster_host)
             url_format = "s"
             secure_port = "1"
+        if self.enforce_tls:
+            url_format = "s"
 
         user_input = "--username %s " % self.backupset.restore_cluster_host_username
         password_input = "--password %s " % self.backupset.restore_cluster_host_password
@@ -1872,9 +1882,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.os_name == "windows":
             cert_file_location = WIN_TMP_PATH_RAW + "cert.pem"
         shell = RemoteMachineShellConnection(server_host)
-        cmd = "%s/couchbase-cli ssl-manage -c %s:8091 -u Administrator -p password " \
+        cmd = "%s/couchbase-cli ssl-manage -c %s:%s -u Administrator -p password " \
               " --cluster-cert-info > %s" % (self.cli_command_location,
                                              server_cert.ip,
+                                             server_cert.port,
                                              cert_file_location)
         output, _ = shell.execute_command(cmd)
         if output and "Error" in output[0]:
