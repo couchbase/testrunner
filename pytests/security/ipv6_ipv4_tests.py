@@ -8,7 +8,7 @@ import subprocess
 from couchbase.cluster import PasswordAuthenticator
 from couchbase.cluster import Cluster
 from couchbase_helper.documentgenerator import BlobGenerator
-
+from couchbase_cli import CouchbaseCLI
 
 class ipv6_ipv4_tests(BaseTestCase):
     REST_PORT = "8091"
@@ -316,6 +316,7 @@ class IPv4_IPv6_only(BaseTestCase):
         super(IPv4_IPv6_only, self).setUp()
         gen_initial_create = BlobGenerator('IPv4_IPv6_only', 'IPv4_IPv6_only', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen_initial_create, "create", 0)
+        self.change_addr_family = self.input.param("change_addr_family", "False")
 
     def tearDown(self):
         super(IPv4_IPv6_only,self).tearDown()
@@ -338,6 +339,33 @@ class IPv4_IPv6_only(BaseTestCase):
         self.sleep(2)
         rest = RestConnection(self.master)
         reached = RestHelper(rest).rebalance_reached(percentage=30)
+        if self.change_addr_family:
+            if self.ipv4_only:
+                cli = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password)
+                cli.setting_autofailover(0, 60)
+                _, _, success = cli.set_ip_family("ipv6only")
+                if not success:
+                    self.fail("Unable to change ip-family to ipv6only")
+                self.check_ip_family_enforcement(ip_family="ipv6_only")
+                self.sleep(2)
+                _, _, success = cli.set_ip_family("ipv4only")
+                if not success:
+                    self.fail("Unable to change ip-family to ipv4only")
+                cli.setting_autofailover(1, 60)
+                self.check_ip_family_enforcement(ip_family="ipv4_only")
+            if self.ipv6_only:
+                cli = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password)
+                cli.setting_autofailover(0, 60)
+                _, _, success = cli.set_ip_family("ipv4only")
+                if not success:
+                    self.fail("Unable to change ip-family to ipv4only")
+                self.check_ip_family_enforcement(ip_family="ipv4_only")
+                self.sleep(2)
+                _, _, success = cli.set_ip_family("ipv6only")
+                if not success:
+                    self.fail("Unable to change ip-family to ipv6only")
+                cli.setting_autofailover(1, 60)
+                self.check_ip_family_enforcement(ip_family="ipv6_only")
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         # Validate during rebalance
         self._validate_ip_addrress_family()
