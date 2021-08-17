@@ -4347,7 +4347,12 @@ class RemoteMachineShellConnection(KeepRefs):
         if getReplica:
              replicaOption = "  --source-vbucket-state=replica"
 
-        source = "http://" + self.ip + ":8091"
+        if self.port == "18091":
+            protocol = "https://"
+        else:
+            protocol = "http://"
+        source = protocol + self.ip + ":" + self.port
+
         if mode == "disk":
             source = "couchstore-files://" + data_path
         elif mode == "backup":
@@ -5201,9 +5206,14 @@ class RemoteMachineShellConnection(KeepRefs):
         else:
             log.info("*** You need to set rest password at ini file ***")
             rest_password = "password"
-        command = "curl --silent --show-error http://{0}:{1}@localhost:{2}/diag/eval -X POST -d " \
+
+        if self.port == "18091":
+            protocol = "https://"
+        else:
+            protocol = "http://"
+        command = "curl --silent --show-error {4}{0}:{1}@localhost:{2}/diag/eval -X POST -d " \
                   "'ns_config:set(allow_nonlocal_eval, {3}).'".format(rest_username, rest_password,
-                                                                      self.port, state.__str__().lower())
+                                                            self.port, state.__str__().lower(), protocol)
         server = {"ip": self.ip, "username": rest_username, "password": rest_password, "port": self.port}
         rest_connection = RestConnection(server)
         is_cluster_compatible = rest_connection.check_cluster_compatibility("5.5")
