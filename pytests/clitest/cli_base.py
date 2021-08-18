@@ -143,9 +143,19 @@ class CliBaseTest(BaseTestCase):
         self.full_v = None
         self.short_v = None
         self.build_number = None
-        cmd =  'curl -g {0}:8091/diag/eval -u {1}:{2} '.format(self.master.ip,
+
+        self.master.protocol = 'http://'
+        if self.enforce_tls:
+            self.master.port = '18091'
+            self.master.protocol = 'https://'
+            for server in self.servers:
+                server.port = '18091'
+
+        cmd =  'curl -g -k {3}{0}:{4}/diag/eval -u {1}:{2} '.format(self.master.ip,
                                                               self.master.rest_username,
-                                                              self.master.rest_password)
+                                                              self.master.rest_password,
+                                                              self.master.protocol,
+                                                              self.master.port)
         cmd += '-d "path_config:component_path(bin)."'
         bin_path  = subprocess.check_output(cmd, shell=True)
         try:
