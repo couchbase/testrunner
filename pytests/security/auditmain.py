@@ -286,7 +286,7 @@ class audit:
     Parameters:
         expectedResult - dictionary of fields and value for event
     '''
-    def checkConfig(self, expectedResults):
+    def checkConfig(self, expectedResults, n1ql_audit=False):
         fieldVerification, valueVerification = self.validateEvents(expectedResults, n1ql_audit)
         self.assertTrue(fieldVerification, "One of the fields is not matching")
         self.assertTrue(valueVerification, "Values for one of the fields is not matching")
@@ -406,6 +406,16 @@ class audit:
                             for items in data[items]:
                                 #log.info ("Second Level Mandatory Field Default getting checked is - {0}".format(items))
                                 if (items not in tempStr and method is not 'REST'):
+                                    #log.info (" Second level Mandatory field not matching with expected expected value is - {0}".format(items))
+                                    flag = False
+            elif items in data['common']:
+                if (isinstance ((data['common'][items]), dict)):
+                    for items1 in manFieldSecLevel:
+                        tempStr = items1.split(":")
+                        if tempStr[0] == items:
+                            for items in data['common'][items]:
+                                #log.info ("Second Level Mandatory Field Default getting checked is - {0}".format(items))
+                                if (items not in tempStr and method != 'REST'):
                                     #log.info (" Second level Mandatory field not matching with expected expected value is - {0}".format(items))
                                     flag = False
             else:
