@@ -4,6 +4,7 @@ import os
 import random
 import string, re
 import time
+import subprocess
 from threading import Thread
 
 from TestInput import TestInputSingleton
@@ -2751,6 +2752,51 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             options = '--new-password password'
             output, error = remote_client.execute_command("{0} {1}".format(cli_command,
                                                            options))
+
+    def test_backup_audit_event(self):
+        """ This test will check if backup could log event in case permission denied
+            due to incorrect password or role when using backup
+        """
+        cb_version = self.cb_version[:5]
+        if int(cb_version[-1:]) == 0:
+            self.fail("This test is for version 7.0.1 and above in cheshire-cat")
+        bk_services = self.rest.get_nodes_services().values()
+        if "backup" not in str(bk_services):
+            self.rest.force_eject_node()
+            cli = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password,
+                               self.cb_version)
+            _, _, success = cli.cluster_init(1024, 512, None, "data,index,query,eventing,backup", None, None,
+                                                 self.master.rest_username,
+                                                 self.master.rest_password, None)
+            self.sleep(15)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+        rest = RestConnection(self.master)
+        bk_service = rest.get_nodes_services()
+
+        """ Enable audit """
+        options = " --set --audit-enabled 1 "
+        output, error = self.shell.execute_couchbase_cli("setting-audit", options=options)
+        self.assertTrue(self._check_output('SUCCESS: Audit settings modified', output))
+        self.sleep(5)
+        options =  ' -d \'{"name": "Backuptest","options": null,"full_backup": true},{"name": "test","task_type":"MERGE","full_backup":null}\' '
+        tls = '1' if self.master.protocol == 'https://' else ''
+        cmd1 = "curl -g -k -X PUT {0}{3}:{1}8097/api/v1/plan/BackupAndMergePlan -u Administrator:wrongpassword {2}".format(self.master.protocol,
+                                                                                                                        tls,
+                                                                                                                        options,
+                                                                                                                        self.master.ip)
+        output = subprocess.check_output(cmd1, shell=True)
+        words_check = "\'A user has been denied access to the REST API\'"
+        cmd2 = "cat%s %s/audit.log | grep%s %s " % (self.cmd_ext, self.log_path,self.cmd_ext, words_check)
+        output, error = self.shell.execute_command(cmd2)
+        self.assertTrue(self._check_output('A user has been denied access to the REST API', output))
+        """ test with cli """
+        options = " settings --get "
+        output, error = self.shell.execute_couchbase_cli("backup-service", options=options,
+                                                         password="xxpasswo")
+        words_check = "\'REST operation failed due to authentication failure\'"
+        cmd3 = "cat%s %s/audit.log | grep%s %s " % (self.cmd_ext, self.log_path,self.cmd_ext, words_check)
+        output, error = self.shell.execute_command(cmd3)
+        self.assertTrue(self._check_output('REST operation failed due to authentication failure', output))
 
     def test_cli_with_offline_upgrade(self):
         """
