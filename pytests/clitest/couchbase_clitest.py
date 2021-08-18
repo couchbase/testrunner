@@ -4,6 +4,7 @@ import os
 import random
 import string, re
 import time
+import subprocess
 from threading import Thread
 
 from TestInput import TestInputSingleton
@@ -2789,8 +2790,12 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         self.assertTrue(self._check_output('SUCCESS: Audit settings modified', output))
         self.sleep(5)
         options =  ' -d \'{"name": "Backuptest","options": null,"full_backup": true},{"name": "test","task_type":"MERGE","full_backup":null}\' '
-        cmd1 = "curl -X PUT http://localhost:8097/api/v1/plan/BackupAndMergePlan -u Administrator:wrongpassword %s" % options
-        output, error = self.shell.execute_command(cmd1)
+        tls = '1' if self.master.protocol == 'https://' else ''
+        cmd1 = "curl -g -k -X PUT {0}{3}:{1}8097/api/v1/plan/BackupAndMergePlan -u Administrator:wrongpassword {2}".format(self.master.protocol,
+                                                                                                                        tls,
+                                                                                                                        options,
+                                                                                                                        self.master.ip)
+        output = subprocess.check_output(cmd1, shell=True)
         words_check = "\'A user has been denied access to the REST API\'"
         cmd2 = "cat%s %s/audit.log | grep%s %s " % (self.cmd_ext, self.log_path,self.cmd_ext, words_check)
         output, error = self.shell.execute_command(cmd2)
