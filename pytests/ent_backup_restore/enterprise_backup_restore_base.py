@@ -81,15 +81,18 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.merge_should_fail = self.input.param("merge_should_fail", False)
         self.database_path = COUCHBASE_DATA_PATH
 
+        self.master.protocol = "http://"
         if self.enforce_tls:
             self.master.port = '18091'
+            self.master.protocol = "https://"
             for server in self.servers:
                 server.port = '18091'
 
-        cmd = 'curl -g -k https://{0}:{3}/diag/eval -u {1}:{2} '.format(self.master.ip,
+        cmd = 'curl -g -k {4}{0}:{3}/diag/eval -u {1}:{2} '.format(self.master.ip,
                                                               self.master.rest_username,
                                                               self.master.rest_password,
-                                                              self.master.port)
+                                                              self.master.port,
+                                                              self.master.protocol)
         cmd += '-d "path_config:component_path(bin)."'
         bin_path = subprocess.check_output(cmd, shell=True)
         try:
