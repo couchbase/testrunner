@@ -341,3 +341,13 @@ class EventingSettings(EventingBaseTest):
         except Exception as e:
             self.log.info(e)
             assert "ERR_INVALID_CONFIG" in str(e) and "processing_status is required" in str(e), True
+
+    def test_default_value_for_language_compatibility(self):
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        del body['settings']['language_compatibility']
+        self.rest.create_function(body['appname'], body)
+        # verify default value for language compatibility is 6.6.2 by loading binary docs
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
+        self.deploy_function(body)
+        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
+        self.undeploy_and_delete_function(body)
