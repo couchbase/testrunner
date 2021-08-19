@@ -825,8 +825,10 @@ class BaseTestCase(unittest.TestCase):
         bucket_params['lww'] = lww
         bucket_params['maxTTL'] = maxttl
         bucket_params['compressionMode'] = compression_mode
-        if bucket_type == "membase":
-            bucket_params['bucket_storage'] = self.bucket_storage
+        bucket_params['bucket_storage'] = self.bucket_storage
+        if bucket_type == "ephemeral":
+            bucket_params['bucket_storage'] = "couchstore"
+
         return bucket_params
 
     def _bucket_creation(self):
