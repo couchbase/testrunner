@@ -26,7 +26,7 @@ class LogScanner(object):
         self.service_log_keywords_map = {
             "all": {
                 "babysitter.log": ["exception occurred in runloop", "failover exited with reason"],
-                "memcached.log": ["CRITICAL", ],
+                "memcached.log": ["CRITICAL", "Invalid packet header detected"],
                 "sanitizers.log.*": ['^'],
                 "all": []
             },
