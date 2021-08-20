@@ -308,3 +308,18 @@ class QueryBackupUDFTests(QueryTests):
 
         result = self.run_cbq_query("execute function default:bucket2.scope2a.scope2a_func()")
         self.assertEqual(result['results'], [0])
+
+    def test_restore_empty_bucket(self):
+        self.create_udf()
+        self.run_cbq_query("drop function default:bucket1.scope1.scope1_func")
+        self.backup_config()
+        self.backup()
+        self.drop_udf()
+        result = self.run_cbq_query("select f.identity.name from system:functions as f order by f.identity.name")
+        self.log.info(result['results'])
+        self.assertEqual(result['results'], [])
+        output = self.restore(disable=self.disable)
+        result = self.run_cbq_query("select f.identity.name from system:functions as f order by f.identity.name")
+        expected_udf = [{'name': 'func_global'}, {'name': 'scope2a_func'}, {'name': 'scope2b_func'}]
+        self.assertEqual(result['results'], expected_udf)
+
