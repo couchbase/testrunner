@@ -2,6 +2,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from .tuq import QueryTests
 import time
 from membase.api.exception import CBQError
+from collection.collections_n1ql_client import CollectionsN1QL
 
 class QueryBackupUDFTests(QueryTests):
 
@@ -25,12 +26,13 @@ class QueryBackupUDFTests(QueryTests):
         bucket2 = self.get_bucket_from_name("bucket2")
         if not bucket2:
             self.rest.create_bucket(bucket="bucket2", ramQuotaMB=200, replicaNumber=0)
-        self.run_cbq_query("create scope bucket1.scope1")
-        self.run_cbq_query("create collection bucket1.scope1.collection1")
-        self.run_cbq_query("create scope bucket2.scope2a")
-        self.run_cbq_query("create scope bucket2.scope2b")
-        self.run_cbq_query("create collection bucket2.scope2a.collection2a")
-        self.run_cbq_query("create collection bucket2.scope2b.collection2b")
+        self.collections_helper = CollectionsN1QL(self.master)
+        self.collections_helper.create_scope(bucket_name="bucket1",scope_name="scope1")
+        self.collections_helper.create_collection(bucket_name="bucket1",scope_name="scope1",collection_name="collection1")
+        self.collections_helper.create_scope(bucket_name="bucket2",scope_name="scope2a")
+        self.collections_helper.create_scope(bucket_name="bucket2",scope_name="scope2b")
+        self.collections_helper.create_collection(bucket_name="bucket2",scope_name="scope2a",collection_name="collection2a")
+        self.collections_helper.create_collection(bucket_name="bucket2",scope_name="scope2b",collection_name="collection2b")
         # add JS library
         functions = 'function adder(a, b, c) { for (i=0; i< b; i++){a = a + c;} return a; }'
         function_names = ["adder"]
