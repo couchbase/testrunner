@@ -4,6 +4,7 @@ import logging
 import random
 import string
 import subprocess
+import time
 import traceback
 import unittest
 import os, ast
@@ -30,6 +31,8 @@ from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import VBucketAwareMemcached
 from remote.remote_util import RemoteUtilHelper
 
+from lib.remote.remote_util import RemoteMachineShellConnection
+from pytests.security.x509main import x509main
 from scripts.collect_server_info import cbcollectRunner
 from security.ntonencryptionBase import ntonencryptionBase
 from security.rbac_base import RbacBase
@@ -476,7 +479,12 @@ class BaseTestCase(unittest.TestCase):
 
             #if self.ntonencrypt == 'enable' and not self.x509enable:
             #    self.setup_nton_encryption()
-
+            if self.x509enable:
+                self.generate_x509_certs(self.servers)
+                if self.setup_once:
+                    self.upload_x509_certs(self.servers)
+            if self.ntonencrypt == "enable":
+                self.setup_nton_encryption()
             if self.enable_secrets:
                 self._setup_node_secret(self.secret_password)
 
@@ -558,9 +566,12 @@ class BaseTestCase(unittest.TestCase):
         return keyword_count_diff
 
     def tearDown(self):
-        if self.input.param("enforce_tls", False):
+        if self.input.param("enforce_tls", False) or \
+                (self.input.param("ntonencrypt", "disable") == "enable"):
             self.log.info('###################### Disabling n2n encryption')
             ntonencryptionBase().disable_nton_cluster([self.master])
+        if self.input.param("x509enable", False):
+            self.teardown_x509_certs(self.servers)
         if self.input.param("ipv4_only", False):
             self.check_ip_family_enforcement(ip_family="ipv4_only")
             cli = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password)
@@ -3197,8 +3208,80 @@ class BaseTestCase(unittest.TestCase):
                 break
 
     def setup_nton_encryption(self):
-        self.log.info('Setting up node to node encyrption from ')
+        self.log.info('Setting up node to node encryption at level {0}'.
+                      format(self.ntonencrypt_level))
         ntonencryptionBase().setup_nton_cluster(self.servers, clusterEncryptionLevel=self.ntonencrypt_level)
+
+    def upload_x509_certs(self, servers):
+        """
+        1. Uploads root certs and client-cert settings on servers
+        2. Uploads node certs on servers
+        """
+        self.log.info("Uploading root cert to servers {0}".format(servers))
+        for server in servers:
+            x509main(server).setup_master(
+                self.client_cert_state, self.paths, self.prefixs, self.delimeters)
+        self.log.info("Sleeping before uploading node certs to nodes {0}".format(
+            servers))
+        time.sleep(5)
+        x509main().setup_cluster_nodes_ssl(servers, reload_cert=True)
+
+    def generate_x509_certs(self, servers):
+        """
+        Initializes all x509 replated input params &
+        Generates x509 root, node, client cert on all servers of the cluster
+        """
+        self.client_cert_state = self.input.param("client_cert_state",
+                                                  "enable")
+        self.paths = self.input.param(
+            'paths', "subject.cn:san.dnsname:san.uri").split(":")
+        self.prefixs = self.input.param(
+            'prefixs', 'www.cb-:us.:www.').split(":")
+        self.delimeters = self.input.param('delimeter', '.:.:.').split(":")
+        self.setup_once = self.input.param("setup_once", True)
+        self.client_ip = self.input.param("client_ip", "172.16.1.174")
+
+        self.log.info("Certificate creation started on servers - {0}".format(
+            servers))
+
+        copy_servers = copy.deepcopy(servers)
+        x509main(servers[0])._generate_cert(
+            copy_servers, root_cn='Root\ Authority', type="openssl",
+            encryption="", key_length=1024,
+            client_ip=self.client_ip, alt_names='default')
+
+    def _reset_original(self, servers):
+        """
+        1. Regenerates root cert on all servers
+        2. Removes inbox folder (node certs) from all VMs
+        """
+        self.log.info(
+            "Reverting to original state - regenerating certificate "
+            "and removing inbox folder")
+        tmp_path = "/tmp/abcd.pem"
+        for server in servers:
+            cli_command = "ssl-manage"
+            remote_client = RemoteMachineShellConnection(server)
+            options = "--regenerate-cert={0}".format(tmp_path)
+            output, error = remote_client.execute_couchbase_cli(
+                cli_command=cli_command, options=options,
+                cluster_host=server.ip, user="Administrator",
+                password="password")
+            x509main(server)._delete_inbox_folder()
+
+    def teardown_x509_certs(self, servers, CA_cert_file_path=None):
+        """
+        1. Regenerates root cert and removes node certs and client
+            cert settings from server
+        2. Removes certs folder from slave
+        """
+        self._reset_original(servers)
+        shell = RemoteMachineShellConnection(x509main.SLAVE_HOST)
+        if not CA_cert_file_path:
+            CA_cert_file_path = x509main.CACERTFILEPATH
+        self.log.info("Removing folder {0} from slave".
+                      format(CA_cert_file_path))
+        shell.execute_command("rm -rf " + CA_cert_file_path)
 
     def _disable_ipv6_grub(self):
         self.log.info('Disabling IPV6 Stack at Grub Level for all nodes')
