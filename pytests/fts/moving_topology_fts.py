@@ -359,7 +359,7 @@ class MovingTopFTS(FTSBaseTest):
                 es_index_name=None,
                 query_index=count))
         self.run_tasks_and_report(tasks, len(index.fts_queries))
-        if not self.disable_file_transfer_rebalance:
+        if not self.disable_file_transfer_rebalance and not index.is_upside_down():
             file_copy_transfer_found, file_transfer_success, failed_file_transfer = \
                 self.validate_file_copy_rebalance_stats()
             if not file_copy_transfer_found:
@@ -398,7 +398,7 @@ class MovingTopFTS(FTSBaseTest):
                 es_index_name=None,
                 query_index=count))
         self.run_tasks_and_report(tasks, len(index.fts_queries))
-        if not self.disable_file_transfer_rebalance:
+        if not self.disable_file_transfer_rebalance and not index.is_upside_down():
             file_copy_transfer_found, file_transfer_success, failed_file_transfer = \
                 self.validate_file_copy_rebalance_stats()
             if not file_copy_transfer_found:
@@ -449,7 +449,7 @@ class MovingTopFTS(FTSBaseTest):
                 query_index=count))
         self.run_tasks_and_report(tasks, len(index.fts_queries))
 
-        if not self.disable_file_transfer_rebalance:
+        if not self.disable_file_transfer_rebalance and not index.is_upside_down():
             file_copy_transfer_found, file_transfer_success, failed_file_transfer = \
                 self.validate_file_copy_rebalance_stats()
             if not file_copy_transfer_found:
@@ -493,13 +493,14 @@ class MovingTopFTS(FTSBaseTest):
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
-        if not self.disable_file_transfer_rebalance:
-            file_copy_transfer_found, file_transfer_success, failed_file_transfer = \
-                self.validate_file_copy_rebalance_stats()
-            if not file_copy_transfer_found:
-                self.log.info("no file based transfer found during rebalance")
-            if not file_transfer_success:
-                self.fail(f'Found file transfer failed for these partitions: {failed_file_transfer}')
+        for index in self._cb_cluster.get_indexes():
+            if not self.disable_file_transfer_rebalance and not index.is_upside_down():
+                file_copy_transfer_found, file_transfer_success, failed_file_transfer = \
+                    self.validate_file_copy_rebalance_stats()
+                if not file_copy_transfer_found:
+                    self.log.info("no file based transfer found during rebalance")
+                if not file_transfer_success:
+                    self.fail(f'Found file transfer failed for these partitions: {failed_file_transfer}')
 
     def rebalance_out_master_during_index_building(self):
         self.load_data()
@@ -1857,9 +1858,8 @@ class MovingTopFTS(FTSBaseTest):
         :return:
         """
         count = 0
-
-        self.load_data()
         self.create_fts_indexes_all_buckets()
+        index = self.create_index_generate_queries()
         self.sleep(10)
         self.wait_for_indexing_complete()
 
@@ -1876,19 +1876,35 @@ class MovingTopFTS(FTSBaseTest):
             "removing node(s) {0} from cluster".format(ejected_nodes))
 
         while count<5:
-            if RestHelper(rest).is_cluster_rebalanced():
-                self.log.info("Rebalance is finished already.")
-                break
             rest.rebalance(otpNodes=[node.id for node in nodes],
                            ejectedNodes=ejected_nodes)
+            self.sleep(5)
             stopped = rest.stop_rebalance()
-            self.sleep(1)
+
             self.assertTrue(stopped, msg="unable to stop rebalance")
             count += 1
 
-        if not RestHelper(rest).is_cluster_rebalanced():
-            rest.rebalance(otpNodes=[node.id for node in nodes],
-                           ejectedNodes=ejected_nodes)
+        rest.rebalance(otpNodes=[node.id for node in nodes],
+                       ejectedNodes=ejected_nodes)
+        self.assertTrue(rest.monitorRebalance(), msg="rebalance operation "
+                                                     "failed after restarting")
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        tasks = []
+        for count in range(0, len(index.fts_queries)):
+            tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                fts_index=index,
+                es=self.es,
+                es_index_name=None,
+                query_index=count))
+        self.run_tasks_and_report(tasks, len(index.fts_queries))
+        if not self.disable_file_transfer_rebalance:
+            file_copy_transfer_found, file_transfer_success, failed_file_transfer = \
+                self.validate_file_copy_rebalance_stats()
+            if not file_copy_transfer_found:
+                self.log.info("no file based transfer found during rebalance")
+            if not file_transfer_success:
+                self.fail(f'Found file transfer failed for these partitions: {failed_file_transfer}')
 
     def test_rebalance_cancel_new_rebalance(self):
         """
