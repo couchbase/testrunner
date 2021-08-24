@@ -42,14 +42,14 @@ class LogScanner(object):
             },
             "index": {
                 "indexer.log": ["panic in", "panic:", "Error parsing XATTR",
-                                "Encounter planner error", "corruption"]
+                                "corruption"]
             },
             "kv": {
                 "projector.log": ["panic", "Error parsing XATTR"],
                 "*xdcr*.log": ["panic", "non-recoverable error from xmem client. response status=KEY_ENOENT"],
             },
             "n1ql": {
-                "query.log": ["panic", "Encounter planner error"]
+                "query.log": ["panic"]
             }
         }
 
