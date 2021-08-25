@@ -4762,6 +4762,7 @@ class FTSBaseTest(unittest.TestCase):
             pindex_stats = rest.get_fts_pindex_stats()
             for key in pindex_stats.keys():
                 key_copy_partition_map = pindex_stats[key]['copyPartitionStats']
+                fft = {}
                 if key_copy_partition_map['TotCopyPartitionStart'] == 1:
                     file_copy_transfer_found = True
                 if key_copy_partition_map['TotCopyPartitionStart'] \
@@ -4769,7 +4770,8 @@ class FTSBaseTest(unittest.TestCase):
                         or ("TransferProgress" in key_copy_partition_map.keys()
                             and key_copy_partition_map["TransferProgress"] == 1):
                     file_transfer_success = False
-                    failed_file_transfer.append(key)
+                    fft[key] = key_copy_partition_map
+                    failed_file_transfer.append(fft)
         return file_copy_transfer_found, file_transfer_success, failed_file_transfer
 
     def generate_random_queries(self, index, num_queries=1, query_type=["match"],
