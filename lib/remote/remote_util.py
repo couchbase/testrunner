@@ -3697,10 +3697,12 @@ class RemoteMachineShellConnection(KeepRefs):
         Given a port, extracts address:port of services
         listening on that port (only ipv4)
         """
-        # TODo add commands for windows and mac
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            pass
+            command = "netstat -a -b -p tcp | grep :%s | grep 'LISTEN' | awk -F ' ' '{print $2}'" % port
+            o, r = self.execute_command(command)
+            self.log_command_output(o, r)
+            return o
         elif self.info.type.lower() == "linux":
             command = "ss -4anpe | grep :%s | grep 'LISTEN' | awk -F ' ' '{print $5}'" % port
             o, r = self.execute_command(command)
