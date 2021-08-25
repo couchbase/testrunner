@@ -4364,11 +4364,15 @@ class RemoteMachineShellConnection(KeepRefs):
         # Iterate per bucket and generate maps
         for bucket in buckets:
             if data_path == None:
-                options = " -b " + bucket.name + " -u " + userId + " -p " + password + \
-                                                                        " --single-node"
+                options = " -b " + bucket.name + " -u " + userId + " -p " + password
             else:
                 options = " -b " + bucket.name + " -u " + userId + " -p " + password + \
                                                                            replicaOption
+            if self.port == "18091":
+                options += " --no-ssl-verify"
+            elif data_path == None:
+                options += " --single-node"
+
             suffix = "_" + bucket.name + "_N%2FA.csv"
             if mode == "memory" or mode == "backup":
                suffix = "_" + bucket.name + "_" + self.ip + "%3A8091.csv"

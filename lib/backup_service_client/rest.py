@@ -64,6 +64,8 @@ class RESTClientObject(object):
         else:
             cert_reqs = ssl.CERT_NONE
 
+        urllib3.disable_warnings()
+
         # ca_certs
         if configuration.ssl_ca_cert:
             ca_certs = configuration.ssl_ca_cert

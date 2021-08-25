@@ -138,7 +138,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         self.configuration_factory = HttpsConfigurationFactory(self.master, hints=self.ssl_hints) if self.use_https else HttpConfigurationFactory(self.master)
 
         # Rest API Configuration
-        self.configuration = self.configuration_factory.create_configuration()
+        self.configuration = self.configuration_factory.create_configuration(self.input.param("no-ssl-verify", False))
 
         # Create Api Client
         self.api_client = ApiClient(self.configuration)
@@ -230,6 +230,11 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         if self.input.param('dgm_run', False):
             self.on_dgm_run()
+
+        if self.input.param('enforce_tls', False):
+            for cluster in self.input.clusters:
+                for server in self.input.clusters[cluster]:
+                    server.port = "18091"
 
     def bootstrap(self, servers, backupset, objstore_provider):
         """ Initialise the BackupServiceBase without calling the setup method
@@ -1959,7 +1964,7 @@ class HttpsConfigurationFactory(AbstractConfigurationFactory):
         # The following keys must be set in order to enable ssl verification
         self.have_hints_for_ssl_verification = all(key in self.hints for key in ['client_private_key_file',  'client_certificate_file', 'root_certificate_file'])
 
-    def create_configuration(self):
+    def create_configuration(self, no_ssl_verify=False):
         """ Creates a https configuration object.
         """
         configuration = self.create_configuration_common()
