@@ -14,6 +14,11 @@ class QueryBackupUDFTests(QueryTests):
         self.map = self.input.param("map", "bucket1=bucket1b")
         self.compact = self.input.param("compact", False)
         self.disable = self.input.param("disable", None)
+        self.role = self.input.param("role", None)
+
+        self.backup_user = self.username
+        self.backup_password = self.password
+
         self.log.info("==============  QueryBackupUDFTests setup has completed ==============")
         self.log_config_info()
 
@@ -55,7 +60,7 @@ class QueryBackupUDFTests(QueryTests):
         output = shell.execute_command(f"{self.path}/cbbackupmgr remove -a {archive} -r {repo}")
         output = shell.execute_command(f"{self.path}/cbbackupmgr config -a {archive} -r {repo}")
 
-    def backuo_info(self, archive="/backup-1", repo="my_backup"):
+    def backup_info(self, archive="/backup-1", repo="my_backup"):
         shell = RemoteMachineShellConnection(self.master)
         output = shell.execute_command(f"{self.path}/cbbackupmgr info -a {archive} -r {repo} -j")
         return self.convert_list_to_json(output[0])
@@ -67,7 +72,7 @@ class QueryBackupUDFTests(QueryTests):
 
     def backup(self, archive="/backup-1", repo="my_backup"):
         shell = RemoteMachineShellConnection(self.master)
-        output = shell.execute_command(f"{self.path}/cbbackupmgr backup -a {archive} -r {repo} -c http://{self.master.ip}:8091 -u {self.username} -p {self.password}")
+        output = shell.execute_command(f"{self.path}/cbbackupmgr backup -a {archive} -r {repo} -c http://{self.master.ip}:8091 -u {self.backup_user} -p {self.backup_password}")
         if self.compact:
             self.log.info("Compacting backup")
             compact = shell.execute_command(f"{self.path}/cbbackupmgr compact -a {archive} -r {repo} --backup latest")
@@ -75,7 +80,7 @@ class QueryBackupUDFTests(QueryTests):
         return output
 
     def restore(self, archive="/backup-1", repo="my_backup", disable=None, start=None, end=None, include=None, exclude=None, map=None):
-        bar_command=f"{self.path}/cbbackupmgr restore -a {archive} -r {repo} -c http://{self.master.ip}:8091 -u {self.username} -p {self.password}"
+        bar_command=f"{self.path}/cbbackupmgr restore -a {archive} -r {repo} -c http://{self.master.ip}:8091 -u {self.backup_user} -p {self.backup_password}"
         if include:
             bar_command += f" --include-data {include}"
         if exclude:
@@ -120,7 +125,7 @@ class QueryBackupUDFTests(QueryTests):
         self.create_udf()
         self.backup_config()
         self.backup()
-        info = self.backuo_info()
+        info = self.backup_info()
         global_count = info['backups'][0]['query_udfs']
         self.assertEqual(global_count, 1)
         scope_count = {}
@@ -130,6 +135,13 @@ class QueryBackupUDFTests(QueryTests):
         self.assertEqual(scope_count['bucket2'], 2)
 
     def test_restore_all(self):
+        if self.role:
+            self.users = [{"id": "jackDoe", "name": "Jack Downing", "password": "password1"}]
+            self.create_users()
+            self.backup_user, self.backup_password = self.users[0]['id'], self.users[0]['password']
+            self.run_cbq_query(query=f"GRANT {self.role} on bucket1,bucket2,default to {self.backup_user}")
+            self.run_cbq_query(query=f"GRANT query_system_catalog to {self.backup_user}")
+
         self.create_udf()
         self.backup_config()
         self.backup()
