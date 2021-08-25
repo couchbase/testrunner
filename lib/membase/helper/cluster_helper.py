@@ -547,7 +547,6 @@ class ClusterOperationHelper(object):
         b. the tls port is not open on all (*) addresses
         else True
         """
-        # TODO uncomment return False statements after FTS and index finishes TLS work
         log = logger.Logger.get_logger()
         for server in servers:
             shell = RemoteMachineShellConnection(server)
@@ -559,8 +558,8 @@ class ClusterOperationHelper(object):
                     if address != expected_address:
                         log.error("On Server {0} Expected {1} Actual {2} !!!!!!!!!!!!!!!!".
                                   format(server.ip, expected_address, address))
-                        # shell.disconnect()
-                        # return False
+                        shell.disconnect()
+                        return False
             # service should listen on tls_port(if there is one) for all outside addresses
             for port in port_map.keys():
                 ssl_port = CbServer.ssl_port_map.get(port)
@@ -568,11 +567,12 @@ class ClusterOperationHelper(object):
                     continue
                 addresses = shell.get_port_recvq(ssl_port)
                 for address in addresses:
-                    expected_address = "*:" + ssl_port
-                    if address != expected_address:
+                    expected_address = ["*:" + ssl_port,
+                                        "0.0.0.0:" + ssl_port]
+                    if address not in expected_address:
                         log.error("On Server {0} Expected {1} Actual {2} !!!!!!!!!!!!!!!!".
                                   format(server.ip, expected_address, address))
-                        # shell.disconnect()
-                        # return False
+                        shell.disconnect()
+                        return False
             shell.disconnect()
-            return True
+        return True
