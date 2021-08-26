@@ -4791,8 +4791,8 @@ class FTSBaseTest(unittest.TestCase):
                     file_copy_transfer_found = True
                 if key_copy_partition_map['TotCopyPartitionStart'] \
                         != key_copy_partition_map['TotCopyPartitionFinished'] \
-                        or ("TransferProgress" in key_copy_partition_map.keys()
-                            and key_copy_partition_map["TransferProgress"] == 1):
+                        or (key_copy_partition_map['TotCopyPartitionFinished'] == 1
+                            and key_copy_partition_map["TransferProgress"] == 0):
                     file_transfer_success = False
                     fft[key] = key_copy_partition_map
                     failed_file_transfer.append(fft)
