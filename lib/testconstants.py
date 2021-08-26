@@ -146,6 +146,9 @@ WIN_MB_PATH = "/cygdrive/c/Program Files/Membase/Server/"
 WIN_PROCESSES_KILLED = ["msiexec32.exe", "msiexec.exe", "setup.exe", "ISBEW64.*",
                         "iexplore.*", "WerFault.*", "Firefox.*", "bash.exe",
                         "chrome.exe", "cbq-engine.exe"]
+WIN_PROCESSES_SPAWNED = ["backup.exe", "cbas.exe", "cbft.exe", "cbq-engine.exe", "erl.exe", "eventing-producer.exe",
+                         "goxdcr.exe", "indexer.exe", "java.exe", "memcached.exe", "projector.exe" "prometheus.exe",
+                         "saslauthd-port.exe", "eventing-consumer.exe"]
 LINUX_CB_PATH = "/opt/couchbase/"
 WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F",
                    "170":"AF3F80E5-2CA3-409C-B59B-6E0DC805BC3F",

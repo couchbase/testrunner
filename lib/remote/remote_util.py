@@ -49,7 +49,7 @@ from testconstants import CB_VERSION_NAME
 from testconstants import CB_REPO
 from testconstants import CB_RELEASE_APT_GET_REPO
 from testconstants import CB_RELEASE_YUM_REPO
-
+from testconstants import WIN_PROCESSES_SPAWNED
 from testconstants import LINUX_NONROOT_CB_BIN_PATH,\
                           NR_INSTALL_LOCATION_FILE, LINUX_DIST_CONFIG
 
@@ -3844,12 +3844,24 @@ class RemoteMachineShellConnection(KeepRefs):
         """ Get all the processes binding to a particular ip family"""
         self.extract_remote_info()
         if self.info.type.lower() == "windows":
-            pass
+            if ip_family == "ipv4":
+                ip_family = "tcp"
+            else:
+                ip_family = "tcpv6"
+            output_win, error = self.execute_command(
+                "netstat -a -b -p {0} | grep exe | sort | uniq | sed \'s/\[//g; s/\]//g;\'".
+                format(ip_family), debug=True)
+            self.log_command_output(output_win, error, debug=True)
+            output = list()
+            for op in output_win:
+                op = op.strip()
+                if op in WIN_PROCESSES_SPAWNED:
+                    output.append(op)
         else:
             output, error = self.execute_command("lsof -i -P -n | grep LISTEN | grep couchbase| grep -i {0}".
                                                  format(ip_family), debug=True)
             self.log_command_output(output, error, debug=True)
-            return output
+        return output
 
     def cleanup_all_configuration(self, data_path):
         """ Deletes the contents of the parent folder that holds the data and config directories.
