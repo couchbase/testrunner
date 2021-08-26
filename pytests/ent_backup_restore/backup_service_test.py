@@ -5,6 +5,9 @@ import random
 import re
 import threading
 import time
+from collections import (
+    Counter
+)
 from multiprocessing import (
     Pool
 )
@@ -3165,21 +3168,28 @@ class BackupServiceTest(BackupServiceBase):
         # Pause the repository and expect it to succeed
         self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_pause_post_with_http_info(repo_name)[1], 200)
 
+        # Attempt to perform actions with invalid username/password combinations
+        self.generate_authentication_failures(repo_name)
+
         # Read logs
         events = []
+        event_count = Counter()
         # Due to an interaction in which emptying the audit log results in non-JSON artifacts
         # where the non-JSON artifact is a large list of nulls populating the first line of the
         # audit log, we have to filter out non-JSON content
         for line in file.read():
             try:
-                events.append(json.loads(line))
+                event = json.loads(line)
+                events.append(event)
+                event_count[event['name']] += 1
             except json.JSONDecodeError:
                 pass
 
+        self.assertEqual(event_count['authentication failure'], 2)
         # Create a dictionary of event names to events
-        seen_events = {event['name']: event for event in events if event['id'] in range(45056, 45064 + 1024)}
+        seen_events = {event['name']: event for event in events}
         # Check the expected set of event names are present in the set of seen_events
-        self.assertTrue({'Backup repository', 'Restore repository', 'Fetch repository', 'Pause repository', 'Add repository'}.issubset(seen_events.keys()))
+        self.assertTrue({'Backup repository', 'Restore repository', 'Fetch repository', 'Pause repository', 'Add repository', 'authentication failure'}.issubset(seen_events.keys()))
 
         # Check some of the descriptions
         self.assertEqual(seen_events['Add repository']['description'], 'A new active backup repository was added')
