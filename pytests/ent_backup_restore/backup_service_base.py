@@ -127,6 +127,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         self.ssl_hints['client_private_key_file'] = '/tmp/client_private_key'
         self.ssl_hints['client_certificate_file'] = '/tmp/client_certificate'
 
+        # Define whether to verify ssl certificates
+        self.ssl_hints['no_ssl_verify'] = self.input.param('no-ssl-verify', False)
+
         # Create/Enable/Upload custom cluster certificates and client certificates
         if self.input.param('custom_certificate', False):
             self.load_custom_certificates()
@@ -1973,5 +1976,11 @@ class HttpsConfigurationFactory(AbstractConfigurationFactory):
 
         # If the hints are set, we have required certificates so we can enable verify_ssl
         configuration.verify_ssl = self.have_hints_for_ssl_verification
+
+        if self.hints['no_ssl_verify']:
+            configuration.verify_ssl = False
+            configuration.ssl_ca_cert = None
+            configuration.cert_file = None
+            configuration.key_file = None
 
         return configuration
