@@ -930,6 +930,17 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         return plan, repo_name
 
+    def generate_authentication_failures(self, repo_name):
+        """ Generates two authentication failures:
+            - Valid user with invalid password
+            - Invalid user with valid password
+        """
+        cluster_host = self.master
+        for credentials in [("gibberish", cluster_host.rest_password), (cluster_host.rest_username, "gibberish")]:
+            body = Body1(target=f"{cluster_host.ip}:{cluster_host.port}", user=credentials[0], password=credentials[1])
+            task_name = self.repository_api.cluster_self_repository_state_id_restore_post("active", repo_name, body=body).task_name
+            self.assertFalse(self.wait_for_task(repo_name, task_name))
+
     def schedule_test(self, schedules, cycles, merge_map=None):
         """ Runs a schedule test
         """
