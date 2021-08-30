@@ -24,6 +24,7 @@ from scripts import collect_data_files
 from tasks.future import TimeoutError
 
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
+from lib.Cb_constants.CBServer import CbServer
 from lib.membase.api.exception import XDCRException
 from security.auditmain import audit
 from security.rbac_base import RbacBase
@@ -1068,7 +1069,7 @@ class XDCReplication:
 
 class CouchbaseCluster:
 
-    def __init__(self, name, nodes, log, use_hostname=False, sdk_compression=True):
+    def __init__(self, name, nodes, log, use_hostname=False, sdk_compression=True,use_https=False):
         """
         @param name: Couchbase cluster name. e.g C1, C2 to distinguish in logs.
         @param nodes: list of server objects (read from ini file).
@@ -1092,6 +1093,8 @@ class CouchbaseCluster:
         self.__clusterop = Cluster()
         self.__kv_gen = {}
         self.sdk_compression = sdk_compression
+        self.use_https = use_https
+
 
     def __str__(self):
         return "Couchbase Cluster: %s, Master Ip: %s" % (
@@ -2852,6 +2855,10 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._evict_with_compactor = self._input.param("evict_with_compactor", False)
         self._replicator_role = self._input.param("replicator_role",False)
         self._replicator_all_buckets = self._input.param("replicator_all_buckets",False)
+        self._use_https = self._input.param("use_https", False)
+        if self._use_https:
+            CbServer.use_https = True
+            self._demand_encryption = True
 
     def __initialize_error_count_dict(self):
         """
