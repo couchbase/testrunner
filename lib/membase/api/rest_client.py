@@ -1531,7 +1531,7 @@ class RestConnection(object):
     def add_node(self, user='', password='', remoteIp='', port='8091', zone_name='', services=None):
         otpNode = None
         protocol = "http"
-        if CbServer.use_https:
+        if CbServer.use_https or CbServer.n2n_encryption:
             port = CbServer.ssl_port
             protocol = "https"
 
