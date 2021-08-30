@@ -50,10 +50,12 @@ class ntonencryptionTest(BaseTestCase):
         self.log.info("---------------Suite Teardown---------------")
 
 
-    def _reset_original(self):
+    def _reset_original(self, servers=None):
+        if servers is None:
+            servers = self.servers
         self.log.info ("Reverting to original state - regenerating certificate and removing inbox folder")
         tmp_path = "/tmp/abcd.pem"
-        for servers in self.servers:
+        for servers in servers:
             cli_command = "ssl-manage"
             remote_client = RemoteMachineShellConnection(servers)
             options = "--regenerate-cert={0}".format(tmp_path)
