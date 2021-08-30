@@ -34,6 +34,7 @@ class CbServer(object):
                     str(memcached_port): str(ssl_memcached_port),
                     str(capi_port): str(ssl_capi_port)}
     use_https = False
+    n2n_encryption = False
 
     default_scope = "_default"
     default_collection = "_default"

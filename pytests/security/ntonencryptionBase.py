@@ -1,5 +1,8 @@
 from membase.api.rest_client import RestConnection
 import logger
+
+from lib.Cb_constants.CBServer import CbServer
+
 log = logger.Logger.get_logger()
 import time
 from subprocess import Popen, PIPE
@@ -39,8 +42,10 @@ class ntonencryptionBase:
         options = ''
         if status == 'enable':
             options = '--enable'
+            CbServer.n2n_encryption = True
         elif status == 'disable':
             options = '--disable'
+            CbServer.n2n_encryption = False
         elif status == 'get':
             options == '--get'
 
