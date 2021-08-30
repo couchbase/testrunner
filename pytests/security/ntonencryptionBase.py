@@ -70,6 +70,7 @@ class ntonencryptionBase:
                 return True
         except:
             pass
+        return output
 
     @staticmethod
     def get_encryption_level_cli(server):
@@ -121,6 +122,7 @@ class ntonencryptionBase:
                 remote_client.disconnect()
         log.info("Output of setting-security command is {0}".format(output))
         log.info("Error of setting-security command is {0}".format(error))
+        return output
 
 
     def setup_nton_cluster(self,servers,ntonStatus='enable',clusterEncryptionLevel='control'):
@@ -182,10 +184,18 @@ class ntonencryptionBase:
                     overall_result.append({'port':node_port,'result':result,'service':service, 'node':node.ip})
         return overall_result
 
+    def enable_autofailover(self, servers):
+        for server in servers:
+            rest = RestConnection(server)
+            rest.update_autofailover_settings(True, 120)
+
     def disable_autofailover(self, servers):
         for server in servers:
             rest = RestConnection(server)
             rest.update_autofailover_settings(False, 120)
+
+    def check_autofailover_enabled(self, servers):
+        return RestConnection(servers[0]).get_autofailover_settings().enabled
 
     def get_the_testssl_script(self, testssl_file_name):
             # get the testssl script

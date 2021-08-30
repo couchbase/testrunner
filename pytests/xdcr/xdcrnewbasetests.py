@@ -23,6 +23,7 @@ from scripts import collect_data_files
 from scripts.java_sdk_setup import JavaSdkSetup
 
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator, SDKDataLoader
+from lib.Cb_constants.CBServer import CbServer
 from lib.membase.api.exception import XDCRException
 from security.auditmain import audit
 from security.rbac_base import RbacBase
@@ -1092,7 +1093,7 @@ class XDCReplication:
 class CouchbaseCluster:
 
     def __init__(self, name, nodes, log, use_hostname=False, sdk_compression=True,
-                 use_java_sdk=False, scope_num=0, collection_num=0):
+                 use_java_sdk=False, scope_num=0, collection_num=0, use_https=False):
         """
         @param name: Couchbase cluster name. e.g C1, C2 to distinguish in logs.
         @param nodes: list of server objects (read from ini file).
@@ -1120,9 +1121,7 @@ class CouchbaseCluster:
         self.gen = None
         self.scope_num = scope_num
         self.collection_num = collection_num
-        self.collection_support = False
-        if RestConnection(self.__master_node).check_cluster_compatibility("7.0"):
-            self.collection_support = True
+        self.use_https = use_https
 
     def __str__(self):
         return "Couchbase Cluster: %s, Master Ip: %s" % (
@@ -1414,7 +1413,7 @@ class CouchbaseCluster:
                     maxttl=maxttl,
                     bucket_storage=bucket_storage
                 ))
-            if self.collection_support and (self.scope_num or self.collection_num):
+            if self.scope_num or self.collection_num:
                 tasks.append(CollectionsRest(self.__master_node).async_create_scope_collection(
                     self.scope_num, self.collection_num, name))
         [task for task in tasks]
@@ -1458,7 +1457,7 @@ class CouchbaseCluster:
                     maxttl=maxttl,
                     bucket_storage=bucket_storage
                 ))
-            if self.collection_support and (self.scope_num or self.collection_num):
+            if self.scope_num or self.collection_num:
                 tasks.append(CollectionsRest(self.__master_node).async_create_scope_collection(
                     self.scope_num, self.collection_num, name))
         [task for task in tasks]
@@ -1497,7 +1496,7 @@ class CouchbaseCluster:
                 maxttl=maxttl,
                 bucket_storage=bucket_storage
             ))
-        if self.collection_support and (self.scope_num or self.collection_num):
+        if self.scope_num or self.collection_num:
             tasks.append(CollectionsRest(self.__master_node).async_create_scope_collection(
                 self.scope_num, self.collection_num, BUCKET_NAME.DEFAULT))
         [task for task in tasks]
@@ -2915,6 +2914,10 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._use_java_sdk = self._input.param("java_sdk_client", False)
         if self._use_java_sdk:
             JavaSdkSetup()
+        self._use_https = self._input.param("use_https", False)
+        if self._use_https:
+            CbServer.use_https = True
+            self._demand_encryption = True
 
     def __initialize_error_count_dict(self):
         """
