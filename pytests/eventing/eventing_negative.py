@@ -490,7 +490,7 @@ class EventingNegative(EventingBaseTest):
         try:
             self.rest.set_settings_for_function(self.function_name,update_body)
         except Exception as e:
-            if "ERR_APP_ALREADY_DEPLOYED" not in str(e):
+            if "ERR_INVALID_CONFIG" not in str(e):
                 raise Exception("Feed boundary updated when app is deployed")
         self.undeploy_and_delete_function(body)
 
