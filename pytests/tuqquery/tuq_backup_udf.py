@@ -55,10 +55,18 @@ class QueryBackupUDFTests(QueryTests):
         self.log.info("==============  QueryBackupUDFTests suite_tearDown has completed ==============")
         super(QueryBackupUDFTests, self).suite_tearDown()
 
-    def backup_config(self, archive="/backup-1", repo="my_backup"):
+    def backup_config(self, archive="/backup-1", repo="my_backup", disable=None, include=None):
         shell = RemoteMachineShellConnection(self.master)
         output = shell.execute_command(f"{self.path}/cbbackupmgr remove -a {archive} -r {repo}")
-        output = shell.execute_command(f"{self.path}/cbbackupmgr config -a {archive} -r {repo}")
+        if disable and include:
+            output = shell.execute_command(f"{self.path}/cbbackupmgr config --include-data {include} --disable-{disable}-query -a {archive} -r {repo}")
+        elif disable:
+            output = shell.execute_command(f"{self.path}/cbbackupmgr config --disable-{disable}-query -a {archive} -r {repo}")
+        elif include:
+            output = shell.execute_command(f"{self.path}/cbbackupmgr config --include-data {include} -a {archive} -r {repo}")
+        else:
+            output = shell.execute_command(f"{self.path}/cbbackupmgr config -a {archive} -r {repo}")
+        return output
 
     def backup_info(self, archive="/backup-1", repo="my_backup"):
         shell = RemoteMachineShellConnection(self.master)
@@ -119,7 +127,10 @@ class QueryBackupUDFTests(QueryTests):
             except CBQError as ex:
                 error = self.process_CBQE(ex)
                 self.assertEqual(error['code'], 10102)
-        self.run_cbq_query('CREATE FUNCTION default:bucket1.scope1.scope1_func(a,b,c) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
+        if self.rest.is_enterprise_edition():
+            self.run_cbq_query('CREATE FUNCTION default:bucket1.scope1.scope1_func(a,b,c) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
+        else:
+            self.run_cbq_query('CREATE FUNCTION default:bucket1.scope1.scope1_func(a,b,c) {a+b+c}')
 
     def test_backup_info(self):
         self.create_udf()
@@ -139,11 +150,15 @@ class QueryBackupUDFTests(QueryTests):
             self.users = [{"id": "jackDoe", "name": "Jack Downing", "password": "password1"}]
             self.create_users()
             self.backup_user, self.backup_password = self.users[0]['id'], self.users[0]['password']
-            self.run_cbq_query(query=f"GRANT {self.role} on bucket1,bucket2,default to {self.backup_user}")
-            self.run_cbq_query(query=f"GRANT query_system_catalog to {self.backup_user}")
-
         self.create_udf()
-        self.backup_config()
+        if self.role == "data_backup":
+            self.run_cbq_query(query=f"GRANT {self.role} on bucket1,bucket2,default to {self.backup_user}")
+            self.backup_config(disable="cluster")
+        elif self.role == "backup_admin":
+            self.run_cbq_query(query=f"GRANT {self.role} to {self.backup_user}")
+            self.backup_config()
+        else:
+            self.backup_config()
         self.backup()
         self.drop_udf()
         result = self.run_cbq_query("select f.identity.name from system:functions as f order by f.identity.name")
@@ -154,13 +169,21 @@ class QueryBackupUDFTests(QueryTests):
         expected_udf = [{'name': 'func_global'}, {'name': 'scope1_func'}, {'name': 'scope2a_func'}, {'name': 'scope2b_func'}]
         if self.disable == "bucket":
             expected_udf = [{'name': 'func_global'}]
-        elif self.disable == "cluster":
+        elif self.disable == "cluster" or self.role == "data_backup":
              expected_udf = [{'name': 'scope1_func'}, {'name': 'scope2a_func'}, {'name': 'scope2b_func'}]
         self.assertEqual(result['results'], expected_udf)
 
     def test_restore_include(self):
+        if self.role:
+            self.users = [{"id": "jackDoe", "name": "Jack Downing", "password": "password1"}]
+            self.create_users()
+            self.backup_user, self.backup_password = self.users[0]['id'], self.users[0]['password']
         self.create_udf()
-        self.backup_config()
+        if self.role == "data_backup":
+            self.run_cbq_query(query=f"GRANT {self.role} on {self.include} to {self.backup_user}")
+            self.backup_config(include=self.include,disable="cluster")
+        else:
+            self.backup_config()
         self.backup()
         self.drop_udf()
         result = self.run_cbq_query("select f.identity.name from system:functions as f")
@@ -168,15 +191,21 @@ class QueryBackupUDFTests(QueryTests):
         self.assertEqual(result['results'], [])
         output = self.restore(include=self.include)
         result = self.run_cbq_query("select f.identity.name from system:functions as f order by f.identity.name")
-        expected_udf = {
-            'bucket1': [{'name': 'func_global'}, {'name': 'scope1_func'}],
-            'bucket2': [{'name': 'func_global'}, {'name': 'scope2a_func'}, {'name': 'scope2b_func'}],
-            'bucket1.scope1': [{'name': 'func_global'}, {'name': 'scope1_func'}],
-            'bucket2.scope2a': [{'name': 'func_global'}, {'name': 'scope2a_func'}],
-            'bucket2.scope2b': [{'name': 'func_global'}, {'name': 'scope2b_func'}],
-            'bucket2.scope2a,bucket2.scope2b': [{'name': 'func_global'}, {'name': 'scope2a_func'}, {'name': 'scope2b_func'}],
-            'bucket1.scope1.collection1': [{'name': 'func_global'}]
-        }
+        if self.role == "data_backup":
+            expected_udf = {
+                'bucket1': [{'name': 'scope1_func'}],
+                'bucket2': [{'name': 'scope2a_func'}, {'name': 'scope2b_func'}],
+            }
+        else:
+            expected_udf = {
+                'bucket1': [{'name': 'func_global'}, {'name': 'scope1_func'}],
+                'bucket2': [{'name': 'func_global'}, {'name': 'scope2a_func'}, {'name': 'scope2b_func'}],
+                'bucket1.scope1': [{'name': 'func_global'}, {'name': 'scope1_func'}],
+                'bucket2.scope2a': [{'name': 'func_global'}, {'name': 'scope2a_func'}],
+                'bucket2.scope2b': [{'name': 'func_global'}, {'name': 'scope2b_func'}],
+                'bucket2.scope2a,bucket2.scope2b': [{'name': 'func_global'}, {'name': 'scope2a_func'}, {'name': 'scope2b_func'}],
+                'bucket1.scope1.collection1': [{'name': 'func_global'}]
+            }
         self.include = self.include.strip('"')
         self.assertEqual(result['results'], expected_udf[self.include])
 
