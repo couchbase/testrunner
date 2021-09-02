@@ -28,6 +28,8 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
             self.rest.set_index_settings({"indexer.plasma.backIndex.evictSweepInterval": self.sweep_interval})
             self.rest.set_index_settings({"indexer.plasma.backIndex.enableInMemoryCompression": True})
             self.rest.set_index_settings({"indexer.plasma.mainIndex.enableInMemoryCompression": True})
+            # add if condition
+            self.rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 60000})
         self.deploy_node_info = ["{0}:{1}".format(self.dgmServer.ip, self.dgmServer.port)]
         self.load_query_definitions = []
         self.initial_index_number = self.input.param("initial_index_number", 5)
@@ -112,10 +114,16 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self._verify_bucket_count_with_index_count(self.query_definitions)
         self.multi_query_using_index(buckets=self.buckets,
                                      query_definitions=self.query_definitions)
+        self.retry_time = self.input.param("retry_time", 5)
+        count = 0
         if self.in_mem_comp:
-            self.sleep(60)
-            if not self.verify_compression_stat(self.query_definitions):
-                self.fail("Seeing index data not compressed")
+            while count < self.retry_time:
+                self.sleep(self.sweep_interval)
+                if self.verify_compression_stat(self.query_definitions):
+                    break
+                count += 1
+        if not self.verify_compression_stat(self.query_definitions):
+            self.fail("Seeing index data not compressed")
 
     def test_dgm_flush_bucket(self):
         """
@@ -145,10 +153,16 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self._verify_bucket_count_with_index_count(self.query_definitions)
         self.multi_query_using_index(buckets=self.buckets,
                                      query_definitions=self.query_definitions)
+        self.retry_time = self.input.param("retry_time", 5)
+        count = 0
         if self.in_mem_comp:
-            self.sleep(60)
-            if not self.verify_compression_stat(self.query_definitions):
-                self.fail("Seeing index data not compressed")
+            while count < self.retry_time:
+                self.sleep(self.sweep_interval)
+                if self.verify_compression_stat(self.query_definitions):
+                    break
+                count += 1
+        if not self.verify_compression_stat(self.query_definitions):
+            self.fail("Seeing index data not compressed")
 
     def test_oom_delete_bucket(self):
         """
@@ -202,7 +216,7 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         post_operation_tasks = self.async_run_operations(phase="after")
         self._run_tasks([post_operation_tasks])
         if self.in_mem_comp:
-            self.sleep(60)
+            self.sleep(2 * self.sweep_interval)
             if not self.verify_compression_stat(self.query_definitions):
                 self.fail("Seeing index data not compressed")
 
@@ -223,7 +237,7 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         post_operation_tasks = self.async_run_operations(phase="after")
         self._run_tasks([post_operation_tasks])
         if self.in_mem_comp:
-            self.sleep(60)
+            self.sleep(2 * self.sweep_interval)
             if not self.verify_compression_stat(self.query_definitions):
                 self.fail("Seeing index data not compressed")
 
@@ -247,7 +261,7 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         post_operation_tasks = self.async_run_operations(phase="after")
         self._run_tasks([post_operation_tasks])
         if self.in_mem_comp:
-            self.sleep(60)
+            self.sleep(2 * self.sweep_interval)
             if not self.verify_compression_stat(self.query_definitions):
                 self.fail("Seeing index data not compressed")
 
@@ -389,6 +403,8 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
             self.multi_query_using_index(verify_results=False)
         self.multi_query_using_index()
         num_rec_compressed_before = {}
+        num_disk_snaps_prev = dict()
+        index_stats = self.rest.get_indexer_stats()
         for bucket in self.buckets:
             if bucket.name not in list(num_rec_compressed_before.keys()):
                 num_rec_compressed_before[bucket.name] = {}
@@ -405,8 +421,16 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
                 if query_definition.index_name not in list(num_rec_compressed_before[bucket.name].keys()):
                     num_rec_compressed_before[bucket.name][query_definition.index_name] = \
                         content[bucket.name][query_definition.index_name]["MainStore"]["num_rec_compressed"]
+
+        for bucket in self.buckets:
+            for query_definition in self.query_definitions:
+                index_stats = self.rest.get_indexer_stats()
+                if "num_disk_snapshots" in index_stats[bucket.name][query_definition.index_name]:
+                    self.log.info("Got the num_disk_snapshots")
+                    num_disk_snaps_prev[bucket.name + query_definition.index_name] = index_stats[bucket.name][
+                        query_definition.index_name]["num_disk_snapshots"]
+
         self.run_doc_ops()
-        self.rest.trigger_compaction()
         count = 0
         while not self._verify_items_count() and count < 15:
             self.log.info("All Items Yet to be Indexed...")
@@ -414,6 +438,24 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
             count += 1
         if not self._verify_items_count():
             raise Exception("All Items didn't get Indexed...")
+        self.sleep(60, "wait before compaction so that every should be flushed")
+
+        is_snaps_incr = False
+        for count in range(40):
+            if is_snaps_incr:
+                break
+            for bucket in self.buckets:
+                for query_definition in self.query_definitions:
+                    index_stats = self.rest.get_indexer_stats()
+                    self.log.info("Got the index_map and comparing it with previous num_disk_snapshots")
+                    if "num_disk_snapshots" in index_stats[bucket.name][query_definition.index_name]:
+                        if num_disk_snaps_prev[bucket.name + query_definition.index_name] < index_stats[bucket.name][
+                            query_definition.index_name]["num_disk_snapshots"]:
+                            is_snaps_incr = True
+                            break
+                        else:
+                            self.sleep(5)
+        self.rest.trigger_compaction()
         for bucket in self.buckets:
             for query_definition in self.query_definitions:
                 content = self.rest.get_index_storage_stats()

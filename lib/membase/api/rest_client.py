@@ -2188,6 +2188,12 @@ class RestConnection(object):
                 if len(tokens) == 1:
                     field = tokens[0]
                     index_map[field] = val
+                if len(tokens) == 3:
+                    if tokens[0] not in index_map:
+                        index_map[tokens[0]] = dict()
+                    if tokens[1] not in index_map[tokens[0]]:
+                        index_map[tokens[0]][tokens[1]] = dict()
+                    index_map[tokens[0]][tokens[1]][tokens[2]] = val
         return index_map
 
     def get_indexer_metadata(self, timeout=120, index_map=None):
@@ -2227,13 +2233,12 @@ class RestConnection(object):
                 x, id = l.split(" : ")
                 if id:
                     log.info(f'Triggering compaction for instance id {id}')
-                    compact_command = {'Cmd': 'compactAll', 'Args': [int(id)]}
+                    compact_command = {'Cmd': 'compactAll', 'Args': [id]}
                     status, content, header = self._http_request(api, 'POST', json.dumps(compact_command))
                     if not status:
                         log.error(f'Failed to trigger compaction : {content}')
             except ValueError:
                 pass
-
 
     def get_index_status(self, timeout=120, index_map=None):
         api = self.baseUrl + 'indexStatus'
