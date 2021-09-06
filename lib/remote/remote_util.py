@@ -5218,6 +5218,20 @@ class RemoteMachineShellConnection(KeepRefs):
             pass
         return output, error
 
+    def non_local_CA_upload(self, allow=False):
+        """
+        allow: (bool) whether to allowNonLocalCACertUpload
+        """
+        username = self.input.membase_settings.rest_username
+        password = self.input.membase_settings.rest_password
+        if allow:
+            allow = "true"
+        else:
+            allow = "false"
+        self.execute_command(
+            f"curl -X POST localhost:{self.port}/settings/security/allowNonLocalCACertUpload "
+            f"-d \"{allow}\" -u {username}:{password} -H 'Content-Type:application/x-www-form-urlencoded'")
+
 
     def give_directory_permissions_to_couchbase(self, location):
         """

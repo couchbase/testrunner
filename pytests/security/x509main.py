@@ -431,11 +431,15 @@ class x509main:
     # 2. Setup other nodes for certificates
     # 3. Create the cert.json file which contains state, path, prefixes and delimeters
     # 4. Upload the cert.json file
-    def setup_master(self, state=None, paths=None, prefixs=None, delimeters=None, mode='rest', user='Administrator', password='password'):
+    def setup_master(self, state=None, paths=None, prefixs=None, delimeters=None,
+                     mode='rest', user='Administrator', password='password',
+                     non_local_CA_upload = True):
         level = ntonencryptionBase().get_encryption_level_cli(self.host)
         if level:
             ntonencryptionBase().disable_nton_cluster([self.host])
         copy_host = copy.deepcopy(self.host)
+        if non_local_CA_upload:
+            self.non_local_CA_upload(server=copy_host, allow=True)
         x509main(copy_host)._upload_cluster_ca_certificate(user, password)
         x509main(copy_host)._setup_node_certificates()
         if state is not None:
@@ -446,6 +450,9 @@ class x509main:
                 x509main(copy_host)._upload_cert_file_via_cli(user, password)
         if level:
             ntonencryptionBase().setup_nton_cluster([self.host], clusterEncryptionLevel=level)
+        if non_local_CA_upload:
+            # Disable it back as uploading is done
+            self.non_local_CA_upload(server=copy_host, allow=False)
 
     # write a new config json file based on state, paths, perfixes and delimeters
     def write_client_cert_json_new(self, state, paths, prefixs, delimeters):
@@ -478,3 +485,15 @@ class x509main:
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                     options=options, cluster_host="localhost", user=user, password=password)
         log.info (" -- Output of command ssl-manage with --set-client-auth is {0} and erorr is {1}".format(output, error))
+
+    def non_local_CA_upload(self, allow=False, server=None):
+        """
+        Changes whether or not the server should allow NonLocalCACertUpload
+        allow: (bool) whether to allowNonLocalCACertUpload
+        server: server object. If not given takes self.host
+        """
+        if server is None:
+            server = self.host
+        shell = RemoteMachineShellConnection(server)
+        shell.non_local_CA_upload(allow=allow)
+        shell.disconnect()
