@@ -102,6 +102,8 @@ class NodeHelper:
         if self.info.deliverable_type == "dmg":
             major_version = os.split('.')
             os = major_version[0] + '.' + major_version[1]
+        if self.info.distribution_type == "Amazon Linux 2":
+            os = "amzn2"
         return os
 
     def uninstall_cb(self):
@@ -312,6 +314,7 @@ class NodeHelper:
                                                          self.node.rest_password)
         else:
             cmd = install_constants.NODE_INIT["ipv4"].format(self._get_cli_path(),
+                                                         self.ip,
                                                          self.ip,
                                                          self.node.rest_username,
                                                          self.node.rest_password)

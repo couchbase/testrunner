@@ -104,7 +104,34 @@ def get_available_servers_count(options=None, is_addl_pool=False, os_version="",
         count = int(content)
     return count
 
+AWS_AMI_MAP = {
+    "amzn2": {
+        "aarch64": "ami-0ee1ea55e9569a8c9",
+        "x86_64": "ami-02c15e47d576743f8"
+    }
+}
+
+def get_servers_aws(descriptor, how_many, options, os_version):
+    descriptor = urllib.parse.unquote(descriptor)
+
+    image_id = AWS_AMI_MAP[os_version][options.architecture]
+    instance_type = "m4.xlarge"
+    if options.architecture == "aarch64":
+        instance_type = "t4g.xlarge"
+
+    subprocess.run(["./deploy.sh", descriptor, "us-west-2", str(how_many), "couchbase-qe-us-west-2", image_id, instance_type], check=True, cwd="../amazon-cloud-formation-couchbase/marketplace/")
+    subprocess.run(["aws", "cloudformation", "wait", "stack-create-complete", "--stack-name", descriptor], check=True)
+    with open("../banana/details.txt", "w") as details:
+        subprocess.run(["aws", "ec2", "describe-instances"], stdout=details, check=True, cwd="../banana")
+    subprocess.run(["python3", "main.py", "AWS", "details.txt", OS.environ.get("AWS_SSH_KEY"), descriptor], check=True, cwd="../banana")
+    with open("ips.txt") as ips_file:
+        ips = ips_file.readlines()[0]
+        return json.loads(f"[{ips}]")
+
 def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool=False, os_version="", pool_id=None):
+    if not is_addl_pool and SERVER_MANAGER == "AWS":
+        return get_servers_aws(descriptor, how_many, options, os_version)
+
     if is_addl_pool:
         pool_id = options.addPoolId
 
@@ -211,6 +238,7 @@ def main():
     parser.add_option('--ssh_poll_interval', dest='SSH_POLL_INTERVAL', default="20")
     parser.add_option('--ssh_num_retries', dest='SSH_NUM_RETRIES', default="3")
     parser.add_option('--job_params', dest='job_params', default=None)
+    parser.add_option('--architecture', dest='architecture', default="x86_64")
 
     # set of parameters for testing purposes.
     #TODO: delete them after successful testing
@@ -534,6 +562,10 @@ def main():
 
             for pool_id in options.poolId:
 
+                if SERVER_MANAGER == "AWS":
+                    haveTestToLaunch = True
+                    break
+
                 serverCount = get_available_servers_count(options=options, os_version=options.os, pool_id=pool_id)
                 print("Server count={}".format(serverCount))
 
@@ -603,9 +635,14 @@ def main():
                             , options.version)
 
                 # and this is the Jenkins descriptor
-                descriptor = urllib.parse.quote(
-                    testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] +
-                    '-' + time.strftime('%b-%d-%X') + '-' + options.version)
+                descriptor = testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] + '-' + time.strftime('%b-%d-%X') + '-' + options.version
+
+                if SERVER_MANAGER == "AWS":
+                    # A stack name can contain only alphanumeric characters (case-sensitive) and hyphens
+                    descriptor = descriptor.replace("_", "-")
+                    descriptor = "".join(filter(lambda char: str.isalnum(char) or char == "-", descriptor))
+
+                descriptor = urllib.parse.quote(descriptor)
 
                 # grab the server resources
                 # this bit is Docker/VM dependent
@@ -824,10 +861,14 @@ def update_url_with_job_params(url, job_params):
     return newurl
 
 def release_servers(descriptor):
-    release_url = "http://{}/releaseservers/{}/available".format(SERVER_MANAGER, descriptor)
-    print('Release URL: {} '.format(release_url))
-    response, content = httplib2.Http(timeout=TIMEOUT).request(release_url, 'GET')
-    print('the release response', response, content)
+    if SERVER_MANAGER == "AWS":
+        descriptor = urllib.parse.unquote(descriptor)
+        subprocess.run(["aws", "cloudformation", "delete-stack", "--stack-name", descriptor], check=True)
+    else:
+        release_url = "http://{}/releaseservers/{}/available".format(SERVER_MANAGER, descriptor)
+        print('Release URL: {} '.format(release_url))
+        response, content = httplib2.Http(timeout=TIMEOUT).request(release_url, 'GET')
+        print('the release response', response, content)
 
 if __name__ == "__main__":
     main()

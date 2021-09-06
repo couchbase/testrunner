@@ -2552,6 +2552,9 @@ class BaseTestCase(unittest.TestCase):
                         self.start_server(node)
 
                 self.sleep(10)
+                for node in self.servers:
+                    rest = RestConnection(node)
+                    rest.rename_node(node.ip, username=node.rest_username, password=node.rest_password)
             except Exception as ex:
                 self.log.info(ex)
 
