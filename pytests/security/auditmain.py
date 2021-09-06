@@ -408,7 +408,7 @@ class audit:
                                 if (items not in tempStr and method != 'REST'):
                                     #log.info (" Second level Mandatory field not matching with expected expected value is - {0}".format(items))
                                     flag = False
-            elif items in data['common']:
+            elif 'common' in data and items in data['common']:
                 if (isinstance ((data['common'][items]), dict)):
                     for items1 in manFieldSecLevel:
                         tempStr = items1.split(":")
