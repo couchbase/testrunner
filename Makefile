@@ -56,6 +56,10 @@ test-gsi-integrations-tests:
 	echo "Running gsi integration tests with 4 node cluster"
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes-xdcr_n1ql_gsi.ini conf/simple_gsi_n1ql.conf 1 1 $(PARAMS)
 
+test-fts:
+	echo "Running fts 2 node cluster"
+	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes-xdcr_n1ql_fts.ini conf/fts/py-fts-simpletopology.conf 1 1 get-cbcollect-info=False,GROUP=PS,fts_quota=1000,index_type=scorch,skip_log_scan=False,skip_disable_nton=True,validate_index_partition=False
+
 e2e-kv-single-node:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini conf/py-all-dev.conf
 

@@ -3910,7 +3910,9 @@ class FTSBaseTest(unittest.TestCase):
                 "====  FTSbasetests cleanup is started for test #{0} {1} ===="
                     .format(self.__case_number, self._testMethodName))
             self._cb_cluster.cleanup_cluster(self)
-            ntonencryptionBase().disable_nton_cluster(self._input.servers)
+            skip_disable_nton = self._input.param("skip_disable_nton", False)
+            if not skip_disable_nton:
+                ntonencryptionBase().disable_nton_cluster(self._input.servers)
             if self.compare_es:
                 self.teardown_es()
 
@@ -4703,6 +4705,11 @@ class FTSBaseTest(unittest.TestCase):
         3. if index is distributed - present on all fts nodes, almost equally?
         4. if index balanced - every fts node services almost equal num of vbs?
         """
+        validate_index_partition = TestInputSingleton.input.param("validate_index_partition", True)
+        if not validate_index_partition:
+            self.sleep(10, "giving sometime for index partition to be created")
+            return True
+
         self.log.info("Validating index distribution for %s ..." % index.name)
         nodes_partitions = self.populate_node_partition_map(index)
 

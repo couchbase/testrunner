@@ -50,8 +50,14 @@ else
     test_params=""
 fi
 # this is specifically added to handle the gsi_type param for gsi integration test
+echo "Printing $5"
+echo $5
 if [ ! -z "$5" -a "$5" != " " ]; then
-    extra_test_params=" -p $5"
+    	echo "In here"
+	extra_test_params=" -p makefile=True,$5"
+	echo $extra_test_params
+else
+	extra_test_params="-p makefile=True"
 fi
 
 servers_count=0
@@ -76,10 +82,10 @@ else
    make dataclean
    make
 fi
-COUCHBASE_NUM_VBUCKETS=64 python ./cluster_run --nodes=$servers_count &> $wd/cluster_run.log &
+COUCHBASE_NUM_VBUCKETS=64 python3 ./cluster_run --nodes=$servers_count &> $wd/cluster_run.log &
 pid=$!
 popd
-python3 ./testrunner.py $conf -i $ini $test_params $extra_test_params 2>&1 -p makefile=True | tee make_test.log
+python3 ./testrunner.py $conf -i $ini $test_params $extra_test_params 2>&1 | tee make_test.log
 
 kill $pid
 wait
