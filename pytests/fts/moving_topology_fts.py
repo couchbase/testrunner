@@ -1898,7 +1898,7 @@ class MovingTopFTS(FTSBaseTest):
                 es_index_name=None,
                 query_index=count))
         self.run_tasks_and_report(tasks, len(index.fts_queries))
-        if not self.disable_file_transfer_rebalance:
+        if not self.disable_file_transfer_rebalance and not index.is_upside_down():
             file_copy_transfer_found, file_transfer_success, failed_file_transfer = \
                 self.validate_file_copy_rebalance_stats()
             if not file_copy_transfer_found:
