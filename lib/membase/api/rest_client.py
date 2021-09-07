@@ -5895,6 +5895,14 @@ class RestConnection(object):
         status, content, header = self._http_request(self.baseUrl + "controller/uploadClusterCA", 'POST', headers=headers, params=certificate)
         return status, content
 
+    def load_trusted_CAs(self):
+        """
+        Instructs the cluster to load trusted CAs(.pem files) from the node's inbox/CA folder
+        """
+        status, content, header = self._http_request(self.baseUrl +
+                                                     "node/controller/loadTrustedCAs", 'POST')
+        return status, content
+
     def reload_certificate(self):
         """ Reload certificate
 
@@ -5902,6 +5910,14 @@ class RestConnection(object):
         """
         headers = self._create_capi_headers()
         status, content, header = self._http_request(self.baseUrl + "node/controller/reloadCertificate", 'POST', headers=headers)
+        return status, content
+
+    def get_trusted_CAs(self):
+        """
+        Get all (default + uploaded) trusted CA certs information
+        """
+        status, content, header = self._http_request(self.baseUrl
+                                                     + "/pools/default/trustedCAs", 'GET')
         return status, content
 
     def client_cert_auth(self, state, prefixes):
