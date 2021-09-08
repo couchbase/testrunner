@@ -1,11 +1,17 @@
 from remote.remote_util import RemoteMachineShellConnection
 from testconstants import COUCHBASE_FROM_4DOT6
 
+from lib.Cb_constants.CBServer import CbServer
+
 
 class CouchbaseCLI:
     def __init__(self, server, username=None, password=None, cb_version=None):
         self.server = server
         self.hostname = "%s:%s" % (server.ip, server.port)
+        if CbServer.use_https:
+            port = CbServer.ssl_port_map.get(str(server.port),
+                                                  str(server.port))
+            self.hostname = "%s:%s" % (server.ip, port)
         self.username = username
         self.password = password
         self.cb_version = cb_version

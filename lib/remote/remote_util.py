@@ -56,7 +56,7 @@ from testconstants import LINUX_NONROOT_CB_BIN_PATH,\
 from membase.api.rest_client import RestConnection, RestHelper
 from cluster_run_manager import KeepRefs
 
-from Cb_constants.CBServer import CbServer
+from lib.Cb_constants.CBServer import CbServer
 
 log = logger.Logger.get_logger()
 logging.getLogger("paramiko").setLevel(logging.WARNING)
@@ -4680,8 +4680,12 @@ class RemoteMachineShellConnection(KeepRefs):
         if self.info.distribution_type.lower() == 'mac':
             cb_client = "%scouchbase-cli" % (MAC_COUCHBASE_BIN_PATH)
 
-        cluster_param = (" -c http://{0}".format(cluster_host),
-                         "")[cluster_host is None]
+        if CbServer.use_https:
+            cluster_param = (" -c https://{0}".format(cluster_host),
+                             "")[cluster_host is None]
+        else:
+            cluster_param = (" -c http://{0}".format(cluster_host),
+                             "")[cluster_host is None]
         if cluster_param is not None:
             cluster_param += (":{0}".format(cluster_port), "")[cluster_port is None]
 
