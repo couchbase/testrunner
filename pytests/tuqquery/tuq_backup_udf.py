@@ -313,7 +313,7 @@ class QueryBackupUDFTests(QueryTests):
         self.backup()
         # Merge backups
         output = self.backup_merge(start=1, end=3)
-        info = self.backuo_info()
+        info = self.backup_info()
         self.assertEqual(info['backups'][0]['type'], 'MERGE-FULL')
         # Restore merged backup
         self.drop_udf()
