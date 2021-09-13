@@ -344,7 +344,7 @@ class Cbstats(CbCmdBase):
             stat_name = "all"
         result = dict()
         output, error = self.get_stats(bucket_name, stat_name)
-        if len(error) != 0:
+        if len(error) != 0 and not self._check_output("Installing Python 3", error):
             raise Exception("\n".join(error))
 
         if type(output) is str:
@@ -774,3 +774,23 @@ class Cbstats(CbCmdBase):
                 pass
             stats[stat] = val
         return stats
+
+    def _check_output(self, word_check, output):
+        found = False
+        if len(output) >= 1:
+            if isinstance(word_check, list):
+                for ele in word_check:
+                    for x in output:
+                        if ele.lower() in str(x.lower()):
+                            print("Found '{0} in CLI output".format(ele))
+                            found = True
+                            break
+            elif isinstance(word_check, str):
+                for x in output:
+                    if word_check.lower() in str(x.lower()):
+                        print("Found '{0}' in CLI output".format(word_check))
+                        found = True
+                        break
+            else:
+                print("invalid {0}".format(word_check))
+        return found
