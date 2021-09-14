@@ -3960,6 +3960,19 @@ class RestConnection(object):
         response, content = http.request(api, "POST", headers=headers, body=json.dumps(body))
         return response, content
 
+    def set_query_servicers(self, server, setting):
+        http = httplib2.Http(disable_ssl_certificate_validation=True)
+        n1ql_port = CbServer.n1ql_port
+        protocol = "http"
+        if CbServer.use_https:
+            n1ql_port = str(CbServer.ssl_port_map.get(str(n1ql_port), str(n1ql_port)))
+            protocol = "https"
+        api = "%s://%s:%s/" % (protocol, server.ip, n1ql_port) + "admin/settings"
+        body = {"servicers": setting}
+        headers = self._create_headers_with_auth('Administrator', 'password')
+        response, content = http.request(api, "POST", headers=headers, body=json.dumps(body))
+        return response, content
+
     def set_profiling_controls(self, server, setting):
         http = httplib2.Http(disable_ssl_certificate_validation=True)
         n1ql_port = CbServer.n1ql_port
@@ -4134,14 +4147,14 @@ class RestConnection(object):
         except ValueError:
             return content
 
-    def query_tool_stats(self):
+    def query_tool_stats(self, server):
         n1ql_port = CbServer.n1ql_port
         protocol = "http"
         if CbServer.use_https:
             n1ql_port = CbServer.ssl_n1ql_port
             protocol = "https"
         log.info('query n1ql stats')
-        api = "%s://%s:%s/admin/stats" % (protocol, str(n1ql_port), self.ip)
+        api = "%s://%s:%s/admin/stats" % (protocol, server.ip, str(n1ql_port))
         status, content, header = self._http_request(api, 'GET')
         log.info(content)
         try:
