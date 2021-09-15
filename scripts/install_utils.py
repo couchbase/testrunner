@@ -382,9 +382,21 @@ class NodeHelper:
             log.info("Setting KV memory quota as {0} MB on {1}".format(kv_quota, self.ip))
         self.rest.init_cluster_memoryQuota(self.node.rest_username, self.node.rest_password, kv_quota)
 
+    def wait_for_couchbase_reachable(self):
+        duration, event, timeout = 5, "Waiting {0}s for {1} to be reachable..", 60
+        start_time = time.time()
+        log.info("Waiting for couchbase to be reachable")
+        while time.time() < start_time + timeout:
+            try:
+                RestConnection(self.node)
+                return
+            except Exception:
+                self.wait_for_completion(duration, event)
+        raise Exception("Couchbase was not reachable after {}s".format(timeout))
+
     def init_cb(self):
+        self.wait_for_couchbase_reachable()
         duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["init"]
-        self.wait_for_completion(duration * 2, event)
         start_time = time.time()
         while time.time() < start_time + timeout:
             try:

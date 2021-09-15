@@ -156,7 +156,7 @@ CMDS = {
             "rpm -e couchbase-server-debuginfo; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; " +
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
-        "pre_install": "yes | yum remove `rpm -qa | grep couchbase`",
+        "pre_install": "",
         "install": "yes | yum localinstall -y buildpath > /dev/null && echo 1 || echo 0",
         "set_vm_swappiness_and_thp":
             "/sbin/sysctl vm.swappiness=0; " +
