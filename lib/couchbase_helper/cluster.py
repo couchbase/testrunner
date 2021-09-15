@@ -215,9 +215,13 @@ class Cluster(object):
         tasks = []
 
         while time.time() < timeout:
-            items = items * loop
+            load_items = items * loop
+            if len(tasks) > 9:
+                for task in tasks:
+                    task.cancel()
+                tasks.clear()
             if java_sdk_client:
-                kv_gen.num_ops = items
+                kv_gen.num_ops = load_items
                 kv_gen.start_seq_num = start
             else:
                 random_key = ''.join(random.choice(string.ascii_uppercase + string.digits) for x in range(6))
@@ -225,7 +229,7 @@ class Cluster(object):
                                        '%s-' % random_key,
                                        value_size,
                                        start=start,
-                                       end=start+items)
+                                       end=start+load_items)
             tasks.append(self.async_load_gen_docs(server, bucket.name, kv_gen,
                                                   bucket.kvs[1], op_type="create",
                                                   exp=exp, flag=0, only_store_hash=True,
@@ -249,7 +253,7 @@ class Cluster(object):
                 except:
                     pass
                 break
-            start += items
+            start += load_items
             loop += 1
         else:
             print(
