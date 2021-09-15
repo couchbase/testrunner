@@ -31,10 +31,6 @@ class PlannerGSI(BaseSecondaryIndexingTests):
                                                         eviction_policy=self.eviction_policy, lww=self.lww)
         self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
                                             bucket_params=self.bucket_params)
-        self.partition_fields = self.input.param('partition_fields', None)
-        if self.partition_fields:
-            self.partition_fields = self.partition_fields.split(',')
-        self.num_partition = self.input.param('num_partition', 8)
         self.buckets = self.rest.get_buckets()
         self.new_index_nodes = self.input.param('new_index_nodes', 1)
         self.new_indexes = self.input.param('new_indexes', 1)

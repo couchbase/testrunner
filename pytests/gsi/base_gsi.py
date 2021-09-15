@@ -66,6 +66,10 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.num_of_docs_per_collection = self.input.param('num_of_docs_per_collection', 1000)
         self.deploy_node_info = None
         self.server_grouping = self.input.param("server_grouping", None)
+        self.partition_fields = self.input.param('partition_fields', None)
+        if self.partition_fields:
+            self.partition_fields = self.partition_fields.split(',')
+        self.num_partition = self.input.param('num_partition', 8)
         self.server_group_map = {}
         if not self.use_rest:
             query_definition_generator = SQLDefinitionGenerator()
