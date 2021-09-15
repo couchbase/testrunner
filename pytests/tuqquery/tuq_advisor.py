@@ -716,18 +716,22 @@ class QueryAdvisorTests(QueryTests):
 
     def test_negative_invalid_arg(self):
         query = "SELECT ADVISOR({'action': 'start', 'duration': '10s', 'invalid': 10});"
-        error = "Error evaluating projection. - cause: Invalid arguments to Advisor() function: [invalid]"
+        error_message = "Error evaluating projection - cause: Invalid arguments to Advisor() function: [invalid]"
+        error_code = 5010
         try:
             results = self.run_cbq_query(query=query, server=self.master)
-            self.fail("Start session did not fail. Error expected: {0}".format(error))
+            self.fail("Start session did not fail. Error expected: {0}".format(error_message))
         except CBQError as ex:
-            self.assertTrue(str(ex).find(error) > 0)
+            error = self.process_CBQE(ex)
+            breakpoint()
+            self.assertEqual(error['code'], error_code)
+            self.assertEqual(error['msg'], error_message)
         else:
-            self.fail("There were no errors. Error expected: {0}".format(error))
+            self.fail("There were no errors. Error expected: {0}".format(error_message))
 
     def test_negative_missing_arg(self):
         query = "SELECT ADVISOR({'action': 'start', 'response': '10s'});"
-        error = "Error evaluating projection. - cause: advisor() not valid argument for 'duration'"
+        error = "Error evaluating projection - cause: advisor() not valid argument for 'duration'"
         try:
             results = self.run_cbq_query(query=query, server=self.master)
             self.fail("Start session did not fail. Error expected: {0}".format(error))
@@ -749,12 +753,12 @@ class QueryAdvisorTests(QueryTests):
 
     def test_negative_invalid_value(self):
         invalid_actions = [ \
-            {'cmd': {'action':'start', 'duration':'two'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection. - cause: time: invalid duration two'}, \
-            {'cmd': {'action':'start', 'duration':'1hr'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection. - cause: time: unknown unit hr in duration 1hr'}, \
-            {'cmd': {'action':'start', 'duration':'1h', 'response':'nul'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection. - cause: time: invalid duration nul'}, \
-            {'cmd': {'action':'start', 'duration':'1h', 'response':'1sec'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection. - cause: time: unknown unit sec in duration 1sec'}, \
-            {'cmd': {'action':'start', 'duration':'1h', 'query_count':'ten'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection. - cause: advisor() not valid argument for \'query_count\''}, \
-            {'cmd': {'action':'start', 'duration':'1h', 'profile':9999}, 'error_code': 5010, 'error_msg': 'Error evaluating projection. - cause: advisor() not valid argument for \'profile\''} ]
+            {'cmd': {'action':'start', 'duration':'two'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection - cause: time: invalid duration "two"'}, \
+            {'cmd': {'action':'start', 'duration':'1hr'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection - cause: time: unknown unit "hr" in duration "1hr"'}, \
+            {'cmd': {'action':'start', 'duration':'1h', 'response':'nul'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection - cause: time: invalid duration "nul"'}, \
+            {'cmd': {'action':'start', 'duration':'1h', 'response':'1sec'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection - cause: time: unknown unit "sec" in duration "1sec"'}, \
+            {'cmd': {'action':'start', 'duration':'1h', 'query_count':'ten'}, 'error_code': 5010, 'error_msg': 'Error evaluating projection - cause: advisor() not valid argument for \'query_count\''}, \
+            {'cmd': {'action':'start', 'duration':'1h', 'profile':9999}, 'error_code': 5010, 'error_msg': 'Error evaluating projection - cause: advisor() not valid argument for \'profile\''} ]
         for action in invalid_actions:
             try:
                 self.run_cbq_query(query=f"SELECT ADVISOR({action['cmd']})", server=self.master)
@@ -765,7 +769,7 @@ class QueryAdvisorTests(QueryTests):
                 self.assertEqual(error['msg'], action['error_msg'] )
 
     def test_negative_list(self):
-        error = "Error evaluating projection. - cause: advisor() not valid argument for 'status'"
+        error = "Error evaluating projection - cause: advisor() not valid argument for 'status'"
         try:
             session = self.run_cbq_query(query="SELECT ADVISOR({'action':'list', 'status':'stopped'})", server=self.master)
             self.fail("Start session did not fail. Error expected: {0}".format(error))
@@ -775,7 +779,7 @@ class QueryAdvisorTests(QueryTests):
             self.fail("There were no errors. Error expected: {0}".format(error))
 
     def test_negative_missing_session(self):
-        error = "Error evaluating projection. - cause: advisor() not valid argument for 'session'"
+        error = "Error evaluating projection - cause: advisor() not valid argument for 'session'"
         try:
             session = self.run_cbq_query(query="SELECT ADVISOR({'action':'get'})", server=self.master)
             self.fail("Start session did not fail. Error expected: {0}".format(error))
@@ -785,7 +789,7 @@ class QueryAdvisorTests(QueryTests):
             self.fail("There were no errors. Error expected: {0}".format(error))
 
     def test_negative_invalid_session(self):
-        error = "Error evaluating projection. - cause: advisor() not valid argument for 'session'"
+        error = "Error evaluating projection - cause: advisor() not valid argument for 'session'"
         for action in ['get','purge','stop','abort']:
             try:
                 session = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'{action}', 'session':123456}})", server=self.master)
