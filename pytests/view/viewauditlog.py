@@ -11,7 +11,7 @@ import logging
 
 log = logging.getLogger()
 
-class ViewAuditLog(createdeleteview.CreateDeleteViewTests,BaseTestCase):
+class ViewAuditLog(createdeleteview.CreateDeleteViewTests):
     def setUp(self):
         try:
             super(ViewAuditLog, self).setUp()
