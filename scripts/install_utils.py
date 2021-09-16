@@ -715,10 +715,17 @@ def __copy_thread(src_path, dest_path, node):
     logging.info("Done copying build to %s.", node.ip)
 
 
-def _copy_to_nodes(src_path, dest_path):
+def _copy_to_nodes(debug=False):
     copy_threads = []
     for node in NodeHelpers:
-        copy_to_node = threading.Thread(target=__copy_thread, args=(src_path, dest_path, node))
+        if debug:
+            path = node.build.debug_path
+        else:
+            path = node.build.path
+        # don't copy if the file already exists and size matches
+        if check_file_size(node, debug):
+            continue
+        copy_to_node = threading.Thread(target=__copy_thread, args=(path, path, node))
         copy_threads.append(copy_to_node)
         copy_to_node.start()
 
@@ -762,10 +769,9 @@ def download_build():
     all_nodes_same_version = len(set([node.build.url for node in NodeHelpers])) == 1
     if params["all_nodes_same_os"] and all_nodes_same_version and not params["skip_local_download"]:
         check_and_retry_download_binary_local(NodeHelpers[0])
-        _copy_to_nodes(NodeHelpers[0].build.path, NodeHelpers[0].build.path)
+        _copy_to_nodes(debug=False)
         if NodeHelpers[0].build.debug_build_present:
-            _copy_to_nodes(NodeHelpers[0].build.debug_path,
-                           NodeHelpers[0].build.debug_path)
+            _copy_to_nodes(debug=True)
         ok = True
         for node in NodeHelpers:
             if not check_file_exists(node, node.build.path) \
