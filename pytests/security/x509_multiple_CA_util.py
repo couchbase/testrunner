@@ -446,6 +446,12 @@ class x509main:
                         self.generate_node_certificate(root_ca_name, int_ca_name,
                                                        copy_servers[node_ptr].ip)
                         node_ptr = node_ptr + 1
+                    if x509main.ca_count == spec["number_of_CAs"] and \
+                            i == (number_of_int_ca - 1):
+                        while node_ptr < max_ptr:
+                            self.generate_node_certificate(root_ca_name, int_ca_name,
+                                                           copy_servers[node_ptr].ip)
+                            node_ptr = node_ptr + 1
         while x509main.ca_count < spec["number_of_CAs"]:
             root_ca_name = "r" + str(x509main.ca_count + 1)
             number_of_int_ca = spec["int_certs_per_CA"]
@@ -577,14 +583,14 @@ class x509main:
         headers = {'Content-Type': 'application/octet-stream',
                    'Authorization': 'Basic %s' % authorization,
                    'Accept': '*/*'}
-        url = "controller/uploadClusterCA"
+        url = "settings/clientCertAuth"
         api = rest.baseUrl + url
         http = httplib2.Http(disable_ssl_certificate_validation=True)
         response, content = http.request(api, 'POST', headers=headers, body=data)
         if response['status'] in ['200', '201', '202']:
             return content
         else:
-            raise Exception(response)
+            raise Exception(content)
         # TODo move some of this code to rest client
 
     def load_trusted_CAs(self, server=None, from_non_localhost=True):
