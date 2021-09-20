@@ -3012,21 +3012,18 @@ class XDCRNewBaseTest(unittest.TestCase):
         return self.__report_error_list
 
     def __calculate_bucket_size(self, cluster_quota, num_buckets):
-
         if 'quota_percent' in self._input.test_params:
             quota_percent = int(self._input.test_params['quota_percent'])
         else:
             quota_percent = None
-
-        dgm_run = self._input.param("dgm_run", 0)
         bucket_size = 0
-        if dgm_run:
-            # buckets cannot be created if size<100MB
-            bucket_size = 256
-        elif quota_percent is not None and num_buckets > 0:
-            bucket_size = int( float(cluster_quota - 500) * float(quota_percent/100.0 ) /float(num_buckets) )
+        if quota_percent is not None and num_buckets > 0:
+            bucket_size = int( float(cluster_quota - 500) * float(quota_percent/100.0 ) /float(num_buckets))
         elif num_buckets > 0:
             bucket_size = int((float(cluster_quota) - 500)/float(num_buckets))
+        # Setting upper limit of 1GB for bucket size
+        if bucket_size > 1024:
+            bucket_size = 1024
         return bucket_size
 
     def __create_buckets(self):
