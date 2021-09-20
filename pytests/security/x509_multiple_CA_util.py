@@ -1,11 +1,12 @@
 import base64
 import importlib
-import json
 import random
 import os
 import copy
 import fileinput
 import sys
+import time
+import requests
 import logger
 import httplib2
 
@@ -45,6 +46,8 @@ class x509main:
     CLIENT_CERT_PEM = CACERTFILEPATH + IP_ADDRESS + ".pem"
     INT_EXTENSIONS_FILE = "./pytests/security/v3_ca.ext"
     CERT_EXTENSIONS_FILE = "./pytests/security/clientconf.conf"
+    ALL_CAs_PATH = CACERTFILEPATH + "all/"  # a dir to store the combined root ca .pem files
+    ALL_CAs_PEM_NAME = "all_ca.pem" # file name of the CA bundle
 
     root_ca_names = []  # list of active root certs
     manifest = {}  # active CA manifest
@@ -183,14 +186,30 @@ class x509main:
 
     def get_client_cert(self, int_ca_name):
         """
-        returns client's cert's key and cert
+        returns client's cert and key
         """
         client_ca_name = "client_" + int_ca_name
-        node_ca_key_path = x509main.client_ca_map[str(client_ca_name)]["path"] + \
-                           self.client_ip + ".key"
-        node_ca_path = x509main.node_ca_map[str(client_ca_name)]["path"] + \
-                       "long_chain" + self.client_ip + ".pem"
-        return node_ca_key_path, node_ca_path
+        client_ca_key_path = x509main.client_ca_map[str(client_ca_name)]["path"] + \
+                             self.client_ip + ".key"
+        client_ca_path = x509main.client_ca_map[str(client_ca_name)]["path"] + \
+                         "long_chain" + self.client_ip + ".pem"
+        return client_ca_path, client_ca_key_path
+
+    def create_ca_bundle(self):
+        """
+        Creates/updates a pem file with all trusted CAs combined
+        """
+        self.remove_directory(dir_name=x509main.ALL_CAs_PATH)
+        self.create_directory(dir_name=x509main.ALL_CAs_PATH)
+        cat_cmd = "cat "
+        for root_ca, root_ca_manifest in x509main.manifest.items():
+            root_ca_dir_path = root_ca_manifest["path"]
+            root_ca_path = root_ca_dir_path + "ca.pem"
+            cat_cmd = cat_cmd + root_ca_path + " "
+        cat_cmd = cat_cmd + "> " + x509main.ALL_CAs_PATH + x509main.ALL_CAs_PEM_NAME
+        shell = RemoteMachineShellConnection(self.slave_host)
+        shell.execute_command(cat_cmd)
+        shell.disconnect()
 
     def generate_root_certificate(self, root_ca_name, cn_name=None):
         root_ca_dir = x509main.CACERTFILEPATH + root_ca_name + "/"
@@ -471,6 +490,7 @@ class x509main:
                                                        copy_servers[node_ptr].ip)
                         node_ptr = node_ptr + 1
         self.write_client_cert_json_new()
+        self.create_ca_bundle()
 
     def rotate_certs(self, all_servers, root_ca_names="all"):
         """
@@ -517,6 +537,7 @@ class x509main:
         for server in servers:
             _ = self.upload_root_certs(server=server, root_ca_names=root_ca_names)
         self.upload_node_certs(servers=servers)
+        self.create_ca_bundle()
         # TODo delete off the old trusted CAs from the server
 
     def upload_root_certs(self, server=None, root_ca_names=None):
@@ -674,3 +695,70 @@ class x509main:
         for server in servers:
             self.delete_inbox_folder_on_server(server=server)
         # ToDO delete trusted certs
+
+
+class Validation:
+    def __init__(self, server,
+                 cacert=None,
+                 client_cert_path_tuple=None):
+        self.server = server
+        self.cacert = cacert
+        self.client_cert_path_tuple = client_cert_path_tuple
+        self.log = logger.Logger.get_logger()
+
+    def urllib_request(self, api, verb='GET', params='', headers=None, timeout=100, try_count=3):
+        if headers is None:
+            credentials = '{}:{}'.format(self.server.rest_username, self.server.rest_password)
+            authorization = base64.encodebytes(credentials.encode('utf-8'))
+            authorization = authorization.decode('utf-8').rstrip('\n')
+            headers = {'Content-Type': 'application/x-www-form-urlencoded',
+                       'Authorization': 'Basic %s' % authorization,
+                       'Connection': 'close',
+                       'Accept': '*/*'}
+        if self.client_cert_path_tuple:
+            self.log.info("Using client cert auth")
+            del headers['Authorization']
+        if self.cacert:
+            verify = self.cacert
+        else:
+            verify = False
+        tries = 0
+        self.log.info("Making a rest request api={0} verb={1} params={2} "
+                      "client_cert={3} verify={4}".
+                      format(api, verb, params, self.client_cert_path_tuple,
+                             verify))
+        while tries < try_count:
+            try:
+                if verb == 'GET':
+                    response = requests.get(api, params=params, headers=headers,
+                                            timeout=timeout, cert=self.client_cert_path_tuple,
+                                            verify=verify)
+                elif verb == 'POST':
+                    response = requests.post(api, data=params, headers=headers,
+                                             timeout=timeout, cert=self.client_cert_path_tuple,
+                                             verify=verify)
+                elif verb == 'DELETE':
+                    response = requests.delete(api, data=params, headers=headers,
+                                               timeout=timeout, cert=self.client_cert_path_tuple,
+                                               verify=verify)
+                elif verb == "PUT":
+                    response = requests.put(api, data=params, headers=headers,
+                                            timeout=timeout, cert=self.client_cert_path_tuple,
+                                            verify=verify)
+                status = response.status_code
+                content = response.content
+                if status in [200, 201, 202]:
+                    return True, content, response
+                else:
+                    self.log.error(response.reason)
+                    return False, content, response
+            except Exception as e:
+                tries = tries + 1
+                if tries >= try_count:
+                    raise Exception(e)
+                else:
+                    self.log.error("Trying again ...")
+                    time.sleep(5)
+
+    def sdk_connection(self):
+        pass

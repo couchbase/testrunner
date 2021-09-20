@@ -1,7 +1,7 @@
 import json
 
 from pytests.basetestcase import BaseTestCase
-from pytests.security.x509_multiple_CA_util import x509main
+from pytests.security.x509_multiple_CA_util import x509main, Validation
 
 
 class MultipleCA(BaseTestCase):
@@ -11,11 +11,37 @@ class MultipleCA(BaseTestCase):
         self.x509 = x509main(host=self.master)
         for server in self.servers:
             self.x509.delete_inbox_folder_on_server(server=server)
+        self.basic_url = "https://" + self.servers[0].ip + ":18091/pools/default/"
 
     def tearDown(self):
         self.x509 = x509main(host=self.master)
         self.x509.teardown_certs(servers=self.servers)
         super(MultipleCA, self).tearDown()
+
+    def test_auth(self):
+        self.x509.generate_multiple_x509_certs(servers=self.servers)
+        self.log.info("Manifest #########\n {0}".format(json.dumps(x509main.manifest, indent=4)))
+        for server in self.servers:
+            _ = self.x509.upload_root_certs(server)
+        self.x509.upload_node_certs(servers=self.servers)
+        self.x509.upload_client_cert_settings(self.servers[0])
+
+        # using client cert auth
+        client_cert_path_tuple = self.x509.get_client_cert(int_ca_name="i1_r1")
+        self.x509_validation = Validation(server=self.servers[0],
+                                          cacert=x509main.ALL_CAs_PATH + x509main.ALL_CAs_PEM_NAME,
+                                          client_cert_path_tuple=client_cert_path_tuple)
+        status, content, response = self.x509_validation.urllib_request(api=self.basic_url)
+        if not status:
+            self.fail("Could not login using client cert auth {0}".format(content))
+
+        # using basic auth
+        self.x509_validation = Validation(server=self.servers[0],
+                                          cacert=x509main.ALL_CAs_PATH + x509main.ALL_CAs_PEM_NAME,
+                                          client_cert_path_tuple=None)
+        status, content, response = self.x509_validation.urllib_request(api=self.basic_url)
+        if not status:
+            self.fail("Could not login using basic auth {0}".format(content))
 
     def test_basic_rebalance(self):
         """
@@ -53,6 +79,3 @@ class MultipleCA(BaseTestCase):
         content = self.x509.get_trusted_CAs()
         self.log.info("Trusted CAs: {0}".format(content))
         self.log.info("Active Root CAs names {0}".format(self.x509.root_ca_names))
-
-
-
