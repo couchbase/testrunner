@@ -3960,7 +3960,7 @@ class RestConnection(object):
         response, content = http.request(api, "POST", headers=headers, body=json.dumps(body))
         return response, content
 
-    def set_query_servicers(self, server, setting):
+    def set_query_servicers(self, server, setting, servicers="servicers"):
         http = httplib2.Http(disable_ssl_certificate_validation=True)
         n1ql_port = CbServer.n1ql_port
         protocol = "http"
@@ -3968,7 +3968,7 @@ class RestConnection(object):
             n1ql_port = str(CbServer.ssl_port_map.get(str(n1ql_port), str(n1ql_port)))
             protocol = "https"
         api = "%s://%s:%s/" % (protocol, server.ip, n1ql_port) + "admin/settings"
-        body = {"servicers": setting}
+        body = {servicers: setting}
         headers = self._create_headers_with_auth('Administrator', 'password')
         response, content = http.request(api, "POST", headers=headers, body=json.dumps(body))
         return response, content
