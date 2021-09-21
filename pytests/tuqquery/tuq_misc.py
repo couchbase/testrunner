@@ -2,6 +2,7 @@ from .tuq import QueryTests
 import threading
 import time
 import json
+from membase.api.exception import CBQError
 
 
 class QueryMiscTests(QueryTests):
@@ -532,3 +533,29 @@ class QueryMiscTests(QueryTests):
         query = 'SELECT d.* FROM ' + self.query_bucket + ' d WHERE ln = "null" AND lk != "null"'
         while time.time() < end_time:
             res = self.run_cbq_query(query=query)
+
+    def test_syntax_reserved_keyword(self):
+        # Sample list of reserved keywords to test with
+        keywords = ['order', 'like', 'advise']
+        for keyword in keywords:
+            # reserved key word in select clause
+            try:
+                result = self.run_cbq_query(f"select {keyword} from {self.temp_bucket_name}")
+            except CBQError as ex:
+                error = self.process_CBQE(ex)
+                self.assertEqual(error['code'], 3000)
+                self.assertEqual(error['msg'],  f"syntax error - line 1, column 8, near 'select', at: {keyword} (reserved word)")
+            # reserved keyword in where clause
+            try:
+                result = self.run_cbq_query(f"select * from {self.temp_bucket_name} where {keyword} = 0")
+            except CBQError as ex:
+                error = self.process_CBQE(ex)
+                self.assertEqual(error['code'], 3000)
+                self.assertEqual(error['msg'],  f"syntax error - line 1, column 33, near 'om {self.temp_bucket_name} where', at: {keyword} (reserved word)")
+            # reserved keyword in from clause
+            try:
+                result = self.run_cbq_query(f"select * from {keyword}")
+            except CBQError as ex:
+                error = self.process_CBQE(ex)
+                self.assertEqual(error['code'], 3000)
+                self.assertEqual(error['msg'],  f"syntax error - line 1, column 15, near 'select * from', at: {keyword} (reserved word)")
