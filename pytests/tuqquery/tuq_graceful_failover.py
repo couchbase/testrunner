@@ -63,11 +63,11 @@ class QueryGracefulFailoverTests(QueryTests):
                     # We expect the query to fail here with error: "Service shut down"
                     # as we expect to still be in middle of the failover at this point
                     fail = self.run_cbq_query(query="select 10",server=server)
-                    self.log.fail("Query should have failed with error code 1181")
+                    self.log.fail("Query should have failed with error code 1180/1181")
                 except CBQError as ex:
                     error = self.process_CBQE(ex)
-                    self.assertEqual(error['code'], 1181)
-                    self.assertEqual(error['msg'], "Service shut down")
+                    self.assertTrue(error['code'] == 1180 or error['code'] == 1181)
+                    self.assertTrue(error['msg'] == "Service shut down" or error['msg'] == "Service shutting down")
             else:
                 response = self.run_cbq_query(query=query,server=server)
             results[index] = response['results']
