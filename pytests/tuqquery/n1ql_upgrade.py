@@ -885,7 +885,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             if self.filter:
                 self.execute_filtered_query()
             self.run_cbq_query(server=self.master, query="SELECT * FROM default LIMIT 100")
-            expectedResults = {'node':'%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
+            expectedResults = {'node':'%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None, 'isAdHoc': True,
                                'name': 'SELECT statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'SELECT * FROM default LIMIT 100',
                                'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
@@ -896,7 +896,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.run_cbq_query(server=self.master, query='INSERT INTO default ( KEY, VALUE ) VALUES ("1",{ "order_id": "1", "type": '
                                      '"order", "customer_id":"24601", "total_price": 30.3, "lineitems": '
                                      '[ "11", "12", "13" ] })')
-            expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
+            expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'errors': None, 'isAdHoc': True,
                                'name': 'INSERT statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'INSERT INTO default ( KEY, VALUE ) VALUES ("1",{ "order_id": "1", "type": '
                                             '"order", "customer_id":"24601", "total_price": 30.3, "lineitems": '
