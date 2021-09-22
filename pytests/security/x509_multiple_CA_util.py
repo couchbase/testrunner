@@ -14,6 +14,7 @@ from shutil import copyfile
 from lib.Cb_constants.CBServer import CbServer
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
+from couchbase.bucket import Bucket
 
 
 class ServerInfo():
@@ -44,10 +45,14 @@ class x509main:
     IP_ADDRESS = '172.16.1.174'
     CLIENT_CERT_KEY = CACERTFILEPATH + IP_ADDRESS + ".key"
     CLIENT_CERT_PEM = CACERTFILEPATH + IP_ADDRESS + ".pem"
+    ROOT_CA_CONFIG = "./pytests/security/x509_extension_files/config"
+    CA_EXT = "./pytests/security/x509_extension_files/ca.ext"
+    SERVER_EXT = "./pytests/security/x509_extension_files/server.ext"
+    CLIENT_EXT = "./pytests/security/x509_extension_files/client.ext"
     INT_EXTENSIONS_FILE = "./pytests/security/v3_ca.ext"
     CERT_EXTENSIONS_FILE = "./pytests/security/clientconf.conf"
     ALL_CAs_PATH = CACERTFILEPATH + "all/"  # a dir to store the combined root ca .pem files
-    ALL_CAs_PEM_NAME = "all_ca.pem" # file name of the CA bundle
+    ALL_CAs_PEM_NAME = "all_ca.pem"  # file name of the CA bundle
 
     root_ca_names = []  # list of active root certs
     manifest = {}  # active CA manifest
@@ -217,6 +222,7 @@ class x509main:
 
         root_ca_key_path = root_ca_dir + "ca.key"
         root_ca_path = root_ca_dir + "ca.pem"
+        config_path = x509main.ROOT_CA_CONFIG
 
         shell = RemoteMachineShellConnection(self.slave_host)
         # create ca.key
@@ -224,14 +230,14 @@ class x509main:
                                               " -out " + root_ca_key_path +
                                               " " + str(self.key_length))
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
-
-        # create ca.pem
         if cn_name is None:
-            cn_name = "My Company Root CA " + root_ca_name
-        output, error = shell.execute_command("openssl req -new -x509  -days 3650 -sha256 " +
-                                              " -key " + root_ca_key_path +
+            cn_name = "RootCA" + root_ca_name
+        # create ca.pem
+        output, error = shell.execute_command("openssl req -config " + config_path +
+                                              " -new -x509 -days 3650" +
+                                              " -sha256 -key " + root_ca_key_path +
                                               " -out " + root_ca_path +
-                                              " -subj '/C=UA/O=My Company/CN=" + cn_name + "'")
+                                              " -subj '/C=UA/O=MyCompany/CN=" + cn_name + "'")
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
         x509main.ca_count += 1
@@ -262,7 +268,7 @@ class x509main:
         # create int CA csr
         output, error = shell.execute_command("openssl req -new -key " + int_ca_key_path +
                                               " -out " + int_ca_csr_path +
-                                              " -subj '/C=UA/O=My Company/CN=My Company Intermediate CA'")
+                                              " -subj '/C=UA/O=MyCompany/OU=Servers/CN=ClientAndServerSigningCA'")
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
         # create int CA pem
@@ -271,7 +277,7 @@ class x509main:
                                               " -CAkey " + root_ca_key_path +
                                               " -CAcreateserial -CAserial " +
                                               int_ca_dir + "rootCA.srl" +
-                                              " -extfile " + x509main.INT_EXTENSIONS_FILE +
+                                              " -extfile " + x509main.CA_EXT +
                                               " -out " + int_ca_path + " -days 365 -sha256")
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
@@ -298,20 +304,16 @@ class x509main:
         if "[" in node_ip:
             node_ip = node_ip.replace("[", "").replace("]", "")
         # modify the extensions file to fill IP/DNS of the node
-        temp_cert_extensions_file = "./pytests/security/clientconf3.conf"
-        copyfile(x509main.CERT_EXTENSIONS_FILE, temp_cert_extensions_file)
+        temp_cert_extensions_file = "./pytests/security/x509_extension_files/server2.ext"
+        copyfile(x509main.SERVER_EXT, temp_cert_extensions_file)
         fin = open(temp_cert_extensions_file, "a+")
         if ".com" in node_ip and self.dns is None:
-            fin.write("\nDNS.0 = {0}".format(node_ip))
+            fin.write("\nsubjectAltName = DNS:{0}".format(node_ip))
         elif self.dns:
-            fin.write("\nDNS.0 = {0}".format(self.dns))
+            fin.write("\nsubjectAltName = DNS:{0}".format(self.dns))
         else:
-            fin.write("\nIP.0 = {0}".format(node_ip))
+            fin.write("\nsubjectAltName = IP:{0}".format(node_ip))
         fin.close()
-        for line in fileinput.input(temp_cert_extensions_file, inplace=1):
-            if "ip_address" in line:
-                line = line.replace("ip_address", node_ip)
-            sys.stdout.write(line)
         # print file contents for easy debugging
         fout = open(temp_cert_extensions_file, "r")
         print((fout.read()))
@@ -327,7 +329,7 @@ class x509main:
         # create node CA csr
         output, error = shell.execute_command("openssl req -new -key " + node_ca_key_path +
                                               " -out " + node_ca_csr_path +
-                                              " -config " + temp_cert_extensions_file)
+                                              " -subj '/C=UA/O=MyCompany/OU=Servers/CN=couchbase.node.svc'")
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
         # create node CA pem
@@ -338,8 +340,7 @@ class x509main:
                                               int_ca_dir + "intermediateCA.srl" +
                                               " -out " + node_ca_path +
                                               " -days 365 -sha256" +
-                                              " -extfile " + temp_cert_extensions_file +
-                                              " -extensions req_ext")
+                                              " -extfile " + temp_cert_extensions_file)
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
         # concatenate node ca pem & int ca pem to give chain.pem
@@ -374,23 +375,12 @@ class x509main:
         if "[" in self.client_ip:
             self.client_ip = self.client_ip.replace("[", "").replace("]", "")
         # modify the extensions file to fill IP/DNS of the client for auth
-        temp_cert_extensions_file = "./pytests/security/clientconf2.conf"
-        copyfile(x509main.CERT_EXTENSIONS_FILE, temp_cert_extensions_file)
+        temp_cert_extensions_file = "./pytests/security/x509_extension_files/client2.ext"
+        copyfile(x509main.CLIENT_EXT, temp_cert_extensions_file)
         fin = open(temp_cert_extensions_file, "a+")
+        # ToDO put other paths that are supported
         if self.alt_names == 'default':
-            fin.write("\nDNS.1 = us.cbadminbucket.com")
-            fin.write("\nURI.1 = www.cbadminbucket.com")
-        elif self.alt_names == 'non_default':
-            if self.dns is not None:
-                dns = "\nDNS.1 = " + self.dns
-                fin.write(dns)
-            if self.uri is not None:
-                uri = "\nURI.1 = " + self.dns
-                fin.write(uri)
-        if ".com" in self.client_ip:
-            fin.write("\nDNS.0 = {0}".format(self.client_ip))
-        else:
-            fin.write("\nIP.0 = {0}".format(self.client_ip.replace('[', '').replace(']', '')))
+            fin.write("\nsubjectAltName = URI:www.cbadminbucket.com")
         fin.close()
 
         # print file contents for easy debugging
@@ -408,7 +398,7 @@ class x509main:
         # create client CA csr
         output, error = shell.execute_command("openssl req -new -key " + client_ca_key_path +
                                               " -out " + client_ca_csr_path +
-                                              " -config " + temp_cert_extensions_file)
+                                              " -subj '/C=UA/O=MyCompany/OU=People/CN=cbadminbucket'")
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
         # create client CA pem
@@ -419,8 +409,7 @@ class x509main:
                                               client_ca_dir + "intermediateCA.srl" +
                                               " -out " + client_ca_path +
                                               " -days 365 -sha256" +
-                                              " -extfile " + temp_cert_extensions_file +
-                                              " -extensions req_ext")
+                                              " -extfile " + temp_cert_extensions_file)
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
         # concatenate client ca pem & int ca pem to give client chain pem
@@ -449,6 +438,7 @@ class x509main:
         """
         self.create_directory(x509main.CACERTFILEPATH)
 
+        # Take care of creating certs from spec file
         spec = self.import_spec_file(spec_file=spec_file_name)
         copy_servers = copy.deepcopy(servers)
         node_ptr = 0
@@ -460,7 +450,6 @@ class x509main:
                 for i in range(number_of_int_ca):
                     int_ca_name = "i" + str(i + 1) + "_" + root_ca_name
                     self.generate_intermediate_certificate(root_ca_name, int_ca_name)
-                    self.generate_client_certificate(root_ca_name, int_ca_name)
                     if node_ptr < max_ptr:
                         self.generate_node_certificate(root_ca_name, int_ca_name,
                                                        copy_servers[node_ptr].ip)
@@ -478,7 +467,6 @@ class x509main:
                 int_ca_name = "i" + str(i + 1) + "_" + root_ca_name
                 self.generate_root_certificate(root_ca_name=root_ca_name)
                 self.generate_intermediate_certificate(root_ca_name, int_ca_name)
-                self.generate_client_certificate(root_ca_name, int_ca_name)
                 if node_ptr < max_ptr:
                     self.generate_node_certificate(root_ca_name, int_ca_name,
                                                    copy_servers[node_ptr].ip)
@@ -489,6 +477,22 @@ class x509main:
                         self.generate_node_certificate(root_ca_name, int_ca_name,
                                                        copy_servers[node_ptr].ip)
                         node_ptr = node_ptr + 1
+
+        # first client
+        int_ca_name = self.node_ca_map[servers[0].ip]["signed_by"]
+        root_ca_name = int_ca_name.split("_")[1]
+        self.generate_client_certificate(root_ca_name, int_ca_name)
+        # second client
+        int_ca_name = "iclient1_" + root_ca_name
+        self.generate_intermediate_certificate(root_ca_name, int_ca_name)
+        self.generate_client_certificate(root_ca_name, int_ca_name)
+        # third client
+        root_ca_name = "clientroot"
+        int_ca_name = "iclient1_" + root_ca_name
+        self.generate_root_certificate(root_ca_name, cn_name="clientroot")
+        self.generate_intermediate_certificate(root_ca_name, int_ca_name)
+        self.generate_client_certificate(root_ca_name, int_ca_name)
+
         self.write_client_cert_json_new()
         self.create_ca_bundle()
 
@@ -523,9 +527,11 @@ class x509main:
                     self.generate_node_certificate(root_ca_name=root_ca_name,
                                                    int_ca_name=int_ca_name,
                                                    node_ip=node_ip)
-                del self.client_ca_map["client_" + int_ca_name]
-                self.generate_client_certificate(root_ca_name=root_ca_name,
-                                                 int_ca_name=int_ca_name)
+                client_cas_manifest = int_ca_manifest["clients"]
+                if self.client_ip in client_cas_manifest.keys():
+                    del self.client_ca_map["client_" + int_ca_name]
+                    self.generate_client_certificate(root_ca_name=root_ca_name,
+                                                     int_ca_name=int_ca_name)
         self.log.info("Generation of new certs done!")
         servers = list()
         for node_affected_ip in nodes_affected_ips:
@@ -760,5 +766,32 @@ class Validation:
                     self.log.error("Trying again ...")
                     time.sleep(5)
 
-    def sdk_connection(self):
-        pass
+    @staticmethod
+    def creates_sdk(client, start=0, end=300):
+        """
+        Given a sdk client, performs creates
+        TODO: Validate this creates ?
+        """
+        for i in range(start, end):
+            key = 'document' + str(i)
+            client.upsert(key, {'application': 'data'})
+
+    def sdk_connection(self, bucket_name='default'):
+        """
+        opens bucket, returns sdk client connection
+        """
+        options = dict(certpath=self.client_cert_path_tuple[0],
+                       truststorepath=self.cacert,
+                       keypath=self.client_cert_path_tuple[1])
+        self.log.info('couchbases://{hostname}/{bucketname}?certpath={certpath}'
+                      '&truststorepath={truststorepath}&keypath={keypath}'.
+                      format(hostname=self.server.ip, bucketname=bucket_name, **options))
+        # TODo change after PYCBC-1179
+        # bucket = Bucket('couchbases://{hostname}/{bucketname}?certpath={certpath}'
+        #                 '&truststorepath={truststorepath}&keypath={keypath}'.
+        #                 format(hostname=self.server.ip, bucketname=bucket_name, **options))
+        bucket = Bucket('couchbases://{hostname}/{bucketname}?certpath={certpath}'
+                        '&ssl=no_verify&keypath={keypath}'.
+                        format(hostname=self.server.ip, bucketname=bucket_name, **options))
+        self.log.info("Nodes are {0}".format(bucket.server_nodes))
+        return bucket

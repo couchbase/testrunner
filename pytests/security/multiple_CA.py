@@ -26,22 +26,31 @@ class MultipleCA(BaseTestCase):
         self.x509.upload_node_certs(servers=self.servers)
         self.x509.upload_client_cert_settings(self.servers[0])
 
-        # using client cert auth
-        client_cert_path_tuple = self.x509.get_client_cert(int_ca_name="i1_r1")
-        self.x509_validation = Validation(server=self.servers[0],
-                                          cacert=x509main.ALL_CAs_PATH + x509main.ALL_CAs_PEM_NAME,
-                                          client_cert_path_tuple=client_cert_path_tuple)
-        status, content, response = self.x509_validation.urllib_request(api=self.basic_url)
-        if not status:
-            self.fail("Could not login using client cert auth {0}".format(content))
+        client_certs = list()
+        client_certs.append(self.x509.get_client_cert(int_ca_name="i1_r1"))
+        client_certs.append(self.x509.get_client_cert(int_ca_name="iclient1_r1"))
+        client_certs.append(self.x509.get_client_cert(int_ca_name="iclient1_clientroot"))
+        for client_cert_path_tuple in client_certs:
+            # 1) using client auth
+            self.x509_validation = Validation(server=self.servers[0],
+                                              cacert=x509main.ALL_CAs_PATH + x509main.ALL_CAs_PEM_NAME,
+                                              client_cert_path_tuple=client_cert_path_tuple)
+            # 1a) rest api
+            status, content, response = self.x509_validation.urllib_request(api=self.basic_url)
+            if not status:
+                self.fail("Could not login using client cert auth {0}".format(content))
+            # 1b) sdk
+            client = self.x509_validation.sdk_connection()
+            self.x509_validation.creates_sdk(client)
 
-        # using basic auth
-        self.x509_validation = Validation(server=self.servers[0],
-                                          cacert=x509main.ALL_CAs_PATH + x509main.ALL_CAs_PEM_NAME,
-                                          client_cert_path_tuple=None)
-        status, content, response = self.x509_validation.urllib_request(api=self.basic_url)
-        if not status:
-            self.fail("Could not login using basic auth {0}".format(content))
+            # 2) using basic auth
+            self.x509_validation = Validation(server=self.servers[0],
+                                              cacert=x509main.ALL_CAs_PATH + x509main.ALL_CAs_PEM_NAME,
+                                              client_cert_path_tuple=None)
+            # 2a) rest api
+            status, content, response = self.x509_validation.urllib_request(api=self.basic_url)
+            if not status:
+                self.fail("Could not login using basic auth {0}".format(content))
 
     def test_basic_rebalance(self):
         """
