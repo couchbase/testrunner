@@ -191,7 +191,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             try:
                 self.run_cbq_query(query="selec * fro " + self.query_buckets[0])
             except CBQError:
-                expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal',
+                expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal',  'errors': None,
                                     'isAdHoc': True,
                                     'name': 'UNRECOGNIZED statement', 'real_userid': {'source': source, 'user': user},
                                     'statement': 'selec * fro ' + self.query_buckets[0],

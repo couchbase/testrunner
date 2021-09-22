@@ -169,13 +169,13 @@ class QueryMonitoringTests(QueryTests):
                 t51.join()
 
     def test_transaction_completed(self):
-        self.rest.set_completed_requests_collection_duration(self.master, 500)
+        self.rest.set_completed_requests_collection_duration(self.master, 200)
         try:
             tx_start = self.run_cbq_query(query="BEGIN WORK", txtimeout="2m")
             txid = tx_start['results'][0]['txid']
             self.run_cbq_query(query='select * from default where name = "employee-9"', txnid=txid)
             self.run_cbq_query(query='update default SET name = "employee-9000" where name = "employee-9"', txnid=txid)
-            self.run_cbq_query(query='delete from default limit 10000', txnid=txid)
+            self.run_cbq_query(query='delete from default limit 15000', txnid=txid)
             try:
                 self.run_cbq_query(query='COMMIT TRANSACTION', txnid=txid)
             except Exception as ex:
@@ -196,7 +196,7 @@ class QueryMonitoringTests(QueryTests):
             self.assertTrue('transactionRemainingTime' in update_results['results'][0]['completed_requests'],"Transaction Remaining Time not found in the entry! {0}".format(str(update_results['results'][0]['completed_requests'])))
             self.assertTrue('transactionElapsedTime' in update_results['results'][0]['completed_requests'],"Transaction Elapsed Time not found in the entry! {0}".format(str(update_results['results'][0]['completed_requests'])))
 
-            delete_results = self.run_cbq_query(query='select * from system:completed_requests where statement = "delete from default limit 10000"')
+            delete_results = self.run_cbq_query(query='select * from system:completed_requests where statement = "delete from default limit 15000"')
             self.log.info(delete_results)
             self.assertEqual(delete_results['results'][0]['completed_requests']['txid'], txid)
             self.assertTrue('transactionRemainingTime' in delete_results['results'][0]['completed_requests'],"Transaction Remaining Time not found in the entry! {0}".format(str(delete_results['results'][0]['completed_requests'])))
@@ -269,7 +269,7 @@ class QueryMonitoringTests(QueryTests):
                 t52.start()
                 t53.start()
             e.set()
-            query = '(select * from %s ) union (select * from %s )' % (query_bucket, query_bucket)
+            query = '(select * from %s ) union (select * from %s ) union (select * from %s)' % (query_bucket, query_bucket, query_bucket)
             self.run_cbq_query(query, server=self.servers[1])
             logging.debug('event is set')
             t50.join(100)
