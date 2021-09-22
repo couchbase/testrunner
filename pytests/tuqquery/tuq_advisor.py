@@ -723,7 +723,6 @@ class QueryAdvisorTests(QueryTests):
             self.fail("Start session did not fail. Error expected: {0}".format(error_message))
         except CBQError as ex:
             error = self.process_CBQE(ex)
-            breakpoint()
             self.assertEqual(error['code'], error_code)
             self.assertEqual(error['msg'], error_message)
         else:
