@@ -283,7 +283,7 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
                                      skip_stats_validation=True)
         # list the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "list",
-                                     " Status: Deployed")
+                                     " Status: deployed")
         # export the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "export",
                                      "SUCCESS: Function exported to: Function_396275055_test_export_function2.json",
@@ -363,7 +363,7 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
                                      skip_stats_validation=True)
         # list the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "list",
-                                     " Status: Deployed")
+                                     " Status: deployed")
         # export the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "export",
                                      "SUCCESS: Function exported to: Function_396275055_test_export_function2.json",
