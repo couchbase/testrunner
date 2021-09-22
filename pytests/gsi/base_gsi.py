@@ -89,7 +89,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.index_loglevel = self.input.param("index_loglevel", None)
         if self.index_loglevel:
             self.set_indexer_logLevel(self.index_loglevel)
-        if self.dgm_run:
+        if self.dgm_run and hasattr(self, "gens_load"):
             self._load_doc_data_all_buckets(gen_load=self.gens_load)
         self.gsi_thread = Cluster()
         self.defer_build = self.defer_build and self.use_gsi_for_secondary
@@ -1595,6 +1595,8 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                                     batch_size=batch_size)
                     for task in tasks:
                         task.result()
+                    if self.dgm_run:
+                        self._load_doc_data_all_buckets(gen_load=self.gen_create)
         return pre_load_idx_pri, pre_load_idx_gsi
 
     def delete_bucket_scope_collection(self, delete_item, server, bucket, scope='test_scope_1',
