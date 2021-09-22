@@ -237,11 +237,7 @@ class Cluster(object):
                                                   scope=scope, collection=collection))
             time.sleep(poll_dgm_mins * 60)
             current_active_resident = StatsCommon.get_stats([server], bucket.name, '','vb_active_perc_mem_resident')[server]
-            print(
-                "Current resident ratio: %s, desired: %s bucket %s" % (
-                    current_active_resident,
-                    active_resident_threshold,
-                    bucket))
+            print("Current resident ratio: %s, desired: %s bucket %s" % (current_active_resident,active_resident_threshold,bucket))
             if int(current_active_resident) <= active_resident_threshold:
                 print("Doc size={0} bytes, Number of docs={1}".format(value_size,
                                                                 StatsCommon.get_stats([server], bucket.name, '',
@@ -256,11 +252,7 @@ class Cluster(object):
             start += load_items
             loop += 1
         else:
-            print(
-                "Timed out waiting for desired dgm%. Current resident ratio: %s, desired: %s bucket %s" % (
-                    current_active_resident,
-                    active_resident_threshold,
-                    bucket))
+            print("Timed out waiting for desired dgm percentage. Current resident ratio: %s, desired: %s bucket %s" % (current_active_resident,active_resident_threshold,bucket))
 
     def async_workload(self, server, bucket, kv_store, num_ops, create, read, update,
                        delete, exp, compression=True, scope=None, collection=None):

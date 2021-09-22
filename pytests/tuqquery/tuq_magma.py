@@ -371,7 +371,7 @@ class QueryMagmaTests(QueryTests):
                                                   bucket=bucket,
                                                   scope=None, collection=None,
                                                   exp=self.expiry,
-                                                  value_size=self.value_size, timeout_mins=5,
+                                                  value_size=self.value_size, timeout_mins=60,
                                                   java_sdk_client=self.java_sdk_client)
         for bkt in self.buckets:
             print(self.stat.get_collection_stats(bkt))
