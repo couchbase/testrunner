@@ -780,8 +780,7 @@ class QueryCurlTests(QueryTests):
     def test_conflicting_method_options(self):
         limit = 5
         n1ql_query = 'select * from ' + self.query_bucket + ' limit %s' % limit
-        invalid_json_error = 'Errorevaluatingprojection.-cause:InvalidJSONendpointhttp:' \
-                             '//%s:%s/query/service' % (self.master.ip, self.n1ql_port)
+        invalid_json_error = 'URLusingbad/illegalformatormissingURL'
 
         options = "{'data' : 'statement=%s', 'user':'%s:%s'}" \
                   % (n1ql_query, self.username, self.password)
@@ -802,14 +801,14 @@ class QueryCurlTests(QueryTests):
         select_query = "select curl(" + self.query_service_url + ", " + options + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertEqual(json_curl['errors'][0]['msg'], invalid_json_error)
+        self.assertTrue(invalid_json_error in json_curl['errors'][0]['msg'], "Message is different than we expect: {0}".format(json_curl['errors'][0]['msg']))
 
         options = "{'data' : 'statement=%s', 'user':'%s:%s','get':True,'request':'POST'}" \
                   % (n1ql_query, self.username, self.password)
         select_query = "select curl(" + self.query_service_url + ", " + options + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertEqual(json_curl['errors'][0]['msg'], invalid_json_error)
+        self.assertTrue(invalid_json_error in json_curl['errors'][0]['msg'], "Message is different than we expect: {0}".format(json_curl['errors'][0]['msg']))
 
     def test_conflicting_get_options(self):
         curl_output = self.shell.execute_command(
