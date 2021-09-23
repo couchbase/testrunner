@@ -35,6 +35,7 @@ from lib.couchbase_helper.tuq_generators import JsonGenerator
 from lib.memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 
 from ent_backup_restore.provider.s3 import S3
+from ent_backup_restore.provider.gcp import GCP
 
 SOURCE_CB_PARAMS = {
     "authUser": "default",
@@ -323,6 +324,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         provider = self.input.param("objstore_provider", None)
         if provider == "s3":
             self.objstore_provider = S3(self.backupset.objstore_access_key_id, self.backupset.objstore_bucket,
+                                        self.backupset.objstore_cacert, self.backupset.objstore_endpoint,
+                                        self.backupset.objstore_no_ssl_verify, self.backupset.objstore_region,
+                                        self.backupset.objstore_secret_access_key,
+                                        self.backupset.objstore_staging_directory)
+        elif provider == "gcp":
+            self.objstore_provider = GCP(self.backupset.objstore_access_key_id, self.backupset.objstore_bucket,
                                         self.backupset.objstore_cacert, self.backupset.objstore_endpoint,
                                         self.backupset.objstore_no_ssl_verify, self.backupset.objstore_region,
                                         self.backupset.objstore_secret_access_key,
