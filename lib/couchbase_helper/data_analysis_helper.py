@@ -517,14 +517,33 @@ class DataCollector(object):
                 shell = RemoteMachineShellConnection(server)
                 cbstat = Cbstats(shell)
                 if collect_vbucket:
-                    vbucket = cbstat.all_stats(bucket, stat_name='vbucket')
-                    self.createMapVbucket(vbucket,map_data)
+                    result = dict()
+                    for vb_type in ["active", "replica"]:
+                        vb_list = cbstat.vbucket_list(bucket.name, vb_type)
+                        for vb_num in vb_list:
+                            result['vb_%s' % vb_num] = dict()
+                            result['vb_%s' % vb_num]["state"] = vb_type
+                    map_data.update(result)
                 if collect_vbucket_seqno:
-                    vbucket_seqno = cbstat.all_stats(bucket, stat_name='vbucket-seqno')
-                    self.createMapVbucket(vbucket_seqno,map_data)
+                    result = dict()
+                    result_original = cbstat.vbucket_seqno(bucket.name)
+                    for key in result_original.keys():
+                        if 'vb_' in key:
+                            num = key.split('vb_')[-1]
+                        else:
+                            num = key
+                        result['vb_' + num] = result_original[key]
+                    map_data.update(result)
                 if collect_vbucket_details:
-                    vbucket_details = cbstat.all_stats(bucket, stat_name='vbucket-details')
-                    self.createMapVbucket(vbucket_details,map_data)
+                    result = dict()
+                    result_original = cbstat.vbucket_details(bucket.name)
+                    for key in result_original.keys():
+                        if 'vb_' in key:
+                            num = key.split('vb_')[-1]
+                        else:
+                            num = key
+                        result['vb_' + num] = result_original[key]
+                    map_data.update(result)
                 if perNode:
                     dataMap[server.ip] = map_data
                 else:
