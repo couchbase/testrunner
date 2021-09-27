@@ -211,6 +211,8 @@ class QueryAdvisorTests(QueryTests):
             self.sleep(3)
 
             results = self.run_cbq_query(query="SELECT ADVISOR({{'action': 'stop', 'session': '{0}'}})".format(session), server=self.master)
+            # Stop a second time to ensure no side effect (see MB-48576)
+            results = self.run_cbq_query(query="SELECT ADVISOR({{'action': 'stop', 'session': '{0}'}})".format(session), server=self.master)
             results = self.run_cbq_query(query="SELECT ADVISOR({{'action': 'get', 'session': '{0}'}})".format(session), server=self.master)
             self.assertTrue('recommended_indexes' in results['results'][0]['$1'][0][0], "There are no recommended index: {0}".format(results['results'][0]['$1'][0][0]))
         except Exception as e:
