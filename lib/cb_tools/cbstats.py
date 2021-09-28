@@ -459,6 +459,12 @@ class Cbstats(CbCmdBase):
         if len(error) != 0:
             raise Exception("\n".join(error))
 
+        if type(output) is str:
+            output = output.split("\n")
+        elif type(output) is not list:
+            output = str(output, 'utf-8')
+            output = output.split("\n")
+
         pattern = "[ \t]*vb_([0-9]+)[ \t]*:[ \t]+([a-zA-Z]+)"
         regexp = re.compile(pattern)
         for line in output:
@@ -493,6 +499,9 @@ class Cbstats(CbCmdBase):
             raise Exception("\n".join(error))
         # In case of cluster_run, output is plain string due to direct exec
         if type(output) is str:
+            output = output.split("\n")
+        elif type(output) is not list:
+            output = str(output, 'utf-8')
             output = output.split("\n")
 
         pattern = "[ \t]*vb_([0-9]+):([0-9a-zA-Z_]*):?[ \t]+([0-9A-Za-z\-\.\:\",_\[\]]+)"
@@ -583,6 +592,12 @@ class Cbstats(CbCmdBase):
         if len(error) != 0:
             raise Exception("\n".join(error))
 
+        if type(output) is str:
+            output = output.split("\n")
+        elif type(output) is not list:
+            output = str(output, 'utf-8')
+            output = output.split("\n")
+
         pattern = "[ \t]*vb_([0-9]+):([0-9a-zA-Z_]+):[ \t]+([0-9]+)"
         regexp = re.compile(pattern)
         for line in output:
@@ -621,6 +636,12 @@ class Cbstats(CbCmdBase):
         output, error = self.get_stats(bucket_name, "failovers")
         if len(error) != 0:
             raise Exception("\n".join(error))
+
+        if type(output) is str:
+            output = output.split("\n")
+        elif type(output) is not list:
+            output = str(output, 'utf-8')
+            output = output.split("\n")
 
         pattern = "[ \t]vb_([0-9]+):([0-9A-Za-z:_]+):[ \t]+([0-9]+)"
         regexp = re.compile(pattern)
