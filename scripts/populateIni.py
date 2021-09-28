@@ -102,9 +102,14 @@ def main():
           if 'dynamic' in data[i] and servers:
              data[i] = data[i].replace('dynamic', servers[0])
              servers.pop(0)
-          elif addPoolServers and options.addPoolServerId in data[i]:
-             data[i] = data[i].replace(options.addPoolServerId, addPoolServers[0])
-             addPoolServers.pop(0)
+          elif addPoolServers:
+              if options.addPoolServerId == "localstack" and "endpoint:" in data[i]:
+                  endpoint = data[i].split(":", 1)[1]
+                  data[i] = data[i].replace(endpoint, "http://" + addPoolServers[0] + ":4572\n")
+                  addPoolServers.pop(0)
+              elif options.addPoolServerId in data[i]:
+                data[i] = data[i].replace(options.addPoolServerId, addPoolServers[0])
+                addPoolServers.pop(0)
 
           if options.os == 'windows':
               if 'username:root' in data[i]:

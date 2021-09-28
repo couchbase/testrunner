@@ -11,6 +11,8 @@ import os as OS
 import paramiko
 import ipaddress
 import subprocess
+import boto3
+import configparser
 
 from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
@@ -105,32 +107,83 @@ def get_available_servers_count(options=None, is_addl_pool=False, os_version="",
     return count
 
 AWS_AMI_MAP = {
-    "amzn2": {
-        "aarch64": "ami-0ee1ea55e9569a8c9",
-        "x86_64": "ami-02c15e47d576743f8"
-    }
+    "couchbase": {
+        "amzn2": {
+            "aarch64": "ami-02eff1b90bf0e886b",
+            "x86_64": "ami-02c15e47d576743f8"
+        }
+    },
+    "elastic-fts": "ami-0fb83341c1917381c",
+    "localstack": "ami-06f8ff60aa74ed321"
 }
 
-def get_servers_aws(descriptor, how_many, options, os_version):
+def get_servers_aws(descriptor, how_many, options, os_version, is_addl_pool):
     descriptor = urllib.parse.unquote(descriptor)
-
-    image_id = AWS_AMI_MAP[os_version][options.architecture]
     instance_type = "m4.xlarge"
-    if options.architecture == "aarch64":
-        instance_type = "t4g.xlarge"
+    
+    if is_addl_pool:
+        image_id = AWS_AMI_MAP[options.addPoolId] 
+    else:
+        image_id = AWS_AMI_MAP["couchbase"][os_version][options.architecture]
+        if options.architecture == "aarch64":
+            instance_type = "t4g.xlarge"
 
-    subprocess.run(["./deploy.sh", descriptor, "us-west-2", str(how_many), "couchbase-qe-us-west-2", image_id, instance_type], check=True, cwd="../amazon-cloud-formation-couchbase/marketplace/")
-    subprocess.run(["aws", "cloudformation", "wait", "stack-create-complete", "--stack-name", descriptor], check=True)
-    with open("../banana/details.txt", "w") as details:
-        subprocess.run(["aws", "ec2", "describe-instances"], stdout=details, check=True, cwd="../banana")
-    subprocess.run(["python3", "main.py", "AWS", "details.txt", OS.environ.get("AWS_SSH_KEY"), descriptor], check=True, cwd="../banana")
-    with open("ips.txt") as ips_file:
-        ips = ips_file.readlines()[0]
-        return json.loads(f"[{ips}]")
+    ec2_resource = boto3.resource('ec2')
+    ec2_client = boto3.client('ec2')
+
+    instances = ec2_resource.create_instances(
+        ImageId=image_id,
+        MinCount=how_many,
+        MaxCount=how_many,
+        InstanceType=instance_type,
+        LaunchTemplate={
+            'LaunchTemplateName': 'TestrunnerCouchbase',
+            'Version': '5'
+        },
+        TagSpecifications=[
+            {
+                'ResourceType': 'instance',
+                'Tags': [
+                    {
+                        'Key': 'Name',
+                        'Value': descriptor
+                    },
+                ]
+            },
+        ],
+    )
+    instance_ids = [instance.id for instance in instances]
+    print("Waiting for instances: ", instance_ids)
+    ec2_client.get_waiter('instance_status_ok').wait(InstanceIds=instance_ids)
+    instances = ec2_client.describe_instances(InstanceIds=instance_ids)
+    ips = []
+
+    users_to_try = ["ec2-user", "centos"]
+
+    for instance in instances['Reservations'][0]['Instances']:
+        ip = instance['PublicDnsName']
+        ips.append(ip)
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        for user in users_to_try:
+            try:
+                ssh.connect(ip, username=user, key_filename=OS.environ.get("AWS_SSH_KEY"))
+                break
+            except paramiko.AuthenticationException:
+                continue
+        else:
+            raise Exception("Could not connect to %s" % ip)
+        ssh.exec_command("echo 'couchbase' | sudo passwd --stdin root",)
+        ssh.exec_command("sudo sed -i '/#PermitRootLogin yes/c\PermitRootLogin yes' /etc/ssh/sshd_config")
+        ssh.exec_command("sudo sed -i '/PermitRootLogin forced-commands-only/c\#PermitRootLogin forced-commands-only' /etc/ssh/sshd_config")
+        ssh.exec_command("sudo sed -i '/PasswordAuthentication no/c\PasswordAuthentication yes' /etc/ssh/sshd_config")
+        ssh.exec_command("sudo service sshd restart")
+
+    return ips
 
 def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool=False, os_version="", pool_id=None):
-    if not is_addl_pool and SERVER_MANAGER == "AWS":
-        return get_servers_aws(descriptor, how_many, options, os_version)
+    if SERVER_MANAGER == "AWS":
+        return get_servers_aws(descriptor, how_many, options, os_version, is_addl_pool)
 
     if is_addl_pool:
         pool_id = options.addPoolId
@@ -677,6 +730,17 @@ def main():
 
                 # get additional pool servers as needed
                 addl_servers = []
+
+                if SERVER_MANAGER == "AWS":
+                    config = configparser.ConfigParser()
+                    config.read(testsToLaunch[i]["iniFile"])
+
+                    for section in config.sections():
+                        if section == "cbbackupmgr" and config.has_option(section, "endpoint"):
+                            testsToLaunch[i]['addPoolServerCount'] = 1
+                            options.addPoolId = "localstack"
+                            break
+
                 if testsToLaunch[i]['addPoolServerCount']:
                     how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
                     addl_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i], how_many=how_many_addl, is_addl_pool=True, os_version=addPoolServer_os)
@@ -863,7 +927,21 @@ def update_url_with_job_params(url, job_params):
 def release_servers(descriptor):
     if SERVER_MANAGER == "AWS":
         descriptor = urllib.parse.unquote(descriptor)
-        subprocess.run(["aws", "cloudformation", "delete-stack", "--stack-name", descriptor], check=True)
+        ec2_client = boto3.client('ec2')
+        instances = ec2_client.describe_instances(
+            Filters=[
+                {
+                    'Name': 'tag:Name',
+                    'Values': [
+                        descriptor
+                    ]
+                }
+            ]
+        )
+        instance_ids = [instance["InstanceId"] for instance in instances["Reservations"][0]["Instances"]]
+        ec2_client.terminate_instances(
+            InstanceIds=instance_ids
+        )
     else:
         release_url = "http://{}/releaseservers/{}/available".format(SERVER_MANAGER, descriptor)
         print('Release URL: {} '.format(release_url))
