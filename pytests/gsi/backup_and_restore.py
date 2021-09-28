@@ -795,9 +795,13 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.assertTrue(restore_result[0], str(restore_result[1]))
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         indexes_after_restore = [index for index in self.rest.get_indexer_metadata()['status']
                                  if index['name'] == replica_index.index_name]
-        self.assertEqual(len(indexes_after_restore), len(indexes_before_backup))
+        if len(index_nodes) > self.num_index_replicas:
+            self.assertEqual(len(indexes_after_restore), len(indexes_before_backup))
+        else:
+            self.assertEqual(len(indexes_after_restore), len(index_nodes))
         self._verify_indexes(indexes_before_backup,
                              indexes_after_restore)
         #services = ["index" for node in out_nodes]

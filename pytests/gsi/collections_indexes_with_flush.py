@@ -42,6 +42,8 @@ class CollectionsIndexesWithFlush(BaseSecondaryIndexingTests):
         num_of_docs_per_collection = 10 ** 5
         self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs_per_collection)
         collection_namespace = self.namespaces[0]
+        _, keyspace = collection_namespace.split(':')
+        bucket, scope, collection = keyspace.split('.')
         index_gen = QueryDefinition(index_name='idx', index_fields=['age', 'city', 'country'])
         query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=False)
         self.run_cbq_query(query=query)
@@ -83,9 +85,17 @@ class CollectionsIndexesWithFlush(BaseSecondaryIndexingTests):
                     self.log.info(out)
 
             self.sleep(15, "Giving some time to indexer to update indexes after flush")
+            idx_stats = self.rest.get_all_index_stats()
+            num_snapshot = idx_stats[f'{bucket}:{scope}:{collection}:idx:num_commits']
             rollback_after_flush = self.rest.get_num_rollback_stat(bucket=self.test_bucket)
             self.log.info(rollback_after_flush)
-            self.assertEqual(rollback_after_flush, num_rollback + 2, "Flush didn't send rollback to Zero to Indexer")
+            # Rolling back to disk snapshot instead of zero
+            if num_snapshot > 0:
+                self.assertEqual(rollback_after_flush, num_rollback + 1,
+                                 "Flush didn't send rollback to Zero to Indexer")
+            else:
+                self.assertEqual(rollback_after_flush, num_rollback + 2,
+                                 "Flush didn't send rollback to Zero to Indexer")
             result = self.run_cbq_query(query=select_query)['results'][0]['$1']
             self.assertEqual(result, 0, "Doc count not matching")
 
