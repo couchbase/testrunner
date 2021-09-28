@@ -318,7 +318,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             for query in index_gen_query_list:
                 task = executor.submit(self.run_cbq_query, query=query)
                 tasks.append(task)
-            self.sleep(120, "Waiting before dropping indexes")
+            self.sleep(30, "Waiting before dropping indexes")
             for task in tasks:
                 try:
                     task.result()
@@ -337,12 +337,10 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                     else:
                         self.fail(err)
         self.rest.set_index_settings(self.schedule_index_enable)
-        self.sleep(120)
         self.wait_until_indexes_online()
-        self.sleep(300)
-        result = self.run_cbq_query(query=self.system_query)['results']
-        self.log.info(result)
-        self.assertEqual(len(result), len(index_gen_list) - len(scheduled_indexes),
+        index_metadata = self.rest.get_indexer_metadata()['status']
+        self.log.info(index_metadata)
+        self.assertEqual(len(index_metadata), len(index_gen_list) - len(scheduled_indexes),
                          "No. of indexes available are not matching expected no.s")
     
     def test_schedule_indexes_with_drop_bsc(self):

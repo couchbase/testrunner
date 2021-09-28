@@ -115,15 +115,11 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         self.index_status = self.rest.get_indexer_metadata()
         self.all_master_stats = self.rest.get_all_index_stats()
         self.consumer_filters = {"planner": {
-            "indexer_level_stats": ["memory_quota", "memory_used",
-                                    "memory_used_storage", "uptime",
-                                    "cpu_utilization"],
-            "index_level_stats": ["resident_percent", "avg_disk_bps",
-                                  "avg_drain_rate", "num_rows_returned",
-                                  "build_progress", "memory_used",
-                                  "data_size", "items_count",
-                                  "num_flush_queued", "avg_scan_rate",
-                                  "avg_mutation_rate"]
+            "indexer_level_stats": ["memory_quota", "memory_used", "memory_used_storage", "uptime", "cpu_utilization"],
+            "index_level_stats": ["resident_percent", "avg_disk_bps", "num_docs_pending", "num_docs_queued",
+                                  "avg_drain_rate", "num_rows_returned", "progress_stat_time","build_progress",
+                                  "memory_used", "data_size", "items_count", "num_flush_queued", "avg_scan_rate",
+                                  "avg_mutation_rate", "index_state", "last_rollback_time"]
         }, "rebalancer": {
             "indexer_level_stats": ["indexer_state"],
             "index_level_stats": ["num_docs_pending",
@@ -383,8 +379,8 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         }).keys())
         bucket_level_stats = set(
             [key for key in self.all_master_stats
-                if len(key.split(":")) == 2 and not
-             key.split(":")[0].isdigit()])
+                if (len(key.split(":")) == 2 and not
+             key.split(":")[0].isdigit()) or 'MAINT_STREAM' in key])
         indexer_level_stats = self.indexer_stats_keyset.union(
             bucket_level_stats)
         self.assertEqual(index_stats_keys, indexer_level_stats)
@@ -714,8 +710,8 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
             for node_id, instance_ids in enumerate(all_instance_ids)
             if node_id != rest_id]
         all_bucket_level_stats = [
-            set([key for key in index_stats if len(key.split(":")) == 2 and not
-                 key.split(":")[0].isdigit()])
+            set([key for key in index_stats if (len(key.split(":")) == 2 and not
+                 key.split(":")[0].isdigit()) or 'MAINT_STREAM' in key])
             for index_stats in all_index_stats
         ]
         all_indexer_level_stats = [self.indexer_stats_keyset.union(
