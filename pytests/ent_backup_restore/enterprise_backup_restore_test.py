@@ -1088,12 +1088,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             content = None
             if subcommand == "":
                 content = \
-                    ['CBBACKUPMGR(1) Backup Manual CBBACKUPMGR(1)']
+                    ['CBBACKUPMGR(1) Couchbase Server Manual CBBACKUPMGR(1)']
                 self.validate_help_content(output, content)
             else:
                 subcmd_cap = subcommand.upper()
                 content = \
-                    ['CBBACKUPMGR-{0}(1) Backup Manual CBBACKUPMGR-{1}(1)'\
+                    ['CBBACKUPMGR-{0}(1) Couchbase Server Manual CBBACKUPMGR-{1}(1)'\
                      .format(subcmd_cap, subcmd_cap)]
                 self.validate_help_content(output, content)
             if self.bkrs_flag is not None:
@@ -3033,7 +3033,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Flag required, but not specified: -u/--username",
+        self.assertEqual(output[0], "Error backing up cluster: cluster credentials required, expected --username/--password or --client-cert/--client-key",
                          "Expected error message not thrown")
         cmd = cmd_to_test + " --archive {0} --repo {1} --cluster http://{2}:{3} \
                               --username".format(self.backupset.directory,
