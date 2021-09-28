@@ -575,29 +575,49 @@ class DataCollector(object):
             for server in servers:
                 shell = RemoteMachineShellConnection(server)
                 cbstat = Cbstats(shell)
-                stats = cbstat.all_stats(bucket, stat_name='failovers')
-                map_data = dict()
-                num_map = dict()
-                for o in list(stats.keys()):
-                    tokens = o.split(":")
-                    vb = tokens[0]
-                    key = tokens[1]
-                    value = stats[o].split()
-                    num = 99999
-                    if len(tokens) == 3:
-                        vb = tokens[0]
-                        num = int(tokens[1])
-                        key = tokens[2]
-                    if vb in list(map_data.keys()) and (num == num_map[vb] or num < num_map[vb]):
-                        map_data[vb][key] = value[0]
-                        num_map[vb] = num
-                    elif vb in list(map_data.keys()) and key == "num_entries":
-                        map_data[vb][key] = value[0]
-                    elif vb not in list(map_data.keys()):
-                        m = dict()
-                        m[key] = value[0]
-                        map_data[vb] = m
-                        num_map[vb] = num
+                stats = cbstat.failover_stats(bucket)
+                map_data = {}
+                num_map = {}
+                for okey, ovalue in stats.items():
+                    vb = 'vb_' + okey
+                    for ikey, ivalue in ovalue.items():
+                        tokens = ikey.split(":")
+                        key = tokens[0]
+                        num = -1
+                        if len(tokens) == 2:
+                            key = tokens[1]
+                            num = int(tokens[0])
+                        value = ivalue.split()
+                        if vb in map_data.keys() and \
+                                (num == num_map[vb] or num > num_map[vb]):
+                            map_data[vb][key] = value[0]
+                        elif vb in map_data.keys() and key == "num_entries":
+                            map_data[vb][key] = value[0]
+                        elif vb not in map_data.keys():
+                            m = {}
+                            m[key] = value[0]
+                            map_data[vb] = m
+                            num_map[vb] = num
+                # for o in list(stats.keys()):
+                #     tokens = o.split(":")
+                #     vb = tokens[0]
+                #     key = tokens[1]
+                #     value = stats[o].split()
+                #     num = 99999
+                #     if len(tokens) == 3:
+                #         vb = tokens[0]
+                #         num = int(tokens[1])
+                #         key = tokens[2]
+                #     if vb in list(map_data.keys()) and (num == num_map[vb] or num < num_map[vb]):
+                #         map_data[vb][key] = value[0]
+                #         num_map[vb] = num
+                #     elif vb in list(map_data.keys()) and key == "num_entries":
+                #         map_data[vb][key] = value[0]
+                #     elif vb not in list(map_data.keys()):
+                #         m = dict()
+                #         m[key] = value[0]
+                #         map_data[vb] = m
+                #         num_map[vb] = num
                 if perNode:
                     dataMap[server.ip] = map_data
                 else:
@@ -629,12 +649,15 @@ class DataCollector(object):
             for server in servers:
                 shell = RemoteMachineShellConnection(server)
                 cbstat = Cbstats(shell)
-                stats = cbstat.all_stats(bucket)
-                for key in list(stats.keys()):
-                    if key == 'vb_active_num':
-                        active_map_data[server.ip] = int(stats[key])
-                    if key == 'vb_replica_num':
-                        replica_map_data[server.ip] = int(stats[key])
+                stats = cbstat.vbucket_list(bucket)
+                active_map_data[server.ip] = len(stats)
+                stats = cbstat.vbucket_list(bucket, vbucket_type="replica")
+                replica_map_data[server.ip] = len(stats)
+                # for key in list(stats.keys()):
+                #     if key == 'vb_active_num':
+                #         active_map_data[server.ip] = int(stats[key])
+                #     if key == 'vb_replica_num':
+                #         replica_map_data[server.ip] = int(stats[key])
                 shell.disconnect()
             active_bucketMap[bucket.name] = active_map_data
             replica_bucketMap[bucket.name] = replica_map_data
