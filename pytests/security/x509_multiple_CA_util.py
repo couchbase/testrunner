@@ -43,14 +43,10 @@ class x509main:
     CLIENT_CERT_AUTH_JSON = 'client_cert_auth1.json'
     CLIENT_CERT_AUTH_TEMPLATE = 'client_cert_config_template.txt'
     IP_ADDRESS = '172.16.1.174'
-    CLIENT_CERT_KEY = CACERTFILEPATH + IP_ADDRESS + ".key"
-    CLIENT_CERT_PEM = CACERTFILEPATH + IP_ADDRESS + ".pem"
     ROOT_CA_CONFIG = "./pytests/security/x509_extension_files/config"
     CA_EXT = "./pytests/security/x509_extension_files/ca.ext"
     SERVER_EXT = "./pytests/security/x509_extension_files/server.ext"
     CLIENT_EXT = "./pytests/security/x509_extension_files/client.ext"
-    INT_EXTENSIONS_FILE = "./pytests/security/v3_ca.ext"
-    CERT_EXTENSIONS_FILE = "./pytests/security/clientconf.conf"
     ALL_CAs_PATH = CACERTFILEPATH + "all/"  # a dir to store the combined root ca .pem files
     ALL_CAs_PEM_NAME = "all_ca.pem"  # file name of the CA bundle
 
@@ -67,8 +63,9 @@ class x509main:
                  prefixs="www.cb-:us.:www.", delimeter=".:.:.",
                  client_ip="172.16.1.174", dns=None, uri=None,
                  alt_names="default",
-                 ssltype="openssl", encryption_type="",
-                 key_length=1024):
+                 encryption_type="",
+                 key_length=1024,
+                 wildcard_dns=None):
         self.log = logger.Logger.get_logger()
 
         if host is not None:
@@ -80,16 +77,16 @@ class x509main:
             self.disable_ssl_certificate_validation = True
 
         self.client_cert_state = client_cert_state
-        self.paths = paths.split(":")
-        self.prefixs = prefixs.split(":")
-        self.delimeters = delimeter.split(":")
-        self.client_ip = client_ip
-        self.dns = dns
-        self.uri = uri
-        self.alt_names = alt_names
-        self.ssltype = ssltype
+        self.paths = paths.split(":")  # client cert's paths
+        self.prefixs = prefixs.split(":")  # client cert's prefixes
+        self.delimeters = delimeter.split(":")  # client cert's delimiters
+        self.client_ip = client_ip  # a dummy client ip name.
+        self.dns = dns  # client cert's san.dns
+        self.uri = uri  # client cert's san.uri
+        self.alt_names = alt_names  # either 'default' or 'non-default' alt names
         self.encryption_type = encryption_type
         self.key_length = key_length
+        self.wildcard_dns = wildcard_dns
 
     # Get the install path for different operating systems
     def _get_install_path(self, host):
@@ -307,10 +304,10 @@ class x509main:
         temp_cert_extensions_file = "./pytests/security/x509_extension_files/server2.ext"
         copyfile(x509main.SERVER_EXT, temp_cert_extensions_file)
         fin = open(temp_cert_extensions_file, "a+")
-        if ".com" in node_ip and self.dns is None:
+        if ".com" in node_ip and self.wildcard_dns is None:
             fin.write("\nsubjectAltName = DNS:{0}".format(node_ip))
-        elif self.dns:
-            fin.write("\nsubjectAltName = DNS:{0}".format(self.dns))
+        elif self.wildcard_dns:
+            fin.write("\nsubjectAltName = DNS:{0}".format(self.wildcard_dns))
         else:
             fin.write("\nsubjectAltName = IP:{0}".format(node_ip))
         fin.close()
@@ -378,9 +375,16 @@ class x509main:
         temp_cert_extensions_file = "./pytests/security/x509_extension_files/client2.ext"
         copyfile(x509main.CLIENT_EXT, temp_cert_extensions_file)
         fin = open(temp_cert_extensions_file, "a+")
-        # ToDO put other paths that are supported
+        # it must be noted that if SAN.DNS is used, it will always be used for auth
+        # irrespective of other SANs in the certificate. So SAN.DNS must be a valid user
         if self.alt_names == 'default':
+            fin.write("\nsubjectAltName = DNS:us.cbadminbucket.com")
             fin.write("\nsubjectAltName = URI:www.cbadminbucket.com")
+        else:
+            if self.dns is not None:
+                fin.write("\nsubjectAltName = DNS:{0}".format(self.dns))
+            if self.uri is not None:
+                fin.write("\nsubjectAltName = URI:{0}".format(self.uri))
         fin.close()
 
         # print file contents for easy debugging
@@ -398,7 +402,7 @@ class x509main:
         # create client CA csr
         output, error = shell.execute_command("openssl req -new -key " + client_ca_key_path +
                                               " -out " + client_ca_csr_path +
-                                              " -subj '/C=UA/O=MyCompany/OU=People/CN=cbadminbucket'")
+                                              " -subj '/C=UA/O=MyCompany/OU=People/CN=clientuser'")
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
         # create client CA pem
