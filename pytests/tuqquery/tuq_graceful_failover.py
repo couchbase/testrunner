@@ -1,6 +1,7 @@
 from .tuq import QueryTests
 import threading
 import json
+import time
 from membase.api.rest_client import RestHelper
 from membase.api.exception import CBQError
 
@@ -136,8 +137,8 @@ class QueryGracefulFailoverTests(QueryTests):
         results = [None] * self.thread_count
 
         # Start a transaction
-        results = self.run_cbq_query(query="BEGIN WORK", server=query_node, txtimeout="2m")
-        txid = results['results'][0]['txid']
+        begin_work = self.run_cbq_query(query="BEGIN WORK", server=query_node, txtimeout="2m")
+        txid = begin_work['results'][0]['txid']
 
         # Launch query thread/s (should be single)
         select_statement = f"select {sleep_time_ms}"
@@ -162,3 +163,26 @@ class QueryGracefulFailoverTests(QueryTests):
         self.log.info(results)
         for i in range(len(threads)):
             self.assertEqual(results[i], [{'$1': sleep_time_ms}])
+
+    def test_failover_transaction_timeout(self):
+        query_node = self.servers[1]
+
+        # Start a transaction and let it time out
+        begin_work = self.run_cbq_query(query="BEGIN WORK", server=query_node, txtimeout="1m")
+        txid = begin_work['results'][0]['txid']
+        self.log.info(f"Started transaction ID:{txid}")
+
+        # Perform failover or removal of query node
+        self.sleep(2)
+        start_time = time.time()
+        if self.action == 'failover':
+            failover = self.cluster.failover(servers=self.servers, failover_nodes=[query_node], graceful=self.graceful)
+            self.assertTrue(failover)
+        elif self.action == 'remove':
+            rebalance = self.cluster.async_rebalance(servers=self.servers, to_add=[], to_remove=[query_node])
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+        end_time = time.time()
+        time_elapsed = (end_time - start_time)
+        self.assertTrue(60 <= time_elapsed <= 180, "Failover should have completed once transaction timed out after 1min")
