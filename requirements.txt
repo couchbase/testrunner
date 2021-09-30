@@ -14,3 +14,4 @@ urllib3==1.26.2
 requests==2.25.0
 httplib2==0.18.1
 typing-extensions==3.7.4.3
+google-cloud-storage==1.42.2
