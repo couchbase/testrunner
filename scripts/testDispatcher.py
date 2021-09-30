@@ -78,9 +78,6 @@ def rreplace(str, pattern, num_replacements):
 def get_available_servers_count(options=None, is_addl_pool=False, os_version="", pool_id=None):
     # this bit is Docker/VM dependent
     getAvailUrl = 'http://' + SERVER_MANAGER + '/getavailablecount/'
-
-    if is_addl_pool:
-        pool_id = options.addPoolId
     
     if options.serverType.lower() == 'docker':
         # may want to add OS at some point
@@ -117,12 +114,12 @@ AWS_AMI_MAP = {
     "localstack": "ami-06f8ff60aa74ed321"
 }
 
-def get_servers_aws(descriptor, how_many, options, os_version, is_addl_pool):
+def get_servers_aws(descriptor, how_many, options, os_version, is_addl_pool, pool_id):
     descriptor = urllib.parse.unquote(descriptor)
     instance_type = "m4.xlarge"
     
     if is_addl_pool:
-        image_id = AWS_AMI_MAP[options.addPoolId] 
+        image_id = AWS_AMI_MAP[pool_id]
     else:
         image_id = AWS_AMI_MAP["couchbase"][os_version][options.architecture]
         if options.architecture == "aarch64":
@@ -183,10 +180,7 @@ def get_servers_aws(descriptor, how_many, options, os_version, is_addl_pool):
 
 def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool=False, os_version="", pool_id=None):
     if SERVER_MANAGER == "AWS":
-        return get_servers_aws(descriptor, how_many, options, os_version, is_addl_pool)
-
-    if is_addl_pool:
-        pool_id = options.addPoolId
+        return get_servers_aws(descriptor, how_many, options, os_version, is_addl_pool, pool_id)
 
     if options.serverType.lower() == 'docker':
         getServerURL = 'http://' + SERVER_MANAGER + '/getdockers/{0}?count={1}&os={2}&poolId={3}'. \
@@ -456,11 +450,23 @@ def main():
                             except Exception:
                                 print('Git error: Did not find {} in {} branch'.format(data['config'], options.branch))
 
+                        addPoolId = options.addPoolId
+
                         # if there's an additional pool, get the number
                         # of additional servers needed from the ini
                         addPoolServerCount = getNumberOfAddpoolServers(
                             data['config'],
-                            options.addPoolId)
+                            addPoolId)
+
+                        if SERVER_MANAGER == "AWS":
+                            config = configparser.ConfigParser()
+                            config.read(data['config'])
+
+                            for section in config.sections():
+                                if section == "cbbackupmgr" and config.has_option(section, "endpoint"):
+                                    addPoolServerCount = 1
+                                    addPoolId = "localstack"
+                                    break
 
                         testsToLaunch.append({
                             'component': data['component'],
@@ -479,7 +485,8 @@ def main():
                             'owner': owner,
                             'mailing_list': mailing_list,
                             'mode': mode,
-                            'framework': framework
+                            'framework': framework,
+                            'addPoolId': addPoolId,
                         })
                 else:
                     print((data['component'], data['subcomponent'], ' is not supported in this release'))
@@ -631,15 +638,15 @@ def main():
                 while not haveTestToLaunch and test_index < len(testsToLaunch):
                     if testsToLaunch[test_index]['serverCount'] <= serverCount:
                         if testsToLaunch[test_index]['addPoolServerCount']:
-                            addlServersCount = get_available_servers_count(options=options, is_addl_pool=True, os_version=addPoolServer_os)
+                            addPoolId = testsToLaunch[test_index]['addPoolId']
+                            addlServersCount = get_available_servers_count(options=options, is_addl_pool=True, os_version=addPoolServer_os, pool_id=addPoolId)
                             if addlServersCount == 0:
-                                print(time.asctime(time.localtime(time.time())), 'no {0} VMs at this time'.format(
-                                    options.addPoolId))
+                                print(time.asctime(time.localtime(time.time())), 'no {0} VMs at this time'.format(addPoolId))
                                 test_index = test_index + 1
                             else:
                                 print(time.asctime(
                                     time.localtime(time.time())), "there are {0} {1} servers available".format(
-                                    addlServersCount, options.addPoolId))
+                                    addlServersCount, addPoolId))
                                 haveTestToLaunch = True
                         else:
                             haveTestToLaunch = True
@@ -731,19 +738,10 @@ def main():
                 # get additional pool servers as needed
                 addl_servers = []
 
-                if SERVER_MANAGER == "AWS":
-                    config = configparser.ConfigParser()
-                    config.read(testsToLaunch[i]["iniFile"])
-
-                    for section in config.sections():
-                        if section == "cbbackupmgr" and config.has_option(section, "endpoint"):
-                            testsToLaunch[i]['addPoolServerCount'] = 1
-                            options.addPoolId = "localstack"
-                            break
-
                 if testsToLaunch[i]['addPoolServerCount']:
                     how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
-                    addl_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i], how_many=how_many_addl, is_addl_pool=True, os_version=addPoolServer_os)
+                    addPoolId = testsToLaunch[i]['addPoolId']
+                    addl_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i], how_many=how_many_addl, is_addl_pool=True, os_version=addPoolServer_os, pool_id=addPoolId)
                     how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
                     if len(addl_servers) != testsToLaunch[i]['addPoolServerCount']:
                         print(
@@ -794,7 +792,7 @@ def main():
                         addPoolServers = json.dumps(addl_servers).replace(' ','').replace('[','', 1)
                         addPoolServers = rreplace(addPoolServers, ']', 1)
                         url = url + '&addPoolServerId=' +\
-                                options.addPoolId +\
+                                testsToLaunch[i]['addPoolId'] +\
                                 '&addPoolServers=' +\
                                 urllib.parse.quote(addPoolServers)
 
