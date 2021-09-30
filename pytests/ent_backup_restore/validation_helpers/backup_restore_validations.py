@@ -357,6 +357,8 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                 return float(result) / 1000
 
     def validate_merge(self, backup_validation_path):
+        self.log.warning("MERGE VALIDATION IS CURRENTLY NON-FUNCTIONAL")
+        return
         for bucket in self.buckets:
             if self.backupset.exclude_buckets and bucket.name in \
                     self.backupset.exclude_buckets:
