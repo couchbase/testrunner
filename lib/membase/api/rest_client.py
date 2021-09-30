@@ -5903,13 +5903,16 @@ class RestConnection(object):
                                                      "node/controller/loadTrustedCAs", 'POST')
         return status, content
 
-    def reload_certificate(self):
+    def reload_certificate(self, params=''):
         """ Reload certificate
 
         Call this function after uploading a certificate to the cluster to activate the new certificate.
         """
         headers = self._create_capi_headers()
-        status, content, header = self._http_request(self.baseUrl + "node/controller/reloadCertificate", 'POST', headers=headers)
+        status, content, header = self._http_request(self.baseUrl + "node/controller/reloadCertificate",
+                                                     'POST',
+                                                     headers=headers,
+                                                     params=params)
         return status, content
 
     def get_trusted_CAs(self):
