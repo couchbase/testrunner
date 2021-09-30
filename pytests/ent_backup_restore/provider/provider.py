@@ -70,7 +70,7 @@ class Provider(metaclass=abc.ABCMeta):
     def list_objects_matching_regex(self, pattern, prefix=None, group=True):
         """List all objects with the given prefix that match a given regex."""
         objects = set()
-        
+
         for obj in self.list_objects(prefix=prefix):
             res = pattern.search(obj)
             if res:
@@ -93,7 +93,7 @@ class Provider(metaclass=abc.ABCMeta):
         backup_pattern, backup_bucket_pattern = re.compile(backup_re), re.compile(backup_re + bucket_re)
 
         return [backup_pattern.sub('', obj) for obj in self.list_objects_matching_regex(
-            pattern, prefix=f"{archive}/{repo}/{backup}")]
+            backup_bucket_pattern, prefix=f"{archive}/{repo}/{backup}")]
 
     def list_rift_indexes(self, archive, repo, backup, bucket):
         """List all the rift indexes that exist in the remote given archive/repo/backup/bucket."""
