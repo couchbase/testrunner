@@ -462,7 +462,7 @@ class BackupExamineTest(EnterpriseBackupRestoreBase):
         # The memory available on the node with the lowest memory
         self.config['memory'] = self.get_available_memory()
         # The size of each bucket that is created
-        self.config['bucket_size'] = 100
+        self.config['bucket_size'] = 256
         # The max buckets that can be created given the available memory and bucket size
         self.config['max_buckets'] = self.config['memory'] // self.config['bucket_size']
 
