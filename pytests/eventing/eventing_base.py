@@ -250,6 +250,10 @@ class EventingBaseTest(QueryHelperTests):
             if self.auth_type=="bearer":
                 body['depcfg']['curl'][0]['bearer_key']=self.bearer_key
         body['settings']['language_compatibility']=language_compatibility
+        if self.non_default_collection:
+            body['function_group'] = {"bucket": self.src_bucket_name, "scope": self.src_bucket_name}
+        else:
+            body['function_group'] = {"bucket": self.src_bucket_name, "scope": "_default"}
         content1 = self.rest.create_function(body['appname'], body)
         self.log.info("saving function {}".format(content1))
         return body
@@ -1179,6 +1183,10 @@ class EventingBaseTest(QueryHelperTests):
                      "username": self.curl_username, "password": self.curl_password, "allow_cookies": self.cookies,"validate_ssl_certificate": validate_ssl})
             if self.auth_type=="bearer":
                 body['depcfg']['curl'][0]['bearer_key']=self.bearer_key
+        if self.non_default_collection:
+            body['function_group'] = {"bucket": self.src_bucket_name, "scope": self.src_bucket_name}
+        else:
+            body['function_group'] = {"bucket": self.src_bucket_name, "scope": "_default"}
         self.rest.create_function(body['appname'], body)
         self.log.info("saving function {}".format(body['appname']))
         return body
