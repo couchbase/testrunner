@@ -1674,6 +1674,7 @@ class QueryCollectionsDDLTests(QueryTests):
         self.rest_client.create_scope(bucket=bucket_name, scope=scope_name)
 
         self.collections_helper.delete_scope(keyspace=keyspace_name, bucket_name=bucket_name, scope_name=scope_name)
+        self.sleep(2)
 
         objects = self.rest.get_bucket_scopes(bucket_name)
         if scope_name in objects:
