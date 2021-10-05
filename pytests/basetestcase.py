@@ -33,6 +33,9 @@ from testconstants import MIN_COMPACTION_THRESHOLD
 from testconstants import MAX_COMPACTION_THRESHOLD
 from testconstants import LINUX_DIST_CONFIG
 from membase.helper.cluster_helper import ClusterOperationHelper
+
+from lib.Cb_constants.CBServer import CbServer
+from lib.cb_tools.cb_cli import CbCli
 from security.rbac_base import RbacBase
 
 
@@ -202,6 +205,10 @@ class BaseTestCase(unittest.TestCase):
             self.lease_time = self.input.param("lease_time", None)
             self.lease_grace_time = self.input.param("lease_grace_time", None)
             self.lease_renew_after = self.input.param("lease_renew_after", None)
+            self.use_https = self.input.param("use_https", False)
+            self.enforce_tls = self.input.param("enforce_tls", False)
+            if self.use_https:
+                CbServer.use_https = True
             if self.skip_setup_cleanup:
                 self.buckets = RestConnection(self.master).get_buckets()
                 return
@@ -308,6 +315,19 @@ class BaseTestCase(unittest.TestCase):
                 self.change_port_info()
             if self.input.param("port", None):
                 self.port = str(self.input.param("port", None))
+            if self.use_https:
+                if self.enforce_tls:
+                    self.log.info("#####Enforcing TLS########")
+                    shell_conn = RemoteMachineShellConnection(self.master)
+                    cb_cli = CbCli(shell_conn, no_ssl_verify=True)
+                    output = cb_cli.enable_n2n_encryption()
+                    self.log.info(output)
+                    output = cb_cli.set_n2n_encryption_level(level="strict")
+                    self.log.info(output)
+                    shell_conn.disconnect()
+                    status = ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master])
+                    if not status:
+                        self.fail("Port binding after enforcing TLS incorrect")
             try:
                 if (str(self.__class__).find('rebalanceout.RebalanceOutTests') != -1) or \
                         (str(self.__class__).find('memorysanitytests.MemorySanity') != -1) or \
@@ -432,6 +452,18 @@ class BaseTestCase(unittest.TestCase):
                            .format(server.ip, e))
 
     def tearDown(self):
+        if self.input.param("enforce_tls", False) or \
+                (self.input.param("ntonencrypt", "disable") == "enable"):
+            self.log.info('###################### Disabling n2n encryption')
+            shell_conn = RemoteMachineShellConnection(self.master)
+            cb_cli = CbCli(shell_conn, no_ssl_verify=True)
+            level = cb_cli.get_n2n_encryption_level()
+            if level is not None:
+                output = cb_cli.set_n2n_encryption_level(level="control")
+                self.log.info(output)
+                output = cb_cli.disable_n2n_encryption()
+                self.log.info(output)
+            shell_conn.disconnect()
         self.print_cluster_stats()
 
         if self.skip_setup_cleanup:
@@ -635,6 +667,8 @@ class BaseTestCase(unittest.TestCase):
             bucket_params - A dictionary containing the parameters needed to create a bucket."""
 
         bucket_params = dict()
+        if CbServer.use_https:
+            port = CbServer.ssl_memcached_port
         bucket_params['server'] = server
         bucket_params['replicas'] = replicas
         bucket_params['size'] = size
@@ -2905,7 +2939,9 @@ class BaseTestCase(unittest.TestCase):
             servers_to_check = []
             for node in nodes:
                 for server in self.servers:
-                    if node.ip == server.ip and str(node.port) == str(server.port):
+                    if node.ip == server.ip and (str(node.port) == str(server.port) or
+                                                 str(node.port) ==
+                                                 CbServer.ssl_port_map.get(str(server.port), str(server.port))):
                         servers_to_check.append(server)
         self.log.info("Servers to check bucket-seqno: {0}"
                       .format(servers_to_check))

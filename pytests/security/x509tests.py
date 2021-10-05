@@ -16,6 +16,8 @@ from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
 from ep_mc_bin_client import MemcachedClient
 
+from lib.Cb_constants.CBServer import CbServer
+
 
 class x509tests(BaseTestCase):
 
@@ -73,6 +75,19 @@ class x509tests(BaseTestCase):
                 self.log.info ("Enabling Audit ")
                 Audit.setAuditEnable('true')
                 self.sleep(30)
+        self.protocol = "http"
+        self.disable_ssl_certificate_validation = False
+        self.rest_port = CbServer.port
+        self.n1ql_port = CbServer.n1ql_port
+        self.cbas_port = CbServer.cbas_port
+        self.fts_port = CbServer.fts_port
+        if CbServer.use_https:
+            self.protocol = "https"
+            self.disable_ssl_certificate_validation = True
+            self.rest_port = CbServer.ssl_port
+            self.n1ql_port = CbServer.ssl_n1ql_port
+            self.cbas_port = CbServer.ssl_cbas_port
+            self.fts_port = CbServer.ssl_fts_port
 
     def tearDown(self):
         self.log.info ("Into Teardown")
@@ -564,13 +579,13 @@ class x509tests(BaseTestCase):
                   " --cert-type PEM --cert " + x509main().CLIENT_CERT_PEM + \
                   " --key-type PEM --key " + x509main().CLIENT_CERT_KEY + \
                   " -d name=" + remote_cluster_name + \
-                  " -d hostname=" + cluster2[0].ip + ":8091"\
+                  " -d hostname=" + cluster2[0].ip + ":" + self.rest_port +\
                   " -d username=" + user + \
                   " -d password=" + password + \
                   " -d demandEncryption=1" \
                   " --data-urlencode \"certificate={0}\"".format(data) + \
-                  " http://Administrator:password@{0}:8091/pools/default/remoteClusters"\
-                      .format(self.master.ip)
+                  " {0}://Administrator:password@{1}:{2}/pools/default/remoteClusters"\
+                      .format(self.protocol, self.master.ip, self.rest_port)
             self.log.info("Command is {0}".format(cmd))
             shell = RemoteMachineShellConnection(x509main.SLAVE_HOST)
             output = shell.execute_command(cmd)
@@ -813,10 +828,10 @@ class x509tests(BaseTestCase):
         if output == "":
             self.assertTrue(True, "Issue with post on /pools/default")
         
-        output = x509main()._execute_command_clientcert(host.ip, url='/pools/default', port=8091, headers=" -u Administrator:password ", client_cert=False, curl=True, verb='GET', plain_curl=True)
+        output = x509main()._execute_command_clientcert(host.ip, url='/pools/default', port=self.rest_port, headers=" -u Administrator:password ", client_cert=False, curl=True, verb='GET', plain_curl=True)
         self.assertEqual(json.loads(output)['rebalanceStatus'], 'none', " The Web request has failed on port 8091 ")
         
-        output = x509main()._execute_command_clientcert(host.ip, url='/pools/default', port=8091, headers=" -u Administrator:password ", client_cert=True, curl=True, verb='POST', plain_curl=True, data='memoryQuota=400')
+        output = x509main()._execute_command_clientcert(host.ip, url='/pools/default', port=self.rest_port, headers=" -u Administrator:password ", client_cert=True, curl=True, verb='POST', plain_curl=True, data='memoryQuota=400')
         if output == "":
             self.assertTrue(True, "Issue with post on /pools/default")
                
@@ -834,7 +849,7 @@ class x509tests(BaseTestCase):
         
         self.assertEqual(json.loads(output)['status'], "success", "Create Index Failed on port 18093")
         
-        output = x509main()._execute_command_clientcert(host.ip, url='/query/service', port=8093, headers='-u Administrator:password ', client_cert=False, curl=True, verb='GET', plain_curl=True, data="statement='create index idx2 on default(name)'")
+        output = x509main()._execute_command_clientcert(host.ip, url='/query/service', port=self.n1ql_port, headers='-u Administrator:password ', client_cert=False, curl=True, verb='GET', plain_curl=True, data="statement='create index idx2 on default(name)'")
         self.assertEqual(json.loads(output)['status'], "success", "Create Index Failed on port 8093")
 
     def check_fts_service(self, host):
@@ -860,7 +875,7 @@ class x509tests(BaseTestCase):
                                                             client_cert=False, curl=True, verb='GET', data="'" + json.dumps(idx) + "'")
         self.assertEqual(json.loads(output), {"status":"ok"}, "Issue with creating FTS index with client Cert")
         
-        output = x509main()._execute_command_clientcert(host.ip, url='/api/index/default_idx01', port=8094, headers=" -XPUT -H \"Content-Type: application/json\" -u Administrator:password ",
+        output = x509main()._execute_command_clientcert(host.ip, url='/api/index/default_idx01', port=self.fts_port, headers=" -XPUT -H \"Content-Type: application/json\" -u Administrator:password ",
                                                         client_cert=False, curl=True, verb='GET', data="'" + json.dumps(idx) + "'", plain_curl=True)
         self.assertEqual(json.loads(output), {"status":"ok"}, "Issue with creating FTS index with client Cert")
         
@@ -872,7 +887,7 @@ class x509tests(BaseTestCase):
                                                             client_cert=False, curl=True, verb='DELETE')
         self.assertEqual(json.loads(output), {"status":"ok"}, "Issue with deleteing FTS index with client Cert")
         
-        output = x509main()._execute_command_clientcert(host.ip, url='/api/index/default_idx01', port=8094, headers=" -H \"Content-Type: application/json\" -u Administrator:password ",
+        output = x509main()._execute_command_clientcert(host.ip, url='/api/index/default_idx01', port=self.fts_port, headers=" -H \"Content-Type: application/json\" -u Administrator:password ",
                                                         client_cert=False, curl=True, verb='DELETE', plain_curl=True)
         self.assertEqual(json.loads(output), {"status":"ok"}, "Issue with deleteing FTS index on 8094")
             
@@ -908,10 +923,10 @@ class x509tests(BaseTestCase):
         if not helper.bucket_exists('default'):
             rest.create_bucket(bucket='default', ramQuotaMB=100)
                 
-        cmd = "curl -v  " + \
+        cmd = "curl -k -v  " + \
                 " -s -u Administrator:password --data pretty=true --data-urlencode 'statement=create dataset on default' " + \
-                "http://{0}:{1}/_p/cbas/query/service ". \
-                format(host.ip, 8091)
+                "{0}://{1}:{2}/_p/cbas/query/service ". \
+                format(self.protocol, host.ip, self.rest_port)
         
         self.log.info("Running command : {0}".format(cmd))
         output = subprocess.check_output(cmd, shell=True)
@@ -951,9 +966,11 @@ class x509tests(BaseTestCase):
         self.assertEqual(status, 401, "Issue with client cert with, user should not able to access via client cert")
 
         output = x509main()._execute_command_clientcert(host.ip, url='/pools/default', port=18091, headers=" -u Administrator:password ", client_cert=False, curl=True)        
-        self.assertEqual(json.loads(output)['rebalanceStatus'], 'none', " The Web request has failed on port 18091 ")  
-    
-        output = x509main()._execute_command_clientcert(host.ip, url='/pools/default', port=8091, headers=" -u Administrator:password ", client_cert=False, curl=True, verb='GET', plain_curl=True)
+        self.assertEqual(json.loads(output)['rebalanceStatus'], 'none', " The Web request has failed on port 18091 ")
+
+        output = x509main()._execute_command_clientcert(host.ip, url='/pools/default', port=self.rest_port,
+                                                        headers=" -u Administrator:password ", client_cert=False,
+                                                        curl=True, verb='GET', plain_curl=True)
         self.assertEqual(json.loads(output)['rebalanceStatus'], 'none', " The Web request has failed on port 18091 ")
         
     def test_rest_api_mandatory(self):
@@ -973,8 +990,15 @@ class x509tests(BaseTestCase):
             output = subprocess.check_output(cmd, shell=True)
         except:
             self.assertTrue(True, "CA Cert works with mandatory")
+        if CbServer.use_https:
+            plain_curl = False
+        else:
+            plain_curl = True
                               
-        status, output = x509main()._execute_command_clientcert(host.ip, url='/pools/default', port=8091, headers=" -u Administrator:password ", client_cert=False, curl=False, verb='GET', plain_curl=True)
+        status, output = x509main()._execute_command_clientcert(host.ip, url='/pools/default',
+                                                                port=self.rest_port, headers=" -u Administrator:password ",
+                                                                client_cert=False, curl=False,
+                                                                verb='GET', plain_curl=True)
         self.assertEqual(status, 401 , "Invalid user gets authenticated successfully")
     
     def test_incorrect_user(self):

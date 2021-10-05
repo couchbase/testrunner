@@ -7,6 +7,14 @@ import traceback
 import socket
 import time
 import re
+from urlparse import urlparse
+import requests
+try:
+    requests.packages.urllib3.disable_warnings()
+except:
+    pass
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import uuid
 from copy import deepcopy
 from threading import Thread
@@ -14,6 +22,7 @@ from TestInput import TestInputSingleton
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, CBAS_QUOTA
 from testconstants import COUCHBASE_FROM_VERSION_4, IS_CONTAINER, CLUSTER_QUOTA_RATIO
 
+from lib.Cb_constants.CBServer import CbServer
 
 try:
     from couchbase_helper.document import DesignDocument, View
@@ -234,7 +243,9 @@ class RestConnection(object):
             port = serverInfo.port
 
         if not port:
-            port = 8091
+            port = CbServer.port
+        if CbServer.use_https:
+            port = CbServer.ssl_port
 
         if int(port) in xrange(9091, 9100):
             # return elastic search rest connection
@@ -252,10 +263,11 @@ class RestConnection(object):
             self.username = serverInfo["username"]
             self.password = serverInfo["password"]
             self.port = serverInfo["port"]
-            self.index_port = 9102
-            self.fts_port = 8094
-            self.query_port = 8093
-            self.eventing_port = 8096
+            self.index_port = CbServer.index_port
+            self.fts_port = CbServer.fts_port
+            self.query_port = CbServer.n1ql_port
+            self.eventing_port = CbServer.eventing_port
+            self.capi_port = CbServer.capi_port
             if "index_port" in serverInfo.keys():
                 self.index_port = serverInfo["index_port"]
             if "fts_port" in serverInfo.keys():
@@ -276,10 +288,11 @@ class RestConnection(object):
             self.password = serverInfo.rest_password
             self.port = serverInfo.port
             self.hostname = ''
-            self.index_port = 9102
-            self.fts_port = 8094
-            self.query_port = 8093
-            self.eventing_port = 8096
+            self.index_port = CbServer.index_port
+            self.fts_port = CbServer.fts_port
+            self.query_port = CbServer.n1ql_port
+            self.eventing_port = CbServer.eventing_port
+            self.capi_port = CbServer.capi_port
             self.services = "kv"
             self.debug_logs = False
             if hasattr(serverInfo, "services"):
@@ -305,31 +318,47 @@ class RestConnection(object):
                 new_services=fts-kv-index-n1ql """
             self.services_node_init = self.input.param("new_services", None)
             self.debug_logs = self.input.param("debug-logs", False)
-        self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
-        self.fts_baseUrl = "http://{0}:{1}/".format(self.ip, self.fts_port)
-        self.index_baseUrl = "http://{0}:{1}/".format(self.ip, self.index_port)
-        self.query_baseUrl = "http://{0}:{1}/".format(self.ip, self.query_port)
-        self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
-        self.eventing_baseUrl = "http://{0}:{1}/".format(self.ip, self.eventing_port)
+        if CbServer.use_https:
+            self.port = CbServer.ssl_port_map.get(str(self.port),
+                                                  str(self.port))
+            self.index_port = CbServer.ssl_port_map.get(str(self.index_port),
+                                                        str(self.index_port))
+            self.query_port = CbServer.ssl_port_map.get(str(self.query_port),
+                                                        str(self.query_port))
+            self.fts_port = CbServer.ssl_port_map.get(str(self.fts_port),
+                                                      str(self.fts_port))
+            self.eventing_port = CbServer.ssl_port_map.get(str(self.eventing_port),
+                                                           str(self.eventing_port))
+            self.capi_port = CbServer.ssl_port_map.get(str(self.capi_port), str(self.capi_port))
+        http_url = "http://%s:%s/"
+        https_url = "https://%s:%s/"
+        generic_url = http_url
+        if CbServer.use_https:
+            generic_url = https_url
+        url_host = "%s" % self.ip
         if self.hostname:
-            self.baseUrl = "http://{0}:{1}/".format(self.hostname, self.port)
-            self.capiBaseUrl = "http://{0}:{1}/".format(self.hostname, 8092)
-            self.query_baseUrl = "http://{0}:{1}/".format(self.hostname, 8093)
-            self.eventing_baseUrl = "http://{0}:{1}/".format(self.hostname, self.eventing_port)
+            url_host = "%s" % self.hostname
+        self.baseUrl = generic_url % (url_host, self.port)
+        self.fts_baseUrl = generic_url % (url_host, self.fts_port)
+        self.index_baseUrl = generic_url % (url_host, self.index_port)
+        self.query_baseUrl = generic_url % (url_host, self.query_port)
+        self.capiBaseUrl = generic_url % (url_host, self.capi_port)
+        self.eventing_baseUrl = generic_url % (url_host, self.eventing_port)
 
         # Initialization of CBAS related params
-        self.cbas_base_url = "http://{0}:{1}".format(self.ip, 8095)
+        self.cbas_ip = self.ip
+        self.cbas_port = CbServer.cbas_port
         if hasattr(self.input, 'cbas'):
             if self.input.cbas:
                 self.cbas_node = self.input.cbas
-                self.cbas_port = 8095
                 if hasattr(self.cbas_node, 'port'):
                     self.cbas_port = self.cbas_node.port
-                self.cbas_base_url = "http://{0}:{1}".format(
-                    self.cbas_node.ip,
-                    self.cbas_port)
-            elif "cbas" in self.services:
-                self.cbas_base_url = "http://{0}:{1}".format(self.ip, 8095)
+                if hasattr(self.cbas_node, 'ip'):
+                    self.cbas_ip = self.cbas_node.ip
+        if CbServer.use_https:
+            self.cbas_port = CbServer.ssl_cbas_port
+        self.cbas_base_url = generic_url % (self.cbas_ip, self.cbas_port)
+        self.cbas_base_url = self.cbas_base_url[:-1]
 
         # for Node is unknown to this cluster error
         for iteration in xrange(5):
@@ -360,7 +389,10 @@ class RestConnection(object):
                     time.sleep(0.2)
                     http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
                 else:
-                    self.capiBaseUrl = http_res["couchApiBase"]
+                    if CbServer.use_https:
+                        self.capiBaseUrl = http_res["couchApiBaseHTTPS"]
+                    else:
+                        self.capiBaseUrl = http_res["couchApiBase"]
                     return
             raise ServerUnavailableException("couchApiBase doesn't exist in nodes/self: %s " % http_res)
 
@@ -369,8 +401,8 @@ class RestConnection(object):
         if isinstance(bucket, Bucket):
             api = self.baseUrl + 'pools/default/bucketsStreaming/{0}'.format(bucket.name)
         try:
-            httplib2.Http(timeout=timeout).request(api, 'GET', '',
-                                                   headers=self._create_capi_headers())
+            self._urllib_request(api=api, method='GET', params='', timeout=timeout,
+                                 headers=self._create_capi_headers())
         except Exception, ex:
             log.warn('Exception while streaming: %s' % str(ex))
 
@@ -462,7 +494,7 @@ class RestConnection(object):
         return status, content
 
     def active_tasks(self):
-        api = 'http://{0}:{1}/pools/default/tasks'.format(self.ip, self.port)
+        api = self.baseUrl + "pools/default/tasks"
         try:
             status, content, header = self._http_request(api, 'GET',
                                                          headers=self._create_capi_headers())
@@ -473,7 +505,7 @@ class RestConnection(object):
         return json_parsed
 
     def get_rebalance_report(self, uri):
-        api = 'http://{0}:{1}{2}'.format(self.ip, self.port, uri)
+        api = self.baseUrl + uri
         try:
             status, content, header = self._http_request(api, 'GET',
                                                          headers=self._create_capi_headers())
@@ -785,32 +817,32 @@ class RestConnection(object):
         return status, json_parsed
 
     def _create_capi_headers(self):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password)).strip("\n")
         return {'Content-Type': 'application/json',
                 'Authorization': 'Basic %s' % authorization,
                 'Accept': '*/*'}
 
     def _create_capi_headers_with_auth(self, username, password):
         authorization = base64.encodestring(
-            '%s:%s' % (username, password))
+            '%s:%s' % (username, password)).strip("\n")
         return {'Content-Type': 'application/json',
                 'Authorization': 'Basic %s' % authorization,
                 'Accept': '*/*'}
 
     def _create_headers_with_auth(self, username, password):
-        authorization = base64.encodestring('%s:%s' % (username, password))
+        authorization = base64.encodestring('%s:%s' % (username, password)).strip("\n")
         return {'Authorization': 'Basic %s' % authorization}
 
     # authorization must be a base64 string of username:password
     def _create_headers(self):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password)).strip("\n")
         return {'Content-Type': 'application/x-www-form-urlencoded',
                 'Authorization': 'Basic %s' % authorization,
                 'Accept': '*/*'}
 
     # authorization must be a base64 string of username:password
     def _create_headers_encoded_prepared(self):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password)).strip("\n")
         return {'Content-Type': 'application/json',
                 'Authorization': 'Basic %s' % authorization}
 
@@ -822,17 +854,70 @@ class RestConnection(object):
                 return "auth: " + base64.decodestring(val[6:])
         return ""
 
-    def _http_request(self, api, method='GET', params='', headers=None, timeout=120):
+    def _urllib_request(self, api, method='GET', params='', headers=None,
+                        timeout=300, verify=False, session=None):
+        if session is None:
+            session = requests.Session()
+        end_time = time.time() + timeout
+        while True:
+            try:
+                if method == "GET":
+                    response = session.get(api, params=params, headers=headers,
+                                           timeout=timeout, verify=verify)
+                elif method == "POST":
+                    response = session.post(api, data=params, headers=headers,
+                                            timeout=timeout, verify=verify)
+                elif method == "DELETE":
+                    response = session.delete(api, data=params, headers=headers,
+                                              timeout=timeout, verify=verify)
+                elif method == "PUT":
+                    response = session.put(api, data=params, headers=headers,
+                                           timeout=timeout, verify=verify)
+                status = response.status_code
+                content = response.content
+                if status in [200, 201, 202]:
+                    return True, content, response
+                else:
+                    log.error(response.reason)
+                    return False, content, response
+            except requests.exceptions.HTTPError as errh:
+                log.error("HTTP Error {0}".format(errh))
+                if time.time() > end_time:
+                    raise ServerUnavailableException(ip=self.ip)
+            except requests.exceptions.ConnectionError as errc:
+                if "Illegal state exception" in str(errc):
+                    # Known ssl bug, retry
+                    pass
+                else:
+                    log.error("Error Connecting {0} {1} {2}".format(errc, api, method))
+                if time.time() > end_time:
+                    raise ServerUnavailableException(ip=self.ip)
+            except requests.exceptions.Timeout as errt:
+                log.error("Timeout Error: {0}".format(errt))
+                if time.time() > end_time:
+                    raise ServerUnavailableException(ip=self.ip)
+            except requests.exceptions.RequestException as err:
+                log.error("Something else: {0}".format(err))
+                if time.time() > end_time:
+                    raise ServerUnavailableException(ip=self.ip)
+            time.sleep(3)
+
+    def _http_request(self, api, method='GET', params='', headers=None,
+                      timeout=120, disable_ssl_certificate_validation=True):
         if not headers:
             headers = self._create_headers()
+        if CbServer.use_https:
+            status, content, response = \
+                self._urllib_request(api, method=method, params=params, headers=headers,
+                                     timeout=timeout, verify=False)
+            return status, content, response
         end_time = time.time() + timeout
         log.debug("Executing {0} request for following api {1} with Params: {2}  and Headers: {3}"\
                                                                 .format(method,api,params,headers))
         count = 1
         while True:
             try:
-                response, content = httplib2.Http(timeout=timeout).request(api, method,
-                                                                           params, headers)
+                response, content = httplib2.Http(timeout=timeout).request(api, method, params, headers)
                 if response['status'] in ['200', '201', '202']:
                     return True, content, response
                 else:
@@ -929,6 +1014,8 @@ class RestConnection(object):
         return kv_quota
 
     def init_node_services(self, username='Administrator', password='password', hostname='127.0.0.1', port='8091', services=None):
+        if CbServer.use_https:
+            port = CbServer.ssl_port_map.get(str(port), str(port))
         log.info("--> init_node_services({},{},{},{},{})".format(username,password,hostname,port,services))
         api = self.baseUrl + '/node/controller/setupServices'
         if services == None:
@@ -1029,8 +1116,11 @@ class RestConnection(object):
         return status
 
     def cleanup_indexer_rebalance(self, server):
+        protocol = "http"
+        if CbServer.use_https:
+            protocol = "https"
         if server:
-            api = "http://{0}:{1}/".format(server.ip, self.index_port) + 'cleanupRebalance'
+            api = "{0}://{1}:{2}/".format(protocol, server.ip, self.index_port) + 'cleanupRebalance'
         else:
             api = self.baseUrl + 'cleanupRebalance'
         status, content, _ = self._http_request(api, 'GET')
@@ -1041,8 +1131,11 @@ class RestConnection(object):
             raise Exception("indexer rebalance cleanup failed")
 
     def list_indexer_rebalance_tokens(self, server):
+        protocol = "http"
+        if CbServer.use_https:
+            protocol = "https"
         if server:
-            api = "http://{0}:{1}/".format(server.ip, self.index_port) + 'listRebalanceTokens'
+            api = "{0}://{1}:{2}/".format(protocol, server.ip, self.index_port) + 'listRebalanceTokens'
         else:
             api = self.baseUrl + 'listRebalanceTokens'
         print api
@@ -1291,6 +1384,10 @@ class RestConnection(object):
     # returns otpNode
     def add_node(self, user='', password='', remoteIp='', port='8091', zone_name='', services=None):
         otpNode = None
+        protocol = "http"
+        if CbServer.use_https or CbServer.n2n_encryption:
+            port = CbServer.ssl_port
+            protocol = "https"
 
         # if ip format is ipv6 and enclosing brackets are not found,
         # enclose self.ip and remoteIp
@@ -1312,12 +1409,12 @@ class RestConnection(object):
             else:
                 raise Exception("There is not zone with name: %s in cluster" % zone_name)
 
-        params = urllib.urlencode({'hostname': "http://{0}:{1}".format(remoteIp, port),
+        params = urllib.urlencode({'hostname': "{0}://{1}:{2}".format(protocol, remoteIp, port),
                                    'user': user,
                                    'password': password})
         if services != None:
             services = ','.join(services)
-            params = urllib.urlencode({'hostname': "http://{0}:{1}".format(remoteIp, port),
+            params = urllib.urlencode({'hostname': "{0}://{1}:{2}".format(protocol, remoteIp, port),
                                    'user': user,
                                    'password': password,
                                    'services': services})
@@ -1359,6 +1456,8 @@ class RestConnection(object):
     # returns otpNode
     def do_join_cluster(self, user='', password='', remoteIp='', port='8091', zone_name='', services=None):
         otpNode = None
+        if CbServer.use_https:
+            port = CbServer.ssl_port
         log.info('adding remote node @{0}:{1} to this cluster @{2}:{3}'\
                           .format(remoteIp, port, self.ip, self.port))
         api = self.baseUrl + '/node/controller/doJoinCluster'
@@ -2418,8 +2517,12 @@ class RestConnection(object):
         if isinstance(bucket, Bucket):
             api = '%s%s%s' % (self.baseUrl, 'pools/default/buckets/', bucket.name)
         status, content, header = self._http_request(api, 'DELETE')
+        if "status" in header:
+            status_code = header['status']
+        else:
+            status_code = header.status_code
 
-        if int(header['status']) == 500:
+        if int(status_code) == 500:
             # According to http://docs.couchbase.com/couchbase-manual-2.5/cb-rest-api/#deleting-buckets
             # the cluster will return with 500 if it failed to nuke
             # the bucket on all of the nodes within 30 secs
@@ -3497,68 +3600,99 @@ class RestConnection(object):
 
     '''Start Monitoring/Profiling Rest Calls'''
     def set_completed_requests_collection_duration(self, server, min_time):
-        http = httplib2.Http()
-        n1ql_port = 8093
-        api = "http://%s:%s/" % (server.ip, n1ql_port) + "admin/settings"
+        n1ql_port = CbServer.n1ql_port
+        protocol = "http"
+        if CbServer.use_https:
+            n1ql_port = str(CbServer.ssl_port_map.get(str(n1ql_port), str(n1ql_port)))
+            protocol = "https"
+        api = "%s://%s:%s/" % (protocol, server.ip, n1ql_port) + "admin/settings"
         body = {"completed-threshold": min_time}
         headers = self._create_headers_with_auth('Administrator','password')
-        response,content = http.request(api, "POST", headers=headers, body=json.dumps(body))
+        status, content, response = self._http_request(api, "POST", headers=headers,
+                                                       params=json.dumps(body))
         return response,content
 
     def set_completed_requests_max_entries(self, server, no_entries):
-        http = httplib2.Http()
-        n1ql_port = 8093
-        api = "http://%s:%s/" % (server.ip, n1ql_port) + "admin/settings"
+        n1ql_port = CbServer.n1ql_port
+        protocol = "http"
+        if CbServer.use_https:
+            n1ql_port = str(CbServer.ssl_port_map.get(str(n1ql_port), str(n1ql_port)))
+            protocol = "https"
+        api = "%s://%s:%s/" % (protocol, server.ip, n1ql_port) + "admin/settings"
         body = {"completed-limit": no_entries}
         headers = self._create_headers_with_auth('Administrator','password')
-        response,content = http.request(api, "POST", headers=headers, body=json.dumps(body))
-        return response,content
+        status, content, response = self._http_request(api, "POST", headers=headers,
+                                                       params=json.dumps(body))
+        return response, content
 
     def set_profiling(self, server, setting):
-        http = httplib2.Http()
-        n1ql_port = 8093
-        api = "http://%s:%s/" % (server.ip, n1ql_port) + "admin/settings"
+        n1ql_port = CbServer.n1ql_port
+        protocol = "http"
+        if CbServer.use_https:
+            n1ql_port = str(CbServer.ssl_port_map.get(str(n1ql_port), str(n1ql_port)))
+            protocol = "https"
+        api = "%s://%s:%s/" % (protocol, server.ip, n1ql_port) + "admin/settings"
         body = {"profile": setting}
         headers = self._create_headers_with_auth('Administrator','password')
-        response,content = http.request(api, "POST", headers=headers, body=json.dumps(body))
-        return response,content
+        status, content, response = self._http_request(api, "POST", headers=headers,
+                                                       params=json.dumps(body))
+        return response, content
 
     def set_profiling_controls(self, server, setting):
-        http = httplib2.Http()
-        n1ql_port = 8093
-        api = "http://%s:%s/" % (server.ip, n1ql_port) + "admin/settings"
+        n1ql_port = CbServer.n1ql_port
+        protocol = "http"
+        if CbServer.use_https:
+            n1ql_port = str(CbServer.ssl_port_map.get(str(n1ql_port), str(n1ql_port)))
+            protocol = "https"
+        api = "%s://%s:%s/" % (protocol, server.ip, n1ql_port) + "admin/settings"
         body = {"controls": setting}
         headers = self._create_headers_with_auth('Administrator','password')
-        response,content = http.request(api, "POST", headers=headers, body=json.dumps(body))
-        return response,content
+        status, content, response = self._http_request(api, "POST", headers=headers,
+                                                       params=json.dumps(body))
+        return response, content
 
     def get_query_admin_settings(self, server):
-        http = httplib2.Http()
-        n1ql_port = 8093
-        api = "http://%s:%s/" % (server.ip, n1ql_port) + "admin/settings"
+        n1ql_port = CbServer.n1ql_port
+        protocol = "http"
+        if CbServer.use_https:
+            n1ql_port = str(CbServer.ssl_port_map.get(str(n1ql_port), str(n1ql_port)))
+            protocol = "https"
+        api = "%s://%s:%s/" % (protocol, server.ip, n1ql_port) + "admin/settings"
         headers = self._create_headers_with_auth('Administrator', 'password')
-        response, content = http.request(api, "GET", headers=headers)
+        status, content, response = self._http_request(api, "POST", headers=headers,
+                                                       params=json.dumps(body))
         result = json.loads(content)
         return result
 
     def get_query_vitals(self,server):
         http = httplib2.Http()
-        n1ql_port = 8093
-        api = "http://%s:%s/" % (server.ip, n1ql_port) + "admin/vitals"
+        n1ql_port = CbServer.n1ql_port
+        protocol = "http"
+        if CbServer.use_https:
+            n1ql_port = str(CbServer.ssl_port_map.get(str(n1ql_port), str(n1ql_port)))
+            protocol = "https"
+        api = "%s://%s:%s/" % (protocol, server.ip, n1ql_port) + "admin/vitals"
         headers = self._create_headers_with_auth('Administrator', 'password')
-        response, content = http.request(api, "GET", headers=headers)
+        status, content, response = self._http_request(api, "GET", headers=headers)
         return response, content
     '''End Monitoring/Profiling Rest Calls'''
 
     def create_whitelist(self, server, whitelist):
-        http = httplib2.Http()
-        api = "http://%s:%s/" % (server.ip, server.port) + "settings/querySettings/curlWhitelist"
+        protocol = "http"
+        if CbServer.use_https:
+            protocol = "https"
+        api = "%s://%s:%s/" % (protocol, server.ip, server.port) + "settings/querySettings/curlWhitelist"
         headers = self._create_headers_with_auth('Administrator', 'password')
-        response,content = http.request(api, "POST", headers=headers, body=json.dumps(whitelist))
-        return response,content
+        status, content, response = self._http_request(api, "POST", headers=headers,
+                                                       params=json.dumps(whitelist))
+        return response, content
 
     def query_tool(self, query, port=8093, timeout=1300, query_params={}, is_prepared=False, named_prepare=None,
                    verbose = True, encoded_plan=None, servers=None):
+        protocol = "http"
+        if CbServer.use_https:
+            port = str(CbServer.ssl_port_map.get(str(port), str(port)))
+            protocol = "https"
         key = 'prepared' if is_prepared else 'statement'
         headers = None
         content=""
@@ -3566,15 +3700,16 @@ class RestConnection(object):
         if is_prepared:
             if named_prepare and encoded_plan:
                 http = httplib2.Http()
-                if len(servers)>1:
-                    url = "http://%s:%s/query/service" % (servers[1].ip, port)
+                if len(servers) > 1:
+                    url = "%s://%s:%s/query/service" % (protocol, servers[1].ip, port)
                 else:
-                    url = "http://%s:%s/query/service" % (self.ip, port)
+                    url = "%s://%s:%s/query/service" % (protocol, self.ip, port)
 
                 headers = self._create_headers_encoded_prepared()
                 body = {'prepared': named_prepare, 'encoded_plan':encoded_plan}
 
-                response, content = http.request(url, 'POST', headers=headers, body=json.dumps(body))
+                status, content, response = self._http_request(url, 'POST', headers=headers,
+                                                               params=json.dumps(body))
 
                 return eval(content)
 
@@ -3591,7 +3726,7 @@ class RestConnection(object):
             if 'creds' in query_params and query_params['creds']:
                 headers = self._create_headers_with_auth(query_params['creds'][0]['user'].encode('utf-8'),
                                                          query_params['creds'][0]['pass'].encode('utf-8'))
-            api = "http://%s:%s/query/service?%s" % (self.ip, port, params)
+            api = "%s://%s:%s/query/service?%s" % (protocol, self.ip, port, params)
             log.info("%s"%api)
         else:
             params = {key : query}
@@ -3603,7 +3738,7 @@ class RestConnection(object):
             params = urllib.urlencode(params)
             if verbose:
                 log.info('query params : {0}'.format(params))
-            api = "http://%s:%s/query?%s" % (self.ip, port, params)
+            api = "%s://%s:%s/query?%s" % (protocol, self.ip, port, params)
 
         status, content, header = self._http_request(api, 'POST', timeout=timeout, headers=headers)
         try:
@@ -3613,22 +3748,26 @@ class RestConnection(object):
 
     def analytics_tool(self, query, port=8095, timeout=650, query_params={}, is_prepared=False, named_prepare=None,
                    verbose = True, encoded_plan=None, servers=None):
+        protocol = "http"
+        if CbServer.use_https:
+            port = str(CbServer.ssl_port_map.get(str(port), str(port)))
+            protocol = "https"
         key = 'prepared' if is_prepared else 'statement'
         headers = None
         content=""
         prepared = json.dumps(query)
         if is_prepared:
             if named_prepare and encoded_plan:
-                http = httplib2.Http()
                 if len(servers)>1:
-                    url = "http://%s:%s/query/service" % (servers[1].ip, port)
+                    url = "%s://%s:%s/query/service" % (protocol, servers[1].ip, port)
                 else:
-                    url = "http://%s:%s/query/service" % (self.ip, port)
+                    url = "%s://%s:%s/query/service" % (protocol, self.ip, port)
 
                 headers = {'Content-type': 'application/json'}
                 body = {'prepared': named_prepare, 'encoded_plan':encoded_plan}
 
-                response, content = http.request(url, 'POST', headers=headers, body=json.dumps(body))
+                status, content, response = self._http_request(url, 'POST', headers=headers,
+                                                               params=json.dumps(body))
 
                 return eval(content)
 
@@ -3662,8 +3801,13 @@ class RestConnection(object):
             return content
 
     def query_tool_stats(self):
+        n1ql_port = CbServer.n1ql_port
+        protocol = "http"
+        if CbServer.use_https:
+            n1ql_port = CbServer.ssl_n1ql_port
+            protocol = "https"
         log.info('query n1ql stats')
-        api = "http://%s:8093/admin/stats" % (self.ip)
+        api = "%s://%s:%s/admin/stats" % (protocol, str(n1ql_port), self.ip)
         status, content, header = self._http_request(api, 'GET')
         log.info(content)
         try:
@@ -3673,7 +3817,12 @@ class RestConnection(object):
 
     def index_tool_stats(self):
         log.info('index n1ql stats')
-        api = "http://%s:8091/indexStatus" % (self.ip)
+        port = CbServer.port
+        protocol = "http"
+        if CbServer.use_https:
+            port = CbServer.ssl_port
+            protocol = "https"
+        api = "%s://%s:%s/indexStatus" % (protocol, self.ip, port)
         params = ""
         status, content, header = self._http_request(api, 'GET', params)
         log.info(content)
@@ -5066,7 +5215,9 @@ class OtpNode(object):
         self.id = id
         self.ip = ''
         self.replication = ''
-        self.port = 8091
+        self.port = CbServer.port
+        if CbServer.use_https:
+            self.port = CbServer.ssl_port
         self.gracefulFailoverPossible = 'true'
         # extract ns ip from the otpNode string
         # its normally ns_1@10.20.30.40
@@ -5167,6 +5318,8 @@ class Node(object):
         self.rest_username = ""
         self.rest_password = ""
         self.port = 8091
+        if CbServer.use_https:
+            self.port = CbServer.ssl_port
         self.services = []
         self.storageTotalRam = 0
 
@@ -5281,6 +5434,10 @@ class RestParser(object):
         if 'interestingStats' in parsed and 'curr_items' in parsed['interestingStats']:
             node.curr_items = parsed['interestingStats']['curr_items']
         node.port = parsed["hostname"][parsed["hostname"].rfind(":") + 1:]
+        if CbServer.use_https:
+            str_node_port = CbServer.ssl_port_map.get(str(node.port), str(node.port))
+            if type(node.port) == int:
+                node.port = int(str_node_port)
         node.os = parsed['os']
 
         if "services" in parsed:
@@ -5330,6 +5487,9 @@ class RestParser(object):
                 node.moxi = ports["proxy"]
             if "direct" in ports:
                 node.memcached = ports["direct"]
+                if CbServer.use_https:
+                    node.memcached = int(CbServer.ssl_port_map.get(str(node.memcached),
+                                                                   str(node.memcached)))
 
         if "storageTotals" in parsed:
             storageTotals = parsed["storageTotals"]
@@ -5433,6 +5593,9 @@ class RestParser(object):
                     node.moxi = ports["proxy"]
                 if "direct" in ports:
                     node.memcached = ports["direct"]
+                    if CbServer.use_https:
+                        node.memcached = int(CbServer.ssl_port_map.get(str(node.memcached),
+                                                                       str(node.memcached)))
             if "hostname" in nodeDictionary:
                 value = str(nodeDictionary["hostname"])
                 node.ip = value[:value.rfind(":")]

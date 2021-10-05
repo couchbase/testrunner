@@ -1,4 +1,10 @@
+import time
+
 import logger
+
+from lib.Cb_constants.CBServer import CbServer
+from lib.cb_tools.cb_cli import CbCli
+
 log = logger.Logger.get_logger()
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
@@ -11,6 +17,13 @@ import os
 import copy
 import subprocess
 import json
+import requests
+try:
+    requests.packages.urllib3.disable_warnings()
+except:
+    pass
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class ServerInfo():
@@ -59,6 +72,9 @@ class x509main:
         if host is not None:
             self.host = host
             self.install_path = self._get_install_path(self.host)
+        self.disable_ssl_certificate_validation = False
+        if CbServer.use_https:
+            self.disable_ssl_certificate_validation = True
         self.slave_host = x509main.SLAVE_HOST
 
     def getLocalIPAddress(self):
@@ -220,9 +236,8 @@ class x509main:
     def _reload_node_certificate(self, host):
         rest = RestConnection(host)
         api = rest.baseUrl + "node/controller/reloadCertificate"
-        http = httplib2.Http()
-        status, content = http.request(api, 'POST', headers=self._create_rest_headers('Administrator', 'password'))
-        # status, content, header = rest._http_request(api, 'POST')
+        status, content, response = rest._http_request(api, 'POST',
+                                                       headers=self._create_rest_headers('Administrator', 'password'))
         return status, content
 
     # Get the install path for different operating system
@@ -266,7 +281,7 @@ class x509main:
         shell.copy_file_local_to_remote(src_path, dest_path)
 
     def _create_rest_headers(self, username="Administrator", password="password"):
-        authorization = base64.encodestring('%s:%s' % (username, password))
+        authorization = base64.encodestring('%s:%s' % (username, password)).strip("\n")
         return {'Content-Type': 'application/octet-stream',
             'Authorization': 'Basic %s' % authorization,
             'Accept': '*/*'}
@@ -274,8 +289,23 @@ class x509main:
     # Function that will upload file via rest
     def _rest_upload_file(self, URL, file_path_name, username=None, password=None):
         data = open(file_path_name, 'rb').read()
-        http = httplib2.Http()
-        status, content = http.request(URL, 'POST', headers=self._create_rest_headers(username, password), body=data)
+        tries = 0
+        while tries < 3:
+            try:
+                response = requests.post(URL, data=data,
+                                         headers=self._create_rest_headers(username, password),
+                                         timeout=120, verify=False)
+                break
+            except Exception as e:
+                log.error(e)
+                if tries >= 3:
+                    raise Exception(e)
+                else:
+                    log.info("Trying again ...")
+                    time.sleep(3)
+                    tries = tries + 1
+        status = response.status_code
+        content = response.content
         log.info (" Status from rest file upload command is {0}".format(status))
         log.info (" Content from rest file upload command is {0}".format(content))
         return status, content
@@ -414,6 +444,12 @@ class x509main:
     # 3. Create the cert.json file which contains state, path, prefixes and delimeters
     # 4. Upload the cert.json file
     def setup_master(self, state=None, paths=None, prefixs=None, delimeters=None, mode='rest', user='Administrator', password='password'):
+        shell_conn = RemoteMachineShellConnection(self.host)
+        cb_cli = CbCli(shell_conn, no_ssl_verify=True)
+        level = cb_cli.get_n2n_encryption_level()
+        if level:
+            cb_cli.set_n2n_encryption_level(level="control")
+            cb_cli.disable_n2n_encryption()
         copy_host = copy.deepcopy(self.host)
         x509main(copy_host)._upload_cluster_ca_certificate(user, password)
         x509main(copy_host)._setup_node_certificates()
@@ -423,6 +459,10 @@ class x509main:
                 x509main(copy_host)._upload_cluster_ca_settings(user, password)
             elif mode == 'cli':
                 x509main(copy_host)._upload_cert_file_via_cli(user, password)
+        if level:
+            cb_cli.enable_n2n_encryption()
+            cb_cli.set_n2n_encryption_level(level=level)
+        shell_conn.disconnect()
         
     # write a new config json file based on state, paths, perfixes and delimeters
     def write_client_cert_json_new(self, state, paths, prefixs, delimeters):

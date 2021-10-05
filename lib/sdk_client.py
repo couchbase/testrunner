@@ -6,6 +6,8 @@ Python based SDK client interface
 import crc32
 import time
 from couchbase import FMT_AUTO
+
+from lib.Cb_constants.CBServer import CbServer
 from memcached.helper.old_kvstore import ClientKeyValueStore
 from couchbase.bucket import Bucket as CouchbaseBucket
 from couchbase.cluster import Cluster, ClassicAuthenticator, PasswordAuthenticator
@@ -23,6 +25,8 @@ class SDKClient(object):
     def __init__(self, bucket, hosts = ["localhost"] , scheme = "couchbase",
                  ssl_path = None, uhm_options = None, password=None,
                  quiet=True, certpath = None, transcoder = None, ipv6=False, compression=True):
+        if CbServer.use_https:
+            scheme = "couchbases"
         self.connection_string = \
             self._createString(scheme = scheme, bucket = bucket, hosts = hosts,
                                certpath = certpath, uhm_options = uhm_options, ipv6=ipv6, compression=compression)
@@ -58,9 +62,15 @@ class SDKClient(object):
                 connection_string = "{0}?compression=off".format(connection_string)
         if scheme == "couchbases":
             if "?" in connection_string:
-                connection_string = "{0},certpath={1}".format(connection_string, certpath)
+                if not certpath:
+                    connection_string = "{0}&ssl=no_verify".format(connection_string)
+                else:
+                    connection_string = "{0}&certpath={1}".format(connection_string, certpath)
             else:
-                connection_string = "{0}?certpath={1}".format(connection_string, certpath)
+                if not certpath:
+                    connection_string = "{0}?ssl=no_verify".format(connection_string)
+                else:
+                    connection_string = "{0}?certpath={1}".format(connection_string, certpath)
         return connection_string
 
     def _createConn(self):
@@ -577,6 +587,8 @@ class SDKSmartClient(object):
         if rest.ip == "127.0.0.1":
             self.host = "{0}:{1}".format(rest.ip,rest.port)
             self.scheme = "http"
+            if CbServer.use_https:
+                self.scheme = "couchbases"
         else:
             self.host = rest.ip
             self.scheme = "couchbase"

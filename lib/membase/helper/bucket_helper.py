@@ -19,6 +19,9 @@ from couchbase_helper.stats_tools import StatsCommon
 from remote.remote_util import RemoteMachineShellConnection
 from subprocess import call
 
+from lib.membase.api.exception import ServerUnavailableException
+
+
 class BucketOperationHelper():
 
     #this function will assert

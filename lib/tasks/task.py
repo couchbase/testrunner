@@ -36,6 +36,7 @@ from multiprocessing import Process, Manager, Semaphore
 import memcacheConstants
 from membase.api.exception import CBQError
 
+from lib.cb_tools.cbstats import Cbstats
 
 try:
     CHECK_FLAG = False
@@ -622,19 +623,23 @@ class StatsWaitTask(Task):
         stat_result = 0
         for server in self.servers:
             try:
-                client = self._get_connection(server)
-                stats = client.stats(self.param)
+                shell = RemoteMachineShellConnection(server)
+                cbstat = Cbstats(shell)
+                stats = cbstat.all_stats(self.bucket, stat_name=self.param)
                 if not stats.has_key(self.stat):
                     self.state = FINISHED
                     self.set_exception(Exception("Stat {0} not found".format(self.stat)))
+                    shell.disconnect()
                     return
                 if stats[self.stat].isdigit():
                     stat_result += long(stats[self.stat])
                 else:
                     stat_result = stats[self.stat]
+                shell.disconnect()
             except EOFError as ex:
                 self.state = FINISHED
                 self.set_exception(ex)
+                shell.disconnect()
                 return
         if not self._compare(self.comparison, str(stat_result), self.value):
             self.log.warn("Not Ready: %s %s %s %s expected on %s, %s bucket" % (self.stat, stat_result,
