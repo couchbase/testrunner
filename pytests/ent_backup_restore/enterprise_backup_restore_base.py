@@ -329,11 +329,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                         self.backupset.objstore_secret_access_key,
                                         self.backupset.objstore_staging_directory)
         elif provider == "gcp":
-            self.objstore_provider = GCP(self.backupset.objstore_access_key_id, self.backupset.objstore_bucket,
-                                        self.backupset.objstore_cacert, self.backupset.objstore_endpoint,
-                                        self.backupset.objstore_no_ssl_verify, self.backupset.objstore_region,
-                                        self.backupset.objstore_secret_access_key,
-                                        self.backupset.objstore_staging_directory)
+            self.objstore_provider = GCP("", self.backupset.objstore_bucket, "", "",
+                                         self.backupset.objstore_no_ssl_verify, "us", "",
+                                         self.backupset.objstore_staging_directory)
 
         # We run in a separate branch so when we add more providers the setup will be run by default
         if provider:
