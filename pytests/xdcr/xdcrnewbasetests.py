@@ -3310,10 +3310,6 @@ class XDCRNewBaseTest(unittest.TestCase):
                     self.__topology))
 
     def perform_update_delete(self):
-        # Number of docs is very large for dgm run, so adjust update, delete percentages
-        if self._dgm_run:
-            self._perc_upd = self._perc_upd / 10
-            self._perc_del = self._perc_del / 10
         # UPDATES
         for doc_ops_cluster in self._upd_clusters:
             cb_cluster = self.get_cb_cluster_by_name(doc_ops_cluster)

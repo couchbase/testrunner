@@ -53,7 +53,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
             proxyPort = rest.get_nodes_self().moxi + 1000
-            rest.create_bucket(bucket=name, ramQuotaMB=200, proxyPort=proxyPort)
+            rest.create_bucket(bucket=name, ramQuotaMB=256, proxyPort=proxyPort)
             msg = 'create_bucket succeeded but bucket {0} does not exist'.format(name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
 
@@ -63,7 +63,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             rest = RestConnection(serverInfo)
             proxyPort = rest.get_nodes_self().moxi
             rest.create_bucket(bucket=name,
-                               ramQuotaMB=200,
+                               ramQuotaMB=256,
                                proxyPort=proxyPort)
             msg = 'create_bucket succeeded but bucket {0} does not exist'.format(name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
@@ -72,7 +72,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
 
             try:
                 rest.create_bucket(bucket=name,
-                                   ramQuotaMB=200,
+                                   ramQuotaMB=256,
                                    proxyPort=11221)
                 msg = "create_bucket created two buckets in different case : {0},{1}".format('default', 'Default')
                 self.fail(msg)
@@ -87,7 +87,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             rest = RestConnection(serverInfo)
             proxyPort = rest.get_nodes_self().moxi + 1000
             rest.create_bucket(bucket=name,
-                               ramQuotaMB=200,
+                               ramQuotaMB=256,
                                proxyPort=proxyPort)
             msg = 'create_bucket succeeded but bucket {0} does not exist'.format(name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
@@ -99,7 +99,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             rest = RestConnection(serverInfo)
             proxyPort = rest.get_nodes_self().moxi + 400
             rest.create_bucket(bucket=name,
-                               ramQuotaMB=200,
+                               ramQuotaMB=256,
                                proxyPort=proxyPort)
             msg = 'create_bucket succeeded but bucket {0} does not exist'.format(name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
@@ -110,14 +110,14 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             rest = RestConnection(serverInfo)
             proxyPort = rest.get_nodes_self().moxi + 500
             rest.create_bucket(bucket=name,
-                               ramQuotaMB=200,
+                               ramQuotaMB=256,
                                proxyPort=proxyPort)
             msg = 'create_bucket succeeded but bucket {0} does not exist'.format(name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
 
             try:
                 name = 'DEFAULT'
-                rest.create_bucket(bucket=name, ramQuotaMB=200, proxyPort=proxyPort + 1000)
+                rest.create_bucket(bucket=name, ramQuotaMB=256, proxyPort=proxyPort + 1000)
                 msg = "create_bucket created two buckets in different case : {0},{1}".format('default', 'DEFAULT')
                 self.fail(msg)
             except BucketCreationException as ex:
@@ -133,7 +133,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             rest = RestConnection(serverInfo)
             proxyPort = rest.get_nodes_self().moxi + 500
             rest.create_bucket(bucket=lowercase_name,
-                               ramQuotaMB=200,
+                               ramQuotaMB=256,
                                proxyPort=proxyPort)
             msg = 'create_bucket succeeded but bucket {0} does not exist'.format(lowercase_name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(lowercase_name, rest), msg=msg)
@@ -141,7 +141,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             uppercase_name = 'UPPERCASE_{0}'.format(postfix)
             try:
                 rest.create_bucket(bucket=uppercase_name,
-                                   ramQuotaMB=200,
+                                   ramQuotaMB=256,
                                    proxyPort=proxyPort + 1000)
                 msg = "create_bucket created two buckets in different case : {0},{1}".format(lowercase_name,
                                                                                              uppercase_name)
@@ -159,7 +159,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
         proxyPort = rest.get_nodes_self().moxi + 100
         shell = RemoteMachineShellConnection(master)
         url = "http://%s:8091/pools/default/buckets" % master.ip
-        params = "name=%s&ramQuotaMB=200&replicaNumber=1&proxyPort=%s" \
+        params = "name=%s&ramQuotaMB=256&replicaNumber=1&proxyPort=%s" \
                                                                    % (name, proxyPort)
         cmd = "curl -X POST -u Administrator:password  -d '%s' %s" % (params, url)
         output, error = shell.execute_command(cmd)
@@ -170,7 +170,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
         self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
 
         name = 'UPPERCASE{0}'.format(postfix)
-        params = "name=%s&ramQuotaMB=200&replicaNumber=1&proxyPort=%s" \
+        params = "name=%s&ramQuotaMB=256&replicaNumber=1&proxyPort=%s" \
                                                                    % (name, proxyPort)
         cmd = "curl -X POST -u Administrator:password  -d '%s' %s" % (params, url)
         output, error = shell.execute_command(cmd)
@@ -227,7 +227,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             proxyPort = rest.get_nodes_self().moxi
             try:
                 rest.create_bucket(bucket=name,
-                                   ramQuotaMB=200,
+                                   ramQuotaMB=256,
                                    replicaNumber=-1,
                                    proxyPort=proxyPort)
                 self.fail('bucket create succeded even with a negative replica count')
@@ -242,7 +242,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             proxyPort = rest.get_nodes_self().moxi
             try:
                 rest.create_bucket(bucket=name,
-                                   ramQuotaMB=200,
+                                   ramQuotaMB=256,
                                    replicaNumber=0,
                                    proxyPort=proxyPort)
             except BucketCreationException as ex:
@@ -259,7 +259,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             rest = RestConnection(serverInfo)
             proxyPort = rest.get_nodes_self().moxi
             try:
-                rest.create_bucket(bucket=name, ramQuotaMB=200, proxyPort=proxyPort)
+                rest.create_bucket(bucket=name, ramQuotaMB=256, proxyPort=proxyPort)
             except BucketCreationException as ex:
                 self.log.error(ex)
                 self.fail('failed to create bucket with 1 replicas')
@@ -274,7 +274,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             rest = RestConnection(serverInfo)
             proxyPort = rest.get_nodes_self().moxi
             try:
-                rest.create_bucket(bucket=name, ramQuotaMB=200, replicaNumber=2,
+                rest.create_bucket(bucket=name, ramQuotaMB=256, replicaNumber=2,
                                    proxyPort=proxyPort,
                                    storageBackend=self.bucket_storage)
             except BucketCreationException as ex:
@@ -291,7 +291,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             rest = RestConnection(serverInfo)
             proxyPort = rest.get_nodes_self().moxi
             try:
-                rest.create_bucket(bucket=name, ramQuotaMB=200, replicaNumber=3,
+                rest.create_bucket(bucket=name, ramQuotaMB=256, replicaNumber=3,
                                    proxyPort=proxyPort,
                                    storageBackend=self.bucket_storage)
             except BucketCreationException as ex:
@@ -308,7 +308,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             rest = RestConnection(serverInfo)
             proxyPort = rest.get_nodes_self().moxi
             try:
-                rest.create_bucket(bucket=name, ramQuotaMB=200, replicaNumber=4,
+                rest.create_bucket(bucket=name, ramQuotaMB=256, replicaNumber=4,
                                    proxyPort=proxyPort)
                 self.fail('created bucket with 4 replicas')
             except BucketCreationException as ex:
@@ -321,7 +321,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             rest = RestConnection(serverInfo)
             proxyPort = rest.get_nodes_self().moxi
             try:
-                rest.create_bucket(bucket=name, ramQuotaMB=200,
+                rest.create_bucket(bucket=name, ramQuotaMB=256,
                                    proxyPort=proxyPort)
             except BucketCreationException as ex:
                 self.log.error(ex)
@@ -340,7 +340,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
                 rest = RestConnection(serverInfo)
                 proxyPort = rest.get_nodes_self().moxi
                 try:
-                    rest.create_bucket(bucket=name, ramQuotaMB=200, replicaNumber=2,
+                    rest.create_bucket(bucket=name, ramQuotaMB=256, replicaNumber=2,
                                        proxyPort=proxyPort)
                     self.fail('created a bucket with invalid characters')
                 except BucketCreationException as ex:
@@ -411,7 +411,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
         rest = RestConnection(master)
         proxyPort = rest.get_nodes_self().moxi
         try:
-            rest.create_bucket(bucket=name, ramQuotaMB=200,
+            rest.create_bucket(bucket=name, ramQuotaMB=256,
                                proxyPort=proxyPort,
                                storageBackend=self.bucket_storage)
             if name_len <= max_len:

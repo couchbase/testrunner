@@ -213,7 +213,7 @@ class Cluster(object):
         start = items
         loop = 1
         tasks = []
-
+        rest = RestConnection(server)
         while time.time() < timeout:
             load_items = items * loop
             if len(tasks) > 9:
@@ -236,7 +236,11 @@ class Cluster(object):
                                                   batch_size=10000, pause_secs=60, timeout_secs=600,
                                                   scope=scope, collection=collection))
             time.sleep(poll_dgm_mins * 60)
-            current_active_resident = StatsCommon.get_stats([server], bucket.name, '','vb_active_perc_mem_resident')[server]
+            try:
+                current_active_resident = rest.fetch_bucket_stats(
+                    bucket.name)["op"]["samples"]["vb_active_resident_items_ratio"][-1]
+            except (ValueError, TimeoutError):
+                current_active_resident = 100
             print("Current resident ratio: %s, desired: %s bucket %s" % (current_active_resident,active_resident_threshold,bucket))
             if int(current_active_resident) <= active_resident_threshold:
                 print("Doc size={0} bytes, Number of docs={1}".format(value_size,

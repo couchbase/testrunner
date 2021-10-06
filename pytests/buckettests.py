@@ -23,6 +23,7 @@ class CreateBucketTests(BaseTestCase):
     def _init_parameters(self):
         self.bucket_name = self.input.param("bucket_name", 'default')
         self.bucket_type = self.input.param("bucket_type", 'sasl')
+        self.reset_node_services = self.input.param("reset_node_services", True)
         self.bucket_size = self.quota
         self.password = 'password'
         self.server = self.master
@@ -142,29 +143,30 @@ class CreateBucketTests(BaseTestCase):
 
     def test_travel_sample_bucket(self):
         sample = "travel-sample"
-        """ reset node to set services correctly: index,kv,n1ql """
-        self.rest.force_eject_node()
-        status = False
+        if self.reset_node_services:
+            """ reset node to set services correctly: index,kv,n1ql """
+            self.rest.force_eject_node()
+            status = False
 
-        try:
-            status = self.rest.init_node_services(hostname=self.master.ip,
-                                        services= ["index,kv,n1ql,fts"])
-            init_node = self.cluster.async_init_node(self.master,
-                                            services = ["index,kv,n1ql,fts"])
-        except Exception as e:
-            if e:
-                print(e)
-        self.sleep(10)
-        self.log.info("Add new user after reset node! ")
-        self.add_built_in_server_user(node=self.master)
-        if status:
-            if self.node_version[:5] in COUCHBASE_FROM_WATSON:
-                self.rest.set_indexer_storage_mode(storageMode="memory_optimized")
-            shell = RemoteMachineShellConnection(self.master)
-            shell.execute_command("""curl -g -v -u Administrator:password \
-                         -X POST http://{0}:8091/sampleBuckets/install \
-                      -d  '["travel-sample"]'""".format(self.master.ip))
-            shell.disconnect()
+            try:
+                status = self.rest.init_node_services(hostname=self.master.ip,
+                                            services= ["index,kv,n1ql,fts"])
+                init_node = self.cluster.async_init_node(self.master,
+                                                services = ["index,kv,n1ql,fts"])
+            except Exception as e:
+                if e:
+                    print(e)
+            self.sleep(10)
+            self.log.info("Add new user after reset node! ")
+            self.add_built_in_server_user(node=self.master)
+            if status:
+                if self.node_version[:5] in COUCHBASE_FROM_WATSON:
+                    self.rest.set_indexer_storage_mode(storageMode="memory_optimized")
+        shell = RemoteMachineShellConnection(self.master)
+        shell.execute_command("""curl -g -v -u Administrator:password \
+                     -X POST http://{0}:8091/sampleBuckets/install \
+                  -d  '["travel-sample"]'""".format(self.master.ip))
+        shell.disconnect()
 
         buckets = RestConnection(self.master).get_buckets()
         for bucket in buckets:
