@@ -2967,16 +2967,16 @@ class QueryTests(BaseTestCase):
         self.assertTrue(str(res).find(find_string) != -1)
 
     def system_catalog_helper_delete(self, test, role="admin"):
-        self.query_with_roles('delete from system:datastores', "'code': 11003")
-        self.query_with_roles('delete from system:namespaces', "'code': 11003")
+        self.query_with_roles('delete from system:datastores', "'code': 11004")
+        self.query_with_roles('delete from system:namespaces', "'code': 11004")
         # To be fixed in next version
         # self.query_with_roles('delete from system:keyspaces', "'code': 11003")
-        self.query_with_roles('delete from system:indexes', "'code': 11003")
+        self.query_with_roles('delete from system:indexes', "'code': 11004")
         self.query_with_roles('delete from system:dual', "'code': 11000")
 
-        self.query_with_roles('delete from system:user_info', "'code': 11003")
-        self.query_with_roles('delete from system:nodes', "'code': 11003")
-        self.query_with_roles('delete from system:applicable_roles', "'code': 11003")
+        self.query_with_roles('delete from system:user_info', "'code': 11004")
+        self.query_with_roles('delete from system:nodes', "'code': 11004")
+        self.query_with_roles('delete from system:applicable_roles', "'code': 11004")
         self.query = 'delete from system:completed_requests'
         res = self.curl_with_roles(self.query)
         role_list = ["query_delete(default)", "query_delete(standard_bucket0)", "delete(default)",
