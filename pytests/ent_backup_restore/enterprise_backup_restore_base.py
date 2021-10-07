@@ -27,7 +27,7 @@ from testconstants import LINUX_COUCHBASE_BIN_PATH, \
     MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH, \
     WIN_TMP_PATH, STANDARD_BUCKET_PORT, WIN_CYGWIN_BIN_PATH
 from testconstants import INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_MAD_HATTER, \
-    CLUSTER_QUOTA_RATIO
+    CLUSTER_QUOTA_RATIO, GCP_AUTH_PATH
 from security.rbac_base import RbacBase
 from couchbase.bucket import Bucket
 
@@ -338,9 +338,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                         self.backupset.objstore_secret_access_key,
                                         self.backupset.objstore_staging_directory)
         elif provider == "gcp":
-            self.objstore_provider = GCP("", self.backupset.objstore_bucket, "", "",
-                                         self.backupset.objstore_no_ssl_verify, "us", "",
-                                         self.backupset.objstore_staging_directory)
+            for server in self.servers:
+                shell = RemoteMachineShellConnection(server)
+                shell.execute_command("mkdir -p /root/.config/gcloud")
+                shell.copy_file_local_to_remote(GCP_AUTH_PATH, GCP_AUTH_PATH)
+            self.objstore_provider = GCP(self.backupset.objstore_access_key_id, self.backupset.objstore_bucket,
+                                        self.backupset.objstore_cacert, self.backupset.objstore_endpoint,
+                                        self.backupset.objstore_no_ssl_verify, self.backupset.objstore_region,
+                                        self.backupset.objstore_secret_access_key,
+                                        self.backupset.objstore_staging_directory)
 
         # We run in a separate branch so when we add more providers the setup will be run by default
         if provider:
