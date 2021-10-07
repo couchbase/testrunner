@@ -2656,7 +2656,7 @@ class BaseTestCase(unittest.TestCase):
                     """ In tests use hostname, if IP in ini file use IP, we need
                         to convert it to hostname to compare it with hostname
                         in cluster """
-                    if "couchbase.com" in ip and "couchbase.com" not in server.ip:
+                    if ip.endswith(".com") and ".com" not in server.ip:
                         shell = RemoteMachineShellConnection(server)
                         hostname = shell.get_full_hostname()
                         self.log.info("convert IP: {0} to hostname: {1}" \
@@ -2675,7 +2675,7 @@ class BaseTestCase(unittest.TestCase):
                                     node.status.pod_ip == server.ip:
                                 ip = node.status.pod_ip
                                 break
-                    elif "couchbase.com" in server.ip and "couchbase.com" not in ip:
+                    elif ".com" in server.ip and not ip.endswith(".com"):
                         node = TestInputServer()
                         node.ip = ip
                         """ match node.ip to server in ini file to get correct credential """
