@@ -65,7 +65,7 @@ class x509main:
                  client_ip="172.16.1.174", dns=None, uri=None,
                  alt_names="default",
                  standard="pkcs8",
-                 encryption_type="aes",
+                 encryption_type="aes256",
                  key_length=1024,
                  passphrase_type="plain",
                  passphrase_script_path="default",
@@ -99,7 +99,8 @@ class x509main:
         self.standard = standard  # PKCS standard; currently supports PKCS#1 & PKCS#8
         if encryption_type in ["none", "None", "", None]:
             encryption_type = None
-        self.encryption_type = encryption_type  # encryption algo for private key in case of PKCS#8. Can be put to None
+        # encryption pkcs#5 v2 algo for private key in case of PKCS#8. Can be put to None
+        self.encryption_type = encryption_type
         self.key_length = key_length
         # Node private key passphrase settings
         self.passphrase_type = passphrase_type  # 'script'/'rest'/'plain'
@@ -269,7 +270,8 @@ class x509main:
                 # create bash file with "echo <passw>"
                 # TODo also support creating bash file that takes args
                 passphrase_path = node_ca_dir + "passphrase.sh"
-                bash_content = "echo '" + passw + "'"
+                bash_content = "#!/bin/bash\n"
+                bash_content = bash_content + "echo '" + passw + "'"
                 with open(passphrase_path, "w") as fh:
                     fh.write(bash_content)
                 os.chmod(passphrase_path, 0o777)
@@ -278,13 +280,14 @@ class x509main:
                 passw = response.content.decode('utf-8')
 
             # convert cmd
-            convert_cmd = "openssl pkcs8 -in " + key_path + " -passout pass:" + passw +\
-                          " -topk8 -out " + tmp_encrypted_key_path
+            convert_cmd = "openssl pkcs8 -in " + key_path + " -passout pass:" + passw + \
+                          " -topk8 -v2 " + self.encryption_type + \
+                          " -out " + tmp_encrypted_key_path
             output, error = shell.execute_command(convert_cmd)
             self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
         else:
-            convert_cmd = "openssl pkcs8 -in " + key_path +\
+            convert_cmd = "openssl pkcs8 -in " + key_path + \
                           " -topk8 -nocrypt -out " + tmp_encrypted_key_path
             output, error = shell.execute_command(convert_cmd)
             self.log.info('Output message is {0} and error message is {1}'.format(output, error))
@@ -313,7 +316,7 @@ class x509main:
                                               " " + str(self.key_length))
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
         if cn_name is None:
-            cn_name = "RootCA" + root_ca_name
+            cn_name = root_ca_name
         # create ca.pem
         output, error = shell.execute_command("openssl req -config " + config_path +
                                               " -new -x509 -days 3650" +
@@ -582,7 +585,7 @@ class x509main:
         # third client
         root_ca_name = "clientroot"
         int_ca_name = "iclient1_" + root_ca_name
-        self.generate_root_certificate(root_ca_name, cn_name="clientroot")
+        self.generate_root_certificate(root_ca_name)
         self.generate_intermediate_certificate(root_ca_name, int_ca_name)
         self.generate_client_certificate(root_ca_name, int_ca_name)
 
@@ -599,13 +602,15 @@ class x509main:
         """
         if root_ca_names == "all":
             root_ca_names = copy.deepcopy(x509main.root_ca_names)
+        old_ids = self.get_ids_from_ca_names(ca_names=root_ca_names,
+                                             server=all_servers[0])
         nodes_affected_ips = list()
         for root_ca_name in root_ca_names:
             root_ca_manifest = copy.deepcopy(x509main.manifest[root_ca_name])
             del x509main.manifest[root_ca_name]
             self.remove_directory(root_ca_manifest['path'])
             x509main.root_ca_names.remove(root_ca_name)
-            cn_name = 'My Company Root CA ' + root_ca_name + ' rotated'
+            cn_name = root_ca_name + 'rotated'
             self.generate_root_certificate(root_ca_name=root_ca_name,
                                            cn_name=cn_name)
             intermediate_cas_manifest = root_ca_manifest["intermediate"]
@@ -637,7 +642,8 @@ class x509main:
             _ = self.upload_root_certs(server=server, root_ca_names=root_ca_names)
         self.upload_node_certs(servers=servers)
         self.create_ca_bundle()
-        # TODo delete off the old trusted CAs from the server
+        self.delete_trusted_CAs(server=servers[0], ids=old_ids,
+                                mark_deleted=False)
 
     def upload_root_certs(self, server=None, root_ca_names=None):
         """
@@ -691,7 +697,7 @@ class x509main:
 
     def upload_client_cert_settings(self, server=None):
         """
-        Upload client cert settings to CB server that was initialized in init function
+        Upload client cert settings(that was initialized in init function) to CB server
         """
         if server is None:
             server = self.host
@@ -711,7 +717,6 @@ class x509main:
             return content
         else:
             raise Exception(content)
-        # TODo move some of this code to rest client
 
     def load_trusted_CAs(self, server=None, from_non_localhost=True):
         if not server:
@@ -740,6 +745,7 @@ class x509main:
         params
         :servers: list of nodes
         """
+
         def build_params(node):
             params = dict()
             if self.encryption_type:
@@ -747,13 +753,14 @@ class x509main:
                 params["privateKeyPassphrase"]["type"] = self.passphrase_type
                 if self.passphrase_type == "script":
                     if self.passphrase_script_path != "default":
-                        params["privateKeyPassphrase"]["path"] = self.passphrase_script_path +\
+                        params["privateKeyPassphrase"]["path"] = self.passphrase_script_path + \
                                                                  "/passphrase.sh"
                     else:
                         params["privateKeyPassphrase"]["path"] = self.install_path + \
-                                                                 x509main.CHAINFILEPATH +\
+                                                                 x509main.CHAINFILEPATH + \
                                                                  "/passphrase.sh"
                     params["privateKeyPassphrase"]["timeout"] = self.passphrase_load_timeout
+                    params["privateKeyPassphrase"]["trim"] = 'true'
                     if self.passphrase_script_args:
                         params["privateKeyPassphrase"]["args"] = self.passphrase_script_args
                 elif self.passphrase_type == "rest":
@@ -769,7 +776,9 @@ class x509main:
 
         for server in servers:
             rest = RestConnection(server)
-            params = build_params(server)
+            params = ''
+            if self.standard == "pkcs8":
+                params = build_params(server)
             status, content = rest.reload_certificate(params=params)
             if not status:
                 msg = "Could not load reload node cert on %s; Failed with error %s" \
@@ -785,8 +794,68 @@ class x509main:
             msg = "Could not get trusted CAs on %s; Failed with error %s" \
                   % (server.ip, content)
             raise Exception(msg)
-        return content
-        # ToDO write code to parse content
+        return json.loads(content.decode('utf-8'))
+
+    def get_ca_names_from_ids(self, ids, server=None):
+        """
+        Returns list of root ca_names,
+        given a list of of CA IDs
+        """
+        ca_names = list()
+        content = self.get_trusted_CAs(server=server)
+        for ca_dict in content:
+            if int(ca_dict["id"]) in ids:
+                subject = ca_dict["subject"]
+                root_ca_name = subject.split("CN=")[1]
+                ca_names.append(root_ca_name)
+        return ca_names
+
+    def get_ids_from_ca_names(self, ca_names, server=None):
+        """
+        Returns list of CA IDs,
+        given a list of string of CA names
+        """
+        ca_ids = list()
+        content = self.get_trusted_CAs(server=server)
+        for ca_dict in content:
+            ca_id = ca_dict["id"]
+            subject = ca_dict["subject"]
+            root_ca_name = subject.split("CN=")[1]
+            if root_ca_name in ca_names:
+                ca_ids.append(int(ca_id))
+        return ca_ids
+
+    def delete_trusted_CAs(self, server=None, ids=None, mark_deleted=True):
+        """
+        Deletes trusted CAs from cluster
+
+        :server: server object to make rest (defaults to self.host)
+        :ids: list of CA IDs to delete. Defaults to all trusted CAs which
+              haven't signed any node
+        :mark_deleted: Boolean on whether to remove it from root_ca_names
+                        global variable list. Defaults to True
+        Returns None
+        """
+        if server is None:
+            server = self.host
+        rest = RestConnection(server)
+        if ids is None:
+            ids = list()
+            content = self.get_trusted_CAs(server)
+            for ca_dict in content:
+                if len(ca_dict["nodes"]) == 0:
+                    ca_id = ca_dict["id"]
+                    ids.append(ca_id)
+        ca_names = self.get_ca_names_from_ids(ids=ids, server=server)
+        for ca_id in ids:
+            status, content = rest.delete_trusted_CA(ca_id=ca_id)
+            if not status:
+                raise Exception("Could not delete trusted CA with id {0}".format(id))
+        if mark_deleted:
+            for ca_name in ca_names:
+                ca_name = ca_name.rstrip("rotated")
+                if ca_name in x509main.root_ca_names:
+                    x509main.root_ca_names.remove(ca_name)
 
     def copy_trusted_CAs(self, root_ca_names, server=None):
         """
@@ -831,6 +900,11 @@ class x509main:
             self.log.info('Output message is {0} and error message is {1}'.format(output, error))
             shell.disconnect()
 
+    @staticmethod
+    def regenerate_certs(server):
+        rest = RestConnection(server)
+        rest.regenerate_cluster_certificate()
+
     def teardown_certs(self, servers):
         """
         1. Remove dir from slave
@@ -839,7 +913,9 @@ class x509main:
         self.remove_directory(x509main.CACERTFILEPATH)
         for server in servers:
             self.delete_inbox_folder_on_server(server=server)
-        # ToDO delete trusted certs
+        for server in servers:
+            self.regenerate_certs(server=server)
+            self.delete_trusted_CAs(server=server)
 
 
 class Validation:

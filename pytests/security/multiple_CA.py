@@ -8,9 +8,11 @@ class MultipleCA(BaseTestCase):
 
     def setUp(self):
         super(MultipleCA, self).setUp()
+        self.standard = self.input.param("standard", "pkcs8")
         self.passphrase_type = self.input.param("passphrase_type", "script")
-        self.encryption_type = self.input.param("encryption_type", "aes")
-        self.x509 = x509main(host=self.master, encryption_type=self.encryption_type,
+        self.encryption_type = self.input.param("encryption_type", "aes256")
+        self.x509 = x509main(host=self.master, standard=self.standard,
+                             encryption_type=self.encryption_type,
                              passphrase_type=self.passphrase_type)
         for server in self.servers:
             self.x509.delete_inbox_folder_on_server(server=server)
