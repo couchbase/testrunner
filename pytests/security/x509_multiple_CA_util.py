@@ -880,7 +880,8 @@ class x509main:
         self.copy_file_from_slave_to_server(server, node_ca_path, dest_pem_path)
         dest_pkey_path = self.install_path + x509main.CHAINFILEPATH + "/pkey.key"
         self.copy_file_from_slave_to_server(server, node_ca_key_path, dest_pkey_path)
-        if self.encryption_type and self.passphrase_type == "script":
+        if self.standard == "pkcs8" and self.encryption_type and \
+                self.passphrase_type == "script":
             node_key_passphrase_path = self.get_node_private_key_passphrase_script(server)
             if self.passphrase_script_path == "default":
                 dest_node_key_passphrase_path = self.install_path + \
