@@ -209,7 +209,10 @@ class QueryTests(BaseTestCase):
                     self.load_directory(self.gens_load)
                 else:
                     self.log.info("-->gens_load flat_json, batch_size=1000")
-                    self.load(self.gens_load, batch_size=1000, flag=self.item_flag)
+                    verify_data = True
+                    if self.enforce_tls:
+                        verify_data = False
+                    self.load(self.gens_load, batch_size=1000, flag=self.item_flag, verify_data=verify_data)
             if not self.input.param("skip_build_tuq", True):
                 self._build_tuq(self.master)
             self.skip_buckets_handle = True

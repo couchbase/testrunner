@@ -275,6 +275,14 @@ class BaseTestCase(unittest.TestCase):
                 self.log.info("Building docker image with java sdk client")
                 JavaSdkSetup()
 
+            if self.use_https:
+                if self.enforce_tls:
+                    self.log.info("#####Enforcing TLS########")
+                    ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
+                    status = ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master])
+                    if not status:
+                        self.fail("Port binding after enforcing TLS incorrect")
+
             # avoid any cluster operations in setup for new upgrade
             #  & upgradeXDCR tests
             if str(self.__class__).find('newupgradetests') != -1 or \
@@ -379,13 +387,6 @@ class BaseTestCase(unittest.TestCase):
                 cli.setting_autofailover(1, 60)
                 self.sleep(2)
                 self.check_ip_family_enforcement(ip_family="ipv6_only")
-            if self.use_https:
-                if self.enforce_tls:
-                    self.log.info("#####Enforcing TLS########")
-                    ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
-                    status = ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master])
-                    if not status:
-                        self.fail("Port binding after enforcing TLS incorrect")
             # Perform a custom rebalance by setting input param `custom_rebalance` to True
             # and implement the make_cluster method in a child class. This works by setting
             # skip_rebalance to True and then calling your custom rebalance method.
@@ -589,9 +590,6 @@ class BaseTestCase(unittest.TestCase):
             #output = cli.get_ip_family()
             cli.setting_autofailover(1, 60)
             #self.assertEqual(output[0][0]], "Cluster using ipv6", "Failed to change IP family")
-        if self.input.param("enforce_tls", False):
-            self.log.info('###################### Disabling n2n encryption')
-            ntonencryptionBase().disable_nton_cluster([self.master])
         self.print_cluster_stats()
 
         self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.case_number}'
