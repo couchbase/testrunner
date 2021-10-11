@@ -1,17 +1,13 @@
+import ast
 import copy
-import json
 import logging
 import random
 import string
 import subprocess
-import time
 import traceback
 import unittest
-import os, ast
 
 import logger
-import testconstants
-from couchbase_cli import CouchbaseCLI
 from couchbase_helper.cluster import Cluster
 from couchbase_helper.data_analysis_helper import *
 from couchbase_helper.document import View
@@ -19,11 +15,12 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_helper.documentgenerator import DocumentGenerator
 from couchbase_helper.stats_tools import StatsCommon
 
+from lib import global_vars
 from lib.Cb_constants.CBServer import CbServer
-from lib.couchbase_helper.documentgenerator import SDKDataLoader
+from lib.SystemEventLogLib.Events import EventHelper
 from lib.ep_mc_bin_client import MemcachedClient
 from lib.mc_bin_client import MemcachedClient as MC_MemcachedClient
-from membase.api.exception import ServerUnavailableException, ServerAlreadyJoinedException
+from membase.api.exception import ServerUnavailableException
 from membase.api.rest_client import Bucket, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -39,7 +36,6 @@ from security.rbac_base import RbacBase
 from testconstants import MAX_COMPACTION_THRESHOLD
 from testconstants import MIN_COMPACTION_THRESHOLD
 from testconstants import STANDARD_BUCKET_PORT
-from security.SecretsMasterBase import SecretsMasterBase
 from security.IPv6_IPv4_grub_level import IPv6_IPv4
 
 from couchbase_cli import CouchbaseCLI
@@ -108,6 +104,12 @@ class BaseTestCase(unittest.TestCase):
                 self.kv_servers.append(server)
         if not self.cbas_node and len(self.cbas_servers) >= 1:
             self.cbas_node = self.cbas_servers[0]
+
+        # System event logs object and test parameter
+        global_vars.system_event_logs = EventHelper()
+        self.system_events = global_vars.system_event_logs
+        self.validate_system_event_logs = \
+            self.input.param("validate_sys_event_logs", False)
 
         try:
             self.skip_setup_cleanup = self.input.param("skip_setup_cleanup", False)
@@ -241,6 +243,9 @@ class BaseTestCase(unittest.TestCase):
             if self.standard_bucket_priority is not None:
                 self.standard_bucket_priority = self.standard_bucket_priority.split(":")
 
+            self.validate_system_event_logs = \
+                self.input.param("validate_sys_event_logs", False)
+
             self.log.info("==============  basetestcase setup was started for test #{0} {1}==============" \
                           .format(self.case_number, self._testMethodName))
 
@@ -302,6 +307,9 @@ class BaseTestCase(unittest.TestCase):
                         _task.result()
                 self.log.info("any cluster operation in setup will be skipped")
                 self.primary_index_created = True
+                # Track test start time only if we need system log validation
+                if self.validate_system_event_logs:
+                    self.system_events.set_test_start_time()
                 self.log.info("==============  basetestcase setup was finished for test #{0} {1} ==============" \
                               .format(self.case_number, self._testMethodName))
                 return
@@ -587,6 +595,12 @@ class BaseTestCase(unittest.TestCase):
         return keyword_count_diff
 
     def tearDown(self):
+        # Perform system event log validation and get failures (if any)
+        sys_event_validation_failure = None
+        if self.validate_system_event_logs:
+            sys_event_validation_failure = \
+                self.system_events.validate(self.master)
+
         if self.input.param("enforce_tls", False) or \
                 (self.input.param("ntonencrypt", "disable") == "enable"):
             self.log.info('###################### Disabling n2n encryption')
@@ -630,12 +644,7 @@ class BaseTestCase(unittest.TestCase):
         try:
             if hasattr(self, 'skip_buckets_handle') and self.skip_buckets_handle:
                 return
-            test_failed = (hasattr(self, '_resultForDoCleanups') and
-                           len(self._resultForDoCleanups.failures or
-                               self._resultForDoCleanups.errors)) or \
-                          (hasattr(self, '_exc_info') and
-                           self._exc_info()[1] is not None)
-
+            test_failed = self.is_test_failed()
             if test_failed and TestInputSingleton.input.param("stop-on-failure", False) \
                     or self.input.param("skip_cleanup", False):
                 self.log.warning("CLEANUP WAS SKIPPED")
@@ -688,6 +697,10 @@ class BaseTestCase(unittest.TestCase):
                 #    ntonencryptionBase().disable_nton_cluster(self.servers)
                 if self.input.param("disable_ipv6_grub", False):
                     self._enable_ipv6_grub()
+
+                # Track test start time only if we need system log validation
+                if self.validate_system_event_logs:
+                    self.system_events.set_test_start_time()
                 self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} ==============" \
                               .format(self.case_number, self._testMethodName))
         except BaseException:
@@ -721,6 +734,14 @@ class BaseTestCase(unittest.TestCase):
             self.cluster.shutdown(force=True)
             if not self.skip_log_scan and keyword_count_diff:
                 self.fail(f'Log scan completed, detected new occurrences of error keywords : {keyword_count_diff}')
+
+            # Fail test in case of sys_event_logging failure
+            if (not self.is_test_failed()) and sys_event_validation_failure:
+                self.fail(sys_event_validation_failure)
+            elif sys_event_validation_failure:
+                self.log.critical("System event log validation failed: %s"
+                                  % sys_event_validation_failure)
+
             self._log_finish(self)
 
     def get_index_map(self):
@@ -754,6 +775,14 @@ class BaseTestCase(unittest.TestCase):
             RestConnection(self.servers[0]).log_client_error(msg)
         except:
             pass
+
+    def is_test_failed(self):
+        return (hasattr(self, '_resultForDoCleanups')
+                and len(self._resultForDoCleanups.failures
+                or self._resultForDoCleanups.errors)) \
+            or (
+                hasattr(self, '_exc_info')
+                and self._exc_info()[1] is not None)
 
     def sleep(self, timeout=15, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
