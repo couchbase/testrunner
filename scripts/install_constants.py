@@ -151,9 +151,7 @@ CMDS = {
     "rpm": {
         "uninstall":
             UNMOUNT_NFS_CMD +
-            "systemctl stop couchbase-server; " +
-            "yes | yum remove `rpm -qa | grep couchbase`; " +
-            "rpm -e `rpm -qa | grep couchbase`; " +
+            "yes | yum remove 'couchbase*' > /dev/null; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; " +
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
         "pre_install": "",
@@ -162,7 +160,6 @@ CMDS = {
             "/sbin/sysctl vm.swappiness=0; " +
             "echo never > /sys/kernel/mm/transparent_hugepage/enabled; " +
             "echo never > /sys/kernel/mm/transparent_hugepage/defrag; ",
-        # "install": "yes | INSTALL_DONT_START_SERVER=1 yum localinstall -y buildpath",
         "suse_install": "rpm -i buildpath",
         "post_install": "systemctl -q is-active couchbase-server && echo 1 || echo 0",
         "post_install_retry": "systemctl daemon-reexec; systemctl restart couchbase-server",
