@@ -95,14 +95,10 @@ CMDS = {
     "deb": {
         "uninstall":
             UNMOUNT_NFS_CMD +
-            "dpkg --purge $(dpkg -l | grep couchbase | awk '{print $2}' | xargs echo); kill -9 `ps -ef |egrep couchbase|cut -f3 -d' '`; " +
-            "rm /var/lib/dpkg/info/couchbase-server.*; " +
+            "apt-get remove -y 'couchbase*' > /dev/null; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
         "pre_install": None,
-        "install":
-            "apt-get update > /dev/null;" +
-            "dpkg -i buildpath > /dev/null &&" +
-            "apt-get -f install > /dev/null && echo 1 || echo 0",
+        "install": "DEBIAN_FRONTEND='noninteractive' apt-get -f install buildpath > /dev/null && echo 1 || echo 0",
         "post_install": "systemctl -q is-active couchbase-server.service && echo 1 || echo 0",
         "post_install_retry": "systemctl restart couchbase-server.service",
         "init": None,
@@ -160,7 +156,11 @@ CMDS = {
             "/sbin/sysctl vm.swappiness=0; " +
             "echo never > /sys/kernel/mm/transparent_hugepage/enabled; " +
             "echo never > /sys/kernel/mm/transparent_hugepage/defrag; ",
-        "suse_install": "rpm -i buildpath",
+        "suse_install": "zypper --no-gpg-checks in -y buildpath > /dev/null && echo 1 || echo 0",
+        "suse_uninstall": UNMOUNT_NFS_CMD +
+            "zypper --ignore-unknown rm -y 'couchbase*' > /dev/null; " +
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; " +
+            "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
         "post_install": "systemctl -q is-active couchbase-server && echo 1 || echo 0",
         "post_install_retry": "systemctl daemon-reexec; systemctl restart couchbase-server",
         "init": None,

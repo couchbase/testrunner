@@ -114,6 +114,8 @@ class NodeHelper:
             need_nonroot_relogin = True
         if self.actions_dict[self.info.deliverable_type]["uninstall"]:
             cmd = self.actions_dict[self.info.deliverable_type]["uninstall"]
+            if "suse" in self.get_os():
+                cmd = self.actions_dict[self.info.deliverable_type]["suse_uninstall"]
             if "msi" in cmd:
                 '''WINDOWS UNINSTALL'''
                 self.shell.terminate_processes(self.info, [s for s in testconstants.WIN_PROCESSES_KILLED])
