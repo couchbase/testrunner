@@ -148,6 +148,7 @@ def get_servers_aws(descriptor, how_many, options, os_version, is_addl_pool, poo
                 ]
             },
         ],
+        InstanceInitiatedShutdownBehavior='terminate'
     )
     instance_ids = [instance.id for instance in instances]
     print("Waiting for instances: ", instance_ids)
@@ -175,6 +176,8 @@ def get_servers_aws(descriptor, how_many, options, os_version, is_addl_pool, poo
         ssh.exec_command("sudo sed -i '/PermitRootLogin forced-commands-only/c\#PermitRootLogin forced-commands-only' /etc/ssh/sshd_config")
         ssh.exec_command("sudo sed -i '/PasswordAuthentication no/c\PasswordAuthentication yes' /etc/ssh/sshd_config")
         ssh.exec_command("sudo service sshd restart")
+        # terminate the instance after 12 hours
+        ssh.exec_command("sudo shutdown -P +720")
 
     return ips
 
