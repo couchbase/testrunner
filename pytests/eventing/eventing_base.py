@@ -251,9 +251,9 @@ class EventingBaseTest(QueryHelperTests):
                 body['depcfg']['curl'][0]['bearer_key']=self.bearer_key
         body['settings']['language_compatibility']=language_compatibility
         if self.non_default_collection:
-            body['function_group'] = {"bucket": self.src_bucket_name, "scope": self.src_bucket_name}
+            body['function_scope'] = {"bucket": self.src_bucket_name, "scope": self.src_bucket_name}
         else:
-            body['function_group'] = {"bucket": self.src_bucket_name, "scope": "_default"}
+            body['function_scope'] = {"bucket": self.src_bucket_name, "scope": "_default"}
         content1 = self.rest.create_function(body['appname'], body)
         self.log.info("saving function {}".format(content1))
         return body
@@ -1184,9 +1184,9 @@ class EventingBaseTest(QueryHelperTests):
             if self.auth_type=="bearer":
                 body['depcfg']['curl'][0]['bearer_key']=self.bearer_key
         if self.non_default_collection:
-            body['function_group'] = {"bucket": self.src_bucket_name, "scope": self.src_bucket_name}
+            body['function_scope'] = {"bucket": self.src_bucket_name, "scope": self.src_bucket_name}
         else:
-            body['function_group'] = {"bucket": self.src_bucket_name, "scope": "_default"}
+            body['function_scope'] = {"bucket": self.src_bucket_name, "scope": "_default"}
         self.rest.create_function(body['appname'], body)
         self.log.info("saving function {}".format(body['appname']))
         return body
