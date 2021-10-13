@@ -848,9 +848,10 @@ class x509main:
                     ids.append(ca_id)
         ca_names = self.get_ca_names_from_ids(ids=ids, server=server)
         for ca_id in ids:
-            status, content = rest.delete_trusted_CA(ca_id=ca_id)
+            status, content, response = rest.delete_trusted_CA(ca_id=ca_id)
             if not status:
-                raise Exception("Could not delete trusted CA with id {0}".format(id))
+                raise Exception("Could not delete trusted CA with id {0}. "
+                                "Failed with content {1} response {2} ".format(ca_id, content, response))
         if mark_deleted:
             for ca_name in ca_names:
                 ca_name = ca_name.rstrip("rotated")
@@ -875,6 +876,7 @@ class x509main:
         """
         copy chain.pem & pkey.key there to inbox of server
         """
+        self.create_inbox_folder_on_server(server=server)
         node_ca_key_path, node_ca_path = self.get_node_cert(server)
         dest_pem_path = self.install_path + x509main.CHAINFILEPATH + "/chain.pem"
         self.copy_file_from_slave_to_server(server, node_ca_path, dest_pem_path)
@@ -983,7 +985,7 @@ class Validation:
                     time.sleep(5)
 
     @staticmethod
-    def creates_sdk(client, start=0, end=300):
+    def creates_sdk(client, start=0, end=10000):
         """
         Given a sdk client, performs creates
         TODO: Validate this creates ?

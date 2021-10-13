@@ -5929,11 +5929,11 @@ class RestConnection(object):
 
         Deletes a trusted CA from the cluster, given its ID
         """
-        status, content, header = self._http_request(self.baseUrl
+        status, content, response = self._http_request(self.baseUrl
                                                      + "/pools/default/trustedCAs/"
                                                      + str(ca_id),
                                                      'DELETE')
-        return status, content
+        return status, content, response
 
     def client_cert_auth(self, state, prefixes):
         """
