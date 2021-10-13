@@ -211,11 +211,7 @@ class AutoFailoverBaseTest(BaseTestCase):
         self.task_manager.schedule(node_monitor_task, sleep_time=5)
         return node_monitor_task
 
-    def enable_firewall(self):
-        """
-        Enable firewall on the nodes to fail in the tests.
-        :return: Nothing
-        """
+    def async_enable_firewall(self):
         node_down_timer_tasks = []
         for node in self.server_to_fail:
             node_failure_timer_task = NodeDownTimerTask(node.ip)
@@ -229,17 +225,21 @@ class AutoFailoverBaseTest(BaseTestCase):
                                             failure_timers=node_down_timer_tasks)
         for node_down_timer_task in node_down_timer_tasks:
             self.node_failure_task_manager.schedule(node_down_timer_task, 2)
+        return task
+
+    def enable_firewall(self):
+        """
+        Enable firewall on the nodes to fail in the tests.
+        :return: Nothing
+        """
+        task = self.async_enable_firewall()
         self.task_manager.schedule(task)
         try:
             task.result()
         except Exception as e:
             self.fail("Exception: {}".format(e))
 
-    def disable_firewall(self):
-        """
-        Disable firewall on the nodes to fail in the tests
-        :return: Nothing
-        """
+    def async_disable_firewall(self):
         self.time_start = time.time()
         task = AutoFailoverNodesFailureTask(self.orchestrator,
                                             self.server_to_fail,
@@ -248,17 +248,21 @@ class AutoFailoverBaseTest(BaseTestCase):
                                             self.pause_between_failover_action,
                                             False,
                                             self.timeout_buffer, False)
+        return task
+
+    def disable_firewall(self):
+        """
+        Disable firewall on the nodes to fail in the tests
+        :return: Nothing
+        """
+        task = self.async_disable_firewall()
         self.task_manager.schedule(task)
         try:
             task.result()
         except Exception as e:
             self.fail("Exception: {}".format(e))
 
-    def restart_couchbase_server(self):
-        """
-        Restart couchbase server on the nodes to fail in the tests
-        :return: Nothing
-        """
+    def async_restart_couchbase_server(self):
         node_down_timer_tasks = []
         for node in self.server_to_fail:
             node_failure_timer_task = NodeDownTimerTask(node.ip, node.port)
@@ -273,17 +277,21 @@ class AutoFailoverBaseTest(BaseTestCase):
                                             failure_timers=node_down_timer_tasks)
         for node_down_timer_task in node_down_timer_tasks:
             self.node_failure_task_manager.schedule(node_down_timer_task, 2)
+        return task
+
+    def restart_couchbase_server(self):
+        """
+        Restart couchbase server on the nodes to fail in the tests
+        :return: Nothing
+        """
+        task = self.async_restart_couchbase_server()
         self.task_manager.schedule(task)
         try:
             task.result()
         except Exception as e:
             self.fail("Exception: {}".format(e))
 
-    def stop_couchbase_server(self):
-        """
-        Stop couchbase server on the nodes to fail in the tests
-        :return: Nothing
-        """
+    def async_stop_couhbase_server(self):
         node_down_timer_tasks = []
         for node in self.server_to_fail:
             node_failure_timer_task = NodeDownTimerTask(node.ip, node.port)
@@ -298,35 +306,41 @@ class AutoFailoverBaseTest(BaseTestCase):
                                             failure_timers=node_down_timer_tasks)
         for node_down_timer_task in node_down_timer_tasks:
             self.node_failure_task_manager.schedule(node_down_timer_task, 2)
+        return task
+
+    def stop_couchbase_server(self):
+        """
+        Stop couchbase server on the nodes to fail in the tests
+        :return: Nothing
+        """
+        task = self.async_stop_couhbase_server()
         self.task_manager.schedule(task)
         try:
             task.result()
         except Exception as e:
             self.fail("Exception: {}".format(e))
+
+    def async_start_couchbase_server(self):
+        task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                            self.server_to_fail,
+                                            "start_couchbase", self.timeout,
+                                            0, False, self.timeout_buffer,
+                                            False)
+        return task
 
     def start_couchbase_server(self):
         """
         Start the couchbase server on the nodes to fail in the tests
         :return: Nothing
         """
-        task = AutoFailoverNodesFailureTask(self.orchestrator,
-                                            self.server_to_fail,
-                                            "start_couchbase", self.timeout,
-                                            0, False, self.timeout_buffer,
-                                            False)
+        task = self.async_start_couchbase_server()
         self.task_manager.schedule(task)
         try:
             task.result()
         except Exception as e:
             self.fail("Exception: {}".format(e))
 
-    def stop_restart_network(self):
-        """
-        Stop and restart network for said timeout period on the nodes to
-        fail in the tests
-        :return: Nothing
-        """
-
+    def async_stop_restart_network(self):
         node_down_timer_tasks = []
         for node in self.server_to_fail:
             node_failure_timer_task = NodeDownTimerTask(node.ip)
@@ -340,18 +354,22 @@ class AutoFailoverBaseTest(BaseTestCase):
                                             failure_timers=node_down_timer_tasks)
         for node_down_timer_task in node_down_timer_tasks:
             self.node_failure_task_manager.schedule(node_down_timer_task, 2)
+        return task
+
+    def stop_restart_network(self):
+        """
+        Stop and restart network for said timeout period on the nodes to
+        fail in the tests
+        :return: Nothing
+        """
+        task = self.async_stop_couhbase_server()
         self.task_manager.schedule(task)
         try:
             task.result()
         except Exception as e:
             self.fail("Exception: {}".format(e))
 
-    def restart_machine(self):
-        """
-        Restart the nodes to fail in the tests
-        :return: Nothing
-        """
-
+    def async_restart_machine(self):
         node_down_timer_tasks = []
         for node in self.server_to_fail:
             node_failure_timer_task = NodeDownTimerTask(node.ip)
@@ -365,6 +383,14 @@ class AutoFailoverBaseTest(BaseTestCase):
                                             failure_timers=node_down_timer_tasks)
         for node_down_timer_task in node_down_timer_tasks:
             self.node_failure_task_manager.schedule(node_down_timer_task, 2)
+        return task
+
+    def restart_machine(self):
+        """
+        Restart the nodes to fail in the tests
+        :return: Nothing
+        """
+        task = self.async_restart_machine()
         self.task_manager.schedule(task)
         try:
             task.result()
@@ -383,11 +409,7 @@ class AutoFailoverBaseTest(BaseTestCase):
                         self.sleep(60, "Sleep for couple of minutes and try "
                                        "again")
 
-    def stop_memcached(self):
-        """
-        Stop the memcached on the nodes to fail in the tests
-        :return: Nothing
-        """
+    def async_stop_memcached(self):
         node_down_timer_tasks = []
         for node in self.server_to_fail:
             node_failure_timer_task = NodeDownTimerTask(node.ip, 11211)
@@ -402,6 +424,14 @@ class AutoFailoverBaseTest(BaseTestCase):
                                             failure_timers=node_down_timer_tasks)
         for node_down_timer_task in node_down_timer_tasks:
             self.node_failure_task_manager.schedule(node_down_timer_task, 2)
+        return task
+
+    def stop_memcached(self):
+        """
+        Stop the memcached on the nodes to fail in the tests
+        :return: Nothing
+        """
+        task = self.async_stop_memcached()
         self.task_manager.schedule(task)
         try:
             task.result()
@@ -416,12 +446,7 @@ class AutoFailoverBaseTest(BaseTestCase):
             self.task_manager.schedule(task)
             task.result()
 
-    def split_network(self):
-        """
-        Split the network in the cluster. Stop network traffic from few
-        nodes while allowing the traffic from rest of the cluster.
-        :return: Nothing
-        """
+    def async_split_network(self):
         self.time_start = time.time()
         if self.server_to_fail.__len__() < 2:
             self.fail("Need atleast 2 servers to fail")
@@ -431,6 +456,15 @@ class AutoFailoverBaseTest(BaseTestCase):
                                             self.pause_between_failover_action,
                                             False,
                                             self.timeout_buffer)
+        return task
+
+    def split_network(self):
+        """
+        Split the network in the cluster. Stop network traffic from few
+        nodes while allowing the traffic from rest of the cluster.
+        :return: Nothing
+        """
+        task = self.async_split_network()
         self.task_manager.schedule(task)
         try:
             task.result()
