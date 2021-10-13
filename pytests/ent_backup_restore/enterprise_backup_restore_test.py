@@ -4703,6 +4703,30 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         # Delete a bucket
         self.backup_remove(self.backups.pop(-2), verify_cluster_stats=False)
 
+    def test_magma_couchstore_compatibility(self):
+        """ Test that couchstore and magma are compatible
+
+        Backup couchstore > restore to magma
+        Backup magma > restore to couchstore
+        """
+        restore_backend = "couchstore" if self.input.param("bucket_storage", "") == "magma" else "magma"
+
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self.log.info("*** start to load items to all buckets")
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.log.info("*** done loading items to all buckets")
+
+        self.backup_create_validate()
+        self.backup_cluster_validate()
+
+        # Tear down and replace bucket with opposite storage backend
+        rest_client = RestConnection(self.master)
+        rest_client.delete_bucket()
+        rest_client.create_bucket(bucket="default", ramQuotaMB=256,
+                                  storageBackend=restore_backend, replicaNumber=0)
+
+        self.backup_restore_validate()
+
     def test_ee_only_features(self):
         """ Test that EE only features do not work on CE servers
 
