@@ -1293,7 +1293,7 @@ class CouchbaseCluster:
                 bucket_params['eviction_policy'] = eviction_policy
             else:
                 bucket_params['eviction_policy'] = EVICTION_POLICY.VALUE_ONLY
-            bucket_params['bucket_storage'] = bucket_storage
+        bucket_params['bucket_storage'] = bucket_storage
         bucket_params['bucket_priority'] = bucket_priority
         bucket_params['flush_enabled'] = flush_enabled
         bucket_params['lww'] = lww
