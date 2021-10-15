@@ -138,7 +138,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         self.configuration_factory = HttpsConfigurationFactory(self.master, hints=self.ssl_hints) if self.use_https else HttpConfigurationFactory(self.master)
 
         # Rest API Configuration
-        self.configuration = self.configuration_factory.create_configuration(self.input.param("no-ssl-verify", False))
+        self.configuration = self.configuration_factory.create_configuration()
 
         # Create Api Client
         self.api_client = ApiClient(self.configuration)
