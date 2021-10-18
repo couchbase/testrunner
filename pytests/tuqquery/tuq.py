@@ -38,6 +38,7 @@ from pytests.fts.fts_base import FTSIndex
 from pytests.fts.random_query_generator.rand_query_gen import DATASET
 from pytests.fts.fts_base import CouchbaseCluster
 from collection.collections_n1ql_client import CollectionsN1QL
+from lib.Cb_constants.CBServer import CbServer
 
 JOIN_INNER = "INNER"
 JOIN_LEFT = "LEFT"
@@ -3885,10 +3886,14 @@ class QueryTests(BaseTestCase):
     '''Create a library with functions, check to see that the library was created and the functions were created'''
     def create_library(self, library_name='', functions={}, function_names=[], replace= False):
         created = False
-        url = f"http://{self.master.ip}:{self.n1ql_port}/evaluator/v1/libraries/{library_name}"
+        protocol = "http"
+        if self.use_https:
+            self.n1ql_port = CbServer.ssl_n1ql_port
+            protocol = "https"
+        url = f"{protocol}://{self.master.ip}:{self.n1ql_port}/evaluator/v1/libraries/{library_name}"
         data = f'{functions}'
-        self.shell.execute_command(f"{self.curl_path} -X POST {url} -u Administrator:password -H 'content-type: application/json' -d '{data}'")
-        libraries = self.shell.execute_command(f"{self.curl_path} {url} -u Administrator:password")
+        self.shell.execute_command(f"{self.curl_path} -k -X POST {url} -u Administrator:password -H 'content-type: application/json' -d '{data}'")
+        libraries = self.shell.execute_command(f"{self.curl_path} -k {url} -u Administrator:password")
         if library_name in str(libraries[0]):
             created = True
         else:
