@@ -37,6 +37,8 @@ from lib.memcached.helper.data_helper import VBucketAwareMemcached, MemcachedCli
 from ent_backup_restore.provider.s3 import S3
 from ent_backup_restore.provider.gcp import GCP
 
+from pytests.security.x509_multiple_CA_util import x509main
+
 SOURCE_CB_PARAMS = {
     "authUser": "default",
     "authPassword": "",
@@ -363,6 +365,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                           self.num_items,
                                                           self.vbuckets,
                                                           self.objstore_provider)
+
+        self.multi_root_certs = self.input.param("x509", False)
+        if self.multi_root_certs:
+            self.setup_multi_root_certs()
 
     def clean_up(self, server, skip_eject_and_rebalance=False):
         """ Clean up files and directories left by backup testing.
@@ -3009,6 +3015,17 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def _common_objstore_arguments(self):
         return self.backupset.common_objstore_arguments(self.objstore_provider)
+
+    def setup_multi_root_certs(self):
+        self.x509 = x509main(host=self.master)
+        for server in self.servers:
+            self.x509.delete_inbox_folder_on_server(server=server)
+        self.x509.teardown_certs(servers=self.servers)
+        self.x509.generate_multiple_x509_certs(servers=self.servers)
+        self.log.info("Manifest #########\n {0}".format(json.dumps(self.x509.manifest, indent=4)))
+        for server in self.servers:
+            self.x509.upload_root_certs(server)
+        self.x509.upload_node_certs(servers=self.servers)
 
 
 class Backupset:
