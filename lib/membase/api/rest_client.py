@@ -1037,7 +1037,7 @@ class RestConnection(object):
                 except AttributeError:
                     pass
 
-                if response['status'] in ['200', '201', '202']:
+                if response['status'] in ['200', '201', '202', '204']:
                     return True, content, response
                 else:
                     try:
