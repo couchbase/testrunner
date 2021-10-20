@@ -39,6 +39,8 @@ class MultipleCA(BaseTestCase):
         :api: - full url to make a rest call
         :servers: a list of servers to make sdk connection/rest connection against
         """
+        # MB-48998 (temporarily return)
+        return None
         if client_certs is None:
             client_certs = list()
             client_certs.append(self.x509.get_client_cert(int_ca_name="i1_r1"))
@@ -242,3 +244,77 @@ class MultipleCA(BaseTestCase):
         content = self.x509.get_trusted_CAs()
         self.log.info("Trusted CAs: {0}".format(content))
         self.log.info("Active Root CAs names {0}".format(self.x509.root_ca_names))
+
+    def test_cluster_works_fine_after_deleting_CA_folder(self):
+        """
+        1. Init node cluster. Generate x509 certs
+        2. Upload root certs from any random node of the cluster
+        3. Delete CA folder from that node
+        4. Verify that cluster continues to operate fine by checking
+            a) Failover & delta recovery of that node
+            b) Failover & rebalance-out of that node
+            c) Client authentication & sdk writes
+        """
+        self.x509.generate_multiple_x509_certs(servers=self.servers[:self.nodes_init])
+        random_nodes = random.sample(self.servers[1:self.nodes_init], 1)
+        self.log.info("Uploading root certs from {0}".format(random_nodes[0]))
+        self.x509.upload_root_certs(random_nodes[0])
+        self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
+        self.x509.upload_client_cert_settings(server=self.master)
+        shell = RemoteMachineShellConnection(random_nodes[0])
+        shell.remove_directory(self.x509.install_path + x509main.CHAINFILEPATH +
+                               "/" + x509main.TRUSTEDCAPATH)
+        shell.disconnect()
+
+        failover_nodes = random_nodes
+        nodes_in_cluster = self.servers[:self.nodes_init]
+        for operation in ["recovery", "out"]:
+            shell = RemoteMachineShellConnection(failover_nodes[0])
+            shell.stop_server()
+            self.cluster.async_failover(self.servers[:self.nodes_init],
+                                        failover_nodes,
+                                        graceful=False)
+            self.wait_for_failover_or_assert(1)
+            if operation == "out":
+                task = self.cluster.async_rebalance(self.servers[:self.nodes_init], [],
+                                                    failover_nodes)
+                self.wait_for_rebalance_to_complete(task)
+                nodes_in_cluster = nodes_in_cluster.remove(failover_nodes[0])
+            shell.start_server(failover_nodes[0])
+            if operation == "recovery":
+                rest = RestConnection(self.master)
+                for node in failover_nodes:
+                    rest.set_recovery_type("ns_1@" + node.ip, recoveryType="delta")
+                task = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
+                self.wait_for_rebalance_to_complete(task)
+        self.auth(servers=nodes_in_cluster)
+
+    def test_CA_upload_from_all_nodes(self):
+        """
+        1. Init node cluster
+        2. Upload CAs: [ca1] from inbox/CA folder of first node
+        3. Upload CAs: [ca2] from inbox/CA folder of second node
+        4 Upload CAs: [ca3, ca4] from inbox/CA folder of third node
+        5.Verify that the net trusted CAs for the cluster is now: [ca1, ca2, ca3, ca4]
+        """
+        self.x509.generate_multiple_x509_certs(servers=self.servers[:self.nodes_init])
+        self.x509.upload_root_certs(server=self.master, root_ca_names=[x509main.root_ca_names[0]])
+        self.x509.upload_root_certs(server=self.servers[:self.nodes_init][1],
+                                    root_ca_names=[x509main.root_ca_names[1]])
+        self.x509.upload_root_certs(server=self.servers[:self.nodes_init][2],
+                                    root_ca_names=x509main.root_ca_names[2:])
+        self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
+        self.x509.upload_client_cert_settings(server=self.master)
+        self.auth(servers=self.nodes_init)
+        content = self.x509.get_trusted_CAs()
+        self.log.info("Trusted CAs: {0}".format(content))
+        expected_root_ca_names = x509main.root_ca_names
+        actual_root_ca_names = list()
+        for ca_dict in content:
+            subject = ca_dict["subject"]
+            root_ca_name = subject.split("CN=")[1]
+            if "Couchbase Server" not in root_ca_name:
+                actual_root_ca_names.append(root_ca_name)
+        if set(actual_root_ca_names) != set(expected_root_ca_names):
+            self.fail("Expected {0} Actual {1}".format(expected_root_ca_names,
+                                                       actual_root_ca_names))

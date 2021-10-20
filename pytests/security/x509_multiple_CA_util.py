@@ -38,6 +38,8 @@ class x509main:
     CACERTFILEPATH = "/tmp/multiple_certs_test_random" + str(random.randint(1, 100)) + "/"
     CHAINFILEPATH = "inbox"
     TRUSTEDCAPATH = "CA"
+    SCRIPTSPATH = "scripts/"
+    SCRIPTFILEPATH = "/passphrase.sh"
     SLAVE_HOST = ServerInfo('127.0.0.1', 22, 'root', 'couchbase')
     CLIENT_CERT_AUTH_JSON = 'client_cert_auth1.json'
     CLIENT_CERT_AUTH_TEMPLATE = 'client_cert_config_template.txt'
@@ -68,7 +70,6 @@ class x509main:
                  encryption_type="aes256",
                  key_length=1024,
                  passphrase_type="plain",
-                 passphrase_script_path="default",
                  passphrase_script_args=None,
                  passhprase_url="https://testingsomething.free.beeceptor.com/",
                  passphrase_plain="default",
@@ -104,7 +105,6 @@ class x509main:
         self.key_length = key_length
         # Node private key passphrase settings
         self.passphrase_type = passphrase_type  # 'script'/'rest'/'plain'
-        self.passphrase_script_path = passphrase_script_path  # path on node to store the bash script
         self.passphrase_script_args = passphrase_script_args
         self.passphrase_url = passhprase_url
         self.passphrase_plain = passphrase_plain
@@ -159,11 +159,27 @@ class x509main:
         shell.execute_command("rm -rf " + final_path)
         shell.disconnect()
 
+    def delete_scripts_folder_on_server(self, server=None):
+        if server is None:
+            server = self.host
+        shell = RemoteMachineShellConnection(server)
+        final_path = self.install_path + x509main.SCRIPTSPATH
+        shell.execute_command("rm -rf " + final_path)
+        shell.disconnect()
+
     def create_inbox_folder_on_server(self, server=None):
         if server is None:
             server = self.host
         shell = RemoteMachineShellConnection(server)
         final_path = self.install_path + x509main.CHAINFILEPATH
+        shell.create_directory(final_path)
+        shell.disconnect()
+
+    def create_scripts_folder_on_server(self, server=None):
+        if server is None:
+            server = self.host
+        shell = RemoteMachineShellConnection(server)
+        final_path = self.install_path + x509main.SCRIPTSPATH
         shell.create_directory(final_path)
         shell.disconnect()
 
@@ -752,13 +768,9 @@ class x509main:
                 params["privateKeyPassphrase"] = dict()
                 params["privateKeyPassphrase"]["type"] = self.passphrase_type
                 if self.passphrase_type == "script":
-                    if self.passphrase_script_path != "default":
-                        params["privateKeyPassphrase"]["path"] = self.passphrase_script_path + \
-                                                                 "/passphrase.sh"
-                    else:
-                        params["privateKeyPassphrase"]["path"] = self.install_path + \
-                                                                 x509main.CHAINFILEPATH + \
-                                                                 "/passphrase.sh"
+                    params["privateKeyPassphrase"]["path"] = self.install_path + \
+                                                             x509main.SCRIPTSPATH + \
+                                                             x509main.SCRIPTFILEPATH
                     params["privateKeyPassphrase"]["timeout"] = self.passphrase_load_timeout
                     params["privateKeyPassphrase"]["trim"] = 'true'
                     if self.passphrase_script_args:
@@ -877,6 +889,7 @@ class x509main:
         copy chain.pem & pkey.key there to inbox of server
         """
         self.create_inbox_folder_on_server(server=server)
+        self.create_scripts_folder_on_server(server=server)
         node_ca_key_path, node_ca_path = self.get_node_cert(server)
         dest_pem_path = self.install_path + x509main.CHAINFILEPATH + "/chain.pem"
         self.copy_file_from_slave_to_server(server, node_ca_path, dest_pem_path)
@@ -885,13 +898,8 @@ class x509main:
         if self.standard == "pkcs8" and self.encryption_type and \
                 self.passphrase_type == "script":
             node_key_passphrase_path = self.get_node_private_key_passphrase_script(server)
-            if self.passphrase_script_path == "default":
-                dest_node_key_passphrase_path = self.install_path + \
-                                                x509main.CHAINFILEPATH + \
-                                                "/passphrase.sh"
-            else:
-                dest_node_key_passphrase_path = self.passphrase_script_path + \
-                                                "/passphrase.sh"
+            dest_node_key_passphrase_path = self.install_path + x509main.SCRIPTSPATH + \
+                                            x509main.SCRIPTFILEPATH
             self.copy_file_from_slave_to_server(server, node_key_passphrase_path,
                                                 dest_node_key_passphrase_path)
             shell = RemoteMachineShellConnection(server)
@@ -916,6 +924,7 @@ class x509main:
         self.remove_directory(x509main.CACERTFILEPATH)
         for server in servers:
             self.delete_inbox_folder_on_server(server=server)
+            self.delete_scripts_folder_on_server(server=server)
         for server in servers:
             self.regenerate_certs(server=server)
             self.delete_trusted_CAs(server=server)
