@@ -255,6 +255,7 @@ class RemoteMachineShellConnection(KeepRefs):
         self._ssh_client = paramiko.SSHClient()
         self.ip = serverInfo.ip
         self.internal_ip = serverInfo.internal_ip if hasattr(serverInfo, "internal_ip") else None
+        self.cluster_ip = self.internal_ip or self.ip
         self.remote = (self.ip != "localhost" and self.ip != "127.0.0.1")
         self.port = serverInfo.port
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -4583,14 +4584,14 @@ class RemoteMachineShellConnection(KeepRefs):
 
         if command != "key" and command != "raw":
             command = "%s %s:11210 %s -u %s -p %s -b %s %s " % (cbstat_command,
-                                                             self.internal_ip, command,
+                                                             self.cluster_ip, command,
                                                              cbadmin_user,
                                                              cbadmin_password,
                                                              bucket.name,
                                                              options)
         else:
             command = "%s %s:11210 %s -u %s -p %s %s %s %s " % (cbstat_command,
-                                                             self.internal_ip, command,
+                                                             self.cluster_ip, command,
                                                              cbadmin_user,
                                                              cbadmin_password,
                                                              keyname, vbid,
@@ -4622,14 +4623,14 @@ class RemoteMachineShellConnection(KeepRefs):
 
         if command != "key" and command != "raw":
             command = "%s -h %s:11210 %s -u %s -P %s -b %s %s " % (cbstat_command,
-                                                             self.internal_ip, command,
+                                                             self.cluster_ip, command,
                                                              cbadmin_user,
                                                              cbadmin_password,
                                                              bucket.name,
                                                              connection_method)
         else:
             command = "%s -h %s:11210 %s -u %s -P %s %s %s %s " % (cbstat_command,
-                                                             self.internal_ip, command,
+                                                             self.cluster_ip, command,
                                                              cbadmin_user,
                                                              cbadmin_password,
                                                              keyname, vbid,
