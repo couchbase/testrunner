@@ -2556,7 +2556,10 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             if not bk_cluster_services:
                 bk_cluster_services = bk_cluster_services.append(self.input.clusters[0][1].services)
             self.sleep(12, "time needs for index service is up (MB-39859)")
-            rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [self.input.clusters[0][1]], [], services=bk_cluster_services[0])
+            rest_rs.add_node(self.input.clusters[0][1].rest_username,
+                    self.input.clusters[0][1].rest_password,
+                    self.input.clusters[0][1].cluster_ip, services=bk_cluster_services[0])
+            rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
             rebalance.result()
             count = 0
             while count < 15:
