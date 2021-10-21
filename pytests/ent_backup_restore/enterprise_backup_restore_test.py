@@ -112,18 +112,36 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         restored = {"{0}/{1}".format(start, end): ""}
         for i in range(1, self.backupset.number_of_backups + 1):
             if self.reset_restore_cluster:
-                self.log.info("*** start to reset cluster")
+                self.log.info("\n*** start to reset cluster")
                 self.backup_reset_clusters(self.cluster_to_restore)
+                cmd_init = 'node-init'
                 if self.same_cluster:
+                    self.log.info("Same cluster")
                     self._initialize_nodes(Cluster(), self.servers[:self.nodes_init])
+                    if self.hostname and self.master.ip.endswith(".com"):
+                        options = '--node-init-hostname ' + self.master.ip
+                        shell = RemoteMachineShellConnection(self.master)
+                        shell.execute_couchbase_cli(cli_command=cmd_init,
+                                                    options=options,
+                                                    cluster_host="localhost",
+                                                    user=self.master.rest_username,
+                                                    password=self.master.rest_username)
+                        shell.disconnect()
                 else:
+                    self.log.info("Different cluster")
                     shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
                     shell.enable_diag_eval_on_non_local_hosts()
-                    shell.disconnect()
                     rest = RestConnection(self.backupset.restore_cluster_host)
                     rest.force_eject_node()
                     rest.init_node()
-                self.log.info("Done reset cluster")
+                    if self.hostname and self.backupset.restore_cluster_host.ip.endswith(".com"):
+                        options = '--node-init-hostname ' + self.backupset.restore_cluster_host.ip
+                        shell.execute_couchbase_cli(cli_command=cmd_init, options=options,
+                                                    cluster_host="localhost",
+                                                    user=self.backupset.restore_cluster_host.rest_username,
+                                                    password=self.backupset.restore_cluster_host.rest_username)
+                    shell.disconnect()
+                self.log.info("\n*** Done reset cluster")
             self.sleep(10)
 
             """ Add built-in user cbadminbucket to second cluster """
