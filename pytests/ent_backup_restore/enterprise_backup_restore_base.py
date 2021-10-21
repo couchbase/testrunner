@@ -2951,15 +2951,28 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.restore_cluster_host.services = ",".join(bk_services)
         rest_rs.force_eject_node()
         ready = RestHelper(rest_rs).is_ns_server_running()
+
+        shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         if ready:
-            shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             shell.enable_diag_eval_on_non_local_hosts()
-            shell.disconnect()
         sv_in_rs = self.backupset.restore_cluster_host.services
         if self.backupset.restore_cluster_host.services and \
             "," in self.backupset.restore_cluster_host.services[0]:
             sv_in_rs = self.backupset.restore_cluster_host.services[0].split(",")
         kv_quota = rest_rs.init_node(sv_in_rs)
+        """ set node to hostname if hostname=true """
+        if self.hostname and self.backupset.restore_cluster_host.ip.endswith(".com"):
+            self.log.info("\n*** Set node with hostname")
+            cmd_init = 'node-init'
+            options = '--node-init-hostname ' + self.backupset.restore_cluster_host.ip
+            output, _ = shell.execute_couchbase_cli(cli_command=cmd_init, options=options,
+                                        cluster_host="localhost",
+                                        user=self.backupset.restore_cluster_host.rest_username,
+                                        password=self.backupset.restore_cluster_host.rest_password)
+            if not self._check_output("SUCCESS: Node initialize", output):
+                raise("Failed to set hostname")
+        shell.disconnect()
+
         if len(bk_cluster_services) > 1:
             bk_cluster_services.remove(bk_services)
         if len(self.input.clusters[0]) > 1:

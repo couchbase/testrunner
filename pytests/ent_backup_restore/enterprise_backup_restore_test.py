@@ -121,12 +121,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                     if self.hostname and self.master.ip.endswith(".com"):
                         options = '--node-init-hostname ' + self.master.ip
                         shell = RemoteMachineShellConnection(self.master)
-                        shell.execute_couchbase_cli(cli_command=cmd_init,
+                        output, _ = shell.execute_couchbase_cli(cli_command=cmd_init,
                                                     options=options,
                                                     cluster_host="localhost",
                                                     user=self.master.rest_username,
-                                                    password=self.master.rest_username)
+                                                    password=self.master.rest_password)
                         shell.disconnect()
+                        if not self._check_output("SUCCESS: Node initialize", output):
+                            raise("Failed to set hostname")
                 else:
                     self.log.info("Different cluster")
                     shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
@@ -136,10 +138,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                     rest.init_node()
                     if self.hostname and self.backupset.restore_cluster_host.ip.endswith(".com"):
                         options = '--node-init-hostname ' + self.backupset.restore_cluster_host.ip
-                        shell.execute_couchbase_cli(cli_command=cmd_init, options=options,
+                        output, _ = shell.execute_couchbase_cli(cli_command=cmd_init, options=options,
                                                     cluster_host="localhost",
                                                     user=self.backupset.restore_cluster_host.rest_username,
-                                                    password=self.backupset.restore_cluster_host.rest_username)
+                                                    password=self.backupset.restore_cluster_host.rest_password)
+                        if not self._check_output("SUCCESS: Node initialize", output):
+                            raise("Failed to set hostname")
                     shell.disconnect()
                 self.log.info("\n*** Done reset cluster")
             self.sleep(10)
