@@ -87,7 +87,7 @@ class auditTest(BaseTestCase):
         rest = RestConnection(self.master)
 
         if (ops in ['create']):
-            expectedResults = {'bucket_name': 'TestBucket', 'ram_quota': 104857600, 'num_replicas': 1,
+            expectedResults = {'bucket_name': 'TestBucket', 'ram_quota': 268435456, 'num_replicas': 1,
                                'replica_index': False, 'eviction_policy': 'value_only', 'type': 'membase',
                                "autocompaction": 'false', "purge_interval": "undefined",
                                "flush_enabled": False, "num_threads": 3, "source": source,
@@ -104,7 +104,7 @@ class auditTest(BaseTestCase):
                                storageBackend=self.bucket_storage)
 
         elif (ops in ['update']):
-            expectedResults = {'bucket_name': 'TestBucket', 'ram_quota': 209715200, 'num_replicas': 1,
+            expectedResults = {'bucket_name': 'TestBucket', 'ram_quota': 268435456, 'num_replicas': 1,
                                'replica_index': False, 'eviction_policy': 'value_only', 'type': 'membase',
                                "autocompaction": 'false', "purge_interval": "undefined", "flush_enabled": 'true',
                                "num_threads": 3, "source": source,
@@ -116,7 +116,7 @@ class auditTest(BaseTestCase):
                                replica_index=0, threadsNumber=expectedResults['num_threads'], flushEnabled=0,
                                evictionPolicy='valueOnly', maxTTL=expectedResults['max_ttl'],
                                storageBackend=self.bucket_storage)
-            expectedResults = {'bucket_name': 'TestBucket', 'ram_quota': 104857600, 'num_replicas': 1,
+            expectedResults = {'bucket_name': 'TestBucket', 'ram_quota': 268435456, 'num_replicas': 1,
                                'replica_index': True, 'eviction_policy': 'value_only', 'type': 'membase',
                                "autocompaction": 'false', "purge_interval": "undefined", "flush_enabled": True,
                                "num_threads": 3, "source": source,
@@ -129,7 +129,7 @@ class auditTest(BaseTestCase):
                                      maxTTL=expectedResults['max_ttl'])
 
         elif (ops in ['delete']):
-            expectedResults = {'bucket_name': 'TestBucket', 'ram_quota': 104857600, 'num_replicas': 1,
+            expectedResults = {'bucket_name': 'TestBucket', 'ram_quota': 268435456, 'num_replicas': 1,
                                'replica_index': True, 'eviction_policy': 'value_only', 'type': 'membase',
                                "autocompaction": 'false', "purge_interval": "undefined", "flush_enabled": False,
                                "num_threads": 3, "source": source,
@@ -143,7 +143,7 @@ class auditTest(BaseTestCase):
             rest.delete_bucket(expectedResults['bucket_name'])
 
         elif (ops in ['flush']):
-            expectedResults = {'bucket_name': 'TestBucket', 'ram_quota': 100, 'num_replicas': 1, 'replica_index': True,
+            expectedResults = {'bucket_name': 'TestBucket', 'ram_quota': 256, 'num_replicas': 1, 'replica_index': True,
                                'eviction_policy': 'value_only', 'type': 'membase',
                                "autocompaction": 'false', "purge_interval": "undefined", "flush_enabled": True,
                                "num_threads": 3, "source": source,
