@@ -2107,15 +2107,25 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 ready = RestHelper(rest).is_ns_server_running()
                 if ready:
                     if server is not None:
+                        cmd_init = 'node-init'
                         shell = RemoteMachineShellConnection(server)
                         shell.enable_diag_eval_on_non_local_hosts()
+                        if self.hostname and server.ip.endswith(".com"):
+                            options = '--node-init-hostname ' + server.ip
+                            output, _ = shell.execute_couchbase_cli(cli_command=cmd_init,
+                                                    options=options,
+                                                    cluster_host="localhost",
+                                                    user=server.rest_username,
+                                                    password=server.rest_password)
                         shell.disconnect()
+                        if not self._check_output("SUCCESS: Node initialize", output):
+                            raise("Failed to set hostname")
                 else:
                     self.fail("NS server is not ready after reset node")
         rest.set_indexer_storage_mode(username='Administrator',
                                       password='password',
                                       storageMode=storageMode)
-        self.log.info("Done reset node")
+        self.log.info("\n*** Done reset storage mode")
         sv_in_rs = self.backupset.restore_cluster_host.services
         if self.backupset.restore_cluster_host.services and \
             "," in self.backupset.restore_cluster_host.services[0]:

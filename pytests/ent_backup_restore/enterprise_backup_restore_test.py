@@ -1669,6 +1669,17 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if info.memoryQuota and int(info.memoryQuota) > 0:
             self.quota = info.memoryQuota
         rest.init_node()
+        if self.hostname and self.backupset.restore_cluster_host.ip.endswith(".com"):
+            self.log.info("\n*** Set node with hostname")
+            cmd_init = 'node-init'
+            options = '--node-init-hostname ' + self.backupset.restore_cluster_host.ip
+            output, _ = conn.execute_couchbase_cli(cli_command=cmd_init, options=options,
+                                        cluster_host="localhost",
+                                        user=self.backupset.restore_cluster_host.rest_username,
+                                        password=self.backupset.restore_cluster_host.rest_password)
+            if not self._check_output("SUCCESS: Node initialize", output):
+                raise("Failed to set hostname")
+        conn.disconnect()
         self.sleep(10)
         self.backup_restore_validate()
 
