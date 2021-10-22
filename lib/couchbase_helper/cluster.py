@@ -185,7 +185,7 @@ class Cluster(object):
         return _task
 
     def async_load_gen_docs_till_dgm(self, server, active_resident_threshold, bucket, scope=None, collection=None, exp=0,
-                                     poll_dgm_mins=1, timeout_mins=60, value_size=512, java_sdk_client=True):
+                                     poll_dgm_mins=1, timeout_mins=60, value_size=512, java_sdk_client=True, kv_dataset="Person"):
         from couchbase_helper.stats_tools import StatsCommon
         import time
         import random
@@ -193,12 +193,10 @@ class Cluster(object):
         if java_sdk_client:
             if scope and collection:
                 kv_gen = SDKDataLoader(doc_size=value_size, doc_expiry=exp, num_ops=10000, percent_create=100,
-                                       percent_update=0,
-                                       percent_delete=0, scope=scope, collection=collection)
+                                        percent_update=0, percent_delete=0, scope=scope, collection=collection, json_template=kv_dataset)
             else:
                 kv_gen = SDKDataLoader(doc_size=value_size, doc_expiry=exp, num_ops=10000, percent_create=100,
-                                   percent_update=0,
-                                   percent_delete=0, all_collections=True)
+                                        percent_update=0, percent_delete=0, all_collections=True, json_template=kv_dataset)
             print("Loading keys to reach dgm limit using catapult")
         else:
             random_key = ''.join(random.choice(string.ascii_uppercase + string.digits) for x in range(6))
