@@ -39,7 +39,7 @@ class x509main:
     CHAINFILEPATH = "inbox"
     TRUSTEDCAPATH = "CA"
     SCRIPTSPATH = "scripts/"
-    SCRIPTFILEPATH = "/passphrase.sh"
+    SCRIPTFILEPATH = "passphrase.sh"
     SLAVE_HOST = ServerInfo('127.0.0.1', 22, 'root', 'couchbase')
     CLIENT_CERT_AUTH_JSON = 'client_cert_auth1.json'
     CLIENT_CERT_AUTH_TEMPLATE = 'client_cert_config_template.txt'
@@ -910,8 +910,14 @@ class x509main:
             output, error = shell.execute_command("chown couchbase:couchbase " +
                                                   dest_node_key_passphrase_path)
             self.log.info('Output message is {0} and error message is {1}'.format(output, error))
-            output, error = shell.execute_command("chmod 777 " +
-                                                  dest_node_key_passphrase_path)
+            if shell.extract_remote_info().distribution_type == "windows":
+                dest_node_key_passphrase_path = "/cygdrive/c/Program Files/Couchbase/Server/var/lib/couchbase/" + \
+                                                x509main.SCRIPTSPATH + x509main.SCRIPTFILEPATH
+                shell.execute_command("chmod 777 '" +
+                                      dest_node_key_passphrase_path + "'")
+            else:
+                output, error = shell.execute_command("chmod 777 '" +
+                                                      dest_node_key_passphrase_path + "'")
             self.log.info('Output message is {0} and error message is {1}'.format(output, error))
             shell.disconnect()
 
