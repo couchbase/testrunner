@@ -167,7 +167,7 @@ def get_servers_aws(descriptor, how_many, options, os_version, is_addl_pool, poo
             try:
                 ssh.connect(ip, username=user, key_filename=OS.environ.get("AWS_SSH_KEY"))
                 break
-            except paramiko.AuthenticationException:
+            except paramiko.SSHException:
                 continue
         else:
             raise Exception("Could not connect to %s" % ip)
