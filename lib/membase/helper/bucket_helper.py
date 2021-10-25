@@ -314,8 +314,12 @@ class BucketOperationHelper:
                         # should probably remove this code.
                         log.error("got disconnected from the server, reconnecting")
                         client.reconnect()
-                        client.sasl_auth_plain(bucket_info.name.encode('ascii'),
+                        if pre_spock:
+                            client.sasl_auth_plain(bucket_info.name.encode('ascii'),
                                                bucket_info.saslPassword.encode('ascii'))
+                        else:
+                            client.sasl_auth_plain(admin_user, admin_pass)
+                            client.bucket_select(bucket)
                         continue
 
                     if c.find(b"\x01") > 0 or c.find(b"\x02") > 0:

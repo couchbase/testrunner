@@ -96,6 +96,7 @@ class MemcachedClient(KeepRefs):
             # IPv4
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            self.s.settimeout(self.timeout)
             if CbServer.use_https:
                 context = ssl._create_unverified_context(ssl.PROTOCOL_TLS_CLIENT)
                 self.s = context.wrap_socket(self.s, server_hostname=self.host)
@@ -105,6 +106,7 @@ class MemcachedClient(KeepRefs):
             self.host = self.host.replace('[', '').replace(']', '')
             self.s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
             self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            self.s.settimeout(self.timeout)
             return self.s.connect_ex((self.host, self.port, 0, 0))
 
     def reconnect(self):
@@ -137,46 +139,36 @@ class MemcachedClient(KeepRefs):
         msg = struct.pack(fmt, magic,
                           cmd, len(key), extraHeaderLength, dtype, vbucketId,
                           len(key) + len(extraHeader) + len(val) + len(extended_meta_data), opaque, cas)
-        self.pollerObject = select.poll()
-        self.pollerObject.register(self.s, select.POLLOUT)
-        fdVsEvent = self.pollerObject.poll(30000)
-        if fdVsEvent:
-            try:
-                key = key.encode()
-            except AttributeError:
-                pass
 
-            try:
-                extraHeader = extraHeader.encode()
-            except AttributeError:
-                pass
+        try:
+            key = key.encode()
+        except AttributeError:
+            pass
 
-            try:
-                val = val.encode()
-            except AttributeError:
-                pass
+        try:
+            extraHeader = extraHeader.encode()
+        except AttributeError:
+            pass
 
-            try:
-                extended_meta_data = extended_meta_data.encode()
-            except AttributeError:
-                pass
-            self.s.sendall(msg + extraHeader + key + val + extended_meta_data)
-        else:
-            raise exceptions.EOFError("Timeout waiting for socket send. from {0}".format(self.host))
+        try:
+            val = val.encode()
+        except AttributeError:
+            pass
+
+        try:
+            extended_meta_data = extended_meta_data.encode()
+        except AttributeError:
+            pass
+
+        self.s.sendall(msg + extraHeader + key + val + extended_meta_data)
 
     def _recvMsg(self):
         response = b""
-        self.pollerObject = select.poll()
-        self.pollerObject.register(self.s, select.POLLIN)
         while len(response) < MIN_RECV_PACKET:
-            fdVsEvent = self.pollerObject.poll(30000)
-            if fdVsEvent:
-                data = self.s.recv(MIN_RECV_PACKET - len(response))
-                if data == b'':
-                    raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
-                response += data
-            else:
-                raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
+            data = self.s.recv(MIN_RECV_PACKET - len(response))
+            if data == b'':
+                raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
+            response += data
 
         assert len(response) == MIN_RECV_PACKET
 
@@ -202,15 +194,11 @@ class MemcachedClient(KeepRefs):
 
         rv = b""
         while remaining > 0:
-            fdVsEvent = self.pollerObject.poll(30000)
-            if fdVsEvent:
-                data = self.s.recv(remaining)
-                if data == b'':
-                    raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
-                rv += data
-                remaining -= len(data)
-            else:
-                raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
+            data = self.s.recv(remaining)
+            if data == b'':
+                raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
+            rv += data
+            remaining -= len(data)
 
         return cmd, errcode, opaque, cas, keylen, extralen, dtype, rv
 
