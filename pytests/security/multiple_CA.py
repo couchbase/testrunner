@@ -127,6 +127,7 @@ class MultipleCA(BaseTestCase):
         for server in self.servers:
             _ = self.x509.upload_root_certs(server)
         self.x509.upload_node_certs(servers=self.servers)
+        self.x509.delete_unused_out_of_the_box_CAs(server=self.master)
         #self.x509.upload_client_cert_settings(server=self.servers[0])
         https_val = CbServer.use_https  # so that add_node uses https
         CbServer.use_https = True
@@ -155,6 +156,7 @@ class MultipleCA(BaseTestCase):
         self.log.info("Manifest #########\n {0}".format(json.dumps(x509main.manifest, indent=4)))
         self.x509.upload_root_certs(self.master)
         self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
+        self.x509.delete_unused_out_of_the_box_CAs(server=self.master)
         #self.x509.upload_client_cert_settings(server=self.servers[0])
         self.master = self.servers[:self.nodes_init][1]
         https_val = CbServer.use_https  # so that add_node uses https
@@ -195,6 +197,7 @@ class MultipleCA(BaseTestCase):
         self.x509.generate_multiple_x509_certs(servers=self.servers[:self.nodes_init])
         self.x509.upload_root_certs(self.master)
         self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
+        self.x509.delete_unused_out_of_the_box_CAs(server=self.master)
         #self.x509.upload_client_cert_settings(server=self.master)
         for graceful in [True, False]:
             for recovery_type in ["delta", "full"]:
@@ -224,6 +227,7 @@ class MultipleCA(BaseTestCase):
         self.x509.generate_multiple_x509_certs(servers=self.servers[:self.nodes_init])
         self.x509.upload_root_certs(self.master)
         self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
+        self.x509.delete_unused_out_of_the_box_CAs(server=self.master)
         #self.x509.upload_client_cert_settings(server=self.master)
         for graceful in [True, False]:
             failover_nodes = random.sample(self.servers[1:self.nodes_init], 1)
@@ -251,6 +255,7 @@ class MultipleCA(BaseTestCase):
         for server in self.servers:
             _ = self.x509.upload_root_certs(server)
         self.x509.upload_node_certs(servers=self.servers)
+        self.x509.delete_unused_out_of_the_box_CAs(server=self.master)
         #self.x509.upload_client_cert_settings(server=self.servers[0])
         self.log.info("Checking authentication ...")
         self.auth()
@@ -285,6 +290,7 @@ class MultipleCA(BaseTestCase):
         self.log.info("Uploading root certs from {0}".format(random_nodes[0]))
         self.x509.upload_root_certs(random_nodes[0])
         self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
+        self.x509.delete_unused_out_of_the_box_CAs(server=self.master)
         #self.x509.upload_client_cert_settings(server=self.master)
         shell = RemoteMachineShellConnection(random_nodes[0])
         shell.remove_directory(self.x509.install_path + x509main.CHAINFILEPATH +
@@ -335,6 +341,7 @@ class MultipleCA(BaseTestCase):
         self.x509.upload_root_certs(server=self.servers[:self.nodes_init][2],
                                     root_ca_names=x509main.root_ca_names[2:])
         self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
+        self.x509.delete_unused_out_of_the_box_CAs(server=self.master)
         #self.x509.upload_client_cert_settings(server=self.master)
         self.auth(servers=self.nodes_init)
         content = self.x509.get_trusted_CAs()

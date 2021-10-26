@@ -861,6 +861,19 @@ class x509main:
                 if ca_name in x509main.root_ca_names:
                     x509main.root_ca_names.remove(ca_name)
 
+    def delete_unused_out_of_the_box_CAs(self, server=None):
+        if server is None:
+            server = self.host
+        rest = RestConnection(server)
+        content = self.get_trusted_CAs(server)
+        for ca_dict in content:
+            if len(ca_dict["nodes"]) == 0 and ca_dict["type"] == "generated":
+                ca_id = ca_dict["id"]
+                status, content, response = rest.delete_trusted_CA(ca_id=ca_id)
+                if not status:
+                    raise Exception("Could not delete trusted CA with id {0}. "
+                                    "Failed with content {1} response {2} ".format(ca_id, content, response))
+
     def copy_trusted_CAs(self, root_ca_names, server=None):
         """
         create inbox/CA folder & copy CAs there
