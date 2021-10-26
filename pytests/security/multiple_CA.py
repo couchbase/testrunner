@@ -2,6 +2,7 @@ import json
 import random
 import time
 
+from lib.Cb_constants.CBServer import CbServer
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.basetestcase import BaseTestCase
@@ -39,7 +40,8 @@ class MultipleCA(BaseTestCase):
         :api: - full url to make a rest call
         :servers: a list of servers to make sdk connection/rest connection against
         """
-        # MB-48998 (temporarily return)
+        # ToDO: remove return statement after MB-48998 is fixed. 
+        #  Also uncomment client cert settings line
         return None
         if client_certs is None:
             client_certs = list()
@@ -125,10 +127,14 @@ class MultipleCA(BaseTestCase):
         for server in self.servers:
             _ = self.x509.upload_root_certs(server)
         self.x509.upload_node_certs(servers=self.servers)
-        self.x509.upload_client_cert_settings(server=self.servers[0])
+        #self.x509.upload_client_cert_settings(server=self.servers[0])
+        https_val = CbServer.use_https  # so that add_node uses https
+        CbServer.use_https = True
         task = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                             self.servers[self.nodes_init:], [])
+
         self.wait_for_rebalance_to_complete(task)
+        CbServer.use_https = https_val
         self.log.info("Checking authentication ...")
         self.auth(servers=self.servers)
 
@@ -149,11 +155,14 @@ class MultipleCA(BaseTestCase):
         self.log.info("Manifest #########\n {0}".format(json.dumps(x509main.manifest, indent=4)))
         self.x509.upload_root_certs(self.master)
         self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
-        self.x509.upload_client_cert_settings(server=self.servers[0])
+        #self.x509.upload_client_cert_settings(server=self.servers[0])
         self.master = self.servers[:self.nodes_init][1]
+        https_val = CbServer.use_https  # so that add_node uses https
+        CbServer.use_https = True
         task = self.cluster.async_rebalance(self.servers[1:self.nodes_init],
                                             [], [self.servers[0]])
         self.wait_for_rebalance_to_complete(task)
+        CbServer.use_https = https_val
         self.log.info("Checking authentication ...")
         self.auth(servers=self.servers[1:self.nodes_init])
         failover_nodes = random.sample(self.servers[1:self.nodes_init], 1)
@@ -163,11 +172,17 @@ class MultipleCA(BaseTestCase):
         rest = RestConnection(self.master)
         for node in failover_nodes:
             rest.set_recovery_type("ns_1@" + node.ip, recoveryType="delta")
+        https_val = CbServer.use_https  # so that add_node uses https
+        CbServer.use_https = True
         task = self.cluster.async_rebalance(self.servers[1:self.nodes_init], [], [])
+        CbServer.use_https = https_val
         self.wait_for_rebalance_to_complete(task)
         self.x509.load_trusted_CAs(server=self.servers[0])
         self.x509.reload_node_certificates(servers=[self.servers[0]])
+        https_val = CbServer.use_https  # so that add_node uses https
+        CbServer.use_https = True
         task = self.cluster.async_rebalance(self.servers[1:self.nodes_init], [self.servers[0]], [])
+        CbServer.use_https = https_val
         self.wait_for_rebalance_to_complete(task)
         self.auth(servers=self.servers)
 
@@ -180,7 +195,7 @@ class MultipleCA(BaseTestCase):
         self.x509.generate_multiple_x509_certs(servers=self.servers[:self.nodes_init])
         self.x509.upload_root_certs(self.master)
         self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
-        self.x509.upload_client_cert_settings(server=self.master)
+        #self.x509.upload_client_cert_settings(server=self.master)
         for graceful in [True, False]:
             for recovery_type in ["delta", "full"]:
                 failover_nodes = random.sample(self.servers[1:self.nodes_init], 2)
@@ -193,7 +208,10 @@ class MultipleCA(BaseTestCase):
                 rest = RestConnection(self.master)
                 for node in failover_nodes:
                     rest.set_recovery_type("ns_1@" + node.ip, recoveryType=recovery_type)
+                https_val = CbServer.use_https  # so that add_node uses https
+                CbServer.use_https = True
                 task = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
+                CbServer.use_https = https_val
                 self.wait_for_rebalance_to_complete(task)
         self.auth(servers=self.servers)
 
@@ -206,14 +224,17 @@ class MultipleCA(BaseTestCase):
         self.x509.generate_multiple_x509_certs(servers=self.servers[:self.nodes_init])
         self.x509.upload_root_certs(self.master)
         self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
-        self.x509.upload_client_cert_settings(server=self.master)
+        #self.x509.upload_client_cert_settings(server=self.master)
         for graceful in [True, False]:
             failover_nodes = random.sample(self.servers[1:self.nodes_init], 1)
             _ = self.cluster.async_failover(self.servers[:self.nodes_init], failover_nodes,
                                             graceful=graceful)
             self.wait_for_failover_or_assert(1)
+            https_val = CbServer.use_https  # so that add_node uses https
+            CbServer.use_https = True
             task = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], failover_nodes)
             self.wait_for_rebalance_to_complete(task)
+            CbServer.use_https = https_val
         nodes_in_cluster = [node for node in self.servers[:self.nodes_init] if node not in failover_nodes]
         self.auth(servers=nodes_in_cluster)
 
@@ -230,15 +251,19 @@ class MultipleCA(BaseTestCase):
         for server in self.servers:
             _ = self.x509.upload_root_certs(server)
         self.x509.upload_node_certs(servers=self.servers)
-        self.x509.upload_client_cert_settings(server=self.servers[0])
+        #self.x509.upload_client_cert_settings(server=self.servers[0])
         self.log.info("Checking authentication ...")
         self.auth()
         self.x509.rotate_certs(self.servers, "all")
         self.log.info("Manifest after rotating certs #########\n {0}".
                       format(json.dumps(x509main.manifest, indent=4)))
+
+        https_val = CbServer.use_https  # so that add_node uses https
+        CbServer.use_https = True
         task = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                             self.servers[self.nodes_init:], [])
         self.wait_for_rebalance_to_complete(task)
+        CbServer.use_https = https_val
         self.log.info("Checking authentication ...")
         self.auth(servers=self.servers)
         content = self.x509.get_trusted_CAs()
@@ -260,7 +285,7 @@ class MultipleCA(BaseTestCase):
         self.log.info("Uploading root certs from {0}".format(random_nodes[0]))
         self.x509.upload_root_certs(random_nodes[0])
         self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
-        self.x509.upload_client_cert_settings(server=self.master)
+        #self.x509.upload_client_cert_settings(server=self.master)
         shell = RemoteMachineShellConnection(random_nodes[0])
         shell.remove_directory(self.x509.install_path + x509main.CHAINFILEPATH +
                                "/" + x509main.TRUSTEDCAPATH)
@@ -276,17 +301,23 @@ class MultipleCA(BaseTestCase):
                                         graceful=False)
             self.wait_for_failover_or_assert(1)
             if operation == "out":
+                https_val = CbServer.use_https  # so that add_node uses https
+                CbServer.use_https = True
                 task = self.cluster.async_rebalance(self.servers[:self.nodes_init], [],
                                                     failover_nodes)
                 self.wait_for_rebalance_to_complete(task)
+                CbServer.use_https = https_val
                 nodes_in_cluster = nodes_in_cluster.remove(failover_nodes[0])
             shell.start_server(failover_nodes[0])
             if operation == "recovery":
                 rest = RestConnection(self.master)
                 for node in failover_nodes:
                     rest.set_recovery_type("ns_1@" + node.ip, recoveryType="delta")
+                https_val = CbServer.use_https  # so that add_node uses https
+                CbServer.use_https = True
                 task = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
                 self.wait_for_rebalance_to_complete(task)
+                CbServer.use_https = https_val
         self.auth(servers=nodes_in_cluster)
 
     def test_CA_upload_from_all_nodes(self):
@@ -304,7 +335,7 @@ class MultipleCA(BaseTestCase):
         self.x509.upload_root_certs(server=self.servers[:self.nodes_init][2],
                                     root_ca_names=x509main.root_ca_names[2:])
         self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
-        self.x509.upload_client_cert_settings(server=self.master)
+        #self.x509.upload_client_cert_settings(server=self.master)
         self.auth(servers=self.nodes_init)
         content = self.x509.get_trusted_CAs()
         self.log.info("Trusted CAs: {0}".format(content))
