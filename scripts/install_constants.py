@@ -251,7 +251,8 @@ NON_ROOT_CMDS = {
 }
 
 NODE_INIT = {
-    "ipv4": "{0} node-init -c {1} --node-init-hostname {2} -u {3} -p {4} > /dev/null && echo 1 || echo 0;",
+    "ipv4_hostname": "{0} node-init -c {1} --node-init-hostname {1} -u {2} -p {3} > /dev/null && echo 1 || echo 0;",
+    "ipv4": "{0} node-init -c {1} -u {2} -p {3} > /dev/null && echo 1 || echo 0;",
     "ipv6": "{0} node-init -c {1} --node-init-hostname {2} --ipv6 -u {3} -p {4} > /dev/null && echo 1 || echo 0;"
 }
 

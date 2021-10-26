@@ -34,13 +34,13 @@ params = {
     "storage_mode": "plasma",
     "disable_consistency": False,
     "enable_ipv6": False,
-    "use_domain_names": False,
     "fts_quota": testconstants.FTS_QUOTA,
     "fts_query_limit": 0,
     "cluster_version": None,
     "bkrs_client": None,
     "ntp": False,
-    "install_debug_info": False
+    "install_debug_info": False,
+    "use_hostnames": False
 }
 
 
@@ -315,11 +315,14 @@ class NodeHelper:
                                                          self.node.rest_username,
                                                          self.node.rest_password)
         else:
-            cmd = install_constants.NODE_INIT["ipv4"].format(self._get_cli_path(),
-                                                         self.ip,
-                                                         self.ip,
-                                                         self.node.rest_username,
-                                                         self.node.rest_password)
+            if params["use_hostnames"]:
+                ipv4_cmd = "ipv4_hostname"
+            else:
+                ipv4_cmd = "ipv4"
+            cmd = install_constants.NODE_INIT[ipv4_cmd].format(self._get_cli_path(),
+                                                            self.node.cluster_ip,
+                                                            self.node.rest_username,
+                                                            self.node.rest_password)
         while retries > 0:
             ret, err = self.shell.execute_command(cmd)
             if ret == ['0']:
@@ -341,7 +344,7 @@ class NodeHelper:
 
     def post_init_cb(self):
         # Optionally change node name and restart server
-        if params.get('use_domain_names', False):
+        if params["use_hostnames"]:
             RemoteUtilHelper.use_hostname_for_server_settings(self.node)
 
         # Optionally disable consistency check
@@ -409,6 +412,10 @@ class NodeHelper:
                 self.pre_init_cb()
 
                 self.rest = RestConnection(self.node)
+
+                if self.node.internal_ip:
+                    self.rest.set_alternate_address(self.ip)
+
                 # Make sure that data_path and index_path are writable by couchbase user
                 for path in set([_f for _f in [self.node.data_path,
                                                self.node.index_path,
@@ -596,6 +603,8 @@ def _parse_user_input():
         if key == "install_debug_info":
             params['install_debug_info'] = True if value.lower() == \
                                                    "true" else False
+        if key == "use_hostnames" or key == "h":
+            params["use_hostnames"] = value.lower() == "true"
 
     if userinput.bkrs_client and not params["cluster_version"]:
         print_result_and_exit("Need 'cluster_version' in params to proceed")

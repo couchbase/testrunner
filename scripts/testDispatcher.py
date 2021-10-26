@@ -1,6 +1,7 @@
 import sys
 import urllib.request, urllib.error, urllib.parse
 import urllib.request, urllib.parse, urllib.error
+from uuid import uuid4
 import httplib2
 import json
 import string
@@ -21,6 +22,8 @@ from couchbase.n1ql import N1QLQuery
 import get_jenkins_params
 import find_rerun_job
 
+import cloud_provision
+
 # takes an ini template as input, standard out is populated with the server pool
 # need a descriptor as a parameter
 
@@ -35,6 +38,15 @@ SERVER_MANAGER_PASSWORD = "esabhcuoc"
 TIMEOUT = 60
 SSH_NUM_RETRIES = 3
 SSH_POLL_INTERVAL = 20
+
+DOCKER = "DOCKER"
+AWS = "AWS"
+AZURE = "AZURE"
+GCP = "GCP"
+KUBERNETES = "KUBERNETES"
+VM = "VM"
+
+CLOUD_SERVER_TYPES = [AWS, AZURE, GCP]
 
 def getNumberOfServers(iniFile):
     f = open(iniFile)
@@ -78,8 +90,8 @@ def rreplace(str, pattern, num_replacements):
 def get_available_servers_count(options=None, is_addl_pool=False, os_version="", pool_id=None):
     # this bit is Docker/VM dependent
     getAvailUrl = 'http://' + SERVER_MANAGER + '/getavailablecount/'
-    
-    if options.serverType.lower() == 'docker':
+
+    if options.serverType == DOCKER:
         # may want to add OS at some point
         getAvailUrl = getAvailUrl + 'docker?os={0}&poolId={1}'.format(os_version, pool_id)
     else:
@@ -103,89 +115,22 @@ def get_available_servers_count(options=None, is_addl_pool=False, os_version="",
         count = int(content)
     return count
 
-AWS_AMI_MAP = {
-    "couchbase": {
-        "amzn2": {
-            "aarch64": "ami-0289ff69e0069c2ed",
-            "x86_64": "ami-070ac986a212c4d9b"
-        }
-    },
-    "elastic-fts": "ami-0c48f8b3129e57beb",
-    "localstack": "ami-0702052d7d7f58aad"
-}
-
-def get_servers_aws(descriptor, how_many, options, os_version, is_addl_pool, pool_id):
+def get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version, pool_id):
     descriptor = urllib.parse.unquote(descriptor)
-    instance_type = "t3.xlarge"  # Get 5Gb network
-
+    type = "couchbase"
     if is_addl_pool:
-        image_id = AWS_AMI_MAP[pool_id]
-    else:
-        image_id = AWS_AMI_MAP["couchbase"][os_version][options.architecture]
-        if options.architecture == "aarch64":
-            instance_type = "t4g.xlarge"
-
-    ec2_resource = boto3.resource('ec2', region_name='us-east-1')
-    ec2_client = boto3.client('ec2', region_name='us-east-1')
-
-    instances = ec2_resource.create_instances(
-        ImageId=image_id,
-        MinCount=how_many,
-        MaxCount=how_many,
-        InstanceType=instance_type,
-        LaunchTemplate={
-            'LaunchTemplateName': 'TestrunnerCouchbase',
-            'Version': '5'
-        },
-        TagSpecifications=[
-            {
-                'ResourceType': 'instance',
-                'Tags': [
-                    {
-                        'Key': 'Name',
-                        'Value': descriptor
-                    },
-                ]
-            },
-        ],
-        InstanceInitiatedShutdownBehavior='terminate'
-    )
-    instance_ids = [instance.id for instance in instances]
-    print("Waiting for instances: ", instance_ids)
-    ec2_client.get_waiter('instance_status_ok').wait(InstanceIds=instance_ids)
-    instances = ec2_client.describe_instances(InstanceIds=instance_ids)
-    ips = []
-
-    users_to_try = ["ec2-user", "centos"]
-
-    for instance in instances['Reservations'][0]['Instances']:
-        ip = instance['PublicDnsName']
-        ips.append(ip)
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        for user in users_to_try:
-            try:
-                ssh.connect(ip, username=user, key_filename=OS.environ.get("AWS_SSH_KEY"))
-                break
-            except paramiko.SSHException:
-                continue
-        else:
-            raise Exception("Could not connect to %s" % ip)
-        ssh.exec_command("echo 'couchbase' | sudo passwd --stdin root",)
-        ssh.exec_command("sudo sed -i '/#PermitRootLogin yes/c\PermitRootLogin yes' /etc/ssh/sshd_config")
-        ssh.exec_command("sudo sed -i '/PermitRootLogin forced-commands-only/c\#PermitRootLogin forced-commands-only' /etc/ssh/sshd_config")
-        ssh.exec_command("sudo sed -i '/PasswordAuthentication no/c\PasswordAuthentication yes' /etc/ssh/sshd_config")
-        ssh.exec_command("sudo service sshd restart")
-        # terminate the instance after 12 hours
-        ssh.exec_command("sudo shutdown -P +720")
-
-    return ips
+        type = pool_id
+    if options.serverType == AWS:
+        ssh_key_path = OS.environ.get("AWS_SSH_KEY")
+        return cloud_provision.aws_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture), None
+    elif options.serverType == GCP:
+        ssh_key_path = OS.environ.get("GCP_SSH_KEY")
+        return cloud_provision.gcp_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture)
 
 def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool=False, os_version="", pool_id=None):
-    if SERVER_MANAGER == "AWS":
-        return get_servers_aws(descriptor, how_many, options, os_version, is_addl_pool, pool_id)
-
-    if options.serverType.lower() == 'docker':
+    if options.serverType in CLOUD_SERVER_TYPES:
+        return get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version, pool_id)
+    elif options.serverType == DOCKER:
         getServerURL = 'http://' + SERVER_MANAGER + '/getdockers/{0}?count={1}&os={2}&poolId={3}'. \
                            format(descriptor, how_many, os_version, pool_id)
     else:
@@ -201,14 +146,14 @@ def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool
     print(('response.status', response, content))
     if response.status == 499:
         time.sleep(POLL_INTERVAL)  # some error checking here at some point
-        return json.loads("[]")
+        return json.loads("[]"), None
 
     content1 = content.decode()
     if '[' not in content1:
         content2 = '["'+str(content1)+'"]'
-        return json.loads(content2)
+        return json.loads(content2), None
     else:
-        return json.loads(content1)
+        return json.loads(content1), None
 
 def check_servers_via_ssh(servers=[], test=None):
     alive_servers = []
@@ -266,7 +211,7 @@ def main():
     parser.add_option('-t', '--test', dest='test', default=False, action='store_true')  # use the test Jenkins
     parser.add_option('-s', '--subcomponent', dest='subcomponent', default=None)
     parser.add_option('-e', '--extraParameters', dest='extraParameters', default=None)
-    parser.add_option('-y', '--serverType', dest='serverType', default='VM')  # or could be Docker
+    parser.add_option('-y', '--serverType', dest='serverType', type="choice", default=VM, choices=[VM, AWS, DOCKER, GCP])  # or could be Docker
     parser.add_option('-u', '--url', dest='url', default=None)
     parser.add_option('-j', '--jenkins', dest='jenkins', default=None)
     parser.add_option('-b', '--branch', dest='branch', default='master')
@@ -461,7 +406,7 @@ def main():
                             data['config'],
                             addPoolId)
 
-                        if SERVER_MANAGER == "AWS":
+                        if options.serverType in CLOUD_SERVER_TYPES:
                             config = configparser.ConfigParser()
                             config.read(data['config'])
 
@@ -595,7 +540,7 @@ def main():
                     {"parameters": currentExecutorParams})
                 # optional add [-docker] [-Jenkins extension] - TBD duplicate
                 launchStringBaseF = launchStringBase
-                if options.serverType.lower() == 'docker':
+                if options.serverType == DOCKER:
                     launchStringBaseF = launchStringBase + '-docker'
                 if options.test:
                     launchStringBaseF = launchStringBase + '-test'
@@ -625,7 +570,7 @@ def main():
 
             for pool_id in options.poolId:
 
-                if SERVER_MANAGER == "AWS":
+                if options.serverType in CLOUD_SERVER_TYPES:
                     haveTestToLaunch = True
                     break
 
@@ -700,7 +645,11 @@ def main():
                 # and this is the Jenkins descriptor
                 descriptor = testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] + '-' + time.strftime('%b-%d-%X') + '-' + options.version
 
-                if SERVER_MANAGER == "AWS":
+                if options.serverType == GCP:
+                    # GCP labels are limited to 63 characters which might be too small. 
+                    # Must also start with a lowercase letter. Just use a UUID which is 32 characters.
+                    descriptor = "testrunner-" + str(uuid4())
+                elif options.serverType == AWS:
                     # A stack name can contain only alphanumeric characters (case-sensitive) and hyphens
                     descriptor = descriptor.replace("_", "-")
                     descriptor = "".join(filter(lambda char: str.isalnum(char) or char == "-", descriptor))
@@ -710,11 +659,12 @@ def main():
                 # grab the server resources
                 # this bit is Docker/VM dependent
                 servers = []
+                internal_servers = None
                 unreachable_servers = []
                 how_many = testsToLaunch[i]['serverCount'] - len(servers)
                 if options.check_vm == "True":
                     while how_many > 0:
-                        unchecked_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i],
+                        unchecked_servers, _ = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i],
                                                     how_many=how_many, os_version=options.os, pool_id=pool_to_use)
                         checked_servers, bad_servers = check_servers_via_ssh(servers=unchecked_servers,
                                                                             test=testsToLaunch[i])
@@ -725,17 +675,17 @@ def main():
                         how_many = testsToLaunch[i]['serverCount'] - len(servers)
 
                 else:
-                    servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i],
+                    servers, internal_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i],
                                             how_many=how_many, os_version=options.os, pool_id=pool_to_use)
                     how_many = testsToLaunch[i]['serverCount'] - len(servers)
 
-                if options.serverType.lower() != 'docker':
+                if options.serverType != DOCKER:
                     # sometimes there could be a race, before a dispatcher process acquires vms,
                     # another waiting dispatcher process could grab them, resulting in lesser vms
                     # for the second dispatcher process
                     if len(servers) != testsToLaunch[i]['serverCount']:
                         print("Received servers count does not match the expected test server count!")
-                        release_servers(descriptor)
+                        release_servers(options, descriptor)
                         continue
 
                 # get additional pool servers as needed
@@ -744,13 +694,13 @@ def main():
                 if testsToLaunch[i]['addPoolServerCount']:
                     how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
                     addPoolId = testsToLaunch[i]['addPoolId']
-                    addl_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i], how_many=how_many_addl, is_addl_pool=True, os_version=addPoolServer_os, pool_id=addPoolId)
+                    addl_servers, _ = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i], how_many=how_many_addl, is_addl_pool=True, os_version=addPoolServer_os, pool_id=addPoolId)
                     how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
                     if len(addl_servers) != testsToLaunch[i]['addPoolServerCount']:
                         print(
                             "Received additional servers count does not match the expected "
                             "test additional servers count!")
-                        release_servers(descriptor)
+                        release_servers(options, descriptor)
                         continue
 
                 # and send the request to the test executor
@@ -786,10 +736,15 @@ def main():
                                                 currentExecutorParams})
 
 
-                if options.serverType.lower() != 'docker':
+                if options.serverType != DOCKER:
                     servers_str = json.dumps(servers).replace(' ','').replace('[','', 1)
                     servers_str = rreplace(servers_str, ']', 1)
                     url = url + '&servers=' + urllib.parse.quote(servers_str)
+
+                    if internal_servers:
+                        internal_servers_str = json.dumps(internal_servers).replace(' ','').replace('[','', 1)
+                        internal_servers_str = rreplace(internal_servers_str, ']', 1)
+                        url = url + '&internal_servers=' + urllib.parse.quote(internal_servers_str)
 
                     if testsToLaunch[i]['addPoolServerCount']:
                         addPoolServers = json.dumps(addl_servers).replace(' ','').replace('[','', 1)
@@ -807,7 +762,7 @@ def main():
 
                 # optional add [-docker] [-Jenkins extension]
                 launchStringBaseF = launchStringBase
-                if options.serverType.lower() == 'docker':
+                if options.serverType == DOCKER:
                     launchStringBaseF = launchStringBase + '-docker'
                 if options.test:
                     launchStringBaseF = launchStringBase + '-test'
@@ -826,7 +781,7 @@ def main():
                 if options.noLaunch or not dispatch_job:
                     # free the VMs
                     time.sleep(3)
-                    if options.serverType.lower() == 'docker':
+                    if options.serverType == DOCKER:
                         #Docker gets only a single sever from
                         # get_server. Not hard coding the server
                         # we get, which as of now is constant,
@@ -842,7 +797,7 @@ def main():
                         print(
                         'the release response', response, content)
                     else:
-                        release_servers(descriptor)
+                        release_servers(options, descriptor)
                 else:
                     response, content = httplib2.Http(timeout=TIMEOUT).request(url, 'GET')
                     print("Response is: {0}".format(str(response)))
@@ -857,7 +812,7 @@ def main():
                 summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
                 if options.noLaunch:
                     pass # no sleeping necessary
-                elif options.serverType.lower() == 'docker':
+                elif options.serverType == DOCKER:
                     time.sleep(240)     # this is due to the docker port allocation race
                 else:
                     time.sleep(30)
@@ -872,7 +827,7 @@ def main():
             if descriptor:
                 try:
                     print('Releasing servers for {} ...'.format(descriptor))
-                    release_servers(descriptor)
+                    release_servers(options, descriptor)
                 except Exception:
                     pass
             time.sleep(POLL_INTERVAL)
@@ -925,24 +880,16 @@ def update_url_with_job_params(url, job_params):
             newurl += '&' + key + "=" + dict[key]
     return newurl
 
-def release_servers(descriptor):
-    if SERVER_MANAGER == "AWS":
+def release_servers_cloud(options, descriptor):
+    if options.serverType == AWS:
+        cloud_provision.aws_terminate(descriptor)
+    elif options.serverType == GCP:
+        cloud_provision.gcp_terminate(descriptor)
+
+def release_servers(options, descriptor):
+    if options.serverType in CLOUD_SERVER_TYPES:
         descriptor = urllib.parse.unquote(descriptor)
-        ec2_client = boto3.client('ec2')
-        instances = ec2_client.describe_instances(
-            Filters=[
-                {
-                    'Name': 'tag:Name',
-                    'Values': [
-                        descriptor
-                    ]
-                }
-            ]
-        )
-        instance_ids = [instance["InstanceId"] for instance in instances["Reservations"][0]["Instances"]]
-        ec2_client.terminate_instances(
-            InstanceIds=instance_ids
-        )
+        release_servers_cloud(options, descriptor)
     else:
         release_url = "http://{}/releaseservers/{}/available".format(SERVER_MANAGER, descriptor)
         print('Release URL: {} '.format(release_url))

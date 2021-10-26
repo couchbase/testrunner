@@ -65,7 +65,10 @@ def validate_install(params):
                 except:
                     continue
                 for item in node_status:
-                    if node.ip not in item["hostname"]:
+                    hostname = item["hostname"]
+                    if "alternateAddresses" in item and "external" in item["alternateAddresses"]:
+                        hostname = item["alternateAddresses"]["external"]["hostname"]
+                    if node.ip not in hostname:
                         continue
                     if version in item['version'] and item['status'] == "healthy":
                         node.install_success = True
