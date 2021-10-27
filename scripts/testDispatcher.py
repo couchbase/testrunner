@@ -107,16 +107,16 @@ AWS_AMI_MAP = {
     "couchbase": {
         "amzn2": {
             "aarch64": "ami-02eff1b90bf0e886b",
-            "x86_64": "ami-02c15e47d576743f8"
+            "x86_64": "ami-070ac986a212c4d9b"
         }
     },
-    "elastic-fts": "ami-0fb83341c1917381c",
-    "localstack": "ami-06f8ff60aa74ed321"
+    "elastic-fts": "ami-0c48f8b3129e57beb",
+    "localstack": "ami-0702052d7d7f58aad"
 }
 
 def get_servers_aws(descriptor, how_many, options, os_version, is_addl_pool, pool_id):
     descriptor = urllib.parse.unquote(descriptor)
-    instance_type = "m4.xlarge"
+    instance_type = "t3.xlarge"  # Get 5Gb network
     
     if is_addl_pool:
         image_id = AWS_AMI_MAP[pool_id]
@@ -125,8 +125,8 @@ def get_servers_aws(descriptor, how_many, options, os_version, is_addl_pool, poo
         if options.architecture == "aarch64":
             instance_type = "t4g.xlarge"
 
-    ec2_resource = boto3.resource('ec2')
-    ec2_client = boto3.client('ec2')
+    ec2_resource = boto3.resource('ec2', region_name='us-east-1')
+    ec2_client = boto3.client('ec2', region_name='us-east-1')
 
     instances = ec2_resource.create_instances(
         ImageId=image_id,
