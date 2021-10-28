@@ -106,7 +106,7 @@ def get_available_servers_count(options=None, is_addl_pool=False, os_version="",
 AWS_AMI_MAP = {
     "couchbase": {
         "amzn2": {
-            "aarch64": "ami-02eff1b90bf0e886b",
+            "aarch64": "ami-0289ff69e0069c2ed",
             "x86_64": "ami-070ac986a212c4d9b"
         }
     },
@@ -117,7 +117,7 @@ AWS_AMI_MAP = {
 def get_servers_aws(descriptor, how_many, options, os_version, is_addl_pool, pool_id):
     descriptor = urllib.parse.unquote(descriptor)
     instance_type = "t3.xlarge"  # Get 5Gb network
-    
+
     if is_addl_pool:
         image_id = AWS_AMI_MAP[pool_id]
     else:
