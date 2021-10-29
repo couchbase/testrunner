@@ -1873,9 +1873,19 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                 ready = RestHelper(rest).is_ns_server_running()
                 if ready:
                     if server is not None:
+                        cmd_init = 'node-init'
                         shell = RemoteMachineShellConnection(server)
                         shell.enable_diag_eval_on_non_local_hosts()
+                        if self.hostname and server.ip.endswith(".com"):
+                            options = '--node-init-hostname ' + server.ip
+                            output, _ = shell.execute_couchbase_cli(cli_command=cmd_init,
+                                                    options=options,
+                                                    cluster_host="localhost",
+                                                    user=server.rest_username,
+                                                    password=server.rest_password)
                         shell.disconnect()
+                        if not self._check_output("SUCCESS: Node initialize", output):
+                            raise("Failed to set hostname")
                 else:
                     self.fail("NS server is not ready after reset node")
         rest.set_indexer_storage_mode(username='Administrator',
@@ -2540,16 +2550,31 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         self.backupset.restore_cluster_host.services = ",".join(bk_services)
         rest_rs.force_eject_node()
         ready = RestHelper(rest_rs).is_ns_server_running()
+        shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         if ready:
-            shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             shell.enable_diag_eval_on_non_local_hosts()
-            shell.disconnect()
         sv_in_rs = self.backupset.restore_cluster_host.services
         if self.backupset.restore_cluster_host.services and \
             "," in self.backupset.restore_cluster_host.services[0]:
             sv_in_rs = self.backupset.restore_cluster_host.services[0].split(",")
         kv_quota = rest_rs.init_node(sv_in_rs)
-        self._reset_storage_mode(rest_rs, bk_storage_mode, False)
+        """ set node to hostname if hostname=true """
+        if self.hostname and self.backupset.restore_cluster_host.ip.endswith(".com"):
+            self.log.info("\n*** Set node with hostname")
+            cmd_init = 'node-init'
+            options = '--node-init-hostname ' + self.backupset.restore_cluster_host.ip
+            output, _ = shell.execute_couchbase_cli(cli_command=cmd_init, options=options,
+                                        cluster_host="localhost",
+                                        user=self.backupset.restore_cluster_host.rest_username,
+                                        password=self.backupset.restore_cluster_host.rest_password)
+            if not self._check_output("SUCCESS: Node initialize", output):
+                raise("Failed to set hostname")
+        shell.disconnect()
+        rest_rs.set_indexer_storage_mode(username=self.backupset.restore_cluster_host.rest_username,
+                                      password=self.backupset.restore_cluster_host.rest_password,
+                                      storageMode=bk_storage_mode)
+        self.log.info("Done reset node with storage mode")
+        #self._reset_storage_mode(rest_rs, bk_storage_mode, False)
         if len(bk_cluster_services) > 1:
             bk_cluster_services.remove(bk_services)
         if len(self.input.clusters[0]) > 1:
