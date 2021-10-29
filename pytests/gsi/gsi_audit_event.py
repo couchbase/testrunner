@@ -17,7 +17,7 @@ from .base_gsi import BaseSecondaryIndexingTests
 class GSIAuditEvent(BaseSecondaryIndexingTests, auditTest):
     def setUp(self):
         super(GSIAuditEvent, self).setUp()
-        self.log.info("==============  CollectionsIndexBasics setup has started ==============")
+        self.log.info("==============  GSIAuditEvent setup has started ==============")
         self.rest.delete_all_buckets()
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
@@ -33,12 +33,12 @@ class GSIAuditEvent(BaseSecondaryIndexingTests, auditTest):
         if "errors" in str(curl_output):
             self.log.error("Auditing settings were not set correctly")
         self.sleep(10)
-        self.log.info("==============  CollectionsIndexBasics setup has completed ==============")
+        self.log.info("==============  GSIAuditEvent setup has completed ==============")
 
     def tearDown(self):
-        self.log.info("==============  CollectionsIndexBasics tearDown has started ==============")
+        self.log.info("==============  GSIAuditEvent tearDown has started ==============")
         super(GSIAuditEvent, self).tearDown()
-        self.log.info("==============  CollectionsIndexBasics tearDown has completed ==============")
+        self.log.info("==============  GSIAuditEvent tearDown has completed ==============")
 
     def suite_tearDown(self):
         pass

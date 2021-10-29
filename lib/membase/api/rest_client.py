@@ -2032,6 +2032,19 @@ class RestConnection(object):
         if not status:
             raise Exception(content)
 
+    def set_gsi_tier_limit(self, bucket='test_bucket', scope='_default', limit=1):
+        """
+        This method sets the upper limit for GSI indexes in Free-Tier
+        :param limit:
+        """
+        setting_json = f'name={scope}&limits={{"index": {{"num_indexes":{limit} }}}}'
+
+        api = self.baseUrl + f'pools/default/buckets/{bucket}/scopes'
+        status, content, header = self._http_request(api, 'POST', setting_json)
+        if not status:
+            raise Exception(content)
+        log.info("{0} set".format(setting_json))
+
     def set_index_settings(self, setting_json, timeout=120):
         api = self.index_baseUrl + 'settings'
         status, content, header = self._http_request(api, 'POST', json.dumps(setting_json))

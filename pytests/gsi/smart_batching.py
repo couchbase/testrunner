@@ -262,7 +262,6 @@ class SmartBatching(BaseSecondaryIndexingTests):
         if len(index_nodes) < 2:
             self.fail("Need at least 2 index nodes")
 
-        self.partitoned_index = self.input.param('partitioned_index', False)
         self.prepare_collection_for_indexing(num_scopes=self.scope_num, num_collections=self.collection_num,
                                              num_of_docs_per_collection=self.num_of_docs_per_collection)
 

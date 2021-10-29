@@ -67,6 +67,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.deploy_node_info = None
         self.server_grouping = self.input.param("server_grouping", None)
         self.partition_fields = self.input.param('partition_fields', None)
+        self.partitoned_index = self.input.param('partitioned_index', False)
         if self.partition_fields:
             self.partition_fields = self.partition_fields.split(',')
         self.num_partition = self.input.param('num_partition', 8)
@@ -1631,7 +1632,6 @@ class BaseSecondaryIndexingTests(QueryTests):
         rest = RestConnection(indexer_node)
         content = rest.cluster_status()
         return int(content['indexMemoryQuota'])
-
 
 class ConCurIndexOps():
     def __init__(self):
