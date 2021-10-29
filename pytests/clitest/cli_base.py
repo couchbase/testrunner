@@ -22,6 +22,8 @@ from security.rbacmain import rbacmain
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 
+from pytests.security.x509_multiple_CA_util import x509main
+
 
 log = logger.Logger.get_logger()
 
@@ -245,6 +247,10 @@ class CliBaseTest(BaseTestCase):
             rolelist = [{'id': bucket.name, 'name': bucket.name, 'roles': 'admin'}]
             self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
         shell.disconnect()
+
+        self.multi_root_certs = self.input.param("x509", False)
+        if self.multi_root_certs:
+            self.setup_multi_root_certs()
 
 
     def tearDown(self):
@@ -1209,6 +1215,22 @@ class CliBaseTest(BaseTestCase):
                                         bucket.name,
                                         item_size,
                                         command_options)
+
+    def setup_multi_root_certs(self):
+        self.x509 = x509main(host=self.master)
+        for server in self.servers:
+            self.x509.delete_inbox_folder_on_server(server=server)
+        self.x509.teardown_certs(servers=self.servers)
+        self.x509.generate_multiple_x509_certs(servers=self.servers)
+        self.log.info("Manifest #########\n {0}".format(json.dumps(self.x509.manifest, indent=4)))
+        if "load" in self.input.param("ca_option", ""):
+            for server in self.servers:
+                self.x509.copy_trusted_CAs(self.x509.root_ca_names, server)
+                self.x509.copy_node_cert(server)
+        else:
+            for server in self.servers:
+                self.x509.upload_root_certs(server)
+            self.x509.upload_node_certs(servers=self.servers)
 
     def _check_output(self, word_check, output):
         found = False

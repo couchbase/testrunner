@@ -2764,12 +2764,40 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             output, error = remote_client.execute_command("{0} {1}".format(cli_command,
                                                            options))
 
+    def test_multiple_ca(self):
+        """ Tests each command related to multiple CAs
+        Requires a testrunner parameter of 'ca_option'
+        If the parameter passed in is not upload, generates and uploads certs in setup
+        """
+        # Generate the command
+        options = "--"
+        cli_command = f"{self.cli_command_path}couchbase-cli{self.cmd_ext} ssl-manage "
+        ca_option = self.input.param("ca_option", "")
+        if not ca_option: self.fail("An option must be provided")
+        options += ca_option
+        #TODO: have this retrieve CA IDs from the cluster
+        if ca_option == "cluster-ca-delete": options += " 1"
+        if ca_option == "upload-cluster-ca":
+            options += f" {self.base_cb_path}var/lib/couchbase/inbox/CA/r1_ca.pem"
+        options += f" -c localhost:{self.master.port} -u {self.master.rest_username} -p {self.master.rest_password}"
+
+        # Execute the command
+        remote_client = RemoteMachineShellConnection(self.master)
+        command = cli_command + options
+        output, error = remote_client.execute_command(command)
+        remote_client.disconnect()
+
+        # Verify the command output
+        self.log.info(f"OUTPUT OF REMOTE COMMAND: {output}")
+        self.log.error(f"ERROR FROM REMOTE COMMAND: {error}")
+        self.assertFalse((error or self._check_output("error", output)))
+
     def test_backup_audit_event(self):
         """ This test will check if backup could log event in case permission denied
             due to incorrect password or role when using backup
         """
         cb_version = self.cb_version[:5]
-        if int(cb_version[-1:]) == 0:
+        if cb_version == "7.0.0":
             self.fail("This test is for version 7.0.1 and above in cheshire-cat")
         bk_services = self.rest.get_nodes_services().values()
         if "backup" not in str(bk_services):
