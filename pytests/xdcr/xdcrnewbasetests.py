@@ -421,6 +421,14 @@ class NodeHelper:
         shell.disconnect()
 
     @staticmethod
+    def kill_goxdcr(server):
+        """Kill goxdcr process running on server.
+        """
+        shell = RemoteMachineShellConnection(server)
+        shell.kill_goxdcr()
+        shell.disconnect()
+
+    @staticmethod
     def get_goxdcr_log_dir(node):
         """Gets couchbase log directory, even for cluster_run
         """
@@ -1303,16 +1311,40 @@ class CouchbaseCluster:
     def set_global_checkpt_interval(self, value):
         self.set_xdcr_param("checkpointInterval", value)
 
+    def get_internal_setting(self, param):
+        import json
+        output, _ = RemoteMachineShellConnection(self.__master_node).execute_command_raw(
+            "curl -X GET http://Administrator:password@localhost:9998/xdcr/internalSettings", debug=True)
+        json_parsed = json.loads(output[0])
+        return json_parsed[param]
+
     def set_internal_setting(self, param, value):
-        output, _ = RemoteMachineShellConnection(self.__master_node).execute_command_raw(
-            "curl -X GET http://Administrator:password@localhost:9998/xdcr/internalSettings")
-        if not '"' + param + '":' + value in output:
-            RemoteMachineShellConnection(self.__master_node).execute_command_raw(
-                "curl http://Administrator:password@localhost:9998/xdcr/internalSettings -X POST -d " +
-                param + '=' + value)
-        output, _ = RemoteMachineShellConnection(self.__master_node).execute_command_raw(
-            "curl -X GET http://Administrator:password@localhost:9998/xdcr/internalSettings")
-        self.__log.info("{0}:{1}".format(self.__master_node.ip, output))
+        RemoteMachineShellConnection(self.__master_node).execute_command_raw(
+            "curl http://Administrator:password@localhost:9998/xdcr/internalSettings -X POST -d " +
+            param + '=' + str(value))
+
+    def toggle_security_setting(self, servers, setting, value):
+        from security.ntonencryptionBase import ntonencryptionBase
+        n2nhelper = ntonencryptionBase()
+        if setting == "tls":
+            if value:
+                n2nhelper.setup_nton_cluster(servers, clusterEncryptionLevel=value)
+            else:
+                n2nhelper.disable_nton_cluster(servers)
+        if setting == "n2n":
+            if value:
+                n2nhelper.ntonencryption_cli(servers, value)
+            else:
+                is_enabled = n2nhelper.ntonencryption_cli(servers, "get")
+                if is_enabled:
+                    n2nhelper.ntonencryption_cli(servers, "disable")
+        if setting == "autofailover":
+            if value:
+                n2nhelper.enable_autofailover(servers)
+            else:
+                is_enabled = n2nhelper.check_autofailover_enabled(servers)
+                if is_enabled:
+                    n2nhelper.disable_autofailover(servers)
 
     def __remove_all_remote_clusters(self):
         rest_remote_clusters = RestConnection(
@@ -2011,7 +2043,7 @@ class CouchbaseCluster:
 
         return task
 
-    def async_rebalance_in_out(self, remove_nodes, num_add_nodes=1, master=False):
+    def async_rebalance_in_out(self, remove_nodes=None, num_add_nodes=1, master=False):
         """Rebalance-in-out nodes from Cluster
         @param remove_nodes: a list of nodes to be rebalanced-out
         @param master: True if rebalance-out master node only.

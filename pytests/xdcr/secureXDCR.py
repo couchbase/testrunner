@@ -1,6 +1,4 @@
 from .xdcrnewbasetests import XDCRNewBaseTest
-from security.ntonencryptionBase import ntonencryptionBase
-from membase.helper.cluster_helper import ClusterOperationHelper
 import time
 import random
 
@@ -22,28 +20,6 @@ class XDCRSecurityTests(XDCRNewBaseTest):
         for cluster_name in input_clusters:
             clusters.append(self.get_cb_cluster_by_name(cluster_name))
         return clusters
-
-    def _toggle_setting(self, servers, setting, value):
-        n2nhelper = ntonencryptionBase()
-        if setting == "tls":
-            if value:
-                n2nhelper.setup_nton_cluster(servers, clusterEncryptionLevel=value)
-            else:
-                n2nhelper.disable_nton_cluster(servers)
-        if setting == "n2n":
-            if value:
-                n2nhelper.ntonencryption_cli(servers, value)
-            else:
-                is_enabled = n2nhelper.ntonencryption_cli(servers, "get")
-                if is_enabled:
-                    n2nhelper.ntonencryption_cli(servers, "disable")
-        if setting == "autofailover":
-            if value:
-                n2nhelper.enable_autofailover(servers)
-            else:
-                is_enabled = n2nhelper.check_autofailover_enabled(servers)
-                if is_enabled:
-                    n2nhelper.disable_autofailover(servers)
 
     def test_xdcr_with_security(self):
         #Settings
@@ -79,34 +55,34 @@ class XDCRSecurityTests(XDCRNewBaseTest):
 
         if enforce_tls:
             for cluster in self.get_cluster_objects_for_input(enforce_tls):
-                self._toggle_setting([cluster.get_master_node()], "tls", tls_level)
+                self.toggle_security_setting([cluster.get_master_node()], "tls", tls_level)
 
         #Revert to default (control) tls level
         if disable_tls:
             for cluster in self.get_cluster_objects_for_input(disable_tls):
-                self._toggle_setting([cluster.get_master_node()], "tls")
+                self.toggle_security_setting([cluster.get_master_node()], "tls")
 
         if enable_n2n:
             for cluster in self.get_cluster_objects_for_input(enable_n2n):
-                self._toggle_setting([cluster.get_master_node()], "n2n", "enable")
+                self.toggle_security_setting([cluster.get_master_node()], "n2n", "enable")
 
         if disable_n2n:
             for cluster in self.get_cluster_objects_for_input(disable_n2n):
-                self._toggle_setting([cluster.get_master_node()], "n2n")
+                self.toggle_security_setting([cluster.get_master_node()], "n2n")
 
         if enable_autofailover:
             for cluster in self.get_cluster_objects_for_input(enable_autofailover):
-                self._toggle_setting([cluster.get_master_node()], "autofailover", "enable")
+                self.toggle_security_setting([cluster.get_master_node()], "autofailover", "enable")
 
         if disable_autofailover:
             for cluster in self.get_cluster_objects_for_input(disable_autofailover):
-                self._toggle_setting([cluster.get_master_node()], "autofailover")
+                self.toggle_security_setting([cluster.get_master_node()], "autofailover")
 
         if random_setting:
             for cluster in self.get_cluster_objects_for_input(random_setting):
                 setting = random.choice(list(settings_values_map.keys()))
                 value = random.choice(settings_values_map.get(setting))
-                self._toggle_setting([cluster.get_master_node()], setting, value)
+                self.toggle_security_setting([cluster.get_master_node()], setting, value)
 
         if apply_settings_before_setup:
             if initial_xdcr:
@@ -153,7 +129,7 @@ class XDCRSecurityTests(XDCRNewBaseTest):
 
         try:
             # Restore defaults - Enable autofailover, disable n2n
-            self._toggle_setting([cluster.get_master_node()], "autofailover", "enable")
-            self._toggle_setting([cluster.get_master_node()], "n2n")
+            self.toggle_security_setting([cluster.get_master_node()], "autofailover", "enable")
+            self.toggle_security_setting([cluster.get_master_node()], "n2n")
         except:
             pass

@@ -5539,6 +5539,8 @@ class NodesFailureTask(Task):
             self._stop_memcached(self.current_failure_node)
         elif self.failure_type == "start_memcached":
             self._start_memcached(self.current_failure_node)
+        elif self.failure_type == "kill_goxdcr":
+            self._kill_goxdcr(self.current_failure_node)
         elif self.failure_type == "network_split":
             self._block_incoming_network_from_node(self.servers_to_fail[0],
                                                    self.servers_to_fail[
@@ -5720,6 +5722,11 @@ class NodesFailureTask(Task):
         o, r = shell.start_memcached()
         self.log.info("Started back memcached. {0} {1}".format(o, r))
         shell.disconnect()
+
+    def _kill_goxdcr(self, node):
+        shell = RemoteMachineShellConnection(node)
+        o, r = shell.kill_goxdcr()
+        self.log.info("Killed goxdcr. {0} {1}".format(o, r))
 
     def _block_incoming_network_from_node(self, node1, node2):
         shell = RemoteMachineShellConnection(node1)
