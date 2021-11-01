@@ -527,6 +527,160 @@ class QueryArrayFlatteningTests(QueryTests):
         if diffs:
             self.assertTrue(False, diffs)
 
+    '''Test a array index covering'''
+    def test_flatten_cover(self):
+        index_results = self.run_cbq_query(query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN SELECT email FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        self.assertTrue("covers" in str(explain_results), "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == 'idx1',
+                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(query="SELECT email FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        expected_results = self.run_cbq_query(query="SELECT email FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''Test a array index covering'''
+    def test_flatten_cover_no_leading(self):
+        index_results = self.run_cbq_query(query="create index idx1 on default(free_parking, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN SELECT email FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        self.assertTrue("covers" in str(explain_results), "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == 'idx1',
+                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(query="SELECT email FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        expected_results = self.run_cbq_query(query="SELECT email FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''Test covering using the flatten array_index'''
+    def test_flatten_cover_no_any(self):
+        index_results = self.run_cbq_query(query="create index idx1 on default(free_parking, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN SELECT email FROM default AS d WHERE free_parking = True")
+        self.assertTrue("covers" in str(explain_results), "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == 'idx1',
+                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(query="SELECT email FROM default AS d WHERE free_parking = True")
+        expected_results = self.run_cbq_query(query="SELECT email FROM default AS d USE INDEX (`#primary`) WHERE free_parking = True")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''You need to use reviews explicitly stated for covering in any and every'''
+    def test_flatten_any_and_every_non_cover(self):
+        index_results = self.run_cbq_query(query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, phone, free_parking)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN SELECT phone FROM default AS d WHERE ANY AND EVERY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        self.assertTrue("covers" not in str(explain_results), "The index is covering, it shouldn't be. Check plan {0}".format(explain_results))
+        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == 'idx1',
+                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(query="SELECT phone FROM default AS d WHERE ANY AND EVERY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        expected_results = self.run_cbq_query(query="SELECT phone FROM default AS d USE INDEX (`#primary`) WHERE ANY AND EVERY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''You need to use reviews explicitly stated for covering in any and every'''
+    def test_flatten_any_and_every_cover(self):
+        index_results = self.run_cbq_query(query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, address, free_parking, reviews)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN SELECT address FROM default AS d WHERE ANY AND EVERY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        self.assertTrue("covers" in str(explain_results), "The index is covering, it shouldn't be. Check plan {0}".format(explain_results))
+        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == 'idx1',
+                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(query="SELECT address FROM default AS d WHERE ANY AND EVERY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        expected_results = self.run_cbq_query(query="SELECT address FROM default AS d USE INDEX (`#primary`) WHERE ANY AND EVERY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''You need to use reviews explicitly stated for covering in any and every'''
+    def test_flatten_any_and_every_cover_non_leading(self):
+        index_results = self.run_cbq_query(query="create index idx1 on default(free_parking, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, address, reviews)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN SELECT address FROM default AS d WHERE ANY AND EVERY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        self.assertTrue("covers" in str(explain_results), "The index is covering, it shouldn't be. Check plan {0}".format(explain_results))
+        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == 'idx1',
+                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(query="SELECT address FROM default AS d WHERE ANY AND EVERY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        expected_results = self.run_cbq_query(query="SELECT address FROM default AS d USE INDEX (`#primary`) WHERE ANY AND EVERY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''You need to use reviews explicitly stated for covering in any and every'''
+    def test_flatten_any_and_every_cover_array_leading(self):
+        index_results = self.run_cbq_query(query="create index idx1 on default(reviews, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, address, free_parking)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN SELECT address FROM default AS d WHERE ANY AND EVERY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        self.assertTrue("covers" not in str(explain_results), "The index is covering, it shouldn't be. Check plan {0}".format(explain_results))
+        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['index'] == '#primary',
+                        "The correct index is not being used or the plan is different than expected! Expected primary got {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(query="SELECT address FROM default AS d WHERE ANY AND EVERY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        expected_results = self.run_cbq_query(query="SELECT address FROM default AS d USE INDEX (`#primary`) WHERE ANY AND EVERY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''Test array indexing cover with a when clause, query has field not explicitly in index but since the field is in when it should be covering'''
+    def test_flatten_when_cover(self):
+        index_results = self.run_cbq_query(query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews WHEN r.ratings.Rooms < 3 END, email, free_parking)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN SELECT email FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 AND r.ratings.Rooms < 3 END AND free_parking = True")
+        self.assertTrue("covers" in str(explain_results), "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == 'idx1',
+                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(query="SELECT email FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 AND r.ratings.Rooms < 3 END AND free_parking = True")
+        expected_results = self.run_cbq_query(query="SELECT email FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 AND r.ratings.Rooms < 3 END AND free_parking = True")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''Test array indexing cover with a when clause, query has field not explicitly in index but since the field is in when it should be covering'''
+    def test_flatten_when_cover_non_leading(self):
+        index_results = self.run_cbq_query(query="create index idx1 on default(free_parking, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews WHEN r.ratings.Rooms < 3 END, email)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN SELECT email FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 AND r.ratings.Rooms < 3 END AND free_parking = True")
+        self.assertTrue("covers" in str(explain_results), "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == 'idx1',
+                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(query="SELECT email FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 AND r.ratings.Rooms < 3 END AND free_parking = True")
+        expected_results = self.run_cbq_query(query="SELECT email FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 AND r.ratings.Rooms < 3 END AND free_parking = True")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''Test covering with a partial array_flattening index'''
+    def test_flatten_partial_cover(self):
+        index_results = self.run_cbq_query(
+            query="create index idx1 on default(ALL ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END,url) where free_parking = True")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(
+            query="EXPLAIN SELECT url FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        self.assertTrue("covers" in str(explain_results), "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == 'idx1',
+                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(
+            query="SELECT url FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        expected_results = self.run_cbq_query(
+            query="SELECT url FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
     def load_data(self, num_extra_buckets=0):
         self.conn.delete_all_buckets()
         time.sleep(5)
