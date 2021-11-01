@@ -2976,7 +2976,7 @@ class QueryTests(BaseTestCase):
         # To be fixed in next version
         # self.query_with_roles('delete from system:keyspaces', "'code': 11003")
         self.query_with_roles('delete from system:indexes', "'code': 11004")
-        self.query_with_roles('delete from system:dual', "'code': 11000")
+        self.query_with_roles('delete from system:dual', "'code': 11004")
 
         self.query_with_roles('delete from system:user_info', "'code': 11004")
         self.query_with_roles('delete from system:nodes', "'code': 11004")
