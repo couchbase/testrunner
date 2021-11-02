@@ -26,6 +26,12 @@ class MultipleCA(BaseTestCase):
         sample_bucket = self.input.param("sample_bucket", "travel-sample")
         if sample_bucket is not None:
             self.load_sample_bucket(self.master, sample_bucket)
+        self.buckets = RestConnection(self.master).get_buckets()
+        rest = RestConnection(self.master)
+        for bucket in self.buckets:
+            rest.change_bucket_props(bucket, replicaNumber=self.num_replicas)
+        task = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
+        self.wait_for_rebalance_to_complete(task)
 
     def tearDown(self):
         self.x509 = x509main(host=self.master)
@@ -355,3 +361,46 @@ class MultipleCA(BaseTestCase):
         if set(actual_root_ca_names) != set(expected_root_ca_names):
             self.fail("Expected {0} Actual {1}".format(expected_root_ca_names,
                                                        actual_root_ca_names))
+
+    def test_restart_node_with_encrypted_pkeys(self):
+        """
+        1. Init node cluster, with encrypted node pkeys
+        2. Restart a node
+        3. Failover and delta recover that node
+        4. Restart the node again and rebalance-out this time
+        5. Repeat steps 2 to 5 until you are left with master node
+        """
+        self.x509.generate_multiple_x509_certs(servers=self.servers[:self.nodes_init])
+        self.x509.upload_root_certs(self.master)
+        self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
+        rest = RestConnection(self.master)
+        nodes_in_cluster = [node for node in self.servers[:self.nodes_init]]
+        for node in self.servers[1:self.nodes_init]:
+            shell = RemoteMachineShellConnection(node)
+            shell.restart_couchbase()
+            shell.disconnect()
+            self.sleep(10, "Wait after restart")
+            self.cluster.async_failover(nodes_in_cluster,
+                                        [node],
+                                        graceful=False)
+            self.wait_for_failover_or_assert(1)
+            rest.set_recovery_type("ns_1@" + node.ip, recoveryType="delta")
+            https_val = CbServer.use_https  # so that add_node uses https
+            CbServer.use_https = True
+            task = self.cluster.async_rebalance(nodes_in_cluster, [], [])
+            CbServer.use_https = https_val
+            self.wait_for_rebalance_to_complete(task)
+            shell = RemoteMachineShellConnection(node)
+            shell.restart_couchbase()
+            shell.disconnect()
+            https_val = CbServer.use_https  # so that add_node uses https
+            CbServer.use_https = True
+            task = self.cluster.async_rebalance(nodes_in_cluster,
+                                                [], [node])
+            self.wait_for_rebalance_to_complete(task)
+            CbServer.use_https = https_val
+            nodes_in_cluster.remove(node)
+
+
+
+
