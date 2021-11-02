@@ -1250,14 +1250,14 @@ class BaseTestCase(unittest.TestCase):
                                                               timeout_secs=300))
         return tasks
 
-    def _async_load_all_buckets_till_dgm(self, server, scope=None, collection=None):
+    def _async_load_all_buckets_till_dgm(self, server, scope=None, collection=None, exp=0):
         tasks = []
         for bucket in self.buckets:
             self.cluster.async_load_gen_docs_till_dgm(server,
                                                       self.active_resident_threshold,
                                                       bucket,
                                                       scope=scope, collection=collection,
-                                                      exp=self.expiry,
+                                                      exp=exp,
                                                       value_size=self.value_size,
                                                       java_sdk_client=self.java_sdk_client)
 
@@ -1308,7 +1308,7 @@ class BaseTestCase(unittest.TestCase):
                                                     "bfilter_enabled", 'true', bucket)
 
         if self.active_resident_threshold < 100.0:
-            tasks = self._async_load_all_buckets_till_dgm(server, scope=scope, collection=collection)
+            tasks = self._async_load_all_buckets_till_dgm(server, scope=scope, collection=collection, exp=exp)
         else:
             tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag,
                                                  only_store_hash, batch_size, pause_secs,
