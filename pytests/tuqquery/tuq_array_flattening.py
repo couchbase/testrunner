@@ -18,6 +18,8 @@ class QueryArrayFlatteningTests(QueryTests):
         self.kv_dataset = self.input.param("kv_dataset", "Hotel")
         self.num_items = self.input.param("num_items", 10000)
         self.expiry = self.input.param("expiry", 0)
+        self.explicit = self.input.param("explicit", False)
+        self.use_all = self.input.param("use_all", False)
         self.rollback = self.input.param("rollback", False)
         self.conn = RestConnection(self.master)
         self.stat = CollectionsStats(self.master)
@@ -315,89 +317,6 @@ class QueryArrayFlatteningTests(QueryTests):
                         "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
                             explain_results))
 
-    '''Test insert that uses a query that uses an index with flatten_keys in it '''
-    def test_flatten_insert(self):
-        self.rest.load_sample("travel-sample")
-        time.sleep(15)
-        index_results = self.run_cbq_query(
-            query="CREATE INDEX idx1 ON `default`((ALL (ARRAY(ALL (ARRAY flatten_keys(n,v) FOR n:v IN (`r`.`ratings`) END)) FOR `r` IN `reviews` END)))")
-        # Ensure the query is actually using the flatten index instead of primary
-        explain_results = self.run_cbq_query(
-            query="EXPLAIN INSERT INTO `travel-sample`.inventory.landmark (KEY foo, VALUE bar) "
-                  "SELECT META(doc).id AS foo, doc AS bar FROM `default` AS doc WHERE ANY r IN doc.reviews SATISFIES "
-                  "ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' AND v = 3 END END")
-        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['~children'][0]['scan']['index'] == 'idx1',
-                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
-                            explain_results))
-        insert_results = self.run_cbq_query(query="INSERT INTO `travel-sample`.inventory.landmark (KEY foo, VALUE bar) "
-                                                  "SELECT META(doc).id AS foo, doc AS bar FROM `default` AS doc WHERE "
-                                                  "ANY r IN doc.reviews SATISFIES ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' "
-                                                  "AND v = 3 END END")
-        self.assertTrue(insert_results['status'] == 'success', "Index was not successfully created! {0}".format(insert_results))
-        query_results = self.run_cbq_query(
-            query="SELECT d.country, d.address, d.free_parking, d.city, d.type, d.url, d.phone, d.price, d.avg_rating, d.name, d.email FROM `travel-sample`.inventory.landmark AS d WHERE ANY r IN d.reviews SATISFIES ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' AND v = 3 END END ")
-        old_results = self.run_cbq_query(query="SELECT d.country, d.address, d.free_parking, d.city, d.type, d.url, d.phone, d.price, d.avg_rating, d.name, d.email FROM default AS d WHERE ANY r IN d.reviews SATISFIES ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' AND v = 3 END END ")
-        diffs = DeepDiff(query_results['results'], old_results['results'], ignore_order=True)
-        if diffs:
-            self.assertTrue(False, diffs)
-
-    '''Test upsert that uses a query that uses an index with flatten_keys in it'''
-    def test_flatten_upsert(self):
-        self.rest.load_sample("travel-sample")
-        time.sleep(15)
-        index_results = self.run_cbq_query(
-            query="CREATE INDEX idx1 ON `default`((ALL (ARRAY(ALL (ARRAY flatten_keys(n,v) FOR n:v IN (`r`.`ratings`) END)) FOR `r` IN `reviews` END)))")
-        # Ensure the query is actually using the flatten index instead of primary
-        explain_results = self.run_cbq_query(
-            query="EXPLAIN UPSERT INTO `travel-sample`.inventory.landmark (KEY foo, VALUE bar) "
-                  "SELECT META(doc).id AS foo, doc AS bar FROM `default` AS doc WHERE ANY r IN doc.reviews SATISFIES "
-                  "ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' AND v = 3 END END")
-        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['~children'][0]['scan']['index'] == 'idx1',
-                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
-                            explain_results))
-        insert_results = self.run_cbq_query(query="UPSERT INTO `travel-sample`.inventory.landmark (KEY foo, VALUE bar) "
-                                                  "SELECT META(doc).id AS foo, doc AS bar FROM `default` AS doc WHERE "
-                                                  "ANY r IN doc.reviews SATISFIES ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' "
-                                                  "AND v = 3 END END")
-        self.assertTrue(insert_results['status'] == 'success',
-                        "Index was not successfully created! {0}".format(insert_results))
-        query_results = self.run_cbq_query(
-            query="SELECT d.country, d.address, d.free_parking, d.city, d.type, d.url, d.phone, d.price, d.avg_rating, d.name, d.email FROM `travel-sample`.inventory.landmark AS d WHERE ANY r IN d.reviews SATISFIES ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' AND v = 3 END END")
-        old_results = self.run_cbq_query(query="SELECT d.country, d.address, d.free_parking, d.city, d.type, d.url, d.phone, d.price, d.avg_rating, d.name, d.email FROM default AS d WHERE ANY r IN d.reviews "
-                                               "SATISFIES ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' AND v = 3 END END")
-        diffs = DeepDiff(query_results['results'], old_results['results'], ignore_order=True)
-        if diffs:
-            self.assertTrue(False, diffs)
-
-        update_results = self.run_cbq_query(query="UPSERT INTO `travel-sample`.inventory.landmark (KEY foo, VALUE bar) "
-                                                  "SELECT META(doc).id AS foo, doc AS bar FROM `default` AS doc WHERE "
-                                                  "ANY r IN doc.reviews SATISFIES ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' "
-                                                  "AND v = 3 END END")
-        self.assertTrue(insert_results['status'] == 'success',
-                        "Index was not successfully created! {0}".format(insert_results))
-        query_results = self.run_cbq_query(
-            query="SELECT d.country, d.address, d.free_parking, d.city, d.type, d.url, d.phone, d.price, d.avg_rating, d.name, d.email FROM `travel-sample`.inventory.landmark AS d WHERE ANY r IN d.reviews SATISFIES ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' AND v = 3 END END")
-        old_results = self.run_cbq_query(query="SELECT d.country, d.address, d.free_parking, d.city, d.type, d.url, d.phone, d.price, d.avg_rating, d.name, d.email FROM default AS d WHERE ANY r IN d.reviews "
-                                               "SATISFIES ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' AND v = 3 END END")
-        diffs = DeepDiff(query_results['results'], old_results['results'], ignore_order=True)
-        if diffs:
-            self.assertTrue(False, diffs)
-
-    def test_flatten_update(self):
-        self.rest.load_sample("travel-sample")
-        time.sleep(30)
-        self.run_cbq_query(query="create index idx1 on default(country, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, avg_rating)")
-        update_results = self.run_cbq_query(
-            query="UPDATE `travel-sample`.inventory.airport "
-                  "SET foo = 9 WHERE country IN "
-                  "(SELECT RAW country FROM default d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' AND r.ratings.Cleanliness = 3 END "
-                  "AND avg_rating <= 3 AND country IS NOT NULL)")
-        self.assertTrue(update_results['status'] == "success")
-        mutation_count = update_results['metrics']['mutationCount']
-        verify_results = self.run_cbq_query(query="select foo from `travel-sample`.inventory.airport where foo = 9")
-        self.assertEqual(verify_results['metrics']['resultCount'], mutation_count, "Results mismatched, here are the verify_results {0}".format(verify_results))
-
-
     def test_flatten_delete(self):
         index_results = self.run_cbq_query(
             query="CREATE INDEX idx1 ON default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, free_parking) WHERE ANY r IN default.reviews SATISFIES r.author LIKE 'M%' END")
@@ -527,9 +446,109 @@ class QueryArrayFlatteningTests(QueryTests):
         if diffs:
             self.assertTrue(False, diffs)
 
+    ##############################################################################################
+    #
+    #   DML
+    ##############################################################################################
+
+    '''Test insert that uses a query that uses an index with flatten_keys in it '''
+    def test_flatten_insert(self):
+        self.rest.load_sample("travel-sample")
+        time.sleep(15)
+        index_results = self.run_cbq_query(
+            query="CREATE INDEX idx1 ON `default`((ALL (ARRAY(ALL (ARRAY flatten_keys(n,v) FOR n:v IN (`r`.`ratings`) END)) FOR `r` IN `reviews` END)))")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(
+            query="EXPLAIN INSERT INTO `travel-sample`.inventory.landmark (KEY foo, VALUE bar) "
+                  "SELECT META(doc).id AS foo, doc AS bar FROM `default` AS doc WHERE ANY r IN doc.reviews SATISFIES "
+                  "ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' AND v = 3 END END")
+        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['~children'][0]['scan']['index'] == 'idx1',
+                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
+                            explain_results))
+        insert_results = self.run_cbq_query(query="INSERT INTO `travel-sample`.inventory.landmark (KEY foo, VALUE bar) "
+                                                  "SELECT META(doc).id AS foo, doc AS bar FROM `default` AS doc WHERE "
+                                                  "ANY r IN doc.reviews SATISFIES ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' "
+                                                  "AND v = 3 END END")
+        self.assertTrue(insert_results['status'] == 'success', "Index was not successfully created! {0}".format(insert_results))
+        query_results = self.run_cbq_query(
+            query="SELECT d.country, d.address, d.free_parking, d.city, d.type, d.url, d.phone, d.price, d.avg_rating, d.name, d.email FROM `travel-sample`.inventory.landmark AS d WHERE ANY r IN d.reviews SATISFIES ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' AND v = 3 END END ")
+        old_results = self.run_cbq_query(query="SELECT d.country, d.address, d.free_parking, d.city, d.type, d.url, d.phone, d.price, d.avg_rating, d.name, d.email FROM default AS d WHERE ANY r IN d.reviews SATISFIES ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' AND v = 3 END END ")
+        diffs = DeepDiff(query_results['results'], old_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''Test upsert that uses a query that uses an index with flatten_keys in it'''
+    def test_flatten_upsert(self):
+        self.rest.load_sample("travel-sample")
+        time.sleep(15)
+        index_results = self.run_cbq_query(
+            query="CREATE INDEX idx1 ON `default`((ALL (ARRAY(ALL (ARRAY flatten_keys(n,v) FOR n:v IN (`r`.`ratings`) END)) FOR `r` IN `reviews` END)))")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(
+            query="EXPLAIN UPSERT INTO `travel-sample`.inventory.landmark (KEY foo, VALUE bar) "
+                  "SELECT META(doc).id AS foo, doc AS bar FROM `default` AS doc WHERE ANY r IN doc.reviews SATISFIES "
+                  "ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' AND v = 3 END END")
+        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['~children'][0]['scan']['index'] == 'idx1',
+                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
+                            explain_results))
+        insert_results = self.run_cbq_query(query="UPSERT INTO `travel-sample`.inventory.landmark (KEY foo, VALUE bar) "
+                                                  "SELECT META(doc).id AS foo, doc AS bar FROM `default` AS doc WHERE "
+                                                  "ANY r IN doc.reviews SATISFIES ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' "
+                                                  "AND v = 3 END END")
+        self.assertTrue(insert_results['status'] == 'success',
+                        "Index was not successfully created! {0}".format(insert_results))
+        query_results = self.run_cbq_query(
+            query="SELECT d.country, d.address, d.free_parking, d.city, d.type, d.url, d.phone, d.price, d.avg_rating, d.name, d.email FROM `travel-sample`.inventory.landmark AS d WHERE ANY r IN d.reviews SATISFIES ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' AND v = 3 END END")
+        old_results = self.run_cbq_query(query="SELECT d.country, d.address, d.free_parking, d.city, d.type, d.url, d.phone, d.price, d.avg_rating, d.name, d.email FROM default AS d WHERE ANY r IN d.reviews "
+                                               "SATISFIES ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' AND v = 3 END END")
+        diffs = DeepDiff(query_results['results'], old_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+        update_results = self.run_cbq_query(query="UPSERT INTO `travel-sample`.inventory.landmark (KEY foo, VALUE bar) "
+                                                  "SELECT META(doc).id AS foo, doc AS bar FROM `default` AS doc WHERE "
+                                                  "ANY r IN doc.reviews SATISFIES ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' "
+                                                  "AND v = 3 END END")
+        self.assertTrue(insert_results['status'] == 'success',
+                        "Index was not successfully created! {0}".format(insert_results))
+        query_results = self.run_cbq_query(
+            query="SELECT d.country, d.address, d.free_parking, d.city, d.type, d.url, d.phone, d.price, d.avg_rating, d.name, d.email FROM `travel-sample`.inventory.landmark AS d WHERE ANY r IN d.reviews SATISFIES ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' AND v = 3 END END")
+        old_results = self.run_cbq_query(query="SELECT d.country, d.address, d.free_parking, d.city, d.type, d.url, d.phone, d.price, d.avg_rating, d.name, d.email FROM default AS d WHERE ANY r IN d.reviews "
+                                               "SATISFIES ANY n:v IN r.ratings SATISFIES n = 'Cleanliness' AND v = 3 END END")
+        diffs = DeepDiff(query_results['results'], old_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    def test_flatten_update(self):
+        self.rest.load_sample("travel-sample")
+        time.sleep(30)
+        self.run_cbq_query(query="create index idx1 on default(country, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, avg_rating)")
+        update_results = self.run_cbq_query(
+            query="UPDATE `travel-sample`.inventory.airport "
+                  "SET foo = 9 WHERE country IN "
+                  "(SELECT RAW country FROM default d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' AND r.ratings.Cleanliness = 3 END "
+                  "AND avg_rating <= 3 AND country IS NOT NULL)")
+        self.assertTrue(update_results['status'] == "success")
+        mutation_count = update_results['metrics']['mutationCount']
+        verify_results = self.run_cbq_query(query="select foo from `travel-sample`.inventory.airport where foo = 9")
+        self.assertEqual(verify_results['metrics']['resultCount'], mutation_count, "Results mismatched, here are the verify_results {0}".format(verify_results))
+
+    ##############################################################################################
+    #
+    #   Covering Tests
+    ##############################################################################################
+
     '''Test a array index covering'''
     def test_flatten_cover(self):
-        index_results = self.run_cbq_query(query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking)")
+        if self.explicit:
+            create_query = "create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking, reviews)"
+        else:
+            create_query = "create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking)"
+
+        if self.use_all:
+            create_query = create_query.replace("DISTINCT", "ALL")
+
+        self.run_cbq_query(query=create_query)
         # Ensure the query is actually using the flatten index instead of primary
         explain_results = self.run_cbq_query(query="EXPLAIN SELECT email FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
         self.assertTrue("covers" in str(explain_results), "The index is not covering, it should be. Check plan {0}".format(explain_results))
@@ -544,7 +563,10 @@ class QueryArrayFlatteningTests(QueryTests):
 
     '''Test a array index covering'''
     def test_flatten_cover_no_leading(self):
-        index_results = self.run_cbq_query(query="create index idx1 on default(free_parking, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email)")
+        create_query = "create index idx1 on default(free_parking, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email)"
+        if self.use_all:
+            create_query = create_query.replace("DISTINCT", "ALL")
+        self.run_cbq_query(query=create_query)
         # Ensure the query is actually using the flatten index instead of primary
         explain_results = self.run_cbq_query(query="EXPLAIN SELECT email FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
         self.assertTrue("covers" in str(explain_results), "The index is not covering, it should be. Check plan {0}".format(explain_results))
@@ -559,7 +581,10 @@ class QueryArrayFlatteningTests(QueryTests):
 
     '''Test covering using the flatten array_index'''
     def test_flatten_cover_no_any(self):
-        index_results = self.run_cbq_query(query="create index idx1 on default(free_parking, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email)")
+        create_query = "create index idx1 on default(free_parking, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email)"
+        if self.use_all:
+            create_query = create_query.replace("DISTINCT", "ALL")
+        self.run_cbq_query(query=create_query)
         # Ensure the query is actually using the flatten index instead of primary
         explain_results = self.run_cbq_query(query="EXPLAIN SELECT email FROM default AS d WHERE free_parking = True")
         self.assertTrue("covers" in str(explain_results), "The index is not covering, it should be. Check plan {0}".format(explain_results))
@@ -574,7 +599,8 @@ class QueryArrayFlatteningTests(QueryTests):
 
     '''You need to use reviews explicitly stated for covering in any and every'''
     def test_flatten_any_and_every_non_cover(self):
-        index_results = self.run_cbq_query(query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, phone, free_parking)")
+        create_query = "create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, phone, free_parking)"
+        self.run_cbq_query(query=create_query)
         # Ensure the query is actually using the flatten index instead of primary
         explain_results = self.run_cbq_query(query="EXPLAIN SELECT phone FROM default AS d WHERE ANY AND EVERY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
         self.assertTrue("covers" not in str(explain_results), "The index is covering, it shouldn't be. Check plan {0}".format(explain_results))
@@ -589,7 +615,10 @@ class QueryArrayFlatteningTests(QueryTests):
 
     '''You need to use reviews explicitly stated for covering in any and every'''
     def test_flatten_any_and_every_cover(self):
-        index_results = self.run_cbq_query(query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, address, free_parking, reviews)")
+        create_query = "create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, address, free_parking, reviews)"
+        if self.use_all:
+            create_query = create_query.replace("DISTINCT", "ALL")
+        self.run_cbq_query(query=create_query)
         # Ensure the query is actually using the flatten index instead of primary
         explain_results = self.run_cbq_query(query="EXPLAIN SELECT address FROM default AS d WHERE ANY AND EVERY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
         self.assertTrue("covers" in str(explain_results), "The index is covering, it shouldn't be. Check plan {0}".format(explain_results))
@@ -634,7 +663,10 @@ class QueryArrayFlatteningTests(QueryTests):
 
     '''Test array indexing cover with a when clause, query has field not explicitly in index but since the field is in when it should be covering'''
     def test_flatten_when_cover(self):
-        index_results = self.run_cbq_query(query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews WHEN r.ratings.Rooms < 3 END, email, free_parking)")
+        create_query = "create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews WHEN r.ratings.Rooms < 3 END, email, free_parking)"
+        if self.use_all:
+            create_query = create_query.replace("DISTINCT", "ALL")
+        self.run_cbq_query(query=create_query)
         # Ensure the query is actually using the flatten index instead of primary
         explain_results = self.run_cbq_query(query="EXPLAIN SELECT email FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 AND r.ratings.Rooms < 3 END AND free_parking = True")
         self.assertTrue("covers" in str(explain_results), "The index is not covering, it should be. Check plan {0}".format(explain_results))
@@ -649,7 +681,10 @@ class QueryArrayFlatteningTests(QueryTests):
 
     '''Test array indexing cover with a when clause, query has field not explicitly in index but since the field is in when it should be covering'''
     def test_flatten_when_cover_non_leading(self):
-        index_results = self.run_cbq_query(query="create index idx1 on default(free_parking, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews WHEN r.ratings.Rooms < 3 END, email)")
+        create_query = "create index idx1 on default(free_parking, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews WHEN r.ratings.Rooms < 3 END, email)"
+        if self.use_all:
+            create_query = create_query.replace("DISTINCT", "ALL")
+        self.run_cbq_query(query=create_query)
         # Ensure the query is actually using the flatten index instead of primary
         explain_results = self.run_cbq_query(query="EXPLAIN SELECT email FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 AND r.ratings.Rooms < 3 END AND free_parking = True")
         self.assertTrue("covers" in str(explain_results), "The index is not covering, it should be. Check plan {0}".format(explain_results))
@@ -664,8 +699,10 @@ class QueryArrayFlatteningTests(QueryTests):
 
     '''Test covering with a partial array_flattening index'''
     def test_flatten_partial_cover(self):
-        index_results = self.run_cbq_query(
-            query="create index idx1 on default(ALL ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END,url) where free_parking = True")
+        create_query = "create index idx1 on default(ALL ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END,url) where free_parking = True"
+        if self.use_all:
+            create_query = create_query.replace("DISTINCT", "ALL")
+        self.run_cbq_query(query=create_query)
         # Ensure the query is actually using the flatten index instead of primary
         explain_results = self.run_cbq_query(
             query="EXPLAIN SELECT url FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
@@ -677,6 +714,304 @@ class QueryArrayFlatteningTests(QueryTests):
             query="SELECT url FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
         expected_results = self.run_cbq_query(
             query="SELECT url FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''With distinct keyword, unnest can't cover, with all keyword, unnest can cover'''
+    def test_flatten_unnest_cover(self):
+        if self.explicit:
+            create_query = "create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Rooms) FOR r IN reviews END, email, country, reviews)"
+        else:
+            create_query = "create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Rooms) FOR r IN reviews END, email, country)"
+        if self.use_all:
+            create_query = create_query.replace("DISTINCT", "ALL")
+
+        self.run_cbq_query(query=create_query)
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN SELECT d.email FROM default AS d UNNEST reviews AS rev "
+                                                   "WHERE rev.author LIKE 'M%' AND rev.ratings.Rooms > 1 AND d.country IS NOT NULL")
+        if self.use_all:
+            self.assertTrue("covers" in str(explain_results), "The index is not covering, it should be. Check plan {0}".format(explain_results))
+            self.assertTrue("filter_covers" in str(explain_results), "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        else:
+            self.assertTrue("covers" not in str(explain_results), "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == 'idx1',
+                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(query="SELECT d.email FROM default AS d UNNEST reviews AS rev "
+                                                   "WHERE rev.author LIKE 'M%' AND rev.ratings.Rooms > 1 AND d.country IS NOT NULL")
+        expected_results = self.run_cbq_query(query="SELECT d.email FROM default AS d USE INDEX (`#primary`) UNNEST reviews AS rev "
+                                                   "WHERE rev.author LIKE 'M%' AND rev.ratings.Rooms > 1 AND d.country IS NOT NULL")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    ##############################################################################################
+    #
+    #   Intersect/Union/Except
+    ##############################################################################################
+
+    '''Test intersect scan between two any/any and every arrays'''
+    def test_flatten_intersect_any(self):
+        index_results = self.run_cbq_query(
+            query="CREATE INDEX `idx1` ON `default`((distinct (array flatten_keys((`r`.`author`), ((`r`.`ratings`).`Cleanliness`)) for `r` in `reviews` end)))")
+        self.run_cbq_query(query="CREATE INDEX `idx2` ON `default`((distinct (array flatten_keys(((`r`.`ratings`).`Rooms`), ((`r`.`ratings`).`Overall`)) for `r` in `reviews` end)),`email`)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(
+            query="EXPLAIN SELECT * FROM default d WHERE ANY r IN d.reviews SATISFIES r.ratings.Cleanliness > 1 "
+                  "AND r.author LIKE 'M%' END AND ANY s IN d.reviews SATISFIES s.ratings.Rooms > 3 AND s.ratings.Overall > 1 END")
+        self.assertTrue("IntersectScan" in str(explain_results), "The query should be using an instersect scan, check explain results {0}".format(explain_results))
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        self.assertTrue("idx2" in str(explain_results),
+                        "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(
+            query="SELECT * FROM default d WHERE ANY r IN d.reviews SATISFIES r.ratings.Cleanliness > 1 "
+                  "AND r.author LIKE 'M%' END AND ANY s IN d.reviews SATISFIES s.ratings.Rooms > 3 AND s.ratings.Overall > 1 END")
+        expected_results = self.run_cbq_query(
+            query="SELECT * FROM default d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.ratings.Cleanliness > 1 "
+                  "AND r.author LIKE 'M%' END AND ANY s IN d.reviews SATISFIES s.ratings.Rooms > 3 AND s.ratings.Overall > 1 END")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''Test intersect scan between an any clause and an unnest clause'''
+    def test_flatten_intersect_any_unnest(self):
+        index_results = self.run_cbq_query(
+            query="CREATE INDEX `idx1` ON `default`((distinct (array flatten_keys((`r`.`author`), ((`r`.`ratings`).`Cleanliness`)) for `r` in `reviews` end)))")
+        self.run_cbq_query(query="CREATE INDEX `idx2` ON `default`((distinct (array flatten_keys(((`r`.`ratings`).`Rooms`), ((`r`.`ratings`).`Overall`)) for `r` in `reviews` end)),`email`)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(
+            query="EXPLAIN SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%'"
+                  " AND ANY s IN d.reviews SATISFIES r.ratings.Rooms > 1 AND r.ratings.Overall < 5 END")
+        self.assertTrue("IntersectScan" in str(explain_results), "The query should be using an instersect scan, check explain results {0}".format(explain_results))
+        self.assertTrue("Unnest" in str(explain_results), "The query should be using an unnest, check explain results {0}".format(explain_results))
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        self.assertTrue("idx2" in str(explain_results),
+                        "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(
+            query="SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%'"
+                  " AND ANY s IN d.reviews SATISFIES r.ratings.Rooms > 1 AND r.ratings.Overall < 5 END")
+        expected_results = self.run_cbq_query(
+            query="SELECT * FROM default d USE INDEX (`#primary`) UNNEST d.reviews  AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%'"
+                  " AND ANY s IN d.reviews SATISFIES r.ratings.Rooms > 1 AND r.ratings.Overall < 5 END")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''Test intersect scan between two unnest clauses'''
+    def test_flatten_intersect_unnest(self):
+        index_results = self.run_cbq_query(
+            query="CREATE INDEX `idx1` ON `default`((distinct (array flatten_keys((`r`.`author`), ((`r`.`ratings`).`Cleanliness`)) for `r` in `reviews` end)))")
+        self.run_cbq_query(query="CREATE INDEX `idx2` ON `default`((distinct (array flatten_keys(((`r`.`ratings`).`Rooms`), ((`r`.`ratings`).`Overall`)) for `r` in `reviews` end)),`email`)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(
+            query="EXPLAIN SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%'"
+                  " AND r.ratings.Rooms > 1 AND r.ratings.Overall < 5")
+        self.assertTrue("IntersectScan" in str(explain_results), "The query should be using an instersect scan, check explain results {0}".format(explain_results))
+        self.assertTrue("Unnest" in str(explain_results), "The query should be using an unnest, check explain results {0}".format(explain_results))
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        self.assertTrue("idx2" in str(explain_results),
+                        "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(
+            query="SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%'"
+                  " AND r.ratings.Rooms > 1 AND r.ratings.Overall < 5")
+        expected_results = self.run_cbq_query(
+            query="SELECT * FROM default d USE INDEX (`#primary`) UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%'"
+                  " AND r.ratings.Rooms > 1 AND r.ratings.Overall < 5")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''Test unionall scan between two any/any and every arrays'''
+    def test_flatten_union_any(self):
+        index_results = self.run_cbq_query(
+            query="CREATE INDEX `idx1` ON `default`((distinct (array flatten_keys((`r`.`author`), ((`r`.`ratings`).`Cleanliness`)) for `r` in `reviews` end)))")
+        self.run_cbq_query(query="CREATE INDEX `idx2` ON `default`((distinct (array flatten_keys(((`r`.`ratings`).`Rooms`), ((`r`.`ratings`).`Overall`)) for `r` in `reviews` end)),`email`)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(
+            query="EXPLAIN SELECT * FROM default d WHERE ANY r IN d.reviews SATISFIES r.ratings.Cleanliness > 1 "
+                  "AND r.author LIKE 'M%' END UNION SELECT * FROM default d WHERE ANY s IN d.reviews SATISFIES s.ratings.Rooms > 3 AND s.ratings.Overall > 1 END")
+        self.assertTrue("UnionAll" in str(explain_results), "The query should be using an instersect scan, check explain results {0}".format(explain_results))
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        self.assertTrue("idx2" in str(explain_results),
+                        "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(
+            query="SELECT * FROM default d WHERE ANY r IN d.reviews SATISFIES r.ratings.Cleanliness > 1 "
+                  "AND r.author LIKE 'M%' END UNION SELECT * FROM default d WHERE ANY s IN d.reviews SATISFIES s.ratings.Rooms > 3 AND s.ratings.Overall > 1 END")
+        expected_results = self.run_cbq_query(
+            query="SELECT * FROM default d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.ratings.Cleanliness > 1 "
+                  "AND r.author LIKE 'M%' END UNION SELECT * FROM default d USE INDEX (`#primary`) WHERE ANY s IN d.reviews SATISFIES s.ratings.Rooms > 3 AND s.ratings.Overall > 1 END")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''Test union all scan between an any clause and an unnest clause'''
+    def test_flatten_union_any_unnest(self):
+        index_results = self.run_cbq_query(
+            query="CREATE INDEX `idx1` ON `default`((distinct (array flatten_keys((`r`.`author`), ((`r`.`ratings`).`Cleanliness`)) for `r` in `reviews` end)))")
+        self.run_cbq_query(query="CREATE INDEX `idx2` ON `default`((distinct (array flatten_keys(((`r`.`ratings`).`Rooms`), ((`r`.`ratings`).`Overall`)) for `r` in `reviews` end)),`email`)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(
+            query="EXPLAIN SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%'"
+                  " UNION SELECT * FROM default d WHERE ANY s IN d.reviews SATISFIES r.ratings.Rooms > 1 AND r.ratings.Overall < 5 END")
+        self.assertTrue("UnionAll" in str(explain_results), "The query should be using an unionall scan, check explain results {0}".format(explain_results))
+        self.assertTrue("Unnest" in str(explain_results), "The query should be using an unnest, check explain results {0}".format(explain_results))
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using an union all scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        self.assertTrue("idx2" in str(explain_results),
+                        "The query should be using an union all scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(
+            query="SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%'"
+                  " UNION SELECT * FROM default d WHERE ANY s IN d.reviews SATISFIES r.ratings.Rooms > 1 AND r.ratings.Overall < 5 END")
+        expected_results = self.run_cbq_query(
+            query="SELECT * FROM default d USE INDEX (`#primary`) UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%'"
+                  " UNION SELECT * FROM default d USE INDEX (`#primary`) WHERE ANY s IN d.reviews SATISFIES r.ratings.Rooms > 1 AND r.ratings.Overall < 5 END")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''Test union all scan between two any/any and every arrays'''
+    def test_flatten_union_unnest(self):
+        index_results = self.run_cbq_query(
+            query="CREATE INDEX `idx1` ON `default`((distinct (array flatten_keys((`r`.`author`), ((`r`.`ratings`).`Cleanliness`)) for `r` in `reviews` end)))")
+        self.run_cbq_query(query="CREATE INDEX `idx2` ON `default`((distinct (array flatten_keys(((`r`.`ratings`).`Rooms`), ((`r`.`ratings`).`Overall`)) for `r` in `reviews` end)),`email`)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(
+            query="EXPLAIN SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%' "
+                  "UNION SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Rooms > 1 AND r.ratings.Overall < 5")
+        self.assertTrue("UnionAll" in str(explain_results), "The query should be using an instersect scan, check explain results {0}".format(explain_results))
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        self.assertTrue("idx2" in str(explain_results),
+                        "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(
+            query="SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%' "
+                  "UNION SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Rooms > 1 AND r.ratings.Overall < 5")
+        expected_results = self.run_cbq_query(
+            query="SELECT * FROM default d USE INDEX (`#primary`) UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%' "
+                  "UNION SELECT * FROM default d USE INDEX (`#primary`) UNNEST d.reviews AS r WHERE r.ratings.Rooms > 1 AND r.ratings.Overall < 5")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''Test exceptall scan between two unnest'''
+    def test_flatten_except_unnest(self):
+        index_results = self.run_cbq_query(
+            query="CREATE INDEX `idx1` ON `default`((distinct (array flatten_keys((`r`.`author`), ((`r`.`ratings`).`Cleanliness`)) for `r` in `reviews` end)))")
+        self.run_cbq_query(query="CREATE INDEX `idx2` ON `default`((distinct (array flatten_keys(((`r`.`ratings`).`Rooms`), ((`r`.`ratings`).`Overall`)) for `r` in `reviews` end)),`email`)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(
+            query="EXPLAIN SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%' "
+                  "EXCEPT SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Rooms > 1 AND r.ratings.Overall < 5")
+        self.assertTrue("ExceptAll" in str(explain_results), "The query should be using an instersect scan, check explain results {0}".format(explain_results))
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        self.assertTrue("idx2" in str(explain_results),
+                        "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(
+            query="SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%' "
+                  "EXCEPT SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Rooms > 1 AND r.ratings.Overall < 5")
+        expected_results = self.run_cbq_query(
+            query="SELECT * FROM default d USE INDEX (`#primary`) UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%' "
+                  "EXCEPT SELECT * FROM default d USE INDEX (`#primary`) UNNEST d.reviews AS r WHERE r.ratings.Rooms > 1 AND r.ratings.Overall < 5")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''Test unionall scan between two any/any and every arrays'''
+    def test_flatten_intersectall_any(self):
+        index_results = self.run_cbq_query(
+            query="CREATE INDEX `idx1` ON `default`((distinct (array flatten_keys((`r`.`author`), ((`r`.`ratings`).`Cleanliness`)) for `r` in `reviews` end)))")
+        self.run_cbq_query(query="CREATE INDEX `idx2` ON `default`((distinct (array flatten_keys(((`r`.`ratings`).`Rooms`), ((`r`.`ratings`).`Overall`)) for `r` in `reviews` end)),`email`)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(
+            query="EXPLAIN SELECT * FROM default d WHERE ANY r IN d.reviews SATISFIES r.ratings.Cleanliness > 1 "
+                  "AND r.author LIKE 'M%' END INTERSECT SELECT * FROM default d WHERE ANY s IN d.reviews SATISFIES s.ratings.Rooms > 3 AND s.ratings.Overall > 1 END")
+        self.assertTrue("IntersectAll" in str(explain_results), "The query should be using an instersect scan, check explain results {0}".format(explain_results))
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        self.assertTrue("idx2" in str(explain_results),
+                        "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(
+            query="SELECT * FROM default d WHERE ANY r IN d.reviews SATISFIES r.ratings.Cleanliness > 1 "
+                  "AND r.author LIKE 'M%' END INTERSECT SELECT * FROM default d WHERE ANY s IN d.reviews SATISFIES s.ratings.Rooms > 3 AND s.ratings.Overall > 1 END")
+        expected_results = self.run_cbq_query(
+            query="SELECT * FROM default d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.ratings.Cleanliness > 1 "
+                  "AND r.author LIKE 'M%' END INTERSECT SELECT * FROM default d USE INDEX (`#primary`) WHERE ANY s IN d.reviews SATISFIES s.ratings.Rooms > 3 AND s.ratings.Overall > 1 END")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''Test union all scan between an any clause and an unnest clause'''
+    def test_flatten_intersectall_any_unnest(self):
+        index_results = self.run_cbq_query(
+            query="CREATE INDEX `idx1` ON `default`((distinct (array flatten_keys((`r`.`author`), ((`r`.`ratings`).`Cleanliness`)) for `r` in `reviews` end)))")
+        self.run_cbq_query(query="CREATE INDEX `idx2` ON `default`((distinct (array flatten_keys(((`r`.`ratings`).`Rooms`), ((`r`.`ratings`).`Overall`)) for `r` in `reviews` end)),`email`)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(
+            query="EXPLAIN SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%'"
+                  " INTERSECT SELECT * FROM default d WHERE ANY s IN d.reviews SATISFIES r.ratings.Rooms > 1 AND r.ratings.Overall < 5 END")
+        self.assertTrue("IntersectAll" in str(explain_results), "The query should be using an instersect scan, check explain results {0}".format(explain_results))
+        self.assertTrue("Unnest" in str(explain_results), "The query should be using an unnest, check explain results {0}".format(explain_results))
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        self.assertTrue("idx2" in str(explain_results),
+                        "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(
+            query="SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%'"
+                  " INTERSECT SELECT * FROM default d WHERE ANY s IN d.reviews SATISFIES r.ratings.Rooms > 1 AND r.ratings.Overall < 5 END")
+        expected_results = self.run_cbq_query(
+            query="SELECT * FROM default d USE INDEX (`#primary`) UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%'"
+                  " INTERSECT SELECT * FROM default d USE INDEX (`#primary`) WHERE ANY s IN d.reviews SATISFIES r.ratings.Rooms > 1 AND r.ratings.Overall < 5 END")
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    '''Test union all scan between two any/any and every arrays'''
+    def test_flatten_intersectall_unnest(self):
+        index_results = self.run_cbq_query(
+            query="CREATE INDEX `idx1` ON `default`((distinct (array flatten_keys((`r`.`author`), ((`r`.`ratings`).`Cleanliness`)) for `r` in `reviews` end)))")
+        self.run_cbq_query(query="CREATE INDEX `idx2` ON `default`((distinct (array flatten_keys(((`r`.`ratings`).`Rooms`), ((`r`.`ratings`).`Overall`)) for `r` in `reviews` end)),`email`)")
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(
+            query="EXPLAIN SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%' "
+                  "INTERSECT SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Rooms > 1 AND r.ratings.Overall < 5")
+        self.assertTrue("IntersectAll" in str(explain_results), "The query should be using an instersect scan, check explain results {0}".format(explain_results))
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        self.assertTrue("idx2" in str(explain_results),
+                        "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(
+            query="SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%' "
+                  "INTERSECT SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Rooms > 1 AND r.ratings.Overall < 5")
+        expected_results = self.run_cbq_query(
+            query="SELECT * FROM default d USE INDEX (`#primary`) UNNEST d.reviews AS r WHERE r.ratings.Cleanliness = 1 AND r.author LIKE 'M%' "
+                  "INTERSECT SELECT * FROM default d USE INDEX (`#primary`) UNNEST d.reviews AS r WHERE r.ratings.Rooms > 1 AND r.ratings.Overall < 5")
         diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
         if diffs:
             self.assertTrue(False, diffs)
