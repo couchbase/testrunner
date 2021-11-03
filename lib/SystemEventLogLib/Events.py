@@ -1,7 +1,7 @@
 import threading
 from datetime import datetime
 
-from Cb_constants.CBServer import CbServer
+from Cb_constants import CbServer
 from SystemEventLogLib.SystemEventOperations import SystemEventRestHelper
 
 
