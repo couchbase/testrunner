@@ -37,8 +37,8 @@ class MultipleCANegative(BaseTestCase):
         CA is not authenticated
         """
         self.x509.generate_multiple_x509_certs(servers=self.servers)
-        self.log.info("Manifest #########\n {0}".format(json.dumps(x509main.manifest, indent=4)))
-        cas = copy.deepcopy(x509main.root_ca_names)
+        self.log.info("Manifest #########\n {0}".format(json.dumps(self.x509.manifest, indent=4)))
+        cas = copy.deepcopy(self.x509.root_ca_names)
         cas.remove("clientroot")  # make "clientroot" ca untrusted
         for server in self.servers[:self.nodes_init]:
             _ = self.x509.upload_root_certs(server=server, root_ca_names=cas)
@@ -97,7 +97,7 @@ class MultipleCANegative(BaseTestCase):
         params["privateKeyPassphrase"] = dict()
         params["privateKeyPassphrase"]["type"] = "plain"
         params["privateKeyPassphrase"]["password"] = \
-            x509main.private_key_passphrase_map[str(self.master.ip)] + "incorrect"
+            self.x509.private_key_passphrase_map[str(self.master.ip)] + "incorrect"
         params = json.dumps(params)
         rest = RestConnection(self.master)
         status, content = rest.reload_certificate(params=params)

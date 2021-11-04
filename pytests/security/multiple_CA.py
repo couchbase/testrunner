@@ -34,6 +34,7 @@ class MultipleCA(BaseTestCase):
         self.wait_for_rebalance_to_complete(task)
 
     def tearDown(self):
+        CbServer.use_https = False
         self.x509 = x509main(host=self.master)
         self.x509.teardown_certs(servers=self.servers)
         super(MultipleCA, self).tearDown()
@@ -128,7 +129,7 @@ class MultipleCA(BaseTestCase):
         3. Client cert auth
         """
         self.x509.generate_multiple_x509_certs(servers=self.servers)
-        self.log.info("Manifest #########\n {0}".format(json.dumps(x509main.manifest, indent=4)))
+        self.log.info("Manifest #########\n {0}".format(json.dumps(self.x509.manifest, indent=4)))
         for server in self.servers:
             _ = self.x509.upload_root_certs(server)
         self.x509.upload_node_certs(servers=self.servers)
@@ -158,7 +159,7 @@ class MultipleCA(BaseTestCase):
         6. Rebalance-in back the step3's node
         """
         self.x509.generate_multiple_x509_certs(servers=self.servers)
-        self.log.info("Manifest #########\n {0}".format(json.dumps(x509main.manifest, indent=4)))
+        self.log.info("Manifest #########\n {0}".format(json.dumps(self.x509.manifest, indent=4)))
         self.x509.upload_root_certs(self.master)
         self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
         self.x509.delete_unused_out_of_the_box_CAs(server=self.master)
@@ -256,7 +257,7 @@ class MultipleCA(BaseTestCase):
         """
         self.x509.generate_multiple_x509_certs(servers=self.servers)
         self.log.info("Manifest before rotating certs #########\n {0}".
-                      format(json.dumps(x509main.manifest, indent=4)))
+                      format(json.dumps(self.x509.manifest, indent=4)))
         for server in self.servers:
             _ = self.x509.upload_root_certs(server)
         self.x509.upload_node_certs(servers=self.servers)
@@ -266,7 +267,7 @@ class MultipleCA(BaseTestCase):
         self.auth()
         self.x509.rotate_certs(self.servers, "all")
         self.log.info("Manifest after rotating certs #########\n {0}".
-                      format(json.dumps(x509main.manifest, indent=4)))
+                      format(json.dumps(self.x509.manifest, indent=4)))
 
         https_val = CbServer.use_https  # so that add_node uses https
         CbServer.use_https = True
@@ -340,18 +341,18 @@ class MultipleCA(BaseTestCase):
         5.Verify that the net trusted CAs for the cluster is now: [ca1, ca2, ca3, ca4]
         """
         self.x509.generate_multiple_x509_certs(servers=self.servers[:self.nodes_init])
-        self.x509.upload_root_certs(server=self.master, root_ca_names=[x509main.root_ca_names[0]])
+        self.x509.upload_root_certs(server=self.master, root_ca_names=[self.x509.root_ca_names[0]])
         self.x509.upload_root_certs(server=self.servers[:self.nodes_init][1],
-                                    root_ca_names=[x509main.root_ca_names[1]])
+                                    root_ca_names=[self.x509.root_ca_names[1]])
         self.x509.upload_root_certs(server=self.servers[:self.nodes_init][2],
-                                    root_ca_names=x509main.root_ca_names[2:])
+                                    root_ca_names=self.x509.root_ca_names[2:])
         self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
         self.x509.delete_unused_out_of_the_box_CAs(server=self.master)
         self.x509.upload_client_cert_settings(server=self.master)
         self.auth(servers=self.nodes_init)
         content = self.x509.get_trusted_CAs()
         self.log.info("Trusted CAs: {0}".format(content))
-        expected_root_ca_names = x509main.root_ca_names
+        expected_root_ca_names = self.x509.root_ca_names
         actual_root_ca_names = list()
         for ca_dict in content:
             subject = ca_dict["subject"]

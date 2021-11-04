@@ -51,13 +51,6 @@ class x509main:
     ALL_CAs_PATH = CACERTFILEPATH + "all/"  # a dir to store the combined root ca .pem files
     ALL_CAs_PEM_NAME = "all_ca.pem"  # file name of the CA bundle
 
-    root_ca_names = []  # list of active root certs
-    manifest = {}  # active CA manifest
-    node_ca_map = {}  # {<node_ip>: {signed_by: <int_ca_name>, path: <node_ca_dir>}}
-    client_ca_map = {}  # {<client_ca_name>:  {signed_by: <int_ca_name>, path: <client_ca_dir>}}
-    private_key_passphrase_map = {}  # {<node_ip>:<plain_passw>}
-    ca_count = 0  # total count of active root certs
-
     def __init__(self,
                  host=None,
                  wildcard_dns=None,
@@ -75,6 +68,13 @@ class x509main:
                  passphrase_plain="default",
                  passphrase_load_timeout=5000,
                  https_opts=None):
+        self.root_ca_names = list()  # list of active root certs
+        self.manifest = dict()  # active CA manifest
+        self.node_ca_map = dict()  # {<node_ip>: {signed_by: <int_ca_name>, path: <node_ca_dir>}}
+        self.client_ca_map = dict()  # {<client_ca_name>:  {signed_by: <int_ca_name>, path: <client_ca_dir>}}
+        self.private_key_passphrase_map = dict()  # {<node_ip>:<plain_passw>}
+        self.ca_count = 0  # total count of active root certs
+
         if https_opts is None:
             self.https_opts = {"verifyPeer": 'false'}
         self.log = logger.Logger.get_logger()
@@ -198,8 +198,7 @@ class x509main:
         shell.copy_file_local_to_remote(src, dst)
         shell.disconnect()
 
-    @staticmethod
-    def get_a_root_cert(root_ca_name=None):
+    def get_a_root_cert(self, root_ca_name=None):
         """
         (returns): path to ca.pem
 
@@ -208,38 +207,36 @@ class x509main:
             of a random trusted CA
         """
         if root_ca_name is None:
-            root_ca_name = random.choice(x509main.root_ca_names)
+            root_ca_name = random.choice(self.root_ca_names)
         return x509main.CACERTFILEPATH + root_ca_name + "/ca.pem"
 
-    @staticmethod
-    def get_node_cert(server):
+    def get_node_cert(self, server):
         """
         returns pkey.key, chain.pem,  ie;
         node's cert's key and cert
         """
 
-        node_ca_key_path = x509main.node_ca_map[str(server.ip)]["path"] + \
+        node_ca_key_path = self.node_ca_map[str(server.ip)]["path"] + \
                            server.ip + ".key"
-        node_ca_path = x509main.node_ca_map[str(server.ip)]["path"] + \
+        node_ca_path = self.node_ca_map[str(server.ip)]["path"] + \
                        "long_chain" + server.ip + ".pem"
         return node_ca_key_path, node_ca_path
 
-    @staticmethod
-    def get_node_private_key_passphrase_script(server):
+    def get_node_private_key_passphrase_script(self, server):
         """
         Given a server object,
         returns the path of the bash script(which prints pkey passphrase for that node) on slave
         """
-        return x509main.node_ca_map[str(server.ip)]["path"] + "passphrase.sh"
+        return self.node_ca_map[str(server.ip)]["path"] + "passphrase.sh"
 
     def get_client_cert(self, int_ca_name):
         """
         returns client's cert and key
         """
         client_ca_name = "client_" + int_ca_name
-        client_ca_key_path = x509main.client_ca_map[str(client_ca_name)]["path"] + \
+        client_ca_key_path = self.client_ca_map[str(client_ca_name)]["path"] + \
                              self.client_ip + ".key"
-        client_ca_path = x509main.client_ca_map[str(client_ca_name)]["path"] + \
+        client_ca_path = self.client_ca_map[str(client_ca_name)]["path"] + \
                          "long_chain" + self.client_ip + ".pem"
         return client_ca_path, client_ca_key_path
 
@@ -250,7 +247,7 @@ class x509main:
         self.remove_directory(dir_name=x509main.ALL_CAs_PATH)
         self.create_directory(dir_name=x509main.ALL_CAs_PATH)
         cat_cmd = "cat "
-        for root_ca, root_ca_manifest in x509main.manifest.items():
+        for root_ca, root_ca_manifest in self.manifest.items():
             root_ca_dir_path = root_ca_manifest["path"]
             root_ca_path = root_ca_dir_path + "ca.pem"
             cat_cmd = cat_cmd + root_ca_path + " "
@@ -278,7 +275,7 @@ class x509main:
                     # generate passw
                     passw = ''.join(random.choice(string.ascii_uppercase + string.digits)
                                     for _ in range(20))
-                    x509main.private_key_passphrase_map[str(node_ip)] = passw
+                self.private_key_passphrase_map[str(node_ip)] = passw
             elif self.passphrase_type == "script":
                 # generate passw
                 passw = ''.join(random.choice(string.ascii_uppercase + string.digits)
@@ -341,11 +338,11 @@ class x509main:
                                               " -subj '/C=UA/O=MyCompany/CN=" + cn_name + "'")
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
-        x509main.ca_count += 1
-        x509main.root_ca_names.append(root_ca_name)
-        x509main.manifest[root_ca_name] = dict()
-        x509main.manifest[root_ca_name]["path"] = root_ca_dir
-        x509main.manifest[root_ca_name]["intermediate"] = dict()
+        self.ca_count += 1
+        self.root_ca_names.append(root_ca_name)
+        self.manifest[root_ca_name] = dict()
+        self.manifest[root_ca_name]["path"] = root_ca_dir
+        self.manifest[root_ca_name]["intermediate"] = dict()
         shell.disconnect()
 
     def generate_intermediate_certificate(self, root_ca_name, int_ca_name):
@@ -382,10 +379,10 @@ class x509main:
                                               " -out " + int_ca_path + " -days 365 -sha256")
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
-        x509main.manifest[root_ca_name]["intermediate"][int_ca_name] = dict()
-        x509main.manifest[root_ca_name]["intermediate"][int_ca_name]["path"] = int_ca_dir
-        x509main.manifest[root_ca_name]["intermediate"][int_ca_name]["nodes"] = dict()
-        x509main.manifest[root_ca_name]["intermediate"][int_ca_name]["clients"] = dict()
+        self.manifest[root_ca_name]["intermediate"][int_ca_name] = dict()
+        self.manifest[root_ca_name]["intermediate"][int_ca_name]["path"] = int_ca_dir
+        self.manifest[root_ca_name]["intermediate"][int_ca_name]["nodes"] = dict()
+        self.manifest[root_ca_name]["intermediate"][int_ca_name]["clients"] = dict()
         shell.disconnect()
 
     def generate_node_certificate(self, root_ca_name, int_ca_name, node_ip):
@@ -456,10 +453,10 @@ class x509main:
 
         os.remove(temp_cert_extensions_file)
         shell.disconnect()
-        x509main.node_ca_map[str(node_ip)] = dict()
-        x509main.node_ca_map[str(node_ip)]["signed_by"] = int_ca_name
-        x509main.node_ca_map[str(node_ip)]["path"] = node_ca_dir
-        x509main.manifest[root_ca_name]["intermediate"][int_ca_name]["nodes"][node_ip] = \
+        self.node_ca_map[str(node_ip)] = dict()
+        self.node_ca_map[str(node_ip)]["signed_by"] = int_ca_name
+        self.node_ca_map[str(node_ip)]["path"] = node_ca_dir
+        self.manifest[root_ca_name]["intermediate"][int_ca_name]["nodes"][node_ip] = \
             node_ca_dir
 
     def generate_client_certificate(self, root_ca_name, int_ca_name):
@@ -531,10 +528,10 @@ class x509main:
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
         os.remove(temp_cert_extensions_file)
         shell.disconnect()
-        x509main.client_ca_map[str(client_ca_name)] = dict()
-        x509main.client_ca_map[str(client_ca_name)]["signed_by"] = int_ca_name
-        x509main.client_ca_map[str(client_ca_name)]["path"] = client_ca_dir
-        x509main.manifest[root_ca_name]["intermediate"][int_ca_name]["clients"][self.client_ip] = \
+        self.client_ca_map[str(client_ca_name)] = dict()
+        self.client_ca_map[str(client_ca_name)]["signed_by"] = int_ca_name
+        self.client_ca_map[str(client_ca_name)]["path"] = client_ca_dir
+        self.manifest[root_ca_name]["intermediate"][int_ca_name]["clients"][self.client_ip] = \
             client_ca_dir
 
     def generate_multiple_x509_certs(self, servers, spec_file_name="default"):
@@ -566,14 +563,14 @@ class x509main:
                         self.generate_node_certificate(root_ca_name, int_ca_name,
                                                        copy_servers[node_ptr].ip)
                         node_ptr = node_ptr + 1
-                    if x509main.ca_count == spec["number_of_CAs"] and \
+                    if self.ca_count == spec["number_of_CAs"] and \
                             i == (number_of_int_ca - 1):
                         while node_ptr < max_ptr:
                             self.generate_node_certificate(root_ca_name, int_ca_name,
                                                            copy_servers[node_ptr].ip)
                             node_ptr = node_ptr + 1
-        while x509main.ca_count < spec["number_of_CAs"]:
-            root_ca_name = "r" + str(x509main.ca_count + 1)
+        while self.ca_count < spec["number_of_CAs"]:
+            root_ca_name = "r" + str(self.ca_count + 1)
             number_of_int_ca = spec["int_certs_per_CA"]
             for i in range(number_of_int_ca):
                 int_ca_name = "i" + str(i + 1) + "_" + root_ca_name
@@ -583,7 +580,7 @@ class x509main:
                     self.generate_node_certificate(root_ca_name, int_ca_name,
                                                    copy_servers[node_ptr].ip)
                     node_ptr = node_ptr + 1
-                if x509main.ca_count == spec["number_of_CAs"] and \
+                if self.ca_count == spec["number_of_CAs"] and \
                         i == (number_of_int_ca - 1):
                     while node_ptr < max_ptr:
                         self.generate_node_certificate(root_ca_name, int_ca_name,
@@ -617,15 +614,15 @@ class x509main:
         :root_ca_names: (optional) - list of root_ca_names. Defaults to all
         """
         if root_ca_names == "all":
-            root_ca_names = copy.deepcopy(x509main.root_ca_names)
+            root_ca_names = copy.deepcopy(self.root_ca_names)
         old_ids = self.get_ids_from_ca_names(ca_names=root_ca_names,
                                              server=all_servers[0])
         nodes_affected_ips = list()
         for root_ca_name in root_ca_names:
-            root_ca_manifest = copy.deepcopy(x509main.manifest[root_ca_name])
-            del x509main.manifest[root_ca_name]
+            root_ca_manifest = copy.deepcopy(self.manifest[root_ca_name])
+            del self.manifest[root_ca_name]
             self.remove_directory(root_ca_manifest['path'])
-            x509main.root_ca_names.remove(root_ca_name)
+            self.root_ca_names.remove(root_ca_name)
             cn_name = root_ca_name + 'rotated'
             self.generate_root_certificate(root_ca_name=root_ca_name,
                                            cn_name=cn_name)
@@ -674,7 +671,7 @@ class x509main:
         if server is None:
             server = self.host
         if root_ca_names is None:
-            root_ca_names = x509main.root_ca_names
+            root_ca_names = self.root_ca_names
         self.copy_trusted_CAs(server=server, root_ca_names=root_ca_names)
         content = self.load_trusted_CAs(server=server)
         return content
@@ -745,6 +742,33 @@ class x509main:
             raise Exception(msg)
         return content
 
+    def build_params(self, node):
+        """
+        Builds parameters for node certificate,key upload
+        """
+        params = dict()
+        if self.encryption_type:
+            params["privateKeyPassphrase"] = dict()
+            params["privateKeyPassphrase"]["type"] = self.passphrase_type
+            if self.passphrase_type == "script":
+                params["privateKeyPassphrase"]["path"] = self.install_path + \
+                                                         x509main.SCRIPTSPATH + \
+                                                         x509main.SCRIPTFILEPATH
+                params["privateKeyPassphrase"]["timeout"] = self.passphrase_load_timeout
+                params["privateKeyPassphrase"]["trim"] = 'true'
+                if self.passphrase_script_args:
+                    params["privateKeyPassphrase"]["args"] = self.passphrase_script_args
+            elif self.passphrase_type == "rest":
+                params["privateKeyPassphrase"]["url"] = self.passphrase_url
+                params["privateKeyPassphrase"]["timeout"] = self.passphrase_load_timeout
+                params["privateKeyPassphrase"]["httpsOpts"] = self.https_opts
+            else:
+                params["privateKeyPassphrase"]["type"] = "plain"
+                params["privateKeyPassphrase"]["password"] = \
+                    self.private_key_passphrase_map[str(node.ip)]
+        params = json.dumps(params)
+        return params
+
     def reload_node_certificates(self, servers):
         """
         reload node certificates from inbox folder
@@ -753,35 +777,11 @@ class x509main:
         :servers: list of nodes
         """
 
-        def build_params(node):
-            params = dict()
-            if self.encryption_type:
-                params["privateKeyPassphrase"] = dict()
-                params["privateKeyPassphrase"]["type"] = self.passphrase_type
-                if self.passphrase_type == "script":
-                    params["privateKeyPassphrase"]["path"] = self.install_path + \
-                                                             x509main.SCRIPTSPATH + \
-                                                             x509main.SCRIPTFILEPATH
-                    params["privateKeyPassphrase"]["timeout"] = self.passphrase_load_timeout
-                    params["privateKeyPassphrase"]["trim"] = 'true'
-                    if self.passphrase_script_args:
-                        params["privateKeyPassphrase"]["args"] = self.passphrase_script_args
-                elif self.passphrase_type == "rest":
-                    params["privateKeyPassphrase"]["url"] = self.passphrase_url
-                    params["privateKeyPassphrase"]["timeout"] = self.passphrase_load_timeout
-                    params["privateKeyPassphrase"]["httpsOpts"] = self.https_opts
-                else:
-                    params["privateKeyPassphrase"]["type"] = "plain"
-                    params["privateKeyPassphrase"]["password"] = \
-                        x509main.private_key_passphrase_map[str(node.ip)]
-            params = json.dumps(params)
-            return params
-
         for server in servers:
             rest = RestConnection(server)
             params = ''
             if self.standard == "pkcs8":
-                params = build_params(server)
+                params = self.build_params(server)
             status, content = rest.reload_certificate(params=params)
             if not status:
                 msg = "Could not load reload node cert on %s; Failed with error %s" \
@@ -858,8 +858,8 @@ class x509main:
         if mark_deleted:
             for ca_name in ca_names:
                 ca_name = ca_name.rstrip("rotated")
-                if ca_name in x509main.root_ca_names:
-                    x509main.root_ca_names.remove(ca_name)
+                if ca_name in self.root_ca_names:
+                    self.root_ca_names.remove(ca_name)
 
     def delete_unused_out_of_the_box_CAs(self, server=None):
         if server is None:

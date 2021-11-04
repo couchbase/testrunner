@@ -30,7 +30,7 @@ class QuerySanityTLSTests(QueryTests):
             CbServer.use_https = False
             self.log.info("###### ROTATING certificate")
             self.x509.rotate_certs(self.servers, "all")
-            self.log.info("Manifest after rotating certs #########\n {0}".format(json.dumps(x509main.manifest, indent=4)))
+            self.log.info("Manifest after rotating certs #########\n {0}".format(json.dumps(self.x509.manifest, indent=4)))
             ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
             self.use_https = True
             CbServer.use_https = True
@@ -46,7 +46,7 @@ class QuerySanityTLSTests(QueryTests):
             for server in self.servers:
                 self.x509.delete_inbox_folder_on_server(server=server)
             self.x509.generate_multiple_x509_certs(servers=self.servers, spec_file_name=self.spec_file)
-            self.log.info("Manifest #########\n {0}".format(json.dumps(x509main.manifest, indent=4)))
+            self.log.info("Manifest #########\n {0}".format(json.dumps(self.x509.manifest, indent=4)))
             for server in self.servers:
                 _ = self.x509.upload_root_certs(server)
             self.x509.upload_node_certs(servers=self.servers)
