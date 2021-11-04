@@ -35,6 +35,10 @@ class CbServer(object):
                     str(capi_port): str(ssl_capi_port)}
     use_https = False
     n2n_encryption = False
+    multiple_ca = False
+    x509 = None
+    use_client_certs = False
+    cacert_verify = False
 
     default_scope = "_default"
     default_collection = "_default"

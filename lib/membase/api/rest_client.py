@@ -1,6 +1,8 @@
 import base64
 import json
 import urllib.request, urllib.parse, urllib.error
+
+import requests
 from urllib3._collections import HTTPHeaderDict
 
 from . import httplib2
@@ -13,7 +15,6 @@ import uuid
 from copy import deepcopy
 from threading import Thread
 from TestInput import TestInputSingleton
-from TestInput import TestInputServer
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, CBAS_QUOTA
 from testconstants import COUCHBASE_FROM_VERSION_4, IS_CONTAINER, CLUSTER_QUOTA_RATIO
 
@@ -31,6 +32,7 @@ from membase.api.exception import BucketCreationException, ServerSelfJoinExcepti
     ReadDocumentException, GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, AddNodeException, \
     BucketFlushFailed, CBRecoveryFailedException, XDCRException, SetRecoveryTypeFailed, BucketCompactionException
 log = logger.Logger.get_logger()
+
 
 # helper library methods built on top of RestConnection interface
 
@@ -1083,6 +1085,55 @@ class RestConnection(object):
             time.sleep(t1)
             count += 1
             t1 *= 2
+
+    def urllib_request(self, api, verb='GET', params='', headers=None, timeout=100, try_count=3, client_cert_path_tuple=None,
+                       cacert=None):
+        if headers is None:
+            headers = self._create_capi_headers()
+        client_cert_path_tuple = None
+        if CbServer.multiple_ca and CbServer.use_client_certs:
+            client_cert_path_tuple=CbServer.x509.get_client_cert(int_ca_name="iclient1_clientroot")
+            log.info("Using client cert auth")
+            del headers['Authorization']
+        if CbServer.cacert_verify:
+            verify = CbServer.x509.ALL_CAs_PATH + CbServer.x509.ALL_CAs_PEM_NAME
+        else:
+            verify = False
+        tries = 0
+        log.info("Making a rest request api={0} verb={1} params={2} "
+                 "client_cert={3} verify={4}".format(api, verb, params, client_cert_path_tuple, verify))
+        while tries < try_count:
+            try:
+                if verb == 'GET':
+                    response = requests.get(api, params=params, headers=headers,
+                                            timeout=timeout, cert=client_cert_path_tuple,
+                                            verify=verify)
+                elif verb == 'POST':
+                    response = requests.post(api, data=params, headers=headers,
+                                             timeout=timeout, cert=client_cert_path_tuple,
+                                             verify=verify)
+                elif verb == 'DELETE':
+                    response = requests.delete(api, data=params, headers=headers,
+                                               timeout=timeout, cert=client_cert_path_tuple,
+                                               verify=verify)
+                elif verb == "PUT":
+                    response = requests.put(api, data=params, headers=headers,
+                                            timeout=timeout, cert=client_cert_path_tuple,
+                                            verify=verify)
+                status = response.status_code
+                content = response.content
+                if status in [200, 201, 202]:
+                    return True, content, response
+                else:
+                    log.error(response.reason)
+                    return False, content, response
+            except Exception as e:
+                tries = tries + 1
+                if tries >= try_count:
+                    raise Exception(e)
+                else:
+                    log.error("Trying again ...")
+                    time.sleep(5)
 
     def init_cluster(self, username='Administrator', password='password', port='8091'):
         log.info("--> in init_cluster...{},{},{}".format(username,password,port))
@@ -3343,7 +3394,7 @@ class RestConnection(object):
         """set fts ram quota"""
         api = self.baseUrl + "pools/default"
         params = urllib.parse.urlencode({"ftsMemoryQuota": value})
-        status, content, _ = self._http_request(api, "POST", params)
+        status, content, _ = self.urllib_request(api, verb="POST", params=params)
         if status:
             log.info("SUCCESS: FTS RAM quota set to {0}mb".format(value))
         else:
@@ -3353,7 +3404,7 @@ class RestConnection(object):
     def set_maxConcurrentPartitionMovesPerNode(self, value):
         api = self.fts_baseUrl + "api/managerOptions"
         params = {"maxConcurrentPartitionMovesPerNode": str(value)}
-        status, content, _ = self._http_request(api, "PUT", params=json.dumps(params, ensure_ascii=False), headers=self._create_capi_headers())
+        status, content, _ = self.urllib_request(api, verb="PUT", params=json.dumps(params, ensure_ascii=False))
         if status:
             log.info("SUCCESS: FTS maxConcurrentPartitionMovesPerNode set to {0}".format(value))
         return status
@@ -3361,7 +3412,7 @@ class RestConnection(object):
     def set_disableFileTransferRebalance(self, value):
         api = self.fts_baseUrl + "api/managerOptions"
         params = {"disableFileTransferRebalance": str(value)}
-        status, content, _ = self._http_request(api, "PUT", params=json.dumps(params, ensure_ascii=False), headers=self._create_capi_headers())
+        status, content, _ = self.urllib_request(api, verb="PUT", params=json.dumps(params, ensure_ascii=False))
         if status:
             log.info("SUCCESS: FTS disableFileTransferRebalance set to {0}".format(value))
         return status
@@ -3369,8 +3420,7 @@ class RestConnection(object):
     def set_maxFeedsPerDCPAgent(self, value):
         api = self.fts_baseUrl + "api/managerOptions"
         params = {"maxFeedsPerDCPAgent": str(value)}
-        status, content, _ = self._http_request(api, "PUT", params=json.dumps(params, ensure_ascii=False),
-                                                     headers=self._create_capi_headers())
+        status, content, _ = self.urllib_request(api, verb="PUT", params=json.dumps(params, ensure_ascii=False))
         if status:
             log.info("SUCCESS: FTS maxFeedsPerDCPAgent set to {0}".format(value))
         return status
@@ -3378,8 +3428,7 @@ class RestConnection(object):
     def set_maxDCPAgents(self, value):
         api = self.fts_baseUrl + "api/managerOptions"
         params = {"maxDCPAgents": str(value)}
-        status, content, _ = self._http_request(api, "PUT", params=json.dumps(params, ensure_ascii=False),
-                                                     headers=self._create_capi_headers())
+        status, content, _ = self.urllib_request(api, verb="PUT", params=json.dumps(params, ensure_ascii=False))
         if status:
             log.info("SUCCESS: FTS maxDCPAgents set to {0}".format(value))
         return status
@@ -3388,11 +3437,7 @@ class RestConnection(object):
         """create or edit fts index , returns {"status":"ok"} on success"""
         api = self.fts_baseUrl + "api/index/{0}".format(index_name)
         log.info(json.dumps(params))
-        status, content, header = self._http_request(api,
-                                    'PUT',
-                                    json.dumps(params, ensure_ascii=False),
-                                    headers=self._create_capi_headers(),
-                                    timeout=30)
+        status, content, header = self.urllib_request(api, verb='PUT', params=json.dumps(params, ensure_ascii=False))
         if status:
             log.info("Index {0} created".format(index_name))
         else:
@@ -3402,25 +3447,19 @@ class RestConnection(object):
     def update_fts_index(self, index_name, index_def):
         api = self.fts_baseUrl + "api/index/{0}".format(index_name)
         log.info(json.dumps(index_def, indent=3))
-        status, content, header = self._http_request(api,
-                                    'PUT',
-                                    json.dumps(index_def, ensure_ascii=False),
-                                    headers=self._create_capi_headers(),
-                                    timeout=30)
+        status, content, header = self.urllib_request(api, verb='PUT', params=json.dumps(index_def, ensure_ascii=False))
         if status:
             log.info("Index/alias {0} updated".format(index_name))
         else:
             raise Exception("Error updating index: {0}".format(content))
         return status
 
-    def get_fts_index_definition(self, name, timeout=30):
+    def get_fts_index_definition(self, name):
         """ get fts index/alias definition """
         json_parsed = {}
         api = self.fts_baseUrl + "api/index/{0}".format(name)
-        status, content, header = self._http_request(
-            api,
-            headers=self._create_capi_headers(),
-            timeout=timeout)
+        status, content, header = self.urllib_request(
+            api)
         if status:
             json_parsed = json.loads(content)
         return status, json_parsed
@@ -3429,10 +3468,7 @@ class RestConnection(object):
         """ get number of docs indexed"""
         json_parsed = {}
         api = self.fts_baseUrl + "api/index/{0}/count".format(name)
-        status, content, header = self._http_request(
-            api,
-            headers=self._create_capi_headers(),
-            timeout=timeout)
+        status, content, header = self.urllib_request(api)
         if status:
             json_parsed = json.loads(content)
         return json_parsed['count']
@@ -3441,10 +3477,7 @@ class RestConnection(object):
         """ Returns uuid of index/alias """
         json_parsed = {}
         api = self.fts_baseUrl + "api/index/{0}".format(name)
-        status, content, header = self._http_request(
-            api,
-            headers=self._create_capi_headers(),
-            timeout=timeout)
+        status, content, header = self.urllib_request(api)
         if status:
             json_parsed = json.loads(content)
         return json_parsed['indexDef']['uuid']
@@ -3453,10 +3486,7 @@ class RestConnection(object):
         """ Returns uuid of index/alias """
         json_parsed = {}
         api = self.fts_baseUrl + "api/stats"
-        status, content, header = self._http_request(
-            api,
-            headers=self._create_capi_headers(),
-            timeout=timeout)
+        status, content, header = self.urllib_request(api)
         if status:
             json_parsed = json.loads(content)
         return json_parsed['pindexes']
@@ -3464,52 +3494,44 @@ class RestConnection(object):
     def delete_fts_index(self, name):
         """ delete fts index/alias """
         api = self.fts_baseUrl + "api/index/{0}".format(name)
-        status, content, header = self._http_request(
+        status, content, header = self.urllib_request(
             api,
-            'DELETE',
-            headers=self._create_capi_headers())
+            verb='DELETE')
         return status
 
     def delete_fts_index_extended_output(self, name):
         """ delete fts index/alias """
         api = self.fts_baseUrl + "api/index/{0}".format(name)
-        status, content, header = self._http_request(
+        status, content, header = self.urllib_request(
             api,
-            'DELETE',
-            headers=self._create_capi_headers())
+            verb='DELETE')
         return status, content, header
 
     def stop_fts_index_update(self, name):
         """ method to stop fts index from updating"""
         api = self.fts_baseUrl + "api/index/{0}/ingestControl/pause".format(name)
         log.info('calling api : {0}'.format(api))
-        status, content, header = self._http_request(
+        status, content, header = self.urllib_request(
             api,
-            'POST',
-            '',
-            headers=self._create_capi_headers())
+            verb='POST')
         return status
 
     def resume_fts_index_update(self, name):
         """ method to stop fts index from updating"""
         api = self.fts_baseUrl + "api/index/{0}/ingestControl/resume".format(name)
         log.info('calling api : {0}'.format(api))
-        status, content, header = self._http_request(
+        status, content, header = self.urllib_request(
             api,
-            'POST',
-            '',
-            headers=self._create_capi_headers())
+            verb='POST')
         return status
 
     def freeze_fts_index_partitions(self, name):
         """ method to freeze index partitions asignment"""
         api = self.fts_baseUrl+ "api/index/{0}/planFreezeControl/freeze".format(name)
         log.info('calling api : {0}'.format(api))
-        status, content, header = self._http_request(
+        status, content, header = self.urllib_request(
             api,
-            'POST',
-            '',
-            headers=self._create_capi_headers())
+            verb='POST')
         return status
 
     def set_bleve_max_result_window(self, bmrw_value):
@@ -3517,11 +3539,9 @@ class RestConnection(object):
         api = self.fts_baseUrl + "api/managerOptions"
         params = {"bleveMaxResultWindow": str(bmrw_value)}
         log.info(json.dumps(params))
-        status, content, header = self._http_request(api,
-                                                     'PUT',
-                                                     json.dumps(params, ensure_ascii=False),
-                                                     headers=self._create_capi_headers(),
-                                                     timeout=30)
+        status, content, header = self.urllib_request(api,
+                                                     verb='PUT',
+                                                     params=json.dumps(params, ensure_ascii=False))
         if status:
             log.info("Updated bleveMaxResultWindow")
         else:
@@ -3533,11 +3553,9 @@ class RestConnection(object):
         api = self.fts_baseUrl + "api/managerOptions"
         params = {str(setting_name): str(value)}
         log.info(json.dumps(params))
-        status, content, header = self._http_request(api,
-                                                     'PUT',
-                                                     json.dumps(params, ensure_ascii=False),
-                                                     headers=self._create_capi_headers(),
-                                                     timeout=30)
+        status, content, header = self.urllib_request(api,
+                                                     verb='PUT',
+                                                     params=json.dumps(params, ensure_ascii=False))
         if status:
             log.info("Updated {0}".format(setting_name))
         else:
@@ -3548,45 +3566,37 @@ class RestConnection(object):
         """ method to freeze index partitions asignment"""
         api = self.fts_baseUrl+ "api/index/{0}/planFreezeControl/unfreeze".format(name)
         log.info('calling api : {0}'.format(api))
-        status, content, header = self._http_request(
+        status, content, header = self.urllib_request(
             api,
-            'POST',
-            '',
-            headers=self._create_capi_headers())
+            verb='POST')
         return status
 
     def disable_querying_on_fts_index(self, name):
         """ method to disable querying on index"""
         api = self.fts_baseUrl + "api/index/{0}/queryControl/disallow".format(name)
         log.info('calling api : {0}'.format(api))
-        status, content, header = self._http_request(
+        status, content, header = self.urllib_request(
             api,
-            'POST',
-            '',
-            headers=self._create_capi_headers())
+            verb='POST')
         return status
 
     def enable_querying_on_fts_index(self, name):
         """ method to enable querying on index"""
         api = self.fts_baseUrl + "api/index/{0}/queryControl/allow".format(name)
         log.info('calling api : {0}'.format(api))
-        status, content, header = self._http_request(
+        status, content, header = self.urllib_request(
             api,
-            'POST',
-            '',
-            headers=self._create_capi_headers())
+            verb='POST')
         return status
 
     def run_fts_query(self, index_name, query_json, timeout=70):
         """Method run an FTS query through rest api"""
         api = self.fts_baseUrl + "api/index/{0}/query".format(index_name)
         headers = self._create_capi_headers()
-        status, content, header = self._http_request(
+        status, content, header = self.urllib_request(
             api,
-            "POST",
-            json.dumps(query_json, ensure_ascii=False).encode('utf8'),
-            headers,
-            timeout=timeout)
+            verb="POST",
+            params=json.dumps(query_json, ensure_ascii=False).encode('utf8'))
         content = json.loads(content)
         if status:
             return content['total_hits'], content['hits'], content['took'], \
@@ -3598,25 +3608,20 @@ class RestConnection(object):
         """Method run an FTS query through rest api"""
         api = self.fts_baseUrl + "api/index/{0}/query".format(index_name)
         headers = self._create_capi_headers()
-        status, content, header = self._http_request(
+        status, content, header = self.urllib_request(
             api,
-            "POST",
-            json.dumps(query_json, ensure_ascii=False).encode('utf8'),
-            headers,
-            timeout=timeout)
+            verb="POST",
+            params=json.dumps(query_json, ensure_ascii=False).encode('utf8'))
         content = json.loads(content)
         return content
 
     def run_fts_query_with_facets(self, index_name, query_json):
         """Method run an FTS query through rest api"""
         api = self.fts_baseUrl + "api/index/{0}/query".format(index_name)
-        headers = self._create_capi_headers()
-        status, content, header = self._http_request(
+        status, content, header = self.urllib_request(
             api,
-            "POST",
-            json.dumps(query_json, ensure_ascii=False).encode('utf8'),
-            headers,
-            timeout=70)
+            verb="POST",
+            params=json.dumps(query_json, ensure_ascii=False).encode('utf8'))
 
         if status:
             content = json.loads(content)

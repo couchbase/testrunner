@@ -47,6 +47,7 @@ from security.SecretsMasterBase import SecretsMasterBase
 from lib.collection.collections_cli_client import CollectionsCLI
 from scripts.java_sdk_setup import JavaSdkSetup
 from couchbase_cli import CouchbaseCLI
+from pytests.security.x509_multiple_CA_util import x509main, Validation
 
 
 class RenameNodeException(FTSException):
@@ -764,7 +765,7 @@ class FTSIndex:
     def __init__(self, cluster, name, source_type='couchbase',
                  source_name=None, index_type='fulltext-index', index_params=None,
                  plan_params=None, source_params=None, source_uuid=None, dataset=None, index_storage_type=None,
-                 type_mapping=None, collection_index=False, scope=None, collections=None):
+                 type_mapping=None, collection_index=False, scope=None, collections=None, multiple_ca=False):
 
         """
          @param name : name of index/alias
@@ -795,6 +796,7 @@ class FTSIndex:
         self.collection_index = collection_index
         self.scope = scope
         self.collections = collections
+        self.multiple_ca=multiple_ca
         if not index_storage_type:
             self.index_storage_type = TestInputSingleton.input.param("index_type", None)
         else:
@@ -2295,12 +2297,26 @@ class CouchbaseCluster:
         finally:
             if cluster_shutdown:
                 self.__clusterop.shutdown(force=True)
-        try:
-            self.__log.info("Removing user 'cbadminbucket'...")
-            RbacBase().remove_user_role(['cbadminbucket'], RestConnection(
-                self.__master_node))
-        except Exception as e:
-            self.__log.info(e)
+            try:
+                self.__log.info("Removing user 'cbadminbucket'...")
+                RbacBase().remove_user_role(['cbadminbucket'], RestConnection(
+                    self.__master_node))
+            except Exception as e:
+                self.__log.info(e)
+            try:
+                self.__log.info("Removing user 'clientuser'...")
+                RbacBase().remove_user_role(['clientuser'], RestConnection(
+                    self.__master_node))
+            except Exception as e:
+                self.__log.info(e)
+            try:
+                if CbServer.multiple_ca:
+                    CbServer.use_client_certs = False
+                    CbServer.cacert_verify = False
+                    self.x509 = x509main(host=self.__master_node)
+                    self.x509.teardown_certs(servers=TestInputSingleton.input.servers)
+            except Exception as e:
+                self.__log.info(e)
 
     def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
                               bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
@@ -3706,6 +3722,7 @@ class FTSBaseTest(unittest.TestCase):
         first_node = copy.deepcopy(self.master)
         self.cli_client = CollectionsCLI(self.master)
 
+        self.multiple_ca = self._input.param("multiple_ca", False)
         self._cb_cluster = CouchbaseCluster("C1",
                                             [first_node],
                                             self.log,
@@ -3725,6 +3742,35 @@ class FTSBaseTest(unittest.TestCase):
 
         self.__setup_for_test()
 
+        if self.multiple_ca:
+            CbServer.multiple_ca = True
+            self.passphrase_type = self._input.param("passphrase_type", "script")
+            self.encryption_type = self._input.param("encryption_type", "des3")
+            self.use_client_certs = self._input.param("use_client_certs", False)
+            self.cacert_verify = self._input.param("cacert_verify", False)
+            spec_file = self._input.param("spec_file", "default")
+            self.use_https = True
+            CbServer.use_https = True
+            CbServer.use_client_certs = self.use_client_certs
+            CbServer.cacert_verify = self.cacert_verify
+            ntonencryptionBase().disable_nton_cluster([self.master])
+            CbServer.x509 = x509main(host=self.master, encryption_type=self.encryption_type,
+                                     passphrase_type=self.passphrase_type)
+            for server in self._input.servers:
+                CbServer.x509.delete_inbox_folder_on_server(server=server)
+            CbServer.x509.generate_multiple_x509_certs(servers=self._input.servers, spec_file_name=spec_file)
+            self.log.info("Manifest #########\n {0}".format(json.dumps(CbServer.x509.manifest, indent=4)))
+            for server in self._input.servers:
+                _ = CbServer.x509.upload_root_certs(server)
+            CbServer.x509.upload_node_certs(servers=self._input.servers)
+            testuser = [{'id': 'clientuser', 'name': 'clientuser', 'password': 'password'}]
+            RbacBase().create_user_source(testuser, 'builtin', self.master)
+
+            # Assign user to role
+            role_list = [{'id': 'clientuser', 'name': 'clientuser', 'roles': 'admin'}]
+            RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
+            CbServer.x509.upload_client_cert_settings(server=self.master)
+            ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
         self.log.info(
             "==== FTSbasetests setup is finished for test #{0} {1} ===="
                 .format(self.__case_number, self._testMethodName))
@@ -3983,6 +4029,8 @@ class FTSBaseTest(unittest.TestCase):
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(master), 'builtin')
+
+
 
         self.enable_dp = self._input.param("enable_dp", False)
         if self.enable_dp:
