@@ -171,6 +171,11 @@ class EventHelper(object):
         :return list: List containing failures
         """
         failures = list()
+
+        # If nothing stored in event list, nothing to validate
+        if not self.events:
+            return failures
+
         rest = SystemEventRestHelper([server])
         # Fetch all events from the server for generic validation
         events = rest.get_events(server=server)
