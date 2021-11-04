@@ -1,5 +1,6 @@
 import threading
-from datetime import datetime
+import uuid
+from datetime import datetime, timedelta
 
 from Cb_constants import CbServer
 from SystemEventLogLib.SystemEventOperations import SystemEventRestHelper
@@ -8,6 +9,8 @@ from SystemEventLogLib.SystemEventOperations import SystemEventRestHelper
 class Event(object):
     # Size in bytes
     max_size = 3072
+    # Time within which the UUID cannot be duplicated in server (in seconds)
+    uuid_uniqueness_time = 60
 
     class Fields(object):
         """Holds all valid fields supported by the SystemEvent REST API"""
@@ -90,6 +93,10 @@ class EventHelper(object):
         self.__event_counter = EventHelper.EventCounter()
 
     @staticmethod
+    def get_rand_uuid():
+        return str(uuid.uuid4())
+
+    @staticmethod
     def get_timestamp_format(datetime_obj):
         """
         Returns a valid datetime string in UTC format
@@ -98,15 +105,59 @@ class EventHelper(object):
         return datetime_obj.strftime("%Y-%m-%dT%H:%M:%S.") + ms_str + 'Z'
 
     @staticmethod
-    def __duplicate_event_ids_present(events):
+    def get_datetime_obj_from_str(datetime_str):
+        return datetime.strptime(datetime_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+
+    @staticmethod
+    def __duplicate_event_ids_present(events, failures):
         """
         :param events: List of events to be validated
-        :returns boolean: 'False' in case of failure due to duplicate UUID
+        :param failures: List of failures detected
+        :returns boolean: 'True' in case of failure due to duplicate UUID
         """
-        uuids = set()
+        duplicates_present = False
+        timestamps = dict()
+        prev_timestamp = None
         for event in events:
-            uuids.add(event[Event.Fields.UUID])
-        return len(events) != len(uuids)
+            event_uuid = event[Event.Fields.UUID]
+            event_timestamp = event[Event.Fields.TIMESTAMP]
+
+            # Check whether the events are ordered by timestamp in server
+            curr_event_datetime = EventHelper.get_datetime_obj_from_str(
+                event_timestamp)
+            if prev_timestamp is not None:
+                prev_event_timestamp = EventHelper.get_datetime_obj_from_str(
+                    prev_timestamp)
+                if curr_event_datetime < prev_event_timestamp:
+                    duplicates_present = True
+                    failures.append("Events not ordered by time !! "
+                                    "UUID %s - timestamp (curr) %s < %s (prev)"
+                                    % (event_uuid,
+                                       event_timestamp, prev_timestamp))
+            prev_timestamp = event_timestamp
+            # End of timestamp validation
+
+            # Check whether the events are not duplicated within desired time
+            if event_uuid not in timestamps:
+                timestamps[event_uuid] = event_timestamp
+            else:
+                ts_for_prev_uuid = EventHelper.get_datetime_obj_from_str(
+                    timestamps[event_uuid])
+                ts_for_curr_uuid = EventHelper.get_datetime_obj_from_str(
+                    event_timestamp)
+                if (ts_for_curr_uuid - ts_for_prev_uuid) \
+                        > timedelta(seconds=Event.uuid_uniqueness_time):
+                    duplicates_present = True
+                    failures.append("Duplicate UUID detected for timestamps!! "
+                                    "%s is present during %s and %s"
+                                    % (event_uuid, timestamps[event_uuid],
+                                       event_timestamp))
+            # End of duplicate UUID validation
+        return duplicates_present
+
+    @staticmethod
+    def update_event_extra_attrs(event, extra_attr_dict):
+        event[Event.Fields.EXTRA_ATTRS] = extra_attr_dict
 
     def set_test_start_time(self):
         self.test_start_time = self.get_timestamp_format(datetime.now())
@@ -125,7 +176,7 @@ class EventHelper(object):
         events = rest.get_events(server=server)
 
         # Check for event_id duplications
-        if self.__duplicate_event_ids_present(events):
+        if self.__duplicate_event_ids_present(events, failures):
             failures.append("Duplicate event_ids seen")
 
         # Fetch events from the cluster and validate against the ones the
