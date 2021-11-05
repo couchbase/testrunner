@@ -3884,7 +3884,7 @@ class QueryTests(BaseTestCase):
     ##############################################################################################            
 
     '''Create a library with functions, check to see that the library was created and the functions were created'''
-    def create_library(self, library_name='', functions={}, function_names=[], replace= False):
+    def create_library(self, library_name='', functions={}, function_names=[], replace= False, filename=None):
         created = False
         protocol = "http"
         if self.use_https:
@@ -3892,8 +3892,11 @@ class QueryTests(BaseTestCase):
             protocol = "https"
         url = f"{protocol}://{self.master.ip}:{self.n1ql_port}/evaluator/v1/libraries/{library_name}"
         data = f'{functions}'
-        self.shell.execute_command(f"{self.curl_path} -k -X POST {url} -u Administrator:password -H 'content-type: application/json' -d '{data}'")
-        libraries = self.shell.execute_command(f"{self.curl_path} -k {url} -u Administrator:password")
+        if filename:
+            self.shell.execute_command(f"{self.curl_path} -s -k -X POST {url} -u Administrator:password -H 'content-type: application/json' -d @{filename}")
+        else:
+            self.shell.execute_command(f"{self.curl_path} -s -k -X POST {url} -u Administrator:password -H 'content-type: application/json' -d '{data}'")
+        libraries = self.shell.execute_command(f"{self.curl_path} -s -k {url} -u Administrator:password")
         if library_name in str(libraries[0]):
             created = True
         else:
