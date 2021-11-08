@@ -3,6 +3,7 @@ import requests
 from copy import deepcopy
 from random import choice
 
+from Cb_constants import CbServer
 from lib.membase.api.rest_client import RestConnection
 
 
@@ -94,3 +95,23 @@ class SystemEventRestHelper:
                                 auth=(rest.username,
                                       rest.password)).content
         return json.loads(response)["events"]
+
+    def update_max_events(self,
+                          max_event_count=CbServer.sys_event_def_logs,
+                          rest=None, server=None,
+                          username=None, password=None):
+        """
+        Update the maximum number of events that will be stored in the cluster
+        :param max_event_count: New event count to be updated in the cluster
+        :param rest: RestConnection object to send requests
+        :param server: Target server to create RestConnection
+        :param username: Username auth to use during API operations
+        :param password: Password auth to use during API operations
+        :return: status, content
+        """
+        rest = self.get_rest_object(rest, server, username, password)
+        api = rest.baseUrl + "internalSettings"
+        status, content = rest._http_request(
+            api, RestConnection.POST,
+            params={'eventLogsLimit': max_event_count})
+        return status, json.loads(content)

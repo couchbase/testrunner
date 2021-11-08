@@ -49,3 +49,12 @@ class CbServer(object):
     # Count excluding the default scope/collection
     max_scopes = 1200
     max_collections = 1200
+
+    # Max supported system_event_logs
+    sys_event_min_logs = 3000
+    sys_event_max_logs = 20000
+    sys_event_def_logs = 10000
+    # Size in bytes
+    sys_event_log_max_size = 3072
+    # Time within which the UUID cannot be duplicated in server (in seconds)
+    sys_event_log_uuid_uniqueness_time = 60

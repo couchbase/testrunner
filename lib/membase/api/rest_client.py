@@ -224,7 +224,13 @@ class RestHelper(object):
             vbuckets_servers[server]['replica_vb'] = vbs_replica
         return vbuckets_servers
 
+
 class RestConnection(object):
+    DELETE = "DELETE"
+    GET = "GET"
+    POST = "POST"
+    PUT = "PUT"
+
     def __new__(cls, serverInfo={}):
         # allow port to determine
         # behavior of restconnection

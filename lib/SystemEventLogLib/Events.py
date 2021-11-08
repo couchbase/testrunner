@@ -7,11 +7,6 @@ from SystemEventLogLib.SystemEventOperations import SystemEventRestHelper
 
 
 class Event(object):
-    # Size in bytes
-    max_size = 3072
-    # Time within which the UUID cannot be duplicated in server (in seconds)
-    uuid_uniqueness_time = 60
-
     class Fields(object):
         """Holds all valid fields supported by the SystemEvent REST API"""
         UUID = "uuid"
@@ -66,6 +61,8 @@ class Event(object):
 
 
 class EventHelper(object):
+    max_events = CbServer.sys_event_def_logs
+
     class EventCounter(object):
         def __init__(self):
             self.__lock = threading.Lock()
@@ -78,7 +75,7 @@ class EventHelper(object):
 
         @property
         def max_events_reached(self):
-            return self.counter > CbServer.max_sys_event_logs
+            return self.counter > EventHelper.max_events
 
     def __init__(self):
         # Saves the start time of test to help during validation
@@ -146,7 +143,7 @@ class EventHelper(object):
                 ts_for_curr_uuid = EventHelper.get_datetime_obj_from_str(
                     event_timestamp)
                 if (ts_for_curr_uuid - ts_for_prev_uuid) \
-                        > timedelta(seconds=Event.uuid_uniqueness_time):
+                        > timedelta(seconds=CbServer.sys_event_log_uuid_uniqueness_time):
                     duplicates_present = True
                     failures.append("Duplicate UUID detected for timestamps!! "
                                     "%s is present during %s and %s"
