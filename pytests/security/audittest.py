@@ -23,6 +23,9 @@ import urllib.request, urllib.parse, urllib.error
 from security.auditmain import audit
 from security.ldaptest import ldaptest
 import socket
+
+from pytests.security.x509_multiple_CA_util import x509main
+
 log = logger.Logger.get_logger()
 from ep_mc_bin_client import MemcachedClient
 
@@ -696,3 +699,37 @@ class auditTest(BaseTestCase):
         expectedResults = {"user":user, ops:value,"source":source,"ip":self.ipAddress, "port":57457}
 
         self.checkConfig(self.eventID, self.master, expectedResults)
+
+    def test_multiple_CA(self):
+        ops = self.input.param("ops", None)
+        self.x509 = x509main(host=self.master)
+        self.x509.generate_multiple_x509_certs(servers=self.servers)
+        if ops == "load_cluster_CA":
+            self.x509.upload_root_certs(server=self.master, root_ca_names=["clientroot"])
+            content = self.x509.get_trusted_CAs(server=self.master)
+            for ca_dict in content:
+                subject = ca_dict["subject"]
+                root_ca_name = subject.split("CN=")[1]
+                if root_ca_name == "clientroot":
+                    expires = ca_dict["notAfter"]
+            expectedResults = {"description": "Upload cluster CA",
+                               "expires": expires,
+                               "local": {"ip": self.master.ip, "port": 8091}, "name": "upload cluster ca",
+                               "real_userid": {"domain": "builtin", "user": "Administrator"},
+                               "remote": {"ip": self.master.ip, "port": 35510},
+                               "subject": "C=UA, O=MyCompany, CN=clientroot"}
+        elif ops == "delete_cluster_CA":
+            self.x509.upload_root_certs(server=self.master, root_ca_names=["clientroot"])
+            ids = self.x509.get_ids_from_ca_names(ca_names=["clientroot"])
+            self.x509.delete_trusted_CAs(ids=ids)
+            expectedResults = {"description": "Delete cluster CA",
+                               "local": {"ip": self.master.ip, "port": 8091}, "name": "delete cluster ca",
+                               "real_userid": {"domain": "builtin", "user": "Administrator"},
+                               "remote": {"ip": self.master.ip, "port": 62993},
+                               "subject": "C=UA, O=MyCompany, CN=clientroot"}
+        self.checkConfig(self.eventID, self.master, expectedResults)
+        self.x509.teardown_certs(servers=self.servers)
+
+
+
+
