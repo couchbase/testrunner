@@ -5145,19 +5145,15 @@ class RestConnection(object):
            Eventing lifecycle operation 
     '''
 
-    def lifecycle_operation(self, name, operation,body=None):
+    def lifecycle_operation(self, name, operation, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name +"/"+ operation
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
-        if body != None:
-            status, content, header = self._http_request(api, 'POST', headers=headers,
-                                                     params=json.dumps(body).encode("ascii", "ignore"))
-        else:
-            status, content, header = self._http_request(api, 'POST', headers=headers)
+        status, content, header = self._http_request(api, 'POST', headers=headers)
         if not status:
             raise Exception(content)
         return content
@@ -5195,11 +5191,11 @@ class RestConnection(object):
     '''
             GET all the Functions
     '''
-    def get_all_functions(self):
+    def get_all_functions(self, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "api/v1/functions"
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5211,11 +5207,11 @@ class RestConnection(object):
     '''
             Undeploy the Function
     '''
-    def set_settings_for_function(self, name, body):
+    def set_settings_for_function(self, name, body, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name +"/settings"
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5230,11 +5226,11 @@ class RestConnection(object):
             deploy the Function 
     '''
 
-    def deploy_function_by_name(self, name):
+    def deploy_function_by_name(self, name, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name + "/settings"
         body = {"deployment_status": True, "processing_status": True}
         api = self.eventing_baseUrl + url
@@ -5249,11 +5245,11 @@ class RestConnection(object):
                pause the Function 
     '''
 
-    def pause_function_by_name(self, name):
+    def pause_function_by_name(self, name, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name + "/settings"
         body = {"deployment_status": True, "processing_status": False}
         api = self.eventing_baseUrl + url
@@ -5267,11 +5263,11 @@ class RestConnection(object):
     '''
         undeploy the Function 
     '''
-    def undeploy_function(self, name):
+    def undeploy_function(self, name, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name +"/settings"
         body= {"deployment_status": False, "processing_status": False}
         api = self.eventing_baseUrl + url
@@ -5285,11 +5281,11 @@ class RestConnection(object):
     '''
         Delete all the functions 
     '''
-    def delete_all_function(self):
+    def delete_all_function(self, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "api/v1/functions"
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5301,11 +5297,11 @@ class RestConnection(object):
     '''
             Delete single function
     '''
-    def delete_single_function(self, name):
+    def delete_single_function(self, name, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5343,12 +5339,12 @@ class RestConnection(object):
     '''
             Export the Function
     '''
-    def export_function(self, name):
+    def export_function(self, name, username="Administrator", password="password"):
         export_map = {}
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "api/v1/export/" + name
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5369,11 +5365,11 @@ class RestConnection(object):
          Import the Function
     '''
 
-    def import_function(self, body):
+    def import_function(self, body, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "api/v1/import"
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5387,11 +5383,11 @@ class RestConnection(object):
     '''
              Ensure that the eventing node is out of bootstrap node
     '''
-    def get_deployed_eventing_apps(self):
+    def get_deployed_eventing_apps(self, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "getDeployedApps"
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5404,11 +5400,11 @@ class RestConnection(object):
             Ensure that the eventing node is out of bootstrap node
     '''
 
-    def get_running_eventing_apps(self):
+    def get_running_eventing_apps(self, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "getRunningApps"
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5420,11 +5416,11 @@ class RestConnection(object):
     '''
             composite status of a handler
     '''
-    def get_composite_eventing_status(self):
+    def get_composite_eventing_status(self, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "api/v1/status"
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5436,13 +5432,13 @@ class RestConnection(object):
     '''
              Get Eventing processing stats
     '''
-    def get_event_processing_stats(self, name, eventing_map=None):
+    def get_event_processing_stats(self, name, eventing_map=None, username="Administrator", password="password"):
         if eventing_map is None:
             eventing_map = {}
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "getEventProcessingStats?name=" + name
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5460,13 +5456,13 @@ class RestConnection(object):
     '''
             Get Aggregate Eventing processing stats
     '''
-    def get_aggregate_event_processing_stats(self, name, eventing_map=None):
+    def get_aggregate_event_processing_stats(self, name, eventing_map=None, username="Administrator", password="password"):
         if eventing_map is None:
             eventing_map = {}
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "getAggEventProcessingStats?name=" + name
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5484,13 +5480,13 @@ class RestConnection(object):
     '''
             Get Eventing execution stats
     '''
-    def get_event_execution_stats(self, name, eventing_map=None):
+    def get_event_execution_stats(self, name, eventing_map=None, username="Administrator", password="password"):
         if eventing_map is None:
             eventing_map = {}
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "getExecutionStats?name=" + name
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5508,13 +5504,13 @@ class RestConnection(object):
     '''
             Get Eventing failure stats
     '''
-    def get_event_failure_stats(self, name, eventing_map=None):
+    def get_event_failure_stats(self, name, eventing_map=None, username="Administrator", password="password"):
         if eventing_map is None:
             eventing_map = {}
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "getFailureStats?name=" + name
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5532,13 +5528,13 @@ class RestConnection(object):
     '''
             Get all eventing stats
     '''
-    def get_all_eventing_stats(self, seqs_processed=False, eventing_map=None):
+    def get_all_eventing_stats(self, seqs_processed=False, eventing_map=None, username="Administrator", password="password"):
         if eventing_map is None:
             eventing_map = {}
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         if seqs_processed:
             url = "api/v1/stats?type=full"
         else:
@@ -5734,11 +5730,11 @@ class RestConnection(object):
     '''
           Get eventing rebalance status
     '''
-    def get_eventing_rebalance_status(self):
+    def get_eventing_rebalance_status(self, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "getAggRebalanceStatus"
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5749,11 +5745,11 @@ class RestConnection(object):
     '''
               Get application logs
     '''
-    def get_app_logs(self,handler_name):
+    def get_app_logs(self,handler_name, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "getAppLog?aggregate=true&name="+handler_name
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5761,11 +5757,11 @@ class RestConnection(object):
         if status:
             return content
 
-    def create_function(self, name, body):
+    def create_function(self, name, body, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5775,11 +5771,11 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
-    def update_function(self, name, body):
+    def update_function(self, name, body, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5790,11 +5786,11 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
-    def get_function_details(self, name):
+    def get_function_details(self, name, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
-            authorization = self.get_authorization(self.username, self.password)
+            authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
