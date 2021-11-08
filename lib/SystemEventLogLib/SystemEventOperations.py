@@ -17,8 +17,8 @@ class SystemEventRestHelper:
         def update_auth(r_obj, u_name, p_word):
             if u_name is not None:
                 r_obj = deepcopy(r_obj)
-                r_obj.rest_username = u_name
-                r_obj.rest_password = p_word
+                r_obj.username = u_name
+                r_obj.password = p_word
             return r_obj
         if rest is not None:
             return update_auth(rest, username, password)
