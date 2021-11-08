@@ -3807,7 +3807,7 @@ class RestConnection(object):
             n1ql_port = CbServer.ssl_n1ql_port
             protocol = "https"
         log.info('query n1ql stats')
-        api = "%s://%s:%s/admin/stats" % (protocol, str(n1ql_port), self.ip)
+        api = "%s://%s:%s/admin/stats" % (protocol, self.ip, str(n1ql_port))
         status, content, header = self._http_request(api, 'GET')
         log.info(content)
         try:
