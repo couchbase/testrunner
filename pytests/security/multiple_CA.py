@@ -6,6 +6,7 @@ from lib.Cb_constants.CBServer import CbServer
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.basetestcase import BaseTestCase
+from pytests.security.ntonencryptionBase import ntonencryptionBase
 from pytests.security.x509_multiple_CA_util import x509main, Validation
 
 
@@ -402,6 +403,20 @@ class MultipleCA(BaseTestCase):
             CbServer.use_https = https_val
             nodes_in_cluster.remove(node)
 
-
-
-
+    def test_teardown_with_n2n_encryption(self):
+        """
+        Verify that regenerate, deletion of trusted CAs work
+        with n2n encryption turned on
+        """
+        CbServer.use_https = True
+        for level in ["strict", "control", "all"]:
+            self.x509 = x509main(host=self.master, standard=self.standard,
+                                 encryption_type=self.encryption_type,
+                                 passphrase_type=self.passphrase_type,
+                                 wildcard_dns=self.wildcard_dns)
+            self.x509.generate_multiple_x509_certs(servers=self.servers[:self.nodes_init])
+            self.x509.upload_root_certs(self.master)
+            self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
+            ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel=level)
+            self.x509.teardown_certs(servers=self.servers)
+            ntonencryptionBase().disable_nton_cluster([self.master])
