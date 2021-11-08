@@ -62,7 +62,6 @@ class QueryTests(BaseTestCase):
         self.expiry_ops_per = self.input.param("expiry_ops_per", 0)
         self.delete_ops_per = self.input.param("delete_ops_per", 0)
         self.update_ops_per = self.input.param("update_ops_per", 0)
-        self.skip_load = self.input.param('skip_load', False)
         if self.input.param("gomaxprocs", None):
             self.n1ql_helper.configure_gomaxprocs()
 

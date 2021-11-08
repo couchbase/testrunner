@@ -216,6 +216,7 @@ class BaseTestCase(unittest.TestCase):
             self.x509enable = self.input.param('x509enable', False)
             self.enable_secrets = self.input.param("enable_secrets", False)
             self.secret_password = self.input.param("secret_password", 'p@ssw0rd')
+            self.skip_load = self.input.param('skip_load', False)
             self.skip_log_scan = self.input.param("skip_log_scan", False)
             self.disable_ipv6_grub = self.input.param("disable_ipv6_grub",False)
             self.upgrade_addr_family = self.input.param("upgrade_addr_family",None)

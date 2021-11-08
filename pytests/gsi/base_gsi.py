@@ -62,6 +62,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.stat = CollectionsStats(self.master)
         self.scope_prefix = self.input.param('scope_prefix', 'test_scope')
         self.collection_prefix = self.input.param('collection_prefix', 'test_collection')
+        self.initial_index_num = self.input.param("initial_index_num", 20)
         self.run_cbq_query = self.n1ql_helper.run_cbq_query
         self.num_of_docs_per_collection = self.input.param('num_of_docs_per_collection', 1000)
         self.deploy_node_info = None

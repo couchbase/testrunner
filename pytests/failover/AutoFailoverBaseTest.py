@@ -39,21 +39,23 @@ class AutoFailoverBaseTest(BaseTestCase):
                                              self.value_size,
                                              start=self.update_items,
                                              end=self.delete_items)
-        self._load_all_buckets(self.servers[0], self.initial_load_gen,
-                               "create", 0)
-        self._async_load_all_buckets(self.orchestrator,
-                                     self.update_load_gen, "update", 0)
-        self._async_load_all_buckets(self.orchestrator,
-                                     self.delete_load_gen, "delete", 0)
+        if self.skip_load:
+            self._load_all_buckets(self.servers[0], self.initial_load_gen,
+                                   "create", 0)
+            self._async_load_all_buckets(self.orchestrator,
+                                         self.update_load_gen, "update", 0)
+            self._async_load_all_buckets(self.orchestrator,
+                                         self.delete_load_gen, "delete", 0)
         self.server_index_to_fail = self.input.param("server_index_to_fail", None)
         if self.server_index_to_fail is None:
             self.server_to_fail = self._servers_to_fail()
         else:
-            self.server_to_fail = [self.servers[self.server_index_to_fail]]
-        self.servers_to_add = self.servers[self.nodes_init:self.nodes_init +
-                                                           self.nodes_in]
-        self.servers_to_remove = self.servers[self.nodes_init -
-                                              self.nodes_out:self.nodes_init]
+            if isinstance(self.server_index_to_fail, str):
+                self.server_to_fail = [self.servers[int(node_item)] for node_item in self.server_index_to_fail.split(":")]
+            else:
+                self.server_to_fail = [self.servers[self.server_index_to_fail]]
+        self.servers_to_add = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
+        self.servers_to_remove = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
 
     def bareSetUp(self):
         super(AutoFailoverBaseTest, self).setUp()
@@ -445,6 +447,80 @@ class AutoFailoverBaseTest(BaseTestCase):
             self.task_manager.schedule(task)
             task.result()
 
+    def async_block_indexer_port(self):
+        node_down_timer_tasks = []
+        for node in self.server_to_fail:
+            node_failure_timer_task = NodeDownTimerTask(node.ip, 11211)
+            node_down_timer_tasks.append(node_failure_timer_task)
+        self.timeout_buffer += 3
+        task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                            self.server_to_fail,
+                                            "block_indexer_port", self.timeout,
+                                            self.pause_between_failover_action,
+                                            self.failover_expected,
+                                            self.timeout_buffer,
+                                            failure_timers=node_down_timer_tasks)
+        for node_down_timer_task in node_down_timer_tasks:
+            self.node_failure_task_manager.schedule(node_down_timer_task, 2)
+        return task
+
+    def block_indexer_port(self):
+        """
+        Stop the indexer on the nodes to fail in the tests
+        :return: Nothing
+        """
+        task = self.async_block_indexer_port()
+        self.task_manager.schedule(task)
+        try:
+            task.result()
+        except Exception as e:
+            self.fail("Exception: {}".format(e))
+        finally:
+            task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                                self.server_to_fail,
+                                                "resume_indexer_port",
+                                                self.timeout, 0, False, 0,
+                                                check_for_failover=False)
+            self.task_manager.schedule(task)
+            task.result()
+
+    def async_stop_indexer(self):
+        node_down_timer_tasks = []
+        for node in self.server_to_fail:
+            node_failure_timer_task = NodeDownTimerTask(node.ip, 11211)
+            node_down_timer_tasks.append(node_failure_timer_task)
+        self.timeout_buffer += 3
+        task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                            self.server_to_fail,
+                                            "stop_indexer", self.timeout,
+                                            self.pause_between_failover_action,
+                                            self.failover_expected,
+                                            self.timeout_buffer,
+                                            failure_timers=node_down_timer_tasks)
+        for node_down_timer_task in node_down_timer_tasks:
+            self.node_failure_task_manager.schedule(node_down_timer_task, 2)
+        return task
+
+    def stop_indexer(self):
+        """
+        Stop the indexer on the nodes to fail in the tests
+        :return: Nothing
+        """
+        task = self.async_stop_indexer()
+        self.task_manager.schedule(task)
+        try:
+            task.result()
+        except Exception as e:
+            self.fail("Exception: {}".format(e))
+        finally:
+            task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                                self.server_to_fail,
+                                                "start_indexer",
+                                                self.timeout, 0, False, 0,
+                                                check_for_failover=False)
+            self.task_manager.schedule(task)
+            task.result()
+
     def async_split_network(self):
         self.time_start = time.time()
         if self.server_to_fail.__len__() < 2:
@@ -515,22 +591,29 @@ class AutoFailoverBaseTest(BaseTestCase):
                                                     False)
         self.can_abort_rebalance = self.input.param("can_abort_rebalance", True)
         self.num_node_failures = self.input.param("num_node_failures", 1)
+        self.deny_autofailover = self.input.param("deny_autofailover", None)
         self.services = self.input.param("services", None)
         self.zone = self.input.param("zone", 1)
+        self.concurrent_failover = self.input.param("concurrent_failover", False)
+        self.num_index_replicas = self.input.param("num_index_replica", 0)
         self.multi_services_node = self.input.param("multi_services_node",
                                                     False)
         self.pause_between_failover_action = self.input.param(
             "pause_between_failover_action", 0)
         self.remove_after_failover = self.input.param(
             "remove_after_failover", False)
-        self.timeout_buffer = 120 if self.failover_orchestrator else 10
-        failover_not_expected = (self. max_count == 1 and self.num_node_failures > 1 and
+        self.timeout_buffer = 180 if self.failover_orchestrator else 60
+        failover_not_expected = (self.max_count == 1 and self.num_node_failures > 1 and
                                 self.pause_between_failover_action <
                                 self.timeout or self.num_replicas < 1)
         failover_not_expected = failover_not_expected or (1 < self.max_count < self.num_node_failures and
                                                           self.pause_between_failover_action < self.timeout or
                                                           self.num_replicas < self.max_count)
         self.failover_expected = not failover_not_expected
+        if self.deny_autofailover is False:
+            self.failover_expected = True
+        elif self.deny_autofailover is True:
+            self.failover_expected = False
         if self.failover_action is "restart_server":
             self.num_items *= 100
         self.orchestrator = self.servers[0] if not \
@@ -558,8 +641,10 @@ class AutoFailoverBaseTest(BaseTestCase):
         "restart_server": restart_couchbase_server,
         "restart_machine": restart_machine,
         "restart_network": stop_restart_network,
+        "stop_indexer": stop_indexer,
         "stop_memcached": stop_memcached,
-        "network_split": split_network
+        "network_split": split_network,
+        "block_indexer_port": block_indexer_port,
     }
 
     def _auto_failover_message_present_in_logs(self, ipaddress):

@@ -5952,7 +5952,7 @@ class AutoFailoverNodesFailureTask(Task):
         self.timeout_buffer = timeout_buffer
         self.current_failure_node = self.servers_to_fail[0]
         self.max_time_to_wait_for_failover = self.timeout + \
-                                             self.timeout_buffer + 60
+                                             self.timeout_buffer + 200
         self.disk_timeout = disk_timeout
         self.disk_location = disk_location
         self.disk_size = disk_size
@@ -6090,6 +6090,14 @@ class AutoFailoverNodesFailureTask(Task):
                                        self.timeout + self.timeout_buffer + 30)
         elif self.failure_type == "restart_machine":
             self._restart_machine(self.current_failure_node)
+        elif self.failure_type == "stop_indexer":
+            self._stop_indexer(self.current_failure_node)
+        elif self.failure_type == "start_indexer":
+            self._start_indexer(self.current_failure_node)
+        elif self.failure_type == "block_indexer_port":
+            self._block_indexer_port(self.current_failure_node)
+        elif self.failure_type == "resume_indexer_port":
+            self._resume_indexer_port(self.current_failure_node)
         elif self.failure_type == "stop_memcached":
             self._stop_memcached(self.current_failure_node)
         elif self.failure_type == "start_memcached":
@@ -6167,6 +6175,37 @@ class AutoFailoverNodesFailureTask(Task):
         shell.execute_command(command=command)
         node_failure_timer.result()
         self.start_time = node_failure_timer.start_time
+
+    def _block_indexer_port(self, node):
+        shell = RemoteMachineShellConnection(node)
+        self.log.info(f"Blocking port 9103 and 9105 on {node}")
+        shell.execute_command("iptables -A INPUT -p tcp --destination-port 9103 -j DROP")
+        shell.execute_command("iptables -A OUTPUT -p tcp --destination-port 9103 -j DROP")
+        shell.execute_command("iptables -A INPUT -p tcp --destination-port 9105 -j DROP")
+        shell.execute_command("iptables -A OUTPUT -p tcp --destination-port 9105 -j DROP")
+
+    def _resume_indexer_port(self, node):
+        shell = RemoteMachineShellConnection(node)
+        self.log.info(f"Resuming port 9103 and 9105 on {node}")
+        shell.execute_command("iptables -D INPUT -p tcp --destination-port 9103 -j DROP")
+        shell.execute_command("iptables -D OUTPUT -p tcp --destination-port 9103 -j DROP")
+        shell.execute_command("iptables -D INPUT -p tcp --destination-port 9105 -j DROP")
+        shell.execute_command("iptables -D OUTPUT -p tcp --destination-port 9105 -j DROP")
+
+    def _stop_indexer(self, node):
+        node_failure_timer = self.failure_timers[self.itr]
+        time.sleep(1)
+        shell = RemoteMachineShellConnection(node)
+        o, r = shell.stop_indexer()
+        self.log.info("Killed indexer. {0} {1}".format(o, r))
+        node_failure_timer.result()
+        self.start_time = node_failure_timer.start_time
+
+    def _start_indexer(self, node):
+        shell = RemoteMachineShellConnection(node)
+        o, r = shell.start_indexer()
+        self.log.info("Started back indexer. {0} {1}".format(o, r))
+        shell.disconnect()
 
     def _stop_memcached(self, node):
         node_failure_timer = self.failure_timers[self.itr]

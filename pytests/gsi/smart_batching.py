@@ -28,7 +28,6 @@ class SmartBatching(BaseSecondaryIndexingTests):
         self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
                                             bucket_params=self.bucket_params)
         self.buckets = self.rest.get_buckets()
-        self.initial_index_num = self.input.param("initial_index_num", 20)
         self.transfer_batch_size = self.input.param("transfer_batch_size", 3)
         self.rebalance_timeout = self.input.param("rebalance_timeout", 600)
         self.use_defer_build = self.input.param("use_defer_build", False)

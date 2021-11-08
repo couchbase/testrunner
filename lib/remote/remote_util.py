@@ -785,6 +785,30 @@ class RemoteMachineShellConnection(KeepRefs):
                     num_retries -= 1
         return o, r
 
+    def stop_indexer(self):
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            RemoteMachineHelper(self).is_process_running('indexer')
+            o, r = self.execute_command("taskkill /F /T /IM indexer*")
+            self.log_command_output(o, r, debug=False)
+        else:
+            RemoteMachineHelper(self).is_process_running('indexer')
+            o, r = self.execute_command("kill -SIGSTOP $(pgrep indexer)")
+            self.log_command_output(o, r, debug=False)
+        return o, r
+
+    def start_indexer(self):
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            o, r = self.execute_command("taskkill /F /T /IM indexer*")
+            RemoteMachineHelper(self).is_process_running('indexer')
+            self.log_command_output(o, r)
+        else:
+            o, r = self.execute_command("kill -SIGCONT $(pgrep indexer)")
+            RemoteMachineHelper(self).is_process_running('indexer')
+            self.log_command_output(o, r)
+        return o, r
+
     def stop_memcached(self):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
