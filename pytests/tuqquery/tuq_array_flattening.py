@@ -21,6 +21,7 @@ class QueryArrayFlatteningTests(QueryTests):
         self.explicit = self.input.param("explicit", False)
         self.use_all = self.input.param("use_all", False)
         self.use_unnest = self.input.param("use_unnest", False)
+        self.any_every = self.input.param("any_every", False)
         self.rollback = self.input.param("rollback", False)
         self.conn = RestConnection(self.master)
         self.stat = CollectionsStats(self.master)
@@ -133,9 +134,12 @@ class QueryArrayFlatteningTests(QueryTests):
     def test_flatten_no_fields(self):
         self.run_cbq_query(
             query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author) FOR r IN reviews END,country,email)")
+
+        query = "EXPLAIN SELECT * FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.ratings.Cleanliness > 1 END"
+        if self.any_every:
+            query = query.replace("ANY", "ANY AND EVERY")
         # Ensure the query is actually using the flatten index instead of primary
-        explain_results = self.run_cbq_query(
-            query="EXPLAIN SELECT * FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.ratings.Cleanliness > 1 END")
+        explain_results = self.run_cbq_query(query=query)
         self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['index'] == '#primary',
                         "The correct index is not being used or the plan is different than expected! Expected primary got {0}".format(
                             explain_results))
@@ -164,10 +168,36 @@ class QueryArrayFlatteningTests(QueryTests):
         else:
             query = "SELECT * FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' END"
             primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' END"
+
+        if self.any_every:
+            query = query.replace("ANY", "ANY AND EVERY")
+            primary_query = primary_query.replace("ANY", "ANY AND EVERY")
         # Ensure the query is actually using the flatten index instead of primary
         explain_results = self.run_cbq_query(query="EXPLAIN " + query)
         self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == 'idx1',
                         "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(explain_results))
+
+        self.compare_against_primary(query, primary_query)
+
+    '''Try the asc desc keywords in index creation'''
+    def test_flatten_asc_desc(self):
+        self.run_cbq_query(query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author ASC,r.ratings.Cleanliness DESC) FOR r IN reviews END, email, free_parking, country)")
+        if self.use_unnest:
+            query = "SELECT * FROM default AS d unnest reviews as r WHERE r.author LIKE 'M%' and r.ratings.Cleanliness > 1 AND free_parking = True AND country is not null"
+            primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) unnest reviews as r WHERE r.author LIKE 'M%' and r.ratings.Cleanliness > 1 AND free_parking = True AND country is not null"
+        else:
+            query = "SELECT * FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True AND country is not null"
+            primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True AND country is not null"
+
+        if self.any_every:
+            query = query.replace("ANY", "ANY AND EVERY")
+            primary_query = primary_query.replace("ANY", "ANY AND EVERY")
+
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == 'idx1',
+                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
+                            explain_results))
         self.compare_against_primary(query, primary_query)
 
     '''Test flatten key with all keyword instead of distinct'''
@@ -185,6 +215,11 @@ class QueryArrayFlatteningTests(QueryTests):
             primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews " \
                             "SATISFIES r.ratings.Rooms = 3 and r.ratings.Cleanliness > 1 END AND free_parking = True " \
                             "AND country is not null"
+
+        if self.any_every:
+            query = query.replace("ANY", "ANY AND EVERY")
+            primary_query = primary_query.replace("ANY", "ANY AND EVERY")
+
         # Ensure the query is actually using the flatten index instead of primary
         explain_results = self.run_cbq_query(query="EXPLAIN " + query)
         self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == 'idx1',
@@ -282,14 +317,19 @@ class QueryArrayFlatteningTests(QueryTests):
 
     '''Test what happens when you have an array with ALL/DISTINCT flatten_keys(v1,v2) but query contains any (v2,1)'''
     def test_flatten_array_ordering(self):
-        self.run_cbq_query(
-            query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,p.ratings.Overall) FOR r,p IN reviews END, avg_rating, country)")
+        create_query = "create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking)"
+        if self.use_unnest:
+            query = "SELECT SUM( r.ratings.Cleanliness) FROM default AS d unnest reviews as r WHERE r.author LIKE 'N%' and r.author is not missing and r.ratings.Cleanliness > 1 AND d.free_parking = False AND d.email is not missing GROUP BY r.rating.Cleanliness,r.author"
+            primary_query = "SELECT SUM( r.ratings.Cleanliness) FROM default AS d  USE INDEX (`#primary`) unnest reviews as r WHERE r.author LIKE 'N%' and r.author is not missing and r.ratings.Cleanliness > 1 AND d.free_parking = False AND d.email is not missing GROUP BY r.rating.Cleanliness,r.author"
+        else:
+            query = "SELECT free_parking, email FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author  LIKE 'N%' and r.ratings.Cleanliness = 3 END AND free_parking = True AND email is not missing GROUP BY free_parking, email"
+            primary_query = "SELECT free_parking, email  FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author  LIKE 'N%'  and r.ratings.Cleanliness = 3 END AND free_parking = True AND email is not missing GROUP BY free_parking,email"
+        self.run_cbq_query(query=create_query)
         # Ensure the query is actually using the flatten index instead of primary
-        explain_results = self.run_cbq_query(
-            query="EXPLAIN SELECT * FROM default AS d WHERE ANY p,r IN d.reviews SATISFIES p.ratings.Overall=5 and r.author='author' END AND avg_rating > 2 AND country is not null")
-        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == 'idx1',
-                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
-                            explain_results))
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.assertTrue("idx1" in str(explain_results),"The query should be using idx1, check explain results {0}".format(explain_results))
+
+        self.compare_against_primary(query, primary_query)
 
     '''Teset partial index'''
     def test_flatten_partial_index(self):
@@ -462,6 +502,92 @@ class QueryArrayFlatteningTests(QueryTests):
                             explain_results))
         self.compare_against_primary(query, primary_query)
 
+    def test_flatten_prepared(self):
+        self.run_cbq_query(query="delete from system:prepareds")
+        create_query = "create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.date,r.ratings.Overall) FOR r IN reviews END, email)"
+        if self.use_unnest:
+            prepare_query = "PREPARE p1 AS SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing"
+            query = "SELECT * FROM default d UNNEST d.reviews AS r WHERE r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing"
+            primary_query = "SELECT * FROM default d USE INDEX (`#primary`) UNNEST d.reviews AS r WHERE r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing"
+        else:
+            prepare_query = "PREPARE p1 AS SELECT * FROM default d WHERE ANY r in reviews SATISFIES r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing END"
+            query = "SELECT * FROM default d WHERE ANY r in reviews SATISFIES r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing END"
+            primary_query = "SELECT * FROM default d USE INDEX (`#primary`) WHERE ANY r in reviews SATISFIES r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing END"
+        self.run_cbq_query(query=create_query)
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using idx1, check explain results {0}".format(explain_results))
+
+        prepare_results = self.run_cbq_query(query=prepare_query)
+        self.assertTrue(prepare_results['status'] == "success")
+        time.sleep(5)
+        node_prepared_name = self.run_cbq_query(query='select * from system:prepareds where name = "p1"')
+        prepareds = self.run_cbq_query(query="select * from system:prepareds")
+        self.assertTrue(node_prepared_name['metrics']['resultCount'] == 2, "There should be two enteries for p1 check prepareds {0}".format(prepareds))
+        execute_results = self.run_cbq_query(query="execute p1")
+        expected_results = self.run_cbq_query(query=primary_query)
+        diffs = DeepDiff(execute_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    def test_flatten_cte(self):
+        create_query = "create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.date,r.ratings.Overall) FOR r IN reviews END, email)"
+        if self.use_unnest:
+            query = "with emails as (SELECT raw d.email FROM default d UNNEST d.reviews AS r WHERE r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing) " \
+                    "select * from default d UNNEST d.reviews as r where r.ratings.Overall BETWEEN 1 and 3 and r.date is not missing AND d.email in emails"
+            primary_query = "with emails as (SELECT raw d.email FROM default d UNNEST d.reviews AS r WHERE r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing) " \
+                    "select * from default d USE INDEX (`#primary`) UNNEST d.reviews as r where r.ratings.Overall BETWEEN 1 and 3 and r.date is not missing AND d.email in emails"
+        else:
+            query = "WITH emails as (SELECT raw email FROM default d WHERE ANY r in reviews SATISFIES r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing END) " \
+                    "SELECT * FROM default d WHERE ANY r in reviews SATISFIES r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing END and email in emails"
+            primary_query = "WITH emails as (SELECT raw email FROM default d WHERE ANY r in reviews SATISFIES r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing END) " \
+                            "SELECT * FROM default d USE INDEX (`#primary`) WHERE ANY r in reviews SATISFIES r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing END and email in emails"
+        self.run_cbq_query(query=create_query)
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using idx1, check explain results {0}".format(explain_results))
+
+        self.compare_against_primary(query, primary_query)
+
+    def test_flatten_cte_conflict(self):
+        create_query = "create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.date,r.ratings.Overall) FOR r IN reviews END, email)"
+        if self.use_unnest:
+            query = "with emails as (SELECT raw d.email FROM default d) " \
+                    "select * from default d UNNEST d.reviews as emails where emails.ratings.Overall BETWEEN 1 and 3 and emails.date is not missing AND d.email in emails"
+
+        else:
+            query = "WITH emails as (SELECT raw email FROM default d ) " \
+                    "SELECT * FROM default d WHERE ANY emails in reviews SATISFIES emails.ratings.Overall BETWEEN 1 and 3 AND emails.date is not missing END and email in emails"
+
+        self.run_cbq_query(query=create_query)
+        try:
+            self.run_cbq_query(query=query)
+            self.fail()
+        except Exception as e:
+            if self.use_unnest:
+                self.assertTrue("Duplicate UNNEST alias emails" in str(e), "The error is incorrect check the error {0}".format(str(e)))
+            else:
+                self.assertTrue("Duplicate variable emails" in str(e), "The error is incorrect check the error {0}".format(str(e)))
+
+
+    def test_flatten_alias_keyspace_collision(self):
+        create_query = "create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.date,r.ratings.Overall) FOR r IN reviews END, email)"
+        if self.use_unnest:
+            query = "SELECT * FROM default d UNNEST d.reviews AS d WHERE d.ratings.Overall BETWEEN 1 and 3 AND d.date is not missing"
+            primary_query = "SELECT * FROM default d USE INDEX (`#primary`) UNNEST d.reviews AS d WHERE r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing"
+        else:
+            query = "SELECT email FROM default d WHERE ANY d in reviews SATISFIES r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing END"
+            primary_query = "SELECT email FROM default d USE INDEX (`#primary`) WHERE ANY d in reviews SATISFIES r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing END"
+        self.run_cbq_query(query=create_query)
+        try:
+            self.run_cbq_query(query=query)
+            self.fail()
+        except Exception as e:
+            if self.use_unnest:
+                self.assertTrue("Duplicate UNNEST alias d" in str(e), "The error is incorrect check the error {0}".format(str(e)))
+            else:
+                self.assertTrue("Duplicate variable d" in str(e), "The error is incorrect check the error {0}".format(str(e)))
+
     '''We expect the query to pick up the array with the keys flattened'''
     def test_flatten_index_selection(self):
         self.run_cbq_query(query="create index idx1 on default(country, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking)")
@@ -508,6 +634,182 @@ class QueryArrayFlatteningTests(QueryTests):
         if diffs:
             self.assertTrue(False, diffs)
 
+    def test_flatten_named_params(self):
+        self.run_cbq_query(
+            query="create index idx1 on default(ALL ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking) where free_parking = True")
+        if self.use_unnest:
+            query = "SELECT * FROM default AS d unnest reviews as r WHERE r.author LIKE $author_name and r.ratings.Cleanliness > $cleaning_score " \
+                    "AND d.free_parking = True AND d.country is not null"
+            primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) unnest reviews as r WHERE r.author LIKE $author_name and r.ratings.Cleanliness > $cleaning_score " \
+                    "AND d.free_parking = True AND d.country is not null"
+            query2 = "SELECT * FROM default AS d unnest reviews as r WHERE r.author LIKE $author_name and r.ratings.Cleanliness > $cleaning_score AND d.free_parking = False"
+
+        else:
+            query = "SELECT * FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE $author_name and r.ratings.Cleanliness > $cleaning_score " \
+                    "END AND free_parking = True AND country is not null"
+            primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author " \
+                            "LIKE $author_name and r.ratings.Cleanliness > $cleaning_score END AND free_parking = True AND country is not null"
+            query2 = "SELECT * FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE $author_name and r.ratings.Cleanliness > $cleaning_score END AND free_parking = False"
+
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query, query_params={'$author_name': "M%", "$cleaning_score": 1})
+        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == 'idx1',
+                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
+                            explain_results))
+        query_results = self.run_cbq_query(query=query, query_params={'$author_name': "M%", "$cleaning_score": 1})
+        expected_results = self.run_cbq_query(query=primary_query, query_params={'$author_name': "M%", "$cleaning_score": 1})
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+        # Ensure partial index is not selected when it does not apply
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query2, query_params={'$author_name': "M%", "$cleaning_score": 1})
+        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['index'] == '#primary',
+                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
+                            explain_results))
+
+    def test_flatten_ansi_joins(self):
+        self.load_travel_sample()
+        create_query = "create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Overall) for r in reviews END,email)"
+
+        query = "select * from `travel-sample`.inventory.hotel t INNER JOIN default d ON (ANY r in d.reviews satisfies " \
+                "r.author like 'M%' and r.ratings.Cleanliness > 1 END AND t.country = d.country AND ANY s in t.reviews " \
+                "SATISFIES s.author like 'M%' and s.ratings.Cleanliness > 1 END) "
+
+        self.run_cbq_query(query=create_query)
+
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using idx1, check explain results {0}".format(explain_results))
+
+        ansi_results = self.run_cbq_query(query=query)
+        self.assertTrue(ansi_results['status'] == 'success',
+                        "Merge did not occur successfully! {0}".format(ansi_results))
+
+    def test_flatten_positional_params(self):
+        self.run_cbq_query(
+            query="create index idx1 on default(ALL ARRAY FLATTEN_KEYS(r.ratings.Overall,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking) where free_parking = True")
+        if self.use_unnest:
+            query = "SELECT * FROM default AS d unnest reviews as r WHERE r.ratings.Overall < $1 and r.ratings.Cleanliness > $2 " \
+                    "AND d.free_parking = True AND d.country is not null"
+            primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) unnest reviews as r WHERE r.ratings.Overall < $1  and r.ratings.Cleanliness > $2 " \
+                    "AND d.free_parking = True AND d.country is not null"
+            query2 = "SELECT * FROM default AS d unnest reviews as r WHERE r.ratings.Overall < $1  and r.ratings.Cleanliness > $2 AND d.free_parking = False"
+
+        else:
+            query = "SELECT * FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.ratings.Overall < $1  and r.ratings.Cleanliness > $2 " \
+                    "END AND free_parking = True AND country is not null"
+            primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.ratings.Overall < $1 " \
+                            " and r.ratings.Cleanliness > $2 END AND free_parking = True AND country is not null"
+            query2 = "SELECT * FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.ratings.Overall < $1  and r.ratings.Cleanliness > $2 END AND free_parking = False"
+
+        args= 'args=[5,1]'
+
+        curl_output = self.shell.execute_command("{0} -u Administrator:password {1}:{2}/query/service -d 'statement=EXPLAIN {3}&{4}'".format(self.curl_path, self.master.ip, self.n1ql_port, query, args))
+        explain_results = self.convert_list_to_json(curl_output[0])
+
+        # Ensure the query is actually using the flatten index instead of primary
+        #explain_results = self.run_cbq_query(query="EXPLAIN " + query, query_params={'args': ["M%", 1]})
+        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == 'idx1',
+                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
+                            explain_results))
+        curl_output = self.shell.execute_command("{0} -u Administrator:password {1}:{2}/query/service -d 'statement={3}&{4}'".format(self.curl_path, self.master.ip, self.n1ql_port, query, args))
+        query_results = self.convert_list_to_json(curl_output[0])
+
+        curl_output = self.shell.execute_command("{0} -u Administrator:password {1}:{2}/query/service -d 'statement={3}&{4}'".format(self.curl_path, self.master.ip, self.n1ql_port, primary_query, args))
+        expected_results = self.convert_list_to_json(curl_output[0])
+
+
+        #query_results = self.run_cbq_query(query=query ,query_params={'args': ["M%", 1]})
+        #expected_results = self.run_cbq_query(query=primary_query, query_params={'args': ["M%", 1]})
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+        # Ensure partial index is not selected when it does not apply
+        curl_output = self.shell.execute_command("{0} -u Administrator:password {1}:{2}/query/service -d statement='EXPLAIN {3}&{4}'".format(self.curl_path, self.master.ip, self.n1ql_port, query2, args))
+        explain_results = self.convert_list_to_json(curl_output[0])
+        #explain_results = self.run_cbq_query(query="EXPLAIN " + query2, query_params={'args': ["M%", 1]})
+        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['index'] == '#primary',
+                        "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
+                            explain_results))
+
+    ##############################################################################################
+    #
+    #   Query Context
+    ##############################################################################################
+
+    def test_flatten_query_context_namespace_bucket_scope(self):
+        self.load_travel_sample()
+        create_query = "create index idx1 on hotel(DISTINCT ARRAY FLATTEN_KEYS(r.date,r.ratings.Overall) FOR r IN reviews END, email)"
+        if self.use_unnest:
+            query = "SELECT * FROM `travel-sample`.inventory.hotel d UNNEST d.reviews AS r WHERE r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing"
+            primary_query = "SELECT * FROM `travel-sample`.inventory.hotel d USE INDEX (`#primary`) UNNEST d.reviews AS r WHERE r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing"
+        else:
+            query = "SELECT * FROM `travel-sample`.inventory.hotel d WHERE ANY r in reviews SATISFIES r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing END"
+            primary_query = "SELECT * FROM `travel-sample`.inventory.hotel d USE INDEX (`#primary`) WHERE ANY r in reviews SATISFIES r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing END"
+        self.run_cbq_query(query=create_query, query_context='default:`travel-sample`.inventory')
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using idx1, check explain results {0}".format(explain_results))
+        self.run_cbq_query(query="CREATE PRIMARY INDEX ON `travel-sample`.inventory.hotel")
+
+        self.compare_against_primary(query, primary_query)
+
+    def test_flatten_query_context_semicolon_bucket_scope(self):
+        self.load_travel_sample()
+        create_query = "create index idx1 on hotel(DISTINCT ARRAY FLATTEN_KEYS(r.date,r.ratings.Overall) FOR r IN reviews END, email)"
+        if self.use_unnest:
+            query = "SELECT * FROM `travel-sample`.inventory.hotel d UNNEST d.reviews AS r WHERE r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing"
+            primary_query = "SELECT * FROM `travel-sample`.inventory.hotel d USE INDEX (`#primary`) UNNEST d.reviews AS r WHERE r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing"
+        else:
+            query = "SELECT * FROM `travel-sample`.inventory.hotel d WHERE ANY r in reviews SATISFIES r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing END"
+            primary_query = "SELECT * FROM `travel-sample`.inventory.hotel d USE INDEX (`#primary`) WHERE ANY r in reviews SATISFIES r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing END"
+        self.run_cbq_query(query=create_query, query_context=':`travel-sample`.inventory')
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using idx1, check explain results {0}".format(explain_results))
+        self.run_cbq_query(query="CREATE PRIMARY INDEX ON `travel-sample`.inventory.hotel")
+
+        self.compare_against_primary(query, primary_query)
+
+    def test_flatten_query_context_namespace(self):
+        self.load_travel_sample()
+        create_query = "create index idx1 on `travel-sample`.inventory.hotel(DISTINCT ARRAY FLATTEN_KEYS(r.date,r.ratings.Overall) FOR r IN reviews END, email) "
+        if self.use_unnest:
+            query = "SELECT * FROM `travel-sample`.inventory.hotel d UNNEST d.reviews AS r WHERE r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing"
+            primary_query = "SELECT * FROM `travel-sample`.inventory.hotel d USE INDEX (`#primary`) UNNEST d.reviews AS r WHERE r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing"
+        else:
+            query = "SELECT * FROM `travel-sample`.inventory.hotel d WHERE ANY r in reviews SATISFIES r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing END"
+            primary_query = "SELECT * FROM `travel-sample`.inventory.hotel d USE INDEX (`#primary`) WHERE ANY r in reviews SATISFIES r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing END"
+        self.run_cbq_query(query=create_query, query_context='default:')
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query, query_context='default:')
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using idx1, check explain results {0}".format(explain_results))
+        self.run_cbq_query(query="CREATE PRIMARY INDEX ON `travel-sample`.inventory.hotel")
+
+        self.compare_against_primary(query, primary_query)
+
+    def test_flatten_query_context(self):
+        self.load_travel_sample()
+        create_query = "create index idx1 on hotel(DISTINCT ARRAY FLATTEN_KEYS(r.date,r.ratings.Overall) FOR r IN reviews END, email)"
+        if self.use_unnest:
+            query = "SELECT * FROM hotel d UNNEST d.reviews AS r WHERE r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing"
+            primary_query = "SELECT * FROM hotel d USE INDEX (`#primary`) UNNEST d.reviews AS r WHERE r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing"
+        else:
+            query = "SELECT * FROM hotel d WHERE ANY r in reviews SATISFIES r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing END"
+            primary_query = "SELECT * FROM hotel d USE INDEX (`#primary`) WHERE ANY r in reviews SATISFIES r.ratings.Overall BETWEEN 1 and 3 AND r.date is not missing END"
+        self.run_cbq_query(query=create_query, query_context='`travel-sample`.inventory')
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query, query_context='`travel-sample`.inventory')
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using idx1, check explain results {0}".format(explain_results))
+        self.run_cbq_query(query="CREATE PRIMARY INDEX ON `travel-sample`.inventory.hotel")
+
+        query_results = self.run_cbq_query(query=query, query_context='`travel-sample`.inventory')
+        expected_results = self.run_cbq_query(query=primary_query, query_context='`travel-sample`.inventory')
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
     ##############################################################################################
     #
     #   Partitioning
@@ -593,22 +895,232 @@ class QueryArrayFlatteningTests(QueryTests):
 
     ##############################################################################################
     #
+    #   PUSHDOWN
+    ##############################################################################################
+    '''Pushdown will work on leading key of index'''
+    def test_flatten_groupby_pushdown_leading(self):
+        create_query = "create index idx1 on default(email, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END,free_parking)"
+
+        self.run_cbq_query(query=create_query)
+        query = "SELECT email FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True AND email is not missing GROUP BY email"
+        primary_query = "SELECT email FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True AND email is not missing GROUP BY email"
+
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.assertTrue("idx1" in str(explain_results),"The query should be using idx1, check explain results {0}".format(explain_results))
+        self.assertTrue("covers" in str(explain_results),
+                        "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue("index_group_aggs" in str(explain_results), "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
+
+        self.compare_against_primary(query, primary_query)
+
+    '''Pushdown will work on leading key of index'''
+    def test_flatten_groupby_pushdown_array_leading(self):
+        create_query = "create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking)"
+        query ="SELECT r.author  FROM default AS d unnest reviews as r WHERE r.author LIKE 'M%' and r.author is not missing and r.ratings.Cleanliness > 1 AND d.free_parking = True AND d.email is not missing GROUP BY r.author"
+        primary_query = "SELECT r.author  FROM default AS d  USE INDEX (`#primary`) unnest reviews as r WHERE r.author LIKE 'M%' and r.author is not missing and r.ratings.Cleanliness > 1 AND d.free_parking = True AND d.email is not missing GROUP BY r.author;"
+
+        self.run_cbq_query(query=create_query)
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.assertTrue("idx1" in str(explain_results),"The query should be using idx1, check explain results {0}".format(explain_results))
+        self.assertTrue("covers" in str(explain_results),
+                        "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue("index_group_aggs" in str(explain_results), "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
+
+        self.compare_against_primary(query, primary_query)
+
+
+    '''Pushdown will work on groupby clause on query that uses diff order than index key order'''
+    def test_flatten_groupby_pushdown_order_unnest(self):
+        create_query = "create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking)"
+        query = "SELECT r.author,d.email  FROM default AS d unnest reviews as r WHERE r.author LIKE 'M%' and r.author is not missing and r.ratings.Cleanliness > 1 AND d.free_parking = True AND d.email is not missing GROUP BY d.email,r.author"
+        primary_query = "SELECT r.author, d.email FROM default AS d  USE INDEX (`#primary`) unnest reviews as r WHERE r.author LIKE 'M%' and r.author is not missing and r.ratings.Cleanliness > 1 AND d.free_parking = True AND d.email is not missing GROUP BY d.email,r.author;"
+
+        self.run_cbq_query(query=create_query)
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using idx1, check explain results {0}".format(explain_results))
+        self.assertTrue("covers" in str(explain_results),
+                        "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue("index_group_aggs" in str(explain_results),
+                        "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
+
+        self.compare_against_primary(query, primary_query)
+
+    def test_flatten_groupby_pushdown_order(self):
+        create_query = "create index idx1 on default(email, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END,free_parking)"
+
+        self.run_cbq_query(query=create_query)
+        query = "SELECT free_parking,email FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True AND email is not missing GROUP BY free_parking,email"
+        primary_query = "SELECT free_parking,email FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True AND email is not missing GROUP BY free_parking,email"
+
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.assertTrue("idx1" in str(explain_results),"The query should be using idx1, check explain results {0}".format(explain_results))
+        self.assertTrue("covers" in str(explain_results),
+                        "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue("index_group_aggs" in str(explain_results), "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
+
+        self.compare_against_primary(query, primary_query)
+
+    '''Pushdown will work on non leading keys '''
+    def test_flatten_groupby_pushdown_nonleading(self):
+        create_query = "create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking)"
+        self.run_cbq_query(query=create_query)
+        if self.use_unnest:
+            query = "SELECT d.email FROM default AS d unnest reviews as r WHERE r.author LIKE 'M%' and r.ratings.Cleanliness > 1 AND d.free_parking = True GROUP BY d.email"
+            primary_query = "SELECT d.email FROM default AS d USE INDEX (`#primary`) unnest reviews as r WHERE r.author LIKE 'M%' and r.ratings.Cleanliness > 1 AND d.free_parking = True GROUP BY d.email"
+        else:
+            query = "SELECT email FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END " \
+                    "AND free_parking = True GROUP BY email"
+            primary_query = "SELECT email FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' " \
+                            "and r.ratings.Cleanliness > 1 END AND free_parking = True GROUP BY email"
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(
+            query="EXPLAIN " + query)
+        self.assertTrue("idx1" in str(explain_results),"The query should be using idx1, check explain results {0}".format(explain_results))
+        self.assertTrue("covers" in str(explain_results),
+                        "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue("index_group_aggs" in str(explain_results), "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
+
+        self.compare_against_primary(query, primary_query)
+
+    '''Pushdown with limit and offset works with group by on leading keys'''
+    def test_flatten_groupby_pushdown_limit_offset(self):
+        create_query = "create index idx1 on default(email, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END,free_parking)"
+        query = "SELECT email FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True AND email is not missing GROUP BY email ORDER BY email LIMIT 10 OFFSET 5"
+        primary_query = "SELECT email FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True AND email is not missing GROUP BY email ORDER BY email LIMIT 10 OFFSET 5"
+
+        self.run_cbq_query(query=create_query)
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.assertTrue("idx1" in str(explain_results),"The query should be using idx1, check explain results {0}".format(explain_results))
+
+        self.assertTrue("covers" in str(explain_results),
+                        "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue("index_group_aggs" in str(explain_results),
+                        "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
+
+    '''Aggregate pushdown can work with no groupby clause'''
+    def test_flatten_aggregate_pushdown_no_group(self):
+        self.load_travel_sample()
+        create_query = "create index idx1 on `travel-sample`.inventory.hotel(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking)"
+        if self.use_unnest:
+            query = "SELECT SUM(r.ratings.Cleanliness) FROM `travel-sample`.inventory.hotel AS d unnest reviews as r WHERE r.author LIKE 'N%' and r.author is not missing and r.ratings.Cleanliness > 1 AND d.free_parking = False AND d.email is not missing"
+            primary_query = "SELECT SUM(r.ratings.Cleanliness) FROM `travel-sample`.inventory.hotel AS d  USE INDEX (`#primary`) unnest reviews as r WHERE r.author LIKE 'N%' and r.author is not missing and r.ratings.Cleanliness > 1 AND d.free_parking = False AND d.email is not missing"
+        else:
+            query = "SELECT COUNT(email), SUM(free_parking)  FROM `travel-sample`.inventory.hotel AS d WHERE ANY r IN d.reviews SATISFIES r.author = 'Nella Ratke' and r.ratings.Cleanliness = 3 END AND free_parking = True AND email is not missing"
+            primary_query = "SELECT COUNT(email), SUM(free_parking)  FROM `travel-sample`.inventory.hotel AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author = 'Nella Ratke' and r.ratings.Cleanliness = 3 END AND free_parking = True AND email is not missing"
+        self.run_cbq_query(query=create_query)
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.run_cbq_query(query="CREATE PRIMARY INDEX ON `travel-sample`.inventory.hotel")
+        self.assertTrue("idx1" in str(explain_results),"The query should be using idx1, check explain results {0}".format(explain_results))
+        self.assertTrue("covers" in str(explain_results),
+                        "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue("index_group_aggs" in str(explain_results), "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
+
+        self.compare_against_primary(query, primary_query)
+
+    '''Aggregate pushdown should work with letting and having'''
+    def test_flatten_aggregate_pushdown_letting_having(self):
+        self.load_travel_sample()
+        create_query = "create index idx1 on `travel-sample`.inventory.hotel(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking)"
+        if self.use_unnest:
+            query = "SELECT SUM(r.ratings.Cleanliness) FROM `travel-sample`.inventory.hotel AS d unnest reviews as r " \
+                    "WHERE r.author LIKE 'N%' and r.author is not missing and r.ratings.Cleanliness > 1 AND d.free_parking = False " \
+                    "AND d.email is not missing GROUP BY r.ratings.Cleanliness LETTING min_cleanliness = 5 HAVING COUNT(r.ratings.Cleanliness) > min_cleanliness"
+            primary_query = "SELECT SUM(r.ratings.Cleanliness) FROM `travel-sample`.inventory.hotel AS d  USE INDEX (`#primary`) unnest reviews as r " \
+                            "WHERE r.author LIKE 'N%' and r.author is not missing and r.ratings.Cleanliness > 1 AND " \
+                            "d.free_parking = False AND d.email is not missing GROUP BY r.ratings.Cleanliness LETTING min_cleanliness = 5 HAVING COUNT(r.ratings.Cleanliness) > min_cleanliness"
+        else:
+            query = "SELECT MAX(email), MIN(email), AVG( free_parking)  FROM `travel-sample`.inventory.hotel AS d WHERE ANY r IN d.reviews SATISFIES r.author = 'Nella Ratke' and r.ratings.Cleanliness = 3 END AND free_parking = True AND email is not missing GROUP BY email, free_parking LETTING avg_parking = 1 HAVING AVG(free_parking) > avg_parking"
+            primary_query = "SELECT MAX(email), MIN(email), AVG( free_parking)  FROM `travel-sample`.inventory.hotel AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author = 'Nella Ratke' and r.ratings.Cleanliness = 3 END AND free_parking = True AND email is not missing GROUP BY email, free_parking LETTING avg_parking = 1 HAVING AVG(free_parking) > avg_parking"
+        self.run_cbq_query(query=create_query)
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.run_cbq_query(query="CREATE PRIMARY INDEX ON `travel-sample`.inventory.hotel")
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using idx1, check explain results {0}".format(explain_results))
+        self.assertTrue("covers" in str(explain_results),
+                        "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue("index_group_aggs" in str(explain_results),
+                        "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
+
+        self.compare_against_primary(query, primary_query)
+
+    def test_flatten_aggregate_pushdown_distinct(self):
+        self.load_travel_sample()
+        create_query = "create index idx1 on `travel-sample`.inventory.hotel(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking)"
+        if self.use_unnest:
+            query = "SELECT SUM( DISTINCT r.ratings.Cleanliness) FROM `travel-sample`.inventory.hotel AS d unnest reviews as r WHERE r.author LIKE 'N%' and r.author is not missing and r.ratings.Cleanliness > 1 AND d.free_parking = False AND d.email is not missing GROUP BY r.author"
+            primary_query = "SELECT SUM( DISTINCT r.ratings.Cleanliness) FROM `travel-sample`.inventory.hotel AS d  USE INDEX (`#primary`) unnest reviews as r WHERE r.author LIKE 'N%' and r.author is not missing and r.ratings.Cleanliness > 1 AND d.free_parking = False AND d.email is not missing GROUP BY r.author"
+        else:
+            query = "SELECT COUNT(DISTINCT email), SUM( DISTINCT free_parking)  FROM `travel-sample`.inventory.hotel AS d WHERE ANY r IN d.reviews SATISFIES r.author = 'Nella Ratke' and r.ratings.Cleanliness = 3 END AND free_parking = True AND email is not missing GROUP BY email, free_parking"
+            primary_query = "SELECT COUNT(DISTINCT email), SUM(DISTINCT free_parking)  FROM `travel-sample`.inventory.hotel AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author = 'Nella Ratke' and r.ratings.Cleanliness = 3 END AND free_parking = True AND email is not missing GROUP BY email, free_parking"
+        self.run_cbq_query(query=create_query)
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.run_cbq_query(query="CREATE PRIMARY INDEX ON `travel-sample`.inventory.hotel")
+        self.assertTrue("idx1" in str(explain_results),"The query should be using idx1, check explain results {0}".format(explain_results))
+        self.assertTrue("covers" in str(explain_results),
+                        "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue("index_group_aggs" in str(explain_results), "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
+
+        self.compare_against_primary(query, primary_query)
+
+    def test_flatten_aggregate_avg_unnest(self):
+        self.load_travel_sample()
+        create_query = "create index idx1 on `travel-sample`.inventory.hotel(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking)"
+        query = "SELECT AVG( r.ratings.Cleanliness) FROM `travel-sample`.inventory.hotel AS d unnest reviews as r WHERE r.author LIKE 'N%' and r.author is not missing and r.ratings.Cleanliness > 1 AND d.free_parking = False AND d.email is not missing GROUP BY r.ratings.Cleanliness"
+        primary_query = "SELECT AVG( r.ratings.Cleanliness) FROM `travel-sample`.inventory.hotel AS d  USE INDEX (`#primary`) unnest reviews as r WHERE r.author LIKE 'N%' and r.author is not missing and r.ratings.Cleanliness > 1 AND d.free_parking = False AND d.email is not missing GROUP BY r.ratings.Cleanliness"
+        self.run_cbq_query(query=create_query)
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.run_cbq_query(query="CREATE PRIMARY INDEX ON `travel-sample`.inventory.hotel")
+        self.assertTrue("idx1" in str(explain_results),"The query should be using idx1, check explain results {0}".format(explain_results))
+        self.assertTrue("covers" in str(explain_results),
+                        "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue("index_group_aggs" in str(explain_results), "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
+
+        self.compare_against_primary(query, primary_query)
+
+    def test_flatten_aggregate_min_max_unnest(self):
+        self.load_travel_sample()
+        create_query = "create index idx1 on `travel-sample`.inventory.hotel(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking)"
+        query = "SELECT MIN(r.ratings.Cleanliness), MAX(r.ratings.Cleanliness) FROM `travel-sample`.inventory.hotel AS d unnest reviews as r WHERE r.author LIKE 'N%' and r.author is not missing and r.ratings.Cleanliness > 1 AND d.free_parking = False AND d.email is not missing GROUP BY r.ratings.Cleanliness"
+        primary_query = "SELECT MIN(r.ratings.Cleanliness), MAX(r.ratings.Cleanliness) FROM `travel-sample`.inventory.hotel AS d  USE INDEX (`#primary`) unnest reviews as r WHERE r.author LIKE 'N%' and r.author is not missing and r.ratings.Cleanliness > 1 AND d.free_parking = False AND d.email is not missing GROUP BY r.ratings.Cleanliness"
+        self.run_cbq_query(query=create_query)
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.run_cbq_query(query="CREATE PRIMARY INDEX ON `travel-sample`.inventory.hotel")
+        self.assertTrue("idx1" in str(explain_results),"The query should be using idx1, check explain results {0}".format(explain_results))
+        self.assertTrue("covers" in str(explain_results),
+                        "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue("index_group_aggs" in str(explain_results), "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
+
+        self.compare_against_primary(query, primary_query)
+
+    ##############################################################################################
+    #
     #   GROUPBY/ORDERBY/LIMIT/OFFSET
     ##############################################################################################
 
     def test_flatten_groupby_non_array(self):
         self.run_cbq_query(
-            query="CREATE INDEX idx1 ON default(DISTINCT ARRAY flatten_keys(r.ratings.Cleanliness,r.ratings.Rooms,r.author) FOR r IN reviews END, country)")
+            query="CREATE INDEX idx1 ON default(DISTINCT ARRAY flatten_keys(r.ratings.Cleanliness,r.ratings.Rooms,r.author) FOR r IN reviews END, email)")
         if self.use_unnest:
-            query = "SELECT d.country FROM default AS d unnest reviews as r WHERE r.author LIKE '%m' AND (r.ratings.Cleanliness > 1 AND r.ratings.Rooms < 3) GROUP BY d.country ORDER BY d.country"
-            primary_query = "SELECT d.country FROM default AS d USE INDEX (`#primary`) unnest reviews as r WHERE r.author LIKE '%m' AND (r.ratings.Cleanliness > 1 AND r.ratings.Rooms < 3) GROUP BY d.country ORDER BY d.country"
+            query = "SELECT d.email FROM default AS d unnest reviews as r WHERE r.author LIKE '%m' AND (r.ratings.Cleanliness > 1 AND r.ratings.Rooms < 3) GROUP BY d.email ORDER BY d.email"
+            primary_query = "SELECT d.email FROM default AS d USE INDEX (`#primary`) unnest reviews as r WHERE r.author LIKE '%m' AND (r.ratings.Cleanliness > 1 AND r.ratings.Rooms < 3) GROUP BY d.email ORDER BY d.email"
         else:
-            query = "SELECT d.country FROM default AS d WHERE ANY r IN d.reviews " \
+            query = "SELECT d.email FROM default AS d WHERE ANY r IN d.reviews " \
                     "SATISFIES r.author LIKE '%m' AND (r.ratings.Cleanliness > 1 AND r.ratings.Rooms < 3) END " \
-                    "GROUP BY d.country ORDER BY d.country"
-            primary_query = "SELECT d.country FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews " \
+                    "GROUP BY d.email ORDER BY d.email"
+            primary_query = "SELECT d.email FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews " \
                             "SATISFIES r.author LIKE '%m' AND (r.ratings.Cleanliness > 1 AND r.ratings.Rooms < 3) END " \
-                            "GROUP BY d.country ORDER BY d.country"
+                            "GROUP BY d.email ORDER BY d.email"
         # Ensure the query is actually using the flatten index instead of primary
         explain_results = self.run_cbq_query(query="EXPLAIN " + query)
         self.assertTrue("idx1" in str(explain_results),"The query should be using idx1, check explain results {0}".format(explain_results))
@@ -731,8 +1243,7 @@ class QueryArrayFlatteningTests(QueryTests):
 
     '''Test insert that uses a query that uses an index with flatten_keys in it '''
     def test_flatten_insert(self):
-        self.rest.load_sample("travel-sample")
-        time.sleep(15)
+        self.load_travel_sample()
         self.run_cbq_query(
             query="CREATE INDEX idx1 ON `default`((ALL (ARRAY(ALL (ARRAY flatten_keys(n,v) FOR n:v IN (`r`.`ratings`) END)) FOR `r` IN `reviews` END)))")
         # Ensure the query is actually using the flatten index instead of primary
@@ -757,8 +1268,7 @@ class QueryArrayFlatteningTests(QueryTests):
 
     '''Test upsert that uses a query that uses an index with flatten_keys in it'''
     def test_flatten_upsert(self):
-        self.rest.load_sample("travel-sample")
-        time.sleep(15)
+        self.load_travel_sample()
         self.run_cbq_query(
             query="CREATE INDEX idx1 ON `default`((ALL (ARRAY(ALL (ARRAY flatten_keys(n,v) FOR n:v IN (`r`.`ratings`) END)) FOR `r` IN `reviews` END)))")
         # Ensure the query is actually using the flatten index instead of primary
@@ -798,8 +1308,7 @@ class QueryArrayFlatteningTests(QueryTests):
             self.assertTrue(False, diffs)
 
     def test_flatten_update(self):
-        self.rest.load_sample("travel-sample")
-        time.sleep(30)
+        self.load_travel_sample()
         self.run_cbq_query(query="create index idx1 on default(country, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, avg_rating)")
         update_results = self.run_cbq_query(
             query="UPDATE `travel-sample`.inventory.airport "
@@ -826,6 +1335,20 @@ class QueryArrayFlatteningTests(QueryTests):
         # Ensure no documents remain that fit the criteria
         primary_results = self.run_cbq_query(query="SELECT * FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness = 3 END AND free_parking = True")
         self.assertTrue(primary_results['metrics']['resultCount'] == 0 ,"There are results! But there should be no results for this query {0}".format(primary_results))
+
+    def test_flatten_ansi_merge(self):
+        self.load_travel_sample()
+        query = "MERGE INTO default d USING `travel-sample`.inventory.hotel t ON t.country = d.country and any r in d.reviews satisfies r.author like 'M%' and r.ratings.Overall > 3 END  WHEN MATCHED THEN DELETE WHERE d.free_parking = true"
+        self.run_cbq_query(
+            query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Overall) for r in reviews END,country)")
+        explain_results = self.run_cbq_query(query="explain " + query)
+
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using idx1 check explain results {0}".format(
+                            explain_results))
+        merge_results = self.run_cbq_query(query=query)
+        self.assertTrue(merge_results['status'] == 'success',
+                        "Merge did not occur successfully! {0}".format(merge_results))
 
     ##############################################################################################
     #
@@ -1315,6 +1838,94 @@ class QueryArrayFlatteningTests(QueryTests):
 
     ##############################################################################################
     #
+    #   nested tests
+    ##############################################################################################
+
+    def test_flatten_triple_nested_covered(self):
+        self.load_nested()
+        self.run_cbq_query(query="CREATE INDEX idx1 ON default( ALL ARRAY(ALL ARRAY( ALL ARRAY FLATTEN_KEYS(sec.num,pg.description,ch.name) FOR sec IN pg.sections END) FOR pg IN ch.pages END) FOR ch IN chapters END, year, chapters, `type`)")
+        if self.use_unnest:
+            query = "SELECT d.year, d.`type` FROM default d UNNEST chapters AS ch UNNEST ch.pages AS pg " \
+                    "UNNEST pg.sections AS sec WHERE d.`type` = 'book' AND ch.name = 'chapter 1' AND pg.description LIKE 'page%' AND sec.num = 1"
+            primary_query = "SELECT d.year, d.`type` FROM default d USE INDEX (`#primary`) UNNEST chapters AS ch UNNEST ch.pages AS pg " \
+                    "UNNEST pg.sections AS sec WHERE d.`type` = 'book' AND ch.name = 'chapter 1' AND pg.description LIKE 'page%' AND sec.num = 1"
+        else:
+            query = "SELECT year, `type` FROM default d WHERE `type` = 'book' AND ANY ch IN chapters SATISFIES ANY pg IN ch.pages " \
+                    "SATISFIES ANY sec IN pg.sections SATISFIES ch.name = 'chapter 1' AND pg.description LIKE 'page%' AND sec.num = 1 END END END"
+            primary_query = "SELECT year, `type` FROM default d USE INDEX (`#primary`) WHERE `type` = 'book' AND ANY ch IN chapters SATISFIES ANY pg IN ch.pages " \
+                    "SATISFIES ANY sec IN pg.sections SATISFIES ch.name = 'chapter 1' AND pg.description LIKE 'page%' AND sec.num = 1 END END END"
+
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using idx1, check explain results {0}".format(
+                            explain_results))
+        self.assertTrue("covers" in str(explain_results),
+                        "The index is not covering, it should be. Check plan {0}".format(explain_results))
+
+        self.compare_against_primary(query, primary_query)
+
+    def test_flatten_triple_nested_or(self):
+        self.load_nested()
+        self.run_cbq_query(query="CREATE INDEX idx1 ON default( ALL ARRAY(ALL ARRAY( ALL ARRAY FLATTEN_KEYS(sec.num,pg.description,ch.name) FOR sec IN pg.sections END) FOR pg IN ch.pages END) FOR ch IN chapters END, year, chapters, `type`)")
+        if self.use_unnest:
+            query = "SELECT d.year, d.`type` FROM default d UNNEST chapters AS ch UNNEST ch.pages AS pg " \
+                    "UNNEST pg.sections AS sec WHERE d.`type` = 'book' OR (ch.name = 'chapter 1' AND pg.description LIKE 'page%' AND sec.num = 1)"
+            primary_query = "SELECT d.year, d.`type` FROM default d USE INDEX (`#primary`) UNNEST chapters AS ch UNNEST ch.pages AS pg " \
+                    "UNNEST pg.sections AS sec WHERE d.`type` = 'book' OR (ch.name = 'chapter 1' AND pg.description LIKE 'page%' AND sec.num = 1)"
+        else:
+            query = "SELECT year, `type` FROM default d WHERE `type` = 'book' OR (ANY ch IN chapters SATISFIES ANY pg IN ch.pages " \
+                    "SATISFIES ANY sec IN pg.sections SATISFIES ch.name = 'chapter 1' AND pg.description LIKE 'page%' AND sec.num = 1 END END END)"
+            primary_query = "SELECT year, `type` FROM default d USE INDEX (`#primary`) WHERE `type` = 'book' OR (ANY ch IN chapters SATISFIES ANY pg IN ch.pages " \
+                    "SATISFIES ANY sec IN pg.sections SATISFIES ch.name = 'chapter 1' AND pg.description LIKE 'page%' AND sec.num = 1 END END END)"
+
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.assertTrue("#primary" in str(explain_results),
+                        "The query should be using idx1, check explain results {0}".format(
+                            explain_results))
+
+        self.compare_against_primary(query, primary_query)
+
+    def test_flatten_triple_nested_multiple_levels(self):
+        self.load_nested()
+        self.run_cbq_query(
+            query="CREATE INDEX idx1 ON default( ALL ARRAY(ALL ARRAY( ALL ARRAY FLATTEN_KEYS(sec.num,pg.description,ch.name) FOR sec IN pg.sections END) FOR pg IN ch.pages END) FOR ch IN chapters END, year, chapters, `type`)")
+
+        query = "SELECT year, `type` FROM default d WHERE `type` = 'book' AND ANY ch IN chapters SATISFIES ANY pg IN ch.pages " \
+                "SATISFIES ANY sec IN pg.sections SATISFIES ch.name = 'chapter 1' AND sec.num = 1 END AND pg.description LIKE 'page%' END END"
+        primary_query = "SELECT year, `type` FROM default d USE INDEX (`#primary`) WHERE `type` = 'book' AND ANY ch IN chapters SATISFIES ANY pg IN ch.pages " \
+                        "SATISFIES ANY sec IN pg.sections SATISFIES ch.name = 'chapter 1' AND sec.num = 1 END  AND pg.description LIKE 'page%' END END"
+
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.assertTrue("idx1" in str(explain_results),
+                        "The query should be using idx1, check explain results {0}".format(
+                            explain_results))
+
+        self.compare_against_primary(query, primary_query)
+
+    def test_flatten_triple_nested_unnest_any_mix(self):
+        self.load_nested()
+        self.run_cbq_query(
+            query="CREATE INDEX idx1 ON default( ALL ARRAY(ALL ARRAY( ALL ARRAY FLATTEN_KEYS(sec.num,pg.description,ch.name) FOR sec IN pg.sections END) FOR pg IN ch.pages END) FOR ch IN chapters END, year, chapters, `type`)")
+
+        query = "SELECT d.year, d.`type` FROM default d UNNEST chapters AS ch UNNEST ch.pages AS pg WHERE d.`type` = 'book' " \
+                "AND ch.name = 'chapter 1' AND pg.description LIKE 'page%' AND ANY sec IN pg.sections SATISFIES sec.num = 1 END"
+        primary_query = "SELECT d.year, d.`type` FROM default d USE INDEX (`#primary`) UNNEST chapters AS ch UNNEST ch.pages AS pg WHERE d.`type` = 'book' " \
+                "AND ch.name = 'chapter 1' AND pg.description LIKE 'page%' AND ANY sec IN pg.sections SATISFIES sec.num = 1 END"
+
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.assertTrue("#primary" in str(explain_results),
+                        "The query should be using idx1, check explain results {0}".format(
+                            explain_results))
+
+        self.compare_against_primary(query, primary_query)
+
+
+    ##############################################################################################
+    #
     #   Helper
     ##############################################################################################
 
@@ -1340,9 +1951,23 @@ class QueryArrayFlatteningTests(QueryTests):
         for bkt in self.buckets:
             print(self.stat.get_collection_stats(bkt))
 
+    def load_nested(self):
+        upsert1 = "UPSERT INTO default VALUES ('book1', { 'type':'book', 'author': 'James', 'rev': 2, 'year': 2020, 'name': 'book 1', 'description': 'book 1 description', 'isbn': 1, 'chapters': [ {'num': 1, 'name': 'chapter 1', 'description': 'chapter 1 description', 'pages' : [ { 'num':1, 'name':'page 1', 'description': 'page 1 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] }, { 'num':2, 'name':'page 2', 'description': 'page 2 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] }, { 'num':3, 'name':'page 3', 'description': 'page 3 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] } ] }, {'num': 2, 'name': 'chapter 2', 'description': 'chapter 2 description', 'pages' : [ { 'num':1, 'name':'page 1', 'description': 'page 1 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] }, { 'num':2, 'name':'page 2', 'description': 'page 2 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] }, { 'num':3, 'name':'page 3', 'description': 'page 3 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] } ] }, {'num': 3, 'name': 'chapter 3', 'description': 'chapter 3 description', 'pages' : [ { 'num':1, 'name':'page 1', 'description': 'page 1 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] }, { 'num':2, 'name':'page 2', 'description': 'page 2 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] }, { 'num':3, 'name':'page 3', 'description': 'page 3 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] } ] } ] })"
+        upsert2 = "UPSERT INTO default VALUES ('book2', { 'type':'book', 'author': 'Mark', 'rev': 3, 'year': 2021, 'name': 'book 2', 'description': 'book 2 description', 'isbn': 2, 'chapters': [ {'num': 1, 'name': 'chapter 1', 'description': 'chapter 1 description', 'pages' : [ { 'num':1, 'name':'page 1', 'description': 'page 1 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] }, { 'num':2, 'name':'page 2', 'description': 'page 2 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] }, { 'num':3, 'name':'page 3', 'description': 'page 3 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] } ] }, {'num': 2, 'name': 'chapter 2', 'description': 'chapter 2 description', 'pages' : [ { 'num':1, 'name':'page 1', 'description': 'page 1 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] }, { 'num':2, 'name':'page 2', 'description': 'page 2 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] }, { 'num':3, 'name':'page 3', 'description': 'page 3 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] } ] }, {'num': 3, 'name': 'chapter 3', 'description': 'chapter 3 description', 'pages' : [ { 'num':1, 'name':'page 1', 'description': 'page 1 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] }, { 'num':2, 'name':'page 2', 'description': 'page 2 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] }, { 'num':3, 'name':'page 3', 'description': 'page 3 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] } ] } ] })"
+        upsert3 = "UPSERT INTO default VALUES ('book3', { 'type':'book', 'author': 'Chris', 'rev': 1, 'year': 2019, 'name': 'book 3', 'description': 'book 3 description', 'isbn': 3, 'chapters': [ {'num': 1, 'name': 'chapter 1', 'description': 'chapter 1 description', 'pages' : [ { 'num':1, 'name':'page 1', 'description': 'page 1 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] }, { 'num':2, 'name':'page 2', 'description': 'page 2 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] }, { 'num':3, 'name':'page 3', 'description': 'page 3 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] } ] }, {'num': 2, 'name': 'chapter 2', 'description': 'chapter 2 description', 'pages' : [ { 'num':1, 'name':'page 1', 'description': 'page 1 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] }, { 'num':2, 'name':'page 2', 'description': 'page 2 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] }, { 'num':3, 'name':'page 3', 'description': 'page 3 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] } ] }, {'num': 3, 'name': 'chapter 3', 'description': 'chapter 3 description', 'pages' : [ { 'num':1, 'name':'page 1', 'description': 'page 1 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] }, { 'num':2, 'name':'page 2', 'description': 'page 2 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] }, { 'num':3, 'name':'page 3', 'description': 'page 3 description', 'sections':[ { 'num':1, 'name':'section 1', 'description': 'section 1 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':2, 'name':'section 2', 'description': 'section 2 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] }, { 'num':3, 'name':'section 3', 'description': 'section 3 description', 'paragraphs': [ { 'num': 1, 'name': 'paragraph 1', 'description': 'paragraph 1 description' }, { 'num': 2, 'name': 'paragraph 2', 'description': 'paragraph 2 description' }, { 'num': 3, 'name': 'paragraph 3', 'description': 'paragraph 3 description' } ] } ] } ] } ] })"
+
+        self.run_cbq_query(query = upsert1)
+        self.run_cbq_query(query = upsert2)
+        self.run_cbq_query(query = upsert3)
+
     def compare_against_primary(self,query="", primary_query=""):
         query_results = self.run_cbq_query(query=query)
         expected_results = self.run_cbq_query(query=primary_query)
         diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
         if diffs:
             self.assertTrue(False, diffs)
+
+    def load_travel_sample(self):
+        self.rest.load_sample("travel-sample")
+        time.sleep(60)
+        self.wait_for_all_indexes_online()
