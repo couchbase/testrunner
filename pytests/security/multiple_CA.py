@@ -200,7 +200,7 @@ class MultipleCA(BaseTestCase):
         task = self.cluster.async_rebalance(self.servers[1:self.nodes_init], [self.servers[0]], [])
         CbServer.use_https = https_val
         self.wait_for_rebalance_to_complete(task)
-        self.auth(servers=self.servers)
+        self.auth(servers=self.servers[:self.nodes_init])
 
     def test_failover_and_recovery(self):
         """
@@ -230,7 +230,7 @@ class MultipleCA(BaseTestCase):
                 task = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
                 CbServer.use_https = https_val
                 self.wait_for_rebalance_to_complete(task)
-        self.auth(servers=self.servers)
+        self.auth(servers=self.servers[:self.nodes_init])
 
     def test_failover_and_rebalance_out(self):
         """
@@ -243,6 +243,7 @@ class MultipleCA(BaseTestCase):
         self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
         self.x509.delete_unused_out_of_the_box_CAs(server=self.master)
         self.x509.upload_client_cert_settings(server=self.master)
+        out_nodes = list()
         for graceful in [True, False]:
             failover_nodes = random.sample(self.servers[1:self.nodes_init], 1)
             _ = self.cluster.async_failover(self.servers[:self.nodes_init], failover_nodes,
@@ -253,7 +254,9 @@ class MultipleCA(BaseTestCase):
             task = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], failover_nodes)
             self.wait_for_rebalance_to_complete(task)
             CbServer.use_https = https_val
-        nodes_in_cluster = [node for node in self.servers[:self.nodes_init] if node not in failover_nodes]
+            for node in failover_nodes:
+                out_nodes.append(node)
+        nodes_in_cluster = [node for node in self.servers[:self.nodes_init] if node not in out_nodes]
         self.auth(servers=nodes_in_cluster)
 
     def test_rotate_certificates(self):
@@ -266,13 +269,13 @@ class MultipleCA(BaseTestCase):
         self.x509.generate_multiple_x509_certs(servers=self.servers)
         self.log.info("Manifest before rotating certs #########\n {0}".
                       format(json.dumps(self.x509.manifest, indent=4)))
-        for server in self.servers:
+        for server in self.servers[:self.nodes_init]:
             _ = self.x509.upload_root_certs(server)
-        self.x509.upload_node_certs(servers=self.servers)
+        self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
         self.x509.delete_unused_out_of_the_box_CAs(server=self.master)
         self.x509.upload_client_cert_settings(server=self.servers[0])
         self.log.info("Checking authentication ...")
-        self.auth()
+        self.auth(servers=self.servers[:self.nodes_init])
         self.x509.rotate_certs(self.servers, "all")
         self.log.info("Manifest after rotating certs #########\n {0}".
                       format(json.dumps(self.x509.manifest, indent=4)))
@@ -357,7 +360,7 @@ class MultipleCA(BaseTestCase):
         self.x509.upload_node_certs(servers=self.servers[:self.nodes_init])
         self.x509.delete_unused_out_of_the_box_CAs(server=self.master)
         self.x509.upload_client_cert_settings(server=self.master)
-        self.auth(servers=self.nodes_init)
+        self.auth(servers=self.servers[:self.nodes_init])
         content = self.x509.get_trusted_CAs()
         self.log.info("Trusted CAs: {0}".format(content))
         expected_root_ca_names = self.x509.root_ca_names
