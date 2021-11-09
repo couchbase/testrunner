@@ -41,7 +41,7 @@ class EventingRBACSupport(EventingBaseTest):
                                       master=self.master, use_rest=True)
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         self.users = self.input.param('users', None)
-        list_of_users = eval(self.users)
+        list_of_users = eval(eval(self.users))
         for user in list_of_users:
             u = [{'id': user['id'], 'password': user['password'], 'name': user['name']}]
             RbacBase().create_user_source(u, 'builtin', self.master)
