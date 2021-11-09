@@ -33,8 +33,15 @@ class MultipleCA(BaseTestCase):
             rest.change_bucket_props(bucket, replicaNumber=self.num_replicas)
         task = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
         self.wait_for_rebalance_to_complete(task)
+        self.n2n_encryption_level_multiple_CA = self.input.param("n2n_encryption_level_multiple_CA", None)
+        if self.n2n_encryption_level_multiple_CA:
+            ntonencryptionBase().setup_nton_cluster([self.master],
+                                                    clusterEncryptionLevel=self.n2n_encryption_level_multiple_CA)
+            CbServer.use_https = True
 
     def tearDown(self):
+        if self.input.param("n2n_encryption_level_multiple_CA", None):
+            ntonencryptionBase().disable_nton_cluster([self.master])
         CbServer.use_https = False
         self.x509 = x509main(host=self.master)
         self.x509.teardown_certs(servers=self.servers)
