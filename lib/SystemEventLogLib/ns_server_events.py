@@ -64,6 +64,18 @@ class NsServerEvents(object):
         }
 
     @staticmethod
+    def node_started(node, extra_attrs=None):
+        event = {
+            Event.Fields.NODE_NAME: node,
+            Event.Fields.EVENT_ID: NsServer.ServiceStarted,
+            Event.Fields.DESCRIPTION: "Service started",
+            Event.Fields.SEVERITY: Event.Severity.INFO,
+        }
+        if extra_attrs:
+            event[Event.Fields.EXTRA_ATTRS] = extra_attrs
+        return event
+
+    @staticmethod
     def node_offline(node, new_node):
         return {
             Event.Fields.NODE_NAME: node,

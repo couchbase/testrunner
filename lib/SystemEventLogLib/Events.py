@@ -68,10 +68,14 @@ class EventHelper(object):
             self.__lock = threading.Lock()
             self.counter = 0
 
+        def set(self, new_value):
+            with self.__lock:
+                self.counter = new_value
+
         def increment(self):
             with self.__lock:
                 self.counter += 1
-                return self.counter
+            return self.counter
 
         @property
         def max_events_reached(self):
@@ -155,6 +159,14 @@ class EventHelper(object):
     @staticmethod
     def update_event_extra_attrs(event, extra_attr_dict):
         event[Event.Fields.EXTRA_ATTRS] = extra_attr_dict
+
+    def _set_counter(self, counter):
+        """
+        Hard resets the event count within the EventHelper
+        :param counter: New value for event count
+        WARNING: Never use this unless truly required for testing purpose
+        """
+        self.__event_counter.set(counter)
 
     def set_test_start_time(self):
         self.test_start_time = self.get_timestamp_format(datetime.now())
