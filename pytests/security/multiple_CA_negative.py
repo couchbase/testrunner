@@ -120,7 +120,7 @@ class MultipleCANegative(BaseTestCase):
                                          'user': "Administrator",
                                          'password': "password",
                                          'services': "kv"})
-        api = rest.baseUrl + 'controller/addNode'
+        api = rest.get_https_base_url() + 'controller/addNode'
         status, content, header = rest._http_request(api, 'POST', params)
         if not status:
             self.log.info("Rebalance failed as expected {0}".format(content))
@@ -141,7 +141,7 @@ class MultipleCANegative(BaseTestCase):
                                          'user': "Administrator",
                                          'password': "password",
                                          'services': "kv"})
-        api = rest.baseUrl + 'controller/addNode'
+        api = rest.get_https_base_url() + 'controller/addNode'
         status, content, header = rest._http_request(api, 'POST', params)
         if not status:
             self.log.info("Rebalance failed as expected {0}".format(content))
@@ -168,7 +168,7 @@ class MultipleCANegative(BaseTestCase):
                                          'user': "Administrator",
                                          'password': "password",
                                          'services': "kv"})
-        api = rest.baseUrl + 'controller/addNode'
+        api = rest.get_https_base_url() + 'controller/addNode'
         status, content, header = rest._http_request(api, 'POST', params)
         if not status:
             self.log.info("Rebalance failed as expected {0}".format(content))

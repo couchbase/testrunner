@@ -179,7 +179,7 @@ class AlternateAddressTests(AltAddrBaseTest):
                 cmd = 'curl -X POST -d  "hostname={0}&user={1}&password={2}&services={3}" '\
                              .format(free_node, server1.rest_username, server1.rest_password,
                                      self.alt_addr_rebalance_in_services)
-                cmd += '-u Administrator:password http://{0}:8091/controller/addNode'\
+                cmd += '-u Administrator:password https://{0}:18091/controller/addNode'\
                              .format(server1.ip)
                 shell.execute_command(cmd)
                 rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\

@@ -406,6 +406,12 @@ class RestConnection(object):
                         return
                 raise ServerUnavailableException("couchApiBase doesn't exist in nodes/self: %s " % http_res)
 
+    def get_https_base_url(self):
+        port = CbServer.ssl_port_map.get(str(self.port),
+                                  str(self.port))
+        https_url = "https://%s:%s/"
+        return https_url % (self.ip, port)
+
     def sasl_streaming_rq(self, bucket, timeout=120,
                           disable_ssl_certificate_validation=True):
         api = self.baseUrl + 'pools/default/bucketsStreaming/{0}'.format(bucket)
@@ -1592,7 +1598,7 @@ class RestConnection(object):
     def add_node(self, user='', password='', remoteIp='', port='8091', zone_name='', services=None):
         otpNode = None
 
-        port = CbServer.ssl_port
+        port = CbServer.ssl_port_map.get(str(port), str(port))
         protocol = "https"
 
         # if ip format is ipv6 and enclosing brackets are not found,

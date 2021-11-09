@@ -5391,7 +5391,7 @@ class RemoteMachineShellConnection(KeepRefs):
         cmd = 'curl{0} -X POST -d  "hostname={1}&user={2}&password={3}&services={4}" '\
                              .format(cmd_ext, internal_IP, server_add.rest_username,
                                      server_add.rest_password, services)
-        cmd += '-u {0}:{1} http://{2}:8091/controller/addNode'\
+        cmd += '-u {0}:{1} https://{2}:18091/controller/addNode'\
                              .format(main_server.rest_username,
                                      main_server.rest_password,
                                      main_server.ip)

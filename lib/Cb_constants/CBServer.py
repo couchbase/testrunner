@@ -25,6 +25,7 @@ class CbServer(object):
 
     # map of {non-ssl,ssl} ports
     ssl_port_map = {str(port): str(ssl_port),
+                    str(ssl_port): str(ssl_port),
                     str(fts_port): str(ssl_fts_port),
                     str(n1ql_port): str(ssl_n1ql_port),
                     str(index_port): str(ssl_index_port),
@@ -32,7 +33,12 @@ class CbServer(object):
                     str(backup_port): str(ssl_backup_port),
                     str(cbas_port): str(ssl_cbas_port),
                     str(memcached_port): str(ssl_memcached_port),
-                    str(capi_port): str(ssl_capi_port)}
+                    str(capi_port): str(ssl_capi_port),
+                    # cluster run ports
+                    "9000": "19000",
+                    "9001": "19001",
+                    "9002": "19002",
+                    "9003": "19003"}
     use_https = False
     n2n_encryption = False
     multiple_ca = False
