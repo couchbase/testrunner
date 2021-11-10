@@ -46,6 +46,11 @@ from TestInput import TestInputSingleton, TestInputServer
 from scripts.java_sdk_setup import JavaSdkSetup
 from tasks.future import Future
 
+try:
+    from pytests.security.x509_multiple_CA_util import x509main as x509main_multiple_ca
+except ImportError:
+    print("Import x509main failed")
+
 
 class BaseTestCase(unittest.TestCase):
     def setUp(self):
@@ -488,6 +493,36 @@ class BaseTestCase(unittest.TestCase):
                     str(self.__class__).find('newupgradetests') == -1 and \
                     not self.skip_bucket_setup:
                 self._bucket_creation()
+            self.multiple_ca = self.input.param("multiple_ca", False)
+            if self.multiple_ca:
+                CbServer.multiple_ca = True
+                self.passphrase_type = self.input.param("passphrase_type", "script")
+                self.encryption_type = self.input.param("encryption_type", "des3")
+                self.use_client_certs = self.input.param("use_client_certs", False)
+                self.cacert_verify = self.input.param("cacert_verify", False)
+                spec_file = self.input.param("spec_file", "default")
+                self.use_https = True
+                CbServer.use_https = True
+                CbServer.use_client_certs = self.use_client_certs
+                CbServer.cacert_verify = self.cacert_verify
+                ntonencryptionBase().disable_nton_cluster([self.master])
+                CbServer.x509 = x509main_multiple_ca(host=self.master, encryption_type=self.encryption_type,
+                                         passphrase_type=self.passphrase_type)
+                for server in self.input.servers:
+                    CbServer.x509.delete_inbox_folder_on_server(server=server)
+                CbServer.x509.generate_multiple_x509_certs(servers=self.input.servers, spec_file_name=spec_file)
+                self.log.info("Manifest #########\n {0}".format(json.dumps(CbServer.x509.manifest, indent=4)))
+                for server in self.input.servers:
+                    _ = CbServer.x509.upload_root_certs(server)
+                CbServer.x509.upload_node_certs(servers=self.input.servers)
+                testuser = [{'id': 'clientuser', 'name': 'clientuser', 'password': 'password'}]
+                RbacBase().create_user_source(testuser, 'builtin', self.master)
+
+                # Assign user to role
+                role_list = [{'id': 'clientuser', 'name': 'clientuser', 'roles': 'admin'}]
+                RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
+                CbServer.x509.upload_client_cert_settings(server=self.master)
+                ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
 
             self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="
                           .format(self.case_number, self._testMethodName))
@@ -691,6 +726,19 @@ class BaseTestCase(unittest.TestCase):
                 sleep_after_bucket_deletion = self.input.param("sleep_after_bucket_deletion", None)
                 if sleep_after_bucket_deletion:
                         self.sleep(sleep_after_bucket_deletion)
+                try:
+                    self.log.info("Removing user 'clientuser'...")
+                    RbacBase().remove_user_role(['clientuser'], RestConnection(
+                        self.master))
+                except Exception as e:
+                    self.log.info(e)
+                try:
+                    if CbServer.multiple_ca:
+                        CbServer.use_client_certs = False
+                        CbServer.cacert_verify = False
+                        CbServer.x509.teardown_certs(servers=TestInputSingleton.input.servers)
+                except Exception as e:
+                    self.log.info(e)
                 ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
                 ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
                 #if self.ntonencrypt == 'enable' and not self.x509enable:

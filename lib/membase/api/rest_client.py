@@ -1092,8 +1092,7 @@ class RestConnection(object):
             count += 1
             t1 *= 2
 
-    def urllib_request(self, api, verb='GET', params='', headers=None, timeout=100, try_count=3, client_cert_path_tuple=None,
-                       cacert=None):
+    def urllib_request(self, api, verb='GET', params='', headers=None, timeout=100, try_count=3):
         if headers is None:
             headers = self._create_capi_headers()
         client_cert_path_tuple = None
@@ -1131,7 +1130,7 @@ class RestConnection(object):
                 if status in [200, 201, 202]:
                     return True, content, response
                 else:
-                    log.error(response.reason)
+                    log.error(str(content))
                     return False, content, response
             except Exception as e:
                 tries = tries + 1
@@ -2047,7 +2046,7 @@ class RestConnection(object):
 
     def set_index_settings(self, setting_json, timeout=120):
         api = self.index_baseUrl + 'settings'
-        status, content, header = self._http_request(api, 'POST', json.dumps(setting_json))
+        status, content, header = self.urllib_request(api, verb='POST', params=json.dumps(setting_json))
         if not status:
             raise Exception(content)
         log.info("{0} set".format(setting_json))
@@ -2067,14 +2066,14 @@ class RestConnection(object):
     def get_index_settings(self, timeout=120):
         node = None
         api = self.index_baseUrl + 'settings'
-        status, content, header = self._http_request(api, timeout=timeout)
+        status, content, header = self.urllib_request(api, timeout=timeout)
         if not status:
             raise Exception(content)
         return json.loads(content)
 
     def get_index_storage_mode(self, timeout=120):
         api = self.index_baseUrl + 'settings'
-        status, content, header = self._http_request(api, timeout=timeout)
+        status, content, header = self.urllib_request(api, timeout=timeout)
         if not status:
             raise Exception(content)
         return json.loads(content)["indexer.settings.storage_mode"]
@@ -2144,7 +2143,7 @@ class RestConnection(object):
 
     def get_index_storage_stats(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'stats/storage'
-        status, content, header = self._http_request(api, timeout=timeout)
+        status, content, header = self.urllib_request(api, timeout=timeout)
         if not status:
             raise Exception(content)
         json_parsed = json.loads(content)
@@ -2163,7 +2162,7 @@ class RestConnection(object):
         else:
             api = baseUrl + 'stats'
         index_map = {}
-        status, content, header = self._http_request(api, timeout=timeout)
+        status, content, header = self.urllib_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
             for key in list(json_parsed.keys()):
@@ -2177,7 +2176,7 @@ class RestConnection(object):
     def get_indexer_metadata(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'getIndexStatus'
         index_map = {}
-        status, content, header = self._http_request(api, timeout=timeout)
+        status, content, header = self.urllib_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
             for key in list(json_parsed.keys()):
@@ -2191,7 +2190,7 @@ class RestConnection(object):
     def get_indexer_internal_stats(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'settings?internal=ok'
         index_map = {}
-        status, content, header = self._http_request(api, timeout=timeout)
+        status, content, header = self.urllib_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
             for key in list(json_parsed.keys()):
@@ -2222,7 +2221,7 @@ class RestConnection(object):
     def get_index_status(self, timeout=120, index_map=None):
         api = self.baseUrl + 'indexStatus'
         index_map = {}
-        status, content, header = self._http_request(api, timeout=timeout)
+        status, content, header = self.urllib_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
             index_map = RestParser().parse_index_status_response(json_parsed)
@@ -2246,7 +2245,7 @@ class RestConnection(object):
     def get_index_statements(self, timeout=120):
         api = self.index_baseUrl + 'getIndexStatement'
         index_map = {}
-        status, content, header = self._http_request(api, timeout=timeout)
+        status, content, header = self.urllib_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
         return json_parsed
