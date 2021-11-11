@@ -61,7 +61,7 @@ class x509main:
                  alt_names="default",
                  standard="pkcs8",
                  encryption_type="aes256",
-                 key_length=1024,
+                 key_length=2048,
                  passphrase_type="plain",
                  passphrase_script_args=None,
                  passhprase_url="https://testingsomething.free.beeceptor.com/",
