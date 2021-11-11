@@ -4,6 +4,7 @@ import logging
 import random
 import string
 import subprocess
+import time
 import traceback
 import unittest
 
@@ -54,6 +55,7 @@ except ImportError:
 
 class BaseTestCase(unittest.TestCase):
     def setUp(self):
+        start_time = time.time()
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         self.primary_index_created = False
@@ -122,7 +124,6 @@ class BaseTestCase(unittest.TestCase):
             self.collection = self.input.param("collection", False)
             self.scope_num = self.input.param("scope_num", 4)
             self.collection_num = self.input.param("collection_num", [2] * self.scope_num)
-            self.upr = self.input.param("upr", None)
             self.index_quota_percent = self.input.param("index_quota_percent", None)
             self.targetIndexManager = self.input.param("targetIndexManager", False)
             self.targetMaster = self.input.param("targetMaster", False)
@@ -131,6 +132,8 @@ class BaseTestCase(unittest.TestCase):
             self.wait_timeout = self.input.param("wait_timeout", 60)
             # number of case that is performed from testrunner( increment each time)
             self.case_number = self.input.param("case_number", 0)
+            self.last_case_fail = self.input.param("last_case_fail",
+                                                   False)
             self.default_bucket = self.input.param("default_bucket", True)
             self.parallelism = self.input.param("parallelism", False)
             if self.default_bucket:
@@ -142,13 +145,10 @@ class BaseTestCase(unittest.TestCase):
             if self.skip_standard_buckets:
                 self.standard_buckets = 0
                 BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers, test_case=self)
-            self.sasl_buckets = self.input.param("sasl_buckets", 0)
             self.num_buckets = self.input.param("num_buckets", 0)
-
             self.verify_unacked_bytes = self.input.param("verify_unacked_bytes", False)
-            self.memcached_buckets = self.input.param("memcached_buckets", 0)
             self.enable_flow_control = self.input.param("enable_flow_control", False)
-            self.total_buckets = self.sasl_buckets + self.default_bucket + self.standard_buckets + self.memcached_buckets
+            self.total_buckets = self.default_bucket + self.standard_buckets
             self.num_servers = self.input.param("servers", len(self.servers))
             # initial number of items in the cluster
             self.nodes_init = self.input.param("nodes_init", 1)
@@ -242,7 +242,7 @@ class BaseTestCase(unittest.TestCase):
                     self.cb_version = RestConnection(self.master).get_nodes_version()
                 else:
                     self.log.info("couchbase server does not run yet")
-                self.protocol = self.get_protocol_type()
+            self.protocol = "dcp"
             self.services_map = None
             if self.sasl_bucket_priority is not None:
                 self.sasl_bucket_priority = self.sasl_bucket_priority.split(":")
@@ -255,16 +255,27 @@ class BaseTestCase(unittest.TestCase):
             self.log.info("==============  basetestcase setup was started for test #{0} {1}==============" \
                           .format(self.case_number, self._testMethodName))
 
-            self.set_alternate_address_all_nodes()
-
-            if not self.input.param("skip_cleanup", False) and not self.skip_buckets_handle and not self.skip_init_check_cbserver:
-                self._cluster_cleanup()
+            # avoid clean up if the previous test has been tear down
+            if self.case_number == 1 or self.case_number > 1000 or \
+                    (self.last_case_fail and not self.input.param(
+                        "teardown_run", False)):
+                if self.case_number > 1000:
+                    self.log.warning(
+                        "teardDown for previous test failed. will "
+                        "retry..")
+                    self.case_number -= 1000
+                self.cleanup = True
+                if not self.skip_init_check_cbserver:
+                    self.tearDown()
+                self.cluster = Cluster()
 
             if self.disable_ipv6_grub:
                 self._disable_ipv6_grub()
 
             if self.upgrade_addr_family:
                 self._upgrade_addr_family(self.upgrade_addr_family)
+
+            self.set_alternate_address_all_nodes()
 
             shared_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                        replicas=self.num_replicas,
@@ -280,10 +291,6 @@ class BaseTestCase(unittest.TestCase):
             membase_ephemeral_params = copy.deepcopy(shared_params)
             membase_ephemeral_params['bucket_type'] = 'ephemeral'
             self.bucket_base_params['membase']['ephemeral'] = membase_ephemeral_params
-
-            memcached_params = copy.deepcopy(shared_params)
-            memcached_params['bucket_type'] = 'memcached'
-            self.bucket_base_params['memcached'] = memcached_params
 
             self.java_sdk_client = self.input.param("java_sdk_client", False)
             if self.java_sdk_client:
@@ -324,19 +331,8 @@ class BaseTestCase(unittest.TestCase):
                 self.log.info("==============  basetestcase setup was finished for test #{0} {1} ==============" \
                               .format(self.case_number, self._testMethodName))
                 return
-            # avoid clean up if the previous test has been tear down
-            if self.case_number == 1 or self.case_number > 1000:
-                if self.case_number > 1000:
-                    self.log.warning("teardDown for previous test failed. will retry..")
-                    self.case_number -= 1000
-                self.cleanup = True
-                if not self.skip_init_check_cbserver:
-                    self.tearDown()
-                self.cluster = Cluster()
             if not self.skip_init_check_cbserver:
                 self.log.info("initializing cluster")
-                self.reset_cluster()
-                self.set_alternate_address_all_nodes()
                 cli_command = 'node-init'
                 if self.hostname is True:
                     for server in self.servers:
@@ -412,8 +408,6 @@ class BaseTestCase(unittest.TestCase):
                 self.sleep(2)
                 self.check_ip_family_enforcement(ip_family="ipv6_only")
 
-            self.set_alternate_address_all_nodes()
-
             # Perform a custom rebalance by setting input param `custom_rebalance` to True
             # and implement the make_cluster method in a child class. This works by setting
             # skip_rebalance to True and then calling your custom rebalance method.
@@ -463,6 +457,8 @@ class BaseTestCase(unittest.TestCase):
             except BaseException as e:
                 # increase case_number to retry tearDown in setup for the next test
                 self.case_number += 1000
+                TestInputSingleton.input.test_params["teardown_run"] \
+                    = str(False)
                 traceback.print_exc()
                 self.fail(e)
 
@@ -493,7 +489,6 @@ class BaseTestCase(unittest.TestCase):
 
             self.bucket_base_params['membase']['non_ephemeral']['size'] = self.bucket_size
             self.bucket_base_params['membase']['ephemeral']['size'] = self.bucket_size
-            self.bucket_base_params['memcached']['size'] = self.bucket_size
 
             if str(self.__class__).find('upgrade_tests') == -1 and \
                     str(self.__class__).find('newupgradetests') == -1 and \
@@ -542,8 +537,6 @@ class BaseTestCase(unittest.TestCase):
                     self.upload_x509_certs(self.servers)
             if self.ntonencrypt == "enable":
                 self.setup_nton_encryption()
-            if self.enable_secrets:
-                self._setup_node_secret(self.secret_password)
 
             if not self.skip_init_check_cbserver:
                 status, content, header = self._log_start(self)
@@ -558,7 +551,14 @@ class BaseTestCase(unittest.TestCase):
         except Exception as e:
             traceback.print_exc()
             self.cluster.shutdown(force=True)
+            TestInputSingleton.input.test_params["teardown_run"] \
+                = str(False)
             self.fail(e)
+        TestInputSingleton.input.test_params["teardown_run"] \
+            = str(False)
+        end_time = time.time()
+        total_time = end_time - start_time
+        self.log.info("Time to execute basesetup : %s" % total_time)
 
     def set_alternate_address_all_nodes(self):
         for node in self.servers:
@@ -636,6 +636,8 @@ class BaseTestCase(unittest.TestCase):
         return keyword_count_diff
 
     def tearDown(self):
+        TestInputSingleton.input.test_params['teardown_run'] = \
+            str(False)
         # Perform system event log validation and get failures (if any)
         sys_event_validation_failure = None
         if self.validate_system_event_logs:
@@ -648,24 +650,7 @@ class BaseTestCase(unittest.TestCase):
             ntonencryptionBase().disable_nton_cluster([self.master])
         if self.input.param("x509enable", False):
             self.teardown_x509_certs(self.servers)
-        if self.input.param("ipv4_only", False):
-            self.check_ip_family_enforcement(ip_family="ipv4_only")
-            cli = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password)
-            cli.setting_autofailover(0, 60)
-            # TODO : teardown is getting invoked in setup hence disrupting the flow of the tc
-            # cli.set_ip_family("ipv4")
-            # output = cli.get_ip_family()
-            cli.setting_autofailover(1, 60)
-            #self.assertEqual(output[0][0], "Cluster using ipv4", "Failed to change IP family")
-        if self.input.param("ipv6_only", False):
-            self.check_ip_family_enforcement(ip_family="ipv6_only")
-            cli = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password)
-            cli.setting_autofailover(0, 60)
-            # TODO : teardown is getting invoked in setup hence disrupting the flow of the tc
-            # cli.set_ip_family("ipv6")
-            #output = cli.get_ip_family()
-            cli.setting_autofailover(1, 60)
-            #self.assertEqual(output[0][0]], "Cluster using ipv6", "Failed to change IP family")
+
         self.print_cluster_stats()
 
         self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.case_number}'
@@ -681,16 +666,19 @@ class BaseTestCase(unittest.TestCase):
                 collect_logs = True
 
         if self.skip_setup_cleanup:
+            TestInputSingleton.input.test_params[
+                'teardown_run'] = str(True)
             return
         try:
             if hasattr(self, 'skip_buckets_handle') and self.skip_buckets_handle:
+                TestInputSingleton.input.test_params[
+                    'teardown_run'] = str(True)
                 return
             test_failed = self.is_test_failed()
             if test_failed and TestInputSingleton.input.param("stop-on-failure", False) \
                     or self.input.param("skip_cleanup", False):
                 self.log.warning("CLEANUP WAS SKIPPED")
             else:
-
                 if test_failed or collect_logs:
                     # collect logs here instead of in test runner because we have not shut things down
                     if TestInputSingleton.input.param("get-cbcollect-info", False) or collect_logs:
@@ -713,8 +701,6 @@ class BaseTestCase(unittest.TestCase):
 
                 self.log.info("==============  basetestcase cleanup was started for test #{0} {1} ==============" \
                               .format(self.case_number, self._testMethodName))
-                if self.enable_secrets:
-                    self._setup_node_secret("")
                 rest = RestConnection(self.master)
                 alerts = rest.get_alerts()
                 if self.force_kill_memcached:
@@ -757,10 +743,14 @@ class BaseTestCase(unittest.TestCase):
                     self.system_events.set_test_start_time()
                 self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} ==============" \
                               .format(self.case_number, self._testMethodName))
+                TestInputSingleton.input.test_params[
+                    'teardown_run'] = str(True)
         except BaseException:
             # kill memcached
             # self.kill_memcached()
             # increase case_number to retry tearDown in setup for the next test
+            TestInputSingleton.input.test_params[
+                'teardown_run'] = str(False)
             self.case_number += 1000
         finally:
 
@@ -797,6 +787,7 @@ class BaseTestCase(unittest.TestCase):
                                   % sys_event_validation_failure)
 
             self._log_finish(self)
+            TestInputSingleton.input.test_params['teardown_run'] = str(True)
 
     def get_index_map(self):
         return RestConnection(self.master).get_index_status()
@@ -841,20 +832,6 @@ class BaseTestCase(unittest.TestCase):
     def sleep(self, timeout=15, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)
-
-    def _cluster_cleanup(self):
-        rest = RestConnection(self.master)
-        alerts = rest.get_alerts()
-        if rest._rebalance_progress_status() == 'running':
-            self.kill_memcached()
-            self.log.warning("rebalancing is still running, test should be verified")
-            stopped = rest.stop_rebalance()
-            self.assertTrue(stopped, msg="unable to stop rebalance")
-        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
-        ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
-        # all required checks are implemented in ClusterOperationHelper.cleanup_cluster
-        # self.sleep(10)
-        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
 
     def _initialize_nodes(self, cluster, servers, disabled_consistent_view=None, rebalanceIndexWaitingDisabled=None,
                           rebalanceIndexPausingDisabled=None, maxParallelIndexers=None, maxParallelReplicaIndexers=None,
@@ -965,10 +942,7 @@ class BaseTestCase(unittest.TestCase):
             if self.enable_time_sync:
                 self._set_time_sync_on_buckets([self.default_bucket_name])
 
-        self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
-        self._create_memcached_buckets(self.master, self.memcached_buckets)
-
         if len(self.master.collections_map):
             self._create_scope_collection()
 
@@ -1027,42 +1001,6 @@ class BaseTestCase(unittest.TestCase):
             # except:
             # print 'got a failure'
 
-    def _create_sasl_buckets(self, server, num_buckets, server_id=None, \
-                             bucket_size=None, password='password'):
-        if not num_buckets:
-            return
-        if server_id is None:
-            server_id = RestConnection(server).get_nodes_self().id
-        if bucket_size is None:
-            bucket_size = self.bucket_size
-        bucket_tasks = []
-        if self.sasl_password != "password":
-            password = self.sasl_password
-
-        bucket_params = copy.deepcopy(self.bucket_base_params['membase']['non_ephemeral'])
-        bucket_params['size'] = bucket_size
-        bucket_params['bucket_type'] = self.bucket_type
-
-        for i in range(num_buckets):
-            name = self.sasl_bucket_name + str(i)
-            bucket_priority = None
-            if self.sasl_bucket_priority is not None:
-                bucket_priority = self.get_bucket_priority(self.sasl_bucket_priority[i])
-            bucket_params['bucket_priority'] = bucket_priority
-
-            bucket_tasks.append(self.cluster.async_create_sasl_bucket(
-                name=name, password=password, bucket_params=bucket_params))
-            self.buckets.append(Bucket(name=name,
-                                       num_replicas=self.num_replicas,
-                                       bucket_size=self.bucket_size,
-                                       master_id=server_id,
-                                       eviction_policy=self.eviction_policy,
-                                       lww=self.lww))
-        for task in bucket_tasks:
-            task.result(self.wait_timeout * 10)
-        if self.enable_time_sync:
-            self._set_time_sync_on_buckets(['bucket' + str(i) \
-                                            for i in range(num_buckets)])
 
     def _create_standard_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
         if not num_buckets:
@@ -1076,20 +1014,12 @@ class BaseTestCase(unittest.TestCase):
         bucket_params = copy.deepcopy(self.bucket_base_params['membase']['non_ephemeral'])
         bucket_params['size'] = bucket_size
         bucket_params['bucket_type'] = self.bucket_type
-        cluster_compatibility = RestConnection(server).check_cluster_compatibility("5.0")
-        if cluster_compatibility is None:
-            pre_spock = True
-        else:
-            pre_spock = not cluster_compatibility
         for i in range(num_buckets):
             name = 'standard_bucket' + str(i)
             port = STANDARD_BUCKET_PORT + i + 1
-            if pre_spock:
-                bucket_params['proxyPort'] = port
             bucket_priority = None
             if self.standard_bucket_priority is not None:
                 bucket_priority = self.get_bucket_priority(self.standard_bucket_priority[i])
-
             bucket_params['bucket_priority'] = bucket_priority
             bucket_params['bucket_storage'] = self.bucket_storage
             bucket_tasks.append(self.cluster.async_create_standard_bucket(name=name, port=port,
@@ -1147,38 +1077,6 @@ class BaseTestCase(unittest.TestCase):
         if self.enable_time_sync:
             self._set_time_sync_on_bucket(bucket_list)
 
-    def _create_memcached_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
-        if not num_buckets:
-            return
-        if server_id is None:
-            server_id = RestConnection(server).get_nodes_self().id
-        if bucket_size is None:
-            bucket_size = self.bucket_size
-        bucket_tasks = []
-
-        bucket_params = copy.deepcopy(self.bucket_base_params['memcached'])
-        bucket_params['size'] = bucket_size
-        cluster_compatibility = RestConnection(server).check_cluster_compatibility("5.0")
-        if cluster_compatibility is None:
-            pre_spock = True
-        else:
-            pre_spock = not cluster_compatibility
-        for i in range(num_buckets):
-
-            name = 'memcached_bucket' + str(i)
-            port = STANDARD_BUCKET_PORT + self.standard_buckets + 2 + i
-
-            if pre_spock:
-                bucket_params['proxyPort'] = port
-
-            bucket_tasks.append(self.cluster.async_create_memcached_bucket(name=name, port=port,
-                                                                           bucket_params=bucket_params))
-            self.buckets.append(Bucket(name=name,
-                                       num_replicas=self.num_replicas,
-                                       bucket_size=bucket_size, port=port,
-                                       master_id=server_id, type='memcached'));
-        for task in bucket_tasks:
-            task.result()
 
     def _all_buckets_delete(self, server):
         delete_tasks = []
@@ -1206,14 +1104,6 @@ class BaseTestCase(unittest.TestCase):
         for bucket in self.buckets:
 
             items = sum([len(kv_store) for kv_store in list(bucket.kvs.values())])
-            if bucket.type == 'memcached':
-                items_actual = 0
-                for server in servers:
-                    client = MemcachedClientHelper.direct_client(server, bucket)
-                    items_actual += int(client.stats()["curr_items"])
-
-                self.assertEqual(items, items_actual, "Items are not correct")
-                continue
             stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
                                                                  'curr_items', '==', items))
             stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
@@ -1276,27 +1166,21 @@ class BaseTestCase(unittest.TestCase):
                 if not collection and (len(self.collection_name[bucket.name]) > 0):
                     for collections in self.collection_name[bucket.name]:
                         gen = copy.deepcopy(kv_gen)
-                        if bucket.type != 'memcached':
-                            tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
-                                                                          bucket.kvs[kv_store],
-                                                                          op_type, exp, flag, only_store_hash,
-                                                                          batch_size, pause_secs, timeout_secs,
-                                                                          proxy_client,
-                                                                          compression=self.sdk_compression,
-                                                                          scope=scope, collection=collections))
-                        else:
-                            self._load_memcached_bucket(server, gen, bucket.name, collections)
-
-                else:
-                    if bucket.type != 'memcached':
                         tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
                                                                       bucket.kvs[kv_store],
                                                                       op_type, exp, flag, only_store_hash,
                                                                       batch_size, pause_secs, timeout_secs,
-                                                                      proxy_client, compression=self.sdk_compression,
-                                                                      scope=scope, collection=collection))
-                    else:
-                        self._load_memcached_bucket(server, gen, bucket.name, scope=scope, collection=collection)
+                                                                      proxy_client,
+                                                                      compression=self.sdk_compression,
+                                                                      scope=scope, collection=collections))
+
+                else:
+                    tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
+                                                                  bucket.kvs[kv_store],
+                                                                  op_type, exp, flag, only_store_hash,
+                                                                  batch_size, pause_secs, timeout_secs,
+                                                                  proxy_client, compression=self.sdk_compression,
+                                                                  scope=scope, collection=collection))
         else:
             # Java SDK Client
             for bucket in self.buckets:
@@ -1447,8 +1331,6 @@ class BaseTestCase(unittest.TestCase):
         servers = self.get_kv_nodes(servers)
         for server in servers:
             for bucket in self.buckets:
-                if bucket.type == 'memcached':
-                    continue
                 tasks.append(self.cluster.async_wait_for_stats([server], bucket, '',
                                                                'ep_queue_size', ep_queue_size_cond, ep_queue_size))
                 if check_ep_items_remaining:
@@ -1495,8 +1377,6 @@ class BaseTestCase(unittest.TestCase):
                 len(self.collection_name[bucket.name])
             except KeyError:
                 self.collection_name[bucket.name] = {}
-            if bucket.type == 'memcached':
-                continue
             # self.collection_bucket=self.collection_name[bucket]
             if not collection_name and (len(self.collection_name[bucket.name]) > 0):
                 for collections in self.collection_name[bucket.name]:
@@ -1781,28 +1661,6 @@ class BaseTestCase(unittest.TestCase):
         shell.disconnect()
         self.fail("Couchbase service is not running after {0} seconds".format(wait_time))
 
-    def _load_memcached_bucket(self, server, gen_load, bucket_name, scope=None, collection=None):
-        num_tries = 0
-        while num_tries < 6:
-            try:
-                num_tries += 1
-                client = MemcachedClientHelper.direct_client(server, bucket_name)
-                break
-            except Exception as ex:
-                if num_tries < 5:
-                    self.log.info("unable to create memcached client due to {0}. Try again".format(ex))
-                else:
-                    self.log.error("unable to create memcached client due to {0}.".format(ex))
-        while gen_load.has_next():
-            key, value = next(gen_load)
-            for v in range(1024):
-                try:
-                    client.set(key, 0, 0, value, v, scope=scope, collection=collection)
-                    break
-                except:
-                    pass
-        client.close()
-
     def get_nodes_in_cluster(self, master_node=None):
         rest = None
         if master_node is None:
@@ -1885,27 +1743,22 @@ class BaseTestCase(unittest.TestCase):
                     break
 
     def change_env_variables(self):
-        if self.vbuckets != 1024 or self.upr != None:
+        if self.vbuckets != 1024:
             for server in self.servers:
                 dict = {}
                 if self.vbuckets:
                     dict["COUCHBASE_NUM_VBUCKETS"] = self.vbuckets
-                if self.upr is not None:
-                    if self.upr:
-                        dict["COUCHBASE_REPL_TYPE"] = "upr"
-                    else:
-                        dict["COUCHBASE_REPL_TYPE"] = "tap"
                 if len(dict) >= 1:
                     remote_client = RemoteMachineShellConnection(server)
                     remote_client.change_env_variables(dict)
-                remote_client.disconnect()
+                    remote_client.disconnect()
             self.sleep(60, "waiting for server to restart")
             self.log.info("========= CHANGED ENVIRONMENT SETTING ===========")
 
     def reset_env_variables(self):
-        if self.vbuckets != 1024 or self.upr != None:
+        if self.vbuckets != 1024:
             for server in self.servers:
-                if self.upr or self.vbuckets:
+                if self.vbuckets:
                     remote_client = RemoteMachineShellConnection(server)
                     remote_client.reset_env_variables()
                     remote_client.disconnect()
@@ -2172,18 +2025,7 @@ class BaseTestCase(unittest.TestCase):
         versions = RestConnection(self.master).get_nodes_versions()
         for group in nodes:
             for node in nodes[group]:
-                if versions[0][:5] in testconstants.COUCHBASE_VERSION_2:
-                    command = "tap"
-                    if not info == 'windows':
-                        commands = "%s %s:11210 %s -b %s -p \"%s\" | grep :vb_filter: |  awk '{print $1}' \
-                            | xargs | sed 's/eq_tapq:replication_ns_1@//g'  | sed 's/:vb_filter://g' \
-                            " % (cbstat_command, node, command, "default", saslpassword)
-                    else:
-                        commands = "%s %s:11210 %s -b %s -p \"%s\" | grep.exe :vb_filter: | gawk.exe '{print $1}' \
-                               | sed.exe 's/eq_tapq:replication_ns_1@//g'  | sed.exe 's/:vb_filter://g' \
-                               " % (cbstat_command, node, command, "default", saslpassword)
-                    output, error = shell.execute_command(commands)
-                elif versions[0][:5] in testconstants.COUCHBASE_VERSION_3 or \
+                if versions[0][:5] in testconstants.COUCHBASE_VERSION_3 or \
                         versions[0][:5] in testconstants.COUCHBASE_FROM_VERSION_4:
                     command = "dcp"
                     if not info == 'windows':
@@ -2199,14 +2041,14 @@ class BaseTestCase(unittest.TestCase):
                                    " % (cbstat_command, node, command, "default", saslpassword, node, node)
                         output, error = shell.execute_command(commands)
                         output = sorted(set(output))
-                shell.log_command_output(output, error)
-                output = output[0].split(" ")
-                if node not in output:
-                    self.log.info("{0}".format(nodes))
-                    self.log.info("replicas of node {0} are in nodes {1}".format(node, output))
-                    self.log.info("replicas of node {0} are not in its zone {1}".format(node, group))
-                else:
-                    raise Exception("replica of node {0} are on its own zone {1}".format(node, group))
+                    shell.log_command_output(output, error)
+                    output = output[0].split(" ")
+                    if node not in output:
+                        self.log.info("{0}".format(nodes))
+                        self.log.info("replicas of node {0} are in nodes {1}".format(node, output))
+                        self.log.info("replicas of node {0} are not in its zone {1}".format(node, group))
+                    else:
+                        raise Exception("replica of node {0} are on its own zone {1}".format(node, group))
         shell.disconnect()
 
     def vb_distribution_analysis(self, servers=[], buckets=[], total_vbuckets=0, std=1.0, type="rebalance",
@@ -2528,17 +2370,6 @@ class BaseTestCase(unittest.TestCase):
         """
         if node is None:
             node = self.master
-        rest = RestConnection(node)
-        cluster_compatibility = rest.check_cluster_compatibility("5.0")
-        if cluster_compatibility is None:
-            pre_spock = True
-        else:
-            pre_spock = not cluster_compatibility
-        if pre_spock:
-            self.log.info("At least one of the nodes in the cluster is "
-                          "pre 5.0 version. Hence not creating rbac user "
-                          "for the cluster. RBAC is a 5.0 feature.")
-            return
         if testuser is None:
             testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
                          'password': 'password'}]
@@ -2998,14 +2829,6 @@ class BaseTestCase(unittest.TestCase):
         if create_per != 0:
             change_dist_map["create"] = {"start": end, "end": create_count + end + 1}
         return change_dist_map
-
-    def get_protocol_type(self):
-        rest = RestConnection(self.master)
-        versions = rest.get_nodes_versions()
-        for version in versions:
-            if "3" > version:
-                return "tap"
-        return "dcp"
 
     def set_testrunner_client(self):
         self.testrunner_client = self.input.param("testrunner_client", None)

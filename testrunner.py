@@ -572,6 +572,8 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
 
     results = []
     case_number = 1
+    last_case_fail = False
+    base_tear_down_run = TestInputSingleton.input.param('teardown_run', False)
 
     if "GROUP" in runtime_test_params:
         print(("Only cases in GROUPs '{0}' will be executed".format(runtime_test_params["GROUP"])))
@@ -637,6 +639,10 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
         TestInputSingleton.input.test_params = params
         TestInputSingleton.input.test_params.update(runtime_test_params)
         TestInputSingleton.input.test_params["case_number"] = case_number
+        TestInputSingleton.input.test_params["last_case_fail"] = \
+            str(last_case_fail)
+        TestInputSingleton.input.test_params["teardown_run"] = \
+            str(base_tear_down_run)
         TestInputSingleton.input.test_params["logs_folder"] = logs_folder
         print("Test Input params:")
         print((TestInputSingleton.input.test_params))
@@ -705,9 +711,12 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
                 if key and value:
                     params += "," + str(key) + "=" + str(value)
 
+        base_tear_down_run = TestInputSingleton.input.param(
+            'teardown_run', False)
         if result.failures or result.errors:
             # Immediately get the server logs, if
             # the test has failed or has errors
+            last_case_fail = True
             if "get-logs" in TestInputSingleton.input.test_params:
                 get_server_logs(TestInputSingleton.input, logs_folder)
 
@@ -739,6 +748,7 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
                            params=params)
             results.append({"result": "fail", "name": name})
         else:
+            last_case_fail = False
             xunit.add_test(name=name, time=time_taken, params=params)
             results.append({"result": "pass", "name": name, "time": time_taken})
         xunit.write("{0}{2}report-{1}".format(os.path.dirname(logs_folder), str_time, os.sep))

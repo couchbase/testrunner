@@ -2986,10 +2986,6 @@ class RestConnection(object):
         if bucketType == "membase":
             init_params['storageBackend'] = storageBackend
 
-        pre_spock = not self.check_cluster_compatibility("5.0")
-        if pre_spock:
-            init_params['proxyPort'] = proxyPort
-
         params = urllib.parse.urlencode(init_params)
 
         log.info("{0} with param: {1}".format(api, params))

@@ -5249,11 +5249,6 @@ class RemoteMachineShellConnection(KeepRefs):
                   "'ns_config:set(allow_nonlocal_eval, {3}).'".format(rest_username, rest_password,
                                                             self.port, state.__str__().lower(), protocol)
         server = {"ip": self.ip, "username": rest_username, "password": rest_password, "port": self.port}
-        rest_connection = RestConnection(server)
-        is_cluster_compatible = rest_connection.check_cluster_compatibility("5.5")
-        if (not is_cluster_compatible):
-            log.info("Enabling diag/eval on non-local hosts is available only post 5.5.2 or 6.0 releases")
-            return None, "Enabling diag/eval on non-local hosts is available only post 5.5.2 or 6.0 releases"
         output, error = self.execute_command(command)
         log.info(output)
         try:

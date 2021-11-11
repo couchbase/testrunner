@@ -15,8 +15,6 @@ class SpatialCompactionTests(BaseTestCase):
         self.bucket_name = "default"
         if self.standard_buckets:
             self.bucket_name = "standard_bucket0"
-        if self.sasl_buckets:
-            self.bucket_name = "bucket0"
         self.helper = SpatialHelper(self, self.bucket_name)
         try:
             if self.start_cluster > 1:

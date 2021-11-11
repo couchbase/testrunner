@@ -52,7 +52,6 @@ class OpsBeforeBackupTests(BackupBaseTest):
                                                              replicas=self.num_replicas)
             self.cluster.create_default_bucket(default_params)
             self.buckets.append(Bucket(name="default", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
-        self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
 
         for bucket in self.buckets:
@@ -103,7 +102,6 @@ class OpsBeforeBackupTests(BackupBaseTest):
                                                              replicas=self.num_replicas)
             self.cluster.create_default_bucket(default_params)
             self.buckets.append(Bucket(name="default", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
-        self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
 
         for bucket in self.buckets:
