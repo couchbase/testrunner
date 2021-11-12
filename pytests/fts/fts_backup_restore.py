@@ -903,7 +903,7 @@ class FTSIndexBackupClient(object):
                 query_params = query_params + c +","
         query_params = query_params[:len(query_params)-1]
         api = self.backup_api + query_params
-        status, content, _ = self.rest._http_request(api=api)
+        status, content, _ = self.rest.urllib_request(api=api)
         if status:
             self.backup_data = json.loads(content)['indexDefs']
             self.is_backup_exists = True
@@ -915,11 +915,10 @@ class FTSIndexBackupClient(object):
         query_params = ""
         if mappings:
             query_params = "?remap={0}".format(",".join(mappings))
-        headers = self.rest._create_capi_headers()
         body = json.dumps(self.backup_data)
         api = self.backup_api + query_params
-        status, content, _ = self.rest._http_request(
-            api=api, method="POST", params=body, headers=headers)
+        status, content, _ = self.rest.urllib_request(
+            api=api, verb="POST", params=body)
         json_response = json.loads(content)
         if json_response['status'] == "ok":
             return True, json_response, api
