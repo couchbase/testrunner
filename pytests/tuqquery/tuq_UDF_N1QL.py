@@ -1,5 +1,7 @@
 from .tuq import QueryTests
 from deepdiff import DeepDiff
+import requests
+from membase.api.exception import CBQError
 
 class QueryUDFN1QLTests(QueryTests):
     ddls = {
@@ -119,6 +121,7 @@ class QueryUDFN1QLTests(QueryTests):
         super(QueryUDFN1QLTests, self).setUp()
         self.log.info("==============  QueryUDFN1QLTests setup has started ==============")
         self.statement = self.input.param("statement", "statement")
+        self.params = self.input.param("params", "named")
         self.library_name = 'n1ql'
         self.log.info("==============  QueryUDFN1QLTests setup has completed ==============")
         self.log_config_info()
@@ -193,11 +196,12 @@ class QueryUDFN1QLTests(QueryTests):
         self.assertEqual(query_result['results'], [{'count_engineer': 672}])
 
     def test_execute_prepared(self):
+        self.run_cbq_query('DELETE FROM system:prepareds WHERE name LIKE "engineer%"')
         function_name = 'execute_prepare_default'
         query = 'EXECUTE engineer_count'
         self.create_n1ql_function(function_name, query)
         # Prepare statement
-        self.run_cbq_query('PREPARE engineer_count as SELECT COUNT(*) as count_engineer FROM default WHERE job_title = "Engineer"')
+        self.run_cbq_query('PREPARE engineer_count as SELECT COUNT(*) as count_engineer FROM default WHERE job_title = "Engineer"', query_context="default:")
         # Execute function and check
         function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
         self.assertEqual(function_result['results'][0], [{'count_engineer': 672}])
@@ -239,3 +243,114 @@ class QueryUDFN1QLTests(QueryTests):
         post_expected = self.ddls[self.statement]['post_expected']
         post_actual = self.run_cbq_query(post_query)
         self.assertEqual(post_expected, post_actual['results'])
+
+    def test_curl(self):
+        url = "https://jsonplaceholder.typicode.com/todos"
+        self.rest.create_whitelist(self.master, {"all_access": True})
+        function_name = 'curl_default'
+        query = f'SELECT CURL("{url}")'
+        self.create_n1ql_function(function_name, query)
+        # Get expected from curl
+        response = requests.get(url)
+        expected_curl = response.json()
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_curl)
+
+    def test_flush_collection(self):
+        function_name = 'flush_default'
+        query = f'{self.statement} COLLECTION default'
+        self.create_n1ql_function(function_name, query)
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+        self.log.info(function_result)
+
+    def test_parameter_from_function(self):
+        function_name = 'param_from_function_default'
+        functions = f'function {function_name}(job, year, month) {{\
+            var query = SELECT name FROM default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 3;\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(j, y, m) LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}("Engineer", 2011, 10)')
+        expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+    def test_parameter_from_var(self):
+        function_name = 'param_from_var_default'
+        functions = f'function {function_name}() {{\
+            var job = "Engineer";\
+            var year = 2011;\
+            var month = 10;\
+            var query = SELECT name FROM default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 3;\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+        expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+    def test_execute_prepared_with_param(self):
+        self.run_cbq_query('DELETE FROM system:prepareds WHERE name LIKE "engineer%"')
+        function_name = 'execute_prepare_default'
+        if self.params == 'named':
+            param_val = {"job": "Engineer"}
+            param_var = "$job"
+        elif self.params == 'positional':
+            param_val = ["Engineer"]
+            param_var = "$1"
+        functions = f'function {function_name}() {{\
+            var query = EXECUTE engineer_count USING {param_val};\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library(self.library_name, functions, [function_name])
+        # Prepare statement wit named parameter $job
+        self.run_cbq_query(f'PREPARE engineer_count as SELECT COUNT(*) as count_engineer FROM default WHERE job_title = {param_var}', query_context="default:")
+        # Execute function and check
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+        self.assertEqual(function_result['results'][0], [{'count_engineer': 672}])
+
+    def test_rbac(self):
+        self.run_cbq_query("CREATE COLLECTION default._default.tmp IF NOT EXISTS")
+        self.run_cbq_query("CREATE INDEX adv_job_title IF NOT EXISTS ON `default`(`job_title`)")
+        # Create user with execute external function role only
+        self.users = [{"id": "jackDoe", "name": "Jack Downing", "password": "password1"}]
+        self.create_users()
+        role = 'query_execute_global_external_functions'
+        user_id = self.users[0]['id']
+        user_pwd = self.users[0]['password']
+        self.run_cbq_query(query=f"GRANT {role} to {user_id}")
+        # Create function
+        function_name = 'rbac_default'
+        if self.statement in self.dmls:
+            query = self.dmls[self.statement]
+        elif self.statement in self.ddls:
+            query = self.ddls[self.statement]['query']
+            pre_query = self.ddls[self.statement]['pre']
+            self.run_cbq_query(pre_query)
+        else:
+            self.log.error(f'Unknown statement: {self.statement}')
+        self.create_n1ql_function(function_name, query)
+        # Execute function as user
+        try:
+            self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()', username=user_id, password=user_pwd)
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 10109)
+            self.assertTrue('User does not have credentials to run' in error['msg'])
