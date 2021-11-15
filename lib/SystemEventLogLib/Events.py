@@ -25,8 +25,13 @@ class Event(object):
                 return [Event.Fields.EVENT_ID, Event.Fields.UUID,
                         Event.Fields.COMPONENT, Event.Fields.TIMESTAMP,
                         Event.Fields.SEVERITY, Event.Fields.DESCRIPTION]
-            return [var_name for var_name in Event.Fields.__dict__.keys()
-                    if not var_name.startswith("__")]
+            values = list()
+            for var_name in Event.Fields.__dict__.keys():
+                attr = getattr(Event.Fields, var_name)
+                if var_name.startswith("__") or callable(attr):
+                    continue
+                values.append(attr)
+            return values
 
     class Component(object):
         """Holds all valid components supported by the SystemEvent REST API"""
@@ -44,8 +49,13 @@ class Event(object):
 
         @staticmethod
         def values():
-            return [var_name for var_name in Event.Component.__dict__.keys()
-                    if not var_name.startswith("__")]
+            values = list()
+            for var_name in Event.Component.__dict__.keys():
+                attr = getattr(Event.Component, var_name)
+                if var_name.startswith("__") or callable(attr):
+                    continue
+                values.append(attr)
+            return values
 
     class Severity(object):
         """Holds all valid log levels supported by the SystemEvent REST API"""
@@ -56,8 +66,13 @@ class Event(object):
 
         @staticmethod
         def values():
-            return [var_name for var_name in Event.Severity.__dict__.keys()
-                    if not var_name.startswith("__")]
+            values = list()
+            for var_name in Event.Severity.__dict__.keys():
+                attr = getattr(Event.Severity, var_name)
+                if var_name.startswith("__") or callable(attr):
+                    continue
+                values.append(attr)
+            return values
 
 
 class EventHelper(object):
