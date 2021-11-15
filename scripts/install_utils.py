@@ -343,10 +343,6 @@ class NodeHelper:
             log.warning("pre_init_cb: Exception {0} occurred on {1}".format(e, self.ip))
 
     def post_init_cb(self):
-        # Optionally change node name and restart server
-        if params["use_hostnames"]:
-            RemoteUtilHelper.use_hostname_for_server_settings(self.node)
-
         # Optionally disable consistency check
         if params.get('disable_consistency', False):
             self.rest.set_couchdb_option(section='couchdb',
