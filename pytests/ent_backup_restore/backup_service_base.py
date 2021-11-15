@@ -9,6 +9,12 @@ import re
 import shlex
 import time
 
+from collections import (
+    Counter
+)
+from enum import (
+    IntEnum
+)
 from couchbase_helper.cluster import (
     Cluster
 )
@@ -89,7 +95,30 @@ from lib.membase.helper.bucket_helper import (
 from TestInput import (
     TestInputSingleton
 )
+from SystemEventLogLib.SystemEventOperations import (
+    SystemEventRestHelper
+)
 
+class Tag(IntEnum):
+    CONFIG_CHANGED = 6144
+    PLAN_CREATED = 6145
+    PLAN_UPDATED = 6146
+    PLAN_DELETED = 6147
+    BACKUP_STARTED = 6148
+    BACKUP_COMPLETED = 6149
+    BACKUP_FAILED = 6150
+    RESTORE_STARTED = 6151
+    RESTORE_COMPLETED = 6152
+    RESTORE_FAILED = 6153
+    MERGE_STARTED = 6154
+    MERGE_COMPLETED = 6155
+    MERGE_FAILED = 6156
+    REPO_CREATED = 6157
+    REPO_DELETED = 6158
+    REPO_ARCHIVED = 6159
+    REPO_IMPORTED = 6160
+    REPO_PAUSED = 6161
+    REPO_RESUMED = 6162
 
 class BackupServiceBase(EnterpriseBackupRestoreBase):
 
@@ -194,6 +223,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
             # Skip the log scan as it causes the backup service jobs to hang.
             self.input.test_params["skip_log_scan"] = True
+
+        self.sys_log_count = Counter()
+        self.log_start = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.") + datetime.datetime.now().strftime("%f")[:3] + 'Z'
 
         super().setUp()
         self.preamble()
@@ -429,6 +461,14 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         if node:
             return next((server for server in self.input.clusters[0] if f"{server.ip}:{server.port}" == node['configuredHostname']), None)
 
+    def delete_plan(self, plan_name, http_info=False):
+        """ Deletes a plan
+        """
+        self.sys_log_count[Tag.PLAN_DELETED] += 1
+        if http_info:
+            return self.plan_api.plan_name_delete_with_http_info(plan_name)
+        return self.plan_api.plan_name_delete(plan_name)
+
     def delete_all_plans(self):
         """ Deletes all plans.
 
@@ -437,6 +477,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         for plan in self.plan_api.plan_get():
             if plan.name not in self.default_plans:
                 self.plan_api.plan_name_delete(plan.name)
+                self.sys_log_count[Tag.PLAN_DELETED] += 1
 
     def delete_all_repositories(self):
         """ Deletes all repositories.
@@ -446,6 +487,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # Pause repositories
         for repo in self.repository_api.cluster_self_repository_state_get('active'):
             self.active_repository_api.cluster_self_repository_active_id_pause_post_with_http_info(repo.id)
+            self.sys_log_count[Tag.REPO_PAUSED] += 1
 
         # Sleep to ensure repositories are paused
         self.sleep(5)
@@ -455,14 +497,17 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         # Archive repositories
         for repo in self.repository_api.cluster_self_repository_state_get('active'):
+            self.sys_log_count[Tag.REPO_ARCHIVED] += 1
             self.active_repository_api.cluster_self_repository_active_id_archive_post_with_http_info(repo.id, body=Body3(id=repo.id))
 
         # Delete archived repositories
         for repo in self.repository_api.cluster_self_repository_state_get('archived'):
+            self.sys_log_count[Tag.REPO_DELETED] += 1
             self.repository_api.cluster_self_repository_state_id_delete_with_http_info('archived', repo.id)
 
         # delete imported repositories
         for repo in self.repository_api.cluster_self_repository_state_get('imported'):
+            self.sys_log_count[Tag.REPO_DELETED] += 1
             self.repository_api.cluster_self_repository_state_id_delete_with_http_info('imported', repo.id)
 
     def run_orphan_detection(self, server):
@@ -547,7 +592,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         return False
 
-    def get_backups(self, state, repo_name):
+    def get_backups(self, state, repo_name, http_info=False):
         """ Returns the backups in a repository.
 
         Attr:
@@ -558,18 +603,35 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             list: A list of backups in the repository.
 
         """
+        if http_info:
+            return self.repository_api.cluster_self_repository_state_id_info_get_with_http_info(state, repo_name)
         return self.repository_api.cluster_self_repository_state_id_info_get(state, repo_name).backups
 
-    def create_plan(self, plan_name, plan):
+    def get_plan(self, plan_name):
+        """ Gets a plan
+        """
+        return self.plan_api.plan_name_get(plan_name)
+
+    def get_all_plans(self, http_info=False):
+        """ Gets all plans
+        """
+        if http_info:
+            return self.plan_api.plan_get_with_http_info()
+        return self.plan_api.plan_get()
+
+    def create_plan(self, plan_name, http_info=False, **kwargs):
         """ Creates a plan
 
         Attr:
             plan_name (str): The name of the new plan.
 
         """
-        return self.plan_api.plan_name_post(plan_name, body=plan)
+        self.sys_log_count[Tag.PLAN_CREATED] += 1
+        if http_info:
+            return self.plan_api.plan_name_post_with_http_info(plan_name, **kwargs)
+        return self.plan_api.plan_name_post(plan_name, **kwargs)
 
-    def create_repository(self, repo_name, plan_name):
+    def create_repository(self, repo_name, plan_name=None, bucket_name=None, body=None, http_info=False, should_succeed=True):
         """ Creates an active repository
 
         Creates an active repository with a filesystem archive. If the objstore provider is set, then
@@ -579,12 +641,17 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             repo_name (str): The name of the new repository.
             plan_name (str): The name of the plan to attach.
         """
-        body = Body2(plan=plan_name, archive=self.backupset.directory)
+        if body is None:
+            body = Body2(plan=plan_name, archive=self.backupset.directory, bucket_name=bucket_name)
 
         if self.objstore_provider:
             body = self.set_cloud_credentials(body)
 
         # Add repositories and tie plan to repository
+        if should_succeed:
+            self.sys_log_count[Tag.REPO_CREATED] += 1
+        if http_info:
+            return self.active_repository_api.cluster_self_repository_active_id_post_with_http_info(repo_name, body=body)
         return self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
 
     def get_repository(self, state, repo_name):
@@ -592,7 +659,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         Attr:
             state (str): The state of the repository e.g. 'active'.
-            repo_name (str): THe name of the repository to fetch.
+            repo_name (str): The name of the repository to fetch.
         """
         return self.repository_api.cluster_self_repository_state_id_get('active', repo_name)
 
@@ -604,10 +671,41 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         """
         return self.repository_api.cluster_self_repository_state_get(state)
 
-    def get_task_history(self, state, repo_name, task_name=None):
-        if task_name:
-            return self.repository_api.cluster_self_repository_state_id_task_history_get(state, repo_name, task_name=task_name)
-        return self.repository_api.cluster_self_repository_state_id_task_history_get(state, repo_name)
+    def pause_repository(self, repo_name, http_info=False):
+        """ Pauses a repository
+
+        Attr:
+            repo_name (str): The name of the repository to pause.
+            http_info (bool): Whether to call the with_http_info function.
+        """
+        self.sys_log_count[Tag.REPO_PAUSED] += 1
+        if http_info:
+            return self.active_repository_api.cluster_self_repository_active_id_pause_post_with_http_info(repo_name)
+        return self.active_repository_api.cluster_self_repository_active_id_pause_post(repo_name)
+
+    def resume_repository(self, repo_name, http_info=False):
+        """ Pauses a repository
+
+        Attr:
+            repo_name (str): The name of the repository to resume.
+            http_info (bool): Whether to call the with_http_info function.
+        """
+        self.sys_log_count[Tag.REPO_RESUMED] += 1
+        if http_info:
+            return self.active_repository_api.cluster_self_repository_active_id_resume_post_with_http_info(repo_name)
+        return self.active_repository_api.cluster_self_repository_active_id_resume_post(repo_name)
+
+    def examine_repository(self, state, repo_name, http_info=False, **kwargs):
+        """ Examines a repository
+        """
+        if http_info:
+            return self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info(state, repo_name, **kwargs)
+        return self.repository_api.cluster_self_repository_state_id_examine_post(state, repo_name, **kwargs)
+
+    def get_task_history(self, state, repo_name, http_info=False, **kwargs):
+        if http_info:
+            return self.repository_api.cluster_self_repository_state_id_task_history_get_with_http_info(state, repo_name, **kwargs)
+        return self.repository_api.cluster_self_repository_state_id_task_history_get(state, repo_name, **kwargs)
 
     def map_task_to_backup(self, state, repo_name, task_name):
         return self.get_task_history(state, repo_name, task_name=task_name)[0].backup
@@ -644,7 +742,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
                 else:
                     self.log.info(f"There were no node_runs for task {task_name}")
             else:
-                task_history = self.get_task_history('active', repo_name, task_name)
+                task_history = self.get_task_history('active', repo_name, task_name=task_name)
 
                 if len(task_history) > 0:
                     self.log.info(f"The task {task_name} has completed with status: {task_history[0].status}")
@@ -680,7 +778,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # Check the task is present in the task history with the status 'done'
         if task_name:
             for i in range(0, retries):
-                task_history = self.get_task_history(state, repo_name, task_name)
+                task_history = self.get_task_history(state, repo_name, task_name=task_name)
 
                 # Be more specific by filtering tasks which match the original schedule time
                 if task_scheduled_time:
@@ -746,19 +844,51 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         """ Take a one off merge
         """
         # Perform a one off merge
+        self.sys_log_count[Tag.MERGE_STARTED] += 1
         task_name = self.active_repository_api.cluster_self_repository_active_id_merge_post(repo_name, body=Body5(start=start, end=end)).task_name
         # Wait until task is completed
         self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=timeout))
+        self.sys_log_count[Tag.MERGE_COMPLETED] += 1
         return task_name
 
-    def take_one_off_backup(self, state, repo_name, full_backup, retries, sleep_time):
+    def take_one_off_merge_with_name(self, repo_name, http_info=False, should_succeed=True, valid_call=True, **kwargs):
+        """ Take a one off merge with just a name
+        """
+        # Perform a one off merge
+        if valid_call:
+            self.sys_log_count[Tag.MERGE_STARTED] += 1
+            if should_succeed:
+                self.sys_log_count[Tag.MERGE_COMPLETED] += 1
+            else:
+                self.sys_log_count[Tag.MERGE_FAILED] += 1
+        if http_info:
+            return self.active_repository_api.cluster_self_repository_active_id_merge_post_with_http_info(repo_name, **kwargs)
+        return self.active_repository_api.cluster_self_repository_active_id_merge_post(repo_name, **kwargs)
+
+    def take_one_off_backup(self, state, repo_name, full_backup, retries, sleep_time, http_info=False):
         """ Take a one off backup
         """
         # Perform a one off backup
         task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, body=Body4(full_backup = full_backup)).task_name
         # Wait until task has completed
+        self.sys_log_count[Tag.BACKUP_STARTED] += 1
         self.assertTrue(self.wait_for_backup_task(state, repo_name, retries, sleep_time, task_name=task_name))
+        self.sys_log_count[Tag.BACKUP_COMPLETED] += 1
         return task_name
+
+    def take_one_off_backup_with_name(self, repo_name, http_info=False, should_succeed=True, valid_call=True, **kwargs):
+        """ Take a one off backup with just a name
+        """
+        if valid_call:
+            self.sys_log_count[Tag.BACKUP_STARTED] += 1
+            if should_succeed:
+                self.sys_log_count[Tag.BACKUP_COMPLETED] += 1
+            else:
+                self.sys_log_count[Tag.BACKUP_FAILED] += 1
+        if http_info:
+            return self.active_repository_api.cluster_self_repository_active_id_backup_post_with_http_info(repo_name, **kwargs)
+        return self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, **kwargs)
+
 
     def take_n_one_off_backups(self, state, repo_name, generator_function, no_of_backups, doc_load_sleep=10, sleep_time=20, retries=20, data_provisioning_function=None):
         """ Take n one off backups
@@ -777,6 +907,29 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
                 self.sleep(doc_load_sleep)
 
             self.take_one_off_backup(state, repo_name, i < 1, retries, sleep_time)
+
+    def delete_backup(self, repo_name, backup_name, http_info=False, **kwargs):
+        """ Delete a given backup from a given repo
+        """
+        if http_info:
+            return self.active_repository_api.cluster_self_repository_active_id_backups_backup_name_delete_with_http_info(repo_name, backup_name)
+        return self.active_repository_api.cluster_self_repository_active_id_backups_backup_name_delete(repo_name, backup_name)
+
+    def archive_repository(self, repo_name, http_info=False, **kwargs):
+        """ Archive a named repository
+        """
+        self.sys_log_count[Tag.REPO_ARCHIVED] += 1
+        if http_info:
+            return self.active_repository_api.cluster_self_repository_active_id_archive_post_with_http_info(repo_name, **kwargs)
+        return self.active_repository_api.cluster_self_repository_active_id_archive_post(repo_name, **kwargs)
+
+    def delete_repository(self, state, repo_name, http_info=False, **kwargs):
+        """ Deletes a given repository
+        """
+        self.sys_log_count[Tag.REPO_DELETED] += 1
+        if http_info:
+            return self.repository_api.cluster_self_repository_state_id_delete_with_http_info(state, repo_name, **kwargs)
+        return self.repository_api.cluster_self_repository_state_id_delete(state, repo_name, **kwargs)
 
     def import_repository(self, fs_archive, fs_repo, backup_service_repo_name="repo_name"):
         """ Imports a repository
@@ -801,12 +954,19 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         # Import repository
         self.assertEqual(self.import_api.cluster_self_repository_import_post_with_http_info(body=body)[1], 200)
+        self.sys_log_count[Tag.REPO_IMPORTED] += 1
 
         # Get backups from imported repository
         imported_backups = [backup._date for backup in self.get_backups("imported", backup_service_repo_name)]
 
         # Check there are backups present in the imported repository
         self.assertGreater(len(imported_backups), 0)
+
+    def import_repository_with_name(self, http_info=False, should_succeed=True, **kwargs):
+        if should_succeed: self.sys_log_count[Tag.REPO_IMPORTED] += 1
+        if http_info:
+            return self.import_api.cluster_self_repository_import_post_with_http_info(**kwargs)
+        return self.import_api.cluster_self_repository_import_post(**kwargs)
 
     def take_one_off_restore(self, state, repo_name, retries, sleep_time, target=None):
         """ Performs a one off restore
@@ -821,11 +981,26 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         body = Body1(target=f"{target.ip}:{target.port}", user=target.rest_username, password=target.rest_password, auto_create_buckets=True)
         # Take one off restore
         task_name = self.repository_api.cluster_self_repository_state_id_restore_post(state, repo_name, body=body).task_name
+        self.sys_log_count[Tag.RESTORE_STARTED] += 1
 
         # Check the task completed successfully
         self.assertTrue(self.wait_for_backup_task(state, repo_name, retries, sleep_time, task_name=task_name))
+        self.sys_log_count[Tag.RESTORE_COMPLETED] += 1
 
         return task_name
+
+    def take_one_off_restore_with_name(self, state, repo_name, http_info=False, should_succeed=True, valid_call=True, **kwargs):
+        """ Performs a one off restore against a given repo
+        """
+        if valid_call:
+            self.sys_log_count[Tag.RESTORE_STARTED] += 1
+            if should_succeed:
+                self.sys_log_count[Tag.RESTORE_COMPLETED] += 1
+            else:
+                self.sys_log_count[Tag.RESTORE_FAILED] += 1
+        if http_info:
+            return self.repository_api.cluster_self_repository_state_id_restore_post_with_http_info(state, repo_name, **kwargs)
+        return self.repository_api.cluster_self_repository_state_id_restore_post(state, repo_name, **kwargs)
 
     def create_repository_with_default_plan(self, repo_name):
         """ Create a repository with a random default plan
@@ -835,6 +1010,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         if self.objstore_provider:
             body = self.set_cloud_credentials(body)
 
+        self.sys_log_count[Tag.REPO_CREATED] += 1
         # Add repositories and tie default plan to repository
         self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
 
@@ -1027,6 +1203,13 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         1. Runs preamble.
         2. Deletes all plans.
         """
+        if self.input.param("validate_sys_event_logs", False):
+            event_rest = SystemEventRestHelper([self.master])
+            events = [e for e in event_rest.get_events(server=self.master, since_time=self.log_start) if e["event_id"] in list(Tag)]
+            self.assertEqual(sum(self.sys_log_count.values()), len(events))
+            for e in self.sys_log_count:
+                self.assertEqual(self.sys_log_count[e], len([event for event in events if event["event_id"] == e]))
+
         self.preamble()
         self.backup_service_cleanup()
         # If the reset_time flag is set, reset the time during the tearDown

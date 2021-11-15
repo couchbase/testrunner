@@ -36,7 +36,8 @@ from ent_backup_restore.backup_service_base import (
     MultipleRemoteShellConnections,
     Prometheus,
     ScheduleTest,
-    Time
+    Time,
+    Tag
 )
 from membase.api.exception import (
     ServerAlreadyJoinedException
@@ -118,7 +119,7 @@ class BackupServiceTest(BackupServiceBase):
         1. Retrieve plans.
         2. Ensure the default plans exist.
         """
-        plans = self.plan_api.plan_get()
+        plans = self.get_all_plans()
         self.assertTrue(set(self.default_plans) == set([plan.name for plan in plans]))
 
     # Backup Service: Backup Plan Cases
@@ -149,10 +150,10 @@ class BackupServiceTest(BackupServiceBase):
 
         # Add invalid Plans and expect them to fail
         for plan in invalid_plans:
-            self.assertEqual(self.plan_api.plan_name_post_with_http_info(plan.name if isinstance(plan, Plan) else "my_plan", body=plan)[1], 400)
+            self.assertEqual(self.create_plan(plan.name if isinstance(plan, Plan) else "my_plan", http_info=True, body=plan)[1], 400)
 
         # Testing an empty plan name throws a 404 as the endpoint does not exist
-        self.assertEqual(self.plan_api.plan_name_post_with_http_info("", body=Plan(name="", description=None, services=None, tasks=None))[1], 404)
+        self.assertEqual(self.create_plan("", http_info=True, body=Plan(name="", description=None, services=None, tasks=None))[1], 404)
 
         # Define a generic schedule for backups and merges
         generic_backup_schedule = TaskTemplateSchedule(job_type="BACKUP", frequency=1, period="HOURS", time="22:00", start_now=False)
@@ -174,7 +175,7 @@ class BackupServiceTest(BackupServiceBase):
         # Add invalid Tasks and expect them to fail
         for task in invalid_tasks:
             # Add plan with an invalid Task (Should fail)
-            self.assertEqual(self.plan_api.plan_name_post_with_http_info("my_plan", body=Plan(name="my_plan", tasks=[task]))[1], 400)
+            self.assertEqual(self.create_plan("my_plan", http_info=True, body=Plan(name="my_plan", tasks=[task]))[1], 400)
 
         # Invalid Schedules for Backups
         invalid_backup_schedules = \
@@ -195,7 +196,7 @@ class BackupServiceTest(BackupServiceBase):
         # Add invalid Schedules and expect them to fails
         for schedule in invalid_backup_schedules:
             # Add plan with an invalid Task (Should fail)
-            self.assertEqual(self.plan_api.plan_name_post_with_http_info("my_plan", body=Plan(name="my_plan", tasks=[TaskTemplate(name="my_task", task_type="BACKUP", schedule=schedule)]))[1], 400)
+            self.assertEqual(self.create_plan("my_plan", http_info=True, body=Plan(name="my_plan", tasks=[TaskTemplate(name="my_task", task_type="BACKUP", schedule=schedule)]))[1], 400)
 
     def test_valid_plan(self):
         """ Test a user can add a valid plan.
@@ -231,9 +232,9 @@ class BackupServiceTest(BackupServiceBase):
         # Add valid Plans and expect them to succeed
         for plan in valid_plans:
             # Add plan
-            self.assertEqual(self.plan_api.plan_name_post_with_http_info(plan.name, body=plan)[1], 200)
+            self.assertEqual(self.create_plan(plan.name, http_info=True, body=plan)[1], 200)
 
-            self.plan_api.plan_name_delete(plan.name)
+            self.delete_plan(plan.name)
 
          # Define a generic schedule for backups and merges
         generic_backup_schedule = TaskTemplateSchedule(job_type="BACKUP", frequency=1, period="HOURS", time="22:00", start_now=False)
@@ -252,9 +253,9 @@ class BackupServiceTest(BackupServiceBase):
         # Add valid Tasks and expect them to succeed
         for task in valid_tasks:
             # Add plan with an valid Task (Should succeed)
-            self.assertEqual(self.plan_api.plan_name_post_with_http_info("my_plan", body=Plan(name="my_plan", tasks=[task]))[1], 200)
+            self.assertEqual(self.create_plan("my_plan", http_info=True, body=Plan(name="my_plan", tasks=[task]))[1], 200)
 
-            self.plan_api.plan_name_delete("my_plan")
+            self.delete_plan("my_plan")
 
         periods = ["MINUTES", "HOURS", "DAYS", "WEEKS", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
 
@@ -275,10 +276,10 @@ class BackupServiceTest(BackupServiceBase):
         # Add Valid Schedules and expect them to succeed
         for schedule in valid_backup_schedules:
             # Add plan with an valid Task (Should succeed)
-            self.assertEqual(self.plan_api.plan_name_post_with_http_info("my_plan", body=Plan(name="my_plan", tasks=[TaskTemplate(name="my_task", task_type="BACKUP", schedule=schedule)]))[1], 200)
+            self.assertEqual(self.create_plan("my_plan", http_info=True, body=Plan(name="my_plan", tasks=[TaskTemplate(name="my_task", task_type="BACKUP", schedule=schedule)]))[1], 200)
 
             # Delete plan
-            self.plan_api.plan_name_delete("my_plan")
+            self.delete_plan("my_plan")
 
     def test_delete_plan(self):
         """ A user can delete a Plan not currently tied to a repository.
@@ -289,17 +290,17 @@ class BackupServiceTest(BackupServiceBase):
         plan_name = "my_plan"
 
         # Add plan
-        self.plan_api.plan_name_post(plan_name)
+        self.create_plan(plan_name)
 
         # Retrieve and confirm plan exists
-        plan = self.plan_api.plan_name_get(plan_name)
+        plan = self.get_plan(plan_name)
         self.assertEqual(plan.name, plan_name)
 
         # Delete plan
-        self.plan_api.plan_name_delete(plan_name)
+        self.delete_plan(plan_name)
 
         # Check if plan has been successfully deleted
-        self.assertTrue(plan_name not in [plan.name for plan in self.plan_api.plan_get()])
+        self.assertTrue(plan_name not in [plan.name for plan in self.get_all_plans()])
 
     def test_delete_plan_tied_to_repository(self):
         """ A user cannot delete a Plan currently tied to a repository.
@@ -311,20 +312,20 @@ class BackupServiceTest(BackupServiceBase):
         plan_name, repo_name = "my_plan", "my_repo"
 
         # Add plan
-        self.plan_api.plan_name_post(plan_name)
+        self.create_plan(plan_name)
 
         # Retrieve and confirm plan exists
-        plan = self.plan_api.plan_name_get(plan_name)
+        plan = self.get_plan(plan_name)
         self.assertEqual(plan.name, plan_name)
 
         # Add repo and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=Body2(plan=plan_name, archive=self.backupset.directory, bucket_name=None))
+        self.create_repository(repo_name, body=Body2(plan=plan_name, archive=self.backupset.directory, bucket_name=None))
 
         # Delete plan (Should fail)
-        self.assertEqual(self.plan_api.plan_name_delete_with_http_info(plan_name)[1], 400)
+        self.assertEqual(self.delete_plan(plan_name, http_info=True)[1], 400)
 
         # Check if plan has not been successfully deleted
-        self.assertTrue(plan_name in [plan.name for plan in self.plan_api.plan_get()])
+        self.assertTrue(plan_name in [plan.name for plan in self.get_all_plans()])
 
     def test_plan_task_limits(self):
         """ Test the min and max limits on task creation
@@ -342,14 +343,14 @@ class BackupServiceTest(BackupServiceBase):
         # Add 0, 1 and 14 Tasks in a Plan and expect it to succeed.
         for no_of_tasks in [0, 1, 14]:
             # Add plan with an valid Task (Should succeed)
-            self.assertEqual(self.plan_api.plan_name_post_with_http_info("my_plan", body=Plan(name="my_plan", tasks=[get_task(i) for i in range(0, no_of_tasks)]))[1], 200)
+            self.assertEqual(self.create_plan("my_plan", http_info=True, body=Plan(name="my_plan", tasks=[get_task(i) for i in range(0, no_of_tasks)]))[1], 200)
 
-            self.plan_api.plan_name_delete("my_plan")
+            self.delete_plan("my_plan")
 
         # Add 15, 20 and 100 Tasks in a Plan and expect it to fail.
         for no_of_tasks in [15, 20, 100]:
             # Add plan with an invalid Task (Should fail)
-            self.assertEqual(self.plan_api.plan_name_post_with_http_info("my_plan", body=Plan(name="my_plan", tasks=[get_task(i) for i in range(0, no_of_tasks)]))[1], 400)
+            self.assertEqual(self.create_plan("my_plan", http_info=True, body=Plan(name="my_plan", tasks=[get_task(i) for i in range(0, no_of_tasks)]))[1], 400)
 
     def test_attach_plan_to_repository(self):
         """ Tie a plan to n repositories and test the plan was attached successfully.
@@ -361,14 +362,14 @@ class BackupServiceTest(BackupServiceBase):
         plan_name, no_of_repositories = "my_plan", 20
 
         # Add plan
-        self.plan_api.plan_name_post(plan_name)
+        self.create_plan(plan_name)
 
         # Add repositories and tie plan to repository
         for i in range(0, no_of_repositories):
-            self.active_repository_api.cluster_self_repository_active_id_post(f"my_repo{i}", body=Body2(plan=plan_name, archive=self.backupset.directory, bucket_name=None))
+            self.create_repository(f"my_repo{i}", body=Body2(plan=plan_name, archive=self.backupset.directory, bucket_name=None))
 
         # Fetch active repositories
-        repos = [repo for repo in self.repository_api.cluster_self_repository_state_get('active')]
+        repos = [repo for repo in self.get_repositories('active')]
 
         # Check there are no_of_repositories repositories
         self.assertEqual(len(repos), no_of_repositories)
@@ -394,21 +395,21 @@ class BackupServiceTest(BackupServiceBase):
         # Add no_of_plans plans with no_of_tasks tasks
         for i in range(0, no_of_plans):
             # Add plan with an valid Task (Should succeed)
-            self.assertEqual(self.plan_api.plan_name_post_with_http_info(f"my_plan{i}", body=Plan(name=f"my_plan{i}", tasks=tasks))[1], 200)
+            self.assertEqual(self.create_plan(f"my_plan{i}", http_info=True, body=Plan(name=f"my_plan{i}", tasks=tasks))[1], 200)
 
         # Delete plans
         for i in range(0, no_of_plans):
-            self.plan_api.plan_name_delete(f"my_plan{i}")
+            self.delete_plan(f"my_plan{i}")
 
     def test_create_plans_with_same_name(self):
         """ Add a plan, then add a plan with the same name and check if the operation fails.
         """
         # Create a plan
         plan_name = "my_plan"
-        self.plan_api.plan_name_post(plan_name, body=Plan(name=plan_name, tasks=None))
+        self.create_plan(plan_name, body=Plan(name=plan_name, tasks=None))
 
         # Add plan with the same the name and expect it fail.
-        self.assertEqual(self.plan_api.plan_name_post_with_http_info(plan_name, body=Plan(name=plan_name, tasks=None))[1], 400)
+        self.assertEqual(self.create_plan(plan_name, http_info=True, body=Plan(name=plan_name, tasks=None))[1], 400)
 
     def test_deleted_plans_name_can_be_reused(self):
         """ Add a plan, delete the plan and check if its name can be reused.
@@ -416,13 +417,13 @@ class BackupServiceTest(BackupServiceBase):
         plan_name = "my_plan"
 
         # Add plan
-        self.plan_api.plan_name_post(plan_name)
+        self.create_plan(plan_name)
 
         # Delete plan
-        self.plan_api.plan_name_delete(plan_name)
+        self.delete_plan(plan_name)
 
         # Add plan with the same name and expect it to succeed.
-        self.plan_api.plan_name_post(plan_name)
+        self.create_plan(plan_name)
 
     def test_creating_plan_simultaneously_on_two_nodes(self):
         """ Test consistent metadata by creating a plan on two nodes simultaneously and expecting one of the operations failing.
@@ -447,7 +448,8 @@ class BackupServiceTest(BackupServiceBase):
             # Rest API Configuration
             configuration = HttpConfigurationFactory(target).create_configuration()
 
-            _, status, _, response_data = PlanApi(ApiClient(configuration)).plan_name_post_with_http_info(plan_name, body=Plan(name=plan_name,tasks=[TaskTemplate(name=f"my_task{target.ip.split('.')[-1]}", task_type="BACKUP", schedule=schedule)]))
+            self.sys_log_count[PLAN_CREATED] += 1
+            _, status, _, response_data = PlanApi(ApiClient(configuration)).plan_name_post_with_http_info(plan_name, http_info=True, body=Plan(name=plan_name,tasks=[TaskTemplate(name=f"my_task{target.ip.split('.')[-1]}", task_type="BACKUP", schedule=schedule)]))
             return status
 
         # Create repos on two different servers simultaneously
@@ -488,19 +490,19 @@ class BackupServiceTest(BackupServiceBase):
                                schedule=TaskTemplateSchedule(job_type="BACKUP", frequency=1, period="HOURS", start_now=False))
 
         # Add plan
-        self.plan_api.plan_name_post(plan_name, body=Plan(tasks=[my_task]))
+        self.create_plan(plan_name, body=Plan(tasks=[my_task]))
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=Body2(plan=plan_name, archive=self.backupset.directory, bucket_name=None if all_buckets else next(iter(buckets))))
+        self.create_repository(repo_name, body=Body2(plan=plan_name, archive=self.backupset.directory, bucket_name=None if all_buckets else next(iter(buckets))))
 
         # Perform a one off backup
-        task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name).task_name
+        task_name = self.take_one_off_backup_with_name(repo_name).task_name
 
         # Wait until backup task has completed
         self.assertTrue(self.wait_for_backup_task("active", repo_name, 20 * len(buckets), 5, task_name))
 
         # Collect the buckets backed up through the info endpoint
-        buckets_backed_up = set(bucket.name for bucket in self.repository_api.cluster_self_repository_state_id_info_get("active", repo_name).backups[0].buckets)
+        buckets_backed_up = set(bucket.name for bucket in self.get_backups("active", repo_name)[0].buckets)
 
         # Check if the expected buckets were backed up
         self.assertEqual(buckets_backed_up, buckets, f"The selected buckets '{buckets.difference(buckets_backed_up)}' were not backed up")
@@ -531,7 +533,7 @@ class BackupServiceTest(BackupServiceBase):
         # Add invalid repositories
         for repo_name, body in invalid_repositories:
             # Add invalid repository and expect it to fail
-            self.assertTrue(self.active_repository_api.cluster_self_repository_active_id_post_with_http_info(repo_name, body=body)[1] in [400, 404], f"An invalid repository configuration was added {repo_name, body}.")
+            self.assertTrue(self.create_repository(repo_name, body=body, http_info=True)[1] in [400, 404], f"An invalid repository configuration was added {repo_name, body}.")
             # Delete repositories
             self.delete_all_repositories()
 
@@ -572,7 +574,7 @@ class BackupServiceTest(BackupServiceBase):
         # Add invalid repositories
         for repo_name, body in invalid_repositories:
             # Add invalid repository and expect it to fail
-            self.assertTrue(self.active_repository_api.cluster_self_repository_active_id_post_with_http_info(repo_name, body=body)[1] in [400, 404], f"An invalid repository configuration was added {repo_name, body}.")
+            self.assertTrue(self.create_repository(repo_name, body=body, http_info=True)[1] in [400, 404], f"An invalid repository configuration was added {repo_name, body}.")
             # Delete repositories
             self.delete_all_repositories()
 
@@ -603,7 +605,7 @@ class BackupServiceTest(BackupServiceBase):
         # Add valid repositories
         for repo_name, body in valid_repositories:
             # Add invalid repository and expect it to fail
-            self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_post_with_http_info(repo_name, body=body)[1], 200, f"A valid repository configuration could not be added {repo_name, body}.")
+            self.assertEqual(self.create_repository(repo_name, body=body, http_info=True)[1], 200, f"A valid repository configuration could not be added {repo_name, body}.")
             # Delete repositories
             self.delete_all_repositories()
 
@@ -647,7 +649,7 @@ class BackupServiceTest(BackupServiceBase):
         # Add valid repositories
         for repo_name, body in valid_repositories:
             # Add invalid repository and expect it to fail
-            self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_post_with_http_info(repo_name, body=body)[1], 200, f"A valid repository configuration could not be added {repo_name, body}.")
+            self.assertEqual(self.create_repository(repo_name, body=body, http_info=True)[1], 200, f"A valid repository configuration could not be added {repo_name, body}.")
             # Delete repositories
             self.delete_all_repositories()
 
@@ -671,19 +673,19 @@ class BackupServiceTest(BackupServiceBase):
                                schedule=TaskTemplateSchedule(job_type="BACKUP", frequency=1, period="MINUTES", start_now=True))
 
         # Create a Plan
-        self.plan_api.plan_name_post(plan_name, body=Plan(tasks=[my_task]))
+        self.create_plan(plan_name, body=Plan(tasks=[my_task]))
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=Body2(plan=plan_name, archive=self.backupset.directory))
+        self.create_repository(repo_name, body=Body2(plan=plan_name, archive=self.backupset.directory))
 
         # Wait until backup task has completed
         self.assertTrue(self.wait_for_backup_task("active", repo_name, 20, 5))
 
         # Pause the repository and expect it to succeed
-        self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_pause_post_with_http_info(repo_name)[1], 200)
+        self.pause_repository(repo_name, http_info=True)
 
         # Pause a paused repository
-        self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_pause_post_with_http_info(repo_name)[1], 200)
+        self.pause_repository(repo_name, http_info=True)
 
         # Count current number of backups
         no_of_backups = len(self.get_backups("active", repo_name))
@@ -695,10 +697,10 @@ class BackupServiceTest(BackupServiceBase):
         self.assertEqual(no_of_backups, len(self.get_backups("active", repo_name)))
 
         # Resume the repository and expect it to succeed
-        self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_pause_post_with_http_info(repo_name)[1], 200)
+        self.assertEqual(self.resume_repository(repo_name, http_info=True)[1], 200)
 
         # Resume a resume repository
-        self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_pause_post_with_http_info(repo_name)[1], 200)
+        self.assertEqual(self.resume_repository(repo_name, http_info=True)[1], 200)
 
     def test_apply_plan_to_repository(self):
         """ A backup plan can be applied to a repository.
@@ -706,10 +708,10 @@ class BackupServiceTest(BackupServiceBase):
         repo_name, plan_name, task_name = "my_repo", "my_plan", "my_task"
 
         # Add plan
-        self.plan_api.plan_name_post(plan_name)
+        self.create_plan(plan_name)
 
         # Add repo and tie plan to repository
-        self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_post_with_http_info(repo_name, body=Body2(plan=plan_name, archive=self.backupset.directory, bucket_name=None))[1], 200)
+        self.assertEqual(self.create_repository(repo_name, body=Body2(plan=plan_name, archive=self.backupset.directory, bucket_name=None), http_info=True)[1], 200)
 
     def test_importing_repository(self):
         """ A user can import a repository.
@@ -736,7 +738,7 @@ class BackupServiceTest(BackupServiceBase):
             self.chown(self.objstore_provider.staging_directory)
 
         # Import repository
-        self.assertEqual(self.import_api.cluster_self_repository_import_post_with_http_info(body=body)[1], 200)
+        self.assertEqual(self.import_repository_with_name(http_info=True, body=body)[1], 200)
 
         # Get backups from imported repository
         imported_backups = [backup._date for backup in self.get_backups("imported", repo_name)]
@@ -763,7 +765,7 @@ class BackupServiceTest(BackupServiceBase):
         body = Body6(id=repo_name, archive=self.backupset.directory, repo=self.backupset.name)
 
         # Import repository
-        self.assertEqual(self.import_api.cluster_self_repository_import_post_with_http_info(body=body)[1], 500)
+        self.assertEqual(self.import_repository_with_name(http_info=True, should_succeed=False, body=body)[1], 500)
 
     def test_importing_read_only_repository(self):
         """ Test a user can import a read only repository.
@@ -780,7 +782,7 @@ class BackupServiceTest(BackupServiceBase):
         body = Body6(id="my_repo", archive=self.backupset.directory, repo=self.backupset.name)
 
         # Import repository
-        self.assertEqual(self.import_api.cluster_self_repository_import_post_with_http_info(body=body)[1], 500)
+        self.assertEqual(self.import_repository_with_name(http_info=True, should_succeed=False, body=body)[1], 500)
 
     def test_one_off_backup(self):
         """ Test one off backup
@@ -800,10 +802,10 @@ class BackupServiceTest(BackupServiceBase):
             self.chown(self.objstore_provider.staging_directory)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         # Fetch repository data
-        repository = self.repository_api.cluster_self_repository_state_get('active')[0]
+        repository = self.get_repositories('active')[0]
 
         # Load buckets with data
         self._load_all_buckets(self.master, BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items), "create", 0)
@@ -812,7 +814,7 @@ class BackupServiceTest(BackupServiceBase):
         self.sleep(10)
 
         # Perform a one off backup
-        task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, body=Body4(full_backup=full_backup)).task_name
+        task_name = self.take_one_off_backup_with_name(repo_name, body=Body4(full_backup=full_backup)).task_name
 
         # Wait until task has completed
         self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=400))
@@ -842,10 +844,10 @@ class BackupServiceTest(BackupServiceBase):
             self.chown(self.objstore_provider.staging_directory)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         # Fetch repository data
-        repository = self.repository_api.cluster_self_repository_state_get('active')[0]
+        repository = self.get_repositories('active')[0]
 
         def get_blob_gen(i):
             return BlobGenerator("ent-backup", "ent-backup-", self.value_size * i, start=self.num_items * i, end=self.num_items * (i + 1))
@@ -859,7 +861,7 @@ class BackupServiceTest(BackupServiceBase):
             self.sleep(10)
 
             # Perform a one off backup
-            task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, body=Body4(full_backup= i < 1)).task_name
+            task_name = self.take_one_off_backup_with_name(repo_name, body=Body4(full_backup= i < 1)).task_name
 
             # Wait until task has completed
             self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=400))
@@ -891,10 +893,10 @@ class BackupServiceTest(BackupServiceBase):
             self.chown(self.objstore_provider.staging_directory)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         # Fetch repository data
-        repository = self.repository_api.cluster_self_repository_state_get('active')[0]
+        repository = self.get_repositories('active')[0]
 
         def get_blob_gen(start_index, end_index):
             return BlobGenerator("ent-backup", "ent-backup-", self.value_size, start=self.num_items * start_index, end=self.num_items * (end_index + 1))
@@ -907,14 +909,14 @@ class BackupServiceTest(BackupServiceBase):
             self.sleep(10)
 
             # Perform a one off backup
-            task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, body=Body4(full_backup= i < 1)).task_name
+            task_name = self.take_one_off_backup_with_name(repo_name, body=Body4(full_backup= i < 1)).task_name
 
             # Wait until task has completed
             self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=400))
 
         backups = [backup._date for backup in self.get_backups("active", repo_name)]
 
-        task_name = self.active_repository_api.cluster_self_repository_active_id_merge_post(repo_name, body=Body5(start=backups[0], end=backups[no_of_backups - subtrahend_for_no_of_backups - 1], data_range="")).task_name
+        task_name = self.take_one_off_merge_with_name(repo_name, body=Body5(start=backups[0], end=backups[no_of_backups - subtrahend_for_no_of_backups - 1], data_range="")).task_name
 
         self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=800))
 
@@ -945,7 +947,7 @@ class BackupServiceTest(BackupServiceBase):
                                schedule=TaskTemplateSchedule(job_type="BACKUP", frequency=1, period="HOURS", start_now=False))
 
         # Add plan
-        self.plan_api.plan_name_post(plan_name, body=Plan(tasks=[my_task]))
+        self.create_plan(plan_name, body=Plan(tasks=[my_task]))
 
         # Create body for creating an active repository
         body = Body2(plan=plan_name, archive=self.backupset.directory)
@@ -960,18 +962,18 @@ class BackupServiceTest(BackupServiceBase):
         self.set_cloud_credentials(body)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         # Take backups
         for i in range(0, 6):
             # Perform a one off backup
-            task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name).task_name
+            task_name = self.take_one_off_backup_with_name(repo_name).task_name
             # Wait until task has completed
             self.assertTrue(self.wait_for_backup_task("active", repo_name, 20, 5, task_name=task_name))
 
         backups = [backup._date for backup in self.get_backups("active", repo_name)]
 
-        self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_merge_post_with_http_info(repo_name, body=Body5(start=backups[0], end=backups[len(backups) - 2]))[1], 500)
+        self.assertEqual(self.take_one_off_merge_with_name(repo_name, http_info=True, valid_call=False, body=Body5(start=backups[0], end=backups[len(backups) - 2]))[1], 500)
 
     def test_one_off_restore(self):
         """ Test one off restore
@@ -987,10 +989,10 @@ class BackupServiceTest(BackupServiceBase):
             self.chown(self.objstore_provider.staging_directory)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         # Fetch repository data
-        repository = self.repository_api.cluster_self_repository_state_get('active')[0]
+        repository = self.get_repositories('active')[0]
 
         # Load buckets with data
         self._load_all_buckets(self.master, BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items), "create", 0)
@@ -999,7 +1001,7 @@ class BackupServiceTest(BackupServiceBase):
         self.sleep(10)
 
         # Perform a one off backup
-        task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, body=Body4(full_backup=full_backup)).task_name
+        task_name = self.take_one_off_backup_with_name(repo_name, body=Body4(full_backup=full_backup)).task_name
 
         # Wait until task has completed
         self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=400))
@@ -1021,7 +1023,7 @@ class BackupServiceTest(BackupServiceBase):
         body = Body1(target=f"{cluster_host.ip}:{cluster_host.port}", user=cluster_host.rest_username, password=cluster_host.rest_password)
 
         # Perform a restore
-        task_name = self.repository_api.cluster_self_repository_state_id_restore_post("active", repo_name, body=body).task_name
+        task_name = self.take_one_off_restore_with_name("active", repo_name, body=body).task_name
 
         # Wait until task has completed
         self.assertTrue(self.wait_for_task(repo_name, task_name))
@@ -1046,7 +1048,7 @@ class BackupServiceTest(BackupServiceBase):
                                schedule=TaskTemplateSchedule(job_type="BACKUP", frequency=1, period="HOURS", start_now=False))
 
         # Add plan
-        self.plan_api.plan_name_post(plan_name, body=Plan(tasks=[my_task]))
+        self.create_plan(plan_name, body=Plan(tasks=[my_task]))
 
         body = Body2(plan=plan_name, archive=self.backupset.directory)
 
@@ -1054,12 +1056,12 @@ class BackupServiceTest(BackupServiceBase):
             body = self.set_cloud_credentials(body)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         # Take backups
         for i in range(0, 6):
             # Perform a one off backup
-            task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name).task_name
+            task_name = self.take_one_off_backup_with_name(repo_name).task_name
             self.sleep(3)
             # Wait until task has completed
             self.assertTrue(self.wait_for_backup_task("active", repo_name, 20, 5, task_name=task_name))
@@ -1068,16 +1070,16 @@ class BackupServiceTest(BackupServiceBase):
 
         if not self.objstore_provider:
         # Start a merge task, this succeeds (don't know if this is a bug)
-            task_name = self.active_repository_api.cluster_self_repository_active_id_merge_post(repo_name, body=Body5(start="Bad Start Point", end="Bad End Point")).task_name
+            task_name = self.take_one_off_merge_with_name(repo_name, should_succeed=False, body=Body5(start="Bad Start Point", end="Bad End Point")).task_name
             self.sleep(3)
 
             # Check if the merge task failed with a sensible warning message delivered to the user (TODO MB-41565)
-            self.assertEqual(self.repository_api.cluster_self_repository_state_id_task_history_get("active", "my_repo", task_name=task_name)[0].status, "failed")
+            self.assertEqual(self.get_task_history("active", "my_repo", task_name=task_name)[0].status, "failed")
 
         body = Body1(target="http://127.0.0.1/", user="Administrator", password="password", start="Bad Start Point", end="Bad End Point")
 
         # Perform a restore
-        self.assertEqual(self.repository_api.cluster_self_repository_state_id_restore_post_with_http_info("active", repo_name)[1], 400)
+        self.assertEqual(self.take_one_off_restore_with_name("active", repo_name, http_info=True, valid_call=False)[1], 400)
 
     def test_user_warned_if_bucket_no_longer_exists(self):
         """ Test user warned adequately warned if the target bucket(s) no longer exist.
@@ -1094,7 +1096,7 @@ class BackupServiceTest(BackupServiceBase):
                                schedule=TaskTemplateSchedule(job_type="BACKUP", frequency=1, period="HOURS", start_now=False))
 
         # Add plan
-        self.plan_api.plan_name_post(plan_name, body=Plan(tasks=[my_task]))
+        self.create_plan(plan_name, body=Plan(tasks=[my_task]))
 
         body = Body2(plan=plan_name, archive=self.backupset.directory, bucket_name=bucket_name)
 
@@ -1103,13 +1105,13 @@ class BackupServiceTest(BackupServiceBase):
             self.create_staging_directory()
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         # Delete all buckets
         RestConnection(self.backupset.cluster_host).delete_all_buckets()
 
         # Perform a one off backup
-        _, status, _, response_data = self.active_repository_api.cluster_self_repository_active_id_backup_post_with_http_info(repo_name)
+        _, status, _, response_data = self.take_one_off_backup_with_name(repo_name, http_info=True, valid_call=False)
 
         # Load as json
         data = json.loads(response_data.data)
@@ -1127,13 +1129,13 @@ class BackupServiceTest(BackupServiceBase):
         repo_name = "my_repo"
 
         # Add repo and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory, bucket_name=None))
+        self.create_repository(repo_name, body=Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory, bucket_name=None))
 
         # Archive repository
-        self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_archive_post_with_http_info(repo_name, body=Body3(id=repo_name))[1], 200)
+        self.assertEqual(self.archive_repository(repo_name, http_info=True, body=Body3(id=repo_name))[1], 200)
 
         # Fetch repository
-        repository = self.repository_api.cluster_self_repository_state_get('archived')[0]
+        repository = self.get_repositories('archived')[0]
 
         # Check the archived repository exists
         self.assertEqual((repository.id, repository.state), (repo_name, "archived"))
@@ -1153,22 +1155,22 @@ class BackupServiceTest(BackupServiceBase):
             self.set_cloud_credentials(body)
 
         # Add repo and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         # Archive repository
-        self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_archive_post_with_http_info(repo_name, body=Body3(id=repo_name))[1], 200)
+        self.assertEqual(self.archive_repository(repo_name, http_info=True, body=Body3(id=repo_name))[1], 200)
 
         # Fetch repository
-        repository = self.repository_api.cluster_self_repository_state_get('archived')[0]
+        repository = self.get_repositories('archived')[0]
 
         # Check the archived repository exists
         self.assertEqual((repository.id, repository.state), (repo_name, "archived"))
 
         # Delete archived repository
-        self.repository_api.cluster_self_repository_state_id_delete_with_http_info('archived', repo_name, remove_repository=remove_repository)
+        self.delete_repository('archived', repo_name, http_info=True, remove_repository=remove_repository)
 
         # Check there are no archived repositories
-        self.assertEqual(len(self.repository_api.cluster_self_repository_state_get('archived')), 0)
+        self.assertEqual(len(self.get_repositories('archived')), 0)
 
         # Fetch repo info
         self.backupset.name, self.backupset.objstore_staging_directory = repository.repo, self.backupset.objstore_alternative_staging_directory
@@ -1188,17 +1190,17 @@ class BackupServiceTest(BackupServiceBase):
         repo_name, plan_name, = "my_repo", "my_plan"
 
         # Add plan
-        self.plan_api.plan_name_post(plan_name)
+        self.create_plan(plan_name)
 
         # Retrieve and confirm plan exists
-        plan = self.plan_api.plan_name_get(plan_name)
+        plan = self.get_plan(plan_name)
         self.assertEqual(plan.name, plan_name)
 
         # Add repo and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=Body2(plan=plan_name, archive=self.backupset.directory, bucket_name=None))
+        self.create_repository(repo_name, plan_name)
 
         # Delete archived repository
-        self.assertEqual(self.repository_api.cluster_self_repository_state_id_delete_with_http_info('active', repo_name, remove_repository=False)[1], 400)
+        self.assertEqual(self.delete_repository('active', repo_name, http_info=True, remove_repository=False)[1], 400)
 
     def test_user_can_history_info_examine_restore_from_archived_repository(self):
         """ Test if a user can task history/info/examine/restore from an archived repository.
@@ -1214,10 +1216,10 @@ class BackupServiceTest(BackupServiceBase):
             self.chown(self.objstore_provider.staging_directory)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         # Fetch repository data
-        repository = self.repository_api.cluster_self_repository_state_get('active')[0]
+        repository = self.get_repositories('active')[0]
 
         # Configure repository name and staging directory
         if self.objstore_provider:
@@ -1237,7 +1239,7 @@ class BackupServiceTest(BackupServiceBase):
             self.sleep(10)
 
             # Perform a one off backup
-            task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, body=Body4(full_backup= i < 1)).task_name
+            task_name = self.take_one_off_backup_with_name(repo_name, body=Body4(full_backup= i < 1)).task_name
 
             # Wait until task has completed
             self.assertTrue(self.wait_for_backup_task("active", repo_name, 20, 20, task_name=task_name))
@@ -1245,7 +1247,7 @@ class BackupServiceTest(BackupServiceBase):
             backup_names.append(self.map_task_to_backup("active", repo_name, task_name))
 
         # Archive repository
-        self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_archive_post_with_http_info(repo_name, body=Body3(id=repo_name))[1], 200)
+        self.assertEqual(self.archive_repository(repo_name, http_info=True, body=Body3(id=repo_name))[1], 200)
 
         # Check if the task history can be fetched from an archived repo
         task_history = self.get_task_history("archived", repo_name)
@@ -1256,7 +1258,7 @@ class BackupServiceTest(BackupServiceBase):
         self.assertEqual(len(backups), 2)
 
         # Check user can examine an archived repo
-        _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("archived", repo_name, body=Body("test_docs-0", "default"))
+        _, status, _, response_data = self.examine_repository("archived", repo_name, http_info=True, body=Body("test_docs-0", "default"))
         self.assertEqual(status, 200)
         data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
         self.assertEqual(data[0][0]['document']['value']['age'], 0)
@@ -1272,13 +1274,13 @@ class BackupServiceTest(BackupServiceBase):
         body = Body1(target=f"{cluster_host.ip}:{cluster_host.port}", user=cluster_host.rest_username, password=cluster_host.rest_password)
 
         # Perform a restore
-        task_name = self.repository_api.cluster_self_repository_state_id_restore_post("archived", repo_name, body=body).task_name
+        task_name = self.take_one_off_restore_with_name("archived", repo_name, body=body).task_name
 
         # Wait until task has completed
         self.assertTrue(self.wait_for_backup_task("archived", repo_name, 20, 5))
 
         # Check the restore task succeeded
-        task = self.get_task_history("archived", repo_name, task_name)[0]
+        task = self.get_task_history("archived", repo_name, task_name=task_name)[0]
         self.assertEqual(task.status, 'done')
         self.assertIsNone(task.node_runs[0].error)
         self.assertEqual(len(task.node_runs[0].stats.transfers), 2)
@@ -1296,7 +1298,7 @@ class BackupServiceTest(BackupServiceBase):
             self.create_staging_directory()
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         remote_client = RemoteMachineShellConnection(self.master)
         if self.objstore_provider:
@@ -1305,7 +1307,7 @@ class BackupServiceTest(BackupServiceBase):
             remote_client.execute_command(f"rm -rf {self.backupset.directory}")
         remote_client.disconnect()
 
-        _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_info_get_with_http_info("active", repo_name)
+        _, status, _, response_data = self.get_backups("active", repo_name, http_info=True)
 
         # Load as json
         data = json.loads(response_data.data)
@@ -1330,7 +1332,7 @@ class BackupServiceTest(BackupServiceBase):
             self.create_staging_directory()
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         self.assertIsNotNone(self.objstore_provider)
 
@@ -1338,7 +1340,7 @@ class BackupServiceTest(BackupServiceBase):
         remote_client.execute_command(f"rm -rf {self.objstore_provider.staging_directory}")
         remote_client.disconnect()
 
-        self.assertEqual(self.repository_api.cluster_self_repository_state_id_info_get_with_http_info("active", repo_name)[1], 200)
+        self.assertEqual(self.get_backups("active", repo_name, http_info=True)[1], 200)
 
     def test_bad_archive_locations(self):
         """ Test bad archive locations.
@@ -1371,7 +1373,7 @@ class BackupServiceTest(BackupServiceBase):
             body = Body2(plan=random.choice(self.default_plans), archive=archive)
 
             # Create repository
-            self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_post_with_http_info("my_repo", body=body)[1], 500, f"Created archive in bad location {archive}")
+            self.assertEqual(self.create_repository("my_repo", body=body, http_info=True, should_succeed=False)[1], 500, f"Created archive in bad location {archive}")
 
         remote_client.disconnect()
 
@@ -1379,9 +1381,6 @@ class BackupServiceTest(BackupServiceBase):
         """ Test health indicators
         """
         task_name, plan_name, repo_name = "task_name", "plan_name", "my_repo"
-
-        def pause_repository():
-            self.active_repository_api.cluster_self_repository_active_id_pause_post(repo_name)
 
         def delete_the_target_bucket():
             # Delete all buckets
@@ -1392,7 +1391,7 @@ class BackupServiceTest(BackupServiceBase):
         health_actions = \
         [
             (None, True, None),
-            (None, True, pause_repository),
+            (None, True, self.pause_repository),
             ("cannot verify bucket exists: element not found", False, delete_the_target_bucket)
         ]
 
@@ -1402,17 +1401,17 @@ class BackupServiceTest(BackupServiceBase):
                                schedule=TaskTemplateSchedule(job_type="BACKUP", frequency=1, period="MINUTES", start_now=True))
 
         # Add plan
-        self.plan_api.plan_name_post(plan_name, body=Plan(tasks=[my_task]))
+        self.create_plan(plan_name, body=Plan(tasks=[my_task]))
 
         for health_issue, healthy, action in health_actions:
 
             # Create repository
-            self.active_repository_api.cluster_self_repository_active_id_post_with_http_info(repo_name, body=Body2(plan=plan_name, archive=self.backupset.directory, bucket_name=random.choice(self.buckets).name))
+            self.create_repository(repo_name, body=Body2(plan=plan_name, archive=self.backupset.directory, bucket_name=random.choice(self.buckets).name), http_info=True)
 
             if action:
                 action()
 
-            repository_health = self.repository_api.cluster_self_repository_state_get('active')[0].health
+            repository_health = self.get_repositories('active')[0].health
 
             self.assertEqual(healthy, repository_health.healthy)
             self.assertEqual(health_issue, repository_health.health_issue)
@@ -1436,7 +1435,7 @@ class BackupServiceTest(BackupServiceBase):
             configuration = HttpConfigurationFactory(target).create_configuration()
 
             # Add repositories and tie plan to repository
-            _, status, _, response_data = ActiveRepositoryApi(ApiClient(configuration)).cluster_self_repository_active_id_post_with_http_info(repo_name, body=Body2(plan=self.default_plans[0], archive=f"{self.backupset.directory}/{target.ip}"))
+            _, status, _, response_data = self.create_repository(repo_name, body=Body2(plan=self.default_plans[0], archive=f"{self.backupset.directory}/{target.ip}"), http_info=True)
 
             return status
 
@@ -1460,7 +1459,7 @@ class BackupServiceTest(BackupServiceBase):
             body = self.set_cloud_credentials(body)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         def get_blob_gen(i):
             return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * (i + 1))), start=0, end=self.num_items)
@@ -1480,7 +1479,7 @@ class BackupServiceTest(BackupServiceBase):
             body = self.set_cloud_credentials(body)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         def get_blob_gen(i):
             return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * (i + 1))), start=0, end=self.num_items)
@@ -1491,7 +1490,7 @@ class BackupServiceTest(BackupServiceBase):
         self.assertEqual(len(backups), 2)
 
         backup_to_delete = random.choice(backups)._date
-        self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_backups_backup_name_delete_with_http_info(repo_name, backup_to_delete)[1], 200)
+        self.assertEqual(self.delete_backup(repo_name, backup_to_delete, http_info=True)[1], 200)
 
         backups = self.get_backups("active", repo_name)
         self.assertEqual(len(backups), 1)
@@ -1507,7 +1506,7 @@ class BackupServiceTest(BackupServiceBase):
             body = self.set_cloud_credentials(body)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         def get_blob_gen(i):
             return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * (i + 1))), start=0, end=self.num_items)
@@ -1518,7 +1517,7 @@ class BackupServiceTest(BackupServiceBase):
         self.assertEqual(len(backups), 2)
 
         backup_to_delete = "Backup"
-        self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_backups_backup_name_delete_with_http_info(repo_name, backup_to_delete)[1], 500)
+        self.assertEqual(self.delete_backup(repo_name, backup_to_delete, http_info=True)[1], 500)
 
         backups = self.get_backups("active", repo_name)
         self.assertEqual(len(backups), 2)
@@ -1534,7 +1533,7 @@ class BackupServiceTest(BackupServiceBase):
             body = self.set_cloud_credentials(body)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         def get_blob_gen(i):
             return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * (i + 1))), start=0, end=self.num_items)
@@ -1545,7 +1544,7 @@ class BackupServiceTest(BackupServiceBase):
         self.assertEqual(len(backups), 2)
 
         # Check user can examine repo
-        _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("test_docs-0", "default"))
+        _, status, _, response_data = self.examine_repository("active", repo_name, http_info=True, body=Body("test_docs-0", "default"))
         self.assertEqual(status, 200)
         data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
 
@@ -1566,7 +1565,7 @@ class BackupServiceTest(BackupServiceBase):
             body = self.set_cloud_credentials(body)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         def get_blob_gen(i):
             return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * (i + 1))), start=0, end=10)
@@ -1577,7 +1576,7 @@ class BackupServiceTest(BackupServiceBase):
         self.assertEqual(len(backups), 2)
 
         # Check user can examine repo with a bucket name containing fullstops which have been escaped
-        _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("test_docs-0", "a\\.b\\.c\\.d"))
+        _, status, _, response_data = self.examine_repository("active", repo_name, http_info=True, body=Body("test_docs-0", "a\\.b\\.c\\.d"))
         self.assertEqual(status, 200)
         data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
         self.assertEqual(data[0][0]['document']['value']['age'], 0)
@@ -1597,7 +1596,7 @@ class BackupServiceTest(BackupServiceBase):
             body = self.set_cloud_credentials(body)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         def get_blob_gen(i):
             return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * (i + 1))), start=0, end=10)
@@ -1607,14 +1606,14 @@ class BackupServiceTest(BackupServiceBase):
         self.assertEqual(len(self.get_backups("active", repo_name)), no_of_backups)
 
         # Check user can examine collection-less backups using a data path consisting of a bucket name
-        _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("test_docs-0", bucket_name))
+        _, status, _, response_data = self.examine_repository("active", repo_name, http_info=True, body=Body("test_docs-0", bucket_name))
         self.assertEqual(status, 200)
         data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
         for i in range(no_of_backups):
             self.assertEqual(data[0][i]['document']['value']['age'], i * 100)
 
         # Check user can examine collection-less backups using a data path consisting of the ._default._default suffix
-        _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("test_docs-0", f"{bucket_name}.{scope_name}.{collection_name}"))
+        _, status, _, response_data = self.examine_repository("active", repo_name, http_info=True, body=Body("test_docs-0", f"{bucket_name}.{scope_name}.{collection_name}"))
         self.assertEqual(status, 200)
         data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
         for i in range(no_of_backups):
@@ -1638,7 +1637,7 @@ class BackupServiceTest(BackupServiceBase):
             body = self.set_cloud_credentials(body)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         # Load collection with data, increasing the body size by 1 each iteration
         def provision_with_data(i):
@@ -1651,14 +1650,14 @@ class BackupServiceTest(BackupServiceBase):
         self.assertEqual(len(self.get_backups("active", repo_name)), no_of_backups)
 
         # Check user can examine collection aware backups using a  data path consisting of bucket.collection.scope
-        _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("pymc0", f"{bucket_name}.{scope_name}.{collection_name}"))
+        _, status, _, response_data = self.examine_repository("active", repo_name, http_info=True, body=Body("pymc0", f"{bucket_name}.{scope_name}.{collection_name}"))
         self.assertEqual(status, 200)
         data = [json.loads(json_object) for json_object in response_data.data.rstrip().split("\n")]
         for i in range(no_of_backups):
             self.assertEqual(data[0][i]['document']['value']['body'], '0' * (i + 2))
 
         # Check if user supplies only a bucket name to a collection aware bucket it fails
-        _, status, _, response_data = self.repository_api.cluster_self_repository_state_id_examine_post_with_http_info("active", repo_name, body=Body("pymc0", f"{bucket_name}"))
+        _, status, _, response_data = self.examine_repository("active", repo_name, http_info=True, body=Body("pymc0", f"{bucket_name}"))
         self.assertEqual(status, 500)
         data = json.loads(response_data.data)
         self.assertEqual("Could not run examine command on repository", data["msg"])
@@ -1677,7 +1676,7 @@ class BackupServiceTest(BackupServiceBase):
             body = self.set_cloud_credentials(body)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         def get_blob_gen(i):
             return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * (i + 1))), start=0, end=self.num_items)
@@ -1697,7 +1696,7 @@ class BackupServiceTest(BackupServiceBase):
             body = self.set_cloud_credentials(body)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         self.take_n_one_off_backups("active", repo_name, None, no_of_backups, sleep_time=10)
 
@@ -1715,10 +1714,10 @@ class BackupServiceTest(BackupServiceBase):
             body = self.set_cloud_credentials(body)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         # Pause the repository to prevent scheduled tasks from executing
-        self.active_repository_api.cluster_self_repository_active_id_pause_post(repo_name)
+        self.pause_repository(repo_name)
 
         no_of_backups = 5 # No of backups to take
         rotation_size = 5 # The rotation size in Mib
@@ -1793,7 +1792,7 @@ class BackupServiceTest(BackupServiceBase):
             body = self.set_cloud_credentials(body)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         self.take_n_one_off_backups("active", repo_name, None, no_of_backups, sleep_time=10)
 
@@ -1801,14 +1800,14 @@ class BackupServiceTest(BackupServiceBase):
         self.assertEqual(len(task_history), no_of_backups)
 
         for offset, limit in offset_limit:
-            paginated_task_history = self.repository_api.cluster_self_repository_state_id_task_history_get("active", repo_name, offset=offset, limit=limit)
+            paginated_task_history = self.get_task_history("active", repo_name, offset=offset, limit=limit)
             self.assertEqual(task_history[offset: offset + limit], paginated_task_history)
             self.assertLessEqual(len(paginated_task_history), limit)
 
         # Cases for 0 offsets and limits
-        self.assertEqual(len(self.repository_api.cluster_self_repository_state_id_task_history_get("active", repo_name, offset=0, limit=0)), no_of_backups)
-        self.assertEqual(len(self.repository_api.cluster_self_repository_state_id_task_history_get("active", repo_name, offset=10, limit=0)), no_of_backups - 10)
-        self.assertEqual(len(self.repository_api.cluster_self_repository_state_id_task_history_get("active", repo_name, offset=0, limit=10)), 10)
+        self.assertEqual(len(self.get_task_history("active", repo_name, offset=0, limit=0)), no_of_backups)
+        self.assertEqual(len(self.get_task_history("active", repo_name, offset=10, limit=0)), no_of_backups - 10)
+        self.assertEqual(len(self.get_task_history("active", repo_name, offset=0, limit=10)), 10)
 
     def test_task_history_start_time(self):
         """ Test start time produces a list of tasks more recent than the start time and includes the start time
@@ -1821,13 +1820,13 @@ class BackupServiceTest(BackupServiceBase):
             body = self.set_cloud_credentials(body)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         self.take_n_one_off_backups("active", repo_name, None, no_of_backups, sleep_time=10)
 
         start = random.choice(self.get_task_history("active", repo_name)).start
 
-        task_start_times = [TimeUtil.rfc3339nano_to_datetime(task.start) for task in self.repository_api.cluster_self_repository_state_id_task_history_get("active", repo_name, first=start)]
+        task_start_times = [TimeUtil.rfc3339nano_to_datetime(task.start) for task in self.get_task_history("active", repo_name, first=start)]
 
         start = TimeUtil.rfc3339nano_to_datetime(start)
 
@@ -1849,7 +1848,7 @@ class BackupServiceTest(BackupServiceBase):
             body = self.set_cloud_credentials(body)
 
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         self.take_n_one_off_backups("active", repo_name, None, no_of_backups)
 
@@ -1912,11 +1911,12 @@ class BackupServiceTest(BackupServiceBase):
             self.nfs_connection.share(privileges)
 
         # Perform a one off backup
-        _, status, _, response_data = self.active_repository_api.cluster_self_repository_active_id_backup_post_with_http_info(repo_name)
+        _, status, _, response_data = self.take_one_off_backup_with_name(repo_name, http_info=True, should_succeed=False)
 
         # If the status is 500, that means that backup was not able to proceed due to
         # the detection of the unshared archive location in which case we can simply return.
         if status == 500:
+            self.sys_log_count[Tag.BACKUP_STARTED] -= 1
             return
 
         # Check the task was started
@@ -1926,11 +1926,11 @@ class BackupServiceTest(BackupServiceBase):
         self.sleep(60)
 
         # Fetch repository information
-        repository = self.repository_api.cluster_self_repository_state_id_get('active', repo_name)
+        repository = self.get_repository('active', repo_name)
         self.assertIsNone(repository.running_one_off)
 
         # Fetch the task history
-        task_history, status, _, _ = self.repository_api.cluster_self_repository_state_id_task_history_get_with_http_info('active', repo_name)
+        task_history, status, _, _ = self.get_task_history('active', repo_name, http_info=True)
 
         # If the task history can be fetched, check the task didn't complete
         if status == 200:
@@ -1960,7 +1960,7 @@ class BackupServiceTest(BackupServiceBase):
         self.sleep(10)
 
         # Perform a one off backup
-        task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name).task_name
+        task_name = self.take_one_off_backup_with_name(repo_name).task_name
         # Wait until the backup task has completed
         self.assertTrue(self.wait_for_backup_task("active", repo_name, 20, 5, task_name=task_name))
 
@@ -1973,7 +1973,7 @@ class BackupServiceTest(BackupServiceBase):
                 client.clean(self.nfs_connection.directory_to_mount)
 
         # Perform a one off backup
-        self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name)
+        self.take_one_off_backup_with_name(repo_name)
 
         self.sleep(10)
 
@@ -1999,7 +1999,7 @@ class BackupServiceTest(BackupServiceBase):
         self.create_repository_with_default_plan(repo_name)
 
         # Fetch repository information
-        repository = self.repository_api.cluster_self_repository_state_id_get('active', repo_name)
+        repository = self.get_repository('active', repo_name)
 
         def get_blob_gen(i):
             return DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(100 * i, 100 * (i + 1))), start=0, end=self.num_items)
@@ -2050,7 +2050,7 @@ class BackupServiceTest(BackupServiceBase):
         self.create_repository_with_default_plan(repo_name)
 
         # Fetch repository information
-        repository = self.repository_api.cluster_self_repository_state_id_get('active', repo_name)
+        repository = self.get_repository('active', repo_name)
 
         # Load buckets with data
         self._load_all_buckets(self.master, BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items), "create", 0)
@@ -2110,7 +2110,7 @@ class BackupServiceTest(BackupServiceBase):
             body = self.set_cloud_credentials(body)
 
         # Add repositories and tie default plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         # Load buckets with data
         self._load_all_buckets(self.master, BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items), "create", 0)
@@ -2123,7 +2123,7 @@ class BackupServiceTest(BackupServiceBase):
 
         if skiptask:
             # Get the time of the next scheduled task
-            previous_task_time, _, previous_task_name = self.repository_api.cluster_self_repository_state_id_get('active', repo_name).next_scheduled
+            previous_task_time, _, previous_task_name = self.get_repository('active', repo_name).next_scheduled
             # This should be the Saturday task
             self.assertEqual(previous_task_name, "backup_saturday")
             # Kill the backup service
@@ -2140,7 +2140,7 @@ class BackupServiceTest(BackupServiceBase):
         # Give the service time to restart
         self.sleep(20)
 
-        time, _, task_name = self.repository_api.cluster_self_repository_state_id_get('active', repo_name).next_scheduled
+        time, _, task_name = self.get_repository('active', repo_name).next_scheduled
 
         if skiptask:
             self.assertEqual(task_name, "backup_sunday" if skiptask else "backup_saturday")
@@ -2177,7 +2177,8 @@ class BackupServiceTest(BackupServiceBase):
             rest_connection.add_set_builtin_user("Mallory", f"name={self.configuration.username}&roles={role}&password={self.configuration.password}")
             self.sleep(5)
             # Create a repository using the new credentials
-            _, status, _, response_data = self.active_repository_api.cluster_self_repository_active_id_post_with_http_info("my_repo", body=Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory, bucket_name=None))
+            _, status, _, response_data = self.create_repository("my_repo", body=Body2(plan=random.choice(self.default_plans), archive=self.backupset.directory, bucket_name=None),
+                                                                 http_info=True, should_succeed=operation_should_succeed)
             # Check the status
             self.assertIn(status, [200] if operation_should_succeed else [403, 400])
             # Clean up if a repository was created successfully
@@ -2206,9 +2207,9 @@ class BackupServiceTest(BackupServiceBase):
 
         actions = \
         [
-            (self.active_repository_api.cluster_self_repository_active_id_backup_post_with_http_info, [repo_name]),
-            (self.repository_api.cluster_self_repository_state_id_task_history_get_with_http_info, ["active", repo_name]),
-            (self.repository_api.cluster_self_repository_state_id_info_get_with_http_info, ["active", repo_name])
+            (self.take_one_off_backup_with_name, [repo_name, True]),
+            (self.get_task_history, ["active", repo_name, True]),
+            (self.get_backups, ["active", repo_name, True])
         ]
 
         for role in roles:
@@ -2238,14 +2239,14 @@ class BackupServiceTest(BackupServiceBase):
         if self.objstore_provider:
             body = self.set_cloud_credentials(body)
         # Add repositories and tie plan to repository
-        self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
+        self.create_repository(repo_name, body=body)
 
         # Load buckets with data
         self._load_all_buckets(self.master, BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items), "create", 0)
         # Sleep to ensure the bucket is populated with data
         self.sleep(10)
 
-        time, _, task_name = self.repository_api.cluster_self_repository_state_id_get('active', repo_name).next_scheduled
+        time, _, task_name = self.get_repository('active', repo_name).next_scheduled
         # Check the saturday task is scheduled
         self.assertEqual(task_name, "backup_saturday")
 
@@ -2265,7 +2266,7 @@ class BackupServiceTest(BackupServiceBase):
             self.sleep(60) # The failover method does not block
             failover_server.recover_from_failover()
 
-        time, _, task_name = self.repository_api.cluster_self_repository_state_id_get('active', repo_name).next_scheduled
+        time, _, task_name = self.get_repository('active', repo_name).next_scheduled
 
         # Check the saturday task was skipped
         self.assertEqual(task_name, "backup_sunday")
@@ -2333,9 +2334,9 @@ class BackupServiceTest(BackupServiceBase):
         for i in range(repositories):
             repo_name = f"{base_repo_name}{i}"
             # Perform a one off backup
-            task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, body=Body4(full_backup=True)).task_name
+            task_name = self.take_one_off_backup_with_name(repo_name, body=Body4(full_backup=True)).task_name
             # Fetch repository information
-            repository = self.repository_api.cluster_self_repository_state_id_get('active', repo_name)
+            repository = self.get_repository('active', repo_name)
 
             # Fetch task from running_one_off
             self.assertIsNotNone(repository.running_one_off, "Expected a task to be currently running")
@@ -2353,7 +2354,7 @@ class BackupServiceTest(BackupServiceBase):
                     failover_server.failover(graceful=False)
 
                 task_history_names = [task.task_name for task in self.get_task_history("active", repo_name)]
-                repository = self.repository_api.cluster_self_repository_state_id_get("active", repo_name)
+                repository = self.get_repository("active", repo_name)
 
                 # If we're unable to create the test conditions, then simply pass
                 if task_name in task_history_names or not repository.running_one_off:
@@ -2577,7 +2578,7 @@ class BackupServiceTest(BackupServiceBase):
         for i in range(50):
             for j in range(10):
                 # Perform a one off backup
-                self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_backup_post_with_http_info(f"{repo_name}{j}", body=Body4(full_backup = True))[1], 200)
+                self.assertEqual(self.take_one_off_backup_with_name(f"{repo_name}{j}", body=Body4(full_backup = True), http_info=True)[1], 200)
 
     def test_time_change_detection(self):
         """ Test Tasks are rescheduled after time change
@@ -2665,7 +2666,7 @@ class BackupServiceTest(BackupServiceBase):
 
         def callback(task, server_task_scheduled_on, repo_name, task_name):
             self.wait_for_backup_task("active", repo_name, 20, 2, task_name)
-            task = self.get_task_history("active", repo_name, task_name)[0]
+            task = self.get_task_history("active", repo_name, task_name=task_name)[0]
 
             task_time_start, task_time_end = TimeUtil.rfc3339nano_to_datetime(task.start), TimeUtil.rfc3339nano_to_datetime(task.end)
             node_time_start, node_time_end = TimeUtil.rfc3339nano_to_datetime(task.node_runs[0].start), TimeUtil.rfc3339nano_to_datetime(task.node_runs[0].end)
@@ -3166,7 +3167,7 @@ class BackupServiceTest(BackupServiceBase):
         self.take_one_off_restore("active", repo_name, 20, 5, self.backupset.cluster_host)
 
         # Pause the repository and expect it to succeed
-        self.assertEqual(self.active_repository_api.cluster_self_repository_active_id_pause_post_with_http_info(repo_name)[1], 200)
+        self.assertEqual(self.pause_repository(repo_name, http_info=True)[1], 200)
 
         # Attempt to perform actions with invalid username/password combinations
         self.generate_authentication_failures(repo_name)
