@@ -345,10 +345,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 shell.execute_command("mkdir -p /root/.config/gcloud")
                 shell.copy_file_local_to_remote(GCP_AUTH_PATH, GCP_AUTH_PATH)
             self.objstore_provider = GCP(self.backupset.objstore_access_key_id, self.backupset.objstore_bucket,
-                                        self.backupset.objstore_cacert, self.backupset.objstore_endpoint,
-                                        self.backupset.objstore_no_ssl_verify, self.backupset.objstore_region,
-                                        self.backupset.objstore_secret_access_key,
-                                        self.backupset.objstore_staging_directory)
+                                         self.backupset.objstore_cacert, self.backupset.objstore_endpoint,
+                                         self.backupset.objstore_no_ssl_verify, self.backupset.objstore_region,
+                                         self.backupset.objstore_secret_access_key,
+                                         self.backupset.objstore_staging_directory, f"archive-{self.master.ip}")
 
         # We run in a separate branch so when we add more providers the setup will be run by default
         if provider:
