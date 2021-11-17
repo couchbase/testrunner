@@ -15,18 +15,27 @@ class NsServerEvents(object):
         }
 
     @staticmethod
-    def rebalance_started(node, triggered_by):
+    def rebalance_started(node, triggered_by, active_nodes, keep_nodes,
+                          eject_nodes, delta_nodes, failed_nodes):
         return {
             Event.Fields.NODE_NAME: node,
             Event.Fields.EVENT_ID: NsServer.RebalanceStarted,
             Event.Fields.COMPONENT: Event.Component.NS_SERVER,
             Event.Fields.DESCRIPTION: "Rebalance initiated",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'triggered_by': triggered_by}
+            Event.Fields.EXTRA_ATTRS: {'triggered_by': triggered_by,
+                                       'nodes_info': {
+                                          'active_nodes': active_nodes,
+                                          'keep_nodes': keep_nodes,
+                                          'eject_nodes': eject_nodes,
+                                          'delta_nodes': delta_nodes,
+                                          'failed_nodes': failed_nodes
+                                       }}
         }
 
     @staticmethod
-    def rebalance_success(node, rebalance_time):
+    def rebalance_success(node, active_nodes,
+                          keep_nodes, eject_nodes, delta_nodes, failed_nodes):
         return {
             Event.Fields.NODE_NAME: node,
             Event.Fields.EVENT_ID: NsServer.RebalanceComplete,
@@ -34,21 +43,35 @@ class NsServerEvents(object):
             Event.Fields.DESCRIPTION: "Rebalance completed",
             Event.Fields.SEVERITY: Event.Severity.INFO,
             Event.Fields.EXTRA_ATTRS: {
-                'time': rebalance_time,
-                "completion_message": "Rebalance completed successfully."
+                "completion_message": "Rebalance completed successfully.",
+                "nodes_info": {
+                    'active_nodes': active_nodes,
+                    'keep_nodes': keep_nodes,
+                    'eject_nodes': eject_nodes,
+                    'delta_nodes': delta_nodes,
+                    'failed_nodes': failed_nodes
+                }
             }
         }
 
     @staticmethod
-    def rebalance_failed(node, rebalance_time, failure_reason):
+    def rebalance_failed(node, active_nodes, keep_nodes, eject_nodes,
+                         delta_nodes, failed_nodes):
         return {
             Event.Fields.NODE_NAME: node,
             Event.Fields.EVENT_ID: NsServer.RebalanceFailure,
             Event.Fields.COMPONENT: Event.Component.NS_SERVER,
             Event.Fields.DESCRIPTION: "Rebalance failed",
-            Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'time': rebalance_time,
-                                       'failure_reason': failure_reason}
+            Event.Fields.SEVERITY: Event.Severity.ERROR,
+            Event.Fields.EXTRA_ATTRS: {
+                "nodes_info": {
+                    'active_nodes': active_nodes,
+                    'keep_nodes': keep_nodes,
+                    'eject_nodes': eject_nodes,
+                    'delta_nodes': delta_nodes,
+                    'failed_nodes': failed_nodes
+                }
+            }
         }
 
     @staticmethod
@@ -64,7 +87,7 @@ class NsServerEvents(object):
         }
 
     @staticmethod
-    def node_started(node, extra_attrs=None):
+    def service_started(node, extra_attrs=None):
         event = {
             Event.Fields.NODE_NAME: node,
             Event.Fields.EVENT_ID: NsServer.ServiceStarted,
@@ -93,9 +116,8 @@ class NsServerEvents(object):
             Event.Fields.COMPONENT: Event.Component.NS_SERVER,
             Event.Fields.DESCRIPTION: "Auto failover initiated",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'node': ['ns_1@' + ip
-                                                for ip in failover_nodes],
-                                       'master_node': 'ns_1@'+orchestrator_node,
+            Event.Fields.EXTRA_ATTRS: {'node': failover_nodes,
+                                       'master_node': orchestrator_node,
                                        'threshold': failover_threshold,
                                        'reason': failover_reason}
         }
@@ -110,8 +132,8 @@ class NsServerEvents(object):
             Event.Fields.DESCRIPTION: "Auto failover completed",
             Event.Fields.SEVERITY: Event.Severity.INFO,
             Event.Fields.EXTRA_ATTRS: {
-                'node': ['ns_1@' + ip for ip in failover_nodes],
-                'master_node': 'ns_1@' + orchestrator_node,
+                'node': failover_nodes,
+                'master_node': orchestrator_node,
                 'time_taken': 0,
                 'threshold': failover_threshold,
                 'reason': failover_reason,
@@ -224,8 +246,8 @@ class NsServerEvents(object):
             Event.Fields.COMPONENT: Event.Component.NS_SERVER,
             Event.Fields.DESCRIPTION: "Master selected",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'old_master': 'ns_1@'+old_orchestrator,
-                                       'new_master': 'ns_1@'+new_orchestrator}
+            Event.Fields.EXTRA_ATTRS: {'old_master': old_orchestrator,
+                                       'new_master': new_orchestrator}
         }
 
     @staticmethod
