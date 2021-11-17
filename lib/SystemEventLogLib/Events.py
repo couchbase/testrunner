@@ -186,7 +186,7 @@ class EventHelper(object):
     def set_test_start_time(self):
         self.test_start_time = self.get_timestamp_format(datetime.now())
 
-    def validate(self, server, since_time=None, events_count=None):
+    def validate(self, server, since_time=None, events_count=-1):
         """
         Validates the cluster events against the given events_list
         :param server: Server from which we can get the cluster events
@@ -194,6 +194,18 @@ class EventHelper(object):
         :param events_count: Number of events to be fetched. '-1' means all
         :return list: List containing failures
         """
+        def extract_req_values(cluster_event, local_event):
+            output_dict = dict()
+            for key in local_event.keys():
+                if key not in cluster_event:
+                    continue
+                if type(local_event[key]) is dict:
+                    output_dict[key] = extract_req_values(cluster_event[key],
+                                                          local_event[key])
+                else:
+                    output_dict[key] = cluster_event[key]
+            return output_dict
+
         failures = list()
 
         # If nothing stored in event list, nothing to validate
@@ -202,7 +214,7 @@ class EventHelper(object):
 
         rest = SystemEventRestHelper([server])
         # Fetch all events from the server for generic validation
-        events = rest.get_events(server=server)
+        events = rest.get_events(server=server, events_count=-1)["events"]
 
         # Check for event_id duplications
         if self.__duplicate_event_ids_present(events, failures):
@@ -212,16 +224,16 @@ class EventHelper(object):
         # test has recorded
         v_index = 0
         events = rest.get_events(server=server, since_time=since_time,
-                                 events_count=events_count)
+                                 events_count=events_count)["events"]
         for event in events:
             if isinstance(self.events[v_index], list):
                 # Process events which occurred in parallel from test's POV
                 # TODO: Write a algo to find the match from the subset
                 pass
             else:
-                dict_to_compare = {k: event.get(k, None)
-                                   for k in self.events[v_index].keys()}
-                if dict_to_compare == event:
+                dict_to_compare = extract_req_values(event,
+                                                     self.events[v_index])
+                if dict_to_compare == self.events[v_index]:
                     v_index += 1
                     if v_index == self.__event_counter.counter:
                         break

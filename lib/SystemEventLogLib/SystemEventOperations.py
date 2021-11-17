@@ -96,7 +96,7 @@ class SystemEventRestHelper:
         response = requests.get(api, params=get_params,
                                 auth=(rest.username,
                                       rest.password)).content
-        return json.loads(response)["events"]
+        return json.loads(response)
 
     def update_max_events(self,
                           max_event_count=CbServer.sys_event_def_logs,
