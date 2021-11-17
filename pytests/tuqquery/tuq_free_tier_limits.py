@@ -166,6 +166,8 @@ class QueryFreeLimits(QueryTests):
         self.assertEqual(results['results'], [10000])
 
         if self.crash:
+            limits_user_1 = '{"query":{"num_concurrent_requests": 2}}'
+            self.set_query_limits(username="limited1", limits=limits_user_1)
             try:
                 remote = RemoteMachineShellConnection(self.master)
                 remote.stop_server()
@@ -274,6 +276,8 @@ class QueryFreeLimits(QueryTests):
         self.assertEqual(results['results'], [10000])
 
         if self.crash:
+            limits_user_1 = '{"query":{"num_queries_per_min": 50}}'
+            self.set_query_limits(username="limited1", limits=limits_user_1)
             try:
                 remote = RemoteMachineShellConnection(self.master)
                 remote.stop_server()
