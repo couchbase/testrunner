@@ -156,8 +156,7 @@ class AutoFailoverBaseTest(BaseTestCase):
         status = self.rest.update_autofailover_settings(True,
                                                         self.timeout,
                                                         self.can_abort_rebalance,
-                                                        maxCount=self.max_count,
-                                                        enableServerGroup=self.server_group_failover)
+                                                        maxCount=self.max_count)
         return status
 
     def disable_autofailover(self):
@@ -500,7 +499,6 @@ class AutoFailoverBaseTest(BaseTestCase):
         """
         self.timeout = self.input.param("timeout", 60)
         self.max_count = self.input.param("maxCount", 1)
-        self.server_group_failover = self.input.param("serverGroupFailover", False)
         self.failover_action = self.input.param("failover_action",
                                                 "stop_server")
         self.failover_orchestrator = self.input.param("failover_orchestrator",

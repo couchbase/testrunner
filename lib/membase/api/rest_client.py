@@ -3054,13 +3054,12 @@ class RestConnection(object):
             settings.failoverOnDataDiskIssuesEnabled = json_parsed["failoverOnDataDiskIssues"]["enabled"]
             settings.failoverOnDataDiskIssuesTimeout = json_parsed["failoverOnDataDiskIssues"]["timePeriod"]
             settings.maxCount = json_parsed["maxCount"]
-            settings.failoverServerGroup = json_parsed["failoverServerGroup"]
             if json_parsed["canAbortRebalance"]:
                 settings.can_abort_rebalance = json_parsed["canAbortRebalance"]
         return settings
 
     def update_autofailover_settings(self, enabled, timeout, canAbortRebalance=False, enable_disk_failure=False,
-                                     disk_timeout=120, maxCount=1, enableServerGroup=False):
+                                     disk_timeout=120, maxCount=1):
         params_dict = {}
         params_dict['timeout'] = timeout
         if enabled:
@@ -3076,10 +3075,6 @@ class RestConnection(object):
         else:
             params_dict['failoverOnDataDiskIssues[enabled]'] = 'false'
         params_dict['maxCount'] = maxCount
-        if enableServerGroup:
-            params_dict['failoverServerGroup'] = 'true'
-        else:
-            params_dict['failoverServerGroup'] = 'false'
         params = urllib.parse.urlencode(params_dict)
         api = self.baseUrl + 'settings/autoFailover'
         log.info('settings/autoFailover params : {0}'.format(params))
@@ -6169,7 +6164,6 @@ class AutoFailoverSettings(object):
         self.failoverOnDataDiskIssuesEnabled = False
         self.failoverOnDataDiskIssuesTimeout = 0
         self.maxCount = 1
-        self.failoverServerGroup = False
         self.can_abort_rebalance = False
 
 
