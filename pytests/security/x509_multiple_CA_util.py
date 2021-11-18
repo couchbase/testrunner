@@ -40,6 +40,7 @@ class x509main:
     TRUSTEDCAPATH = "CA"
     SCRIPTSPATH = "scripts/"
     SCRIPTFILEPATH = "passphrase.sh"
+    SCRIPTWINDOWSFILEPATH = "passphrase.bat"
     SLAVE_HOST = ServerInfo('127.0.0.1', 22, 'root', 'couchbase')
     CLIENT_CERT_AUTH_JSON = 'client_cert_auth1.json'
     CLIENT_CERT_AUTH_TEMPLATE = 'client_cert_config_template.txt'
@@ -82,6 +83,7 @@ class x509main:
             self.host = host
             self.install_path = self._get_install_path(self.host)
         self.slave_host = x509main.SLAVE_HOST
+        self.windows_test = False  # will be set to True in generate_multiple_x509_certs if windows VMs are used
 
         # Node cert settings
         self.wildcard_dns = wildcard_dns
@@ -227,7 +229,11 @@ class x509main:
         Given a server object,
         returns the path of the bash script(which prints pkey passphrase for that node) on slave
         """
-        return self.node_ca_map[str(server.ip)]["path"] + "passphrase.sh"
+        shell = RemoteMachineShellConnection(server)
+        if shell.extract_remote_info().distribution_type == "windows":
+            return self.node_ca_map[str(server.ip)]["path"] + x509main.SCRIPTWINDOWSFILEPATH
+        else:
+            return self.node_ca_map[str(server.ip)]["path"] + x509main.SCRIPTFILEPATH
 
     def get_client_cert(self, int_ca_name):
         """
@@ -281,13 +287,20 @@ class x509main:
                 passw = ''.join(random.choice(string.ascii_uppercase + string.digits)
                                 for _ in range(20))
                 # create bash file with "echo <passw>"
-                # TODo also support creating bash file that takes args
-                passphrase_path = node_ca_dir + "passphrase.sh"
-                bash_content = "#!/bin/bash\n"
-                bash_content = bash_content + "echo '" + passw + "'"
-                with open(passphrase_path, "w") as fh:
-                    fh.write(bash_content)
-                os.chmod(passphrase_path, 0o777)
+                if self.windows_test:
+                    passphrase_path = node_ca_dir + "passphrase.bat"
+                    bash_content = "@echo off\n"
+                    bash_content = bash_content + "ECHO " + passw
+                    with open(passphrase_path, "w") as fh:
+                        fh.write(bash_content)
+                    os.chmod(passphrase_path, 0o777)
+                else:
+                    passphrase_path = node_ca_dir + "passphrase.sh"
+                    bash_content = "#!/bin/bash\n"
+                    bash_content = bash_content + "echo '" + passw + "'"
+                    with open(passphrase_path, "w") as fh:
+                        fh.write(bash_content)
+                    os.chmod(passphrase_path, 0o777)
             else:
                 response = requests.get(self.passphrase_url)
                 passw = response.content.decode('utf-8')
@@ -545,6 +558,12 @@ class x509main:
         returns
         None
         """
+
+        shell = RemoteMachineShellConnection(servers[0])
+        if shell.extract_remote_info().distribution_type == "windows":
+            self.windows_test = True
+        shell.disconnect()
+
         self.create_directory(x509main.CACERTFILEPATH)
 
         # Take care of creating certs from spec file
@@ -747,13 +766,18 @@ class x509main:
         Builds parameters for node certificate,key upload
         """
         params = dict()
+        script_file = x509main.SCRIPTFILEPATH
+        shell = RemoteMachineShellConnection(node)
+        if shell.extract_remote_info().distribution_type == "windows":
+            script_file = x509main.SCRIPTWINDOWSFILEPATH
+        shell.disconnect()
         if self.encryption_type:
             params["privateKeyPassphrase"] = dict()
             params["privateKeyPassphrase"]["type"] = self.passphrase_type
             if self.passphrase_type == "script":
                 params["privateKeyPassphrase"]["path"] = self.install_path + \
                                                          x509main.SCRIPTSPATH + \
-                                                         x509main.SCRIPTFILEPATH
+                                                         script_file
                 params["privateKeyPassphrase"]["timeout"] = self.passphrase_load_timeout
                 params["privateKeyPassphrase"]["trim"] = 'true'
                 if self.passphrase_script_args:
@@ -902,23 +926,29 @@ class x509main:
         if self.standard == "pkcs8" and self.encryption_type and \
                 self.passphrase_type == "script":
             node_key_passphrase_path = self.get_node_private_key_passphrase_script(server)
-            dest_node_key_passphrase_path = self.install_path + x509main.SCRIPTSPATH + \
-                                            x509main.SCRIPTFILEPATH
-            self.copy_file_from_slave_to_server(server, node_key_passphrase_path,
-                                                dest_node_key_passphrase_path)
             shell = RemoteMachineShellConnection(server)
-            output, error = shell.execute_command("chown couchbase:couchbase " +
-                                                  dest_node_key_passphrase_path)
-            self.log.info('Output message is {0} and error message is {1}'.format(output, error))
             if shell.extract_remote_info().distribution_type == "windows":
+                dest_node_key_passphrase_path = self.install_path + x509main.SCRIPTSPATH + \
+                                                x509main.SCRIPTWINDOWSFILEPATH
+                self.copy_file_from_slave_to_server(server, node_key_passphrase_path,
+                                                    dest_node_key_passphrase_path)
                 dest_node_key_passphrase_path = "/cygdrive/c/Program Files/Couchbase/Server/var/lib/couchbase/" + \
-                                                x509main.SCRIPTSPATH + x509main.SCRIPTFILEPATH
+                                                x509main.SCRIPTSPATH + x509main.SCRIPTWINDOWSFILEPATH
                 shell.execute_command("chmod 777 '" +
                                       dest_node_key_passphrase_path + "'")
             else:
+                dest_node_key_passphrase_path = self.install_path + x509main.SCRIPTSPATH + \
+                                                x509main.SCRIPTFILEPATH
+                self.copy_file_from_slave_to_server(server, node_key_passphrase_path,
+                                                    dest_node_key_passphrase_path)
                 output, error = shell.execute_command("chmod 777 '" +
                                                       dest_node_key_passphrase_path + "'")
-            self.log.info('Output message is {0} and error message is {1}'.format(output, error))
+                self.log.info('Output message is {0} and error message is {1}'.
+                              format(output, error))
+                output, error = shell.execute_command("chown couchbase:couchbase " +
+                                                      dest_node_key_passphrase_path)
+                self.log.info('Output message is {0} and error message is {1}'.
+                              format(output, error))
             shell.disconnect()
 
     @staticmethod
