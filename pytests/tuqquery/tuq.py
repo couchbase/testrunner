@@ -3891,6 +3891,7 @@ class QueryTests(BaseTestCase):
             self.n1ql_port = CbServer.ssl_n1ql_port
             protocol = "https"
         url = f"{protocol}://{self.master.ip}:{self.n1ql_port}/evaluator/v1/libraries/{library_name}"
+        self.shell.execute_command(f"{self.curl_path} -s -k -X DELETE {url} -u Administrator:password")
         data = f'{functions}'
         if filename:
             self.shell.execute_command(f"{self.curl_path} -s -k -X POST {url} -u Administrator:password -H 'content-type: application/json' -d @{filename}")

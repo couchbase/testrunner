@@ -102,6 +102,20 @@ class QueryUDFN1QLTests(QueryTests):
             'function_expected': [[]],
             'post': 'select `bucket`, `scope`, `collection`, `histogramKey` from `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = "histogram"',
             'post_expected' : [{"bucket": "default", "collection": "_default", "histogramKey": "job_title", "scope": "_default"}]
+        },
+        'grant': {
+            'pre': 'REVOKE query_select on default from jackdoe',
+            'query': 'GRANT query_select on default to jackdoe',
+            'function_expected': [[]],
+            'post': 'select roles from system:user_info where id = "jackdoe"',
+            'post_expected': [{'roles': [{'bucket_name': 'default', 'collection_name': '*', 'origins': [{'type': 'user'}], 'role': 'select', 'scope_name': '*'}]}]
+        },
+        'revoke': {
+            'pre': 'GRANT query_select on default to jackdoe',
+            'query': 'REVOKE query_select on default from jackdoe',
+            'function_expected': [[]],
+            'post': 'select roles from system:user_info where id = "jackdoe"',
+            'post_expected': [{'roles': []}]
         }
     }
     dmls = {
@@ -131,6 +145,8 @@ class QueryUDFN1QLTests(QueryTests):
         self.log.info("==============  QueryUDFN1QLTests suite_setup has started ==============")
         functions = 'function add(a, b) { return a + b; }'
         self.create_library('math', functions, 'add')
+        self.users = [{"id": "jackdoe", "name": "Jack Downing", "password": "password"}]
+        self.create_users()
         self.log.info("==============  QueryUDFN1QLTests suite_setup has completed ==============")
 
     def tearDown(self):
@@ -187,7 +203,6 @@ class QueryUDFN1QLTests(QueryTests):
         function_name = 'prepare_default'
         query = 'PREPARE engineer_count as SELECT COUNT(*) as count_engineer FROM default WHERE job_title = "Engineer"'
         self.create_n1ql_function(function_name, query)
-        breakpoint()
         # Execute function and check
         function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
         self.assertEqual(function_result['results'][0][0]['text'], f'{query};')
@@ -202,6 +217,17 @@ class QueryUDFN1QLTests(QueryTests):
         self.create_n1ql_function(function_name, query)
         # Prepare statement
         self.run_cbq_query('PREPARE engineer_count as SELECT COUNT(*) as count_engineer FROM default WHERE job_title = "Engineer"', query_context="default:")
+        # Execute function and check
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+        self.assertEqual(function_result['results'][0], [{'count_engineer': 672}])
+
+    def test_execute_prepared_using(self):
+        self.run_cbq_query('DELETE FROM system:prepareds WHERE name LIKE "engineer%"')
+        function_name = 'execute_prepare_using_default'
+        query = 'EXECUTE engineer_count using ["Engineer"]'
+        self.create_n1ql_function(function_name, query)
+        # Prepare statement
+        self.run_cbq_query('PREPARE engineer_count as SELECT COUNT(*) as count_engineer FROM default WHERE job_title = $1', query_context="default:")
         # Execute function and check
         function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
         self.assertEqual(function_result['results'][0], [{'count_engineer': 672}])
@@ -307,20 +333,21 @@ class QueryUDFN1QLTests(QueryTests):
         self.run_cbq_query('DELETE FROM system:prepareds WHERE name LIKE "engineer%"')
         function_name = 'execute_prepare_default'
         if self.params == 'named':
-            param_val = {"job": "Engineer"}
+            param_val = '{"job": "Engineer"}'
             param_var = "$job"
         elif self.params == 'positional':
-            param_val = ["Engineer"]
+            param_val = '["Engineer"]'
             param_var = "$1"
         functions = f'function {function_name}() {{\
-            var query = EXECUTE engineer_count USING {param_val};\
+            var params = {param_val};\
+            var query = N1QL("EXECUTE engineer_count", params);\
             var acc = [];\
-            for (const row of query) {{\
-                acc.push(row);\
-            }}\
-            return acc;}}'
+            for (const row of query) {{ acc.push(row); }}\
+            return acc;\
+        }}'
         self.create_library(self.library_name, functions, [function_name])
-        # Prepare statement wit named parameter $job
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        # Prepare statement with named or postional parameter
         self.run_cbq_query(f'PREPARE engineer_count as SELECT COUNT(*) as count_engineer FROM default WHERE job_title = {param_var}', query_context="default:")
         # Execute function and check
         function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
