@@ -39,6 +39,7 @@ class BaseRQGTests(BaseTestCase):
             self.use_fts = self.input.param("use_fts", False)
             self.use_sdk = self.input.param("use_sdk", False)
             self.use_analytics = self.input.param("use_analytics", False)
+            self.use_udf = self.input.param("use_udf", False)
             self.shell = RemoteMachineShellConnection(self.master)
             self.ansi_joins = self.input.param("ansi_joins", False)
             self.with_let = self.input.param("with_let", False)
@@ -251,6 +252,26 @@ class BaseRQGTests(BaseTestCase):
                     results = self.n1ql_helper.run_cbq_query(query="CREATE PRIMARY INDEX ON {0}".format(self.database + "_" + table_name))
             if self.remove_alias:
                 table_map = self.remove_aliases_from_table_map(table_map)
+            if self.use_udf:
+                bucket_username = "cbadminbucket"
+                bucket_password = "password"
+                # Register udf library
+                udf_code = 'function execute_query(statement) {\
+                    var query = N1QL(statement, {});\
+                    var acc = [];\
+                    for (const row of query) { acc.push(row); }\
+                    return acc;\
+                }'
+                filename = "udf.js"
+                f = open(filename, 'w')
+                f.write(udf_code)
+                f.close()
+                url = f'http://{self.master.ip}:8093/evaluator/v1/libraries/n1ql'
+                cmd = f"curl -s -k -X POST -u {bucket_username}:{bucket_password} {url} -H 'content-type: application/json' -d @{filename}"
+                os.system(cmd)
+                os.remove(filename)
+                # Create execute_query udf
+                self.n1ql_helper.run_cbq_query(query='CREATE OR REPLACE FUNCTION execute_query(s) LANGUAGE JAVASCRIPT AS  "execute_query" AT "n1ql"')
             if self.use_analytics:
                 data = 'use Default;'
                 bucket_username = "cbadminbucket"
@@ -1072,6 +1093,8 @@ class BaseRQGTests(BaseTestCase):
 
         fts_query = n1ql_query
         cbas_query = n1ql_query
+        udf_n1ql_query = n1ql_query.replace('"',"'")
+        udf_query = f'EXECUTE FUNCTION execute_query("{udf_n1ql_query}")'
         if self.use_fts:
             if not "JOIN" in n1ql_query:
                 add_hint = n1ql_query.split("WHERE")
@@ -1132,6 +1155,10 @@ class BaseRQGTests(BaseTestCase):
             elif self.use_analytics:
                 analytics_result = self.n1ql_query_runner_wrapper(n1ql_query=cbas_query, server=self.n1ql_server,
                                                                query_params=query_params,query_context=query_context)
+            elif self.use_udf:
+                if "PREPARE" in udf_query:
+                    udf_query = udf_query.replace("PREPARE ","")
+                udf_result = self.n1ql_query_runner_wrapper(n1ql_query=udf_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus",query_context=query_context)
 
             actual_result = self.n1ql_query_runner_wrapper(n1ql_query=n1ql_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus",query_context=query_context)
             if self.prepared or use_prepared:
@@ -1146,9 +1173,11 @@ class BaseRQGTests(BaseTestCase):
                 fts_result = fts_result["results"]
             elif self.use_analytics:
                 analytics_result = analytics_result['results']
+            elif self.use_udf:
+                udf_result = udf_result['results'][0]
 
             # Run SQL Query
-            if not self.use_fts and not self.use_analytics:
+            if not self.use_fts and not self.use_analytics and not self.use_udf:
                 sql_result = expected_result
                 client = None
                 if self.use_mysql:
@@ -1168,6 +1197,8 @@ class BaseRQGTests(BaseTestCase):
                 self.log.info(" result from fts query returns {0} items".format(len(fts_result)))
             elif self.use_analytics:
                 self.log.info(" result from analytics query returns {0} items".format(len(analytics_result)))
+            elif self.use_udf:
+                self.log.info(" result from udf query returns {0} items".format(len(udf_result)))
             self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
 
             if self.use_fts:
@@ -1190,6 +1221,15 @@ class BaseRQGTests(BaseTestCase):
                             len(n1ql_result) == 0 and len(analytics_result) == 1) or (len(analytics_result) == 0):
                         return {"success": True, "result": "Pass"}
                     return {"success": False, "result": str("different results")}
+            elif self.use_udf:
+                if len(n1ql_result) != len(udf_result):
+                    self.log.info("number of results returned from sql and n1ql are different")
+                    self.log.info("udf query is {0}".format(udf_query))
+                    self.log.info("n1ql query is {0}".format(n1ql_query))
+
+                    if (len(udf_result) == 0 and len(n1ql_result) == 1) or (len(n1ql_result) == 0 and len(udf_result) == 1) or (len(udf_result) == 0):
+                            return {"success": True, "result": "Pass"}
+                    return {"success": False, "result": str("different results")}
             else:
                 if len(n1ql_result) != len(sql_result):
                     self.log.info("number of results returned from sql and n1ql are different")
@@ -1204,6 +1244,8 @@ class BaseRQGTests(BaseTestCase):
                     self.n1ql_helper._verify_results_rqg(subquery, aggregate, sql_result=fts_result, n1ql_result=n1ql_result, hints=hints, aggregate_pushdown=self.aggregate_pushdown,use_fts=self.use_fts)
                 elif self.use_analytics:
                     self.n1ql_helper._verify_results_rqg(subquery, aggregate, sql_result=analytics_result, n1ql_result=n1ql_result, hints=hints, aggregate_pushdown=self.aggregate_pushdown)
+                elif self.use_udf:
+                    self.n1ql_helper._verify_results_rqg(subquery, aggregate, sql_result=udf_result, n1ql_result=n1ql_result, hints=hints, aggregate_pushdown=self.aggregate_pushdown)
                 else:
                     self.n1ql_helper._verify_results_rqg(subquery, aggregate, sql_result=sql_result, n1ql_result=n1ql_result, hints=hints, aggregate_pushdown=self.aggregate_pushdown)
             except Exception as ex:
