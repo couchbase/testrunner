@@ -244,19 +244,20 @@ class MultipleCA(BaseTestCase):
         self.x509.delete_unused_out_of_the_box_CAs(server=self.master)
         self.x509.upload_client_cert_settings(server=self.master)
         out_nodes = list()
+        nodes_in_cluster = self.servers[:self.nodes_init]
         for graceful in [True, False]:
-            failover_nodes = random.sample(self.servers[1:self.nodes_init], 1)
-            _ = self.cluster.async_failover(self.servers[:self.nodes_init], failover_nodes,
+            failover_nodes = random.sample(nodes_in_cluster[1:], 1)
+            _ = self.cluster.async_failover(nodes_in_cluster, failover_nodes,
                                             graceful=graceful)
             self.wait_for_failover_or_assert(1)
             https_val = CbServer.use_https  # so that add_node uses https
             CbServer.use_https = True
-            task = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], failover_nodes)
+            task = self.cluster.async_rebalance(nodes_in_cluster, [], failover_nodes)
             self.wait_for_rebalance_to_complete(task)
             CbServer.use_https = https_val
             for node in failover_nodes:
                 out_nodes.append(node)
-        nodes_in_cluster = [node for node in self.servers[:self.nodes_init] if node not in out_nodes]
+            nodes_in_cluster = [node for node in self.servers[:self.nodes_init] if node not in out_nodes]
         self.auth(servers=nodes_in_cluster)
 
     def test_rotate_certificates(self):
@@ -326,9 +327,17 @@ class MultipleCA(BaseTestCase):
             if operation == "out":
                 https_val = CbServer.use_https  # so that add_node uses https
                 CbServer.use_https = True
-                task = self.cluster.async_rebalance(self.servers[:self.nodes_init], [],
-                                                    failover_nodes)
-                self.wait_for_rebalance_to_complete(task)
+                rest = RestConnection(self.master)
+                otp_nodes = []
+                ejected_nodes = []
+                for node in nodes_in_cluster:
+                    otp_nodes.append('ns_1@'+node.ip)
+                for node in failover_nodes:
+                    ejected_nodes.append('ns_1@' + node.ip)
+                status = rest.rebalance(otpNodes=otp_nodes, ejectedNodes=ejected_nodes)
+                if not status:
+                    shell.start_server(failover_nodes[0])
+                    self.fail("rebalance/failover failed")
                 CbServer.use_https = https_val
                 nodes_in_cluster = nodes_in_cluster.remove(failover_nodes[0])
             shell.start_server(failover_nodes[0])
