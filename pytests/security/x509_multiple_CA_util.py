@@ -231,8 +231,10 @@ class x509main:
         """
         shell = RemoteMachineShellConnection(server)
         if shell.extract_remote_info().distribution_type == "windows":
+            shell.disconnect()
             return self.node_ca_map[str(server.ip)]["path"] + x509main.SCRIPTWINDOWSFILEPATH
         else:
+            shell.disconnect()
             return self.node_ca_map[str(server.ip)]["path"] + x509main.SCRIPTFILEPATH
 
     def get_client_cert(self, int_ca_name):
