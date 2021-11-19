@@ -4998,7 +4998,6 @@ class FTSBaseTest(unittest.TestCase):
             collections=collections,
             no_check=no_check)
         self.is_index_partitioned_balanced(index)
-        index_uuid = index.get_uuid()
         return index
 
     def create_fts_indexes_all_buckets(self, plan_params=None, analyzer='standard'):

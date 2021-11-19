@@ -29,6 +29,12 @@ class StableTopFTS(FTSBaseTest):
     def tearDown(self):
         super(StableTopFTS, self).tearDown()
 
+    def suite_setUp(self):
+        pass
+
+    def suite_tearDown(self):
+        pass
+
     def check_fts_service_started(self):
         try:
             rest = RestConnection(self._cb_cluster.get_random_fts_node())
