@@ -25,7 +25,6 @@ class CbServer(object):
 
     # map of {non-ssl,ssl} ports
     ssl_port_map = {str(port): str(ssl_port),
-                    str(ssl_port): str(ssl_port),
                     str(fts_port): str(ssl_fts_port),
                     str(n1ql_port): str(ssl_n1ql_port),
                     str(index_port): str(ssl_index_port),
