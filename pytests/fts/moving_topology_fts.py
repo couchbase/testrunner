@@ -1,3 +1,5 @@
+from lib import global_vars
+from lib.SystemEventLogLib.fts_service_events import SearchServiceEvents
 from .fts_base import FTSBaseTest, FTSException
 from .fts_base import NodeHelper
 from TestInput import TestInputSingleton
@@ -24,9 +26,17 @@ class MovingTopFTS(FTSBaseTest):
         super(MovingTopFTS, self).setUp()
         rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         rest.set_disableFileTransferRebalance(self.disable_file_transfer_rebalance)
+        self.index_path = rest.get_index_path()
+        if self.index_path == "/data":
+            self.reset_data_mount_point(self._cb_cluster.get_fts_nodes())
 
     def tearDown(self):
         super(MovingTopFTS, self).tearDown()
+        if self.index_path == "/data":
+            try:
+                self.reset_data_mount_point(self._cb_cluster.get_fts_nodes())
+            except Exception as err:
+                self.log.info(str(err))
 
     def suite_setUp(self):
         self.log.info("*** MovingTopFTS: suite_setUp() ***")
@@ -42,6 +52,19 @@ class MovingTopFTS(FTSBaseTest):
         for i in range(retries):
             NodeHelper.kill_cbft_process(fts_node)
         return fts_node
+
+    @staticmethod
+    def reset_data_mount_point(nodes):
+        for node in nodes:
+            shell = RemoteMachineShellConnection(node)
+            shell.execute_command('umount -l /data; '
+                                  'mkdir -p /usr/disk-img; dd if=/dev/zero '
+                                  'of=/usr/disk-img/disk-quota.ext4 count=10485760; '
+                                  '/sbin/mkfs -t ext4 -q /usr/disk-img/disk-quota.ext4 -F; '
+                                  'mount -o loop,rw,usrquota,grpquota /usr/disk-img/disk-quota.ext4 /data; '
+                                  'umount -l /data; fsck.ext4 /usr/disk-img/disk-quota.ext4 -y; '
+                                  'chattr +i /data; mount -o loop,rw,usrquota,grpquota /usr/disk-img/disk-quota.ext4 '
+                                  '/data; rm -rf /data/*; chmod -R 777 /data')
 
     def stop_cb_service(self, nodes, timeout=0):
         self.sleep(timeout)
@@ -1508,6 +1531,31 @@ class MovingTopFTS(FTSBaseTest):
         node = self._cb_cluster.get_random_fts_node()
         NodeHelper.kill_cbft_process(node)
         self._cb_cluster.set_bypass_fts_node(node)
+        self.run_query_and_compare(index)
+
+    def fts_diskfull_scenario(self):
+        #TESTED
+        index = self.create_index_generate_queries()
+        node = self._cb_cluster.get_random_fts_node()
+        shell = RemoteMachineShellConnection(node)
+        process_id = shell.get_process_id("cbft")
+        self.log.debug("Pid of '%s'=%s" % ("cbft", process_id))
+        shell.fill_disk_space(self.index_path)
+        NodeHelper.kill_cbft_process(node)
+        process_id = None
+        for i in range(100):
+            if not process_id:
+                try:
+                    process_id = shell.get_process_id("cbft")
+                except Exception as e:
+                    self.log.info(str(e))
+        if process_id:
+            global_vars.system_event_logs.add_event(SearchServiceEvents.fts_crash(node.ip, process_id))
+        else:
+            self.log.info("Verifying without process id")
+            global_vars.system_event_logs.add_event(SearchServiceEvents.fts_crash_no_processid(node.ip))
+        shell._recover_disk_full_failure(self.index_path)
+        self.sleep(2)
         self.run_query_and_compare(index)
 
     def update_index_during_rebalance(self):

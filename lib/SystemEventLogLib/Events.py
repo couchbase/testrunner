@@ -207,6 +207,8 @@ class EventHelper(object):
             return output_dict
 
         failures = list()
+        if not since_time:
+            since_time = self.test_start_time
 
         # If nothing stored in event list, nothing to validate
         if not self.events:

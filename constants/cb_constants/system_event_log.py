@@ -75,7 +75,12 @@ class Index(object):
 
 class Fts(object):
     """Mapping of FTS (search) related events - event_id. Valid range 3072:4095"""
-
+    ServiceStartEventID = 3072
+    IndexCreateEventID = 3073
+    IndexUpdateEventID = 3074
+    IndexDeleteEventID = 3075
+    SettingsUpdateEventID = 3076
+    CrashEventID = 4095
 
 class Eventing(object):
     """Mapping of Eventing related events - event_id. Valid range 4096:5119"""

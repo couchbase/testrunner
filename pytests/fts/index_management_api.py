@@ -1,6 +1,9 @@
 # coding=utf-8
 
 import json
+
+from lib import global_vars
+from lib.SystemEventLogLib.fts_service_events import SearchServiceEvents
 from .fts_base import FTSBaseTest
 from .fts_base import NodeHelper
 from lib.membase.api.rest_client import RestConnection
@@ -204,6 +207,19 @@ class IndexManagementAPI(FTSBaseTest):
             error = error + "\nslowQueryLogTimeout is not propagated on new node."
 
         self.assertEqual(error, "", error)
+
+    def test_config_settings(self):
+        config = self._input.param("config", "bleveMaxResultWindow")
+        value = self._input.param("value", 100000)
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+
+        rest.set_node_setting(config, value)
+        global_vars.system_event_logs.add_event(SearchServiceEvents.fts_settings_updated())
+
+        verification_config_setting = rest.get_node_settings(config)
+
+        if str(verification_config_setting) != str(value):
+            self.fail(f'{verification_config_setting} is not equal to expected {value} for config:{config}')
 
     def test_ingest_control(self):
         self.load_data()

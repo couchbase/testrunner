@@ -5373,6 +5373,17 @@ class RemoteMachineShellConnection(KeepRefs):
         output, error = self.execute_command(command)
         return output, error
 
+    def _recover_disk_full_failure(self, location):
+        delete_file = "{0}/disk-quota.ext3".format(location)
+        output, error = self.execute_command("rm -f {0}".format(delete_file))
+        return output, error
+
+    def get_process_id(self, process_name):
+        process_id, _ = self.execute_command(
+            "ps -ef | grep \"%s \" | grep -v grep | awk '{print $2}'"
+            % process_name)
+        return process_id[0].strip()
+
     def update_dist_type(self):
         output, error = self.execute_command("echo '{{dist_type,inet6_tcp}}.' > {0}".format(LINUX_DIST_CONFIG))
         self.log_command_output(output, error)

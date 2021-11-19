@@ -30,6 +30,7 @@ from lib.couchbase_helper.documentgenerator import GeoSpatialDataLoader, WikiJSO
 from lib.collection.collections_stats import CollectionsStats
 from lib.memcached.helper.data_helper import KVStoreAwareSmartClient
 from lib.Cb_constants.CBServer import CbServer
+from lib.SystemEventLogLib.fts_service_events import SearchServiceEvents
 from scripts.collect_server_info import cbcollectRunner
 from couchbase_helper.documentgenerator import *
 from tasks.taskmanager import TaskManager
@@ -47,7 +48,9 @@ from security.SecretsMasterBase import SecretsMasterBase
 from lib.collection.collections_cli_client import CollectionsCLI
 from scripts.java_sdk_setup import JavaSdkSetup
 from couchbase_cli import CouchbaseCLI
-from pytests.security.x509_multiple_CA_util import x509main, Validation
+from pytests.security.x509_multiple_CA_util import x509main
+from lib.SystemEventLogLib.Events import EventHelper
+from lib import global_vars
 
 
 class RenameNodeException(FTSException):
@@ -841,6 +844,7 @@ class FTSIndex:
             self.generate_new_custom_map(seed=self.cm_id, type_mapping=type_mapping, collection_index=collection_index)
 
         self.fts_queries = []
+        self.uuid = None
 
         if index_params:
             self.index_definition['params'] = \
@@ -1230,6 +1234,9 @@ class FTSIndex:
             rest.ip))
         rest.create_fts_index(self.name, self.index_definition)
         self.__cluster.get_indexes().append(self)
+        self.uuid = self.get_uuid()
+        global_vars.system_event_logs.add_event(SearchServiceEvents.index_created(rest.ip, self.uuid,
+                                                                                  self.name, self._source_name))
 
     def create_no_check(self, rest=None):
         if not rest:
@@ -1249,8 +1256,9 @@ class FTSIndex:
             self.name,
             rest.ip))
         rest.update_fts_index(self.name, self.index_definition)
-        #self.__log.info("sleeping for 200")
-        #time.sleep(200)
+        self.uuid = self.get_uuid()
+        global_vars.system_event_logs.add_event(SearchServiceEvents.index_updated(rest.ip, self.uuid,
+                                                                                  self.name, self._source_name))
 
     def update_index_to_upside_down(self):
         if self.is_upside_down():
@@ -1320,6 +1328,7 @@ class FTSIndex:
         status, content, header = rest.delete_fts_index_extended_output(self.name)
         content1 = content.decode()
         content_json = json.loads(str(content1))
+
         if status:
             self.__cluster.get_indexes().remove(self)
             if not self.__cluster.are_index_files_deleted_from_disk(self.name):
@@ -1333,6 +1342,7 @@ class FTSIndex:
             self.__cluster.get_indexes().remove(self)
         else:
             raise FTSException("Index/alias {0} not deleted".format(self.name))
+        global_vars.system_event_logs.add_event(SearchServiceEvents.index_deleted(rest.ip, self.uuid, self.name, self._source_name))
 
     def get_index_defn(self, rest=None):
         if not rest:
@@ -3694,6 +3704,11 @@ class FTSBaseTest(unittest.TestCase):
         self.log = logger.Logger.get_logger()
         self.__init_logger()
         self.__cluster_op = Cluster()
+        # System event logs object and test parameter
+        global_vars.system_event_logs = EventHelper()
+        self.system_events = global_vars.system_event_logs
+        self.validate_system_event_logs = \
+            TestInputSingleton.input.param("validate_sys_event_logs", False)
         self.__init_parameters()
         self.num_custom_analyzers = self._input.param("num_custom_analyzers", 0)
         self.field_name = self._input.param("field_name", None)
@@ -3771,6 +3786,9 @@ class FTSBaseTest(unittest.TestCase):
             RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
             CbServer.x509.upload_client_cert_settings(server=self.master)
             ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
+
+        if self.validate_system_event_logs:
+            self.system_events.set_test_start_time()
         self.log.info(
             "==== FTSbasetests setup is finished for test #{0} {1} ===="
                 .format(self.__case_number, self._testMethodName))
@@ -3887,6 +3905,10 @@ class FTSBaseTest(unittest.TestCase):
 
     def tearDown(self):
         """Clusters cleanup"""
+        sys_event_validation_failure = None
+        if self.validate_system_event_logs:
+            sys_event_validation_failure = \
+                self.system_events.validate(self.master)
         if self._input.param("enforce_tls", False):
             self.log.info('###################### Disabling n2n encryption')
             ntonencryptionBase().disable_nton_cluster([self.master])
@@ -3981,6 +4003,13 @@ class FTSBaseTest(unittest.TestCase):
             self.__cluster_op.shutdown(force=True)
             if not self.skip_log_scan and keyword_count_diff:
                 self.fail(f'Log scan completed, detected new occurrences of error keywords : {keyword_count_diff}')
+
+            # Fail test in case of sys_event_logging failure
+            if (not self.__is_test_failed()) and sys_event_validation_failure:
+                self.fail(sys_event_validation_failure)
+            elif sys_event_validation_failure:
+                self.log.critical("System event log validation failed: %s"
+                                  % sys_event_validation_failure)
             unittest.TestCase.tearDown(self)
 
     def __init_logger(self):
@@ -4969,6 +4998,7 @@ class FTSBaseTest(unittest.TestCase):
             collections=collections,
             no_check=no_check)
         self.is_index_partitioned_balanced(index)
+        index_uuid = index.get_uuid()
         return index
 
     def create_fts_indexes_all_buckets(self, plan_params=None, analyzer='standard'):
