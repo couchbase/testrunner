@@ -292,6 +292,24 @@ class QueryUDFN1QLTests(QueryTests):
         function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
         self.log.info(function_result)
 
+    def test_param_function_param(self):
+        function_name = 'param_function_param_default'
+        functions = f'function {function_name}() {{\
+            var number = 10;\
+            var query = EXECUTE FUNCTION add(5, $number);\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(j, y, m) LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}("Engineer", 2011, 10)')
+        expected_result = [15]
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
     def test_parameter_from_function(self):
         function_name = 'param_from_function_default'
         functions = f'function {function_name}(job, year, month) {{\
@@ -381,3 +399,41 @@ class QueryUDFN1QLTests(QueryTests):
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
             self.assertTrue('User does not have credentials to run' in error['msg'])
+
+    def test_parameter_values(self):
+        function_name = 'param_values_default'
+        functions = f'function {function_name}() {{\
+            var num = 10;\
+            var str = "Hello World!";\
+            var obj = {{"Name": "Grogu", Age: 50}};\
+            var arr1 = ["a", "b", "c"];\
+            var arr2 = [1, 2, 3];\
+            var tru = true;\
+            var fal = false;\
+            var nul = null;\
+            var nan = NaN;\
+            var inf = Infinity;\
+            var query = SELECT $num as value_number, $str as value_string,$obj as value_object,\
+                    $arr1 as value_array_1, $arr2 as value_array_2, $tru as value_true, $fal as value_false,\
+                    $nan as value_nan, $inf as value_infinity, $nul as value_null;\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+        expected_result = [
+            {'value_array_1': ['a', 'b', 'c'],
+            'value_array_2': [1, 2, 3],
+            'value_false': False,
+            'value_infinity': None, 'value_nan': None, 'value_null': None,
+            'value_number': 10,
+            'value_object': {'Age': 50, 'Name': 'Grogu'},
+            'value_string': 'Hello World!',
+            'value_true': True}
+        ]
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
