@@ -1598,8 +1598,10 @@ class RestConnection(object):
     def add_node(self, user='', password='', remoteIp='', port='8091', zone_name='', services=None):
         otpNode = None
 
-        port = CbServer.ssl_port_map.get(str(port), str(port))
-        protocol = "https"
+        protocol = "http"
+        if float(self.get_major_version()) >= 6.5:
+            port = CbServer.ssl_port_map.get(str(port), str(port))
+            protocol = "https"
 
         # if ip format is ipv6 and enclosing brackets are not found,
         # enclose self.ip and remoteIp
