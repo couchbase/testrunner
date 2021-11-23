@@ -71,6 +71,19 @@ class Query(object):
 
 class Index(object):
     """Mapping of Index (2i) related events - event_id. Valid range 2048:3071"""
+    IndexSettingsChanged = 2048
+    ProjectorSettingsChanged = 2049
+    QueryClientSettingsChanged = 2050
+    IndexerCrash = 2051
+    ProjectorCrash = 2052
+    QueryClientCrash = 2053
+    IndexCreated = 2054
+    IndexBuilding = 2055
+    IndexOnline = 2056
+    IndexDropped = 2057
+    IndexPartitionedMerged = 2058
+    IndexError = 2059
+
 
 
 class Fts(object):
