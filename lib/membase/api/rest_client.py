@@ -2855,6 +2855,9 @@ class RestConnection(object):
                     log.warning("Bucket deletion timed out waiting for all nodes, retrying...")
                     num_retries -= 1
                     time.sleep(poll_interval)
+                elif int(header['status']) == 404:
+                    log.warning("Bucket does not exist..exiting bucket delete")
+                    break
                 else:
                     break
             except Exception as e:
