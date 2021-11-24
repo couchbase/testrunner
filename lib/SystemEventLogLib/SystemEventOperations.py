@@ -95,8 +95,14 @@ class SystemEventRestHelper:
 
         response = requests.get(api, params=get_params,
                                 auth=(rest.username,
-                                      rest.password)).content
-        return json.loads(response)
+                                      rest.password))
+
+        # MB-49617: Exception handling for non-json (plain text) case
+        try:
+            return response.json()
+        except ValueError:
+            pass
+        return response.content
 
     def update_max_events(self,
                           max_event_count=CbServer.sys_event_def_logs,
@@ -113,7 +119,7 @@ class SystemEventRestHelper:
         """
         rest = self.get_rest_object(rest, server, username, password)
         api = rest.baseUrl + "internalSettings"
-        params = urllib.parse.urlencode({"maxEvents": max_event_count})
+        params = urllib.parse.urlencode({"eventLogsLimit": max_event_count})
         status, content, _ = rest._http_request(api, RestConnection.POST,
                                                 params=params)
         return status, json.loads(content)

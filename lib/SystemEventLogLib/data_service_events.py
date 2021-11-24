@@ -9,7 +9,7 @@ class DataServiceEvents(object):
             Event.Fields.NODE_NAME: node,
             Event.Fields.EVENT_ID: KvEngine.BucketOffline,
             Event.Fields.COMPONENT: Event.Component.DATA,
-            Event.Fields.EXTRA_ATTRS: {'bucket': bucket_uuid}
+            Event.Fields.EXTRA_ATTRS: {"bucket": bucket_uuid}
         }
 
     @staticmethod
@@ -18,10 +18,10 @@ class DataServiceEvents(object):
             Event.Fields.NODE_NAME: node,
             Event.Fields.EVENT_ID: KvEngine.BucketOnline,
             Event.Fields.COMPONENT: Event.Component.DATA,
-            Event.Fields.DESCRIPTION: "Bucket created",
+            Event.Fields.DESCRIPTION: "Bucket online",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'bucket': bucket,
-                                       'bucket_uuid': bucket_uuid}
+            Event.Fields.EXTRA_ATTRS: {"bucket": bucket,
+                                       "bucket_uuid": bucket_uuid}
         }
 
     @staticmethod
@@ -32,10 +32,10 @@ class DataServiceEvents(object):
             Event.Fields.COMPONENT: Event.Component.DATA,
             Event.Fields.DESCRIPTION: "Bucket created",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'bucket': bucket,
-                                       'bucket_uuid': bucket_uuid,
-                                       'bucket_type': bucket_type,
-                                       'bucket_props': bucket_settings}
+            Event.Fields.EXTRA_ATTRS: {"bucket": bucket,
+                                       "bucket_uuid": bucket_uuid,
+                                       "bucket_type": bucket_type,
+                                       "bucket_props": bucket_settings}
         }
 
     @staticmethod
@@ -46,8 +46,8 @@ class DataServiceEvents(object):
             Event.Fields.COMPONENT: Event.Component.DATA,
             Event.Fields.DESCRIPTION: "Bucket deleted",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'bucket': bucket,
-                                       'bucket_uuid': bucket_uuid}
+            Event.Fields.EXTRA_ATTRS: {"bucket": bucket,
+                                       "bucket_uuid": bucket_uuid}
         }
 
     @staticmethod
@@ -58,21 +58,24 @@ class DataServiceEvents(object):
             Event.Fields.COMPONENT: Event.Component.DATA,
             Event.Fields.DESCRIPTION: "Bucket flushed",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'bucket': bucket,
-                                       'bucket_uuid': bucket_uuid}
+            Event.Fields.EXTRA_ATTRS: {"bucket": bucket,
+                                       "bucket_uuid": bucket_uuid}
         }
 
     @staticmethod
-    def bucket_updated(node, bucket, old_settings, new_settings):
+    def bucket_updated(node, bucket, bucket_uuid, bucket_type,
+                       old_settings, new_settings):
         return {
             Event.Fields.NODE_NAME: node,
             Event.Fields.EVENT_ID: KvEngine.BucketConfigChanged,
             Event.Fields.COMPONENT: Event.Component.DATA,
             Event.Fields.DESCRIPTION: "Bucket configuration changed",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'bucket': bucket,
-                                       'old_settings': old_settings,
-                                       'new_settings': new_settings}
+            Event.Fields.EXTRA_ATTRS: {"bucket": bucket,
+                                       "bucket_uuid": bucket_uuid,
+                                       "type": bucket_type,
+                                       "old_settings": old_settings,
+                                       "new_settings": new_settings}
         }
 
     @staticmethod
@@ -83,10 +86,10 @@ class DataServiceEvents(object):
             Event.Fields.COMPONENT: Event.Component.DATA,
             Event.Fields.DESCRIPTION: "Collection created",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'bucket': bucket,
-                                       'bucket_uuid': bucket_uuid,
-                                       'scope': scope,
-                                       'collection': collection}
+            Event.Fields.EXTRA_ATTRS: {"bucket": bucket,
+                                       "bucket_uuid": bucket_uuid,
+                                       "scope": scope,
+                                       "collection": collection}
         }
 
     @staticmethod
@@ -97,10 +100,10 @@ class DataServiceEvents(object):
             Event.Fields.COMPONENT: Event.Component.DATA,
             Event.Fields.DESCRIPTION: "Collection deleted",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'bucket': bucket,
-                                       'bucket_uuid': bucket_uuid,
-                                       'scope': scope,
-                                       'collection': collection}
+            Event.Fields.EXTRA_ATTRS: {"bucket": bucket,
+                                       "bucket_uuid": bucket_uuid,
+                                       "scope": scope,
+                                       "collection": collection}
         }
 
     @staticmethod
@@ -111,9 +114,9 @@ class DataServiceEvents(object):
             Event.Fields.COMPONENT: Event.Component.DATA,
             Event.Fields.DESCRIPTION: "Scope created",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'bucket': bucket,
-                                       'bucket_uuid': bucket_uuid,
-                                       'scope': scope}
+            Event.Fields.EXTRA_ATTRS: {"bucket": bucket,
+                                       "bucket_uuid": bucket_uuid,
+                                       "scope": scope}
         }
 
     @staticmethod
@@ -124,9 +127,9 @@ class DataServiceEvents(object):
             Event.Fields.COMPONENT: Event.Component.DATA,
             Event.Fields.DESCRIPTION: "Scope deleted",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'bucket': bucket,
-                                       'bucket_uuid': bucket_uuid,
-                                       'scope': scope}
+            Event.Fields.EXTRA_ATTRS: {"bucket": bucket,
+                                       "bucket_uuid": bucket_uuid,
+                                       "scope": scope}
         }
 
     @staticmethod
@@ -138,23 +141,12 @@ class DataServiceEvents(object):
             Event.Fields.COMPONENT: Event.Component.DATA,
             Event.Fields.DESCRIPTION: "Bucket auto reprovisioned",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'bucket': bucket,
-                                       'bucket_uuid': bucket_uuid,
-                                       'nodes': ['ns_1@'+ip for ip in nodes],
-                                       'restarted_on':
-                                           ['ns_1@'+ip for ip in restarted_on]
+            Event.Fields.EXTRA_ATTRS: {"bucket": bucket,
+                                       "bucket_uuid": bucket_uuid,
+                                       "nodes": ["ns_1@"+ip for ip in nodes],
+                                       "restarted_on":
+                                           ["ns_1@"+ip for ip in restarted_on]
                                        }
-        }
-
-    @staticmethod
-    def memcached_crashed(node, crashed_pid):
-        return {
-            Event.Fields.NODE_NAME: node,
-            Event.Fields.EVENT_ID: KvEngine.MemcachedCrashed,
-            Event.Fields.COMPONENT: Event.Component.DATA,
-            Event.Fields.DESCRIPTION: "Memcached crashed",
-            Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'os_pid': crashed_pid}
         }
 
     @staticmethod
@@ -165,6 +157,6 @@ class DataServiceEvents(object):
             Event.Fields.COMPONENT: Event.Component.DATA,
             Event.Fields.DESCRIPTION: "Memcached configuration changed",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'old_settings': prev_settings,
-                                       'new_settings': new_settings}
+            Event.Fields.EXTRA_ATTRS: {"old_settings": prev_settings,
+                                       "new_settings": new_settings}
         }

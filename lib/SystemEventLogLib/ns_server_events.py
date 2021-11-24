@@ -4,18 +4,7 @@ from cb_constants.system_event_log import NsServer
 
 class NsServerEvents(object):
     @staticmethod
-    def baby_sitter_respawn(node, process_id):
-        return {
-            Event.Fields.NODE_NAME: node,
-            Event.Fields.EVENT_ID: NsServer.BabySitterRespawn,
-            Event.Fields.COMPONENT: Event.Component.NS_SERVER,
-            Event.Fields.DESCRIPTION: "Babysitter crashed",
-            Event.Fields.SEVERITY: Event.Severity.FATAL,
-            Event.Fields.EXTRA_ATTRS: {'process_id': process_id}
-        }
-
-    @staticmethod
-    def rebalance_started(node, triggered_by, active_nodes, keep_nodes,
+    def rebalance_started(node, active_nodes, keep_nodes,
                           eject_nodes, delta_nodes, failed_nodes):
         return {
             Event.Fields.NODE_NAME: node,
@@ -23,13 +12,12 @@ class NsServerEvents(object):
             Event.Fields.COMPONENT: Event.Component.NS_SERVER,
             Event.Fields.DESCRIPTION: "Rebalance initiated",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'triggered_by': triggered_by,
-                                       'nodes_info': {
-                                          'active_nodes': active_nodes,
-                                          'keep_nodes': keep_nodes,
-                                          'eject_nodes': eject_nodes,
-                                          'delta_nodes': delta_nodes,
-                                          'failed_nodes': failed_nodes
+            Event.Fields.EXTRA_ATTRS: {"nodes_info": {
+                                          "active_nodes": active_nodes,
+                                          "keep_nodes": keep_nodes,
+                                          "eject_nodes": eject_nodes,
+                                          "delta_nodes": delta_nodes,
+                                          "failed_nodes": failed_nodes
                                        }}
         }
 
@@ -45,11 +33,11 @@ class NsServerEvents(object):
             Event.Fields.EXTRA_ATTRS: {
                 "completion_message": "Rebalance completed successfully.",
                 "nodes_info": {
-                    'active_nodes': active_nodes,
-                    'keep_nodes': keep_nodes,
-                    'eject_nodes': eject_nodes,
-                    'delta_nodes': delta_nodes,
-                    'failed_nodes': failed_nodes
+                    "active_nodes": active_nodes,
+                    "keep_nodes": keep_nodes,
+                    "eject_nodes": eject_nodes,
+                    "delta_nodes": delta_nodes,
+                    "failed_nodes": failed_nodes
                 }
             }
         }
@@ -65,11 +53,11 @@ class NsServerEvents(object):
             Event.Fields.SEVERITY: Event.Severity.ERROR,
             Event.Fields.EXTRA_ATTRS: {
                 "nodes_info": {
-                    'active_nodes': active_nodes,
-                    'keep_nodes': keep_nodes,
-                    'eject_nodes': eject_nodes,
-                    'delta_nodes': delta_nodes,
-                    'failed_nodes': failed_nodes
+                    "active_nodes": active_nodes,
+                    "keep_nodes": keep_nodes,
+                    "eject_nodes": eject_nodes,
+                    "delta_nodes": delta_nodes,
+                    "failed_nodes": failed_nodes
                 }
             }
         }
@@ -82,8 +70,8 @@ class NsServerEvents(object):
             Event.Fields.DESCRIPTION: "Node successfully joined the cluster",
             Event.Fields.SEVERITY: Event.Severity.INFO,
             Event.Fields.COMPONENT: Event.Component.NS_SERVER,
-            Event.Fields.EXTRA_ATTRS: {'node_added': node_added,
-                                       'services': node_services}
+            Event.Fields.EXTRA_ATTRS: {"node_added": node_added,
+                                       "services": node_services}
         }
 
     @staticmethod
@@ -92,6 +80,7 @@ class NsServerEvents(object):
             Event.Fields.NODE_NAME: node,
             Event.Fields.EVENT_ID: NsServer.ServiceStarted,
             Event.Fields.DESCRIPTION: "Service started",
+            Event.Fields.COMPONENT: Event.Component.NS_SERVER,
             Event.Fields.SEVERITY: Event.Severity.INFO,
         }
         if extra_attrs:
@@ -104,7 +93,7 @@ class NsServerEvents(object):
             Event.Fields.NODE_NAME: node,
             Event.Fields.EVENT_ID: NsServer.NodeOffline,
             Event.Fields.COMPONENT: Event.Component.NS_SERVER,
-            Event.Fields.EXTRA_ATTRS: {'node': new_node}
+            Event.Fields.EXTRA_ATTRS: {"node": new_node}
         }
 
     @staticmethod
@@ -116,10 +105,10 @@ class NsServerEvents(object):
             Event.Fields.COMPONENT: Event.Component.NS_SERVER,
             Event.Fields.DESCRIPTION: "Auto failover initiated",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'node': failover_nodes,
-                                       'master_node': orchestrator_node,
-                                       'threshold': failover_threshold,
-                                       'reason': failover_reason}
+            Event.Fields.EXTRA_ATTRS: {"node": failover_nodes,
+                                       "master_node": orchestrator_node,
+                                       "threshold": failover_threshold,
+                                       "reason": failover_reason}
         }
 
     @staticmethod
@@ -132,11 +121,11 @@ class NsServerEvents(object):
             Event.Fields.DESCRIPTION: "Auto failover completed",
             Event.Fields.SEVERITY: Event.Severity.INFO,
             Event.Fields.EXTRA_ATTRS: {
-                'node': failover_nodes,
-                'master_node': orchestrator_node,
-                'time_taken': 0,
-                'threshold': failover_threshold,
-                'reason': failover_reason,
+                "node": failover_nodes,
+                "master_node": orchestrator_node,
+                "time_taken": 0,
+                "threshold": failover_threshold,
+                "reason": failover_reason,
                 "completion_message": "Failover completed successfully."}
         }
 
@@ -149,10 +138,10 @@ class NsServerEvents(object):
             Event.Fields.COMPONENT: Event.Component.NS_SERVER,
             Event.Fields.DESCRIPTION: "Auto failover failed",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'node': failover_node,
-                                       'orchestrator': orchestrator_node,
-                                       'threshold': failover_threshold,
-                                       'reason': failure_reason}
+            Event.Fields.EXTRA_ATTRS: {"node": failover_node,
+                                       "orchestrator": orchestrator_node,
+                                       "threshold": failover_threshold,
+                                       "reason": failure_reason}
         }
 
     @staticmethod
@@ -164,9 +153,9 @@ class NsServerEvents(object):
             Event.Fields.COMPONENT: Event.Component.NS_SERVER,
             Event.Fields.DESCRIPTION: "Graceful failover started",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'trigger_method': trigger_method,
-                                       'node': failover_node,
-                                       'orchestrator': orchestrator_node}
+            Event.Fields.EXTRA_ATTRS: {"trigger_method": trigger_method,
+                                       "node": failover_node,
+                                       "orchestrator": orchestrator_node}
         }
 
     @staticmethod
@@ -178,9 +167,9 @@ class NsServerEvents(object):
             Event.Fields.COMPONENT: Event.Component.NS_SERVER,
             Event.Fields.DESCRIPTION: "Graceful failover complete",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'trigger_method': trigger_method,
-                                       'node': failover_node,
-                                       'orchestrator': orchestrator_node}
+            Event.Fields.EXTRA_ATTRS: {"trigger_method": trigger_method,
+                                       "node": failover_node,
+                                       "orchestrator": orchestrator_node}
         }
 
     @staticmethod
@@ -192,9 +181,9 @@ class NsServerEvents(object):
             Event.Fields.COMPONENT: Event.Component.NS_SERVER,
             Event.Fields.DESCRIPTION: "Graceful failover failed",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'trigger_method': trigger_method,
-                                       'node': failover_node,
-                                       'orchestrator': orchestrator_node}
+            Event.Fields.EXTRA_ATTRS: {"trigger_method": trigger_method,
+                                       "node": failover_node,
+                                       "orchestrator": orchestrator_node}
         }
 
     @staticmethod
@@ -206,9 +195,9 @@ class NsServerEvents(object):
             Event.Fields.COMPONENT: Event.Component.NS_SERVER,
             Event.Fields.DESCRIPTION: "Hard failover started",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'trigger_type': trigger_type,
-                                       'node': failover_node,
-                                       'orchestrator': orchestrator_node}
+            Event.Fields.EXTRA_ATTRS: {"trigger_type": trigger_type,
+                                       "node": failover_node,
+                                       "orchestrator": orchestrator_node}
         }
 
     @staticmethod
@@ -220,9 +209,9 @@ class NsServerEvents(object):
             Event.Fields.COMPONENT: Event.Component.NS_SERVER,
             Event.Fields.DESCRIPTION: "Hard failover complete",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'trigger_type': trigger_type,
-                                       'node': failover_node,
-                                       'orchestrator': orchestrator_node}
+            Event.Fields.EXTRA_ATTRS: {"trigger_type": trigger_type,
+                                       "node": failover_node,
+                                       "orchestrator": orchestrator_node}
         }
 
     @staticmethod
@@ -234,9 +223,9 @@ class NsServerEvents(object):
             Event.Fields.COMPONENT: Event.Component.NS_SERVER,
             Event.Fields.DESCRIPTION: "Hard failover failed",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'trigger_type': trigger_type,
-                                       'node': failover_node,
-                                       'orchestrator': orchestrator_node}
+            Event.Fields.EXTRA_ATTRS: {"trigger_type": trigger_type,
+                                       "node": failover_node,
+                                       "orchestrator": orchestrator_node}
         }
 
     @staticmethod
@@ -246,8 +235,8 @@ class NsServerEvents(object):
             Event.Fields.COMPONENT: Event.Component.NS_SERVER,
             Event.Fields.DESCRIPTION: "Master selected",
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.EXTRA_ATTRS: {'old_master': old_orchestrator,
-                                       'new_master': new_orchestrator}
+            Event.Fields.EXTRA_ATTRS: {"old_master": old_orchestrator,
+                                       "new_master": new_orchestrator}
         }
 
     @staticmethod
@@ -256,6 +245,21 @@ class NsServerEvents(object):
             Event.Fields.NODE_NAME: node,
             Event.Fields.EVENT_ID: NsServer.TopologyChange,
             Event.Fields.COMPONENT: Event.Component.NS_SERVER,
-            Event.Fields.EXTRA_ATTRS: {'old_topology': old_topology,
-                                       'new_topology': new_topology}
+            Event.Fields.EXTRA_ATTRS: {"old_topology": old_topology,
+                                       "new_topology": new_topology}
+        }
+
+    @staticmethod
+    def service_crashed(node, process_name, process_id, exit_status):
+        return {
+            Event.Fields.NODE_NAME: node,
+            Event.Fields.EVENT_ID: NsServer.ServiceCrashed,
+            Event.Fields.COMPONENT: Event.Component.NS_SERVER,
+            Event.Fields.DESCRIPTION: "Service crashed",
+            Event.Fields.SEVERITY: Event.Severity.ERROR,
+            Event.Fields.EXTRA_ATTRS: {
+                "name": process_name,
+                "os_pid": process_id,
+                "exit_status": exit_status
+            }
         }

@@ -154,20 +154,23 @@ class EventHelper(object):
             # End of timestamp validation
 
             # Check whether the events are not duplicated within desired time
-            if event_uuid not in timestamps:
-                timestamps[event_uuid] = event_timestamp
-            else:
+            if event_uuid in timestamps:
                 ts_for_prev_uuid = EventHelper.get_datetime_obj_from_str(
                     timestamps[event_uuid])
                 ts_for_curr_uuid = EventHelper.get_datetime_obj_from_str(
                     event_timestamp)
+                blocked_window = CbServer.sys_event_log_uuid_uniqueness_time
                 if (ts_for_curr_uuid - ts_for_prev_uuid) \
-                        > timedelta(seconds=CbServer.sys_event_log_uuid_uniqueness_time):
+                        < timedelta(seconds=blocked_window):
                     duplicates_present = True
                     failures.append("Duplicate UUID detected for timestamps!! "
                                     "%s is present during %s and %s"
                                     % (event_uuid, timestamps[event_uuid],
                                        event_timestamp))
+
+            # Save the last known timestamp for the current UUID
+            timestamps[event_uuid] = event_timestamp
+
             # End of duplicate UUID validation
         return duplicates_present
 
@@ -184,7 +187,7 @@ class EventHelper(object):
         self.__event_counter.set(counter)
 
     def set_test_start_time(self):
-        self.test_start_time = self.get_timestamp_format(datetime.now())
+        self.test_start_time = self.get_timestamp_format(datetime.utcnow())
 
     def validate(self, server, since_time=None, events_count=-1):
         """
