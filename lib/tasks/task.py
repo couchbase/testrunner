@@ -5142,7 +5142,7 @@ class EnterpriseBackupTask(Task):
 
 class EnterpriseRestoreTask(Task):
 
-    def __init__(self, backupset, objstore_provider, no_progress_bar=False, cli_command_location='', cb_version=None):
+    def __init__(self, backupset, objstore_provider, no_progress_bar=False, cli_command_location='', cb_version=None, start="start", end="end", backups=[], force_updates=False, no_resume=False):
         Task.__init__(self, "enterprise_backup_task")
         self.backupset = backupset
         self.objstore_provider = objstore_provider
@@ -5160,6 +5160,8 @@ class EnterpriseRestoreTask(Task):
         self.backups = backups
         self.start = start
         self.end = end
+        self.force_updates = force_updates
+        self.no_resume = no_resume
         try:
             self.remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         except Exception as e:
@@ -5169,14 +5171,18 @@ class EnterpriseRestoreTask(Task):
 
     def execute(self, task_manager):
         try:
-            try:
-                backup_start = self.backups[int(self.start) - 1]
-            except IndexError:
-                backup_start = "{0}{1}".format(self.backups[-1], self.start)
-            try:
-                backup_end = self.backups[int(self.end) - 1]
-            except IndexError:
-                backup_end = "{0}{1}".format(self.backups[-1], self.end)
+            if isinstance(self.start, int) and isinstance(self.end, int):
+                try:
+                    backup_start = self.backups[int(self.start) - 1]
+                except IndexError:
+                    backup_start = "{0}{1}".format(self.backups[-1], self.start)
+                try:
+                    backup_end = self.backups[int(self.end) - 1]
+                except IndexError:
+                    backup_end = "{0}{1}".format(self.backups[-1], self.end)
+            else:
+                backup_start = self.start
+                backup_end = self.end
 
             args = (
                 f"restore --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
@@ -5192,6 +5198,7 @@ class EnterpriseRestoreTask(Task):
                        f"{' --obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''}"
                        f"{' --obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
                         f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
+                f"{' --resume' if self.backupset.resume and not self.no_resume else ''}"
             )
             if self.no_progress_bar:
                 args += " --no-progress-bar"

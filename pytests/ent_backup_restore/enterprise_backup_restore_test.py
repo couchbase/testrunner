@@ -3767,6 +3767,35 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_cluster_validate()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
 
+    def test_resume_restore(self):
+        """
+        1. Creates specified bucket on the cluster and loads it
+        2. Performs a backup
+        3. Starts, then kills a restore
+        4. Performs and validates a restore using resume
+        """
+        if not self.backupset.resume:
+            self.fail("Resume must be True for this test")
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster_validate()
+        self.log.info("Start to flush bucket")
+        self._all_buckets_flush()
+        restore_result = self.cluster.async_restore_cluster(backupset=self.backupset,
+                                                            objstore_provider=self.objstore_provider,
+                                                            no_progress_bar=self.no_progress_bar,
+                                                            cli_command_location=self.cli_command_location,
+                                                            cb_version=self.cb_version,
+                                                            force_updates=self.backupset.force_updates,
+                                                            no_resume=True)
+        state = ""
+        while state not in ("FINISHED", "EXECUTING"):
+            state = restore_result.state
+        self._kill_cbbackupmgr()
+        self.assertFalse(self._check_output("success", restore_result.result()))
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+
     def test_merge_with_crash(self):
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)

@@ -831,6 +831,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --filter-values '{0}'".format(self.backupset.filter_values)
         if self.backupset.force_updates:
             args += " --force-updates"
+        if self.backupset.resume:
+            args += " --resume"
         if self.no_progress_bar:
             args += " --no-progress-bar"
         bucket_compression_mode = self.compression_mode

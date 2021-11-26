@@ -1414,7 +1414,7 @@ class Cluster(object):
         return _task
 
     def async_restore_cluster(self, backupset, objstore_provider, no_progress_bar=False, cli_command_location='',
-                              cb_version=None):
+                              cb_version=None, start="start", end="end", backups=[], force_updates=False, no_resume=False):
         """
         Asynchronously start backup restore
         :param backupset: backupset containing common parameter passed into backup tests
@@ -1424,7 +1424,7 @@ class Cluster(object):
         :param cli_command_location: cli_command_location: command location with respect to os
         :return: task with the output or error message
         """
-        _task = EnterpriseRestoreTask(backupset, objstore_provider, no_progress_bar, cli_command_location, cb_version)
+        _task = EnterpriseRestoreTask(backupset, objstore_provider, no_progress_bar, cli_command_location, cb_version, start, end, backups, force_updates, no_resume)
         self.task_manager.schedule(_task)
         return _task
 
