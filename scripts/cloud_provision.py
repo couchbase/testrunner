@@ -1,10 +1,13 @@
 from argparse import ArgumentParser
-import sys
+import sys, json, subprocess
 import boto3
 import paramiko
 from google.cloud.compute_v1 import ImagesClient, InstancesClient, ZoneOperationsClient
 from google.cloud.compute_v1.types.compute import AccessConfig, AttachedDisk, AttachedDiskInitializeParams, BulkInsertInstanceRequest, BulkInsertInstanceResource, DeleteInstanceRequest, GetFromFamilyImageRequest, InstanceProperties, ListInstancesRequest, NetworkInterface, Operation
 import time
+"""
+  Azure needs to install azure cli 'az' in dispatcher slave
+"""
 
 def post_provisioner(host, username, ssh_key_path):
     ssh = paramiko.SSHClient()
@@ -172,11 +175,70 @@ def gcp_get_servers(name, count, os, type, ssh_key_path, architecture):
 
     return ips, internal_ips
 
+AZ_TEMPLATE_MAP = {
+    "couchbase"  : "qe-image-20211129",
+    "elastic-fts": "qe-es-image-20211129",
+    "localstack" : "qe-localstack-image-20211129"
+}
+def az_get_servers(name, count, os, type, ssh_key_path, architecture):
+    vm_type = "Standard_B4ms"
+    security_group_name = "qe-test-nsg"
+    group_name = "qe-test"
+    ips = []
+    internal_ips []
+
+    if type != "couchbase":
+        image_name = AZ_TEMPLATE_MAP[type]
+    else:
+        image_name = AZ_TEMPLATE_MAP["couchbase"]
+
+    """ az vm create -g qe-test -n from-w22 --image 'qe-test-image-20211112-westus2' --nsg qe-test-nsg
+           --size Standard_B4ms --output json  --count 2 --public-ip-sku Standard
+        image_name = "qe-test-image-20211112-westus2"
+    """
+    for x in range(1, count + 1):
+        cmd = "az vm create -g {0} -n {1}{2} --image {3} --nsg {4} --size {5} --public-ip-sku Standard --output json "\
+              .format(group_name, name, x, image_name, security_group_name, vm_type)
+        print("\ncreate vm {0}{1}".format(name, x))
+        stdout = subprocess.check_output(cmd, shell=True)
+        if isinstance(stdout, bytes):
+            # convert to string to load json
+            stdout = stdout.decode('utf-8')
+        if isinstance(stdout, str):
+            stdout = json.loads(stdout)
+            ips.append(stdout["publicIpAddress"])
+            internal_ips.append(stdout["privateIpAddress"])
+    """ no need post_provisioner run on azure """
+    print("public ips of vms: ", ips)
+    print("private ips of vms: ", internal_ips)
+    return ips, internal_ips
+
+def az_terminate(name):
+    group_name = "qe-test"
+    cmd = "az vm list |  grep -o '\"computerName\": \"[^\"]*' | grep -o '[^\"]*$' | grep ^{}".format(name)
+    vms = subprocess.check_output(cmd, shell=True).decode('utf-8')
+    vms = vms.split("\n")
+    vms = [s for s in vms if s]
+    for vm_name in vms:
+        cmd1 = "az vm delete -g {0} -n {1} -y "\
+               .format(group_name, vm_name)
+        cmd2 = "az network nic delete -g {0} -n {1}VMNic --no-wait"\
+                .format(group_name, vm_name)
+        cmd3 = "az network public-ip delete -g {0} -n {1}PublicIP"\
+                .format(group_name, vm_name)
+        print("\ndelete vm {0}".format(name))
+        subprocess.check_output(cmd1, shell=True)
+        print("\ndelete network of vm {0}".format(name))
+        subprocess.check_output(cmd2, shell=True)
+        print("\ndelete public ip of vm {0}".format(name))
+        subprocess.check_output(cmd3, shell=True)
+
+
 if __name__ == "__main__":
     parser = ArgumentParser()
     subparsers = parser.add_subparsers(dest="provider")
 
-    providers = ["aws", "gcp"]
+    providers = ["aws", "gcp", "az"]
 
     for provider in providers:
         provider_parser = subparsers.add_parser(provider)
@@ -196,3 +258,6 @@ if __name__ == "__main__":
     elif args.provider == "gcp":
         if args.cmd == "terminate":
             gcp_terminate(args.name)
+    elif arg.provider == "az":
+        if args.cmd == "terminate":
+            az_terminate(args.name)

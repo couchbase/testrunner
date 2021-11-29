@@ -126,6 +126,8 @@ def get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version, p
     elif options.serverType == GCP:
         ssh_key_path = OS.environ.get("GCP_SSH_KEY")
         return cloud_provision.gcp_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture)
+    elif options.serverType == AZUZE:
+        return cloud_provision.az_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture)
 
 def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool=False, os_version="", pool_id=None):
     if options.serverType in CLOUD_SERVER_TYPES:
@@ -211,7 +213,7 @@ def main():
     parser.add_option('-t', '--test', dest='test', default=False, action='store_true')  # use the test Jenkins
     parser.add_option('-s', '--subcomponent', dest='subcomponent', default=None)
     parser.add_option('-e', '--extraParameters', dest='extraParameters', default=None)
-    parser.add_option('-y', '--serverType', dest='serverType', type="choice", default=VM, choices=[VM, AWS, DOCKER, GCP])  # or could be Docker
+    parser.add_option('-y', '--serverType', dest='serverType', type="choice", default=VM, choices=[VM, AWS, DOCKER, GCP, AZURE])  # or could be Docker
     parser.add_option('-u', '--url', dest='url', default=None)
     parser.add_option('-j', '--jenkins', dest='jenkins', default=None)
     parser.add_option('-b', '--branch', dest='branch', default='master')
@@ -653,6 +655,8 @@ def main():
                     # A stack name can contain only alphanumeric characters (case-sensitive) and hyphens
                     descriptor = descriptor.replace("_", "-")
                     descriptor = "".join(filter(lambda char: str.isalnum(char) or char == "-", descriptor))
+                elif options.serverType == AZURE:
+                    descriptor = "testrunner-" + str(uuid4())
 
                 descriptor = urllib.parse.quote(descriptor)
 
@@ -885,6 +889,8 @@ def release_servers_cloud(options, descriptor):
         cloud_provision.aws_terminate(descriptor)
     elif options.serverType == GCP:
         cloud_provision.gcp_terminate(descriptor)
+    elif options.serverType == AZURE:
+        cloud_provision.az_terminate(descriptor)
 
 def release_servers(options, descriptor):
     if options.serverType in CLOUD_SERVER_TYPES:
