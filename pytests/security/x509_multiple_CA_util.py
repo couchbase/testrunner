@@ -818,12 +818,7 @@ class x509main:
         if server is None:
             server = self.host
         rest = RestConnection(server)
-        status, content = rest.get_trusted_CAs()
-        if not status:
-            msg = "Could not get trusted CAs on %s; Failed with error %s" \
-                  % (server.ip, content)
-            raise Exception(msg)
-        return json.loads(content.decode('utf-8'))
+        return rest.get_trusted_CAs()
 
     def get_ca_names_from_ids(self, ids, server=None):
         """

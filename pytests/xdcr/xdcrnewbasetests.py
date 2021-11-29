@@ -1,34 +1,37 @@
-import unittest
-import time
 import copy
-import logger
+import json
 import logging
-import re
 import random
+import re
+import time
+import unittest
 
-from couchbase_helper.cluster import Cluster
-from membase.api.rest_client import RestConnection, Bucket
-from membase.api.exception import ServerUnavailableException
-from remote.remote_util import RemoteMachineShellConnection
-from remote.remote_util import RemoteUtilHelper
-from testconstants import STANDARD_BUCKET_PORT, WIN_COUCHBASE_LOGS_PATH
-from couchbase_helper.document import View
-from membase.helper.cluster_helper import ClusterOperationHelper
-from couchbase_helper.stats_tools import StatsCommon
-from membase.helper.bucket_helper import BucketOperationHelper
-from memcached.helper.data_helper import MemcachedClientHelper
-from TestInput import TestInputSingleton
-from scripts.collect_server_info import cbcollectRunner
-from scripts import collect_data_files
-from scripts.java_sdk_setup import JavaSdkSetup
-
-from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator, SDKDataLoader
-from lib.Cb_constants.CBServer import CbServer
-from lib.membase.api.exception import XDCRException
-from security.auditmain import audit
-from security.rbac_base import RbacBase
+import logger
 from collection.collections_rest_client import CollectionsRest
 from couchbase_cli import CouchbaseCLI
+from couchbase_helper.cluster import Cluster
+from couchbase_helper.document import View
+from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator, SDKDataLoader
+from membase.api.exception import ServerUnavailableException
+from membase.api.rest_client import RestConnection, Bucket
+from membase.helper.bucket_helper import BucketOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
+from memcached.helper.data_helper import MemcachedClientHelper
+from remote.remote_util import RemoteMachineShellConnection
+from remote.remote_util import RemoteUtilHelper
+from security.auditmain import audit
+from security.ntonencryptionBase import ntonencryptionBase
+from security.rbac_base import RbacBase
+from security.x509_multiple_CA_util import x509main
+from testconstants import STANDARD_BUCKET_PORT, WIN_COUCHBASE_LOGS_PATH
+
+from TestInput import TestInputSingleton
+from lib.Cb_constants.CBServer import CbServer
+from lib.membase.api.exception import XDCRException
+from scripts import collect_data_files
+from scripts.collect_server_info import cbcollectRunner
+from scripts.java_sdk_setup import JavaSdkSetup
+
 
 class RenameNodeException(XDCRException):
 
@@ -589,7 +592,7 @@ class XDCRRemoteClusterRef:
     """Class keep the information related to Remote Cluster References.
     """
 
-    def __init__(self, src_cluster, dest_cluster, name, encryption=False, replicator_target_role=False):
+    def __init__(self, src_cluster, dest_cluster, name, encryption=False, replicator_target_role=False, multiple_ca=False):
         """
         @param src_cluster: source couchbase cluster object.
         @param dest_cluster: destination couchbase cluster object:
@@ -601,6 +604,7 @@ class XDCRRemoteClusterRef:
         self.__dest_cluster = dest_cluster
         self.__name = name
         self.__encryption = encryption
+        self.__multiple_ca = multiple_ca
         self.__rest_info = {}
         self.__replicator_target_role = replicator_target_role
         self.__use_scramsha = TestInputSingleton.input.param("use_scramsha", False)
@@ -654,6 +658,12 @@ class XDCRRemoteClusterRef:
                 self.__src_cluster.get_master_node(),
                 self.__get_event_expected_results())
 
+    def _extract_certs(self, raw_content):
+        certs = ""
+        for ca_dict in raw_content:
+            certs += ca_dict["pem"]
+        return certs
+
     def add(self):
         """create cluster reference- add remote cluster
         """
@@ -661,8 +671,13 @@ class XDCRRemoteClusterRef:
         certificate = ""
         dest_master = self.__dest_cluster.get_master_node()
         if self.__encryption:
-            rest_conn_dest = RestConnection(dest_master)
-            certificate = rest_conn_dest.get_cluster_ceritificate()
+            if self.__multiple_ca:
+                rest_conn_dest = RestConnection(dest_master)
+                raw_content = rest_conn_dest.get_trusted_CAs()
+                certificate = self._extract_certs(raw_content)
+            else:
+                rest_conn_dest = RestConnection(dest_master)
+                certificate = rest_conn_dest.get_cluster_ceritificate()
 
         if self.__replicator_target_role:
             self.dest_user = "replicator_user"
@@ -790,7 +805,6 @@ class XDCRRemoteClusterRef:
 
 
 class XDCReplication:
-
     def __init__(self, remote_cluster_ref, from_bucket, rep_type, to_bucket):
         """
         @param remote_cluster_ref: XDCRRemoteClusterRef object
@@ -1210,7 +1224,6 @@ class CouchbaseCluster:
         """
         master = RestConnection(self.__master_node)
         self.enable_diag_eval_on_non_local_hosts(self.__master_node)
-        is_master_sherlock_or_greater = master.is_cluster_compat_mode_greater_than(3.1)
         self.__init_nodes(disabled_consistent_view)
         self.__clusterop.async_rebalance(
             self.__nodes,
@@ -1219,7 +1232,7 @@ class CouchbaseCluster:
             use_hostnames=self.__use_hostname).result()
 
         if CHECK_AUDIT_EVENT.CHECK:
-            if master.is_enterprise_edition() and is_master_sherlock_or_greater:
+            if master.is_enterprise_edition():
                 # enable audit by default in all goxdcr tests
                 audit_obj = audit(host=self.__master_node)
                 status = audit_obj.getAuditStatus()
@@ -1324,7 +1337,6 @@ class CouchbaseCluster:
             param + '=' + str(value))
 
     def toggle_security_setting(self, servers, setting, value):
-        from security.ntonencryptionBase import ntonencryptionBase
         n2nhelper = ntonencryptionBase()
         if setting == "tls":
             if value:
@@ -1410,6 +1422,13 @@ class CouchbaseCluster:
         finally:
             if cluster_shutdown:
                 self.__clusterop.shutdown(force=True)
+            try:
+                if CbServer.multiple_ca:
+                    CbServer.use_client_certs = False
+                    CbServer.cacert_verify = False
+                    x509main(host=self.__master_node).teardown_certs(servers=TestInputSingleton.input.servers)
+            except Exception as e:
+                self.__log.info(e)
 
     def create_sasl_buckets(
             self, bucket_size, num_buckets=1, num_replicas=1,
@@ -2368,7 +2387,8 @@ class CouchbaseCluster:
             value)
         task.result()
 
-    def add_remote_cluster(self, dest_cluster, name, encryption=False, replicator_target_role=False):
+    def add_remote_cluster(self, dest_cluster, name, encryption=False, replicator_target_role=False,
+                           multiple_ca=False):
         """Create remote cluster reference or add remote cluster for xdcr.
         @param dest_cluster: Destination cb cluster object.
         @param name: name of remote cluster reference
@@ -2379,7 +2399,8 @@ class CouchbaseCluster:
             dest_cluster,
             name,
             encryption,
-            replicator_target_role
+            replicator_target_role,
+            multiple_ca
         )
         remote_cluster.add()
         self.__remote_clusters.append(remote_cluster)
@@ -2944,9 +2965,13 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._replicator_role = self._input.param("replicator_role", False)
         self._replicator_all_buckets = self._input.param("replicator_all_buckets", False)
         self._use_java_sdk = self._input.param("java_sdk_client", False)
+        self._multiple_ca = self._input.param("use_multiple_certs", False)
+        self._use_https = self._input.param("use_https", False)
         if self._use_java_sdk:
             JavaSdkSetup()
-        self._use_https = self._input.param("use_https", False)
+        if self._multiple_ca:
+            CbServer.multiple_ca = True
+            self._use_https = True
         if self._use_https:
             CbServer.use_https = True
             self._demand_encryption = True
@@ -3150,7 +3175,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                     cb_cluster.get_name(),
                     self.__cb_clusters[i + 1].get_name()),
                 self._demand_encryption,
-                self._replicator_role
+                self._replicator_role,
+                self._multiple_ca
             )
             if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
                 self.__cb_clusters[i + 1].add_remote_cluster(
@@ -3159,7 +3185,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                         self.__cb_clusters[i + 1].get_name(),
                         cb_cluster.get_name()),
                     self._demand_encryption,
-                    self._replicator_role
+                    self._replicator_role,
+                    self._multiple_ca
                 )
 
     def __set_topology_star(self):
@@ -3171,14 +3198,16 @@ class XDCRNewBaseTest(unittest.TestCase):
                 cb_cluster,
                 Utility.get_rc_name(hub.get_name(), cb_cluster.get_name()),
                 self._demand_encryption,
-                self._replicator_role
+                self._replicator_role,
+                self._multiple_ca
             )
             if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
                 cb_cluster.add_remote_cluster(
                     hub,
                     Utility.get_rc_name(cb_cluster.get_name(), hub.get_name()),
                     self._demand_encryption,
-                    self._replicator_role
+                    self._replicator_role,
+                    self._multiple_ca
                 )
 
     def __set_topology_ring(self):
@@ -3192,7 +3221,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                 self.__cb_clusters[-1].get_name(),
                 self.__cb_clusters[0].get_name()),
             self._demand_encryption,
-            self._replicator_role
+            self._replicator_role,
+            self._multiple_ca
         )
         if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
             self.__cb_clusters[0].add_remote_cluster(
@@ -3201,7 +3231,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                     self.__cb_clusters[0].get_name(),
                     self.__cb_clusters[-1].get_name()),
                 self._demand_encryption,
-                self._replicator_role
+                self._replicator_role,
+                self._multiple_ca
             )
 
     def set_xdcr_topology(self):

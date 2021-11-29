@@ -1450,6 +1450,7 @@ class RestConnection(object):
             elif self.check_node_versions("5.0") and RestConnection(remote).check_node_versions("5.0"):
                 param_map['encryptionType'] = encryptionType
         params = urllib.parse.urlencode(param_map)
+        log.info("with settings {0}".format(param_map))
         retries = 5
         while retries:
             status, content, _ = self._http_request(api, 'POST', params)
@@ -5972,9 +5973,13 @@ class RestConnection(object):
         """
         Get all (default + uploaded) trusted CA certs information
         """
-        status, content, header = self._http_request(self.baseUrl
+        status, content, _ = self._http_request(self.baseUrl
                                                      + "/pools/default/trustedCAs", 'GET')
-        return status, content
+        if not status:
+            msg = "Could not get trusted CAs; Failed with error %s" \
+                  % (content)
+            raise Exception(msg)
+        return json.loads(content.decode('utf-8'))
 
     def delete_trusted_CA(self, ca_id):
         """
