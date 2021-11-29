@@ -387,6 +387,7 @@ class x509main:
         else:
             main_url = final_verb + "  --cacert " + x509main.CERT_FILE
 
+        main_url = main_url + " --tls-max 1.2"
         cmd = str(main_url) + " " + str(headers) + " " + str(final_url)
         if data is not None:
             cmd = cmd + " -d " + data
@@ -418,13 +419,6 @@ class x509main:
         else:
             status, result = self._validate_ssl_login(final_url, headers, client_cert, verb, data, plain_curl, username, password)
             return status, result
-
-    # Get current root cert from the cluster
-    def _get_cluster_ca_cert(self):
-        rest = RestConnection(self.host)
-        api = rest.baseUrl + "pools/default/certificate?extended=true"
-        status, content, header = rest._http_request(api, 'GET')
-        return status, content, header
 
     # Setup master node
     # 1. Upload Cluster cert i.e
