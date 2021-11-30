@@ -1205,7 +1205,10 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         """
         if self.input.param("validate_sys_event_logs", False):
             event_rest = SystemEventRestHelper([self.master])
-            events = [e for e in event_rest.get_events(server=self.master, since_time=self.log_start) if e["event_id"] in list(Tag)]
+            try:
+                events = [e for e in event_rest.get_events(server=self.master, since_time=self.log_start) if e["event_id"] in list(Tag)]
+            except TypeError:
+                events = [e for e in event_rest.get_events(server=self.master, since_time=self.log_start)["events"] if e["event_id"] in list(Tag)]
             self.assertEqual(sum(self.sys_log_count.values()), len(events))
             for e in self.sys_log_count:
                 self.assertEqual(self.sys_log_count[e], len([event for event in events if event["event_id"] == e]))
