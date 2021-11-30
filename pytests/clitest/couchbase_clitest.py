@@ -258,10 +258,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
     def _convert_server_to_url(self, server):
         """From 6.5.x, add, remove, failover... need to prefix server with
-           http/https and postfix with 8091/18091 """
-        url_server = "http://{0}:{1}".format(server.cluster_ip, server.port)
-        if self.secure_conn:
-            url_server = "https://{0}:1{1}".format(server.cluster_ip, server.port)
+           http/https and postfix with 8091/18091
+           From 7.1, only allow secure connection to add node """
+        url_server = "https://{0}:1{1}".format(server.ip, server.port)
         return url_server
 
 
@@ -478,12 +477,13 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                     self.servers[num + 1].ip))
                 options = "--server-add={0} \
                            --server-add-username=Administrator \
-                           --server-add-password=password" \
+                           --server-add-password=password \
+                           --no-ssl-verify " \
                             .format(self._convert_server_to_url(self.servers[num + 1]))
                 output, error = \
                       remote_client.execute_couchbase_cli(cli_command=cli_command,
                                         options=options, cluster_host="localhost",
-                                          cluster_port=8091, user="Administrator",
+                                          cluster_port=18091, user="Administrator",
                                                               password="password")
                 server_added = False
                 output_msg = "SUCCESS: Server added"
@@ -559,11 +559,12 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                         .format(self.servers[nodes_add - nodes_rem - num ].ip))
             self.sleep(10, "wait for previous command execute completely")
 
-            options = "--server-add={0}:{1}".format(self.servers[nodes_add - nodes_rem - num].ip,
+            options = "--server-add=https{0}:1{1} --no-ssl-verify "\
+                                                   .format(self.servers[nodes_add - nodes_rem - num].ip,
                                                     self.servers[nodes_add - nodes_rem - num].port)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                         options=options, cluster_host="localhost",
-                                                          cluster_port=8091, user="Administrator",
+                                                          cluster_port=18091, user="Administrator",
                                                                               password="password")
             self.assertTrue(self._check_output(["DEPRECATED: Please use the recovery command ",
                                  "SUCCESS: Servers recovered"], output), "Server readd failed")
@@ -596,7 +597,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                                     options=options,
                                                                     cluster_host="localhost",
-                                                                    cluster_port=8091,
+                                                                    cluster_port=18091,
                                                                     user=cluster_user,
                                                                     password=cluster_pwd)
                 self.assertTrue("SUCCESS: Server added" in output[0])
@@ -661,7 +662,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             cli_command = "server-readd"
             self.log.info("add node {0} back to cluster"\
                           .format(self.servers[nodes_add - nodes_rem - num].ip))
-            options = "--server-add={0}:{1}".format(self.servers[nodes_add - nodes_rem - num].ip,
+            options = "--server-add=https{0}:1{1} --no-ssl-verify "\
+                                                   .format(self.servers[nodes_add - nodes_rem - num].ip,
                                                     self.servers[nodes_add - nodes_rem - num].port)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                                 options=options,
@@ -686,7 +688,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         for num in range(nodes_failover):
             self.log.info("add back node {0} to cluster"\
                                   .format(self.servers[nodes_add - nodes_rem - num ].ip))
-            options = "--server-add={0}:{1}".format(self.servers[nodes_add - nodes_rem - num ].ip,
+            options = "--server-add=https{0}:1{1} --no-ssl-verify "\
+                                                   .format(self.servers[nodes_add - nodes_rem - num ].ip,
                                                     self.servers[nodes_add - nodes_rem - num ].port)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                                 options=options,
@@ -3506,9 +3509,8 @@ class XdcrCLITest(CliBaseTest):
 
     def _convert_server_to_url(self, server):
         """From 6.5.x, add, remove, failover... need to prefix server with
-           http/https and postfix with 8091/18091 """
-        url_server = "http://{0}:{1}".format(server.ip, server.port)
-        if self.secure_conn:
-            url_server = "https://{0}:1{1}".format(server.ip, server.port)
+           http/https and postfix with 8091/18091
+           From 7.1, only allow secure connection to add node """
+        url_server = "https://{0}:1{1}".format(server.ip, server.port)
         return url_server
 

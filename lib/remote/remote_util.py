@@ -4694,6 +4694,10 @@ class RemoteMachineShellConnection(KeepRefs):
             passwd_param = (" --cluster-password {0}".format(password), "")[password is None]
         # now we can run command in format where all parameters are optional
         # {PATH}/couchbase-cli [COMMAND] [CLUSTER:[PORT]] [USER] [PASWORD] [OPTIONS]
+        if cli_command in ["server-readd", "server-add"]:
+            cluster_param = (" -c https://{0}".format(cluster_host),
+                             "")[cluster_host is None]
+            cluster_param += (":{0}".format(cluster_port), ":18091 ")[cluster_port is None]
         command = cb_client + " " + cli_command + cluster_param + user_param + passwd_param + " " + options
         if _stdin:
             command = "echo %s | %s" % (_stdin, command)
