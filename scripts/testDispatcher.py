@@ -48,6 +48,9 @@ VM = "VM"
 
 CLOUD_SERVER_TYPES = [AWS, AZURE, GCP]
 
+DEFAULT_ARCHITECTURE = "x86_64"
+DEFAULT_SERVER_TYPE = VM
+
 def getNumberOfServers(iniFile):
     f = open(iniFile)
     contents = f.read()
@@ -215,7 +218,7 @@ def main():
     parser.add_option('-t', '--test', dest='test', default=False, action='store_true')  # use the test Jenkins
     parser.add_option('-s', '--subcomponent', dest='subcomponent', default=None)
     parser.add_option('-e', '--extraParameters', dest='extraParameters', default=None)
-    parser.add_option('-y', '--serverType', dest='serverType', type="choice", default=VM, choices=[VM, AWS, DOCKER, GCP, AZURE])  # or could be Docker
+    parser.add_option('-y', '--serverType', dest='serverType', type="choice", default=DEFAULT_SERVER_TYPE, choices=[VM, AWS, DOCKER, GCP, AZURE])  # or could be Docker
     parser.add_option('-u', '--url', dest='url', default=None)
     parser.add_option('-j', '--jenkins', dest='jenkins', default=None)
     parser.add_option('-b', '--branch', dest='branch', default='master')
@@ -237,7 +240,7 @@ def main():
     parser.add_option('--ssh_poll_interval', dest='SSH_POLL_INTERVAL', default="20")
     parser.add_option('--ssh_num_retries', dest='SSH_NUM_RETRIES', default="3")
     parser.add_option('--job_params', dest='job_params', default=None)
-    parser.add_option('--architecture', dest='architecture', default="x86_64")
+    parser.add_option('--architecture', dest='architecture', default=DEFAULT_ARCHITECTURE)
 
     # set of parameters for testing purposes.
     #TODO: delete them after successful testing
@@ -494,6 +497,10 @@ def main():
         launchString = launchString + '&url=' + options.url
     if options.cherrypick is not None:
         launchString = launchString + '&cherrypick=' + urllib.parse.quote(options.cherrypick)
+    if options.architecture != DEFAULT_ARCHITECTURE:
+        launchString = launchString + '&arch=' + options.architecture
+    if options.serverType != DEFAULT_SERVER_TYPE:
+        launchString = launchString + '&server_type=' + options.serverType
     currentDispatcherJobUrl = OS.getenv("BUILD_URL")
     currentExecutorParams = get_jenkins_params.get_params(
         currentDispatcherJobUrl)
