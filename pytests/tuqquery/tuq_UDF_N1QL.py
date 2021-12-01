@@ -281,7 +281,7 @@ class QueryUDFN1QLTests(QueryTests):
         expected_curl = response.json()
         # Execute function
         function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
-        actual_result = function_result['results'][0]
+        actual_result = function_result['results'][0][0]['$1']
         self.assertEqual(actual_result, expected_curl)
 
     def test_flush_collection(self):
@@ -399,6 +399,93 @@ class QueryUDFN1QLTests(QueryTests):
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
             self.assertTrue('User does not have credentials to run' in error['msg'])
+
+    def test_datetime_value(self):
+        function_name = 'datetime_value'
+        functions = f'function {function_name}() {{\
+            const date1 = new Date(Date.UTC(2018, 11, 24, 10, 33, 30, 3));\
+            const date2 = new Date(Date.UTC(2018, 11, 24, 10, 33, 30));\
+            const date3 = new Date(Date.UTC(2018, 11, 24, 10, 33));\
+            const date4 = new Date(Date.UTC(2018, 11, 24, 10));\
+            const date5 = new Date(2018, 11, 24);\
+            const date6 = new Date(2018, 11);\
+            const date7 = new Date(100000000000);\
+            const date8 = new Date("December 24, 2018 10:33:30");\
+            var query = SELECT $date1 as date_2018_12_24_10_33_30_3,\
+                                $date2 as date_2018_12_24_10_33_30,\
+                                $date3 as date_2018_12_24_10_33,\
+                                $date4 as date_2018_12_24_10,\
+                                $date5 as date_2018_12_24,\
+                                $date6 as date_2018_12,\
+                                $date7 as date_millis,\
+                                $date8 as date_str;\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;\
+            }}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+        expected_result = [ {
+            "date_2018_12": "2018-12-01T08:00:00.000Z",
+            "date_2018_12_24": "2018-12-24T08:00:00.000Z",
+            "date_2018_12_24_10": "2018-12-24T10:00:00.000Z",
+            "date_2018_12_24_10_33": "2018-12-24T10:33:00.000Z",
+            "date_2018_12_24_10_33_30": "2018-12-24T10:33:30.000Z",
+            "date_2018_12_24_10_33_30_3": "2018-12-24T10:33:30.003Z",
+            "date_millis": "1973-03-03T09:46:40.000Z",
+            "date_str": "2018-12-24T18:33:30.000Z"
+            }
+        ]
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+    def test_datetime_function(self):
+        function_name = 'datetime_function'
+        functions = f'function {function_name}() {{\
+            const date1 = new Date(Date.UTC(2018, 11, 24, 10, 33, 30, 3));\
+            date_short = "2021-05-15";\
+            date_time = "01:15:45";\
+            var query = SELECT DATE_FORMAT_STR($date1, "1111-11-11") as full_to_short,\
+                     DATE_FORMAT_STR($date_short, "1111-11-11T00:00:00+00:00") as short_to_full,\
+                     DATE_FORMAT_STR($date_time, "1111-11-11T01:01:01Z") as time_to_full,\
+                     DATE_PART_STR($date1, "day") as day_24,\
+                     DATE_PART_STR($date1, "millisecond") as millisecond_3,\
+                     DATE_PART_STR($date1, "second") as second_30,\
+                     DATE_PART_STR($date1, "minute") as minute_33,\
+                     DATE_PART_STR($date1, "hour") as hour_10,\
+                     DATE_PART_STR($date1, "month") as month_12,\
+                     DATE_PART_STR($date1, "week") as week_52,\
+                     DATE_PART_STR($date1, "year") as year_2018;\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;\
+            }}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+        expected_result = [ {
+            'day_24': 24,
+            'full_to_short': '2018-12-24',
+            'hour_10': 10,
+            'millisecond_3': 3,
+            'minute_33': 33,
+            'month_12': 12,
+            'second_30': 30,
+            'short_to_full': '2021-05-15T00:00:00-07:00',
+            'time_to_full': '0000-01-01T01:15:45-07',
+            'week_52': 52,
+            'year_2018': 2018
+            }
+        ]
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
 
     def test_parameter_values(self):
         function_name = 'param_values_default'
