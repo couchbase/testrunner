@@ -53,8 +53,8 @@ class EventingCollections(EventingBaseTest):
         self.wait_for_handler_state(body['appname'], "undeployed")
         self.collection_rest.create_collection(bucket=self.src_bucket_name, scope=self.src_bucket_name,
                                      collection=self.src_bucket_name)
-        self.deploy_function(body)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        self.deploy_function(body)
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         self.undeploy_and_delete_function(body)
 
@@ -74,8 +74,8 @@ class EventingCollections(EventingBaseTest):
         self.collection_rest.delete_scope("src_bucket","src_bucket")
         self.wait_for_handler_state(body['appname'],"undeployed")
         self.create_scope_collection(self.src_bucket_name,self.src_bucket_name,self.src_bucket_name)
-        self.deploy_function(body)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        self.deploy_function(body)
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         self.undeploy_and_delete_function(body)
 
@@ -91,10 +91,10 @@ class EventingCollections(EventingBaseTest):
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         self.pause_function(body)
         self.collection_rest.delete_collection("dst_bucket","dst_bucket","dst_bucket")
-        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
-                                     is_delete=True)
         self.collection_rest.create_collection(bucket=self.dst_bucket_name, scope=self.dst_bucket_name,
                                                collection=self.dst_bucket_name)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                     is_delete=True)
         self.resume_function(body)
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", 0)
         self.undeploy_and_delete_function(body)
@@ -110,11 +110,11 @@ class EventingCollections(EventingBaseTest):
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         self.pause_function(body)
         self.collection_rest.delete_scope("dst_bucket","dst_bucket")
-        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
-                                     is_delete=True)
         self.collection_rest.create_scope(bucket=self.dst_bucket_name, scope=self.dst_bucket_name)
         self.collection_rest.create_collection(bucket=self.dst_bucket_name, scope=self.dst_bucket_name,
                                                collection=self.dst_bucket_name)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
+                                     is_delete=True)
         self.resume_function(body)
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", 0)
         self.undeploy_and_delete_function(body)
@@ -136,8 +136,8 @@ class EventingCollections(EventingBaseTest):
         self.wait_for_handler_state(body['appname'], "undeployed")
         self.collection_rest.create_collection(bucket=self.metadata_bucket_name, scope=self.metadata_bucket_name,
                                      collection=self.metadata_bucket_name)
-        self.deploy_function(body)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        self.deploy_function(body)
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         self.undeploy_and_delete_function(body)
 
@@ -157,8 +157,8 @@ class EventingCollections(EventingBaseTest):
         self.collection_rest.delete_scope("metadata","metadata")
         self.wait_for_handler_state(body['appname'],"undeployed")
         self.create_scope_collection(self.metadata_bucket_name,self.metadata_bucket_name,self.metadata_bucket_name)
-        self.deploy_function(body)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        self.deploy_function(body)
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         self.undeploy_and_delete_function(body)
 

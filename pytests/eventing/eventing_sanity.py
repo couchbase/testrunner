@@ -25,16 +25,16 @@ class EventingSanity(EventingBaseTest):
             self.buckets = RestConnection(self.master).get_buckets()
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.expiry = 3
+        if self.non_default_collection:
+            self.create_scope_collection(bucket=self.src_bucket_name,scope=self.src_bucket_name,collection=self.src_bucket_name)
+            self.create_scope_collection(bucket=self.metadata_bucket_name,scope=self.metadata_bucket_name,collection=self.metadata_bucket_name)
+            self.create_scope_collection(bucket=self.dst_bucket_name,scope=self.dst_bucket_name,collection=self.dst_bucket_name)
         query = "create primary index on {}".format(self.src_bucket_name)
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
         query = "create primary index on {}".format(self.dst_bucket_name)
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
         query = "create primary index on {}".format(self.metadata_bucket_name)
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
-        if self.non_default_collection:
-            self.create_scope_collection(bucket=self.src_bucket_name,scope=self.src_bucket_name,collection=self.src_bucket_name)
-            self.create_scope_collection(bucket=self.metadata_bucket_name,scope=self.metadata_bucket_name,collection=self.metadata_bucket_name)
-            self.create_scope_collection(bucket=self.dst_bucket_name,scope=self.dst_bucket_name,collection=self.dst_bucket_name)
 
     def tearDown(self):
         super(EventingSanity, self).tearDown()
