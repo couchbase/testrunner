@@ -159,7 +159,7 @@ CMDS = {
         "suse_install": "zypper --no-gpg-checks in -y buildpath > /dev/null && echo 1 || echo 0",
         "suse_uninstall": UNMOUNT_NFS_CMD +
             "zypper --ignore-unknown rm -y 'couchbase*' > /dev/null; " +
-            "rm -rf /var/cache/zypper/RPMS/couchbase* " +
+            "rm -rf /var/cache/zypper/RPMS/couchbase* ;" +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; " +
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
         "post_install": "systemctl -q is-active couchbase-server && echo 1 || echo 0",
