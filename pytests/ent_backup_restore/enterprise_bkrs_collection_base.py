@@ -75,9 +75,18 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         self.merge_should_fail = self.input.param("merge_should_fail", False)
         self.database_path = COUCHBASE_DATA_PATH
 
-        cmd = 'curl -g {0}:8091/diag/eval -u {1}:{2} '.format(self.master.ip,
-                                                              self.master.rest_username,
-                                                              self.master.rest_password)
+        self.master.protocol = "http://"
+        if self.enforce_tls:
+            self.master.port = '18091'
+            self.master.protocol = "https://"
+            for server in self.servers:
+                server.port = '18091'
+
+        cmd = 'curl -k -g {4}{0}:{3}/diag/eval -u {1}:{2} '.format(self.master.ip,
+                                                                   self.master.rest_username,
+                                                                   self.master.rest_password,
+                                                                   self.master.port,
+                                                                   self.master.protocol)
         cmd += '-d "path_config:component_path(bin)."'
         bin_path = subprocess.check_output(cmd, shell=True)
         try:
@@ -374,6 +383,11 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
 
     def tearDown(self):
         super(EnterpriseBackupRestoreCollectionBase, self).tearDown()
+        if self.enforce_tls:
+            self.master.port = '8091'
+            self.master.protocol = "http://"
+            for server in self.servers:
+                server.port = '8091'
         if not self.input.param("skip_cleanup", False):
             remote_client = RemoteMachineShellConnection(self.input.clusters[1][0])
             info = remote_client.extract_remote_info().type.lower()
@@ -800,6 +814,8 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                                                        self.backupset.cluster_host)
             secure_port = "1"
             url_format = "s"
+        if self.enforce_tls:
+            url_format = "s"
 
         user_input = "--username %s " % self.backupset.cluster_host_username
         password_input = "--password %s " % self.backupset.cluster_host_password
@@ -944,6 +960,8 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             cacert = self.root_path + "cert.pem"
             if self.os_name == "windows":
                 cacert = WIN_TMP_PATH_RAW + "cert.pem"
+        if self.enforce_tls:
+            url_format = "s"
 
         user_input = "--username %s " % self.backupset.restore_cluster_host_username
         password_input = "--password %s " % self.backupset.restore_cluster_host_password
