@@ -14,7 +14,6 @@ class CbServer(object):
     ssl_n1ql_port = 18093
     ssl_index_port = 19102
     ssl_eventing_port = 18096
-    ssl_backup_port = 18097
     ssl_cbas_port = 18095
 
     memcached_port = 11210
@@ -29,7 +28,6 @@ class CbServer(object):
                     str(n1ql_port): str(ssl_n1ql_port),
                     str(index_port): str(ssl_index_port),
                     str(eventing_port): str(ssl_eventing_port),
-                    str(backup_port): str(ssl_backup_port),
                     str(cbas_port): str(ssl_cbas_port),
                     str(memcached_port): str(ssl_memcached_port),
                     str(capi_port): str(ssl_capi_port)}

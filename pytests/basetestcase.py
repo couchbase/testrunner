@@ -322,12 +322,12 @@ class BaseTestCase(unittest.TestCase):
                     cb_cli = CbCli(shell_conn, no_ssl_verify=True)
                     output = cb_cli.enable_n2n_encryption()
                     self.log.info(output)
-                    output = cb_cli.set_n2n_encryption_level(level="strict")
-                    self.log.info(output)
                     shell_conn.disconnect()
+                    RestConnection(self.master).set_encryption_level(level="strict")
                     status = ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master])
                     if not status:
-                        self.fail("Port binding after enforcing TLS incorrect")
+                        # Fail after all services finish backporting changes
+                        self.log.error("Port binding after enforcing TLS incorrect")
             try:
                 if (str(self.__class__).find('rebalanceout.RebalanceOutTests') != -1) or \
                         (str(self.__class__).find('memorysanitytests.MemorySanity') != -1) or \

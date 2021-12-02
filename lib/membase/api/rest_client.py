@@ -1207,6 +1207,38 @@ class RestConnection(object):
                     status, content))
             raise Exception("Analytics Admin API failed")
 
+    def can_enable_strict_encryption(self, boolean=True):
+        """
+        Enables/disables setting strict level encryption
+        """
+        if boolean:
+            boolean = "true"
+        else:
+            boolean = "false"
+        api = self.baseUrl + 'internalSettings'
+        params = urllib.urlencode({"canEnableStrictEncryption": boolean})
+        status, content, _ = self._http_request(api, 'POST', params)
+        return status, content
+
+    def set_encryption_level(self, level="control"):
+        if level == "strict":
+            status, content = self.can_enable_strict_encryption(boolean=True)
+            if not status:
+                log.error("setting canEnableStrictEncryption failed on node {0} "
+                                    "with error {1}".format(self.ip, content))
+                raise Exception("setting canEnableStrictEncryption failed")
+        _ = self.update_autofailover_settings(False, 120, False)
+        api = self.baseUrl + "settings/security"
+        params = urllib.urlencode({'clusterEncryptionLevel': level})
+        status, content, header = self._http_request(api, 'POST', params)
+        if status:
+            CbServer.use_https = True
+            return content
+        else:
+            log.error("Setting encryption level on node {0} "
+                                "failed with error {1}".format(self.ip, content))
+            raise Exception("Setting encryption failed")
+
     def get_cluster_ceritificate(self):
         api = self.baseUrl + 'pools/default/certificate'
         status, content, _ = self._http_request(api, 'GET')
