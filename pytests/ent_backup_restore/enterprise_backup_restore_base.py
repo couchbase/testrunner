@@ -383,6 +383,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 pass
 
             remote_client.disconnect()
+        if self.enforce_tls:
+            self.master.port = '8091'
+            self.master.protocol = "http://"
+            for server in self.servers:
+                server.port = '8091'
 
     @property
     def cluster_to_backup(self):
