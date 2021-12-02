@@ -120,6 +120,8 @@ class QueryUDFN1QLTests(QueryTests):
     }
     dmls = {
         'select': 'SELECT d.* FROM default d ORDER BY META(d).id LIMIT 1',
+        'select_with_comment': 'SELECT d.* FROM default d ORDER BY META(d).id LIMIT 1 -- some comment',
+        'select_with_comment2': 'SELECT d.* FROM default d /* some comment */ ORDER BY META(d).id LIMIT 1',
         'update': 'UPDATE default SET job_title = "ENGINEER" WHERE join_yr = 2011 AND join_mo = 10 AND lower(job_title) = "engineer" RETURNING name, job_title',
         'insert': 'INSERT INTO default (KEY, VALUE) VALUES ("key1", { "type" : "hotel", "name" : "new hotel" }) RETURNING *',
         'upsert': 'UPSERT INTO default (KEY, VALUE) VALUES ("key1", { "type" : "hotel", "name" : "new hotel" }) RETURNING *',
