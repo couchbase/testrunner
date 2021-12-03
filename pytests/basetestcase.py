@@ -317,6 +317,7 @@ class BaseTestCase(unittest.TestCase):
                 self.port = str(self.input.param("port", None))
             if self.use_https:
                 if self.enforce_tls:
+                    RestConnection(self.master).update_autofailover_settings(False, 120, False)
                     self.log.info("#####Enforcing TLS########")
                     shell_conn = RemoteMachineShellConnection(self.master)
                     cb_cli = CbCli(shell_conn, no_ssl_verify=True)
