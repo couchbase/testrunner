@@ -526,3 +526,42 @@ class QueryUDFN1QLTests(QueryTests):
         ]
         actual_result = function_result['results'][0]
         self.assertEqual(actual_result, expected_result)
+
+    def test_comment(self):
+        function_name = 'success'
+        functions = f"""function {function_name}() {{
+            // some comment
+            query = SELECT "success" as res; // some other comment
+            var acc = [];
+            for (const row of query) {{
+                acc.push(row);
+            }}
+            return acc;
+        }}
+        """
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, [{'res': 'success'}])
+
+    def test_comment2(self):
+        function_name = 'success'
+        functions = f"""function {function_name}() {{
+            // some comment
+            query = SELECT * FROM [1,2,3] as t // can i put a comment here?
+                    WHERE t > 1; // and another one here?
+            var acc = [];
+            for (const row of query) {{
+                acc.push(row);
+            }}
+            return acc;
+        }}
+        """
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, [{'t': 2}, {'t': 3}])
