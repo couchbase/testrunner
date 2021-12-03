@@ -168,18 +168,17 @@ class GSIFreeTier(BaseSecondaryIndexingTests):
                 try:
                     result = task.result()
                     self.log.info(result)
-                    index_instance_counter += self.num_index_replicas + 1
                 except Exception as err:
                     expected_err_1 = 'Limit for number of indexes that can be created per scope has been reached'
-                    concurrent_index_err = 'The index is scheduled for background creation.'
-                    if concurrent_index_err in str(err):
+                    concurrent_index_err_1 = 'The index is scheduled for background creation.'
+                    concurrent_index_err_2 = 'Index creation will be retried in background'
+                    concurrent_index_err_3 = 'Build Already In Progress.'
+
+                    if concurrent_index_err_1 in str(err) or concurrent_index_err_2 in str(err) or\
+                            concurrent_index_err_3 in str(err):
                         pass
                     elif expected_err_1 in str(err):
                         self.log.info("Last query tried to create indexes which were beyond GSI Tier limits")
-                        self.log.info(f"GSI Free Tier Limit: {self.gsi_tier_limit}")
-                        self.log.info(f"Index instances limit available: {self.gsi_tier_limit - index_instance_counter}")
-                        break
+                        self.log.info(err)
                     else:
                         self.fail(err)
-                else:
-                    self.fail("Test supposed to over go the limit but didn't go. ")
