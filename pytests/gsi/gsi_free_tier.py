@@ -8,10 +8,7 @@ __created_on__ = "10/27/21 11:22 am"
 
 """
 from concurrent.futures import ThreadPoolExecutor
-
 from couchbase_helper.query_definitions import QueryDefinition
-from security.audittest import auditTest
-
 from .base_gsi import BaseSecondaryIndexingTests
 from .collections_concurrent_indexes import powerset
 
@@ -93,7 +90,7 @@ class GSIFreeTier(BaseSecondaryIndexingTests):
                     if expected_err in str(err):
                         self.log.info("Last query tried to create indexes which were beyond GSI Tier limits")
                         self.log.info(f"GSI Free Tier Limit: {self.gsi_tier_limit}")
-                        self.log.info(f"Index instances limit available: {self.gsi_tier_limit - index_instance_counter}")
+                        self.log.info(f"Index instances limit available:{self.gsi_tier_limit - index_instance_counter}")
                         prev_scope = scope
                         if self.updated_tier_limit and not limit_updated_flag:
                             self.index_rest.set_gsi_tier_limit(bucket=bucket, scope=scope,
@@ -124,6 +121,8 @@ class GSIFreeTier(BaseSecondaryIndexingTests):
                                         self.log.info(f"GSI Free Tier Limit: {self.gsi_tier_limit}")
                                         self.log.info(f"Index instances limit available:"
                                                       f" {self.gsi_tier_limit - index_instance_counter}")
+                                        limit_updated_flag = True
+                                        break
                                     else:
                                         self.fail(err)
                                 else:
@@ -137,15 +136,11 @@ class GSIFreeTier(BaseSecondaryIndexingTests):
                         self.fail(err)
 
     def test_free_tier_limit_with_concurrent_indexes(self):
-        prev_scope = None
-        index_instance_counter = 0
         query_list = []
         for collection_namespace in self.namespaces:
             _, keyspace = collection_namespace.split(':')
             bucket, scope, collection = keyspace.split('.')
             self.index_rest.set_gsi_tier_limit(bucket=bucket, scope=scope, limit=self.gsi_tier_limit)
-            if prev_scope != scope:
-                index_instance_counter = 0
             for item, index_field in zip(range(self.gsi_tier_limit), self.index_field_set):
                 idx = f'idx_{item}'
                 if self.partitoned_index:
