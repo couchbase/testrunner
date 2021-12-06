@@ -50,6 +50,7 @@ class RbacBase:
             userid = user_role['id']
             username = user_role['name']
             user_role_param = user_role['roles'].split("]:")
+
             if len(user_role_param) == 1:
                 final_roles = user_role_param[0]
             else:
@@ -69,6 +70,8 @@ class RbacBase:
             elif self.source == 'builtin':
                 if 'password' in list(user_role.keys()):
                     payload=payload+'&password='+user_role['password']
+                if 'limits' in list(user_role.keys()):
+                    payload=payload+'&limits='+user_role['limits']
                 cluster_compatibility = rest.check_cluster_compatibility("5.0")
                 if cluster_compatibility is None:
                     pre_spock = True

@@ -2047,6 +2047,19 @@ class RestConnection(object):
             raise Exception(content)
         log.info("{0} set".format(setting_json))
 
+    def set_fts_tier_limit(self, bucket='test_bucket', scope='_default', limit=1):
+        """
+        This method sets the upper limit for GSI indexes in Free-Tier
+        :param limit:
+        """
+        setting_json = f'name={scope}&limits={{"fts": {{"num_fts_indexes":{limit} }}}}'
+
+        api = self.baseUrl + f'pools/default/buckets/{bucket}/scopes'
+        status, content, header = self._http_request(api, 'POST', setting_json)
+        if not status:
+            raise Exception(content)
+        log.info("{0} set".format(setting_json))
+
     def set_index_settings(self, setting_json, timeout=120):
         api = self.index_baseUrl + 'settings'
         status, content, header = self.urllib_request(api, verb='POST', params=json.dumps(setting_json))
@@ -4761,7 +4774,7 @@ class RestConnection(object):
     def get_user_group(self,user_name):
         api = self.baseUrl + "/settings/rbac/users/local/" + user_name
         status, content, header = self._http_request(api, 'GET')
-        log.info ("Status of Adding role to group command is {0}".format(status))
+        log.info ("Status of Retrieving role from group command is {0}".format(status))
         return status, json.loads(content)
 
     def grp_invalidate_cache(self):

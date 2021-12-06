@@ -1518,7 +1518,7 @@ class FTSIndex:
             else:
                 rest_timeout = timeout // 1000 + 10
             hits, matches, time_taken, status = \
-                self.__cluster.run_fts_query(self.name, query_dict, node=node, timeout=rest_timeout)
+                self.__cluster.run_fts_query(self.name, query_dict, node=node, timeout=rest_timeout, rest=rest)
         except ServerUnavailableException:
             if zero_results_ok and (expected_hits is None or expected_hits <= 0):
                 return hits, doc_ids, time_taken, status
@@ -2654,7 +2654,7 @@ class CouchbaseCluster:
         """ Delete all FTSIndex objects from self.__indexes """
         self.__indexes.clear()
 
-    def run_fts_query(self, index_name, query_dict, node=None, timeout=70):
+    def run_fts_query(self, index_name, query_dict, node=None, timeout=70, rest=None):
         """ Runs a query defined in query_json against an index/alias and
         a specific node
 
@@ -2664,11 +2664,13 @@ class CouchbaseCluster:
         """
         if not node:
             node = self.get_random_fts_node()
-        self.__log.info("Running query %s on node: %s:%s"
+        if not rest:
+             rest = RestConnection(node)
+        self.__log.info("Running query %s on node as %s : %s:%s"
                         % (json.dumps(query_dict, ensure_ascii=False),
-                           node.ip, node.fts_port))
+                           node.ip, rest.username, node.fts_port))
         total_hits, hit_list, time_taken, status = \
-            RestConnection(node).run_fts_query(index_name, query_dict, timeout=timeout)
+            rest.run_fts_query(index_name, query_dict, timeout=timeout)
         return total_hits, hit_list, time_taken, status
 
     def run_fts_query_generalized(self, index_name, query_dict, node=None, timeout=70):
