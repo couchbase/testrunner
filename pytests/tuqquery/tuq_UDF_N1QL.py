@@ -684,7 +684,7 @@ class QueryUDFN1QLTests(QueryTests):
     def test_nested_udf_recursion(self):
         # Create function that executes a function that will loop back and call it
         function_name = 'call_func1'
-        query = "EXECUTE FUNCTION call_func1(x)"
+        query = "EXECUTE FUNCTION call_func1($x)"
         function_names = [function_name]
         functions = f'function {function_name}(x) {{\
             var acc = [];\
@@ -981,7 +981,7 @@ class QueryUDFN1QLTests(QueryTests):
 
     def test_try_catch(self):
         function_name = "syntax_error"
-        query = 'SELEC * FROM default WHERE lower(job_title) = "engineer"'
+        query = 'SELECT * FROM fake_bucket WHERE lower(job_title) = "engineer"'
         function_names = [function_name]
         functions = f'function {function_name}() {{\
             try{{\
@@ -989,8 +989,13 @@ class QueryUDFN1QLTests(QueryTests):
             var acc = [];\
             for (const row of query) {{\
                 acc.push(row);\
-            }}}}catch(err){{throw "Syntax error at selec"}}\
+            }}}}catch(err){{throw "bucket does not exist"}}\
             return acc;}}'
         self.create_library(self.library_name, functions, function_names)
         self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
-        results = self.run_cbq_query(f"EXECUTE FUNCTION {function_name}()")
+        try:
+            self.run_cbq_query(f"EXECUTE FUNCTION {function_name}()")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 10109)
+            self.assertTrue('bucket does not exist' in error['msg'], f"Error is not what we expected {str(ex)}")
