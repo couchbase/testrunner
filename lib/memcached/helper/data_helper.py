@@ -806,6 +806,8 @@ class VBucketAwareMemcached(object):
                     server.ip = masterIp
                     if CbServer.use_https:
                         server.port = CbServer.ssl_port_map.get(str(server.port), str(server.port))
+                        if server.port == "":
+                            server.port = CbServer.ssl_port
                     self.log.info("Received forward map, reset vbucket map, new direct_client")
                     self.memcacheds[vBucket.master] = MemcachedClientHelper.direct_client(server, self.bucket,
                                                                     admin_user=admin_user,admin_pass=admin_pass)
