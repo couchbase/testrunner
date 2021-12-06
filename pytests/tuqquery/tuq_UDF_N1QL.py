@@ -138,6 +138,7 @@ class QueryUDFN1QLTests(QueryTests):
         self.log.info("==============  QueryUDFN1QLTests setup has started ==============")
         self.statement = self.input.param("statement", "statement")
         self.params = self.input.param("params", "named")
+        self.inline_func = self.input.param("inline_func", False)
         self.library_name = 'n1ql'
         self.log.info("==============  QueryUDFN1QLTests setup has completed ==============")
         self.log_config_info()
@@ -197,7 +198,7 @@ class QueryUDFN1QLTests(QueryTests):
         # Execute function and check
         function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
         diffs = DeepDiff(function_result['results'][0], query_result['results'], ignore_order=True)
-        if diffs: 
+        if diffs:
             self.assertTrue(False, diffs)
 
     def test_prepare(self):
@@ -402,6 +403,53 @@ class QueryUDFN1QLTests(QueryTests):
             self.assertEqual(error['code'], 10109)
             self.assertTrue('User does not have credentials to run' in error['msg'])
 
+    def test_circumvent_udf_rbac(self):
+        # Create user with execute external function role only
+        self.users = [{"id": "scope1", "name": "user1", "password": "password1"}]
+        self.create_users()
+        user_roles = ['query_manage_external_functions','query_execute_external_functions'
+            ,'query_manage_functions','query_execute_functions']
+
+        user_id = self.users[0]['id']
+        user_pwd = self.users[0]['password']
+        for role in user_roles:
+            self.run_cbq_query(query=f"GRANT {role} ON default:default.test to {user_id}")
+
+        if self.inline_func:
+            # Create an inline function on scope that user does not have perms on
+            self.run_cbq_query(
+                "CREATE OR REPLACE FUNCTION default:default._default.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9")
+        else:
+            # Create a js function on the scope that the user does not have perms on
+            functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
+            function_names = ["adder", "multiplier"]
+            created = self.create_library("math2", functions, function_names)
+            self.run_cbq_query(query='CREATE OR REPLACE FUNCTION default:default._default.func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math2"')
+
+        # Create function
+        function_name = 'rbac_default'
+        if self.inline_func:
+            query = "EXECUTE FUNCTION default:default._default.celsius(10)"
+        else:
+            query = "EXECUTE FUNCTION default:default._default.func1(1,4)"
+        function_names = [function_name]
+        functions = f'function {function_name}() {{\
+            var query = {query};\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library(self.library_name, functions, function_names)
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION default:default.test.{function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')        # Execute function as user
+        try:
+            self.run_cbq_query(f'EXECUTE FUNCTION default:default.test.{function_name}()', username=user_id, password=user_pwd)
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 10109)
+            self.assertTrue('User does not have credentials to run' in error['msg'], f"Error is not what we expected {str(ex)}")
+
     def test_datetime_value(self):
         function_name = 'datetime_value'
         functions = f'function {function_name}() {{\
@@ -486,8 +534,274 @@ class QueryUDFN1QLTests(QueryTests):
             'year_2018': 2018
             }
         ]
+
+    def test_udf_args(self):
+        function_name = 'param_from_var_default'
+        functions = f'function {function_name}(job, year, month) {{\
+            var job = job;\
+            var year = year;\
+            var month = month;\
+            var query = SELECT name FROM default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 3;\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(...) LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}("Engineer",2011,10)')
+        expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
         actual_result = function_result['results'][0]
         self.assertEqual(actual_result, expected_result)
+
+        # Execute function w/ extra params, should get ignored
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}("Engineer", 2011, 10, "random", "extra")')
+        expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+        try:
+            # Execute function w/ not enough params should pass none to the last param required
+            self.run_cbq_query(f'EXECUTE FUNCTION {function_name}("Engineer", 2011)')
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 10109)
+            self.assertTrue('Invalid data type for named parameters: "undefined" is not a valid type' in error['msg'], f"Error is not what we expected {str(ex)}")
+
+    def test_looped_calls(self):
+        # Create a js function that executes the js function that calls it
+        function_name = 'call_func2'
+        query = "EXECUTE FUNCTION call_func1()"
+        function_names = [function_name]
+        functions = f'function {function_name}() {{\
+            var query = {query};\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library("n1ql", functions, function_names)
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "n1ql"')
+        self.create_n1ql_function(function_name, query)
+
+        # Create function that executes a function that will loop back and call it
+        function_name = 'call_func1'
+        query = "EXECUTE FUNCTION call_func2()"
+        function_names = [function_name]
+        functions = f'function {function_name}() {{\
+            var query = {query};\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library("n1ql2", functions, function_names)
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "n1ql2"')
+        # Execute function as user
+        try:
+            self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 10109)
+            self.assertTrue('nested javascript calls' in error['msg'], f"Error is not what we expected {str(ex)}")
+
+    def test_nested_loop_timeout(self):
+        # create a function that will just sleep so that we can hit the timeout instead of the nested loop limit
+        function_name = 'sleep'
+        function_names = [function_name]
+        function_sleep = 'function sleep(delay) { var start = new Date().getTime(); while (new Date().getTime() < start + delay); return delay; }'
+        self.create_library("sleep", function_sleep, function_names)
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(t) LANGUAGE JAVASCRIPT AS "{function_name}" AT "sleep"')
+        sleep_query = f"EXECUTE FUNCTION {function_name}(30000)"
+
+        # Create a js function that executes the js function that calls it
+        function_name = 'call_func2'
+        query = "EXECUTE FUNCTION call_func1()"
+        function_names = [function_name]
+        functions = f'function {function_name}() {{\
+            var sleep_query = {sleep_query};\
+            var query = {query};\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library("n1ql", functions, function_names)
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "n1ql"')
+        self.create_n1ql_function(function_name, query)
+
+        # Create function that executes a function that will loop back and call it
+        function_name = 'call_func1'
+        query = "EXECUTE FUNCTION call_func2()"
+        function_names = [function_name]
+        functions = f'function {function_name}() {{\
+            var sleep_query = {sleep_query};\
+            var query = {query};\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library("n1ql2", functions, function_names)
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "n1ql2"')
+        # Execute function as user
+        try:
+            self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 10109)
+            self.assertTrue('Evaluator error Function timed out' in error['msg'], f"Error is not what we expected {str(ex)}")
+
+    def test_nested_udf_inline(self):
+        # Create an inline function on scope that user does not have perms on
+        self.run_cbq_query(
+            "CREATE OR REPLACE FUNCTION default:default._default.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9")
+
+        # Create function
+        function_name = 'rbac_default'
+        query = "EXECUTE FUNCTION default:default._default.celsius(10)"
+        function_names = [function_name]
+        functions = f'function {function_name}() {{\
+            var query = {query};\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library(self.library_name, functions, function_names)
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION default:default.test.{function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        # Execute function as user
+        results = self.run_cbq_query(f'EXECUTE FUNCTION default:default.test.{function_name}()')
+        self.assertEqual(results['results'], [[-12.222222222222221]], f"results mismatch {results}")
+
+    def test_nested_udf_recursion(self):
+        # Create function that executes a function that will loop back and call it
+        function_name = 'call_func1'
+        query = "EXECUTE FUNCTION call_func1(x)"
+        function_names = [function_name]
+        functions = f'function {function_name}(x) {{\
+            var acc = [];\
+            if (x > 5){{ x = x - 1;\
+            var query = {query};\
+            for (const row of query){{\
+                acc.push(row);}}}}\
+            else{{ return acc; }}}}'
+        self.create_library("n1ql2", functions, function_names)
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION {function_name}(x) LANGUAGE JAVASCRIPT AS "{function_name}" AT "n1ql2"')
+        # Execute function as user
+        results = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(6)')
+
+    def test_query_context(self):
+        # Create an inline function on scope that user does not have perms on
+        self.run_cbq_query(
+            "CREATE OR REPLACE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9")
+
+        # Create function
+        function_name = 'execute_udf'
+        query = "EXECUTE FUNCTION default:default._default.celsius(10)"
+        function_names = [function_name]
+        functions = f'function {function_name}() {{\
+            var query = {query};\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library(self.library_name, functions, function_names)
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"', query_context="default:default.test")
+
+        function_name = 'execute_udf'
+        functions = f'function {function_name}(job, year, month) {{\
+            var query = SELECT name FROM _default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 3;\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library("library", functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(j, y, m) LANGUAGE JAVASCRIPT AS "{function_name}" AT "library"', query_context='default:default._default')
+
+        # Execute function w/ correct query context
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}("Engineer", 2011, 10)', query_context='default:default._default')
+        expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+        # Execute function relative path should be picked up from the context of the udf
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION default:default._default.{function_name}("Engineer", 2011, 10)')
+        expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+        try:
+            # Execute function w/ incorrect query context, incorrect function should be used
+            function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}("Engineer", 2011, 10)', query_context='default:default.test')
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 10104)
+            self.assertTrue('Incorrect number of arguments supplied' in error['msg'], f"Error is not what we expected {str(ex)}")
+
+    def test_global_query_context(self):
+        self.run_cbq_query(
+            "CREATE OR REPLACE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9")
+
+        function_name = 'execute_udf'
+        functions = f'function {function_name}(job, year, month) {{\
+            var query = SELECT name FROM _default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 3;\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library("library", functions, [function_name])
+        # Create a global udf so that the relative path call fails, and create the proper scope udf
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(j, y, m) LANGUAGE JAVASCRIPT AS "{function_name}" AT "library"', query_context='default:default._default')
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(j, y, m) LANGUAGE JAVASCRIPT AS "{function_name}" AT "library"')
+
+        # Execute function w/ correct query context
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}("Engineer", 2011, 10)', query_context='default:default._default')
+        expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+        try:
+            # Execute global function, relative path query should fail
+            function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}("Engineer", 2011, 10)')
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 10109)
+            self.assertTrue('No bucket named _default' in error['msg'], f"Error is not what we expected {str(ex)}")
+
+    def test_query_context_negative(self):
+        function_name = 'execute_default'
+        query_context = '{"query_context": "default:default._default"}'
+        functions = f'function {function_name}() {{\
+            var params = {query_context};\
+            var query = N1QL("SELECT name FROM _default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 3", params);\
+            var acc = [];\
+            for (const row of query) {{ acc.push(row); }}\
+            return acc;\
+        }}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        try:
+            # Execute function, you should not be able to pass query context to N1QL function
+            function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 10109)
+            self.assertTrue('No bucket named _default' in error['msg'], f"Error is not what we expected {str(ex)}")
 
     def test_parameter_values(self):
         function_name = 'param_values_default'
@@ -565,3 +879,118 @@ class QueryUDFN1QLTests(QueryTests):
         function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
         actual_result = function_result['results'][0]
         self.assertEqual(actual_result, [{'t': 2}, {'t': 3}])
+
+    def test_make_statement(self):
+        function_name = 'param_from_var_default'
+        functions = f'function {function_name}(j, y, m) {{\
+            var job = j;\
+            var year = y;\
+            var month = m;\
+            var query = SELECT name FROM default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 3;\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(...) LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}("Engineer",2011,10)')
+        expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+    def test_build_statement_strings(self):
+        function_name = 'param_from_var_default'
+        functions = f'function {function_name}(selector, j, y, m) {{\
+            var projection = "";\
+            if (selector){{ projection = "name";}} else {{ projection = "job_title"; }}\
+            var job = j;\
+            var year = y.toString();\
+            var month = m.toString();\
+            var query_string = "SELECT " + projection + " FROM default WHERE job_title = " + job + "AND join_yr = " + year "AND join_mo = " + month + "ORDER by name LIMIT 3";\
+            var query = N1QL(query_string);\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(...) LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(1,"Engineer",2011,10)')
+        expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(0,"Engineer",2011,10)')
+        expected_result = [{'job_title': 'Engineer'}, {'job_title': 'Engineer'}, {'job_title': 'Engineer'}]
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+    def test_create_library_error(self):
+        function_name = 'param_function_param_default'
+        functions = f'function {function_name}() {{\
+            var number = 10;\
+            var query = EXECUTE FUNCTION add(5, $number);\
+            var acc = []\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library(self.library_name, functions, [function_name], error=True)
+
+    def test_syntax_error(self):
+        function_name = "syntax_error"
+        query = 'SELEC * FROM default WHERE lower(job_title) = "engineer"'
+        function_names = [function_name]
+        functions = f'function {function_name}() {{\
+            var query = {query};\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library(self.library_name, functions, function_names, error=True)
+
+    def test_timeout(self):
+        function_name = 'sleep'
+        function_names = [function_name]
+        function_sleep = 'function sleep(delay) { var start = new Date().getTime(); while (new Date().getTime() < start + delay); return delay; }'
+        self.create_library("sleep", function_sleep, function_names)
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(t) LANGUAGE JAVASCRIPT AS "{function_name}" AT "sleep"')
+        sleep_query = f"EXECUTE FUNCTION {function_name}(30000)"
+
+        try:
+            self.run_cbq_query(sleep_query, query_params={'timeout':'10s'})
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 10109)
+            self.assertTrue('sleep stopped after running beyond 10000 ms' in error['msg'], f"Error is not what we expected {str(ex)}")
+
+        try:
+            self.run_cbq_query(sleep_query, query_params={'timeout':'600s'})
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 10109)
+            self.assertTrue('sleep stopped after running beyond 120000 ms' in error['msg'], f"Error is not what we expected {str(ex)}")
+
+    def test_try_catch(self):
+        function_name = "syntax_error"
+        query = 'SELEC * FROM default WHERE lower(job_title) = "engineer"'
+        function_names = [function_name]
+        functions = f'function {function_name}() {{\
+            try{{\
+            var query = {query};\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}}}catch(err){{throw "Syntax error at selec"}}\
+            return acc;}}'
+        self.create_library(self.library_name, functions, function_names)
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        results = self.run_cbq_query(f"EXECUTE FUNCTION {function_name}()")

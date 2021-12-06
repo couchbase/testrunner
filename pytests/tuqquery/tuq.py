@@ -3884,7 +3884,7 @@ class QueryTests(BaseTestCase):
     ##############################################################################################            
 
     '''Create a library with functions, check to see that the library was created and the functions were created'''
-    def create_library(self, library_name='', functions={}, function_names=[], replace= False, filename=None):
+    def create_library(self, library_name='', functions={}, function_names=[], replace= False, filename=None, error=False):
         created = False
         protocol = "http"
         if self.use_https:
@@ -3894,9 +3894,12 @@ class QueryTests(BaseTestCase):
         self.shell.execute_command(f"{self.curl_path} -s -k -X DELETE {url} -u Administrator:password")
         data = f'{functions}'
         if filename:
-            self.shell.execute_command(f"{self.curl_path} -s -k -X POST {url} -u Administrator:password -H 'content-type: application/json' -d @{filename}")
+            results = self.shell.execute_command(f"{self.curl_path} -s -k -X POST {url} -u Administrator:password -H 'content-type: application/json' -d @{filename}")
         else:
-            self.shell.execute_command(f"{self.curl_path} -s -k -X POST {url} -u Administrator:password -H 'content-type: application/json' -d '{data}'")
+            results = self.shell.execute_command(f"{self.curl_path} -s -k -X POST {url} -u Administrator:password -H 'content-type: application/json' -d '{data}'")
+        if error:
+            self.assertTrue("SyntaxError: Unexpected token" in str(results), f"The message is not correct, please check {results}")
+        self.log.info(results)
         libraries = self.shell.execute_command(f"{self.curl_path} -s -k {url} -u Administrator:password")
         if library_name in str(libraries[0]):
             created = True
