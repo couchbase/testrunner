@@ -1599,7 +1599,7 @@ class RestConnection(object):
         otpNode = None
 
         protocol = "http"
-        if float(self.get_major_version()) >= 6.5:
+        if float(self.get_major_version()) >= 6.5 and self.is_enterprise_edition():
             port = CbServer.ssl_port_map.get(str(port), str(port))
             protocol = "https"
 
