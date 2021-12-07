@@ -1204,3 +1204,10 @@ class EventingBaseTest(QueryHelperTests):
     def wait_for_deployment_n_handlers(self,n):
         for i in range(1, n + 1):
             self.wait_for_handler_state(self.function_name + str(i), "deployed")
+
+    def import_function_from_directory(self, function):
+        script_dir = os.path.dirname(__file__)
+        abs_file_path = os.path.join(script_dir, function)
+        fh = open(abs_file_path, "r")
+        body = fh.read()
+        self.rest.import_function(body)

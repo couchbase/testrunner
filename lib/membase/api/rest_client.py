@@ -5858,6 +5858,36 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
+    '''
+            start tracing
+    '''
+    def start_tracing(self):
+        authorization = self.get_authorization(self.username, self.password)
+        url = "startTracing"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json',
+                   'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET',
+                                                     headers=headers, params='')
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
+            stop tracing
+    '''
+    def stop_tracing(self):
+        authorization = self.get_authorization(self.username, self.password)
+        url = "stopTracing"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json',
+                   'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET',
+                                                     headers=headers, params='')
+        if not status:
+            raise Exception(content)
+        return content
+
     def get_user(self, user_id):
         url = "settings/rbac/users/"
         api = self.baseUrl + url

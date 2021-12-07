@@ -84,6 +84,17 @@ class Fts(object):
 
 class Eventing(object):
     """Mapping of Eventing related events - event_id. Valid range 4096:5119"""
+    ProducerStartup = 4096
+    ConsumerStartup = 4097
+    ConsumerCrash = 4098
+    StartTracing = 4099
+    StopTracing = 4100
+    StartDebugger = 4101
+    StopDebugger = 4102
+    CreateFunction = 4103
+    DeleteFunction = 4104
+    ImportFunctions = 4105
+    ExportFunctions = 4106
 
 
 class Analytics(object):
