@@ -561,9 +561,9 @@ class EventingNegative(EventingBaseTest):
 
 
     def test_src_collection_delete_when_eventing_is_processing_mutations(self):
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
         self.deploy_function(body)
-        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
         if self.pause_resume:
             self.pause_function(body)
         # delete source collection
@@ -579,9 +579,9 @@ class EventingNegative(EventingBaseTest):
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
 
     def test_src_scope_delete_when_eventing_is_processing_mutations(self):
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
         self.deploy_function(body)
-        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
         if self.pause_resume:
             self.pause_function(body)
         # delete source collection
@@ -598,9 +598,9 @@ class EventingNegative(EventingBaseTest):
 
 
     def test_metadata_collection_delete_when_eventing_is_processing_mutations(self):
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
         self.deploy_function(body)
-        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
         if self.pause_resume:
             self.pause_function(body)
         # delete source collection
@@ -616,9 +616,9 @@ class EventingNegative(EventingBaseTest):
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
 
     def test_metadata_scope_delete_when_eventing_is_processing_mutations(self):
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
         self.deploy_function(body)
-        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
         if self.pause_resume:
             self.pause_function(body)
         # delete source collection

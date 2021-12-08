@@ -160,7 +160,7 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
         # create a cluster admin user
         user = [{'id': 'test', 'password': 'password', 'name': 'test'}]
         RbacBase().create_user_source(user, 'builtin', self.master)
-        user_role_list = [{'id': 'test', 'name': 'test', 'roles': 'cluster_admin'}]
+        user_role_list = [{'id': 'test', 'name': 'test', 'roles': 'views_admin[*]'}]
         RbacBase().add_user_role(user_role_list, self.rest, 'builtin')
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
@@ -175,10 +175,10 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
                                    "description": "Authentication failed", "method": "GET", "url": "/api/v1/stats"}
         self.check_config(32787, eventing_node, expected_results_authentication_failure)
         # audit event for authorisation failure
-        shell.execute_command("curl -s -XGET http://test:password@localhost:8096/api/v1/stats")
+        shell.execute_command("curl -s -XGET http://test:password@localhost:8096/api/v1/config")
         expected_results_authorization_failure = {"real_userid:source": "local", "real_userid:user": "test",
                                    "context": "<nil>", "id": 32788, "name": "Authorization Failure",
-                                   "description": "Authorization failed", "method": "GET", "url": "/api/v1/stats"}
+                                   "description": "Authorization failed", "method": "GET", "url": "/api/v1/config"}
         self.check_config(32788, eventing_node, expected_results_authorization_failure)
         shell.disconnect()
         self.undeploy_and_delete_function(body)

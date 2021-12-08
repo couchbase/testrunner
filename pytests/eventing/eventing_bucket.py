@@ -49,13 +49,6 @@ class EventingBucket(EventingBaseTest):
             self.handler_code = HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS
         else:
             self.handler_code = "handler_code/ABO/insert.js"
-        # index is required for delete operation through n1ql
-        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
-                                      item_flag=self.item_flag, n1ql_port=self.n1ql_port,
-                                      full_docs_list=self.full_docs_list, log=self.log, input=self.input,
-                                      master=self.master, use_rest=True)
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         if self.non_default_collection:
             self.create_scope_collection(bucket=self.src_bucket_name, scope=self.src_bucket_name,
                                          collection=self.src_bucket_name)
@@ -63,6 +56,13 @@ class EventingBucket(EventingBaseTest):
                                          collection=self.metadata_bucket_name)
             self.create_scope_collection(bucket=self.dst_bucket_name, scope=self.dst_bucket_name,
                                          collection=self.dst_bucket_name)
+        # index is required for delete operation through n1ql
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
+                                      item_flag=self.item_flag, n1ql_port=self.n1ql_port,
+                                      full_docs_list=self.full_docs_list, log=self.log, input=self.input,
+                                      master=self.master, use_rest=True)
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
 
     def tearDown(self):
         try:
@@ -471,15 +471,15 @@ class EventingBucket(EventingBaseTest):
                                          collection=self.metadata_bucket_name)
             self.create_scope_collection(bucket=self.dst_bucket_name, scope=self.dst_bucket_name,
                                          collection=self.dst_bucket_name)
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
         body = self.create_save_function_body(self.function_name, self.handler_code,src_binding=True)
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
-        if self.non_default_collection:
-            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
-        else:
-            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
