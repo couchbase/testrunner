@@ -34,7 +34,8 @@ from es_base import ElasticSearchBase
 from security.rbac_base import RbacBase
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from random_query_generator.rand_query_gen import FTSESQueryGenerator
-
+from lib.Cb_constants.CBServer import CbServer
+from lib.cb_tools.cb_cli import CbCli
 
 class RenameNodeException(FTSException):
     """Exception thrown when converting ip to hostname failed
@@ -3351,6 +3352,11 @@ class FTSBaseTest(unittest.TestCase):
         self.field_name = self._input.param("field_name", None)
         self.field_type = self._input.param("field_type", None)
         self.field_alias = self._input.param("field_alias", None)
+        self.enable_dp = self._input.param("enable_dp", False)
+        self.use_https = self._input.param("use_https", False)
+        self.enforce_tls = self._input.param("enforce_tls", False)
+        if self.use_https:
+            CbServer.use_https = True
 
         self.log.info(
             "==== FTSbasetests setup is started for test #{0} {1} ===="
@@ -3412,6 +3418,17 @@ class FTSBaseTest(unittest.TestCase):
 
     def tearDown(self):
         """Clusters cleanup"""
+        if self._input.param("enforce_tls", False):
+            self.log.info('###################### Disabling n2n encryption')
+            shell_conn = RemoteMachineShellConnection(self._master)
+            cb_cli = CbCli(shell_conn, no_ssl_verify=True)
+            level = cb_cli.get_n2n_encryption_level()
+            if level is not None:
+                output = cb_cli.set_n2n_encryption_level(level="control")
+                self.log.info(output)
+                output = cb_cli.disable_n2n_encryption()
+                self.log.info(output)
+            shell_conn.disconnect()
         if len(self.__report_error_list) > 0:
             error_logger = self.check_error_count_in_fts_log()
             if error_logger:
@@ -3519,6 +3536,21 @@ class FTSBaseTest(unittest.TestCase):
         if not no_buckets:
             self.__create_buckets()
         self._master = self._cb_cluster.get_master_node()
+
+        if self.use_https:
+            if self.enforce_tls:
+                RestConnection(self._master).update_autofailover_settings(False, 120, False)
+                self.log.info("#####Enforcing TLS########")
+                shell_conn = RemoteMachineShellConnection(self._master)
+                cb_cli = CbCli(shell_conn, no_ssl_verify=True)
+                output = cb_cli.enable_n2n_encryption()
+                self.log.info(output)
+                shell_conn.disconnect()
+                RestConnection(self._master).set_encryption_level(level="strict")
+                self.sleep(10)
+                status = ClusterOperationHelper.check_if_services_obey_tls(servers=[self._master])
+                if not status:
+                    self.fail("Port binding after enforcing TLS incorrect")
 
         # simply append to this list, any error from log we want to fail test on
         self.__report_error_list = []
