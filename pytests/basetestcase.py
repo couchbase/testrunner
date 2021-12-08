@@ -325,10 +325,10 @@ class BaseTestCase(unittest.TestCase):
                     self.log.info(output)
                     shell_conn.disconnect()
                     RestConnection(self.master).set_encryption_level(level="strict")
+                    self.sleep(10)
                     status = ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master])
                     if not status:
-                        # Fail after all services finish backporting changes
-                        self.log.error("Port binding after enforcing TLS incorrect")
+                        self.fail("Port binding after enforcing TLS incorrect")
             try:
                 if (str(self.__class__).find('rebalanceout.RebalanceOutTests') != -1) or \
                         (str(self.__class__).find('memorysanitytests.MemorySanity') != -1) or \
