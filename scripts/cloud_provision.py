@@ -185,7 +185,7 @@ def az_get_servers(name, count, os, type, ssh_key_path, architecture):
     security_group_name = "qe-test-nsg"
     group_name = "qe-test"
     ips = []
-    internal_ips []
+    internal_ips = []
 
     if type != "couchbase":
         image_name = AZ_TEMPLATE_MAP[type]
