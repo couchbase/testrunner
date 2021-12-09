@@ -3,6 +3,9 @@ import copy
 from couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from couchbase_helper.tuq_generators import TuqGenerators
+
+from lib.Cb_constants.CBServer import CbServer
+
 QUERY_TEMPLATE = "SELECT {0} FROM %s "
 
 class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
@@ -395,7 +398,12 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                             refer_index.append(query_definitions[x].index_name)
                             deploy_node_info = None
                             if self.use_gsi_for_secondary:
-                                deploy_node_info = ["{0}:{1}".format(server.ip,server.port)]
+                                if self.use_https:
+                                    port = CbServer.ssl_port_map.get(str(server.port),
+                                                                     str(server.port))
+                                else:
+                                    port = server.port
+                                deploy_node_info = ["{0}:{1}".format(server.ip,port)]
                             build_index_map[bucket.name].append(query_definitions[x].index_name)
                             tasks.append(self.async_create_index(bucket.name, query_definitions[x],
                                                                  deploy_node_info=deploy_node_info))
