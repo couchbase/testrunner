@@ -139,6 +139,7 @@ class QueryUDFN1QLTests(QueryTests):
         self.statement = self.input.param("statement", "statement")
         self.params = self.input.param("params", "named")
         self.inline_func = self.input.param("inline_func", False)
+        self.use_select = self.input.param("use_select", False)
         self.library_name = 'n1ql'
         self.log.info("==============  QueryUDFN1QLTests setup has completed ==============")
         self.log_config_info()
@@ -729,25 +730,51 @@ class QueryUDFN1QLTests(QueryTests):
         self.create_library("library", functions, [function_name])
         self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(j, y, m) LANGUAGE JAVASCRIPT AS "{function_name}" AT "library"', query_context='default:default._default')
 
-        # Execute function w/ correct query context
-        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}("Engineer", 2011, 10)', query_context='default:default._default')
-        expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
-        actual_result = function_result['results'][0]
-        self.assertEqual(actual_result, expected_result)
+        if self.use_select:
+            # call functions inside of a select statement w/query contexts passed
+            # Execute function w/ correct query context
+            function_result = self.run_cbq_query(f'select {function_name}("Engineer", 2011, 10)',
+                                                 query_context='default:default._default')
+            expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
+            actual_result = function_result['results'][0]
+            self.assertEqual(actual_result, expected_result)
 
-        # Execute function relative path should be picked up from the context of the udf
-        function_result = self.run_cbq_query(f'EXECUTE FUNCTION default:default._default.{function_name}("Engineer", 2011, 10)')
-        expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
-        actual_result = function_result['results'][0]
-        self.assertEqual(actual_result, expected_result)
-        try:
-            # Execute function w/ incorrect query context, incorrect function should be used
-            function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}("Engineer", 2011, 10)', query_context='default:default.test')
-            self.fail("Query should have CBQ error'd")
-        except CBQError as ex:
-            error = self.process_CBQE(ex)
-            self.assertEqual(error['code'], 10104)
-            self.assertTrue('Incorrect number of arguments supplied' in error['msg'], f"Error is not what we expected {str(ex)}")
+            # Execute function relative path should be picked up from the context of the udf
+            function_result = self.run_cbq_query(
+                f'select default:default._default.{function_name}("Engineer", 2011, 10)')
+            expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
+            actual_result = function_result['results'][0]
+            self.assertEqual(actual_result, expected_result)
+            try:
+                # Execute function w/ incorrect query context, incorrect function should be used
+                function_result = self.run_cbq_query(f'select {function_name}("Engineer", 2011, 10)',
+                                                     query_context='default:default.test')
+                self.fail("Query should have CBQ error'd")
+            except CBQError as ex:
+                error = self.process_CBQE(ex)
+                self.assertEqual(error['code'], 10104)
+                self.assertTrue('Incorrect number of arguments supplied' in error['msg'],
+                                f"Error is not what we expected {str(ex)}")
+        else:
+            # Execute function w/ correct query context
+            function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}("Engineer", 2011, 10)', query_context='default:default._default')
+            expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
+            actual_result = function_result['results'][0]
+            self.assertEqual(actual_result, expected_result)
+
+            # Execute function relative path should be picked up from the context of the udf
+            function_result = self.run_cbq_query(f'EXECUTE FUNCTION default:default._default.{function_name}("Engineer", 2011, 10)')
+            expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
+            actual_result = function_result['results'][0]
+            self.assertEqual(actual_result, expected_result)
+            try:
+                # Execute function w/ incorrect query context, incorrect function should be used
+                function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}("Engineer", 2011, 10)', query_context='default:default.test')
+                self.fail("Query should have CBQ error'd")
+            except CBQError as ex:
+                error = self.process_CBQE(ex)
+                self.assertEqual(error['code'], 10104)
+                self.assertTrue('Incorrect number of arguments supplied' in error['msg'], f"Error is not what we expected {str(ex)}")
 
     def test_global_query_context(self):
         self.run_cbq_query(
@@ -781,6 +808,53 @@ class QueryUDFN1QLTests(QueryTests):
             self.assertEqual(error['code'], 10109)
             self.assertTrue('No bucket named _default' in error['msg'], f"Error is not what we expected {str(ex)}")
 
+    def test_query_context_cross_scope(self):
+        # Create an inline function on scope that user does not have perms on
+        self.run_cbq_query(
+            "CREATE OR REPLACE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9")
+
+        # Create function
+        function_name = 'execute_udf'
+        query = "EXECUTE FUNCTION default:default.test.celsius(10)"
+        function_names = [function_name]
+        functions = f'function {function_name}() {{\
+            var query = {query};\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library(self.library_name, functions, function_names)
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"', query_context="default:default.test")
+
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()', query_context='default:default.test')
+        self.assertEqual(function_result['results'], [[-12.222222222222221]], f"results mismatch {function_result}")
+
+    def test_query_context_absolute_path(self):
+        # Create a scope function, call that scope function w/absolute path and pass in an incorrect query context, absolute path should be used
+        self.run_cbq_query(
+            "CREATE OR REPLACE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9")
+
+        # Create function
+        function_name = 'execute_udf'
+        query = "EXECUTE FUNCTION celsius(10)"
+        function_names = [function_name]
+        functions = f'function {function_name}() {{\
+            var query = {query};\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library(self.library_name, functions, function_names)
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"', query_context="default:default.test")
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(a,b) LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"', query_context="default:default._default")
+
+
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION default:default.test.{function_name}()', query_context='default:default._default')
+        self.assertEqual(function_result['results'], [[-12.222222222222221]], f"results mismatch {function_result}")
+
+
     def test_query_context_negative(self):
         function_name = 'execute_default'
         query_context = '{"query_context": "default:default._default"}'
@@ -802,6 +876,267 @@ class QueryUDFN1QLTests(QueryTests):
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
             self.assertTrue('No bucket named _default' in error['msg'], f"Error is not what we expected {str(ex)}")
+
+    def test_query_context_prepared(self):
+        self.run_cbq_query('DELETE FROM system:prepareds WHERE name LIKE "engineer%"')
+        function_name = 'execute_prepare_default'
+        param_val = '["Engineer"]'
+        param_var = "$1"
+        functions = f'function {function_name}() {{\
+            var params = {param_val};\
+            var query = N1QL("EXECUTE engineer_count", params);\
+            var acc = [];\
+            for (const row of query) {{ acc.push(row); }}\
+            return acc;\
+        }}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION default:default._default.{function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION default:default.test.{function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        # Prepare statement with named or postional parameter
+        self.run_cbq_query(
+            f'PREPARE engineer_count as SELECT COUNT(*) as count_engineer FROM _default WHERE job_title = {param_var}',
+            query_context="default:default._default")
+        # Execute function and check
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()', query_context="default:default._default")
+        self.assertEqual(function_result['results'][0], [{'count_engineer': 672}])
+
+        # Execute global function should error
+        try:
+            # Execute function, you should not be able to pass query context to N1QL function
+            function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 10109)
+            self.assertTrue('No such prepared statement: engineer_count, context: default:' in error['msg'], f"Error is not what we expected {str(ex)}")
+
+        try:
+            #execute function in wrong scope should error
+            function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()', query_context="default:default.test")
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 10109)
+            self.assertTrue('No such prepared statement: engineer_count, context: default:default.test' in error['msg'], f"Error is not what we expected {str(ex)}")
+
+    def test_udf_prepare_query_context(self):
+        self.run_cbq_query('DELETE FROM system:prepareds WHERE name LIKE "engineer%"')
+        function_name = 'execute_prepare_default'
+        param_val = '["Engineer"]'
+        param_var = "$1"
+        functions = f'function {function_name}() {{\
+            var params = {param_val};\
+            var query = PREPARE engineer_count as SELECT COUNT(*) as count_engineer FROM _default WHERE job_title = {param_var}; \
+            var query1 = N1QL("EXECUTE engineer_count", params);\
+            var acc = [];\
+            for (const row of query1) {{ acc.push(row); }}\
+            return acc;\
+        }}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION default:default._default.{function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION default:default.test.{function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+
+        # Execute function and check
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()', query_context="default:default._default")
+        self.assertEqual(function_result['results'][0], [{'count_engineer': 672}])
+
+        # Execute global function should error
+        try:
+            # Execute function, you should not be able to pass query context to N1QL function
+            function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 10109)
+            self.assertTrue('Keyspace not found in CB datastore: default:_default' in error['msg'], f"Error is not what we expected {str(ex)}")
+
+        try:
+            #execute function in wrong scope should error
+            function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()', query_context="default:default.test")
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 10109)
+            self.assertTrue('Keyspace not found in CB datastore: default:default.test._default' in error['msg'], f"Error is not what we expected {str(ex)}")
+
+        prepared_results = self.run_cbq_query(query="select * from system:prepareds")
+        self.assertEqual(prepared_results['results'][0]['prepareds']['name'],'engineer_count(default:default._default)', f"the prepared name is wrong please check prepareds {prepared_results}")
+
+    def test_global_udf_prepare_query_context(self):
+        self.run_cbq_query('DELETE FROM system:prepareds WHERE name LIKE "engineer%"')
+        function_name = 'execute_prepare_default'
+        param_val = '["Engineer"]'
+        param_var = "$1"
+        functions = f'function {function_name}() {{\
+            var params = {param_val};\
+            var query = PREPARE engineer_count as SELECT COUNT(*) as count_engineer FROM default WHERE job_title = {param_var}; \
+            var query1 = N1QL("EXECUTE engineer_count", params);\
+            var acc = [];\
+            for (const row of query1) {{ acc.push(row); }}\
+            return acc;\
+        }}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION default:default._default.{function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION default:default.test.{function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+
+        # Execute function, you should not be able to pass query context to N1QL function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+        self.assertEqual(function_result['results'][0], [{'count_engineer': 672}])
+
+        try:
+            #execute function in wrong scope should error
+            function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()', query_context="default:default._default")
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 10109)
+            self.assertTrue('Keyspace not found in CB datastore: default:default._default.default' in error['msg'], f"Error is not what we expected {str(ex)}")
+
+        try:
+            #execute function in wrong scope should error
+            function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()', query_context="default:default.test")
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 10109)
+            self.assertTrue('Keyspace not found in CB datastore: default:default.test.default' in error['msg'], f"Error is not what we expected {str(ex)}")
+
+        prepared_results = self.run_cbq_query(query="select * from system:prepareds")
+        self.assertEqual(prepared_results['results'][0]['prepareds']['name'],'engineer_count', f"the prepared name is wrong please check prepareds {prepared_results}")
+
+    def test_nested_udf_prepare_query_context(self):
+        self.run_cbq_query('DELETE FROM system:prepareds WHERE name LIKE "engineer%"')
+        self.run_cbq_query("CREATE PRIMARY INDEX ON default:default.test.test1")
+        function_name = 'execute_default'
+        param_val = '["Engineer"]'
+        param_var = "$1"
+        # Create a correct function to call for each scope, based on what scope will call it
+        functions = f'function {function_name}() {{\
+            var params = {param_val};\
+            var query = N1QL("SELECT COUNT(*) as count_engineer FROM _default WHERE job_title = {param_var}",params); \
+            var acc = [];\
+            for (const row of query) {{ acc.push(row); }}\
+            return acc;\
+        }}'
+        self.create_library(self.library_name, functions, [function_name])
+
+        functions = f'function {function_name}() {{\
+            var params = {param_val};\
+            var query = N1QL("SELECT COUNT(*) as count_engineer FROM default WHERE job_title = {param_var}",params); \
+            var acc = [];\
+            for (const row of query) {{ acc.push(row); }}\
+            return acc;\
+        }}'
+        self.create_library("global_library", functions, [function_name])
+
+        functions = f'function {function_name}() {{\
+            var query = SELECT * FROM test1; \
+            var acc = [];\
+            for (const row of query) {{ acc.push(row); }}\
+            return acc;\
+        }}'
+        self.create_library("test_library", functions, [function_name])
+
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "global_library"')
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION default:default._default.{function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION default:default.test.{function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "test_library"')
+
+        self.run_cbq_query(f'PREPARE engineer_count as SELECT {function_name}()', query_context="default:default._default")
+        self.run_cbq_query(f'PREPARE engineer_count as SELECT {function_name}()', query_context="default:default.test")
+        self.run_cbq_query(f'PREPARE engineer_count as SELECT {function_name}()', query_context="default:")
+
+        prepared_results = self.run_cbq_query(query="EXECUTE engineer_count", query_context="default:default._default")
+        self.assertEqual(prepared_results['results'], [{'$1': [{'count_engineer': 672}]}], f"Results are wrong {prepared_results}")
+        prepared_results = self.run_cbq_query(query="EXECUTE engineer_count", query_context="default:default.test")
+        self.assertEqual(prepared_results['results'], [{'$1': [{'test1': {'name': 'old hotel', 'type': 'hotel'}},
+                                                               {'test1': {'name': 'new hotel', 'type': 'hotel'}},
+                                                               {'test1': {'name': 'old hotel', 'nested': {'fields': 'fake'}}},
+                                                               {'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}]}],
+                         f"Results are wrong {prepared_results}")
+        prepared_results = self.run_cbq_query(query="EXECUTE engineer_count", query_context="default:")
+        self.assertEqual(prepared_results['results'], [{'$1': [{'count_engineer': 672}]}], f"Results are wrong {prepared_results}")
+
+    def test_nested_udf_prepare_query_context_scope_negative(self):
+        self.run_cbq_query('DELETE FROM system:prepareds WHERE name LIKE "engineer%"')
+        function_name = 'execute_default'
+        param_val = '["Engineer"]'
+        param_var = "$1"
+        functions = f'function {function_name}() {{\
+            var params = {param_val};\
+            var query = SELECT COUNT(*) as count_engineer FROM _default WHERE job_title = {param_var}; \
+            var query1 = N1QL("EXECUTE engineer_count", params);\
+            var acc = [];\
+            for (const row of query1) {{ acc.push(row); }}\
+            return acc;\
+        }}'
+        self.create_library(self.library_name, functions, [function_name])
+
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION default:default._default.{function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        self.run_cbq_query(f'PREPARE engineer_count as SELECT {function_name}()', query_context="default:default._default")
+
+        try:
+            prepared_results = self.run_cbq_query(query="EXECUTE engineer_count", query_context="default:default.test")
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 4040)
+            self.assertTrue('No such prepared statement: engineer_count, context: default:default.test' in error['msg'], f"Error is not what we expected {str(ex)}")
+
+        try:
+            prepared_results = self.run_cbq_query(query="EXECUTE engineer_count", query_context="default:")
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 4040)
+            self.assertTrue('No such prepared statement: engineer_count, context: default:' in error['msg'], f"Error is not what we expected {str(ex)}")
+
+    def test_nested_udf_prepare_query_context_global_negative(self):
+        self.run_cbq_query('DELETE FROM system:prepareds WHERE name LIKE "engineer%"')
+        function_name = 'execute_default'
+        param_val = '["Engineer"]'
+        param_var = "$1"
+        functions = f'function {function_name}() {{\
+            var params = {param_val};\
+            var query = SELECT COUNT(*) as count_engineer FROM default WHERE job_title = {param_var}; \
+            var acc = [];\
+            for (const row of query) {{ acc.push(row); }}\
+            return acc;\
+        }}'
+        self.create_library(self.library_name, functions, [function_name])
+
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        self.run_cbq_query(f'PREPARE engineer_count as SELECT {function_name}()', query_context="default:default._default")
+
+        try:
+            prepared_results = self.run_cbq_query(query="EXECUTE engineer_count", query_context="default:default._default")
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 5010)
+            self.assertTrue('Keyspace not found in CB datastore: default:default._default.default' in error['msg'], f"Error is not what we expected {str(ex)}")
+
+        try:
+            prepared_results = self.run_cbq_query(query="EXECUTE engineer_count", query_context="default:default.test")
+            self.fail("Query should have CBQ error'd")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 4040)
+            self.assertTrue('No such prepared statement: engineer_count, context: default:' in error['msg'], f"Error is not what we expected {str(ex)}")
 
     def test_parameter_values(self):
         function_name = 'param_values_default'
