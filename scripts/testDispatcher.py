@@ -126,7 +126,7 @@ def get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version, p
     elif options.serverType == GCP:
         ssh_key_path = OS.environ.get("GCP_SSH_KEY")
         return cloud_provision.gcp_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture)
-    elif options.serverType == AZUZE:
+    elif options.serverType == AZURE:
         return cloud_provision.az_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture)
 
 def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool=False, os_version="", pool_id=None):
