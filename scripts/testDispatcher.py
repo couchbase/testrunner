@@ -360,6 +360,12 @@ def main():
 
                 # and also check for which release it is implemented in
                 if 'implementedIn' not in data or releaseVersion >= float(data['implementedIn']):
+                    # and check if there is a max version the tests
+                    # can run in
+                    if 'maxVersion' in data and releaseVersion > \
+                            float(data['maxVersion']):
+                        print((data['component'], data['subcomponent'], ' is not supported in this release'))
+                        continue
                     if 'jenkins' in data:
                         # then this is sort of a special case, launch the old style Jenkins job
                         # not implemented yet
