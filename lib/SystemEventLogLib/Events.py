@@ -230,6 +230,9 @@ class EventHelper(object):
         v_index = 0
         events = rest.get_events(server=server, since_time=since_time,
                                  events_count=events_count)["events"]
+        if not events:
+            failures.append("Unable to fetch events since {0} on {1}".format(since_time, server.ip))
+
         for event in events:
             if isinstance(self.events[v_index], list):
                 # Process events which occurred in parallel from test's POV

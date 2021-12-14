@@ -28,10 +28,12 @@ from testconstants import STANDARD_BUCKET_PORT, WIN_COUCHBASE_LOGS_PATH
 from TestInput import TestInputSingleton
 from lib.Cb_constants.CBServer import CbServer
 from lib.membase.api.exception import XDCRException
+from lib.SystemEventLogLib.Events import EventHelper
+from lib.SystemEventLogLib.xdcr_events import XDCRServiceEvents
+from lib import global_vars
 from scripts import collect_data_files
 from scripts.collect_server_info import cbcollectRunner
 from scripts.java_sdk_setup import JavaSdkSetup
-
 
 class RenameNodeException(XDCRException):
 
@@ -592,7 +594,8 @@ class XDCRRemoteClusterRef:
     """Class keep the information related to Remote Cluster References.
     """
 
-    def __init__(self, src_cluster, dest_cluster, name, encryption=False, replicator_target_role=False, multiple_ca=False):
+    def __init__(self, src_cluster, dest_cluster, name, encryption=False, replicator_target_role=False, multiple_ca=False,
+                 systemeventlog=None):
         """
         @param src_cluster: source couchbase cluster object.
         @param dest_cluster: destination couchbase cluster object:
@@ -605,6 +608,7 @@ class XDCRRemoteClusterRef:
         self.__name = name
         self.__encryption = encryption
         self.__multiple_ca = multiple_ca
+        self.__systemeventlog = systemeventlog
         self.__rest_info = {}
         self.__replicator_target_role = replicator_target_role
         self.__use_scramsha = TestInputSingleton.input.param("use_scramsha", False)
@@ -635,6 +639,9 @@ class XDCRRemoteClusterRef:
     def get_rest_info(self):
         return self.__rest_info
 
+    def get_systemeventlog(self):
+        return self.__systemeventlog
+
     def get_replication_for_bucket(self, bucket):
         for replication in self.__replications:
             if replication.get_src_bucket().name == bucket.name:
@@ -653,11 +660,18 @@ class XDCRRemoteClusterRef:
         return expected_results
 
     def __validate_create_event(self):
-            ValidateAuditEvent.validate_audit_event(
-                GO_XDCR_AUDIT_EVENT_ID.CREATE_CLUSTER,
-                self.__src_cluster.get_master_node(),
-                self.__get_event_expected_results())
-
+        ValidateAuditEvent.validate_audit_event(
+            GO_XDCR_AUDIT_EVENT_ID.CREATE_CLUSTER,
+            self.__src_cluster.get_master_node(),
+            self.__get_event_expected_results())
+        self.__systemeventlog.add_event(
+            XDCRServiceEvents.create_remote_cluster_ref(self.__src_cluster.get_master_node().ip,
+                                                        self.__dest_cluster.get_master_node().ip
+                                                        + ':' + self.__dest_cluster.get_master_node().port,
+                                                        self.__rest_info['uuid'],
+                                                        "plain",
+                                                        self.__name
+                                                        ))
     def _extract_certs(self, raw_content):
         certs = ""
         for ca_dict in raw_content:
@@ -710,6 +724,13 @@ class XDCRRemoteClusterRef:
             GO_XDCR_AUDIT_EVENT_ID.MOD_CLUSTER,
             self.__src_cluster.get_master_node(),
             self.__get_event_expected_results())
+        self.__systemeventlog.add_event(
+            XDCRServiceEvents.update_remote_cluster_ref(self.__src_cluster.get_master_node(),
+                                                        self.__dest_cluster.get_master_node().ip,
+                                                        self.__rest_info['uuid'],
+                                                        self.__encryption,
+                                                        self.__name
+                                                        ))
 
     def use_scram_sha_auth(self):
         self.__use_scramsha = True
@@ -748,7 +769,13 @@ class XDCRRemoteClusterRef:
             GO_XDCR_AUDIT_EVENT_ID.RM_CLUSTER,
             self.__src_cluster.get_master_node(),
             self.__get_event_expected_results())
-
+        self.__systemeventlog.add_event(
+        XDCRServiceEvents.delete_remote_cluster_ref(self.__src_cluster.get_master_node(),
+                                                    self.__dest_cluster.get_master_node().ip,
+                                                    self.__rest_info['uuid'],
+                                                    self.__encryption,
+                                                    self.__name
+                                                    ))
 
     def remove(self):
         RestConnection(
@@ -769,6 +796,7 @@ class XDCRRemoteClusterRef:
                 fromBucket,
                 rep_type,
                 toBucket))
+
 
     def clear_all_replications(self):
         self.__replications = []
@@ -912,6 +940,9 @@ class XDCReplication:
     def get_repl_id(self):
         return self.__rep_id
 
+    def get_remote_cluster_ref(self):
+        return self.__remote_cluster_ref
+
     def __get_event_expected_results(self):
         expected_results = {
                 "real_userid:source": "ns_server",
@@ -946,6 +977,14 @@ class XDCReplication:
         ValidateAuditEvent.validate_audit_event(
             GO_XDCR_AUDIT_EVENT_ID.IND_SETT,
             self.get_src_cluster().get_master_node(), expected_results)
+        self.get_remote_cluster_ref().get_systemeventlog().add_event(
+            XDCRServiceEvents.update_replication(self.get_src_cluster().get_master_node(),
+                                                 self.get_src_bucket().name,
+                                                 self.get_dest_bucket().name,
+                                                 self.get_repl_id(),
+                                                 self.get_remote_cluster_ref().get_name(),
+                                                 self.get_filter_exp()
+                                                 ))
 
     def get_xdcr_setting(self, param):
         """Get a replication setting value
@@ -976,6 +1015,14 @@ class XDCReplication:
             GO_XDCR_AUDIT_EVENT_ID.CREATE_REPL,
                 self.get_src_cluster().get_master_node(),
                 self.__get_event_expected_results())
+        self.get_remote_cluster_ref().get_systemeventlog().add_event(
+            XDCRServiceEvents.create_replication(self.get_src_cluster().get_master_node().ip,
+                                                 self.get_src_bucket().name,
+                                                 self.get_dest_bucket().name,
+                                                 self.get_repl_id(),
+                                                 self.get_remote_cluster_ref().get_name(),
+                                                 self.get_filter_exp()
+                                                 ))
 
     def start(self):
         """Start replication"""
@@ -1010,6 +1057,8 @@ class XDCReplication:
             GO_XDCR_AUDIT_EVENT_ID.PAUSE_REPL,
             self.get_src_cluster().get_master_node(),
             self.__get_event_expected_results())
+        self.get_remote_cluster_ref().get_systemeventlog().add_event(
+            XDCRServiceEvents.pause_replication(self.get_src_cluster().get_master_node().ip))
 
     def pause(self, repl_id=None, verify=False):
         """Pause replication"""
@@ -1080,6 +1129,8 @@ class XDCReplication:
             GO_XDCR_AUDIT_EVENT_ID.RESUME_REPL,
             self.get_src_cluster().get_master_node(),
             self.__get_event_expected_results())
+        self.get_remote_cluster_ref().get_systemeventlog().add_event(
+            XDCRServiceEvents.resume_replication(self.get_src_cluster().get_master_node().ip))
 
     def resume(self, repl_id=None, verify=False):
         """Resume replication if paused"""
@@ -1105,6 +1156,8 @@ class XDCReplication:
             GO_XDCR_AUDIT_EVENT_ID.CAN_REPL,
             self.get_src_cluster().get_master_node(),
             self.__get_event_expected_results())
+        self.get_remote_cluster_ref().get_systemeventlog().add_event(
+            XDCRServiceEvents.delete_replication(self.get_src_cluster().get_master_node().ip))
 
 
     def cancel(self, rest, rest_all_repl):
@@ -2388,7 +2441,7 @@ class CouchbaseCluster:
         task.result()
 
     def add_remote_cluster(self, dest_cluster, name, encryption=False, replicator_target_role=False,
-                           multiple_ca=False):
+                           multiple_ca=False, systemeventlog=None):
         """Create remote cluster reference or add remote cluster for xdcr.
         @param dest_cluster: Destination cb cluster object.
         @param name: name of remote cluster reference
@@ -2400,7 +2453,8 @@ class CouchbaseCluster:
             name,
             encryption,
             replicator_target_role,
-            multiple_ca
+            multiple_ca,
+            systemeventlog
         )
         remote_cluster.add()
         self.__remote_clusters.append(remote_cluster)
@@ -2754,6 +2808,16 @@ class XDCRNewBaseTest(unittest.TestCase):
         return len({server.ip for server in self._input.servers}) == 1
 
     def tearDown(self):
+        if self.validate_systemeventlog:
+            for cluster in self.__cb_clusters:
+                for remote_cluster_ref in cluster.get_remote_clusters():
+                    src_cluster = remote_cluster_ref.get_src_cluster()
+                    systemeventlog_failures = self._systemeventlog.validate(src_cluster.get_master_node())
+                    if len(systemeventlog_failures):
+                        raise XDCRException(
+                        "System event log validation failed on cluster {0}\n{1}".format(src_cluster.get_master_node(),
+                                                                                        systemeventlog_failures))
+
         """Clusters cleanup"""
         if self._input.param("negative_test", False):
             if hasattr(self, '_resultForDoCleanups') \
@@ -2831,7 +2895,18 @@ class XDCRNewBaseTest(unittest.TestCase):
     def __setup_for_test(self):
         use_hostnames = self._input.param("use_hostnames", False)
         sdk_compression = self._input.param("sdk_compression", True)
-
+        if self._use_java_sdk:
+            JavaSdkSetup()
+        if self._multiple_ca:
+            CbServer.multiple_ca = True
+            self._use_https = True
+        if self._use_https:
+            CbServer.use_https = True
+            self._demand_encryption = True
+        global_vars.system_event_logs = EventHelper()
+        self._systemeventlog = global_vars.system_event_logs
+        self.validate_systemeventlog = \
+            self._input.param("validate_systemeventlog", False)
         collection_density = self._input.param("collection_density", "low")
         if self._dgm_run:
             collection_density = "medium"
@@ -2893,6 +2968,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                 RbacBase().add_user_role(role_list_replicator,
                                              RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()),
                                              'builtin')
+        if self.validate_systemeventlog:
+            self._systemeventlog.set_test_start_time()
 
     def __init_parameters(self):
         self.__case_number = self._input.param("case_number", 0)
@@ -2967,14 +3044,6 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._use_java_sdk = self._input.param("java_sdk_client", False)
         self._multiple_ca = self._input.param("use_multiple_certs", False)
         self._use_https = self._input.param("use_https", False)
-        if self._use_java_sdk:
-            JavaSdkSetup()
-        if self._multiple_ca:
-            CbServer.multiple_ca = True
-            self._use_https = True
-        if self._use_https:
-            CbServer.use_https = True
-            self._demand_encryption = True
 
     def __initialize_error_count_dict(self):
         """
@@ -3176,7 +3245,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                     self.__cb_clusters[i + 1].get_name()),
                 self._demand_encryption,
                 self._replicator_role,
-                self._multiple_ca
+                self._multiple_ca,
+                self._systemeventlog
             )
             if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
                 self.__cb_clusters[i + 1].add_remote_cluster(
@@ -3186,7 +3256,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                         cb_cluster.get_name()),
                     self._demand_encryption,
                     self._replicator_role,
-                    self._multiple_ca
+                    self._multiple_ca,
+                    self._systemeventlog
                 )
 
     def __set_topology_star(self):
@@ -3199,7 +3270,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                 Utility.get_rc_name(hub.get_name(), cb_cluster.get_name()),
                 self._demand_encryption,
                 self._replicator_role,
-                self._multiple_ca
+                self._multiple_ca,
+                self._systemeventlog
             )
             if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
                 cb_cluster.add_remote_cluster(
@@ -3207,7 +3279,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                     Utility.get_rc_name(cb_cluster.get_name(), hub.get_name()),
                     self._demand_encryption,
                     self._replicator_role,
-                    self._multiple_ca
+                    self._multiple_ca,
+                    self._systemeventlog
                 )
 
     def __set_topology_ring(self):
@@ -3222,7 +3295,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                 self.__cb_clusters[0].get_name()),
             self._demand_encryption,
             self._replicator_role,
-            self._multiple_ca
+            self._multiple_ca,
+            self._systemeventlog
         )
         if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
             self.__cb_clusters[0].add_remote_cluster(
@@ -3232,7 +3306,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                     self.__cb_clusters[-1].get_name()),
                 self._demand_encryption,
                 self._replicator_role,
-                self._multiple_ca
+                self._multiple_ca,
+                self._systemeventlog
             )
 
     def set_xdcr_topology(self):

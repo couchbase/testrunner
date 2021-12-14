@@ -125,17 +125,17 @@ class Analytics(object):
     SettingChanged = 0
 
 
-class Xdcr(object):
+class XDCR(object):
     """Mapping of XDCR related events - event_id. Valid range 7168:8191"""
-    CreateReplication = 0
-    IncomingReplication = 0
-    ModifyReplication = 0
-    RemoveReplication = 0
-    ProcessCrashed = 0
-    SettingChanged = 0
-    Paused = 0
-    Resumed = 0
-
+    CreateRemoteClusterRef = 7168
+    UpdateRemoteClusterRef = 7169
+    DeleteRemoteClusterRef = 7170
+    CreateReplication = 7171
+    PauseReplication = 7172
+    ResumeReplication = 7173
+    DeleteReplication = 7174
+    UpdateDefaultReplicationSetting = 7175
+    UpdateReplicationSetting = 7176
 
 class Backup(object):
     """Mapping of Backup related events - event_id. Valid range 6143:7167"""
