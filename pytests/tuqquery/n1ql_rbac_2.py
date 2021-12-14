@@ -1156,3 +1156,17 @@ class RbacN1QL(QueryTests):
         self.revoke_role(role='query_system_catalog')
         self.query = 'select * from system:indexes'
         res = self.curl_with_roles(self.query)
+
+    def test_create_drop_scope(self):
+        self.create_users()
+        self.grant_role()
+        self.run_cbq_query(query="DROP SCOPE default.scope1 IF EXISTS", username=self.users[0]['id'], password=self.users[0]['password'])
+        self.run_cbq_query(query="CREATE SCOPE default.scope1", username=self.users[0]['id'], password=self.users[0]['password'])
+        self.run_cbq_query(query="DROP SCOPE default.scope1", username=self.users[0]['id'], password=self.users[0]['password'])
+
+    def test_create_drop_collection(self):
+        self.create_users()
+        self.grant_role()
+        self.run_cbq_query(query="DROP COLLECTION default._default.collection1 IF EXISTS", username=self.users[0]['id'], password=self.users[0]['password'])
+        self.run_cbq_query(query="CREATE COLLECTION default._default.collection1", username=self.users[0]['id'], password=self.users[0]['password'])
+        self.run_cbq_query(query="DROP COLLECTION default._default.collection1", username=self.users[0]['id'], password=self.users[0]['password'])
