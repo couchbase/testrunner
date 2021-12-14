@@ -217,6 +217,7 @@ def main():
     parser.add_option('-a', '--addPoolId', dest='addPoolId', default=None)
     parser.add_option('-t', '--test', dest='test', default=False, action='store_true')  # use the test Jenkins
     parser.add_option('-s', '--subcomponent', dest='subcomponent', default=None)
+    parser.add_option('--subcomponent_regex', dest='subcomponent_regex', default=None)
     parser.add_option('-e', '--extraParameters', dest='extraParameters', default=None)
     parser.add_option('-y', '--serverType', dest='serverType', type="choice", default=DEFAULT_SERVER_TYPE, choices=[VM, AWS, DOCKER, GCP, AZURE])  # or could be Docker
     parser.add_option('-u', '--url', dest='url', default=None)
@@ -322,7 +323,8 @@ def main():
     if options.component is None or options.component == 'None':
         queryString = "select * from `QE-Test-Suites` where " + suiteString + " order by component"
     else:
-        if options.subcomponent is None or options.subcomponent == 'None':
+        if (options.subcomponent is None or options.subcomponent == 'None') \
+                and (options.subcomponent_regex is None or options.subcomponent_regex == "None"):
             splitComponents = options.component.split(',')
             componentString = ''
             for i in range(len(splitComponents)):
@@ -333,7 +335,7 @@ def main():
             queryString = "select * from `QE-Test-Suites` where {0} and component in [{1}] order by component;".format(
                 suiteString, componentString)
 
-        else:
+        elif options.subcomponent_regex is None or options.subcomponent_regex == "None":
             # have a subcomponent, assume only 1 component
 
             splitSubcomponents = options.subcomponent.split(',')
@@ -345,6 +347,9 @@ def main():
                     subcomponentString = subcomponentString + ','
             queryString = "select * from `QE-Test-Suites` where {0} and component in ['{1}'] and subcomponent in [{2}];". \
                 format(suiteString, options.component, subcomponentString)
+        else:
+            queryString = "select * from `QE-Test-Suites` where {0} and component in ['{1}'] and subcomponent like \"{2}\";". \
+                format(suiteString, options.component, options.subcomponent_regex)
 
     print(('the query is', queryString))  # .format(options.run, componentString)
     query = N1QLQuery(queryString)
