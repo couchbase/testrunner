@@ -258,6 +258,6 @@ if __name__ == "__main__":
     elif args.provider == "gcp":
         if args.cmd == "terminate":
             gcp_terminate(args.name)
-    elif arg.provider == "az":
+    elif args.provider == "az":
         if args.cmd == "terminate":
             az_terminate(args.name)
