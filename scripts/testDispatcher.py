@@ -348,8 +348,17 @@ def main():
             queryString = "select * from `QE-Test-Suites` where {0} and component in ['{1}'] and subcomponent in [{2}];". \
                 format(suiteString, options.component, subcomponentString)
         else:
-            queryString = "select * from `QE-Test-Suites` where {0} and component in ['{1}'] and subcomponent like \"{2}\";". \
-                format(suiteString, options.component, options.subcomponent_regex)
+            splitComponents = options.component.split(',')
+            componentString = ''
+            for comp in splitComponents:
+                comp = f'"{comp}"'
+                if componentString == '':
+                    componentString = comp
+                else:
+                    componentString = f'{componentString},{comp}'
+
+            queryString = "select * from `QE-Test-Suites` where {0} and component in [{1}] and subcomponent like \"{2}\";". \
+                format(suiteString, componentString, options.subcomponent_regex)
 
     print(('the query is', queryString))  # .format(options.run, componentString)
     query = N1QLQuery(queryString)
