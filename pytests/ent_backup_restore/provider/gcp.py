@@ -86,7 +86,7 @@ class GCP(provider.Provider):
         if prefix:
             kwargs['prefix'] = prefix
 
-        self.cloud_bucket.delete_blobs(self.resource.list_blobs(self.cloud_bucket, **kwargs))
+        self.cloud_bucket.delete_blobs(list(self.resource.list_blobs(self.cloud_bucket, **kwargs)))
 
     def num_multipart_uploads(self):
         """ See super class
