@@ -429,6 +429,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.master.protocol = "http://"
             for server in self.servers:
                 server.port = '8091'
+        if self.input.param("x509", False):
+            for server in self.servers:
+                shell = RemoteMachineShellConnection(server)
+                shell.execute_command(f"rm -rf {self.x509.CACERTFILEPATH}")
+                self.x509.delete_inbox_folder_on_server(server=server)
+            self.x509.teardown_certs(servers=self.servers)
 
     @property
     def cluster_to_backup(self):
@@ -627,6 +633,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             password_input = ""
         elif self.backupset.passwd_env_with_prompt:
             password_input = "-p "
+
+        if self.input.param("x509", False):
+            user_input = f" --client-cert {self.backupset.client_certs[2][0]}"
+            password_input = f" --client-key {self.backupset.client_certs[2][1]}"
 
         """ Print out of cbbackupmgr from 6.5 is different with older version """
         self.cbbkmgr_version = "6.5"
@@ -3024,6 +3034,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         return self.backupset.common_objstore_arguments(self.objstore_provider)
 
     def setup_multi_root_certs(self):
+        # Generate and upload the certs
         self.x509 = x509main(host=self.master)
         for server in self.servers:
             self.x509.delete_inbox_folder_on_server(server=server)
@@ -3033,6 +3044,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         for server in self.servers:
             self.x509.upload_root_certs(server)
         self.x509.upload_node_certs(servers=self.servers)
+
+        # Copy the certs onto the test machines
+        self.backupset.client_certs = list()
+        for ca_name in ("i1_r1", "iclient1_r1", "iclient1_clientroot"):
+            self.backupset.client_certs.append(self.x509.get_client_cert(int_ca_name=ca_name))
+        for server in self.servers:
+            shell = RemoteMachineShellConnection(server)
+            for cert_tuple in self.backupset.client_certs:
+                for cert in cert_tuple:
+                    shell.execute_command(f"mkdir -p {os.path.dirname(cert)}")
+                    shell.copy_file_local_to_remote(cert, cert)
+            shell.execute_command(f"mkdir -p {self.x509.CACERTFILEPATH}all")
+            shell.copy_file_local_to_remote(f"{self.x509.CACERTFILEPATH}all/all_ca.pem", f"{self.x509.CACERTFILEPATH}all/all_ca.pem")
 
 
 class Backupset:

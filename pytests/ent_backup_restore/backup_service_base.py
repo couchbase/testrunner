@@ -1215,6 +1215,17 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         self.preamble()
         self.backup_service_cleanup()
+        if self.enforce_tls:
+            self.master.port = '8091'
+            self.master.protocol = "http://"
+            for server in self.servers:
+                server.port = '8091'
+        if self.input.param("x509", False):
+            for server in self.servers:
+                shell = RemoteMachineShellConnection(server)
+                shell.execute_command(f"rm -rf {self.x509.CACERTFILEPATH}")
+                self.x509.delete_inbox_folder_on_server(server=server)
+            self.x509.teardown_certs(servers=self.servers)
         # If the reset_time flag is set, reset the time during the tearDown
         if self.input.param('reset_time', False):
             self.time.reset()
