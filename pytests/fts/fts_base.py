@@ -3420,6 +3420,7 @@ class FTSBaseTest(unittest.TestCase):
         """Clusters cleanup"""
         if self._input.param("enforce_tls", False):
             self.log.info('###################### Disabling n2n encryption')
+            self._master = self._cb_cluster.get_master_node()
             shell_conn = RemoteMachineShellConnection(self._master)
             cb_cli = CbCli(shell_conn, no_ssl_verify=True)
             level = cb_cli.get_n2n_encryption_level()
