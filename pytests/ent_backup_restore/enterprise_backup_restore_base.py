@@ -751,9 +751,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                               self.backup_validation_files_location)
             self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
-            self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                    self.backup_validation_files_location,
-                                                    self.objstore_provider)
 
     def backup_restore(self):
         if self.restore_only:
@@ -1383,10 +1380,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.validation_helper.store_latest(self.cluster_to_backup, self.buckets,
                                             self.number_of_backups_taken,
                                             self.backup_validation_files_location)
-        self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                self.backup_validation_files_location,
-                                                self.objstore_provider,
-                                                merge=True)
         conn.disconnect()
 
     def bk_with_erlang_crash_and_restart(self):
@@ -1441,9 +1434,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.validation_helper.store_latest(self.cluster_to_backup, self.buckets,
                                             self.number_of_backups_taken,
                                             self.backup_validation_files_location)
-        self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                self.backup_validation_files_location,
-                                                self.objstore_provider)
         conn.disconnect()
 
     def bk_with_cb_server_stop_and_restart(self):
@@ -1498,9 +1488,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.validation_helper.store_latest(self.cluster_to_backup, self.buckets,
                                             self.number_of_backups_taken,
                                             self.backup_validation_files_location)
-        self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                self.backup_validation_files_location,
-                                                self.objstore_provider)
         conn.disconnect()
 
     def bk_with_stop_and_resume(self, iterations=1, remove_staging_directory=False):
@@ -1639,7 +1626,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if error or exit_code:
             return False, error, "Merging backup failed"
         elif not output:
-            self.log.info("process cbbackupmge may be killed")
+            self.log.info("process cbbackupmgr may be killed")
             return False, [], "cbbackupmgr may be killed"
         elif check_for_panic:
             found_panic, output, error = \
@@ -1666,9 +1653,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         remote_client.disconnect()
         return True, output, "Merging backup succeeded"
 
-    def backup_merge_validate(self, repeats=1, skip_validation=False):
-        self.log.warning("MERGE VALIDATION IS CURRENTLY NON-FUNCTIONAL")
-        return
+    def backup_merge_validate(self, repeats=1, skip_validation=False, **kwargs):
         status, output, message = self.backup_merge()
         if not status:
             if self.backup_corrupted:
@@ -1684,21 +1669,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     self.fail(message)
 
         if repeats < 2 and not skip_validation:
-            self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
-                                              self.backup_validation_files_location)
-            self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
-                                                self.backup_validation_files_location)
-            self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                    self.backup_validation_files_location,
-                                                    self.objstore_provider,
-                                                    merge=True)
+            self.validate_backup_data(**kwargs)
 
-            self.validation_helper.validate_merge(self.backup_validation_files_location)
-
-    def validate_backup_data(self, server_host, server_bucket, master_key,
-                             perNode, getReplica, mode, items, key_check,
-                             validate_keys=False, regex_pattern=None,
-                             swap=False, backup_name=None, filter_keys=None,
+    def validate_backup_data(self, server_host=None, server_bucket=None, master_key="ent-backup",
+                             perNode=False, getReplica=False, mode="memory",
+                             items=None, key_check="ent-backup1", validate_keys=False,
+                             regex_pattern=None, swap=False, backup_name=None, filter_keys=None,
                              skip_stats_check=False):
         """Compare data in cluster with data in backup file.
 
@@ -1714,6 +1690,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                backup_name (str): If None retrieves a backup from the filesystem (or cloud) otherwise uses the backup_name provided.
                skip_stats_check (bool): Skip fetching cluster stats
         """
+        if server_host is None:
+            server_host = self.backupset.backup_host
+        if server_bucket is None:
+            server_bucket = [self.master]
+        if items is None:
+            items = self.num_items
         data_matched = True
         data_collector = DataCollector()
         bk_file_data, _ = data_collector.get_kv_dump_from_backup_file(server_host, self.cli_command_location,
@@ -3395,14 +3377,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.log.info("backups after merge: " + str(self.backups))
         self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
         if self.number_of_repeats < 2:
-            self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
-                                              self.backup_validation_files_location)
-            self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
-                                                self.backup_validation_files_location)
-            self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                    self.backup_validation_files_location,
-                                                    self.objstore_provider)
-            self.validation_helper.validate_merge(self.backup_validation_files_location)
+            self.validate_backup_data()
         conn.disconnect()
 
     def merge_with_erlang_crash_and_restart(self):
@@ -3436,14 +3411,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.log.info("backups after merge: " + str(self.backups))
         self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
         if self.number_of_repeats < 2:
-            self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
-                                              self.backup_validation_files_location)
-            self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
-                                                self.backup_validation_files_location)
-            self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                    self.backup_validation_files_location,
-                                                    self.objstore_provider)
-            self.validation_helper.validate_merge(self.backup_validation_files_location)
+            self.validate_backup_data()
         conn.disconnect()
 
     def merge_with_cb_server_stop_and_restart(self):
@@ -3481,14 +3449,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.log.info("backups after merge: " + str(self.backups))
         self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
         if self.number_of_repeats < 2:
-            self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
-                                              self.backup_validation_files_location)
-            self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
-                                                self.backup_validation_files_location)
-            self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                    self.backup_validation_files_location,
-                                                    self.objstore_provider)
-            self.validation_helper.validate_merge(self.backup_validation_files_location)
+            self.validate_backup_data()
         conn.disconnect()
 
     def compact_backup(self):
