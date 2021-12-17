@@ -7,6 +7,7 @@ from base_gsi import BaseSecondaryIndexingTests
 from membase.api.rest_client import RestConnection, RestHelper
 import random
 from lib import testconstants
+from lib.Cb_constants.CBServer import CbServer
 from lib.couchbase_helper.tuq_generators import TuqGenerators
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
@@ -3348,6 +3349,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.sleep(30)
 
         node_out = self.servers[self.node_out]
+        #port = node_out.port
+        #if self.use_https:
+        #    port = CbServer.ssl_port_map.get(str(node_out.port),
+        #                                          str(node_out.port))
         node_out_str = node_out.ip + ":" + str(node_out.port)
 
         # Get Index Names
