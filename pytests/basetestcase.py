@@ -2405,8 +2405,10 @@ class BaseTestCase(unittest.TestCase):
         return target_node
 
     def get_item_count(self, server, bucket):
-        client = MemcachedClientHelper.direct_client(server, bucket)
-        return int(client.stats()["curr_items"])
+        rest = RestConnection(self.master)
+        return rest.get_active_key_count(bucket)
+        #client = MemcachedClientHelper.direct_client(server, bucket)
+        #return int(client.stats()["curr_items"])
 
     def stop_server(self, node):
         """ Method to stop a server which is subject to failover """
