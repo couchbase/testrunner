@@ -728,3 +728,17 @@ class QueryUpdateStatsTests(QueryTests):
                 error = self.process_CBQE(ex)
                 self.assertEqual(error['code'], error_code)
                 self.assertEqual(error['msg'], error_message)
+
+    def test_more_than_ten_column(self):
+        update_stats = "UPDATE STATISTICS FOR `travel-sample`.inventory.hotel(title, name, address, directions, phone, tollfree, email, fax, url, checkin, checkout, price, geo.lat, geo.lon, geo.accuracy)"
+        select_distribution = "SELECT distributionKeys FROM system:dictionary WHERE `bucket` = 'travel-sample' and `keyspace` = 'hotel';"
+        self.run_cbq_query(update_stats)
+        system_dictionary = self.run_cbq_query(select_distribution)
+        expected_result = [
+            '(geo.accuracy)', '(geo.lat)', '(geo.lon)',
+            'address', 'checkin', 'checkout', 'directions',
+            'email', 'fax', 'name', 'phone', 'price',
+            'title', 'tollfree', 'url']
+        actual_result = system_dictionary['results'][0]['distributionKeys']
+        actual_result.sort()
+        self.assertEqual(actual_result, expected_result)
