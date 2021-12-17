@@ -297,19 +297,6 @@ class BaseTestCase(unittest.TestCase):
                 self.log.info("Building docker image with java sdk client")
                 JavaSdkSetup()
 
-            if self.use_https:
-                if self.enforce_tls:
-                    self.log.info("#####Enforcing TLS########")
-                    ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
-                    for i in range(2):
-                        status = ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master])
-                        if status:
-                            break
-                        else:
-                            self.sleep(10)
-                    if not status:
-                        self.fail("Port binding after enforcing TLS incorrect")
-
             # avoid any cluster operations in setup for new upgrade
             #  & upgradeXDCR tests
             if str(self.__class__).find('newupgradetests') != -1 or \
@@ -331,6 +318,19 @@ class BaseTestCase(unittest.TestCase):
                 self.log.info("==============  basetestcase setup was finished for test #{0} {1} ==============" \
                               .format(self.case_number, self._testMethodName))
                 return
+
+            if self.use_https:
+                if self.enforce_tls:
+                    self.log.info("#####Enforcing TLS########")
+                    ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
+                    for i in range(2):
+                        status = ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master])
+                        if status:
+                            break
+                        else:
+                            self.sleep(10)
+                    if not status:
+                        self.fail("Port binding after enforcing TLS incorrect")
             if not self.skip_init_check_cbserver:
                 self.log.info("initializing cluster")
                 cli_command = 'node-init'
