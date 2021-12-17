@@ -3713,6 +3713,7 @@ class RestConnection(object):
         protocol = "http"
         if CbServer.use_https:
             protocol = "https"
+            server.port = str(CbServer.ssl_port_map.get(str(server.port), str(server.port)))
         api = "%s://%s:%s/" % (protocol, server.ip, server.port) + "settings/querySettings/curlWhitelist"
         headers = self._create_headers_with_auth('Administrator', 'password')
         status, content, response = self._http_request(api, "POST", headers=headers,
