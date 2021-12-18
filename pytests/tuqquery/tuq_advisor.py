@@ -664,19 +664,44 @@ class QueryAdvisorTests(QueryTests):
 
     def test_session_skip_count(self):
         """ 
-            Non advisabeable statement (select advisor) should
+            Non advisabeable statement should
             not be counted toward query_count.
+            Only query_lyon should be counted.
         """        
-        query_lyon='SELECT airportname FROM `travel-sample` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
         advisor_list_query = "SELECT ADVISOR ({'action': 'list'})"
+        explain_query = 'EXPLAIN SELECT airportname FROM `travel-sample` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
+        advise_query = 'ADVISE SELECT airportname FROM `travel-sample` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
+        prepare_query = 'PREPARE aeroport_de_lyon AS SELECT airportname FROM `travel-sample`.`inventory`.`airport` WHERE lower(city) = "lyon" AND country = "France"'
+        execute_prepared_query = 'EXECUTE aeroport_de_lyon'
+        update_stats_query = 'UPDATE STATISTICS FOR `travel-sample`.inventory.airport(city)'
+        create_scope = "CREATE SCOPE `travel-sample`.scope1"
+        drop_scope = "DROP SCOPE `travel-sample`.scope1"
+        create_collection = "CREATE COLLECTION `travel-sample`.inventory.collection1"
+        drop_collection = "DROP COLLECTION `travel-sample`.inventory.collection1"
+
+        query_lyon='SELECT airportname FROM `travel-sample` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
         # Start session
         start = self.run_cbq_query("SELECT ADVISOR({'action': 'start', 'duration': '45m', 'query_count': 2})")
         session = start['results'][0]['$1']['session']
-        # Run queries.
+        # Run queries
         self.run_cbq_query(advisor_list_query)
         self.run_cbq_query(advisor_list_query)
+        self.run_cbq_query(prepare_query)
+        self.run_cbq_query(advise_query)
+        self.run_cbq_query(update_stats_query)
+        self.run_cbq_query(create_scope)
+        self.run_cbq_query(create_collection)
+
+        # First execution of query
         self.run_cbq_query(query_lyon)
+
         self.run_cbq_query(advisor_list_query)
+        self.run_cbq_query(execute_prepared_query)
+        self.run_cbq_query(explain_query)
+        self.run_cbq_query(drop_scope)
+        self.run_cbq_query(drop_collection)
+
+        # Second execution of query
         self.run_cbq_query(query_lyon)
         # Stop and check session
         self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'stop', 'session':'{session}'}}) as Stop")
