@@ -7,6 +7,8 @@ from string import ascii_lowercase
 from string import digits
 import gzip
 from testconstants import DEWIKI, ENWIKI, ESWIKI, FRWIKI, NAPADATASET
+
+from lib.Cb_constants.CBServer import CbServer
 from .data import FIRST_NAMES, LAST_NAMES, DEPT, LANGUAGES
 
 class KVGenerator(object):
@@ -692,6 +694,7 @@ class SDKDataLoader(object):
         self.output = output
         self.upd_del_shift = upd_del_shift
         self.shuffle_docs = shuffle_docs
+        self.secure = CbServer.use_https
 
     def update(self, fields_to_update=None):
         self.start_seq_num = self.start + 1
