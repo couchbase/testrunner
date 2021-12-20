@@ -140,6 +140,7 @@ class QueryUDFN1QLTests(QueryTests):
         self.params = self.input.param("params", "named")
         self.inline_func = self.input.param("inline_func", False)
         self.use_select = self.input.param("use_select", False)
+        self.test_sideeffect = self.input.param("test_sideeffect", False)
         self.library_name = 'n1ql'
         self.log.info("==============  QueryUDFN1QLTests setup has completed ==============")
         self.log_config_info()
@@ -187,8 +188,17 @@ class QueryUDFN1QLTests(QueryTests):
         query_result = self.run_cbq_query(query, txnid=txid)
         self.run_cbq_query('ROLLBACK', txnid=txid)
         # Execute function and check
-        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
-        self.assertEqual(function_result['results'][0], query_result['results'])
+        if self.test_sideeffect:
+            try:
+                function_result = self.run_cbq_query(f'select {function_name}() from default')
+                self.fail("Query should have CBQ error'd")
+            except CBQError as ex:
+                error = self.process_CBQE(ex)
+                self.assertEqual(error['code'], 5010)
+                self.assertTrue('Error: not a readonly request' in error['msg'])
+        else:
+            function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+            self.assertEqual(function_result['results'][0], query_result['results'])
 
     def test_explain(self):
         function_name = "explain_default"
@@ -266,13 +276,22 @@ class QueryUDFN1QLTests(QueryTests):
         pre_query = self.ddls[self.statement]['pre']
         self.run_cbq_query(pre_query)
         # Execute function
-        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
-        self.assertEqual(function_result['results'], self.ddls[self.statement]['function_expected'])
-        # Run post check
-        post_query = self.ddls[self.statement]['post']
-        post_expected = self.ddls[self.statement]['post_expected']
-        post_actual = self.run_cbq_query(post_query)
-        self.assertEqual(post_expected, post_actual['results'])
+        if self.test_sideeffect:
+            try:
+                function_result = self.run_cbq_query(f'select {function_name}() from default')
+                self.fail("Query should have CBQ error'd")
+            except CBQError as ex:
+                error = self.process_CBQE(ex)
+                self.assertEqual(error['code'], 5010)
+                self.assertTrue('Error: not a readonly request' in error['msg'])
+        else:
+            function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+            self.assertEqual(function_result['results'], self.ddls[self.statement]['function_expected'])
+            # Run post check
+            post_query = self.ddls[self.statement]['post']
+            post_expected = self.ddls[self.statement]['post_expected']
+            post_actual = self.run_cbq_query(post_query)
+            self.assertEqual(post_expected, post_actual['results'])
 
     def test_curl(self):
         url = "https://jsonplaceholder.typicode.com/todos"
@@ -688,12 +707,11 @@ class QueryUDFN1QLTests(QueryTests):
         query = "EXECUTE FUNCTION call_func1($x)"
         function_names = [function_name]
         functions = f'function {function_name}(x) {{\
-            var acc = [];\
+            var levels = 1;\
             if (x > 5){{ x = x - 1;\
-            var query = {query};\
-            for (const row of query){{\
-                acc.push(row);}}}}\
-            else{{ return acc; }}}}'
+            levels = levels + 1; \
+            var query = {query};}}\
+            else{{ return levels; }}}}'
         self.create_library("n1ql2", functions, function_names)
         self.run_cbq_query(
             f'CREATE OR REPLACE FUNCTION {function_name}(x) LANGUAGE JAVASCRIPT AS "{function_name}" AT "n1ql2"')
@@ -1242,9 +1260,9 @@ class QueryUDFN1QLTests(QueryTests):
             var projection = "";\
             if (selector){{ projection = "name";}} else {{ projection = "job_title"; }}\
             var job = j;\
-            var year = y.toString();\
-            var month = m.toString();\
-            var query_string = "SELECT " + projection + " FROM default WHERE job_title = " + job + "AND join_yr = " + year "AND join_mo = " + month + "ORDER by name LIMIT 3";\
+            var year = y;\
+            var month = m;\
+            var query_string = "SELECT " + projection + " FROM default WHERE job_title = \\\"" + job + "\\\" AND join_yr = " + year + " AND join_mo = " + month + " ORDER by name LIMIT 3";\
             var query = N1QL(query_string);\
             var acc = [];\
             for (const row of query) {{\
@@ -1262,6 +1280,143 @@ class QueryUDFN1QLTests(QueryTests):
 
         function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(0,"Engineer",2011,10)')
         expected_result = [{'job_title': 'Engineer'}, {'job_title': 'Engineer'}, {'job_title': 'Engineer'}]
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+        function_name = 'param_from_var_default'
+        functions = f'function {function_name}(selector, j, y, m) {{\
+            var projection = "";\
+            if (selector){{ projection = "name";}} else {{ projection = "job_title"; }}\
+            var job = j;\
+            var year = y;\
+            var month = m;\
+            var query_string = "SELECT " + projection + " FROM default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 3";\
+            var query = N1QL(query_string, {{"job":job, "month": month, "year": year}});\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library(self.library_name, functions, [function_name])
+
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(1,"Engineer",2011,10)')
+        expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(0,"Engineer",2011,10)')
+        expected_result = [{'job_title': 'Engineer'}, {'job_title': 'Engineer'}, {'job_title': 'Engineer'}]
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+    def test_iterator(self):
+        function_name = 'param_from_var_default'
+        # once iterator is closed iter.next will no longer return a value
+        functions = f'function {function_name}(selector, j, y, m) {{\
+            var projection = "";\
+            if (selector){{ projection = "name";}} else {{ projection = "job_title"; }}\
+            var job = j;\
+            var year = y;\
+            var month = m;\
+            var query_string = "SELECT " + projection + " FROM default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 3";\
+            var query = N1QL(query_string, {{"job":job, "month": month, "year": year}});\
+            let iter = query[Symbol.iterator]();\
+            var firstrow = iter.next();\
+            query.close();\
+            var secondrow = iter.next();\
+            var thirdrow = iter.next();\
+            return {{"first_row": firstrow, "secondrow": secondrow, "thirdrow": thirdrow}};}}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(...) LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(1,"Engineer",2011,10)')
+        expected_result = {'first_row': {'done': False, 'value': {'name': 'employee-1'}}, 'secondrow': {'done': True, 'value': None}, 'thirdrow': {'done': True, 'value': None}}
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(0,"Engineer",2011,10)')
+        expected_result = {'first_row': {'done': False, 'value': {'job_title': 'Engineer'}}, 'secondrow': {'done': True, 'value': None}, 'thirdrow': {'done': True, 'value': None}}
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+        #if we do not close iterator we can get a subset of values
+        functions = f'function {function_name}(selector, j, y, m) {{\
+            var projection = "";\
+            if (selector){{ projection = "name";}} else {{ projection = "job_title"; }}\
+            var job = j;\
+            var year = y;\
+            var month = m;\
+            var query_string = "SELECT " + projection + " FROM default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 3";\
+            var query = N1QL(query_string, {{"job":job, "month": month, "year": year}});\
+            let iter = query[Symbol.iterator]();\
+            var firstrow = iter.next();\
+            var secondrow = iter.next();\
+            return {{"first_row": firstrow, "secondrow": secondrow}};}}'
+        self.create_library(self.library_name, functions, [function_name])
+
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(1,"Engineer",2011,10)')
+        expected_result = {'first_row': {'done': False, 'value': {'name': 'employee-1'}}, 'secondrow': {'done': False, 'value': {'name': 'employee-10'}}}
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(0,"Engineer",2011,10)')
+        expected_result = {'first_row': {'done': False, 'value': {'job_title': 'Engineer'}}, 'secondrow': {'done': False, 'value': {'job_title': 'Engineer'}}}
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+        #if we do not close iterator we can get a subset of values
+        functions = f'function {function_name}(selector, j, y, m) {{\
+            var projection = "";\
+            if (selector){{ projection = "name";}} else {{ projection = "job_title"; }}\
+            var job = j;\
+            var year = y;\
+            var month = m;\
+            var query_string = "SELECT " + projection + " FROM default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 3";\
+            var query = N1QL(query_string, {{"job":job, "month": month, "year": year}});\
+            let iter = query[Symbol.iterator]();\
+            var firstrow = iter.next();\
+            var secondrow = iter.next();\
+            var thirdrow = iter.next();\
+            return {{"first_row": firstrow, "secondrow": secondrow, "thirdrow" : thirdrow}};}}'
+        self.create_library(self.library_name, functions, [function_name])
+
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(1,"Engineer",2011,10)')
+        expected_result = {'first_row': {'done': False, 'value': {'name': 'employee-1'}}, 'secondrow': {'done': False, 'value': {'name': 'employee-10'}}, 'thirdrow': {'done': False, 'value': {'name': 'employee-11'}}}
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(0,"Engineer",2011,10)')
+        expected_result = {'first_row': {'done': False, 'value': {'job_title': 'Engineer'}}, 'secondrow': {'done': False, 'value': {'job_title': 'Engineer'}}, 'thirdrow': {'done': False, 'value': {'job_title': 'Engineer'}}}
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+        # We can iterate through the iterator with a for loop for as long as we have values to use
+        functions = f'function {function_name}(selector, j, y, m) {{\
+            var projection = "";\
+            if (selector){{ projection = "name";}} else {{ projection = "job_title"; }}\
+            var job = j;\
+            var year = y;\
+            var month = m;\
+            var query_string = "SELECT " + projection + " FROM default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 10";\
+            var query = N1QL(query_string, {{"job":job, "month": month, "year": year}});\
+            let iter = query[Symbol.iterator]();\
+            var acc = [];\
+            for ( let i = 0; i < 5; i++) {{acc.push(iter.next());}}\
+            return acc;}}'
+        self.create_library(self.library_name, functions, [function_name])
+
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(1,"Engineer",2011,10)')
+        expected_result = [{'done': False, 'value': {'name': 'employee-1'}}, {'done': False, 'value': {'name': 'employee-10'}}, {'done': False, 'value': {'name': 'employee-11'}}, {'done': False, 'value': {'name': 'employee-12'}}, {'done': False, 'value': {'name': 'employee-13'}}]
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(0,"Engineer",2011,10)')
+        expected_result = [{'done': False, 'value': {'job_title': 'Engineer'}}, {'done': False, 'value': {'job_title': 'Engineer'}}, {'done': False, 'value': {'job_title': 'Engineer'}}, {'done': False, 'value': {'job_title': 'Engineer'}}, {'done': False, 'value': {'job_title': 'Engineer'}}]
         actual_result = function_result['results'][0]
         self.assertEqual(actual_result, expected_result)
 
