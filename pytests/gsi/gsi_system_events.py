@@ -377,7 +377,52 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
                                                             partition_id=partition))
         self.system_events.validate(self.master)
 
-    def test_gsi_error_system_event(self):
+    def test_gsi_schedule_creation_system_event(self):
+        collection_namespace = self.namespaces[0]
+        _, keyspace = collection_namespace.split(':')
+        bucket, scope, _ = keyspace.split('.')
+        self.index_rest.set_index_settings({"indexer.debug.enableBackgroundIndexCreation": False})
+        query_list = []
+        for item, index_field in zip(range(self.initial_index_num), self.index_field_set):
+            index_name = f'idx_{item}'
+            index_gen = QueryDefinition(index_name=index_name, index_fields=index_field)
+            query = index_gen.generate_index_create_query(namespace=self.namespaces[0], defer_build=True,
+                                                          num_replica=self.num_index_replicas)
+            query_list.append(query)
+        with ThreadPoolExecutor() as executor:
+            tasks = []
+            for query in query_list:
+                task = executor.submit(self.run_cbq_query, query=query)
+                tasks.append(task)
+
+            try:
+                for task in tasks:
+                    task.result()
+            except Exception as err:
+                self.log.info(err)
+
+        indexer_metadata = self.index_rest.get_indexer_metadata()['status']
+        for index in indexer_metadata:
+            instance_id = index['instId']
+            definition_id = index['defnId']
+            replica_id = index['replicaId']
+            node = index['hosts'][0].split(':')[0]
+            indexer_id = self.nodes_uuids[node]
+            if index['status'] == 'Scheduled for Creation':
+                self.system_events.add_event(
+                    IndexingServiceEvents.index_schedule_for_creation(node=node,
+                                                                      definition_id=definition_id,
+                                                                      indexer_id=indexer_id,
+                                                                      replica_id=replica_id))
+            else:
+                self.system_events.add_event(IndexingServiceEvents.index_created(node=node,
+                                                                                 definition_id=definition_id,
+                                                                                 instance_id=instance_id,
+                                                                                 indexer_id=indexer_id,
+                                                                                 replica_id=replica_id))
+        self.system_events.validate(self.master)
+
+    def test_gsi_schedule_error_system_event(self):
         collection_namespace = self.namespaces[0]
         _, keyspace = collection_namespace.split(':')
         bucket, scope, _ = keyspace.split('.')
@@ -402,8 +447,28 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
             except Exception as err:
                 self.log.info(err)
 
+        self.sleep(30, "Giving some time to indexes to build or move to error state")
         indexer_metadata = self.index_rest.get_indexer_metadata()['status']
-        # Todo: Add events for the error
+        for index in indexer_metadata:
+            instance_id = index['instId']
+            definition_id = index['defnId']
+            replica_id = index['replicaId']
+            node = index['hosts'][0].split(':')[0]
+            indexer_id = self.nodes_uuids[node]
+            if index['status'] == 'Error':
+                err_string = 'Limit for number of indexes that can be created per scope has been reached. Limit : 5'
+                self.system_events.add_event(IndexingServiceEvents.index_schedule_error(node=node,
+                                                                                        definition_id=definition_id,
+                                                                                        instance_id=0,
+                                                                                        indexer_id=indexer_id,
+                                                                                        replica_id=replica_id,
+                                                                                        error_string=err_string))
+            else:
+                self.system_events.add_event(IndexingServiceEvents.index_created(node=node,
+                                                                                 definition_id=definition_id,
+                                                                                 instance_id=instance_id,
+                                                                                 indexer_id=indexer_id,
+                                                                                 replica_id=replica_id))
         self.system_events.validate(self.master)
 
     def test_gsi_ddl_system_events_with_backup_restore(self):

@@ -83,6 +83,8 @@ class Index(object):
     IndexDropped = 2057
     IndexPartitionedMerged = 2058
     IndexError = 2059
+    IndexScheduledForCreation = 2060
+    IndexScheduledCreationError = 2061
 
 
 

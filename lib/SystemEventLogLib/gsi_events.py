@@ -192,3 +192,38 @@ class IndexingServiceEvents(object):
                                        "module": "IndexErrorStateChange",
                                        "error_string": error_string}}
         return event
+
+    @staticmethod
+    def index_schedule_error(node, definition_id, instance_id, indexer_id, replica_id, error_string):
+        event = {
+            Event.Fields.NODE_NAME: node,
+            Event.Fields.EVENT_ID: Index.IndexScheduledCreationError,
+            Event.Fields.COMPONENT: Event.Component.INDEXING,
+            Event.Fields.DESCRIPTION: "Index Scheduled Creation Error",
+            Event.Fields.SEVERITY: Event.Severity.ERROR,
+            Event.Fields.SUB_COMPONENT: "Indexer",
+            Event.Fields.EXTRA_ATTRS: {"definition_id": definition_id,
+                                       "instance_id": instance_id,
+                                       "indexer_id": indexer_id,
+                                       "replica_id": replica_id,
+                                       "group": "DDL",
+                                       "module": "IndexScheduledCreationError",
+                                       "error_string": error_string}}
+        return event
+
+    @staticmethod
+    def index_schedule_for_creation(node, definition_id, indexer_id, replica_id):
+        event = {
+            Event.Fields.NODE_NAME: node,
+            Event.Fields.EVENT_ID: Index.IndexScheduledForCreation,
+            Event.Fields.COMPONENT: Event.Component.INDEXING,
+            Event.Fields.DESCRIPTION: "Index Scheduled for Creation",
+            Event.Fields.SEVERITY: Event.Severity.INFO,
+            Event.Fields.SUB_COMPONENT: "Indexer",
+            Event.Fields.EXTRA_ATTRS: {"definition_id": definition_id,
+                                       "instance_id": 0,
+                                       "indexer_id": indexer_id,
+                                       "replica_id": replica_id,
+                                       "group": "DDL",
+                                       "module": "IndexScheduledForCreation"}}
+        return event
