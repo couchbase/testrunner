@@ -130,7 +130,8 @@ class QueryUDFN1QLTests(QueryTests):
             'WHEN MATCHED THEN UPDATE SET t.old_tile = "Engineer", t.job_title = "Ingenieur" ' \
             'WHERE t.join_yr = 2011 AND t.join_mo = 11 LIMIT 2 RETURNING *',
         'insert_from_select': 'INSERT INTO default._default.tmp (KEY UUID(), VALUE _employee) SELECT _employee FROM default _employee WHERE job_title = "Engineer" AND join_yr = 2011 AND join_mo = 10 RETURNING *',
-        'cte': 'WITH cte as (SELECT d.* FROM default d ORDER BY META(d).id LIMIT 1) SELECT * FROM cte'
+        'cte': 'WITH cte as (SELECT d.* FROM default d ORDER BY META(d).id LIMIT 1) SELECT * FROM cte',
+        'search': 'SELECT SEARCH_META() AS meta FROM default AS t1 WHERE SEARCH(t1, {"query": {"match": "ubuntu", "fields": "VMs.os", "analyzer": "standard"}, "includeLocations": true }) LIMIT 3'
     }
 
     def setUp(self):
