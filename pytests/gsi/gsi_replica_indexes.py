@@ -403,11 +403,15 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         rebalance.result()
 
         index_meta_info = index_metadata = self.rest.get_indexer_metadata()['status']
+        if self.use_https:
+            port = '18091'
+        else:
+            port = '8091'
         for index in index_meta_info:
             hosts = index['hosts']
-            self.assertTrue(f"{self.servers[2].ip}:8091" not in hosts, f"Index stats are not correct. {index}")
-            self.assertTrue(f"{self.servers[3].ip}:8091" not in hosts, f"Index stats are not correct. {index}")
-            self.assertTrue((f"{self.servers[4].ip}:8091" in hosts) or (f"{self.servers[5].ip}:8091" in hosts),
+            self.assertTrue(f"{self.servers[2].ip}:{port}" not in hosts, f"Index stats are not correct. {index}")
+            self.assertTrue(f"{self.servers[3].ip}:{port}" not in hosts, f"Index stats are not correct. {index}")
+            self.assertTrue((f"{self.servers[4].ip}:{port}" in hosts) or (f"{self.servers[5].ip}:{port}" in hosts),
                             f"Index stats are not correct. {index}")
             self.assertEqual(index['numPartition'], 8)
 
@@ -3349,6 +3353,10 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             src_nodes = self.nodes
         nodes = []
         invalid_ip = "10.111.151.256"
+        if self.use_https:
+            port = '18091'
+        else:
+            port = '8091'
         if src_nodes:
             nodes = src_nodes.split(":")
             for i in range(0, len(nodes)):
@@ -3356,7 +3364,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                     nodes[i] = self.servers[int(nodes[i])].ip + ":" + \
                                self.servers[int(nodes[i])].port
                 elif nodes[i] == "invalid":
-                    nodes[i] = invalid_ip + ":" + "8091"
+                    nodes[i] = invalid_ip + ":" + port
                 elif nodes[i] == "empty":
                     nodes[i] = ""
         else:

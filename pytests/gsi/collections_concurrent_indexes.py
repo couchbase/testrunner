@@ -457,7 +457,11 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             index_name = f'{idx_prefix}_{idx_num}'
             index_gen = QueryDefinition(index_name=index_name, index_fields=index_fields)
             index_gen_list.append(index_gen)
-            deploy_node_info = [f"{node}:8091" for node in index_nodes_to_be_used]
+            if self.use_https:
+                port = '18091'
+            else:
+                port = '8091'
+            deploy_node_info = [f"{node}:{port}" for node in index_nodes_to_be_used]
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
                                                           num_replica=self.num_replicas,
                                                           deploy_node_info=deploy_node_info)
@@ -739,7 +743,11 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             index_name = f'{idx_prefix}_{idx_num}'
             index_gen = QueryDefinition(index_name=index_name, index_fields=index_fields)
             index_gen_list.append(index_gen)
-            deploy_node_info = [f"{node}:8091" for node in index_nodes_to_be_used]
+            if self.use_https:
+                port = '18091'
+            else:
+                port = '8091'
+            deploy_node_info = [f"{node}:{port}" for node in index_nodes_to_be_used]
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
                                                           deploy_node_info=deploy_node_info)
             index_gen_query_list.append(query)
@@ -955,7 +963,11 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             index_name = f'{idx_prefix}_{idx_num}'
             index_gen = QueryDefinition(index_name=index_name, index_fields=index_fields)
             index_gen_list.append(index_gen)
-            deploy_node_info = [f"{node}:8091" for node in index_nodes_to_be_used]
+            if self.use_https:
+                port = '18091'
+            else:
+                port = '8091'
+            deploy_node_info = [f"{node}:{port}" for node in index_nodes_to_be_used]
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
                                                           deploy_node_info=deploy_node_info)
             index_gen_query_list.append(query)
@@ -1191,8 +1203,12 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             alter_index_query = f'ALTER INDEX schedule_index on {collection_namespace}' \
                                 f' WITH {{"action": "replica_count", "num_replica": 1}}'
         elif self.alter_call == 'move_node':
+            if self.use_https:
+                port = '18091'
+            else:
+                port = '8091'
             alter_index_query = f'ALTER INDEX schedule_index on {collection_namespace}' \
-                                f' WITH {{"action": "move", "nodes": ["{node_b.ip}:8091"]}}'
+                                f' WITH {{"action": "move", "nodes": ["{node_b.ip}:{port}"]}}'
         else:
             self.fail("Unexpected value for alter_call")
         idx_prefix = 'idx'
@@ -1203,7 +1219,11 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             index_name = f'{idx_prefix}_{idx_num}'
             index_gen = QueryDefinition(index_name=index_name, index_fields=index_fields)
             index_gen_list.append(index_gen)
-            deploy_node_info = [f"{node_a.ip}:8091"]
+            if self.use_https:
+                port = '18091'
+            else:
+                port = '8091'
+            deploy_node_info = [f"{node_a.ip}:{port}"]
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
                                                           deploy_node_info=deploy_node_info)
             index_gen_query_list.append(query)
@@ -1283,8 +1303,12 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         collection_namespace = self.namespaces[0]
         # issuing concurrent create index  with invalid node info
         index_gen_query_list = []
-        deploy_node1 = [f'{self.master.ip}:8091']
-        deploy_node2 = ['10.112.205.102:8091']
+        if self.use_https:
+            port = '18091'
+        else:
+            port = '8091'
+        deploy_node1 = [f'{self.master.ip}:{port}']
+        deploy_node2 = [f'10.112.205.102:{port}']
         index_gen1 = QueryDefinition(index_name='idx_1', index_fields=['age'])
         index_gen2 = QueryDefinition(index_name='idx_2', index_fields=['city'])
         index_gen3 = QueryDefinition(index_name='idx_3', index_fields=['country'])
@@ -1309,7 +1333,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                 task = executor.submit(self.run_cbq_query, query=query)
                 tasks.append(task)
         
-        err_msg = 'cause: Indexer node (10.112.205.102:8091) not found. The node may be failed or under' \
+        err_msg = 'The node may be failed or under' \
                   ' rebalance or network partitioned from query process.'
         for task in tasks:
             try:

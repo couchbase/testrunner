@@ -434,7 +434,11 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         Verifies if indexer is Online
         :return:
         """
-        host = "{0}:8091".format(self.oomServer.ip)
+        if self.use_https:
+            port = '18091'
+        else:
+            port = '8091'
+        host = "{0}:{1}".format(self.oomServer.ip, port)
         rest = RestConnection(self.oomServer)
         index_status = rest.get_index_status()
         for index in index_status.values():

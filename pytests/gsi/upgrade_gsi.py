@@ -1008,7 +1008,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         rest = RestConnection(self.master)
         index_map = rest.get_index_status()
         log.info("index_map: {0}".format(index_map))
-        host = "{0}:8091".format(index_node.ip)
+        if self.use_https:
+            port = '18091'
+        else:
+            port = '8091'
+        host = "{0}:{1}".format(index_node.ip, port)
         for bucket, index in index_map.items():
             for index, vals in index.items():
                 if vals["hosts"] == host:
@@ -1235,7 +1239,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         return json_settings["indexer.settings.build.batch_size"]
 
     def _verify_indexer_storage_mode(self, indexer_node):
-        indexer_info = "{0}:8091".format(indexer_node.ip)
+        if self.use_https:
+            port = '18091'
+        else:
+            port = '8091'
+        indexer_info = "{0}:{1}".format(indexer_node.ip, port)
         rest = RestConnection(indexer_node)
         index_metadata = rest.get_indexer_metadata()["status"]
         node_map = self._get_nodes_with_version()
@@ -1255,7 +1263,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                                          "GSI type is not {0} after upgrade for index {1}".format(gsi_type, index_val["name"]))
 
     def _verify_throttling(self, indexer_node):
-        indexer_info = "{0}:8091".format(indexer_node.ip)
+        if self.use_https:
+            port = '18091'
+        else:
+            port = '8091'
+        indexer_info = "{0}:{1}".format(indexer_node.ip, port)
         rest = RestConnection(indexer_node)
         index_metadata = rest.get_indexer_metadata()["status"]
         index_building = 0

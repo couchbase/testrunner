@@ -59,7 +59,11 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
         pass
 
     def _get_nodes_uuids(self):
-        api = f'http://{self.master.ip}:8091/pools/default'
+        if self.use_https:
+            port = '18091'
+        else:
+            port = '8091'
+        api = f'http://{self.master.ip}:{port}/pools/default'
         status, content, header = self.rest.urllib_request(api)
         if not status:
             raise Exception(content)

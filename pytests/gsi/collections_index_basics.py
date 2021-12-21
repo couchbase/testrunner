@@ -321,7 +321,11 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         try:
             replica_nodes = []
             for node in index_nodes:
-                replica_nodes.append(f'{node.ip}:8091')
+                if self.use_https:
+                    port = '18091'
+                else:
+                    port = '8091'
+                replica_nodes.append(f'{node.ip}:{port}')
             query = index_gen.generate_index_create_query(namespace=collection_namespace,
                                                           deploy_node_info=replica_nodes, defer_build=self.defer_build)
             self.run_cbq_query(query=query)

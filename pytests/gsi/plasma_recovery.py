@@ -735,8 +735,12 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
         rest = RestConnection(self.master)
         index_map = rest.get_index_status()
         log.info("index_map: {0}".format(index_map))
+        if self.use_https:
+            port = '18091'
+        else:
+            port = '8091'
         for index_node in self.index_nodes_out:
-            host = "{0}:8091".format(index_node.ip)
+            host = "{0}:{1}".format(index_node.ip, port)
             for index in index_map.values():
                 for keys, vals in index.items():
                     if vals["hosts"] == host:

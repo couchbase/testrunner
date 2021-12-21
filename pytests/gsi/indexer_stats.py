@@ -828,10 +828,14 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
             "replica_index",
             index_fields=["firstName"])
         bucket = self.buckets[0].name
+        if self.use_https:
+            port = '18091'
+        else:
+            port = '8091'
         query = replica_index.generate_index_create_query(
             namespace=f"default:{bucket}",
             deploy_node_info=[
-                idx.ip + ":" + idx.port
+                idx.ip + ":" + port
                 for idx in indexer_nodes],
             defer_build=self.defer_build,
             num_replica=self.num_index_replicas
@@ -877,10 +881,14 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
             "partition_index",
             index_fields=["firstName"])
         bucket = self.buckets[0].name
+        if self.use_https:
+            port = '18091'
+        else:
+            port = '8091'
         query = partition_index.generate_index_create_query(
             namespace=f"default:{bucket}",
             deploy_node_info=[
-                idx.ip + ":" + idx.port
+                idx.ip + ":" + port
                 for idx in indexer_nodes],
             defer_build=self.defer_build,
             partition_by_fields=partition_fields
@@ -929,10 +937,14 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
             "replica_index",
             index_fields=["firstName"])
         bucket = self.buckets[0].name
+        if self.use_https:
+            port = '18091'
+        else:
+            port = '8091'
         query = replica_index.generate_index_create_query(
             namespace=f"default:{bucket}",
             deploy_node_info=[
-                idx.ip + ":" + idx.port
+                idx.ip + ":" + port
                 for idx in indexer_nodes],
             defer_build=self.defer_build,
             num_replica=self.num_index_replicas

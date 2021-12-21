@@ -59,7 +59,11 @@ class PlannerGSI(BaseSecondaryIndexingTests):
         del_cmd = f'rm -rf {output_file}'
         self.log.info("Deleting index_plan.log from Remote host")
         remote.execute_command(del_cmd)
-        cmd = f'/opt/couchbase/bin/cbindexplan  -command=retrieve -cluster="127.0.0.1:8091" ' \
+        if self.use_https:
+            port = '18091'
+        else:
+            port = '8091'
+        cmd = f'/opt/couchbase/bin/cbindexplan  -command=retrieve -cluster="127.0.0.1:{port}" ' \
               f'-username="Administrator" -password="password" -getUsage -numNewReplica {count}' \
               f' -output {output_file}'
         remote.execute_command(cmd)

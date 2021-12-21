@@ -1628,11 +1628,16 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         nodes_out_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         # rebalance out a node
         shell = RemoteMachineShellConnection(kv_node)
-        command = "{0}couchbase-cli rebalance -c {1} -u {2} -p {3} --server-remove={4}:8091".format(
+        if self.use_https:
+            port = '18091'
+        else:
+            port = '8091'
+        command = "{0}couchbase-cli rebalance -c {1} -u {2} -p {3} --server-remove={4}:{5}".format(
             self.cli_command_location,
             kv_node.ip, kv_node.rest_username,
             kv_node.rest_password,
-            nodes_out_list.ip)
+            nodes_out_list.ip,
+            port)
         o, e = shell.execute_non_sudo_command(command)
         shell.log_command_output(o, e)
         self.sleep(30)
