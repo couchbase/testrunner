@@ -819,7 +819,9 @@ def filter_fields(testname):
                     and not fw.startswith("ini:") \
                     and not fw.startswith("case_number:") \
                     and not fw.startswith("num_nodes:") \
-                    and not fw.startswith("spec:"):
+                    and not fw.startswith("spec:") \
+                    and not fw.startswith("last_case_fail:") \
+                    and not fw.startswith("teardown_run:"):
                 if not "\":" in fw or "query:" in fw:
                     #log.info("Replacing : with ={}".format(fw))
                     line = line + fw.replace(":", "=", 1)
@@ -838,7 +840,9 @@ def filter_fields(testname):
                     and not fw.startswith("ini=") \
                     and not fw.startswith("case_number=") \
                     and not fw.startswith("num_nodes=") \
-                    and not fw.startswith("spec="):
+                    and not fw.startswith("spec=") \
+                    and not fw.startswith("last_case_fail=") \
+                    and not fw.startswith("teardown_run="):
                 line.append(fw)
         return ",".join(line)
 

@@ -19,8 +19,9 @@ def filter_fields(testname, run_params=""):
         testwords = testname.split(",")
         line = ""
         filter_test_params = ['logs_folder', 'conf_file',
-                            'cluster_name:', 'ini:', 'case_number:',
-                            'num_nodes:', 'spec:', 'is_container:']
+                              'cluster_name:', 'ini:', 'case_number:',
+                              'num_nodes:', 'spec:', 'is_container:',
+                              'last_case_fail:', 'teardown_run:']
         filter_test_params.extend([param.split("=")[0] for param in
                             run_params.split(',')])
         for fw in testwords:
@@ -37,8 +38,9 @@ def filter_fields(testname, run_params=""):
         testwords = testname.split(",")
         line = []
         filter_test_params = ['logs_folder=', 'conf_file=',
-                            'cluster_name=', 'ini=', 'case_number=',
-                            'num_nodes=', 'spec=', 'is_container=']
+                              'cluster_name=', 'ini=', 'case_number=',
+                              'num_nodes=', 'spec=', 'is_container=',
+                              'last_case_fail=', 'teardown_run=']
         filter_test_params.extend([param.split("=")[0] for param in
                             run_params.split(',')])
         for fw in testwords:
