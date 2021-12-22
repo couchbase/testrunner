@@ -333,6 +333,8 @@ class BaseTestCase(unittest.TestCase):
                         self.fail("Port binding after enforcing TLS incorrect")
             if not self.skip_init_check_cbserver:
                 self.log.info("initializing cluster")
+                self.reset_cluster()
+                self.set_alternate_address_all_nodes()
                 cli_command = 'node-init'
                 if self.hostname is True:
                     for server in self.servers:
@@ -768,8 +770,6 @@ class BaseTestCase(unittest.TestCase):
                 # self.log.info(str(ins))
                 ins.close()
 
-            if not self.input.param("skip_cleanup", False):
-                self.reset_cluster()
             # stop all existing task manager threads
             if self.cleanup:
                 self.cleanup = False
@@ -2410,13 +2410,21 @@ class BaseTestCase(unittest.TestCase):
         #client = MemcachedClientHelper.direct_client(server, bucket)
         #return int(client.stats()["curr_items"])
 
-    def stop_server(self, node):
+    def stop_server(self, node, wait_till_stopped=False):
         """ Method to stop a server which is subject to failover """
         for server in self.servers:
             if server.ip == node.ip:
                 shell = RemoteMachineShellConnection(server)
                 if shell.is_couchbase_installed():
                     shell.stop_couchbase()
+                    if wait_till_stopped:
+                        count = 0
+                        while shell.is_couchbase_running() and count \
+                                < 10:
+                            self.sleep(1, "Waiting for a second to "
+                                          "check if couchbase is "
+                                          "still running")
+                            count += 1
                     self.log.info("Couchbase stopped")
                 else:
                     shell.stop_membase()
@@ -2480,13 +2488,13 @@ class BaseTestCase(unittest.TestCase):
                         rest = RestConnection(node)
                         data_path = rest.get_data_path()
                         # Stop node
-                        self.stop_server(node)
-                        self.sleep(5)
+                        self.stop_server(node, wait_till_stopped=True)
+                        # self.sleep(5)
                         # Delete Path
                         shell.cleanup_data_config(data_path)
                         self.start_server(node)
 
-                self.sleep(10)
+                #self.sleep(10)
                 for node in self.servers:
                     rest = RestConnection(node)
                     rest.rename_node(node.ip, username=node.rest_username, password=node.rest_password)
