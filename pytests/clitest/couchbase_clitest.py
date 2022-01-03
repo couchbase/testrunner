@@ -239,13 +239,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
     def _check_output(self, word_check, output):
         found = False
         if len(output) >= 1:
-            for x in output:
             if isinstance(word_check, list):
-                if word_check in x:
                 for ele in word_check:
-                    self.log.info("Found \"%s\" in CLI output" % word_check)
                     for x in output:
-                    found = True
                         if ele.lower() in str(x.lower()):
                             self.log.info("Found '{0} in CLI output".format(ele))
                             found = True
@@ -3409,13 +3405,9 @@ class XdcrCLITest(CliBaseTest):
     def _check_output(self, word_check, output):
         found = False
         if len(output) >= 1:
-            for x in output:
             if isinstance(word_check, list):
-                if word_check in x:
                 for ele in word_check:
-                    self.log.info("Found \"%s\" in CLI output" % word_check)
                     for x in output:
-                    found = True
                         if ele.lower() in str(x.lower()):
                             self.log.info("Found '{0} in CLI output".format(ele))
                             found = True
