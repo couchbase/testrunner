@@ -4736,7 +4736,7 @@ class RemoteMachineShellConnection(KeepRefs):
         """
         cert_file_location = cert_path + "cert.pem"
         cmd = "%s/couchbase-cli ssl-manage -c %s:8091 -u %s -p %s "\
-              " --cluster-cert-info > %s" % (bin_path, server_cert.ip,
+              "  --regenerate-cert %s" % (bin_path, server_cert.ip,
                                              user, password,
                                              cert_file_location)
         output, _ = self.execute_command(cmd)
