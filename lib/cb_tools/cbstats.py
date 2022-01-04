@@ -252,7 +252,7 @@ class Cbstats(CbCmdBase):
         :error  - Buffer containing warnings/errors from the execution
         """
 
-        cmd = "%s localhost:%s -u %s -p %s -b %s %s" \
+        cmd = "%s localhost:%s -u %s -p '%s' -b %s %s" \
               % (self.cbstatCmd, self.mc_port, self.username, self.password,
                  bucket_name, stat_name)
 

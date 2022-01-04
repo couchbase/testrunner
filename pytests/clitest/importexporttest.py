@@ -61,7 +61,7 @@ class ImportExportTests(CliBaseTest):
         if self.imex_type == "csv":
             num_require_flags = 5
         self.log.info("output from command run %s " % output[:num_require_flags])
-        self.assertEqual(require_flags[:num_require_flags], output[:num_require_flags],
+        self.assertTrue(self._check_output(require_flags[:num_require_flags], output[:num_require_flags]),
                                        "Error in require flags of cbimport")
 
     def test_check_require_export_flags(self):
