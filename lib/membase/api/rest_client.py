@@ -759,13 +759,19 @@ class RestConnection(object):
         meta_parsed = ""
         if status:
             # in dp4 builds meta data is in content, not in header
-            if 'x-couchbase-meta' in header:
+            if 'X-Couchbase-Meta' in header:
+                meta = header['X-Couchbase-Meta']
+                meta_parsed = json.loads(meta)
+            elif 'x-couchbase-meta' in header:
                 meta = header['x-couchbase-meta']
                 meta_parsed = json.loads(meta)
             else:
                 meta_parsed = {}
-                meta_parsed["_rev"] = json_parsed["_rev"]
-                meta_parsed["_id"] = json_parsed["_id"]
+                try:
+                    meta_parsed["_rev"] = json_parsed["_rev"]
+                    meta_parsed["_id"] = json_parsed["_id"]
+                except KeyError:
+                    pass
         return status, json_parsed, meta_parsed
 
     def _delete_design_doc(self, bucket, name):
