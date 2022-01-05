@@ -67,9 +67,10 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
         self.deploy_function(body)
         expected_results_deploy = {"real_userid:source": "builtin", "real_userid:user": "Administrator",
-                                   "context": self.function_name, "id": 32768, "name": "Create Function",
-                                   "description": "Eventing function definition was created or updated",
-                                   "method": "POST", "url": "/api/v1/functions/" + self.function_name}
+                                   "context": "Create Function", "id": 32768, "name": "Create Function",
+                                   "description": "Request to create or update eventing function definition",
+                                   "method": "POST", "url": "/api/v1/functions/" + self.function_name,
+                                   "error": None}
         # check audit log if the deploy operation is present in audit log
         self.check_config(32768, eventing_node, expected_results_deploy)
         # Wait for eventing to catch up with all the create mutations and verify results
@@ -79,21 +80,18 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
             self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs)
         self.undeploy_and_delete_function(body)
         expected_results_undeploy = {"real_userid:source": "builtin", "real_userid:user": "Administrator",
-                                     "context": self.function_name, "id": 32779, "name": "Set Settings",
-                                     "description": "Save settings for a given app",
-                                     "method": "POST", "url": "/api/v1/functions/" + self.function_name + "/undeploy"}
-        expected_results_delete_draft = {"real_userid:source": "builtin", "real_userid:user": "Administrator",
-                                         "context": self.function_name, "id": 32773, "name": "Delete Drafts",
-                                         "description": "Eventing function draft definitions were deleted",
-                                         "method": "DELETE", "url": "/api/v1/functions/" + self.function_name}
+                                     "context": "Undeploy function", "id": 32790, "name": "Undeploy Function",
+                                     "description": "Request to undeploy eventing function",
+                                     "method": "POST", "url": "/api/v1/functions/" + self.function_name + "/undeploy",
+                                     "error": None, "request": None}
         expected_results_delete = {"real_userid:source": "builtin", "real_userid:user": "Administrator",
-                                   "context": self.function_name, "id": 32769, "name": "Delete Function",
-                                   "description": "Eventing function definition was deleted",
-                                   "method": "DELETE", "url": "/api/v1/functions/" + self.function_name}
+                                   "context": "Delete Function", "id": 32769, "name": "Delete Function",
+                                   "description": "Request to delete eventing function definition",
+                                   "method": "DELETE", "url": "/api/v1/functions/" + self.function_name,
+                                   "error": None, "request": None}
         # check audit log if the un deploy operation is present in audit log
-        self.check_config(32779, eventing_node, expected_results_undeploy)
+        self.check_config(32790, eventing_node, expected_results_undeploy)
         # check audit log if the delete operation is present in audit log
-        self.check_config(32773, eventing_node, expected_results_delete_draft)
         self.check_config(32769, eventing_node, expected_results_delete)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(60)

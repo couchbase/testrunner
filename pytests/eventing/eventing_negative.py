@@ -107,7 +107,7 @@ class EventingNegative(EventingBaseTest):
         try:
             body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
         except Exception as ex:
-            if "ERR_SOURCE_BUCKET_MEMCACHED" not in str(ex):
+            if "ERR_BUCKET_MEMCACHED" not in str(ex):
                 self.fail("Eventing function allowed both source and metadata bucket to be memcached buckets")
         self.skip_metabucket_check=True
 
@@ -207,7 +207,7 @@ class EventingNegative(EventingBaseTest):
         # Validation of any issues like panic will be taken care by teardown method
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
-
+        self.skip_metabucket_check = True
 
     # MB-29533 and MB-31545
     def test_metadata_bucket_delete_when_eventing_is_processing_mutations(self):

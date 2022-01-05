@@ -306,7 +306,7 @@ class EventingSettings(EventingBaseTest):
             self.rest.create_function(body['appname'], body)
         except Exception as e:
             self.log.info(e)
-            assert "ERR_BUCKET_MISSING" in str(e) and "Bucket does not exist in the cluster" in str(e), True
+            assert "ERR_BUCKET_MISSING" in str(e), True
 
     def test_update_bindings_via_config_api_call(self):
         # load documents

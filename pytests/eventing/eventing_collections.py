@@ -211,4 +211,4 @@ class EventingCollections(EventingBaseTest):
             self.rest.create_function(body['appname'], body)
         except Exception as e:
             self.log.info(e)
-            assert "ERR_SRC_MB_SAME" in str(e) and "Source keyspace same as metadata keyspace" in str(e), True
+            assert "ERR_SRC_MB_SAME" in str(e) and "source keyspace same as metadata keyspace" in str(e), True
