@@ -13,7 +13,6 @@ import httplib2
 from shutil import copyfile
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
-from couchbase.bucket import Bucket
 
 
 class ServerInfo():
@@ -1044,6 +1043,7 @@ class Validation:
         """
         opens bucket, returns sdk client connection
         """
+        from couchbase.bucket import Bucket
         options = dict(certpath=self.client_cert_path_tuple[0],
                        truststorepath=self.cacert,
                        keypath=self.client_cert_path_tuple[1])
