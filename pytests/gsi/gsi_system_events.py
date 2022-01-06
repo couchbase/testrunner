@@ -30,6 +30,7 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
         global_vars.system_event_logs = EventHelper()
         self.system_events = global_vars.system_event_logs
         self.system_events.set_test_start_time()
+        self.log.info(f"Test Start Time: {self.system_events.test_start_time}")
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
@@ -113,7 +114,10 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
         self.system_events.add_event(IndexingServiceEvents.query_client_settings_updated(old_setting=old_setting,
                                                                                          new_setting=new_setting,
                                                                                          node=index_node))
-        self.system_events.validate(server=self.master)
+        result = self.system_events.validate(server=self.master, ignore_order=True)
+        if result:
+            self.log.error(result)
+            self.fail("System Event validation failed")
 
     def test_gsi_ddl_system_events(self):
         index_gens = []
@@ -179,19 +183,26 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
                                                            instance_id=instance_id, indexer_id=indexer_id,
                                                            replica_id=replica_id))
 
-                # checking for drop and adding events before running the action as Indexer Metadata will go away
-                if self.index_drop_flag:
-                    self.system_events.add_event(
-                        IndexingServiceEvents.index_dropped(node=node, definition_id=definition_id,
-                                                            instance_id=instance_id, indexer_id=indexer_id,
-                                                            replica_id=replica_id))
         if self.index_drop_flag:
             for collection_namespace in self.namespaces:
                 for index_gen, index_name in zip(index_gens, indexes_list):
                     query = index_gen.generate_index_drop_query(namespace=collection_namespace)
                     self.run_cbq_query(query)
+            for index in indexer_metadata:
+                instance_id = index['instId']
+                definition_id = index['defnId']
+                replica_id = index['replicaId']
+                node = index['hosts'][0].split(':')[0]
+                indexer_id = self.nodes_uuids[node]
+                self.system_events.add_event(
+                    IndexingServiceEvents.index_dropped(node=node, definition_id=definition_id,
+                                                        instance_id=instance_id, indexer_id=indexer_id,
+                                                        replica_id=replica_id))
 
-        self.system_events.validate(self.master)
+        result = self.system_events.validate(server=self.master, ignore_order=True)
+        if result:
+            self.log.error(result)
+            self.fail("System Event validation failed")
 
     def test_gsi_ddl_system_events_with_alter_index(self):
         index_name_list = []
@@ -242,7 +253,10 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
                                                                                  instance_id=instance_id,
                                                                                  indexer_id=indexer_id,
                                                                                  replica_id=replica_id))
-        self.system_events.validate(self.master)
+        result = self.system_events.validate(server=self.master, ignore_order=True)
+        if result:
+            self.log.error(result)
+            self.fail("System Event validation failed")
 
     def test_gsi_ddl_system_events_with_rebalance(self):
         redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
@@ -319,7 +333,10 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
                                                                             instance_id=instance_id,
                                                                             indexer_id=indexer_id,
                                                                             replica_id=replica_id))
-        self.system_events.validate(self.master)
+        result = self.system_events.validate(server=self.master, ignore_order=True)
+        if result:
+            self.log.error(result)
+            self.fail("System Event validation failed")
 
     def test_gsi_partition_merge_system_events(self):
         remove_nodes = [self.servers[self.nodes_init - 1]]
@@ -330,6 +347,21 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
 
         # Adding nodes and checking Index DDL
         indexer_metadata_b4_reb = self.index_rest.get_indexer_metadata()['status']
+        for index in indexer_metadata_b4_reb:
+            instance_id = index['instId']
+            definition_id = index['defnId']
+            replica_id = index['replicaId']
+
+            for host in index['partitionMap']:
+                for partition_id in index['partitionMap'][host]:
+                    node = host.split(':')[0]
+                    indexer_id = self.nodes_uuids[node]
+                    self.system_events.add_event(IndexingServiceEvents.index_created(node=node,
+                                                                                     definition_id=definition_id,
+                                                                                     instance_id=instance_id,
+                                                                                     indexer_id=indexer_id,
+                                                                                     replica_id=replica_id,
+                                                                                     partition_id=partition_id))
         rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
                                                       to_remove=remove_nodes, services=['index'])
         rebalance_task.result()
@@ -350,36 +382,15 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
             if node in new_partition_map:
                 new_partition_list = set(new_partition_map[node])
                 merged_partitions = list(new_partition_list - old_partition_list)
-                dropped_parition = list(old_partition_list - new_partition_list)
                 for partition in merged_partitions:
-                    self.system_events.add_event(
-                        IndexingServiceEvents.index_created(node=host, definition_id=definition_id,
-                                                            instance_id=instance_id, indexer_id=indexer_id,
-                                                            replica_id=replica_id, partition_id=partition,
-                                                            is_proxy_instance=True))
                     self.system_events.add_event(
                         IndexingServiceEvents.index_partition_merged(node=host, definition_id=definition_id,
                                                                      instance_id=instance_id, indexer_id=indexer_id,
                                                                      replica_id=replica_id, partition_id=partition))
-                    self.system_events.add_event(
-                        IndexingServiceEvents.index_dropped(node=host, definition_id=definition_id,
-                                                            instance_id=instance_id, indexer_id=indexer_id,
-                                                            replica_id=replica_id, partition_id=partition,
-                                                            is_proxy_instance=True))
-                for partition in dropped_parition:
-                    self.system_events.add_event(
-                        IndexingServiceEvents.index_dropped(node=host, definition_id=definition_id,
-                                                            instance_id=instance_id, indexer_id=indexer_id,
-                                                            replica_id=replica_id, partition_id=partition))
-            else:
-                for partition in old_partition_list:
-                    self.system_events.add_event(
-                        IndexingServiceEvents.index_dropped(node=host, definition_id=definition_id,
-                                                            instance_id=instance_id,
-                                                            indexer_id=indexer_id,
-                                                            replica_id=replica_id,
-                                                            partition_id=partition))
-        self.system_events.validate(self.master)
+        result = self.system_events.validate(server=self.master, ignore_order=True)
+        if result:
+            self.log.error(result)
+            self.fail("System Event validation failed")
 
     def test_gsi_schedule_creation_system_event(self):
         collection_namespace = self.namespaces[0]
@@ -424,7 +435,10 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
                                                                                  instance_id=instance_id,
                                                                                  indexer_id=indexer_id,
                                                                                  replica_id=replica_id))
-        self.system_events.validate(self.master)
+        result = self.system_events.validate(server=self.master, ignore_order=True)
+        if result:
+            self.log.error(result)
+            self.fail("System Event validation failed")
 
     def test_gsi_schedule_error_system_event(self):
         collection_namespace = self.namespaces[0]
@@ -473,13 +487,16 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
                                                                                  instance_id=instance_id,
                                                                                  indexer_id=indexer_id,
                                                                                  replica_id=replica_id))
-        self.system_events.validate(self.master)
+        result = self.system_events.validate(server=self.master, ignore_order=True)
+        if result:
+            self.log.error(result)
+            self.fail("System Event validation failed")
 
     def test_gsi_ddl_system_events_with_backup_restore(self):
         self.audit_url = "http://%s:%s/settings/audit" % (self.master.ip, self.master.port)
         self.shell = RemoteMachineShellConnection(self.master)
-        curl_output = self.shell.execute_command(f"curl -u Administrator:password -X POST "
-                                                 f"-d 'auditdEnabled=true' {self.audit_url}")
+        self.shell.execute_command(f"curl -u Administrator:password -X POST "
+                                   f"-d 'auditdEnabled=true' {self.audit_url}")
         collection_namespace = self.namespaces[0]
         _, keyspace = collection_namespace.split(':')
         bucket, scope, collection = keyspace.split('.')
@@ -534,4 +551,7 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
                                                                              instance_id=instance_id,
                                                                              indexer_id=indexer_id,
                                                                              replica_id=replica_id))
-        self.system_events.validate(self.master)
+        result = self.system_events.validate(server=self.master, ignore_order=True)
+        if result:
+            self.log.error(result)
+            self.fail("System Event validation failed")

@@ -189,7 +189,7 @@ class EventHelper(object):
     def set_test_start_time(self):
         self.test_start_time = self.get_timestamp_format(datetime.utcnow())
 
-    def validate(self, server, since_time=None, events_count=-1):
+    def validate(self, server, since_time=None, events_count=-1, ignore_order=False):
         """
         Validates the cluster events against the given events_list
         :param server: Server from which we can get the cluster events
@@ -241,10 +241,16 @@ class EventHelper(object):
             else:
                 dict_to_compare = extract_req_values(event,
                                                      self.events[v_index])
-                if dict_to_compare == self.events[v_index]:
-                    v_index += 1
-                    if v_index == self.__event_counter.counter:
-                        break
+                if ignore_order:
+                    if dict_to_compare in self.events:
+                        v_index += 1
+                        if v_index == self.__event_counter.counter:
+                            break
+                else:
+                    if dict_to_compare == self.events[v_index]:
+                        v_index += 1
+                        if v_index == self.__event_counter.counter:
+                            break
         else:
             failures.append("Unable to validate event: %s"
                             % self.events[v_index])

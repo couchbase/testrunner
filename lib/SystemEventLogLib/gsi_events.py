@@ -84,9 +84,7 @@ class IndexingServiceEvents(object):
             Event.Fields.EXTRA_ATTRS: {"definition_id": definition_id,
                                        "instance_id": instance_id,
                                        "indexer_id": indexer_id,
-                                       "replica_id": replica_id,
-                                       "group": "DDL",
-                                       "module": "IndexPartitionStateChange"}}
+                                       "replica_id": replica_id}}
         if partition_id:
             event[Event.Fields.EXTRA_ATTRS]['partition_id'] = partition_id
         if is_proxy_instance:
@@ -108,9 +106,7 @@ class IndexingServiceEvents(object):
             Event.Fields.EXTRA_ATTRS: {"definition_id": definition_id,
                                        "instance_id": instance_id,
                                        "indexer_id": indexer_id,
-                                       "replica_id": replica_id,
-                                       "group": "DDL",
-                                       "module": "IndexPartitionDropped"}}
+                                       "replica_id": replica_id}}
         if partition_id:
             event[Event.Fields.EXTRA_ATTRS]['partition_id'] = partition_id
         if is_proxy_instance:
@@ -131,9 +127,7 @@ class IndexingServiceEvents(object):
             Event.Fields.EXTRA_ATTRS: {"definition_id": definition_id,
                                        "instance_id": instance_id,
                                        "indexer_id": indexer_id,
-                                       "replica_id": replica_id,
-                                       "group": "DDL",
-                                       "module": "IndexPartitionStateChange"}}
+                                       "replica_id": replica_id}}
         if partition_id:
             event[Event.Fields.EXTRA_ATTRS]['partition_id'] = partition_id
         return event
@@ -150,9 +144,7 @@ class IndexingServiceEvents(object):
             Event.Fields.EXTRA_ATTRS: {"definition_id": definition_id,
                                        "instance_id": instance_id,
                                        "indexer_id": indexer_id,
-                                       "replica_id": replica_id,
-                                       "group": "DDL",
-                                       "module": "IndexPartitionStateChange"}}
+                                       "replica_id": replica_id}}
         if partition_id:
             event[Event.Fields.EXTRA_ATTRS]['partition_id'] = partition_id
         return event
@@ -170,8 +162,6 @@ class IndexingServiceEvents(object):
                                        "instance_id": instance_id,
                                        "indexer_id": indexer_id,
                                        "replica_id": replica_id,
-                                       "group": "DDL",
-                                       "module": "IndexPartitionMerged",
                                        "partition_id": partition_id}}
         return event
 
@@ -188,8 +178,6 @@ class IndexingServiceEvents(object):
                                        "instance_id": instance_id,
                                        "indexer_id": indexer_id,
                                        "replica_id": replica_id,
-                                       "group": "DDL",
-                                       "module": "IndexErrorStateChange",
                                        "error_string": error_string}}
         return event
 
@@ -206,8 +194,6 @@ class IndexingServiceEvents(object):
                                        "instance_id": instance_id,
                                        "indexer_id": indexer_id,
                                        "replica_id": replica_id,
-                                       "group": "DDL",
-                                       "module": "IndexScheduledCreationError",
                                        "error_string": error_string}}
         return event
 
@@ -224,6 +210,5 @@ class IndexingServiceEvents(object):
                                        "instance_id": 0,
                                        "indexer_id": indexer_id,
                                        "replica_id": replica_id,
-                                       "group": "DDL",
-                                       "module": "IndexScheduledForCreation"}}
+}}
         return event
