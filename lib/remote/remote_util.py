@@ -4321,8 +4321,6 @@ class RemoteMachineShellConnection(KeepRefs):
                                                                            replicaOption
             if self.port == "18091":
                 options += " --no-ssl-verify"
-            elif data_path == None:
-                options += " --single-node"
 
             suffix = "_" + bucket.name + "_N%2FA.csv"
             if mode == "memory" or mode == "backup":
@@ -4337,17 +4335,26 @@ class RemoteMachineShellConnection(KeepRefs):
             destination = "csv:" + csv_path
             log.info("Run cbtransfer to get data map")
             self.execute_cbtransfer(source, destination, options, debug)
-            file_existed = self.file_exists(temp_path, genFileName)
-            if file_existed:
-                self.copy_file_remote_to_local(path, dest_path)
-                self.delete_files(path)
-                content = []
-                headerInfo = ""
-                with open(dest_path) as f:
-                    headerInfo = f.readline()
-                    content = f.readlines()
-                bucketMap[bucket.name] = content
-                os.remove(dest_path)
+
+            csv_template = prefix + "_" + bucket.name
+            for output_file in self.list_files(temp_path):
+                if csv_template in output_file['file']:
+                    file_existed = self.file_exists(temp_path, output_file['file'])
+                    if file_existed:
+                        path = temp_path + output_file['file']
+                        dest_path = "/tmp/" + output_file['file']
+                        self.copy_file_remote_to_local(path, dest_path)
+                        self.delete_files(path)
+                        content = []
+                        headerInfo = ""
+                        with open(dest_path) as f:
+                            headerInfo = f.readline()
+                            content = f.readlines()
+                            if bucket.name in bucketMap:
+                                bucketMap[bucket.name] += content
+                            else:
+                                bucketMap[bucket.name] = content
+                            os.remove(dest_path)
         return headerInfo, bucketMap
 
     def execute_cbtransfer(self, source, destination, command_options='',

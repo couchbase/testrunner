@@ -1,5 +1,6 @@
 import json
 import os
+from os import listdir
 import logger
 import math
 
@@ -100,6 +101,10 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         for bucket in self.buckets:
             kv_file_name = "{0}-{1}-{2}-{3}.json".format(bucket.name, "key_value", "backup", backup_number)
             kv_file_path = os.path.join(self.backup_validation_path, kv_file_name)
+            if backup_number == self.backupset.end:
+                backup_files = [f"{self.backup_validation_path}/" + f for f in listdir(self.backup_validation_path) if f"{bucket.name}-key_value-backup" in f]
+                backup_files.sort(key=os.path.getmtime)
+                kv_file_path = backup_files[-1]
             backedup_kv = {}
             if os.path.exists(kv_file_path):
                 try:
@@ -107,6 +112,8 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                         backedup_kv = json.load(f)
                 except Exception as e:
                     raise e
+            else:
+                raise Exception(f"{kv_file_path} is missing!")
             data_collector = DataCollector()
             info, restored_data = data_collector.collect_data(self.restore_cluster,
                                      [bucket],

@@ -1699,8 +1699,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             items = self.num_items
         data_matched = True
         data_collector = DataCollector()
+        bk_buckets = [b for b in self.buckets if b.name not in self.backupset.exclude_buckets]
+        if self.backupset.include_buckets:
+            bk_buckets = [b for b in bk_buckets if b.name in self.backupset.include_buckets]
         bk_file_data, _ = data_collector.get_kv_dump_from_backup_file(server_host, self.cli_command_location,
-                                                                      self.cmd_ext, master_key, self.buckets,
+                                                                      self.cmd_ext, master_key, bk_buckets,
                                                                       objstore_provider=self.objstore_provider,
                                                                       backupset=self.backupset, backup_name=backup_name)
         restore_file_data = bk_file_data
@@ -1710,7 +1713,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if " " in regex_pattern:
                 search_pattern = search_pattern.replace(" ", "")
             pattern = re.compile(search_pattern)
-            for bucket in self.buckets:
+            for bucket in bk_buckets:
                 key_in_file_match_regex = 0
                 regex_backup_data[bucket.name] = {}
                 self.log.info("Extract keys with regex pattern '%s' either in key or body"
@@ -1753,7 +1756,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 restore_file_data = regex_backup_data
 
         buckets_data = {}
-        for bucket in self.buckets:
+        for bucket in bk_buckets:
             headerInfo, bucket_data = data_collector.collect_data(server_bucket, [bucket],
                                                                   perNode=False,
                                                                   getReplica=getReplica,
@@ -1770,7 +1773,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     if value.startswith('"') and value.endswith('"'):
                         value = value[1:-1]
                 else:
-                    value = ",".join(value.split(',')[4:5])
+                    try:
+                        json.loads(",".join(value.split(',')[4:8])[3:-2].replace('""','"'))
+                        value = ",".join(value.split(',')[4:8])[3:-2].replace('""','"')
+                    except:
+                        value = ",".join(value.split(',')[4:5])
                 if value.startswith("b'"):
                     value = value[2:-1]
                 buckets_data[bucket.name][key] = value
@@ -1823,8 +1830,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                     .format(bucket.name))
             if len(restore_file_data[bucket.name]) != key_count:
                 raise Exception("Total key counts do not match.  Backup {0} != {1} bucket" \
-                                .format(restore_file_data[bucket.name], key_count))
-            self.log.info("******** Data macth in backup file and bucket {0} ******** " \
+                                .format(len(restore_file_data[bucket.name]), key_count))
+            self.log.info("******** Data match in backup file and bucket {0} ******** " \
                           .format(bucket.name))
             print(("Bucket: ", bucket.name))
             print(("Total items in backup file:   ", len(bk_file_data[bucket.name])))

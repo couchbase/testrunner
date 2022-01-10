@@ -891,7 +891,7 @@ class DataCollector(object):
 
             repository = backupset.name if backupset else "backup"
 
-            if backup_name:
+            if backup_name and type(backup_name) is not list:
                 backup_name = [backup_name]
             else:
                 if objstore_provider:
@@ -901,11 +901,15 @@ class DataCollector(object):
                     if not backup_name or e:
                         return None, status
 
+            bucket_name = None
             if objstore_provider:
                 bucket_name = objstore_provider.list_buckets(backupset.directory, repository, backup_name[0])
             else:
-                bucket_name, e = conn.execute_command(f"ls -tr --group-directories-first {backupset.directory}/{repository}/{backup_name[0]} | head -1")
-                if not bucket_name or e:
+                for item in conn.list_files(f"{backupset.directory}/{repository}/{backup_name[0]}"):
+                    if bucket.name == "-".join(item["file"].split("-")[:-1]):
+                        bucket_name = [item["file"]]
+                        break
+                if not bucket_name:
                     return None, status
 
             if objstore_provider:
@@ -947,16 +951,17 @@ class DataCollector(object):
                         shards_with_data[bucket.name].append(i)
                         for x in output:
                             data_dumps = json.loads(x)
-                            if type(data_dumps['value']) is str:
-                                key_value.append(bytes.fromhex(data_dumps['value']).decode('utf-8'))
-                            else:
-                                key_value.append(str(data_dumps['value']).replace("'", '"'))
-                            key_ids.append(data_dumps['key'])
-                            key_status.append(data_dumps['deleted'])
-                            for idx, key in enumerate(key_ids):
-                                backup_data[bucket.name][key] = \
-                                   {"KV store name":key_partition, "Status":key_status[idx],
-                                    "Value":key_value[idx]}
+                            if 'value' in data_dumps:
+                                if type(data_dumps.get('value')) is str:
+                                    key_value.append(bytes.fromhex(data_dumps['value']).decode('utf-8'))
+                                else:
+                                    key_value.append(str(data_dumps['value']).replace("'", '"'))
+                                key_ids.append(data_dumps['key'])
+                                key_status.append(data_dumps['deleted'])
+                                for idx, key in enumerate(key_ids):
+                                    backup_data[bucket.name][key] = \
+                                        {"KV store name":key_partition, "Status":key_status[idx],
+                                         "Value":key_value[idx]}
                         status = True
             else:
                 for i in range(0, 1024):
