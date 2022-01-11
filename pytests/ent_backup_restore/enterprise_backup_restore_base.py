@@ -71,15 +71,21 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.merge_should_fail = self.input.param("merge_should_fail", False)
         self.database_path = COUCHBASE_DATA_PATH
 
+        self.master.protocol = "http://"
         if self.enforce_tls:
-            self.master.port = '18091'
+            self.master.backup_port = '18091'
+            self.master.protocol = "https://"
             for server in self.servers:
-                server.port = '18091'
+                server.backup_port = '18091'
 
-        cmd = 'curl -g -k https://{0}:{3}/diag/eval -u {1}:{2} '.format(self.master.ip,
+        pp = "18091" if self.enforce_tls else "8091"
+        pt = "https://" if self.enforce_tls else "http://"
+        cmd = 'curl -g -k {4}{0}:{3}/diag/eval -u {1}:{2} '.format(self.master.ip,
                                                               self.master.rest_username,
                                                               self.master.rest_password,
-                                                              self.master.port)
+                                                              pp,
+                                                              pt)
+
         cmd += '-d "path_config:component_path(bin)."'
         bin_path  = subprocess.check_output(cmd, shell=True)
         if not self.skip_init_check_cbserver:
@@ -384,10 +390,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
             remote_client.disconnect()
         if self.enforce_tls:
-            self.master.port = '8091'
+            self.master.backup_port = '8091'
             self.master.protocol = "http://"
             for server in self.servers:
-                server.port = '8091'
+                server.backup_port = '8091'
 
     @property
     def cluster_to_backup(self):
@@ -545,6 +551,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             url_format = "s"
         if self.enforce_tls:
             url_format = "s"
+            secure_port = "1"
 
         user_input = "--username %s " % self.backupset.cluster_host_username
         password_input = "--password %s " % self.backupset.cluster_host_password
@@ -691,6 +698,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             secure_port = "1"
         if self.enforce_tls:
             url_format = "s"
+            secure_port = "1"
 
         user_input = "--username %s " % self.backupset.restore_cluster_host_username
         password_input = "--password %s " % self.backupset.restore_cluster_host_password

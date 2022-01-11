@@ -4068,11 +4068,14 @@ class RemoteMachineShellConnection:
         if getReplica:
              replicaOption = "  --source-vbucket-state=replica"
 
-        if self.port == "18091":
+        if CbServer.use_https:
             protocol = "https://"
+            port = "18091"
         else:
             protocol = "http://"
-        source = protocol + self.ip + ":" + self.port
+            port = "8091"
+        source = protocol + self.ip + ":" + port
+        log.info(source)
 
         if mode == "disk":
             source = "couchstore-files://" + data_path
