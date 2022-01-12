@@ -27,7 +27,7 @@ def filter_fields(testname, run_params=""):
         for fw in testwords:
             filter_word = False
             for filter_words in filter_test_params:
-                if fw.startswith(filter_words):
+                if filter_words and fw.startswith(filter_words):
                     filter_word = True
             if not filter_word:
                 line = line + fw.replace(":", "=", 1)
@@ -46,7 +46,7 @@ def filter_fields(testname, run_params=""):
         for fw in testwords:
             filter_word = False
             for filter_words in filter_test_params:
-                if fw.startswith(filter_words):
+                if filter_words and fw.startswith(filter_words):
                     filter_word = True
             if not filter_word:
                 line.append(fw)
