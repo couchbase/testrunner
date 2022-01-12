@@ -86,7 +86,7 @@ CBFT_ENV_OPTIONS = \
             "grep bleveMaxResultWindow={0} /opt/couchbase/bin/couchbase-server > /dev/null && echo 1 || echo 0"
     }
 
-PROCESSES_TO_TERMINATE = ["beam.smp", "memcached", "moxi", "vbucketmigrator", "couchdb", "epmd", "memsup", "cpu_sup",
+PROCESSES_TO_TERMINATE = ["beam.smp", "memcached", "vbucketmigrator", "couchdb", "epmd", "memsup", "cpu_sup",
                           "goxdcr", "erlang", "eventing", "erl", "godu", "goport", "gosecrets", "projector"]
 
 UNMOUNT_NFS_CMD = "umount -a -t nfs,nfs4 -f -l;"

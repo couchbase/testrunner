@@ -99,10 +99,9 @@ class BackupRestoreTests(BaseTestCase):
         info = rest.get_nodes_self()
         size = int(info.memoryQuota * 2.0 / 3.0)
         if bucket == "default":
-            rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=info.moxi)
+            rest.create_bucket(bucket, ramQuotaMB=size)
         else:
-            proxyPort = info.moxi + 500
-            rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=proxyPort)
+            rest.create_bucket(bucket, ramQuotaMB=size)
 
         ready = BucketOperationHelper.wait_for_memcached(server, bucket)
         self.assertTrue(ready, "wait_for_memcached failed")
@@ -113,7 +112,6 @@ class BackupRestoreTests(BaseTestCase):
                                                                                              name=bucket,
                                                                                              ram_load_ratio=1,
                                                                                              value_size_distribution=distribution,
-                                                                                             moxi=True,
                                                                                              write_only=True,
                                                                                              number_of_threads=2)
 
@@ -150,16 +148,15 @@ class BackupRestoreTests(BaseTestCase):
         BucketOperationHelper.delete_bucket_or_assert(self.master, bucket, self)
 
         if bucket == "default":
-            rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=info.moxi)
+            rest.create_bucket(bucket, ramQuotaMB=size)
         else:
-            proxyPort = info.moxi + 500
-            rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=proxyPort)
+            rest.create_bucket(bucket, ramQuotaMB=size)
         BucketOperationHelper.wait_for_memcached(self.master, bucket)
 
         if bucket == "default":
-            BackupHelper(self.master, self).restore(backup_location=self.remote_tmp_folder, moxi_port=info.moxi)
+            BackupHelper(self.master, self).restore(backup_location=self.remote_tmp_folder)
         else:
-            BackupHelper(self.master, self).restore(backup_location=self.remote_tmp_folder, moxi_port=info.moxi, username=bucket, password='password')
+            BackupHelper(self.master, self).restore(backup_location=self.remote_tmp_folder, username=bucket, password='password')
 
         keys_exist = BucketOperationHelper.keys_exist_or_assert_in_parallel(inserted_keys, self.master, bucket, self, concurrency=4)
         self.assertTrue(keys_exist, msg="unable to verify keys after restore")
@@ -169,7 +166,7 @@ class BackupRestoreTests(BaseTestCase):
         rest = RestConnection(self.master)
         info = rest.get_nodes_self()
         size = int(info.memoryQuota * 2.0 / 3.0)
-        rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=info.moxi, replicaNumber=replica)
+        rest.create_bucket(bucket, ramQuotaMB=size, replicaNumber=replica)
         BucketOperationHelper.wait_for_memcached(self.master, bucket)
         client = MemcachedClientHelper.direct_client(self.master, bucket)
         expiry = 60
@@ -195,7 +192,7 @@ class BackupRestoreTests(BaseTestCase):
         backupHelper.backup(bucket, node, self.remote_tmp_folder)
 
         BucketOperationHelper.delete_bucket_or_assert(self.master, bucket, self)
-        rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=info.moxi)
+        rest.create_bucket(bucket, ramQuotaMB=size)
         BucketOperationHelper.wait_for_memcached(self.master, bucket)
         backupHelper.restore(self.remote_tmp_folder)
         time.sleep(60)
@@ -277,7 +274,6 @@ class BackupRestoreTests(BaseTestCase):
         inserted_keys, rejected_keys = MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[self.master],
                                                                                              ram_load_ratio=1,
                                                                                              value_size_distribution=distribution,
-                                                                                             moxi=True,
                                                                                              write_only=True,
                                                                                              number_of_threads=2)
 
@@ -386,7 +382,6 @@ class BackupRestoreTests(BaseTestCase):
                                                                                              ram_load_ratio=1,
                                                                                              value_size_distribution=distribution,
                                                                                              write_only=True,
-                                                                                             moxi=True,
                                                                                              number_of_threads=2)
 
         self.log.info("Sleep after data load")
@@ -407,7 +402,7 @@ class BackupRestoreTests(BaseTestCase):
         self.assertTrue(ready, "wait_for_memcached failed")
 
         for server in self.servers:
-            BackupHelper(server, self).restore(self.remote_tmp_folder, moxi_port=11213)
+            BackupHelper(server, self).restore(self.remote_tmp_folder)
             time.sleep(10)
 
         self.assertTrue(BucketOperationHelper.verify_data(self.master, inserted_keys, False, False, 11213, debug=False,
@@ -429,7 +424,6 @@ class BackupRestoreTests(BaseTestCase):
                                                                                              ram_load_ratio=20,
                                                                                              value_size_distribution=distribution,
                                                                                              write_only=True,
-                                                                                             moxi=True,
                                                                                              number_of_threads=2)
 
         self.log.info("Sleep after data load")
@@ -451,7 +445,7 @@ class BackupRestoreTests(BaseTestCase):
         self.assertTrue(ready, "wait_for_memcached failed")
 
         for server in self.servers:
-            BackupHelper(server, self).restore(self.remote_tmp_folder, moxi_port=11212)
+            BackupHelper(server, self).restore(self.remote_tmp_folder)
             time.sleep(10)
 
         ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket_after_backup, 'ep_queue_size', 0)
@@ -536,7 +530,6 @@ class BackupRestoreTests(BaseTestCase):
                                                                                              name=bucket,
                                                                                              ram_load_ratio=0.5,
                                                                                              value_size_distribution=distribution,
-                                                                                             moxi=True,
                                                                                              write_only=True,
                                                                                              delete_ratio=0.1,
                                                                                              number_of_threads=2)
@@ -589,7 +582,6 @@ class BackupRestoreTests(BaseTestCase):
         rest.create_bucket(bucket, ramQuotaMB=size)
         ready = BucketOperationHelper.wait_for_memcached(server, bucket)
         self.assertTrue(ready, "wait_for_memcached_failed")
-        #BackupHelper(self.master, self).restore(backup_location=remote_tmp, moxi_port=info.moxi)
         shell = RemoteMachineShellConnection(worker)
         shell.execute_command("/opt/couchbase/bin/cbrestore {2} http://{0}:{1} -b {3}".format(
                                                             self.master.ip, self.master.port, remote_tmp, bucket))
@@ -716,7 +708,7 @@ class BackupHelper(object):
         output, error = self.test.shell.execute_command(command)
         self.test.shell.log_command_output(output, error)
 
-    def restore(self, backup_location, moxi_port=None, overwrite_flag=False, username=None, password=None):
+    def restore(self, backup_location, overwrite_flag=False, username=None, password=None):
         command = "{0}/{1}".format("/opt/couchbase/bin", "cbrestore")
         if self.test.is_membase:
             command = "{0}/{1}".format("/opt/membase/bin", "mbrestore")
@@ -724,8 +716,6 @@ class BackupHelper(object):
         if not overwrite_flag:
             command += " -a"
 
-        if not moxi_port is None:
-            command += " -p {0}".format(moxi_port)
         if username is not None:
             command += " -u {0}".format(username)
         if password is not None:

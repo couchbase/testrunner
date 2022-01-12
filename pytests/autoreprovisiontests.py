@@ -652,7 +652,6 @@ class AutoReprovisionTests(unittest.TestCase):
                                         number_of_threads=1,
                                         override_vBucketId=-1,
                                         write_only=False,
-                                        moxi=True,
                                         delete_ratio=0,
                                         expiry_ratio=0):
         inserted_keys = []
@@ -666,7 +665,6 @@ class AutoReprovisionTests(unittest.TestCase):
                                                        number_of_threads,
                                                        override_vBucketId,
                                                        write_only=write_only,
-                                                       moxi=moxi,
                                                        delete_ratio=delete_ratio,
                                                        expiry_ratio=expiry_ratio)
 
@@ -728,7 +726,6 @@ class AutoReprovisionTests(unittest.TestCase):
                 rest.create_bucket(bucket=bucket_name,
                                    ramQuotaMB=bucket_ram,
                                    replicaNumber=self.replicas,
-                                   proxyPort=info.moxi,
                                    bucketType=bucketType,
                                    evictionPolicy=evictionPolicy,
                                    storageBackend=self.bucket_storage)
@@ -736,7 +733,6 @@ class AutoReprovisionTests(unittest.TestCase):
                 rest.create_bucket(bucket=bucket_name,
                                    ramQuotaMB=100,
                                    replicaNumber=self.replicas,
-                                   proxyPort=info.moxi,
                                    bucketType=bucketType,
                                    evictionPolicy=evictionPolicy,
                                    storageBackend=self.bucket_storage)
@@ -759,7 +755,6 @@ class AutoReprovisionTests(unittest.TestCase):
                                                                                 # ram_load_ratio=0.02,
                                                                                 value_size_distribution=distribution,
                                                                                 write_only=True,
-                                                                                moxi=True,
                                                                                 number_of_threads=2,
                                                                                 number_of_items=keys_count)
             self.loaded_items[bucket.name] = inserted_count

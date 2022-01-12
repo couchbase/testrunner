@@ -121,9 +121,9 @@ will be mutations on existing items).  That is because the
 ratio-creates=1.00
 
 Q: Will the cluster-aware version be vbucket-aware or still require
-moxi (the memcached/couchbase proxy)?
+(the memcached/couchbase proxy)?
 
-A: No moxi required -- mcsoda can optionally behave as a so-called
+A: mcsoda can optionally behave as a so-called
 "smart client" and respond to Couchbase's dynamic cluster
 server-map/REST topology changes. In other words, you can use
 Rebalance to add/remove server nodes while using mcsoda.
@@ -148,9 +148,6 @@ Or, if you're testing Couchbase 2.0...
 
     ./mcsoda.py memcached-binary://HOST:11210 vbuckets=256
 
-To target moxi, use port 11211...
-
-    ./mcsoda.py memcached-binary://HOST:11211
 
 For completeness, to target an entire Couchbase / Membase cluster, use
 "membase-binary://HOST:8091".  mcsoda only targets the default bucket.

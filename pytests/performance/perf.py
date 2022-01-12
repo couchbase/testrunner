@@ -106,7 +106,6 @@ class PerfBase(unittest.TestCase):
         else:
             self.set_up_buckets()
 
-        self.set_up_proxy()
 
         if self.input.clusters:
             for cluster in list(self.input.clusters.values()):
@@ -319,11 +318,6 @@ class PerfBase(unittest.TestCase):
 
         self.log.info("routine starts")
 
-        if self.parami("tear_down_proxy", 1) == 1:
-            self.tear_down_proxy()
-        else:
-            self.log.info("proxy tearDown skipped")
-
         if self.sc is not None:
             self.sc.stop()
             self.sc = None
@@ -353,38 +347,9 @@ class PerfBase(unittest.TestCase):
                                                              self)
         self.log.info("Cluster teared down")
 
-    def set_up_proxy(self, bucket=None):
-        """Set up and start Moxi"""
-
-        if self.input.moxis:
-            self.log.info("setting up proxy")
-
-            bucket = bucket or self.param('bucket', 'default')
-
-            shell = RemoteMachineShellConnection(self.input.moxis[0])
-            shell.start_moxi(self.input.servers[0].ip, bucket,
-                             self.input.moxis[0].port)
-            shell.disconnect()
-
-    def tear_down_proxy(self):
-        if len(self.input.moxis) > 0:
-            shell = RemoteMachineShellConnection(self.input.moxis[0])
-            shell.stop_moxi()
-            shell.disconnect()
-
-    # Returns "host:port" of moxi to hit.
     def target_host_port(self, bucket='default', use_direct=False):
-        rv = self.param('moxi', None)
-        if use_direct:
-            return "%s:%s" % (self.input.servers[0].ip,
-                              '11210')
-        if rv:
-            return rv
-        if len(self.input.moxis) > 0:
-            return "%s:%s" % (self.input.moxis[0].ip,
-                              self.input.moxis[0].port)
         return "%s:%s" % (self.input.servers[0].ip,
-                          self.rest.get_bucket(bucket).nodes[0].moxi)
+                              '11210')
 
     def protocol_parse(self, protocol_in, use_direct=False):
         if protocol_in.find('://') >= 0:
@@ -413,10 +378,6 @@ class PerfBase(unittest.TestCase):
         """ Get backup server lists for memcached-binary """
         port = protocol.split(":")[-1]
         return ["%s:%s" % (server.ip, port) for server in self.input.servers[1:]]
-
-    def restartProxy(self, bucket=None):
-        self.tear_down_proxy()
-        self.set_up_proxy(bucket)
 
     def set_up_dgm(self):
         """Download fragmented, DGM dataset onto each cluster node, if not

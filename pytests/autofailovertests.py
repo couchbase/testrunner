@@ -360,7 +360,6 @@ class AutoFailoverTests(unittest.TestCase):
             rest.create_bucket(bucket=bucket_name,
                                ramQuotaMB=bucket_ram,
                                replicaNumber=replicas,
-                               proxyPort=info.moxi,
                                storageBackend=bucket_storage)
         else:
             created = BucketOperationHelper.create_multiple_buckets(self.master, replicas, howmany=num_buckets,

@@ -41,55 +41,6 @@ class DeleteMembaseBuckets(unittest.TestCase):
         except:
             pass
 
-    def test_default_moxi(self):
-        name = 'default'
-        for serverInfo in self.servers:
-            rest = RestConnection(serverInfo)
-            replicas = [0, 1, 2, 3]
-            for replicaNumber in replicas:
-                proxyPort = rest.get_nodes_self().moxi
-                rest.create_bucket(bucket=name,
-                                   ramQuotaMB=200,
-                                   replicaNumber=replicaNumber,
-                                   proxyPort=proxyPort)
-                remote = RemoteMachineShellConnection(serverInfo)
-
-                msg = 'create_bucket succeeded but bucket {0} does not exist'.format(name)
-                self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
-                rest.delete_bucket(name)
-                msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(name)
-                self.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(name, rest, timeout_in_seconds=30), msg=msg)
-                msg = 'bucket {0} data files are not deleted after bucket deleted from membase'.format(name)
-                self.assertTrue(
-                    self.wait_for_data_files_deletion(name,
-                                                      remote_connection=remote,
-                                                      rest=rest, timeout_in_seconds=20), msg=msg)
-
-    def test_non_default_moxi(self):
-        name = 'new-bucket-{0}'.format(uuid.uuid4())
-        for serverInfo in self.servers:
-            replicas = [0, 1, 2, 3]
-            for replicaNumber in replicas:
-                rest = RestConnection(serverInfo)
-                proxyPort = rest.get_nodes_self().moxi + 2000
-                rest.create_bucket(bucket=name,
-                                   ramQuotaMB=200,
-                                   replicaNumber=replicaNumber,
-                                   proxyPort=proxyPort)
-                remote = RemoteMachineShellConnection(serverInfo)
-                msg = 'create_bucket succeeded but bucket {0} does not exist'.format(name)
-                self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
-                rest.delete_bucket(name)
-                msg = 'bucket "{0}" was not deleted even after waiting for 30 seconds'.format(name)
-                self.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(name, rest, timeout_in_seconds=30), msg=msg)
-                msg = 'bucket {0} data files are not deleted after bucket deleted from membase'.format(name)
-                self.assertTrue(
-                    self.wait_for_data_files_deletion(name,
-                                                      remote_connection=remote,
-                                                      rest=rest, timeout_in_seconds=20), msg=msg)
-                BucketOperationHelper.delete_bucket_or_assert(serverInfo, name, self)
-
-
     #TODO: move these methods to a helper class
     def wait_for_data_files_deletion(self,
                                      bucket,

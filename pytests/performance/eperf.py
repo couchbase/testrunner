@@ -464,7 +464,6 @@ class EPerfMaster(perf.PerfBase):
                       prefix=prefix,
                       start_at=start_at,
                       is_eperf=True)
-            self.restartProxy()
 
     def load_phase_clients_start_at(self, num_items, num_clients):
         """

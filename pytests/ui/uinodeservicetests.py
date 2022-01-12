@@ -37,7 +37,7 @@ class  NodeServiceTests(BaseUITestCase):
         super(NodeServiceTests, self).tearDown()
 
     def test_add_node(self):
-        # kv n1ql moxi index
+        # kv n1ql index
         services = self.input.param("services", '').split(';')
         error = self.input.param("error", '')
         NavigationHelper(self).navigate('Server Nodes')

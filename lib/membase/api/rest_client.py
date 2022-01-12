@@ -6157,7 +6157,6 @@ class Node(object):
         self.availableStorage = []
         self.storage = []
         self.memoryQuota = 0
-        self.moxi = 11211
         self.memcached = 11210
         self.id = ""
         self.ip = ""
@@ -6385,8 +6384,6 @@ class RestParser(object):
         # ports":{"proxy":11211,"direct":11210}
         if "ports" in parsed:
             ports = parsed["ports"]
-            if "proxy" in ports:
-                node.moxi = ports["proxy"]
             if "direct" in ports:
                 node.memcached = ports["direct"]
                 if CbServer.use_https:
@@ -6512,8 +6509,6 @@ class RestParser(object):
             node.os = nodeDictionary['os']
             if "ports" in nodeDictionary:
                 ports = nodeDictionary["ports"]
-                if "proxy" in ports:
-                    node.moxi = ports["proxy"]
                 if "direct" in ports:
                     node.memcached = ports["direct"]
                     if CbServer.use_https:

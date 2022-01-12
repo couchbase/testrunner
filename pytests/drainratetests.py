@@ -92,8 +92,7 @@ class DrainRateTests(unittest.TestCase):
                                                                   value_size_distribution=distribution,
                                                                   number_of_threads=1,
                                                                   number_of_items=self.number_of_items,
-                                                                  write_only=True,
-                                                                  moxi=True)
+                                                                  write_only=True)
 
     def _parallel_read(self):
         rest = RestConnection(self.master)

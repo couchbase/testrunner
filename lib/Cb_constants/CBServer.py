@@ -18,7 +18,6 @@ class CbServer(object):
     ssl_cbas_port = 18095
 
     memcached_port = 11210
-    moxi_port = 11211
 
     ssl_memcached_port = 11207
     cr_memcached_port = 12000

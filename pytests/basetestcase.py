@@ -69,10 +69,6 @@ class BaseTestCase(unittest.TestCase):
                 else:
                     hd.setLevel(level=getattr(logging, self.input.param("log_level", None)))
         self.servers = self.input.servers
-        if str(self.__class__).find('moxitests') != -1:
-            self.moxi_server = self.input.moxis[0]
-            self.servers = [server for server in self.servers
-                            if server.ip != self.moxi_server.ip]
         self.buckets = []
         self.bucket_base_params = {'membase': {}}
         self.master = self.servers[0]

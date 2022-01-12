@@ -21,7 +21,6 @@ class TestInput(object):
 
     def __init__(self):
         self.servers = []
-        self.moxis = []
         self.clusters = {}
         self.membase_settings = None
         self.test_params = {}
@@ -219,9 +218,7 @@ class TestInputParser():
         end = 0
         cluster_ips = []
         clusters = {}
-        moxis = []
         input.tuq_client = {}
-        moxi_ips = []
         client_ips = []
         input.dashboard = []
         input.ui_conf = {}
@@ -232,8 +229,6 @@ class TestInputParser():
             result = re.search('^cluster', section)
             if section == 'servers':
                 ips = TestInputParser.get_server_ips(config, section)
-            elif section == 'moxis':
-                moxi_ips = TestInputParser.get_server_ips(config, section)
             elif section == 'clients':
                 client_ips = TestInputParser.get_server_ips(config, section)
             elif section == 'membase':
@@ -284,12 +279,6 @@ class TestInputParser():
         for ip in ips:
             servers.append(TestInputParser.get_server(ip, config))
         input.servers = TestInputParser.get_server_options(servers, input.membase_settings, global_properties)
-
-        # Setting up 'moxis' tag
-        moxis = []
-        for moxi_ip in moxi_ips:
-            moxis.append(TestInputParser.get_server(moxi_ip, config))
-        input.moxis = TestInputParser.get_server_options(moxis, input.membase_settings, global_properties)
 
         if 'cbbackupmgr' not in sections:
             input.cbbackupmgr["name"] = "local_bkrs"

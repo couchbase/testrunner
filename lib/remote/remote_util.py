@@ -927,8 +927,8 @@ class RemoteMachineShellConnection(KeepRefs):
 
     def change_port_static(self, new_port):
         # ADD NON_ROOT user config_details
-        log.info("=========CHANGE PORTS for REST: %s, MCCOUCH: %s,MEMCACHED: %s, MOXI: %s, CAPI: %s==============="
-                % (new_port, new_port + 1, new_port + 2, new_port + 3, new_port + 4))
+        log.info("=========CHANGE PORTS for REST: %s, MCCOUCH: %s,MEMCACHED: %s, CAPI: %s==============="
+                % (new_port, new_port + 1, new_port + 2, new_port + 4))
         output, error = self.execute_command("sed -i '/{rest_port/d' %s" % testconstants.LINUX_STATIC_CONFIG)
         self.log_command_output(output, error)
         output, error = self.execute_command("sed -i '$ a\{rest_port, %s}.' %s"
@@ -943,11 +943,6 @@ class RemoteMachineShellConnection(KeepRefs):
         self.log_command_output(output, error)
         output, error = self.execute_command("sed -i '$ a\{memcached_port, %s}.' %s"
                                              % (new_port + 2, testconstants.LINUX_STATIC_CONFIG))
-        self.log_command_output(output, error)
-        output, error = self.execute_command("sed -i '/{moxi_port/d' %s" % testconstants.LINUX_STATIC_CONFIG)
-        self.log_command_output(output, error)
-        output, error = self.execute_command("sed -i '$ a\{moxi_port, %s}.' %s"
-                                             % (new_port + 3, testconstants.LINUX_STATIC_CONFIG))
         self.log_command_output(output, error)
         output, error = self.execute_command("sed -i '/port = /c\port = %s' %s"
                                              % (new_port + 4, testconstants.LINUX_CAPI_INI))
@@ -1014,44 +1009,6 @@ class RemoteMachineShellConnection(KeepRefs):
                 num_retries -= 1
         if not is_couchbase_started:
             log.error("Couchbase server is failed to start!")
-
-    def is_moxi_installed(self):
-        self.extract_remote_info()
-        if self.info.type.lower() == 'windows':
-            log.error('Not implemented')
-        elif self.info.distribution_type.lower() == 'mac':
-            log.error('Not implemented')
-        elif self.info.type.lower() == "linux":
-            if self.file_exists(testconstants.LINUX_MOXI_PATH, 'moxi'):
-                return True
-        return False
-
-    # /opt/moxi/bin/moxi -Z port_listen=11211 -u root -t 4 -O /var/log/moxi/moxi.log
-    def start_moxi(self, ip, bucket, port, user=None, threads=4, log_file="/var/log/moxi.log"):
-        if self.is_couchbase_installed():
-            prod = "couchbase"
-        else:
-            prod = "membase"
-        cli_path = "/opt/" + prod + "/bin/moxi"
-        args = ""
-        args += "http://{0}:8091/pools/default/bucketsStreaming/{1} ".format(ip, bucket)
-        args += "-Z port_listen={0} -u {1} -t {2} -O {3} -d".format(port,
-                                                                    user or prod,
-                                                                    threads, log_file)
-        self.extract_remote_info()
-        if self.info.type.lower() == "linux":
-            o, r = self.execute_command("{0} {1}".format(cli_path, args))
-            self.log_command_output(o, r)
-        else:
-            raise Exception("running standalone moxi is not supported for windows")
-
-    def stop_moxi(self):
-        self.extract_remote_info()
-        if self.info.type.lower() == "linux":
-            o, r = self.execute_command("killall -9 moxi")
-            self.log_command_output(o, r)
-        else:
-            raise Exception("stopping standalone moxi is not supported on windows")
 
     def is_url_live(self, url="", exit_if_not_live=True, num_retries=3, timeout=10):
         live_url = False
@@ -2547,24 +2504,6 @@ class RemoteMachineShellConnection(KeepRefs):
                 sys.exit("fail to install %s on node %s" % \
                                   (CB_RELEASE_YUM_REPO.rsplit("/", 1)[-1], self.ip))
 
-    def install_moxi(self, build):
-        success = True
-        track_words = ("warning", "error", "fail")
-        self.extract_remote_info()
-        log.info('deliverable_type : {0}'.format(self.info.deliverable_type))
-        if self.info.type.lower() == 'windows':
-            log.error('Not implemented')
-        elif self.info.deliverable_type in ["rpm"]:
-            output, error = self.execute_command('rpm -i /tmp/{0}'.format(build.name))
-            if error and ' '.join(error).find("ERROR") != -1:
-                success = False
-        elif self.info.deliverable_type == 'deb':
-            output, error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
-            if error and ' '.join(error).find("ERROR") != -1:
-                success = False
-        success &= self.log_command_output(output, '', track_words)
-        return success
-
     def wait_till_file_deleted(self, remotepath, filename, timeout_in_seconds=180):
         end_time = time.time() + float(timeout_in_seconds)
         deleted = False
@@ -2675,7 +2614,7 @@ class RemoteMachineShellConnection(KeepRefs):
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*",
                          "/opt/couchbase", "/data/*"]
-        terminate_process_list = ["beam.smp", "memcached", "moxi", "vbucketmigrator",
+        terminate_process_list = ["beam.smp", "memcached", "vbucketmigrator",
                                   "couchdb", "epmd", "memsup", "cpu_sup", "goxdcr",
                                   "erlang", "eventing", "erl", "godu",
                                   "goport", "gosecrets", "projector"]
@@ -3066,7 +3005,7 @@ class RemoteMachineShellConnection(KeepRefs):
     def membase_uninstall(self, save_upgrade_config=False):
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*"]
-        terminate_process_list = ["beam", "memcached", "moxi", "vbucketmigrator",
+        terminate_process_list = ["beam", "memcached", "vbucketmigrator",
                                   "couchdb", "epmd"]
         self.extract_remote_info()
         log.info(self.info.distribution_type)
@@ -3147,24 +3086,6 @@ class RemoteMachineShellConnection(KeepRefs):
             self.terminate_processes(self.info, terminate_process_list)
             if not save_upgrade_config:
                 self.remove_folders(linux_folders)
-
-    def moxi_uninstall(self):
-        terminate_process_list = ["moxi"]
-        self.extract_remote_info()
-        log.info(self.info.distribution_type)
-        type = self.info.distribution_type.lower()
-        if type == 'windows':
-            log.error("Not implemented")
-        elif type == "ubuntu":
-            uninstall_cmd = "dpkg -r {0};dpkg --purge {1};".format("moxi-server", "moxi-server")
-            output, error = self.execute_command(uninstall_cmd)
-            self.log_command_output(output, error)
-        elif type in LINUX_DISTRIBUTION_NAME:
-            uninstall_cmd = 'rpm -e {0}'.format("moxi-server")
-            log.info('running rpm -e to remove couchbase-server')
-            output, error = self.execute_command(uninstall_cmd)
-            self.log_command_output(output, error)
-        self.terminate_processes(self.info, terminate_process_list)
 
     def log_command_output(self, output, error, track_words=(), debug=True):
         # success means that there are no track_words in the output

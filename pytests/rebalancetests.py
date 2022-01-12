@@ -166,8 +166,7 @@ class RebalanceBaseTest(unittest.TestCase):
                 ram_load_ratio=load_ratio,
                 value_size_distribution=distribution,
                 number_of_threads=1,
-                write_only=True,
-                moxi=True)
+                write_only=True)
             test.log.info('inserted {0} keys'.format(inserted_count))
             bucket_data[bucket.name]["items_inserted_count"] += inserted_count
 
@@ -210,8 +209,7 @@ class RebalanceBaseTest(unittest.TestCase):
             number_of_threads=2,
             write_only=True,
             delete_ratio=delete_ratio,
-            expiry_ratio=expiry_ratio,
-            moxi=True)
+            expiry_ratio=expiry_ratio)
         log.info("wait until data is completely persisted on the disk")
         ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0, timeout_in_seconds=120)
         test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
@@ -731,7 +729,7 @@ class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
     def tearDown(self):
         RebalanceBaseTest.common_tearDown(self)
 
-    def _common_test_body(self, moxi=False):
+    def _common_test_body(self):
         master = self.servers[0]
         rest = RestConnection(master)
         creds = self.input.membase_settings
@@ -755,36 +753,26 @@ class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
                 self.assertTrue(rest.monitorRebalance(),
                     msg="rebalance operation failed after adding node {0}".format(server.ip))
                 self.log.info("completed rebalancing in server {0}".format(server))
-                IncrementalRebalanceWithParallelReadTests._reader_thread(self, inserted_keys, bucket_data, moxi=moxi)
+                IncrementalRebalanceWithParallelReadTests._reader_thread(self, inserted_keys, bucket_data)
                 self.assertTrue(rest.monitorRebalance(),
                     msg="rebalance operation failed after adding node {0}".format(server.ip))
                 break
 
     @staticmethod
-    def _reader_thread(self, inserted_keys, bucket_data, moxi=False):
+    def _reader_thread(self, inserted_keys, bucket_data):
         errors = []
         rest = RestConnection(self._servers[0])
         smartclient = None
         for name in bucket_data:
             for key in inserted_keys:
-                if moxi:
-                    moxi = MemcachedClientHelper.proxy_client(self._servers[0], name)
-                else:
-                    smartclient = VBucketAwareMemcached(rest, name)
+                smartclient = VBucketAwareMemcached(rest, name)
                 try:
-                    if moxi:
-                        moxi.get(key)
-                    else:
-                        smartclient.memcached(key).get(key)
+                    smartclient.memcached(key).get(key)
                 except Exception as ex:
                     errors.append({"error": ex, "key": key})
                     self.log.info(ex)
-                    if not moxi:
-                        smartclient.done()
-                        smartclient = VBucketAwareMemcached(rest, name)
-
-    def test_10k_moxi(self):
-        self._common_test_body(moxi=True)
+                    smartclient.done()
+                    smartclient = VBucketAwareMemcached(rest, name)
 
     def test_10k_memcached(self):
         self._common_test_body()

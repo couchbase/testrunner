@@ -359,11 +359,6 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
     def testHelp(self):
         command_with_error = {}
         shell = RemoteMachineShellConnection(self.master)
-        if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-            self.log.info("skip moxi because it is removed in spock ")
-            for x in CLI_COMMANDS:
-                if x == "moxi":
-                    CLI_COMMANDS.remove("moxi")
         for cli in CLI_COMMANDS:
             """ excluded_commands should separate by ';' """
             if self.excluded_commands is not None:
@@ -1669,8 +1664,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 self.add_built_in_server_user(node=server)
 
                 MemcachedClientHelper.load_bucket_and_return_the_keys([server], name=bucket_name, number_of_threads=1,
-                                                                      write_only=True, number_of_items=insert_keys,
-                                                                      moxi=False)
+                                                                      write_only=True, number_of_items=insert_keys)
                 inserted = int(rest.get_bucket_json(bucket_name)["basicStats"]["itemCount"])
                 self.assertTrue(self.waitForItemCount(server, bucket_name, insert_keys))
 

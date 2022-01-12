@@ -117,7 +117,6 @@ class CCCP(BaseTestCase):
             self.assertTrue("couchApiBase" in node and "hostname" in node,
                             "No hostname name in config")
             if self.cb_version[:5] in COUCHBASE_FROM_MAD_HATTER:
-                """ moxi port is removed from Mad-Hatter 6.5.0 """
                 self.assertTrue(node["ports"]["direct"] == 11210,
                             "ports are incorrect: %s" % node)
             else:

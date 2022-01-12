@@ -60,14 +60,12 @@ class BucketOperationHelper:
             else:
                 bucket_ram = 100
                 # choose a port that is not taken by this ns server
-            port = info.moxi + 1
             for i in range(0, howmany):
                 name = "bucket-{0}".format(i)
                 if sasl:
                     rest.create_bucket(bucket=name,
                                        ramQuotaMB=bucket_ram,
                                        replicaNumber=replica,
-                                       proxyPort=port,
                                        bucketType=bucketType,
                                        evictionPolicy=evictionPolicy,
                                        storageBackend=bucket_storage)
@@ -75,9 +73,7 @@ class BucketOperationHelper:
                     rest.create_bucket(bucket=name,
                                        ramQuotaMB=bucket_ram,
                                        replicaNumber=replica,
-                                       proxyPort=port,
                                        storageBackend=bucket_storage)
-                port += 1
                 msg = "create_bucket succeeded but bucket \"{0}\" does not exist"
                 bucket_created = BucketOperationHelper.wait_for_bucket_creation(name, rest)
                 if not bucket_created:
@@ -93,8 +89,7 @@ class BucketOperationHelper:
             ip_rest = RestConnection(serverInfo)
             ip_rest.create_bucket(bucket='default',
                                   ramQuotaMB=256,
-                                  replicaNumber=number_of_replicas,
-                                  proxyPort=11220)
+                                  replicaNumber=number_of_replicas)
             msg = 'create_bucket succeeded but bucket "default" does not exist'
             removed_all_buckets = BucketOperationHelper.wait_for_bucket_creation('default', ip_rest)
             if not removed_all_buckets:
@@ -103,7 +98,7 @@ class BucketOperationHelper:
                     assert_on_test.fail(msg=msg)
 
     @staticmethod
-    def create_bucket(serverInfo, name='default', replica=1, port=11210, test_case=None, bucket_ram=-1, password=None):
+    def create_bucket(serverInfo, name='default', replica=1, test_case=None, bucket_ram=-1, password=None):
         log = logger.Logger.get_logger()
         rest = RestConnection(serverInfo)
         if bucket_ram < 0:
@@ -112,8 +107,7 @@ class BucketOperationHelper:
 
         rest.create_bucket(bucket=name,
                            ramQuotaMB=bucket_ram,
-                           replicaNumber=replica,
-                           proxyPort=port)
+                           replicaNumber=replica)
         msg = 'create_bucket succeeded but bucket "{0}" does not exist'
         bucket_created = BucketOperationHelper.wait_for_bucket_creation(name, rest)
         if not bucket_created:

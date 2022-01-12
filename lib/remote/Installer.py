@@ -1,6 +1,6 @@
 #whether membase server is installed or not
 #install version x on ip y - raise a meaningful if we can't install membase
-#server not reachable , installed but can't reach moxi
+#server not reachable
 # can't reach the 8091
 # which part of server is not working
 import logger

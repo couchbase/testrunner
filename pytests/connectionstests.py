@@ -16,35 +16,6 @@ class ConnectionTests(BaseTestCase):
     def tearDown(self):
         super(ConnectionTests, self).tearDown()
 
-    def _run_moxi(self, server, port_listen, node_ip, bucket_name):
-        command = ("nohup /opt/couchbase/bin/moxi -u root -Z usr=Administrator,pwd=password,port_listen={0}," +
-                "concurrency=1024,wait_queue_timeout=200,connect_timeout=400,connect_max_errors=3," +
-                "connect_retry_interval=30000,auth_timeout=100,downstream_conn_max=16,downstream_timeout=5000" +
-                ",cycle=200,default_bucket_name={2} http://{1}:8091/pools/default/bucketsStreaming/{2} -d").\
-                   format(port_listen, node_ip, bucket_name)
-        shell = RemoteMachineShellConnection(server)
-        output, error = shell.execute_command_raw(command)
-        shell.log_command_output(output, error)
-        shell.disconnect()
-
-    def _stop_moxi(self, server, port_listen):
-        command = "kill -9 $(ps aux | grep -v grep | grep {0} | awk '{{print $2}}')".format(port_listen)
-        shell = RemoteMachineShellConnection(server)
-        output, error = shell.execute_command_raw(command)
-        shell.log_command_output(output, error)
-        shell.disconnect()
-
-    def _run_mcsoda_localy(self, node_ip, port_ip, bucket_name, mcsoda_items):
-        command = ("nohup python lib/perf_engines/mcsoda.py {0}:{1} vbuckets=1024 " +
-            "doc-gen=0 doc-cache=0 ratio-creates=0.9 ratio-sets=0.9 min-value-size=1024 " +
-            "max-items={2} ratio-deletes=0.1 exit-after-creates=0 threads=4 prefix={3} &").\
-            format(node_ip, port_ip, mcsoda_items, bucket_name)
-        os.system(command)
-
-    def _stop_mcsoda_localy(self, port_listen):
-        command = "kill -9 $(ps aux | grep -v grep | grep {0} | awk '{{print $2}}')".format(port_listen)
-        os.system(command)
-
     def create_connections_test(self):
 
         shell = RemoteMachineShellConnection(self.master)
@@ -89,37 +60,6 @@ class ConnectionTests(BaseTestCase):
                 self.log.info("Usage of memory is %s" % rate)
             except:
                 pass
-
-    """ this test need to install autoconf and automake on master vm """
-    def multiple_connections_using_memcachetest (self):
-        """ server side moxi is removed in spock as in MB-16661 """
-        if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-            self.log.info("From spock, server side moxi is removed."
-                          " More information could be found in MB-16661 ")
-            return
-        shell = RemoteMachineShellConnection(self.master)
-        os_type = shell.extract_remote_info()
-        if os_type.type != 'Linux':
-            return
-        mcsoda_items = self.input.param('mcsoda_items', 1000000)
-        memcachetest_items = self.input.param('memcachetest_items', 100000)
-        moxi_port = self.input.param('moxi_port', 51500)
-        self._stop_moxi(self.master, moxi_port)
-        self._stop_mcsoda_localy(moxi_port)
-        try:
-            self._run_moxi(self.master, moxi_port, self.master.ip, "default")
-            self._run_mcsoda_localy(self.master.ip, moxi_port, "default",
-                                                    mcsoda_items=mcsoda_items)
-            self.sleep(30)
-            sd = MemcachetestRunner(self.master, num_items=memcachetest_items, \
-                                     extra_params="-W 16 -t 16 -c 0 -M 2")  # MB-8083
-            status = sd.start_memcachetest()
-            if not status:
-                self.fail("see logs above!")
-        finally:
-            self._stop_mcsoda_localy(moxi_port)
-            if 'sd' in locals():
-                sd.stop_memcachetest()
 
     # CBQE-1245 implement verification tap client activity when the client is not using a TAP client
     def checks_tap_connections_tests(self):

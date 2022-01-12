@@ -15,7 +15,7 @@ def usage(err=None):
     print("./vbucketpop.py -i <server> -p <port> -b <bucket> -P <password> -f <file>")
     print("")
     print(" server             Server IP")
-    print(" port               moxi port")
+    print(" port               port")
     print(" bucket             bucket (default)")
     print(" password           saslbucket password ('')")
     print(" file               kvstore filename")
@@ -32,7 +32,7 @@ class Config(object):
     def __init__(self, argv):
         # defaults
         self.server = '127.0.0.1'
-        self.port = 11211
+        self.port = 11210
         self.bucket = 'default'
         self.password = ''
         self.filename = ''

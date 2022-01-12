@@ -111,7 +111,6 @@ def installer_factory(params):
     es_alias = ["elasticsearch"]
     css_alias = ["couchbase-single", "couchbase-single-server", "css"]
     mongo_alias = ["mongo"]
-    moxi_alias = ["moxi", "moxi-server"]
 
     if params["product"] in mb_alias:
         return MembaseServerInstaller()
@@ -119,8 +118,6 @@ def installer_factory(params):
         return CouchbaseServerInstaller()
     elif params["product"] in mongo_alias:
         return MongoInstaller()
-    elif params["product"] in moxi_alias:
-        return MoxiInstaller()
     elif params["product"] in sdk_alias:
         return SDKInstaller()
     elif params["product"] in es_alias:
@@ -225,7 +222,6 @@ class Installer(object):
             mb_alias = ["membase", "membase-server", "mbs", "mb"]
             cb_alias = ["couchbase", "couchbase-server", "cb"]
             css_alias = ["couchbase-single", "couchbase-single-server", "css"]
-            moxi_alias = ["moxi", "moxi-server"]
             cbas_alias = ["cbas", "server-analytics"]
 
             if params["product"] in cbas_alias:
@@ -241,8 +237,6 @@ class Installer(object):
                     names = ['couchbase-server-enterprise', 'couchbase-server-community']
             elif params["product"] in css_alias:
                 names = ['couchbase-single-server-enterprise', 'couchbase-single-server-community']
-            elif params["product"] in moxi_alias:
-                names = ['moxi-server']
             else:
                 ok = False
                 _errors.append(errors["INVALID-PARAMS"])
@@ -308,12 +302,6 @@ class Installer(object):
                 build_repo = CB_REPO
             elif "server-analytics" in names:
                 build_repo = CB_REPO.replace("couchbase-server", "server-analytics") + CB_VERSION_NAME[version[:3]] + "/"
-            elif "moxi-server" in names and version[:5] != "2.5.2":
-                """
-                moxi repo:
-                   http://172.23.126.166/builds/latestbuilds/moxi/4.6.0/101/moxi-server..
-                """
-                build_repo = CB_REPO.replace("couchbase-server", "moxi") + version[:5] + "/"
             elif version[:5] not in COUCHBASE_VERSION_2 and \
                  version[:5] not in COUCHBASE_VERSION_3:
                 if version[:3] in CB_VERSION_NAME:
@@ -893,48 +881,6 @@ class MongoInstaller(Installer):
             log.error("Connection with MongoDB config server was not established.")
             sys.exit()
 
-class MoxiInstaller(Installer):
-    def __init__(self):
-        Installer.__init__(self)
-
-    def initialize(self, params):
-        log.info('There is no initialize phase for moxi')
-
-    def uninstall(self, params):
-        remote_client = RemoteMachineShellConnection(params["server"])
-        remote_client.membase_uninstall()
-        remote_client.couchbase_uninstall()
-        remote_client.moxi_uninstall()
-        remote_client.disconnect()
-
-    def install(self, params, queue=None):
-        try:
-            build = self.build_url(params)
-        except Exception as e:
-            if queue:
-                queue.put(False)
-            raise e
-        remote_client = RemoteMachineShellConnection(params["server"])
-        info = remote_client.extract_remote_info()
-        type = info.type.lower()
-        if type == "windows":
-            raise Exception("Not implemented for windows")
-        else:
-            downloaded = remote_client.download_build(build)
-            if not downloaded:
-                log.error('server {1} unable to download binaries : {0}' \
-                          .format(build.url, params["server"].ip))
-                return False
-            try:
-                success = remote_client.install_moxi(build)
-            except BaseException as e:
-                success = False
-                log.error("installation failed: {0}".format(e))
-        remote_client.disconnect()
-        if queue:
-            queue.put(success)
-        return success
-
 class SDKInstaller(Installer):
     def __init__(self):
         pass
@@ -1319,12 +1265,6 @@ def main():
             sys.exit(log_install_failed)
 
     success = True
-    if "product" in input.test_params and input.test_params["product"] in ["moxi", "moxi-server"]:
-        print("verify installation...")
-        for server in input.servers:
-            success &= RemoteMachineShellConnection(server).is_moxi_installed()
-        if not success:
-            sys.exit(log_install_failed)
     if "change_indexer_ports" in input.test_params and input.test_params["change_indexer_ports"].lower() == 'true'\
             and input.test_params["product"] in ["couchbase", "couchbase-server", "cb"]:
         change_couchbase_indexer_ports(input)

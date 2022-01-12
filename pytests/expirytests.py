@@ -40,7 +40,6 @@ class ExpiryTests(unittest.TestCase):
 
         rest = RestConnection(serverInfo)
         info = rest.get_nodes_self()
-        self._bucket_port = info.moxi
         rest.init_cluster(username=serverInfo.rest_username,
                           password=serverInfo.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
@@ -56,7 +55,6 @@ class ExpiryTests(unittest.TestCase):
 
         rest.create_bucket(bucket=self._bucket_name,
                            ramQuotaMB=bucket_ram,
-                           proxyPort=info.memcached,
                            storageBackend=self.bucket_storage)
         bucket_ready = RestHelper(rest).vbucket_map_ready(self._bucket_name)
         if not bucket_ready:

@@ -866,7 +866,7 @@ class WarmUpMemcachedTest(unittest.TestCase):
         rest = RestConnection(self.master)
         command = "try ns_server_testrunner_api:kill_memcached(20000) catch _:_ -> [erlang:exit(element(2, X), kill) || X <- supervisor:which_children(ns_port_sup)] end."
         memcached_restarted, content = rest.diag_eval(command)
-        self.assertTrue(memcached_restarted, "unable to restart memcached/moxi process through diag/eval")
+        self.assertTrue(memcached_restarted, "unable to restart memcached process through diag/eval")
 
         #wait until memcached starts
         start = time.time()
@@ -972,7 +972,6 @@ class MultiGetNegativeTest(unittest.TestCase):
         self._create_default_bucket()
         self.keys_cleanup = []
         self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default", timeout=600)
-        self.onenodemoxi = MemcachedClientHelper.proxy_client(self.master, "default", timeout=600)
 
 
     def tearDown(self):
@@ -1018,31 +1017,16 @@ class MultiGetNegativeTest(unittest.TestCase):
         self._test_multi_get(self.onenodemc, 30 * 1000)
         self._test_multi_get(self.onenodemc, 40 * 1000)
 
-    def test_mx_multi_get(self):
-        self._test_multi_get(self.onenodemoxi, 10)
-        self._test_multi_get(self.onenodemoxi, 100)
-        self._test_multi_get(self.onenodemoxi, 1000)
-        self._test_multi_get(self.onenodemoxi, 10 * 1000)
-        self._test_multi_get(self.onenodemoxi, 20 * 1000)
-        self._test_multi_get(self.onenodemoxi, 30 * 1000)
-        self._test_multi_get(self.onenodemoxi, 40 * 1000)
-
-
     def _test_multi_get(self, client, howmany):
         mc_message = "memcached virt memory size {0} : resident memory size : {1}"
-        mx_message = "moxi virt memory size {0} : resident memory size : {1}"
         shell = RemoteMachineShellConnection(self.master)
-        moxi_pid = RemoteMachineHelper(shell).is_process_running("moxi").pid
         mc_pid = RemoteMachineHelper(shell).is_process_running("memcached").pid
         keys = self._insert_data(client, howmany)
         self.keys_cleanup.extend(keys)
-        self.log.info("printing moxi and memcached stats before running multi-get")
-        moxi_sys_stats = self._extract_proc_info(shell, moxi_pid)
+        self.log.info("printing memcached stats before running multi-get")
         memcached_sys_stats = self._extract_proc_info(shell, mc_pid)
         self.log.info(mc_message.format(int(memcached_sys_stats["rss"]) * 4096,
                                         memcached_sys_stats["vsize"]))
-        self.log.info(mx_message.format(int(moxi_sys_stats["rss"]) * 4096,
-                                        moxi_sys_stats["vsize"]))
 
         self.log.info("running multiget to get {0} keys".format(howmany))
         gets = client.getMulti(keys)
@@ -1051,14 +1035,10 @@ class MultiGetNegativeTest(unittest.TestCase):
         self.log.info(gets)
         self.assertEqual(len(gets), len(keys))
 
-        self.log.info("printing moxi and memcached stats after running multi-get")
-        moxi_sys_stats = self._extract_proc_info(shell, moxi_pid)
+        self.log.info("printing memcached stats after running multi-get")
         memcached_sys_stats = self._extract_proc_info(shell, mc_pid)
         self.log.info(mc_message.format(int(memcached_sys_stats["rss"]) * 4096,
                                         memcached_sys_stats["vsize"]))
-        self.log.info(mx_message.format(int(moxi_sys_stats["rss"]) * 4096,
-                                        moxi_sys_stats["vsize"]))
-
 
     def _extract_proc_info(self, shell, pid):
         o, r = shell.execute_command("cat /proc/{0}/stat".format(pid))

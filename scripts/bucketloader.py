@@ -35,9 +35,9 @@ def create_buckets(server, count, prefix, quota):
             print("created bucket {0}".format(name))
 
 
-def load_buckets(server, name, get, threads, moxi):
+def load_buckets(server, name, get, threads):
     distro = {500: 0.5, 1024: 0.5}
-    MemcachedClientHelper.load_bucket([server], name, -1, 10000000, distro, threads, -1, get, moxi)
+    MemcachedClientHelper.load_bucket([server], name, -1, 10000000, distro, threads, -1, get)
 
 
 if __name__ == "__main__":
@@ -47,7 +47,6 @@ if __name__ == "__main__":
         params = input.test_params
         count = 0
         get = True
-        moxi = False
         bucket_quota = 200
         run_load = False
         delete = False
@@ -64,9 +63,6 @@ if __name__ == "__main__":
             no_threads = params["threads"]
         if "bucket_quota" in params:
             bucket_quota = params["bucket_quota"]
-        if "moxi" in params:
-            if params["moxi"].lower() == "true":
-                moxi = True
         if "get" in params:
             if params["get"].lower() == "true":
                 get = True
@@ -85,7 +81,7 @@ if __name__ == "__main__":
             buckets = rest.get_buckets()
             threads = []
             for bucket in buckets:
-                t = Thread(target=load_buckets, args=(server, bucket.name, get, no_threads, moxi))
+                t = Thread(target=load_buckets, args=(server, bucket.name, get, no_threads))
                 t.start()
                 threads.append(t)
 
