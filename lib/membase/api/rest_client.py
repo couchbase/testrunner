@@ -3428,7 +3428,8 @@ class RestConnection(object):
         """set fts ram quota"""
         api = self.baseUrl + "pools/default"
         params = urllib.parse.urlencode({"ftsMemoryQuota": value})
-        status, content, _ = self.urllib_request(api, verb="POST", params=params)
+        headers = self._create_headers()
+        status, content, _ = self.urllib_request(api, verb="POST", params=params, headers=headers)
         if status:
             log.info("SUCCESS: FTS RAM quota set to {0}mb".format(value))
         else:
