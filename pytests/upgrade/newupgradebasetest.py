@@ -19,7 +19,9 @@ from couchbase_helper.document import DesignDocument, View
 from couchbase_helper.documentgenerator import BlobGenerator
 
 from TestInput import TestInputSingleton
+from lib.Cb_constants.CBServer import CbServer
 from pytests.fts.fts_base import QUERY
+from pytests.security.ntonencryptionBase import ntonencryptionBase
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from query_tests_helper import QueryHelperTests
@@ -229,6 +231,9 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.init_nodes = self.input.param('init_nodes', True)
         self.initial_build_type = self.input.param('initial_build_type', None)
         self.use_hostnames = self.input.param("use_hostnames", False)
+        if CbServer.use_https:
+            self.log.info('###################### Disabling n2n encryption')
+            ntonencryptionBase().disable_nton_cluster([self.master])
 
         self.log.info("==============  NewUpgradeBaseTest tearDown has started ==============")
         test_failed = (hasattr(self, '_resultForDoCleanups') and \
@@ -1269,6 +1274,18 @@ class NewUpgradeBaseTest(BaseTestCase):
         if queue is not None:
             queue.put(True)
 
+    def enforce_tls_https(self, queue=None):
+        ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
+        CbServer.use_https = True
+        if queue is not None:
+            queue.put(True)
+
+    def enforce_control_encryption(self, queue=None):
+        ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="control")
+        CbServer.use_https = False
+        if queue is not None:
+            queue.put(True)
+
     def modify_num_pindexes(self, queue=None):
         for index in self.fts_obj.fts_indexes:
             index.update_num_pindexes(8)
@@ -1879,12 +1896,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         fts_callable.wait_for_indexing_complete(100)
 
         docs_indexed = fts_idx.get_indexed_doc_count()
-
-        if fts_idx.collections:
-            container_doc_count = fts_idx.get_src_collections_doc_count()
-        else:
-            container_doc_count = fts_idx.get_src_bucket_doc_count()
-
+        container_doc_count = fts_idx.get_src_bucket_doc_count()
         self.log.info(f"Docs in index {fts_idx.name}={docs_indexed}, kv docs={container_doc_count}")
         if docs_indexed == 0:
             errors.append(f"No docs were indexed for index {fts_idx.name}")
@@ -1916,10 +1928,7 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         docs_indexed = fts_idx.get_indexed_doc_count()
 
-        if fts_idx.collections:
-            container_doc_count = fts_idx.get_src_collections_doc_count()
-        else:
-            container_doc_count = fts_idx.get_src_bucket_doc_count()
+        container_doc_count = fts_idx.get_src_bucket_doc_count()
 
         self.log.info(f"Docs in index {fts_idx.name}={docs_indexed}, kv docs={container_doc_count}")
         if docs_indexed == 0:
@@ -3016,13 +3025,13 @@ class NewUpgradeBaseTest(BaseTestCase):
         return server_set
 
     def _create_collections(self, scope=None, collection=None):
-        cli_client = CollectionsCLI(self.master)
-        cli_client.create_scope(bucket="default", scope=scope)
+        rest = RestConnection(self.master)
+        rest.create_scope(bucket="default", scope=scope)
         if type(collection) is list:
             for c in collection:
-                cli_client.create_collection(bucket="default", scope=scope, collection=c)
+                rest.create_collection(bucket="default", scope=scope, collection=c)
         else:
-            cli_client.create_collection(bucket="default", scope=scope, collection=collection)
+            rest.create_collection(bucket="default", scope=scope, collection=collection)
 
     def __define_index_parameters_collection_related(self, container_type="bucket", scope=None, collection=None):
         if container_type == 'bucket':

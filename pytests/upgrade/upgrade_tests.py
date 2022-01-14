@@ -238,17 +238,12 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
 
             self.log.info("\nWill install upgrade version to any free nodes")
             out_nodes = self._get_free_nodes()
-            self.log.info("Here is free nodes {0}".format(out_nodes))
-            """ only install nodes out when there is cluster operation """
-            cluster_ops = ["rebalance_in", "rebalance_out", "rebalance_in_out"]
-            for event in self.after_events[0].split("-"):
-                if event in cluster_ops:
-                    self.log.info(
-                        "\n\nThere are cluster ops after upgrade. "
-                        "Need to install free nodes in upgrade version")
-                    self.initial_version = self.upgrade_versions[0]
-                    self._install(out_nodes)
-                    break
+            if out_nodes:
+                self.log.info("Here is free nodes {0}".format(out_nodes))
+                self.initial_version = self.upgrade_versions[0]
+                self._install(out_nodes)
+            else:
+                self.log.info("No free nodes")
             self.generate_map_nodes_out_dist_upgrade(
                 self.after_upgrade_services_out_dist)
 
