@@ -1,8 +1,10 @@
 import json
 import random
 import time
+import os
 
 from security.ntonencryptionBase import ntonencryptionBase
+from security.rbac_base import RbacBase
 
 from lib.Cb_constants.CBServer import CbServer
 from pytests.security.x509_multiple_CA_util import x509main
@@ -11,6 +13,12 @@ from lib.remote.remote_util import RemoteMachineShellConnection
 
 
 class XDCRSecurityTests(XDCRNewBaseTest):
+
+    def _read_from_file(self, file_path):
+        fout = open(file_path, "r")
+        content = fout.read()
+        fout.close()
+        return content
 
     def get_cluster_objects_for_input(self, input):
         """returns a list of cluster objects for input. 'input' is a string
@@ -49,6 +57,8 @@ class XDCRSecurityTests(XDCRNewBaseTest):
         initial_xdcr = self._input.param("initial_xdcr", random.choice([True, False]))
         random_setting = self._input.param("random_setting", False)
         multiple_ca = self._input.param("multiple_ca", None)
+        use_client_certs = self._input.param("use_client_certs", None)
+        int_ca_name = self._input.param("int_ca_name", "iclient1_clientroot")
         all_node_upload = self._input.param("all_node_upload", False)
         rotate_certs = self._input.param("rotate_certs", None)
         delete_certs = self._input.param("delete_certs", None)
@@ -97,14 +107,6 @@ class XDCRSecurityTests(XDCRNewBaseTest):
                 cluster.toggle_security_setting([cluster.get_master_node()], setting, value)
 
         if multiple_ca:
-            CbServer.multiple_ca = True
-            self.passphrase_type = "script"
-            self.encryption_type = "des3"
-            self.use_client_certs = True
-            self.cacert_verify = True
-            CbServer.use_https = True
-            CbServer.use_client_certs = self.use_client_certs
-            CbServer.cacert_verify = self.cacert_verify
             for cluster in self.get_cluster_objects_for_input(multiple_ca):
                 master = cluster.get_master_node()
                 ntonencryptionBase().disable_nton_cluster([master])
@@ -120,7 +122,22 @@ class XDCRSecurityTests(XDCRNewBaseTest):
                     for server in cluster.get_nodes():
                         CbServer.x509.upload_root_certs(server)
                 CbServer.x509.upload_node_certs(servers=cluster.get_nodes())
-                CbServer.x509.upload_client_cert_settings(server=master)
+                if use_client_certs:
+                    CbServer.x509.upload_client_cert_settings(server=master)
+                    client_cert_path, client_key_path = CbServer.x509.get_client_cert(
+                        int_ca_name=int_ca_name)
+                    # Copy the certs onto the test machines
+                    for server in cluster.get_nodes():
+                        shell = RemoteMachineShellConnection(server)
+                        shell.execute_command(f"mkdir -p {os.path.dirname(client_cert_path)}")
+                        shell.copy_file_local_to_remote(client_cert_path, client_cert_path)
+                        shell.execute_command(f"mkdir -p {CbServer.x509.CACERTFILEPATH}all")
+                        shell.copy_file_local_to_remote(f"{CbServer.x509.CACERTFILEPATH}all/all_ca.pem",
+                                                        f"{CbServer.x509.CACERTFILEPATH}all/all_ca.pem")
+                        shell.disconnect()
+                    self._client_cert = self._read_from_file(client_cert_path)
+                    self._client_key = self._read_from_file(client_key_path)
+                    self.add_built_in_server_user(node=master)
                 ntonencryptionBase().setup_nton_cluster([master], clusterEncryptionLevel="strict")
             if rotate_certs:
                 for cluster in self.get_cluster_objects_for_input(rotate_certs):

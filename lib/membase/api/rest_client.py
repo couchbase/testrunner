@@ -1429,7 +1429,7 @@ class RestConnection(object):
             raise Exception("regenerateCertificate API failed")
 
     def __remote_clusters(self, api, op, remoteIp, remotePort, username, password, name, demandEncryption=0,
-                          certificate='', encryptionType="half"):
+                          certificate='', clientCertificate=None, clientKey=None, encryptionType=None):
         param_map = {'hostname': "{0}:{1}".format(remoteIp, remotePort),
                         'username': username,
                         'password': password,
@@ -1442,13 +1442,15 @@ class RestConnection(object):
         remote.port = remotePort
         if demandEncryption:
             param_map ['demandEncryption'] = 'on'
-            if certificate != '':
+            param_map['secureType'] = encryptionType
+            if certificate:
                 param_map['certificate'] = certificate
-            if self.check_node_versions("5.5") and RestConnection(remote).check_node_versions("5.5"):
-                # 5.5.0 and above
-                param_map['secureType'] = encryptionType
-            elif self.check_node_versions("5.0") and RestConnection(remote).check_node_versions("5.0"):
-                param_map['encryptionType'] = encryptionType
+            if clientCertificate:
+                param_map['clientCertificate'] = clientCertificate
+                param_map['clientKey'] = clientKey
+                param_map.pop("username")
+                param_map.pop("password")
+
         params = urllib.parse.urlencode(param_map)
         log.info("with settings {0}".format(param_map))
         retries = 5
@@ -1462,25 +1464,21 @@ class RestConnection(object):
             retries -= 1
         raise Exception("remoteCluster API '{0} remote cluster' failed".format(op))
 
-    def add_remote_cluster(self, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate='',
-                           encryptionType="full"):
+    def add_remote_cluster(self, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate=None,
+                           clientCertificate=None, clientKey=None, encryptionType="full"):
         # example : password:password username:Administrator hostname:127.0.0.1:9002 name:two
         msg = "adding remote cluster hostname:{0}:{1} with username:password {2}:{3} name:{4} to source node: {5}:{6}"
         log.info(msg.format(remoteIp, remotePort, username, password, name, self.ip, self.port))
         api = self.baseUrl + 'pools/default/remoteClusters'
-        return self.__remote_clusters(api, 'add', remoteIp, remotePort, username, password, name, demandEncryption, certificate, encryptionType)
+        return self.__remote_clusters(api, 'add', remoteIp, remotePort, username, password, name, demandEncryption,
+                                      certificate, clientCertificate, clientKey, encryptionType)
 
-    def add_remote_cluster_new(self, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate=''):
-        # example : password:password username:Administrator hostname:127.0.0.1:9002 name:two
-        msg = "adding remote cluster hostname:{0}:{1} with username:password {2}:{3} name:{4} to source node: {5}:{6}"
-        log.info(msg.format(remoteIp, remotePort, username, password, name, self.ip, self.port))
-        api = self.baseUrl + 'pools/default/remoteClusters'
-        return self.__remote_clusters(api, 'add', remoteIp, remotePort, username, password, name, demandEncryption, certificate)
-
-    def modify_remote_cluster(self, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate='', encryptionType="half"):
+    def modify_remote_cluster(self, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate=None,
+                              clientCertificate=None, clientKey=None, encryptionType="full"):
         log.info("modifying remote cluster name:{0}".format(name))
         api = self.baseUrl + 'pools/default/remoteClusters/' + urllib.parse.quote(name)
-        return self.__remote_clusters(api, 'modify', remoteIp, remotePort, username, password, name, demandEncryption, certificate, encryptionType)
+        return self.__remote_clusters(api, 'modify', remoteIp, remotePort, username, password, name, demandEncryption,
+                                      certificate, clientCertificate, clientKey, encryptionType)
 
     def get_remote_clusters(self):
         remote_clusters = []

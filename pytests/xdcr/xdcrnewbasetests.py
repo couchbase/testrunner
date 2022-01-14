@@ -594,8 +594,8 @@ class XDCRRemoteClusterRef:
     """Class keep the information related to Remote Cluster References.
     """
 
-    def __init__(self, src_cluster, dest_cluster, name, encryption=False, replicator_target_role=False, multiple_ca=False,
-                 systemeventlog=None):
+    def __init__(self, src_cluster, dest_cluster, name, encryption=False, replicator_target_role=False,
+                 multiple_ca=False, client_certificate=None, client_key=None, systemeventlog=None):
         """
         @param src_cluster: source couchbase cluster object.
         @param dest_cluster: destination couchbase cluster object:
@@ -608,6 +608,8 @@ class XDCRRemoteClusterRef:
         self.__name = name
         self.__encryption = encryption
         self.__multiple_ca = multiple_ca
+        self.__client_certificate = client_certificate
+        self.__client_key = client_key
         self.__systemeventlog = systemeventlog
         self.__rest_info = {}
         self.__replicator_target_role = replicator_target_role
@@ -682,17 +684,15 @@ class XDCRRemoteClusterRef:
         """create cluster reference- add remote cluster
         """
         rest_conn_src = RestConnection(self.__src_cluster.get_master_node())
-        certificate = ""
+        certificate = None
         dest_master = self.__dest_cluster.get_master_node()
         if self.__encryption:
+            rest_conn_dest = RestConnection(dest_master)
             if self.__multiple_ca:
-                rest_conn_dest = RestConnection(dest_master)
                 raw_content = rest_conn_dest.get_trusted_CAs()
                 certificate = self._extract_certs(raw_content)
             else:
-                rest_conn_dest = RestConnection(dest_master)
                 certificate = rest_conn_dest.get_cluster_ceritificate()
-
         if self.__replicator_target_role:
             self.dest_user = "replicator_user"
             self.dest_pass = "password"
@@ -706,7 +706,10 @@ class XDCRRemoteClusterRef:
                 self.dest_user,
                 self.dest_pass, self.__name,
                 demandEncryption=self.__encryption,
-                certificate=certificate)
+                certificate=certificate,
+                clientCertificate=self.__client_certificate,
+                clientKey=self.__client_key
+            )
         else:
             print("Using scram-sha authentication")
             self.__rest_info = rest_conn_src.add_remote_cluster(
@@ -738,21 +741,26 @@ class XDCRRemoteClusterRef:
         self.modify()
 
     def modify(self, encryption=True):
-        """Modify cluster reference to enable SSL encryption
-        """
         dest_master = self.__dest_cluster.get_master_node()
         rest_conn_src = RestConnection(self.__src_cluster.get_master_node())
-        certificate = ""
         if encryption:
             rest_conn_dest = RestConnection(dest_master)
             if not self.__use_scramsha:
-                certificate = rest_conn_dest.get_cluster_ceritificate()
+                if self.__multiple_ca:
+                    raw_content = rest_conn_dest.get_trusted_CAs()
+                    certificate = self._extract_certs(raw_content)
+                else:
+                    certificate = rest_conn_dest.get_cluster_ceritificate()
+
                 self.__rest_info = rest_conn_src.modify_remote_cluster(
                     dest_master.ip, dest_master.port,
                     self.dest_user,
                     self.dest_pass, self.__name,
                     demandEncryption=encryption,
-                    certificate=certificate)
+                    certificate=certificate,
+                    clientCertificate=self.__client_certificate,
+                    clientKey=self.__client_key
+                )
             else:
                 print("Using scram-sha authentication")
                 self.__rest_info = rest_conn_src.modify_remote_cluster(
@@ -2441,7 +2449,7 @@ class CouchbaseCluster:
         task.result()
 
     def add_remote_cluster(self, dest_cluster, name, encryption=False, replicator_target_role=False,
-                           multiple_ca=False, systemeventlog=None):
+                           multiple_ca=False, client_cert=None, client_key=None, systemeventlog=None):
         """Create remote cluster reference or add remote cluster for xdcr.
         @param dest_cluster: Destination cb cluster object.
         @param name: name of remote cluster reference
@@ -2454,6 +2462,8 @@ class CouchbaseCluster:
             encryption,
             replicator_target_role,
             multiple_ca,
+            client_cert,
+            client_key,
             systemeventlog
         )
         remote_cluster.add()
@@ -2835,17 +2845,17 @@ class XDCRNewBaseTest(unittest.TestCase):
                 self.__is_test_failed():
             NodeHelper.collect_logs(self._input.servers, self.__is_cluster_run())
 
-        for i in range(1, len(self.__cb_clusters) + 1):
-            try:
+        #for i in range(1, len(self.__cb_clusters) + 1):
+        #    try:
                 # Remove rbac users in teardown
-                role_del = ['cbadminbucket']
-                RbacBase().remove_user_role(role_del, RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()))
-                if self._replicator_role:
-                    role_del = ['replicator_user']
-                    RbacBase().remove_user_role(role_del,
-                                                RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()))
-            except Exception as e:
-                self.log.warning(e)
+                # role_del = ['cbadminbucket']
+                # RbacBase().remove_user_role(role_del, RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()))
+                # if self._replicator_role:
+                #     role_del = ['replicator_user']
+                #     RbacBase().remove_user_role(role_del,
+                #                                 RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()))
+        #    except Exception as e:
+        #        self.log.warning(e)
         try:
             if self.__is_cleanup_needed() or self._input.param("skip_cleanup", False):
                 self.log.warning("CLEANUP WAS SKIPPED")
@@ -2878,6 +2888,23 @@ class XDCRNewBaseTest(unittest.TestCase):
                                 "log_level",
                                 None)))
 
+    def add_built_in_server_user(self, testuser=None, rolelist=None, node=None):
+        if testuser is None:
+            testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
+                         'password': 'password'}]
+        if rolelist is None:
+            rolelist = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
+                         'roles': 'admin'}]
+
+        self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
+                                                                       node.ip))
+        RbacBase().create_user_source(testuser, 'builtin', node)
+        # Some times in upgraded envs, user creation is taking some time. Added a small sleep to mitigate failures in subsequent steps.
+        self.sleep(5)
+        self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
+                                                                testuser[0]["name"]))
+        status = RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
+
     def add_user(self, id="cbadminbucket", name="cbadminbucket", password="password", roles="admin"):
         for i in range(1, len(self.__cb_clusters) + 1):
             self.log.info("Adding user: {} with roles: {}".format(name, roles))
@@ -2900,6 +2927,10 @@ class XDCRNewBaseTest(unittest.TestCase):
         if self._multiple_ca:
             CbServer.multiple_ca = True
             self._use_https = True
+        if self._client_cert:
+            CbServer.multiple_ca = True
+            CbServer.use_client_certs = True
+            CbServer.cacert_verify = True
         if self._use_https:
             CbServer.use_https = True
             self._demand_encryption = True
@@ -3042,7 +3073,9 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._replicator_role = self._input.param("replicator_role", False)
         self._replicator_all_buckets = self._input.param("replicator_all_buckets", False)
         self._use_java_sdk = self._input.param("java_sdk_client", False)
-        self._multiple_ca = self._input.param("use_multiple_certs", False)
+        self._multiple_ca = self._input.param("multiple_ca", None)
+        self._client_cert = self._input.param("client_cert", None)
+        self._client_key = self._input.param("client_key", None)
         self._use_https = self._input.param("use_https", False)
 
     def __initialize_error_count_dict(self):
@@ -3246,6 +3279,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                 self._demand_encryption,
                 self._replicator_role,
                 self._multiple_ca,
+                self._client_cert,
+                self._client_key,
                 self._systemeventlog
             )
             if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
@@ -3257,6 +3292,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                     self._demand_encryption,
                     self._replicator_role,
                     self._multiple_ca,
+                    self._client_cert,
+                    self._client_key,
                     self._systemeventlog
                 )
 
@@ -3271,6 +3308,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                 self._demand_encryption,
                 self._replicator_role,
                 self._multiple_ca,
+                self._client_cert,
+                self._client_key,
                 self._systemeventlog
             )
             if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
@@ -3280,6 +3319,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                     self._demand_encryption,
                     self._replicator_role,
                     self._multiple_ca,
+                    self._client_cert,
+                    self._client_key,
                     self._systemeventlog
                 )
 
@@ -3296,6 +3337,8 @@ class XDCRNewBaseTest(unittest.TestCase):
             self._demand_encryption,
             self._replicator_role,
             self._multiple_ca,
+            self._client_cert,
+            self._client_key,
             self._systemeventlog
         )
         if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
@@ -3307,6 +3350,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                 self._demand_encryption,
                 self._replicator_role,
                 self._multiple_ca,
+                self._client_cert,
+                self._client_key,
                 self._systemeventlog
             )
 

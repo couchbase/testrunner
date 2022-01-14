@@ -46,7 +46,9 @@ class LogScanner(object):
             },
             "kv": {
                 "projector.log": ["panic", "Error parsing XATTR"],
-                "*xdcr*.log": ["panic", "non-recoverable error from xmem client. response status=KEY_ENOENT"],
+                "*xdcr*.log": ["panic", "non-recoverable error from xmem client. response status=KEY_ENOENT",
+                               "Execution timed out",
+                               "initConnection error"],
             },
             "n1ql": {
                 "query.log": ["panic"]
