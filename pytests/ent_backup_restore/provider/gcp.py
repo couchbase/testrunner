@@ -4,6 +4,9 @@ import json
 import time
 import contextlib
 
+from concurrent.futures import(
+    ThreadPoolExecutor
+)
 from google.cloud import(
         storage,
         exceptions
@@ -38,7 +41,7 @@ class GCP(provider.Provider):
         try:
             self.resource.create_bucket(self.bucket, **kwargs)
         except Exception as error:
-            if "You already own this bucket. Please select another name." not in error.message:
+            if error.code != 409:
                 raise error
             self.log.info("Bucket already exists, this is fine.")
 
@@ -86,7 +89,9 @@ class GCP(provider.Provider):
         if prefix:
             kwargs['prefix'] = prefix
 
-        self.cloud_bucket.delete_blobs(list(self.resource.list_blobs(self.cloud_bucket, **kwargs)))
+        objects = list([key.name for key in self.resource.list_blobs(self.cloud_bucket, **kwargs)])
+        with ThreadPoolExecutor() as pool:
+            pool.map(lambda obj: self.cloud_bucket.delete_blob(obj), objects)
 
     def num_multipart_uploads(self):
         """ See super class
@@ -104,8 +109,8 @@ class GCP(provider.Provider):
                 self.cloud_bucket.add_lifecycle_delete_rule(age=0)
                 self.cloud_bucket.patch()
                 while len(all_blobs) > 256:
-                    all_blobs = list(self.resource.list_blobs(self.cloud_bucket))
                     time.sleep(10)
+                    all_blobs = list(self.resource.list_blobs(self.cloud_bucket))
                     # If we don't have that many delete synchronously
             elif len(all_blobs) > 256:
                 self.cloud_bucket.delete_blobs(all_blobs)
