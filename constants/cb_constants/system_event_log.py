@@ -110,6 +110,10 @@ class Eventing(object):
     DeleteFunction = 4104
     ImportFunctions = 4105
     ExportFunctions = 4106
+    DeployFunction = 4109
+    UndeployFunction = 4110
+    PauseFunction = 4111
+    ResumeFunction = 4112
 
 
 class Analytics(object):

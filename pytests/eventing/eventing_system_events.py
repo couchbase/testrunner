@@ -94,3 +94,24 @@ class EventingSystemEvents(EventingBaseTest):
             EventingServiceEvents.delete_function(self.eventing_node,
                                                   self.function_name))
         self.system_events.validate(server=self.master)
+
+    def test_lifecycle_operations_system_events(self):
+        body = self.create_save_function_body(self.function_name,
+                                              self.handler_code)
+        self.deploy_function(body)
+        global_vars.system_event_logs.add_event(
+            EventingServiceEvents.deploy_function(self.eventing_node,
+                                                  self.function_name))
+        self.pause_function(body)
+        global_vars.system_event_logs.add_event(
+            EventingServiceEvents.pause_function(self.eventing_node,
+                                                 self.function_name))
+        self.resume_function(body)
+        global_vars.system_event_logs.add_event(
+            EventingServiceEvents.resume_function(self.eventing_node,
+                                                  self.function_name))
+        self.undeploy_and_delete_function(body)
+        global_vars.system_event_logs.add_event(
+            EventingServiceEvents.undeploy_function(self.eventing_node,
+                                                    self.function_name))
+        self.system_events.validate(server=self.master)

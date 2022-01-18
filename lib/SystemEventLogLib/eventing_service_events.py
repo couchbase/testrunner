@@ -127,3 +127,51 @@ class EventingServiceEvents(object):
             Event.Fields.SUB_COMPONENT: "eventing-producer",
             Event.Fields.NODE_NAME: node
         }
+
+    @staticmethod
+    def deploy_function(node, appname):
+        return {
+            Event.Fields.EVENT_ID: Eventing.DeployFunction,
+            Event.Fields.COMPONENT: Event.Component.EVENTING,
+            Event.Fields.DESCRIPTION: "Function deployed",
+            Event.Fields.SEVERITY: Event.Severity.INFO,
+            Event.Fields.SUB_COMPONENT: "eventing-producer",
+            Event.Fields.NODE_NAME: node,
+            Event.Fields.EXTRA_ATTRS: {"appName": appname}
+        }
+
+    @staticmethod
+    def undeploy_function(node, appname):
+        return {
+            Event.Fields.EVENT_ID: Eventing.UndeployFunction,
+            Event.Fields.COMPONENT: Event.Component.EVENTING,
+            Event.Fields.DESCRIPTION: "Function undeployed",
+            Event.Fields.SEVERITY: Event.Severity.INFO,
+            Event.Fields.SUB_COMPONENT: "eventing-producer",
+            Event.Fields.NODE_NAME: node,
+            Event.Fields.EXTRA_ATTRS: {"appName": appname}
+        }
+
+    @staticmethod
+    def resume_function(node, appname):
+        return {
+            Event.Fields.EVENT_ID: Eventing.ResumeFunction,
+            Event.Fields.COMPONENT: Event.Component.EVENTING,
+            Event.Fields.DESCRIPTION: "Function resumed",
+            Event.Fields.SEVERITY: Event.Severity.INFO,
+            Event.Fields.SUB_COMPONENT: "eventing-producer",
+            Event.Fields.NODE_NAME: node,
+            Event.Fields.EXTRA_ATTRS: {"appName": appname}
+        }
+
+    @staticmethod
+    def pause_function(node, appname):
+        return {
+            Event.Fields.EVENT_ID: Eventing.PauseFunction,
+            Event.Fields.COMPONENT: Event.Component.EVENTING,
+            Event.Fields.DESCRIPTION: "Function paused",
+            Event.Fields.SEVERITY: Event.Severity.INFO,
+            Event.Fields.SUB_COMPONENT: "eventing-producer",
+            Event.Fields.NODE_NAME: node,
+            Event.Fields.EXTRA_ATTRS: {"appName": appname}
+        }
