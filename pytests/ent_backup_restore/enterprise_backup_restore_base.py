@@ -430,6 +430,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             for server in self.servers:
                 server.port = '8091'
         if self.input.param("x509", False):
+            self.x509 = x509main(host=self.master)
             for server in self.servers:
                 shell = RemoteMachineShellConnection(server)
                 shell.execute_command(f"rm -rf {self.x509.CACERTFILEPATH}")
@@ -3026,6 +3027,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         for server in self.servers:
             self.x509.upload_root_certs(server)
         self.x509.upload_node_certs(servers=self.servers)
+        self.x509.upload_client_cert_settings(server=self.master)
 
         # Copy the certs onto the test machines
         self.backupset.client_certs = list()

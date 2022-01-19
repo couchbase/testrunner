@@ -98,6 +98,9 @@ from TestInput import (
 from SystemEventLogLib.SystemEventOperations import (
     SystemEventRestHelper
 )
+from pytests.security.x509_multiple_CA_util import (
+    x509main
+)
 
 class Tag(IntEnum):
     CONFIG_CHANGED = 6144
@@ -1221,6 +1224,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             for server in self.servers:
                 server.port = '8091'
         if self.input.param("x509", False):
+            self.x509 = x509main(host=self.master)
             for server in self.servers:
                 shell = RemoteMachineShellConnection(server)
                 shell.execute_command(f"rm -rf {self.x509.CACERTFILEPATH}")
