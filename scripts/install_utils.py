@@ -931,6 +931,8 @@ def check_file_size(node, debug_build=False):
 
 
 def check_and_retry_download_binary(cmd, node, path, debug_build=False):
+    if "amazonaws" in cmd:
+        cmd += " --no-check-certificate "
     duration, event, timeout = install_constants.WAIT_TIMES[node.info.deliverable_type]["download_binary"]
     start_time = time.time()
     while time.time() < start_time + timeout:

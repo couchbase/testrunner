@@ -1014,6 +1014,10 @@ class RemoteMachineShellConnection(KeepRefs):
         live_url = False
         # log.info("Check if url {0} is ok".format(url))
         log.info("Trying to check is this url alive: {0}".format(url))
+        if "amazonaws" in url:
+            import ssl
+            """ no verify cacert when download build from S3 """
+            ssl._create_default_https_context = ssl._create_unverified_context
         while num_retries > 0:
             try:
                 status = urllib.request.urlopen(url).getcode()
@@ -1023,7 +1027,7 @@ class RemoteMachineShellConnection(KeepRefs):
                     break
             except Exception as e:
                 self.sleep(timeout, "Waiting for {0} seconds to try to reach url once again. "
-                           "Build server might be too busy.".format(timeout))
+                           "Build server might be too busy.  Error msg: {{1}}".format(timeout, str(e)))
                 num_retries = num_retries - 1
 
         if not live_url:
