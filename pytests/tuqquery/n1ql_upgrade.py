@@ -12,6 +12,7 @@ from security.audittest import auditTest
 from security.auditmain import audit
 import socket
 import urllib.request, urllib.parse, urllib.error
+from SystemEventLogLib.SystemEventOperations import SystemEventRestHelper
 
 class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
@@ -312,6 +313,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             if upgrade_type != "OFFLINE":
                 with self.subTest("PRE PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
+            if int(self.initial_version[0]) == 7:
+                self.run_test_udf_inline(phase=phase)
         elif phase == "mixed-mode":
             self.log.info("running mixed-mode test for N1QL")
             with self.subTest("MIXED FILTER TEST"):
@@ -319,9 +322,13 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             with self.subTest("MIXED WINDOW CLAUSE TEST"):
                 self.run_test_window()
             with self.subTest("MIXED UDF INLINE TEST"):
-                self.run_test_udf_inline()
+                self.run_test_udf_inline(phase=phase)
             with self.subTest("MIXED UDF JAVASCRIPT TEST"):
                 self.run_test_udf_javascript()
+            with self.subTest("MIXED UDF N1QL JAVASCRIPT TEST"):
+                self.run_test_udf_n1ql_javascript()
+            #with self.subTest("MIXED SYSTEM EVENT TEST"):
+            #    self.test_system_event()
             with self.subTest("MIXED ADVISOR STATEMENT TEST"):
                 self.run_test_advisor_statement()
             with self.subTest("MIXED ADVISOR SESSION TEST"):
@@ -343,9 +350,15 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             with self.subTest("POST WINDOW CLAUSE TEST"):
                 self.run_test_window()
             with self.subTest("POST UDF INLINE TEST"):
-                self.run_test_udf_inline()
+                self.run_test_udf_inline(phase=phase)
             with self.subTest("POST UDF JAVASCRIPT TEST"):
                 self.run_test_udf_javascript()
+            with self.subTest("POST UDF N1QL JAVASCRIPT TEST"):
+                self.run_test_udf_n1ql_javascript()
+            with self.subTest("POST FLATTEN ARRAY INDEX TEST"):
+                self.test_flatten_array_index()
+            with self.subTest("POST SYSTEM EVENT TEST"):
+                self.test_system_event()
             with self.subTest("POST ADVISOR STATEMENT TEST"):
                 self.run_test_advisor_statement()
             with self.subTest("POST ADVISOR SESSION TEST"):
@@ -504,38 +517,100 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
     def run_test_neg_update_stats(self):
         pass
 
+    def run_test_udf_n1ql_javascript(self):
+        functions = 'function select1() {\
+            var query = SELECT airportname FROM `travel-sample` WHERE type = "airport" AND city = "Lyon" ORDER BY airportname;\
+            var acc = [];\
+            for (const row of query) {\
+                acc.push(row);\
+            }\
+            return acc;\
+        }'
+        function_names = ["select1"]
+        self.log.info("Create n1ql library")
+        self.create_library("n1ql", functions, function_names)
+        try:
+            self.run_cbq_query(query='CREATE FUNCTION select1() LANGUAGE JAVASCRIPT AS "select1" AT "n1ql"')
+            results = self.run_cbq_query(query="EXECUTE FUNCTION select1()")
+            self.assertEqual(results['results'], [[{'airportname': 'Bron'}, {'airportname': 'Lyon Part-Dieu Railway'}, {'airportname': 'Saint Exupery'}]])
+        finally:
+            try:
+                self.log.info("Delete n1ql library")
+                self.delete_library("n1ql")
+                self.run_cbq_query("DROP FUNCTION select1")
+            except Exception as e:
+                self.log.error(str(e))
+
     def run_test_udf_javascript(self):
         functions = 'function adder(a, b, c) { for (i=0; i< b; i++){a = a + c;} return a; }'
         function_names = ["adder"]
         self.log.info("Create math library")
         self.create_library("math", functions, function_names)
         try:
-            self.run_cbq_query(query='CREATE FUNCTION func1(a,b,c) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
-            results = self.run_cbq_query(query="EXECUTE FUNCTION func1(1,3,5)")
+            self.run_cbq_query(query='CREATE FUNCTION func2(a,b,c) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
+            results = self.run_cbq_query(query="EXECUTE FUNCTION func2(1,3,5)")
             self.assertEqual(results['results'], [16])
         finally:
             try:
                 self.log.info("Delete math library")
                 self.delete_library("math")
-                self.run_cbq_query("DROP FUNCTION func1")
+                self.run_cbq_query("DROP FUNCTION func2")
             except Exception as e:
                 self.log.error(str(e))
 
-    def run_test_udf_inline(self):
+    def run_test_udf_inline(self, phase):
         try:
-            self.run_cbq_query("CREATE OR REPLACE FUNCTION func1(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }")
-            results = self.run_cbq_query("EXECUTE FUNCTION func1(10,20,30)")
-            self.assertEqual(results['results'], [[20]])
-            results = self.run_cbq_query("SELECT func1(10,20,30)")
-            self.assertEqual(results['results'], [{'$1': [20]}])
+            if phase == "pre-upgrade" or int(self.initial_version[0]) < 7:
+                self.run_cbq_query("CREATE OR REPLACE FUNCTION func1(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }")
+            if phase == "mixed-mode" or phase == "post-upgrade":
+                results = self.run_cbq_query("EXECUTE FUNCTION func1(10,20,30)")
+                self.assertEqual(results['results'], [[20]])
+                results = self.run_cbq_query("SELECT func1(10,20,30)")
+                self.assertEqual(results['results'], [{'$1': [20]}])
         except Exception as e:
             self.log.error(str(e))
             self.fail()
         finally:
             try:
-                self.run_cbq_query("DROP FUNCTION func1")
+                if int(self.initial_version[0]) < 7:
+                    self.run_cbq_query("DROP FUNCTION func1")
             except Exception as e:
                 self.log.error(str(e))
+
+    def test_flatten_array_index(self):
+        self.run_cbq_query("DROP INDEX idx1 IF EXISTS ON `travel-sample`")
+        create_query = "create index idx1 on `travel-sample`(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking, type)"
+        query = "SELECT MIN(r.ratings.Cleanliness), MAX(r.ratings.Cleanliness) FROM `travel-sample` AS d unnest reviews as r WHERE d.type = 'hotel' and r.author LIKE 'N%' and r.author is not missing and r.ratings.Cleanliness > 1 AND d.free_parking = False AND d.email is not missing GROUP BY r.ratings.Cleanliness"
+        self.run_cbq_query(query=create_query)
+        # Ensure the query is actually using the flatten index instead of primary
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
+        self.assertTrue("idx1" in str(explain_results),"The query should be using idx1, check explain results {0}".format(explain_results))
+        self.assertTrue("covers" in str(explain_results),
+                        "The index is not covering, it should be. Check plan {0}".format(explain_results))
+        self.assertTrue("index_group_aggs" in str(explain_results), "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
+
+    def test_system_event(self):
+        self.event_rest = SystemEventRestHelper([self.master])
+        event_seen = False
+        log_fields = ["uuid", "component", "event_id", "description", "severity", "timestamp", "extra_attributes", "node"]
+        query = "'statement=select (select * from `default`)&memory_quota=1'"
+        curl_output = self.shell.execute_command(
+            f"{self.curl_path} -X POST -u {self.rest.username}:{self.rest.password} http://{self.master.ip}:{self.n1ql_port}/query/service -d {query}")
+        self.log.info(curl_output)
+        output = self.convert_list_to_json(curl_output[0])
+        requestID = output['requestID']
+        events = self.event_rest.get_events(server=self.master, events_count=-1)["events"]
+        for event in events:
+            if event['event_id'] == 1026:
+                event_seen = True
+                for field in log_fields:
+                    self.assertTrue(field in event.keys(), f"Field {field} is not in the event and it should be, please check the event {event}")
+                    self.assertEqual(event['component'], "query")
+                    self.assertEqual(event['description'], "Request memory quota exceeded")
+                    self.assertEqual(event['severity'], "info")
+                    self.assertEqual(event['node'], self.master.ip)
+                    self.assertEqual(event['extra_attributes']['request-id'], requestID)
+        self.assertTrue(event_seen, f"We did not see the event id we were looking for: {events}")
 
     def run_test_collection(self, phase):
         scope = phase
