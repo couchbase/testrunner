@@ -3898,7 +3898,7 @@ class QueryTests(BaseTestCase):
         else:
             results = self.shell.execute_command(f"{self.curl_path} -s -k -X POST {url} -u Administrator:password -H 'content-type: application/json' -d '{data}'")
         if error:
-            self.assertTrue("SyntaxError: Unexpected token" in str(results), f"The message is not correct, please check {results}")
+            self.assertTrue("syntax error" in str(results), f"The message is not correct, please check {results}")
         self.log.info(results)
         libraries = self.shell.execute_command(f"{self.curl_path} -s -k {url} -u Administrator:password")
         if library_name in str(libraries[0]):

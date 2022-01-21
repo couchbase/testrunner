@@ -158,7 +158,8 @@ class QueryUDFN1QLTests(QueryTests):
         self.users = [{"id": "jackdoe", "name": "Jack Downing", "password": "password"}]
         self.create_users()
         self.collections_helper = CollectionsN1QL(self.master)
-        self.collections_helper.create_collection(bucket_name="default",scope_name="_default",collection_name="txn_scope")
+        self.collections_helper.create_collection(bucket_name="default", scope_name="_default", collection_name="txn_scope")
+        self.sleep(5)
         self.run_cbq_query("CREATE primary INDEX on default.`_default`.txn_scope")
         self.log.info("==============  QueryUDFN1QLTests suite_setup has completed ==============")
 
@@ -180,6 +181,7 @@ class QueryUDFN1QLTests(QueryTests):
             for (const row of query) {{\
                 acc.push(row);\
             }}\
+            query.close();\
             return acc;}}'
         self.create_library(self.library_name, functions, function_names)
         self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
@@ -283,6 +285,7 @@ class QueryUDFN1QLTests(QueryTests):
         # Run pre-req prior to DDL
         pre_query = self.ddls[self.statement]['pre']
         self.run_cbq_query(pre_query)
+        self.sleep(5)
         # Execute function
         if self.test_sideeffect:
             try:
@@ -1134,11 +1137,9 @@ class QueryUDFN1QLTests(QueryTests):
     def test_nested_udf_prepare_query_context_global_negative(self):
         self.run_cbq_query('DELETE FROM system:prepareds WHERE name LIKE "engineer%"')
         function_name = 'execute_default'
-        param_val = '["Engineer"]'
-        param_var = "$1"
         functions = f'function {function_name}() {{\
-            var params = {param_val};\
-            var query = SELECT COUNT(*) as count_engineer FROM default WHERE job_title = {param_var}; \
+            var params = ["Engineer"];\
+            var query = SELECT COUNT(*) as count_engineer FROM default WHERE job_title = $1; \
             var acc = [];\
             for (const row of query) {{ acc.push(row); }}\
             return acc;\
