@@ -52,24 +52,22 @@ class ExpiryTests(unittest.TestCase):
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
+        try:
+            rest.create_bucket(bucket=self._bucket_name,
+                               ramQuotaMB=bucket_ram,
+                               proxyPort=info.memcached,
+                               storageBackend=self.bucket_storage)
+        except Exception as ex:
+            self.log.info(ex)
 
-        rest.create_bucket(bucket=self._bucket_name,
-                           ramQuotaMB=bucket_ram,
-                           storageBackend=self.bucket_storage)
-        bucket_ready = RestHelper(rest).vbucket_map_ready(self._bucket_name)
-        if not bucket_ready:
-            self.fail("bucket {0} not ready after 120 seconds".format(self._bucket_name))
-        msg = 'create_bucket succeeded but bucket "default" does not exist'
-        
         if (testconstants.TESTRUNNER_CLIENT in list(os.environ.keys())) and os.environ[testconstants.TESTRUNNER_CLIENT] == testconstants.PYTHON_SDK:
             self.client = SDKSmartClient(serverInfo, self._bucket_name, compression=TestInputSingleton.input.param(
                 "sdk_compression", True))
         else:
+            ready = BucketOperationHelper.wait_for_memcached(serverInfo, self._bucket_name)
+            self.assertTrue(ready, "wait_for_memcached failed")
             self.client = MemcachedClientHelper.direct_client(serverInfo, self._bucket_name)
-            
-        self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(self._bucket_name, rest), msg=msg)
-        ready = BucketOperationHelper.wait_for_memcached(serverInfo, self._bucket_name)
-        self.assertTrue(ready, "wait_for_memcached failed")
+
         self._log_start()
 
     def _log_start(self):

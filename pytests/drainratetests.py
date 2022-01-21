@@ -16,6 +16,7 @@ class DrainRateTests(unittest.TestCase):
         self.input = TestInputSingleton.input
         self.assertTrue(self.input, msg="input parameters missing...")
         self.master = self.input.servers[0]
+        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
         self.bucket = "default"
         self.number_of_items = -1
         # Add built-in user

@@ -213,7 +213,7 @@ class BucketOperationHelper:
     @staticmethod
     def wait_for_bucket_deletion(bucket,
                                  rest,
-                                 timeout_in_seconds=120):
+                                 timeout_in_seconds=125):
         log = logger.Logger.get_logger()
         log.info('waiting for bucket deletion to complete....')
         start = time.time()
@@ -222,7 +222,7 @@ class BucketOperationHelper:
             if not helper.bucket_exists(bucket):
                 return True
             else:
-                time.sleep(0.1)
+                time.sleep(5)
         return False
 
     @staticmethod
