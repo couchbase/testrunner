@@ -35,6 +35,8 @@ class EventingSecurity(EventingBaseTest):
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.expiry = 3
         handler_code = self.input.param('handler_code', 'bucket_op')
+        if handler_code == 'bucket_op_with_timers':
+            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS
         # index is required for delete operation through n1ql
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
