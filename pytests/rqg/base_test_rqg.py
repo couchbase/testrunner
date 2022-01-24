@@ -75,6 +75,7 @@ class BaseRQGTests(BaseTestCase):
             self.using_gsi = self.input.param("using_gsi", True)
             self.use_txns = self.input.param("use_txns", False)
             self.num_txns = self.input.param("num_txns", 1)
+            self.use_cbo = self.input.param("use_cbo", False)
             self.reset_database = self.input.param("reset_database", True)
             self.create_primary_index = self.input.param("create_primary_index", False)
             self.create_secondary_indexes = self.input.param("create_secondary_indexes", False)
@@ -322,6 +323,9 @@ class BaseRQGTests(BaseTestCase):
             result_queue = queue.Queue()
             failure_queue = queue.Queue()
             input_queue = queue.Queue()
+            if self.use_cbo:
+                for table in table_list:
+                    self.n1ql_helper.run_cbq_query(query=f"UPDATE STATISTICS FOR {self.database}_{table}(bool_field1,char_field1,datetime_field1,decimal_field1,int_field1,primary_key_id,varchar_field1)")
             # Run Test Batches
             thread_list = []
             start_test_case_number = 1
@@ -1798,7 +1802,7 @@ class BaseRQGTests(BaseTestCase):
             self.rest.delete_bucket(bucket.name)
         self.buckets = []
         # Create New Buckets
-        self._create_buckets(self.master, bucket_list, server_id=None, bucket_size=None)
+        self._create_buckets(self.master, bucket_list, server_id=None, bucket_size=300)
         # Wait till the buckets are up
         self.sleep(15)
         # Read Data from mysql database and populate the couchbase server
@@ -1831,7 +1835,7 @@ class BaseRQGTests(BaseTestCase):
         if self.change_bucket_properties or self.gsi_type == "memory_optimized":
             bucket_size = 100
         else:
-            bucket_size = None
+            bucket_size = 200
 
         if self.change_bucket_properties:
             shell = RemoteMachineShellConnection(self.master)
