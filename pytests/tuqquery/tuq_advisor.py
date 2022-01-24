@@ -743,8 +743,8 @@ class QueryAdvisorTests(QueryTests):
 
     def test_negative_invalid_arg(self):
         query = "SELECT ADVISOR({'action': 'start', 'duration': '10s', 'invalid': 10});"
-        error_message = "Error evaluating projection - cause: Invalid arguments to Advisor() function: [invalid]"
-        error_code = 5010
+        error_message = "Advisor: Invalid arguments."
+        error_code = 10503
         try:
             results = self.run_cbq_query(query=query, server=self.master)
             self.fail("Start session did not fail. Error expected: {0}".format(error_message))
