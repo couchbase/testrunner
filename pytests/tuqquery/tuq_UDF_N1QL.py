@@ -159,7 +159,7 @@ class QueryUDFN1QLTests(QueryTests):
         self.create_users()
         self.collections_helper = CollectionsN1QL(self.master)
         self.collections_helper.create_collection(bucket_name="default", scope_name="_default", collection_name="txn_scope")
-        self.sleep(5)
+        self.sleep(10)
         self.run_cbq_query("CREATE primary INDEX on default.`_default`.txn_scope")
         self.log.info("==============  QueryUDFN1QLTests suite_setup has completed ==============")
 
@@ -805,6 +805,28 @@ class QueryUDFN1QLTests(QueryTests):
                 self.assertEqual(error['code'], 10104)
                 self.assertTrue('Incorrect number of arguments supplied' in error['msg'], f"Error is not what we expected {str(ex)}")
 
+    def test_letting_having_groupby(self):
+        string_functions = 'function concater(a,b) { var text = ""; var x; for (x in a) {if (x = b) { return x; }} return "n"; } function comparator(a, b) {if (a > b) { return "old hotel"; } else { return "new hotel" }}'
+        function_names2 = ["concater","comparator"]
+        created2 = self.create_library("strings",string_functions,function_names2)
+        self.run_cbq_query(query='CREATE OR REPLACE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "comparator" AT "strings"')
+        self.run_cbq_query("CREATE OR REPLACE FUNCTION func2(degrees) LANGUAGE INLINE AS (degrees - 32) ")
+        self.run_cbq_query(query='CREATE OR REPLACE FUNCTION func3(a,b) LANGUAGE JAVASCRIPT AS "concater" AT "strings"')
+
+        function_name = 'execute_udf'
+        functions = f'function {function_name}() {{\
+            var query = SELECT name FROM default:default.test.test1 LET maximum_no = func2(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END GROUP BY name LETTING letter = func3("old hotel","o") HAVING name > letter;\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library("library", functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "library"')
+
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+        self.assertEqual(function_result['results'], [[{'name': 'old hotel'}]])
+
     def test_global_query_context(self):
         self.run_cbq_query(
             "CREATE OR REPLACE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9")
@@ -1429,6 +1451,36 @@ class QueryUDFN1QLTests(QueryTests):
         actual_result = function_result['results'][0]
         self.assertEqual(actual_result, expected_result)
 
+    def test_multiple_iterator(self):
+        function_name = 'param_from_var_default'
+        functions = f'function {function_name}(j, y, m) {{\
+            var job = j;\
+            var year = y;\
+            var month = m;\
+            var inset = INSERT INTO default (KEY, VALUE) VALUES ("key1", {{ "type" : "hotel", "name" : "new hotel" }}) RETURNING *;\
+            var query = SELECT name FROM default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 3;\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            query.close();\
+            var query2 = SELECT name FROM default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 8;\
+            var acc2 = [];\
+            for (const row of query2) {{acc2.push(row);}}\
+            query2.close();\
+            return {{"query1": acc, "query2": acc2}};}}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(...) LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}("Engineer",2011,10)')
+        expected_result = {'query1': [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}],
+                           'query2': [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'},
+                                      {'name': 'employee-12'}, {'name': 'employee-13'}, {'name': 'employee-14'},
+                                      {'name': 'employee-15'}, {'name': 'employee-16'}]}
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
     def test_create_library_error(self):
         function_name = 'param_function_param_default'
         functions = f'function {function_name}() {{\
@@ -1861,47 +1913,61 @@ class QueryUDFN1QLTests(QueryTests):
             return [ warehouse];}}'
         self.create_library(self.library_name, functions, [function_name])
         self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(...) LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
-        try:
-            self.run_cbq_query('EXECUTE FUNCTION doPayment(1,6,2873.55,1,6,"501","None","2022-01-10 11:07:34.823485")', query_params={"tximplicit":True}, sever=self.master)
-            self.fail("Query should have CBQ error'd")
-        except CBQError as ex:
-            error = self.process_CBQE(ex)
-            self.assertEqual(error['code'], 10109)
-            self.assertTrue('Error: START_TRANSACTION statement is not supported within the transaction' in error['msg'], f"Error is not what we expected {str(ex)}")
+        udf = self.run_cbq_query('EXECUTE FUNCTION doPayment(1,6,2873.55,1,6,"501","None","2022-01-10 11:07:34.823485")', query_params={"tximplicit":True})
+        self.assertEqual(udf['metrics']['resultCount'], 1)
 
     def test_prepared_begin_commit_rollback(self):
         self.run_cbq_query(query="DELETE from system:prepareds")
         self.run_cbq_query("DELETE FROM default.`_default`.txn_scope")
         prepare_beginwork = "PREPARE beginWork as BEGIN WORK"
-        prepare_commitWork = "PREPARE commitWork AS COMMIT"
-        prepare_rollback_savepoint = "PREPARE rollbackWork AS ROLLBACK TRANSACTION"
+        prepare_commitwork = "PREPARE commitWork as COMMIT"
+        prepare_rollback_savepoint = "PREPARE rollbackWork AS ROLLBACK TRANSACTION TO SAVEPOINT S2"
         self.run_cbq_query(prepare_beginwork)
-        self.run_cbq_query(prepare_commitWork)
+        self.run_cbq_query(prepare_commitwork)
         self.run_cbq_query(prepare_rollback_savepoint)
         function_name = 'savepoint_default'
         function_names = [function_name]
         functions = f'function {function_name}() {{\
             var start_txn = EXECUTE beginWork;\
+            start_txn.close();\
             var query1 = INSERT INTO default.`_default`.txn_scope(key, value) VALUES (UUID(), {{"a":1, "b":2}}) ;\
+            query1.close();\
             var query2 = SAVEPOINT S1;\
+            query2.close();\
             var query3 = INSERT INTO default.`_default`.txn_scope(key, value) VALUES (UUID(), {{"a":2, "b":2}}) ;\
-            var query4 = SAVEPOINT S2;\
-            var query5 = INSERT INTO default.`_default`.txn_scope(key, value) VALUES (UUID(), {{"a":3, "b":2}}) ;\
+            query3.close();\
+            var query4 = SAVEPOINT S2; \
+            query4.close(); \
+            var query5 = INSERT INTO default.`_default`.txn_scope(key, value) VALUES (UUID(), {{"a":3, "b":2}}) ; \
+            query5.close(); \
             var query6 = SELECT * FROM default.`_default`.txn_scope ORDER BY a;\
             var acc = [];\
             for (const row of query6) {{\
                 acc.push(row);\
-            }}\
-            var query7 = EXECUTE rollbackWork;\
+            }} \
+            query6.close(); \
+            var query7 = EXECUTE rollbackWork; \
+            query7.close(); \
             var end_txn = EXECUTE commitWork;\
-            return acc;\
-        }}'
+            end_txn.close();\
+            return acc;}}'
         self.create_library(self.library_name, functions, function_names)
         self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
-        udf = self.run_cbq_query(f"EXECUTE FUNCTION {function_name}()", sever=self.master)
+        udf = self.run_cbq_query(f"EXECUTE FUNCTION {function_name}()")
         self.assertEqual(udf['results'][0], [{'txn_scope': {'a': 1, 'b': 2}}, {'txn_scope': {'a': 2, 'b': 2}}, {'txn_scope': {'a': 3, 'b': 2}}])
-        result = self.run_cbq_query("SELECT * FROM default.`_default`.txn_scope")
-        self.assertEqual(result['results'], [])
+        expected_result = [{'txn_scope': {'a': 1, 'b': 2}},{'txn_scope': {'a': 2, 'b': 2}}]
+        result = self.run_cbq_query("SELECT * FROM default.`_default`.txn_scope order by a")
+        self.assertEqual(result['results'], expected_result, f"Results are not as expected, expected: {expected_result}, actual: {result}")
+
+        self.run_cbq_query("DELETE FROM system:prepareds where name = 'rollbackWork'")
+        self.run_cbq_query("DELETE FROM default.`_default`.txn_scope")
+        prepare_rollback_savepoint = "PREPARE rollbackWork AS ROLLBACK TRANSACTION TO SAVEPOINT S1"
+        self.run_cbq_query(prepare_rollback_savepoint)
+        udf = self.run_cbq_query(f"EXECUTE FUNCTION {function_name}()")
+        self.assertEqual(udf['results'][0], [{'txn_scope': {'a': 1, 'b': 2}}, {'txn_scope': {'a': 2, 'b': 2}}, {'txn_scope': {'a': 3, 'b': 2}}])
+        expected_result = [{'txn_scope': {'a': 1, 'b': 2}}]
+        result = self.run_cbq_query("SELECT * FROM default.`_default`.txn_scope order by a")
+        self.assertEqual(result['results'], expected_result, f"Results are not as expected, expected: {expected_result}, actual: {result}")
 
     def test_transaction_metrics(self):
         self.run_cbq_query("DELETE FROM default.`_default`.txn_scope")
