@@ -76,8 +76,8 @@ class GCP(provider.Provider):
 
     def list_objects(self, prefix=None):
         """See super class"""
-        kwargs = {}
-        if prefix:
+        kwargs = {'prefix': self.repo_name}
+        if prefix is not None:
             kwargs['prefix'] = prefix
 
         # We only care about the path here, so generate a list of paths to return
