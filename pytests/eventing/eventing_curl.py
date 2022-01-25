@@ -268,6 +268,24 @@ class EventingCurl(EventingBaseTest):
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
             self.undeploy_and_delete_function(body)
 
+        # MB-46304
+        def test_curl_enable_disable_feature(self):
+            self.load(self.gens_load, buckets=self.src_bucket,
+                      flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+            self.rest.disable_curl()
+            body = self.create_save_function_body(
+                self.function_name, "handler_code/curl/curl_enable_disable.js")
+            self.deploy_function(body)
+            self.verify_doc_count_collections("dst_bucket._default._default",
+                                              self.docs_per_day * self.num_docs)
+            self.rest.enable_curl()
+            self.load(self.gens_load, buckets=self.src_bucket,
+                      flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
+            self.verify_doc_count_collections("dst_bucket._default._default", 0)
+            self.undeploy_and_delete_function(body)
+
 
 
 

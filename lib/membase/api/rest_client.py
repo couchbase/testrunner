@@ -5889,6 +5889,40 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
+    '''
+            enable curl
+    '''
+    def enable_curl(self):
+        authorization = self.get_authorization(self.username, self.password)
+        url = "api/v1/config"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json',
+                   'Authorization': 'Basic %s' % authorization}
+        body = '{"disable_curl": false}'
+        status, content, header = self._http_request(api, 'POST',
+                                                     headers=headers,
+                                                     params=body)
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
+            disable curl
+    '''
+    def disable_curl(self):
+        authorization = self.get_authorization(self.username, self.password)
+        url = "api/v1/config"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json',
+                   'Authorization': 'Basic %s' % authorization}
+        body = '{"disable_curl": true}'
+        status, content, header = self._http_request(api, 'POST',
+                                                     headers=headers,
+                                                     params=body)
+        if not status:
+            raise Exception(content)
+        return content
+
     def get_user(self, user_id):
         url = "settings/rbac/users/"
         api = self.baseUrl + url
