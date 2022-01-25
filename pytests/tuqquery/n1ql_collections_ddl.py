@@ -1059,7 +1059,7 @@ class QueryCollectionsDDLTests(QueryTests):
             "test_queries": [
                 {
                     "text": "create scope bucket1.scope1.scope2",
-                    "expected_error": "syntax error - line 1"
+                    "expected_error": "syntax error"
                 }
             ]
         },
@@ -1077,7 +1077,7 @@ class QueryCollectionsDDLTests(QueryTests):
             "test_queries": [
                 {
                     "text": "create scope bucket1.scope1.collection1.scope2",
-                    "expected_error": "syntax error - line 1"
+                    "expected_error": "syntax error"
                 }
             ]
         },
@@ -1091,7 +1091,7 @@ class QueryCollectionsDDLTests(QueryTests):
             "test_queries": [
                 {
                     "text": "create scope mykeyspace:bucket1.scope1",
-                    "expected_error": "syntax error - line 1"
+                    "expected_error": "syntax error"
                 }
             ]
         },
@@ -1133,7 +1133,7 @@ class QueryCollectionsDDLTests(QueryTests):
             "test_queries": [
                 {
                     "text": "create collection bucket1.collection1",
-                    "expected_error": "syntax error - line 1"
+                    "expected_error": "syntax error"
                 }
             ]
         },
@@ -1151,7 +1151,7 @@ class QueryCollectionsDDLTests(QueryTests):
             "test_queries": [
                 {
                     "text": "create collection bucket1.collection1",
-                    "expected_error": "syntax error - line 1"
+                    "expected_error": "syntax error"
                 }
             ]
         },
@@ -1169,7 +1169,7 @@ class QueryCollectionsDDLTests(QueryTests):
             "test_queries": [
                 {
                     "text": "create collection bucket1.scope1.collection1.collection2",
-                    "expected_error": "syntax error - line 1"
+                    "expected_error": "syntax error"
                 }
             ]
         },
@@ -1187,7 +1187,7 @@ class QueryCollectionsDDLTests(QueryTests):
             "test_queries": [
                 {
                     "text": "create collection mykeyspace.bucket1.scope1.collection2",
-                    "expected_error": "syntax error - line 1"
+                    "expected_error": "syntax error"
                 }
             ]
         },
@@ -1223,7 +1223,7 @@ class QueryCollectionsDDLTests(QueryTests):
             "test_queries": [
                 {
                     "text": "drop collection scope1.collection1",
-                    "expected_error": "syntax error - line 1"
+                    "expected_error": "syntax error"
                 }
             ]
         },
@@ -1241,7 +1241,7 @@ class QueryCollectionsDDLTests(QueryTests):
             "test_queries": [
                 {
                     "text": "drop scope scope1",
-                    "expected_error": "syntax error - line 1"
+                    "expected_error": "syntax error"
                 }
             ]
         },

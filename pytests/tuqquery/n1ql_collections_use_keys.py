@@ -129,7 +129,7 @@ class QueryCollectionsUseKeys(QueryTests):
                          f'b1.name == b2.name when not matched then insert (KEY "test",VALUE {{"name": "new"}})'
             self.run_cbq_query(query_params=self.query_params)
         except CBQError as e:
-            self.assertTrue("Keyspace reference cannot have USE KEYS hint in MERGE statement." in str(e))
+            self.assertTrue("Keyspace reference cannot have USE KEYS hint in MERGE statement" in str(e))
 
         low = randint(10, 50)
         high = randint(100, 150)
@@ -140,20 +140,7 @@ class QueryCollectionsUseKeys(QueryTests):
             result = self.run_cbq_query(query_params=self.query_params)
             self.assertTrue(result is not None, "Failed")
         except CBQError as e:
-            self.assertTrue("Keyspace reference cannot have USE KEYS hint in MERGE statement." in str(e))
-
-    # def test_upsert_with_use_keys(self):
-    #     doc_id = f"doc_{randint(1, 10)}"
-    #     self.query = f'SELECT * FROM {self.col_namespace} USE KEYS "{doc_id}"'
-    #     result = self.run_cbq_query(query_params=self.query_params)
-    #     num_item_in_docs = 9
-    #     self.assertEqual(len(result['results'][0][self.my_collection_name]), num_item_in_docs,
-    #                      "result is not matching with expected value")
-    #
-    #     doc_ids = ", ".join([f'"doc_{item}"' for item in range(self.num_items+1)])
-    #     self.query = f'SELECT * FROM {self.col_namespace} USE KEYS [{doc_ids}]'
-    #     result = self.run_cbq_query(query_params=self.query_params)
-    #     self.assertEqual(len(result['results']), self.num_items, "Num of expected result not matching with actual")
+            self.assertTrue("Keyspace reference cannot have USE KEYS hint in MERGE statement" in str(e))
 
     def test_negative_scneario_with_use_keys(self):
         if self.query_context:
