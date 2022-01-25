@@ -1123,7 +1123,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         plan = Plan(name=plan_name, tasks=[TaskTemplate(name=f"task{i}", task_type=get_task_type(i), schedule=TaskTemplateSchedule(job_type=get_task_type(i),\
                                            frequency=freq, period=period, time=at_time), merge_options = get_merge_options(i)) for i, (freq, period, at_time) in enumerate(schedule)])
 
-        self.create_plan(plan_name, plan)
+        self.create_plan(plan_name, body=plan)
         self.create_repository(repo_name, plan_name)
 
         return plan, repo_name
