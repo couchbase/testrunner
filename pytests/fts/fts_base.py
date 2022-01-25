@@ -527,6 +527,7 @@ class NodeHelper:
         shell.stop_couchbase()
         time.sleep(5)
         shell.start_couchbase()
+        time.sleep(10)
         shell.disconnect()
 
     @staticmethod
@@ -3679,8 +3680,6 @@ class CouchbaseCluster:
         for node in self.__nodes:
             NodeHelper.do_a_warm_up(node)
 
-        NodeHelper.wait_warmup_completed(self.__nodes)
-
     def wait_for_flusher_empty(self, timeout=60):
         """Wait for disk queue to completely flush.
         """
@@ -3723,6 +3722,7 @@ class FTSBaseTest(unittest.TestCase):
         self.scope = TestInputSingleton.input.param("scope", "scope1")
         self.skip_log_scan = self._input.param("skip_log_scan", False)
         self.collection = str(TestInputSingleton.input.param("collection", "collection1"))
+        self.restart_couchbase = self._input.param("restart_couchbase", False)
         self.enable_dp = self._input.param("enable_dp", False)
         self.use_https = self._input.param("use_https", False)
         self.enforce_tls = self._input.param("enforce_tls", False)
@@ -4730,16 +4730,20 @@ class FTSBaseTest(unittest.TestCase):
             # now wait for num_mutations_to_index to become zero to handle the pure
             # updates scenario - where doc count remains unchanged
             retry_mut_count = 20
+            num_mutations_to_index = 1000
             if item_count == None:
-                while True and retry_count:
+                while True and retry_mut_count:
                     num_mutations_to_index = index.get_num_mutations_to_index()
                     if num_mutations_to_index > 0:
                         self.sleep(5, f"num_mutations_to_index: {num_mutations_to_index} > 0")
-                        retry_count -= 1
+                        retry_mut_count -= 1
                     else:
                         break
+                if num_mutations_to_index > 0:
+                    self.fail(f"num_mutations_to_index: {num_mutations_to_index} > 0 even after 20 retries")
 
     def construct_plan_params(self):
+
         plan_params = {}
         plan_params['numReplicas'] = 0
         if self.index_replicas:
