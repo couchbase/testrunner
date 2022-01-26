@@ -263,11 +263,12 @@ class CliBaseTest(BaseTestCase):
                 self.shell.disconnect()
         self.times_teardown_called += 1
         serverInfo = self.servers[0]
-        rest = RestConnection(serverInfo)
-        zones = rest.get_zone_names()
-        for zone in zones:
-            if zone != "Group 1":
-                rest.delete_zone(zone)
+        if "enterprise" in self.cb_version:
+            rest = RestConnection(serverInfo)
+            zones = rest.get_zone_names()
+            for zone in zones:
+                if zone != "Group 1":
+                    rest.delete_zone(zone)
         self.clusters_dic = self.input.clusters
         if self.clusters_dic:
             if len(self.clusters_dic) > 1:
