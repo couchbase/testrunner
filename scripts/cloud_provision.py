@@ -86,6 +86,10 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
                         'Key': 'Name',
                         'Value': name
                     },
+                    {
+                        'Key': 'Owner',
+                        'Value': 'ServerRegression'
+                    }
                 ]
             },
         ],
