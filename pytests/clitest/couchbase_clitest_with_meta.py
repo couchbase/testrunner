@@ -34,16 +34,16 @@ class CouchbaseCliTestWithMeta(CliBaseTest):
         success_set_exist_item = False
         mc = MemcachedClient(self.master.ip, 11210)
         mc.sasl_auth_plain('Administrator', 'password')
-        mc.bucket_select('bucket0')
+        mc.bucket_select('standard_bucket0')
         mc.vbucketId = 903
 
         self.log.info("Start to test")
         mc.setWithMeta('test_with_meta', 'value', 0, 0, 0x1234000000000001, 1)
         self.sleep(10)
-        item_count = rest.get_active_key_count("bucket0")
+        item_count = rest.get_active_key_count("standard_bucket0")
 
         if int(item_count) != 1:
-            self.fail("Fail to set 1 key to bucket0")
+            self.fail("Fail to set 1 key to standard_bucket0")
 
         mc.evict_key('test_with_meta')
         try:

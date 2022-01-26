@@ -587,7 +587,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 self.log.info("add node {0} to cluster".format(self.servers[num + 1].ip))
                 options = "--server-add={0} \
                            --server-add-username=Administrator \
-                           --server-add-password=password"\
+                           --server-add-password=password \
+                           --no-ssl-verify "\
                            .format(self._convert_server_to_url(self.servers[num + 1]))
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                                     options=options,
@@ -679,37 +680,14 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                 password=cluster_pwd)
             self.assertTrue("SUCCESS: Servers recovered" in output[0], str(output))
 
-        cli_command = "server-readd"
-        for num in range(nodes_failover):
-            self.log.info("add back node {0} to cluster"\
-                                  .format(self.servers[nodes_add - nodes_rem - num ].ip))
-            options = "--server-add=https{0}:1{1} --no-ssl-verify "\
-                                                   .format(self.servers[nodes_add - nodes_rem - num ].ip,
-                                                    self.servers[nodes_add - nodes_rem - num ].port)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                                                options=options,
-                                                                cluster_host="localhost",
-                                                                user=cluster_user,
-                                                                password=cluster_pwd)
-            found_deprecated, found_success = False, False
-            for message in output:
-                if "DEPRECATED: Please use the recovery command" in message:
-                    found_deprecated = True
-                if "SUCCESS: Servers recovered" in message:
-                    found_success = True
-            self.assertTrue(found_success and found_deprecated, "Server readd failed")
-            self.sleep(5)
-
-        """ in spock, server-readd does not work to add a node not
-            in cluster back to cluster as server-add
-        """
         if int(nodes_readd) > int(nodes_failover):
             cli_command = "server-add"
             for num in range(nodes_readd - nodes_failover):
                 self.log.info("add node {0} to cluster".format(self.servers[nodes_add - num ].ip))
                 options = "--server-add={0} \
                            --server-add-username=Administrator \
-                           --server-add-password=password" \
+                           --server-add-password=password \
+                           --no-ssl-verify " \
                                                .format(self._convert_server_to_url(\
                                                        self.servers[nodes_add -num]))
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
@@ -2130,14 +2108,14 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
     def test_cmd_set_stats(self):
         """ When set any items, cmd_set should increase counting number.
             params: default_bucket=False,sasl_buckets=1
-        /opt/couchbase/bin/cbstats localhost:11210 all -u Administrator -p password -b bucket0 | grep cmd_set
+        /opt/couchbase/bin/cbstats localhost:11210 all -u Administrator -p password -b standard_bucket0 | grep cmd_set
         cmd_set: 10011
         """
 
         shell = RemoteMachineShellConnection(self.master)
         cmd = self.cli_command_path + "cbstats" + self.cmd_ext + " "
         cmd += self.master.ip + ":11210 all -u Administrator -p password "
-        cmd += "-b bucket0 | grep cmd_set"
+        cmd += "-b standard_bucket0 | grep cmd_set"
 
         output, _ = shell.execute_command(cmd)
         self.assertTrue(self._check_output("0", output))

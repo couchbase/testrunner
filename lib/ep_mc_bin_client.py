@@ -150,7 +150,7 @@ class MemcachedClient(KeepRefs):
 
     vbucketId = 0
 
-    def __init__(self, host='127.0.0.1', port=11211, family=socket.AF_UNSPEC):
+    def __init__(self, host='127.0.0.1', port=11210, family=socket.AF_UNSPEC):
         super(MemcachedClient, self).__init__()
         self.host = host
         self.port = port
