@@ -2450,7 +2450,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_create()
         self.backup_cluster_validate()
         self._load_all_buckets(self.master, gen, "delete", 0)
-        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function="<=")
 
     def test_backup_restore_with_failover(self):
         """
@@ -3033,7 +3033,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue(self._check_output("archive directory '{0}xyz' does not exist".format(self.root_path), output))
+        self.assertTrue(self._check_output("archive '{0}xyz' does not exist".format(self.root_path), output))
         cmd = cmd_to_test + " --archive {0} -c http://localhost:8091 -u Administrator -p password".format(
             self.backupset.directory)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
@@ -3086,7 +3086,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Flag required, but not specified: -p/--password",
+        self.assertEqual(output[0], "Error backing up cluster: the --username/--password flags must be supplied together",
                          "Expected error message not thrown")
         cmd = cmd_to_test + " --archive {0} --repo abc --cluster http://{1}:{2} --username {3} \
                               --password {4}".format(self.backupset.directory,
@@ -3113,7 +3113,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue(self._check_output(f"Error {part_message} cluster: failed to connect to any host(s) from the connection string", output), "Expected error message not thrown")
+        self.assertIn(f"Error {part_message} cluster: failed to bootstrap client: failed to connect to any host(s) from the connection string", output[-1])
         cmd = cmd_to_test + " --archive {0} --repo {1} --cluster http://{2}:{3} --username abc \
                               --password {4}".format(self.backupset.directory,
                                                      self.backupset.name,
