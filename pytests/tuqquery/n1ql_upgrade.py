@@ -13,6 +13,11 @@ from security.auditmain import audit
 import socket
 import urllib.request, urllib.parse, urllib.error
 from SystemEventLogLib.SystemEventOperations import SystemEventRestHelper
+from security.rbac_base import RbacBase
+from deepdiff import DeepDiff
+import threading
+import time
+import json
 
 class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
@@ -327,6 +332,9 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_udf_javascript()
             with self.subTest("MIXED UDF N1QL JAVASCRIPT TEST"):
                 self.run_test_udf_n1ql_javascript()
+            # if int(self.initial_version[0]) == 7:
+            #     with self.subTest("MIXED QUERY LIMIT TEST"):
+            #         self.test_query_limit()
             #with self.subTest("MIXED SYSTEM EVENT TEST"):
             #    self.test_system_event()
             with self.subTest("MIXED ADVISOR STATEMENT TEST"):
@@ -359,6 +367,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.test_flatten_array_index()
             with self.subTest("POST SYSTEM EVENT TEST"):
                 self.test_system_event()
+            with self.subTest("POST QUERY LIMIT TEST"):
+                self.test_query_limit()
             with self.subTest("POST ADVISOR STATEMENT TEST"):
                 self.run_test_advisor_statement()
             with self.subTest("POST ADVISOR SESSION TEST"):
@@ -611,6 +621,50 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     self.assertEqual(event['node'], self.master.ip)
                     self.assertEqual(event['extra_attributes']['request-id'], requestID)
         self.assertTrue(event_seen, f"We did not see the event id we were looking for: {events}")
+
+    def test_query_limit(self):
+        self.enforce_limits = True
+        self.expected_error = False
+        self.log.info("==============  Create SLEEP function ==============")
+        functions = 'function sleep(delay) { var start = new Date().getTime(); while (new Date().getTime() < start + delay); return delay; }'
+        function_names = ["sleep"]
+        self.create_library("sleep", functions, function_names)
+        self.run_cbq_query(query="CREATE OR REPLACE FUNCTION sleep(t) LANGUAGE JAVASCRIPT AS \"sleep\" AT \"sleep\"")
+
+        self.log.info("==============  Creating USER limited1 ==============")
+        testuser = [
+            {'id': 'limited1', 'name': 'limited1', 'password': 'password'}
+        ]
+        RbacBase().create_user_source(testuser, 'builtin', self.master)
+        full_permissions = 'bucket_full_access[*]:query_select[*]:query_update[*]:' \
+                           'query_insert[*]:query_delete[*]:query_manage_index[*]:' \
+                           'query_system_catalog:query_external_access:query_execute_global_external_functions'
+        # Assign user to role
+        role_list = [
+            {'id': 'limited1', 'name': 'limited1', 'roles': f'{full_permissions}', 'password': 'password'}
+        ]
+        RbacBase().add_user_role(role_list, self.rest, 'builtin')
+        self.cbqpath_user1 = f'{self.path}cbq -e {self.master.ip}:{self.n1ql_port} -q -u "limited1" -p {self.rest.password}'
+
+        limits_user_1 = '{"query":{"num_concurrent_requests": 2}}'
+        self.set_query_limits(username="limited1", limits=limits_user_1)
+        query = "EXECUTE FUNCTION sleep(10000)"
+
+        t51 = threading.Thread(name='run_first', target=self.run_dummy_query_thread, args=("limited1", 20000))
+        t51.start()
+        t52 = threading.Thread(name='run_second', target=self.run_dummy_query_thread, args=("limited1", 20000))
+        t52.start()
+        time.sleep(1)
+        # User 1 should not be allowed to run another query
+        cbq_user1 = self.execute_commands_inside(self.cbqpath_user1, query, '', '', '', '', '')
+        self.log.info(cbq_user1)
+        self.assertTrue("429 Too Many Requests" in cbq_user1, f"The statement should have error'd {cbq_user1}")
+        # After a query finishes, we should be able to run another query
+        t51.join()
+        cbq_user1 = self.execute_commands_inside(self.cbqpath_user1, query, '', '', '', '', '')
+        results = self.convert_list_to_json(cbq_user1)
+        self.assertEqual(results['status'], "success")
+        self.assertEqual(results['results'], [10000])
 
     def run_test_collection(self, phase):
         scope = phase
@@ -1308,3 +1362,45 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             return docs_1
         else:
             return compare
+
+
+    def set_query_limits(self, username="", limits="", server=None, skip_verify=False):
+        if server is None:
+            server = self.master
+        if self.enforce_limits:
+            curl_output = self.shell.execute_command(
+                f"{self.curl_path} -X POST -u {self.rest.username}:{self.rest.password} http://{server.ip}:{server.port}/internalSettings "
+                "-d 'enforceLimits=true' ")
+            self.log.info(curl_output)
+            curl_output = self.shell.execute_command(
+                f"{self.curl_path} -X GET -u {self.rest.username}:{self.rest.password} http://{server.ip}:{server.port}/internalSettings")
+            self.log.info(curl_output)
+            enforce_limits_setting = self.convert_list_to_json(curl_output[0])
+            self.assertEqual(enforce_limits_setting['enforceLimits'], True)
+        full_permissions = 'bucket_full_access[*],query_select[*],query_update[*],' \
+                           'query_insert[*],query_delete[*],query_manage_index[*],' \
+                           'query_system_catalog,query_external_access,query_execute_global_external_functions'
+        curl_output = self.shell.execute_command(f"{self.curl_path} -X PUT -u {self.rest.username}:{self.rest.password} http://{server.ip}:{server.port}/settings/rbac/users/local/{username} "
+                                                 f"-d 'limits={limits}' -d 'roles={full_permissions}' ")
+        self.log.info(curl_output)
+        actual_output = self.convert_list_to_json(curl_output[0])
+        if self.expected_error:
+            self.assertTrue("Thevaluemustbeinrangefrom1toinfinity" in str(actual_output), f"The error is not right {actual_output}")
+        else:
+            curl_output = self.shell.execute_command(f"{self.curl_path} -X GET -u {self.rest.username}:{self.rest.password} http://{server.ip}:{server.port}/settings/rbac/users/local/{username}")
+            self.log.info(curl_output)
+            expected_settings = json.loads(limits)
+            actual_settings = self.convert_list_to_json(curl_output[0])
+            if not skip_verify:
+                diffs = DeepDiff(actual_settings['limits'], expected_settings, ignore_order=True)
+                if diffs:
+                    self.assertTrue(False, diffs)
+
+    def run_dummy_query_thread(self, username='', delay=5000):
+        try:
+            cbqpath = f'{self.path}cbq -e {self.master.ip}:{self.n1ql_port} -q -u {username} -p {self.rest.password}'
+            query = f"EXECUTE FUNCTION sleep({delay})"
+            curl = self.execute_commands_inside(cbqpath, query, '', '', '', '', '')
+            self.log.info(curl)
+        finally:
+            return
