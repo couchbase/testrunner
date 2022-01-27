@@ -4694,8 +4694,11 @@ class RemoteMachineShellConnection(KeepRefs):
                                                      item_size, command_options, collection_id):
         cbworkloadgen_command = self._get_cbworkloadgen_command()
 
-        command = "%s -n %s:%s -r %s -i %s -b %s -c %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
-                                                                          "localhost", self.port,
+        protocol = "https://" if self.port == "18091" else ""
+        if self.port == "18091":
+            command_options += " --no-ssl-verify "
+        command = "%s -n %s%s:%s -r %s -i %s -b %s -c %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
+                                                                          protocol, "localhost", self.port,
                                                                           ratio, num_items, bucket,
                                                                           collection_id,
                                                                           item_size, command_options,
@@ -4707,8 +4710,12 @@ class RemoteMachineShellConnection(KeepRefs):
     def execute_cbworkloadgen(self, username, password, num_items, ratio, bucket,
                               item_size, command_options, timeout=1200):
         cbworkloadgen_command = self._get_cbworkloadgen_command()
-        command = "%s -n %s:%s -r %s -i %s -b %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
-                                                                          "localhost", self.port,
+
+        protocol = "https://" if self.port == "18091" else ""
+        if self.port == "18091":
+            command_options += " --no-ssl-verify "
+        command = "%s -n %s%s:%s -r %s -i %s -b %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
+                                                                          protocol, "localhost", self.port,
                                                                           ratio, num_items, bucket,
                                                                           item_size, command_options,
                                                                           username, password)
@@ -4776,13 +4783,18 @@ class RemoteMachineShellConnection(KeepRefs):
         """
         self.execute_command("rm -f {output_file}")
 
-        command = f"{LINUX_COUCHBASE_BIN_PATH}cbexport json -c couchbase://{target.ip} -u {target.rest_username} -p {target.rest_password} -b {bucket} -o {output_file} -f list"
+        protocol = "couchbases://" if self.port == "18091" else "couchbase://"
+        port = ":18091" if self.port == "18091" else ""
+        command = f"{LINUX_COUCHBASE_BIN_PATH}cbexport json -c {protocol}{target.ip}{port} -u {target.rest_username} -p {target.rest_password} -b {bucket} -o {output_file} -f list"
 
         if scope:
             command += f" -scope-field {scope}"
 
         if collection:
             command += f" -collection-field {collection}"
+
+        if self.port == "18091":
+            command += " --no-ssl-verify"
 
         output, error, exit_code  = self.execute_command(command, get_exit_code=True)
         if exit_code > 0:

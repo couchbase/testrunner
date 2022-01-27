@@ -981,7 +981,8 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             target = self.backupset.cluster_host
 
         # Specify restore target
-        body = Body1(target=f"{target.ip}:{target.port}", user=target.rest_username, password=target.rest_password, auto_create_buckets=True)
+        protocol = "https://" if target.port == "18091" else ""
+        body = Body1(target=f"{protocol}{target.ip}:{target.port}", user=target.rest_username, password=target.rest_password, auto_create_buckets=True)
         # Take one off restore
         task_name = self.repository_api.cluster_self_repository_state_id_restore_post(state, repo_name, body=body).task_name
         self.sys_log_count[Tag.RESTORE_STARTED] += 1
