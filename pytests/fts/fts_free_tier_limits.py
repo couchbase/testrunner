@@ -219,19 +219,24 @@ class FtsFreeTierLimits(FTSBaseTest):
         search_string = "a" * 1048576
         size_search_string = len(search_string.encode('utf-8'))
         self.log.info(f'size of search string : {size_search_string}')
-        fts_query = {"explain": True, "fields": ["*"], "highlight": {}, "query": {"query": search_string}, "size": 1080}
-        all_hits, all_matches, _, _ = cluster.run_fts_query(fts_index.name, fts_query, rest=self.fts_rest)
+        try:
+            fts_query = {"explain": True, "fields": ["*"], "highlight": {}, "query": {"query": search_string}, "size": 1080}
+            all_hits, all_matches, _, _ = cluster.run_fts_query(fts_index.name, fts_query, rest=self.fts_rest, timeout=10)
+        except Exception as e:
+            self.log.info(str(e))
 
-        fts_query = {"explain": True, "fields": ["*"], "highlight": {}, "query": {"query": search_string}, "size": 1080}
-        all_hits, all_matches, _, _ = cluster.run_fts_query(fts_index.name, fts_query, rest=self.fts_rest)
+        fts_query = {"explain": True, "fields": ["*"], "highlight": {}, "query": {"query": "United"}, "size": 1080}
+        all_hits, all_matches, _, _ = cluster.run_fts_query(fts_index.name, fts_query, rest=self.fts_rest, timeout=10)
         self.fts_rest.username = self.testuser1["id"]
         self.fts_rest.password = self.testuser1["password"]
-
-        fts_query = {"explain": True, "fields": ["*"], "highlight": {}, "query": {"query": search_string}, "size": 1080}
-        all_hits, all_matches, _, _ = cluster.run_fts_query(fts_index.name, fts_query, rest=self.fts_rest)
+        try:
+            fts_query = {"explain": True, "fields": ["*"], "highlight": {}, "query": {"query": search_string}, "size": 1080}
+            all_hits, all_matches, _, _ = cluster.run_fts_query(fts_index.name, fts_query, rest=self.fts_rest, timeout=10)
+        except Exception as e:
+            self.log.info(str(e))
 
         fts_query = {"explain": True, "fields": ["*"], "highlight": {}, "query": {"query": "United"}, "size": 10}
-        all_hits, all_matches, _, _ = cluster.run_fts_query(fts_index.name, fts_query, rest=self.fts_rest)
+        all_hits, all_matches, _, _ = cluster.run_fts_query(fts_index.name, fts_query, rest=self.fts_rest, timeout=10)
         self.log.info(str(all_matches))
         if all_hits != -1 or "ingress_mib_per_min" not in all_matches:
             self.fail("expected error message with egress_mib_per_min not found")

@@ -1233,6 +1233,7 @@ class FTSIndex:
             self.name,
             rest.ip))
         rest.create_fts_index(self.name, self.index_definition)
+        time.sleep(2)
         self.__cluster.get_indexes().append(self)
         self.uuid = self.get_uuid()
         global_vars.system_event_logs.add_event(SearchServiceEvents.index_created(rest.ip, self.uuid,
@@ -2654,7 +2655,7 @@ class CouchbaseCluster:
         """ Delete all FTSIndex objects from self.__indexes """
         self.__indexes.clear()
 
-    def run_fts_query(self, index_name, query_dict, node=None, timeout=70, rest=None):
+    def run_fts_query(self, index_name, query_dict, node=None, timeout=100, rest=None):
         """ Runs a query defined in query_json against an index/alias and
         a specific node
 
