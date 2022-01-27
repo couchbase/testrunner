@@ -898,11 +898,11 @@ class BuildQuery(object):
                 """ sherlock build in unix only support 64-bit """
                 build.architecture_type = "amd64"
                 if  "ubuntu 20.04" in distribution_version:
-                    if build_version[:5] in COUCHBASE_FROM_662:
+                    if version[:5] in COUCHBASE_FROM_662:
                         os_name = "ubuntu20.04"
                     else:
                         self.fail("ubuntu 20.04 doesn't support version %s "
-                                  % build_version[:5])
+                                                              % version[:5])
                 elif "ubuntu 14.04" in distribution_version:
                     os_name = "ubuntu14.04"
                 elif "ubuntu 16.04" in distribution_version:
