@@ -592,9 +592,9 @@ class x509main:
         while self.ca_count < spec["number_of_CAs"]:
             root_ca_name = "r" + str(self.ca_count + 1)
             number_of_int_ca = spec["int_certs_per_CA"]
+            self.generate_root_certificate(root_ca_name=root_ca_name)
             for i in range(number_of_int_ca):
                 int_ca_name = "i" + str(i + 1) + "_" + root_ca_name
-                self.generate_root_certificate(root_ca_name=root_ca_name)
                 self.generate_intermediate_certificate(root_ca_name, int_ca_name)
                 if node_ptr < max_ptr:
                     self.generate_node_certificate(root_ca_name, int_ca_name,
