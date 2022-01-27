@@ -18,7 +18,7 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         self.log_config_info()
         cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         fts_node = cbcluster.get_fts_nodes()
-        RestConnection(fts_node[0]).set_fts_ram_quota(1000)
+        RestConnection(fts_node[0]).set_fts_ram_quota(900)
 
         self.log.info("==============  N1qlFTSIntegrationPhase2ClusteropsTest setup has completed ==============")
 
