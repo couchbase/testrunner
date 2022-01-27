@@ -3066,7 +3066,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Error backing up cluster: cluster credentials required, expected --username/--password or --client-cert/--client-key",
+        self.assertIn("cluster credentials required, expected --username/--password or --client-cert/--client-key", output[0],
                          "Expected error message not thrown")
         cmd = cmd_to_test + " --archive {0} --repo {1} --cluster http://{2}:{3} \
                               --username".format(self.backupset.directory,
@@ -3086,7 +3086,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Error backing up cluster: the --username/--password flags must be supplied together",
+        self.assertIn("the --username/--password flags must be supplied together", output[0],
                          "Expected error message not thrown")
         cmd = cmd_to_test + " --archive {0} --repo abc --cluster http://{1}:{2} --username {3} \
                               --password {4}".format(self.backupset.directory,
@@ -3157,7 +3157,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         remote_client.disconnect()
-        self.assertTrue(self._check_output("archive directory '{0}xyz' does not exist".format(self.root_path), output))
+        self.assertTrue(self._check_output("archive '{0}xyz' does not exist".format(self.root_path), output))
 
     def test_backup_compact_negative_args(self):
         """
@@ -3204,12 +3204,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         remote_client.log_command_output(output, error)
         self.assertEqual(output[0], "Expected argument for option: --backup",
                          "Expected error message not thrown")
-        cmd = "compact --archive abc --repo {0} --backup {1}" \
+        cmd = "compact --archive xyz --repo {0} --backup {1}" \
             .format(self.backupset.name, self.backups[0])
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertIn("not a directory", output[-1])
+        self.assertIn(f"archive '{self.root_path}xyz' does not exist", output[-1])
         cmd = "compact --archive {0} --repo abc --backup {1}" \
             .format(self.backupset.directory, self.backups[0])
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
@@ -3289,7 +3289,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Error merging data: archive directory '{0}xyz' does not exist".format(self.root_path) in output[-1],
+        self.assertTrue("Error merging data: archive '{0}xyz' does not exist".format(self.root_path) in output[-1],
                         "Expected error message not thrown")
         cmd = "merge --archive {0} --repo abc --start {1} --end {2}".format(self.backupset.directory,
                                                                             self.backups[0], self.backups[1])
@@ -3350,7 +3350,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Removing backup repository failed: archive directory '{0}xyz' does not exist".format(self.root_path) in output[-1],
+        self.assertTrue("Removing backup repository failed: archive '{0}xyz' does not exist".format(self.root_path) in output[-1],
                         "Expected error message not thrown")
         cmd = "remove --archive {0} --repo xyz".format(self.backupset.directory)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
