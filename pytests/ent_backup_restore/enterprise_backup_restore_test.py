@@ -3465,11 +3465,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_cluster_validate()
 
         rest_target = RestConnection(self.backupset.restore_cluster_host)
-        rest_target.add_node(self.input.clusters[0][1].rest_username,
-                             self.input.clusters[0][1].rest_password,
-                             self.input.clusters[0][1].cluster_ip, services=['kv', 'index'])
-        rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
-        rebalance.result()
+        if "ephemeral" not in self.bucket_type:
+            rest_target.add_node(self.input.clusters[0][1].rest_username,
+                                 self.input.clusters[0][1].rest_password,
+                                 self.input.clusters[0][1].cluster_ip, services=['kv', 'index'])
+            rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
+            rebalance.result()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
 
         cmd = "cbindex -type list -auth %s:%s" % (self.master.rest_username,

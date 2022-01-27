@@ -2130,9 +2130,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                     cluster_host="localhost",
                                                     user=server.rest_username,
                                                     password=server.rest_password)
+                            if not self._check_output("SUCCESS: Node initialize", output):
+                                shell.disconnect()
+                                raise("Failed to set hostname")
                         shell.disconnect()
-                        if not self._check_output("SUCCESS: Node initialize", output):
-                            raise("Failed to set hostname")
                 else:
                     self.fail("NS server is not ready after reset node")
         rest.set_indexer_storage_mode(username='Administrator',
