@@ -1079,7 +1079,7 @@ class QueryTests(BaseTestCase):
                                 self.run_cbq_query("CREATE PRIMARY INDEX ON `%s` USING %s" % (keyspace, using))
                                 break
                             except CBQError as ex:
-                                if "Index #primary already exists" in str(ex):
+                                if "#primary already exists" in str(ex):
                                     self.log.info("Primary index already exists")
                                     break
                                 else:
