@@ -64,7 +64,7 @@ def run_test(ini, conf, verbose, debug):
         os.chdir(TR_DIR)
 
         args = ["python3", "testrunner.py", "-i", ini, "-c", conf]
-        params = "makefile=True"
+        params = "makefile=True,stop_on_failure=True"
 
         if verbose == 0:
             params += ",log_level=CRITICAL"
