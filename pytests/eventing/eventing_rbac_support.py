@@ -224,10 +224,11 @@ class EventingRBACSupport(EventingBaseTest):
         payload = "name=" + "john" + "&roles=" + '''data_reader[metadata],data_writer[metadata],data_writer[dst_bucket],
                   data_dcp_reader[src_bucket],eventing_manage_functions[src_bucket:_default]''' + "&password=" + "asdasd"
         self.rest.add_set_builtin_user(user_id="john", payload=payload)
-        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
-        self.deploy_function(body, username="john", password="asdasd")
-        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
-        self.undeploy_function(body, username="john", password="asdasd")
+        try:
+            self.deploy_function(body, username="john", password="asdasd")
+        except Exception as e:
+            self.log.info(e)
+            assert "ERR_FORBIDDEN" in str(e) and "User who created the function does not exist in the system" in str(e), True
         self.delete_function(body, username="john", password="asdasd")
 
     def test_function_scope_modification_after_function_creation(self):
@@ -237,5 +238,5 @@ class EventingRBACSupport(EventingBaseTest):
         try:
             self.rest.update_function(self.function_name, body, username="john", password="asdasd")
         except Exception as e:
-            assert "ERR_SAVE_CONFIG" in str(e) and "Function scope cannot be changed" in str(e), True
+            assert "ERR_INVALID_REQUEST" in str(e) and "Function scope cannot be changed" in str(e), True
         self.delete_function(body)

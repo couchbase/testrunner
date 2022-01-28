@@ -483,7 +483,7 @@ class EventingLifeCycle(EventingBaseTest):
             self.deploy_function(body)
         except Exception as e:
             self.log.info(e)
-            assert "ERR_APP_NOT_UNDEPLOYED" in str(e), True
+            assert "ERR_APP_PAUSED" in str(e), True
         finally:
             self.undeploy_and_delete_function(body)
 
