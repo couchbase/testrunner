@@ -933,11 +933,11 @@ class RbacN1QL(QueryTests):
         self.create_users()
         #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
-        self.grant_role(role="query_select(bucket0)")
+        self.grant_role(role="query_select(`standard_bucket0`)")
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
               "'statement=INSERT INTO default:`%s`._default._default (KEY UUID(), VALUE _name)" \
-              " SELECT _name FROM default:`bucket0`._default._default _name WHERE age > 10'" % \
+              " SELECT _name FROM default:`standard_bucket0`._default._default _name WHERE age > 10'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
@@ -953,7 +953,7 @@ class RbacN1QL(QueryTests):
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
               "'statement=INSERT INTO default:`%s`._default._default (KEY UUID(), VALUE _name)" \
-              " SELECT _name FROM default:`bucket0`._default._default _name WHERE age > 10'" % \
+              " SELECT _name FROM default:`standard_bucket0`._default._default _name WHERE age > 10'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
@@ -967,7 +967,7 @@ class RbacN1QL(QueryTests):
         self.create_users()
         #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
-        self.grant_role(role="query_select(bucket0)")
+        self.grant_role(role="query_select(`standard_bucket0`)")
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
               "'statement=UPSERT INTO `%s` (KEY UUID(), VALUE _name)" \
@@ -993,7 +993,7 @@ class RbacN1QL(QueryTests):
                self.query_bucket)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("User does not have credentials to run SELECT queries on the bucket0 bucket."
+        self.assertTrue(any("User does not have credentials to run SELECT queries on the `standard_bucket0` bucket."
                             in line for line in output),
                         "Able to select from {0} as user {1} - not expected".
                         format(self.buckets[1].name, self.users[0]['id']))
@@ -1003,11 +1003,11 @@ class RbacN1QL(QueryTests):
         self.create_users()
         #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
-        self.grant_role(role="query_select(bucket0)")
+        self.grant_role(role="query_select(`standard_bucket0`)")
         shell = RemoteMachineShellConnection(self.master)
         new_name = "employee-14-2"
         cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=UPDATE `{3}` a set name = '{4}' WHERE name IN (SELECT name FROM default:`bucket0`._default._default WHERE age > 10)'". \
+              "'statement=UPDATE `{3}` a set name = '{4}' WHERE name IN (SELECT name FROM default:`standard_bucket0`._default._default WHERE age > 10)'". \
             format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, new_name, self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
@@ -1023,7 +1023,7 @@ class RbacN1QL(QueryTests):
         shell = RemoteMachineShellConnection(self.master)
         new_name = "employee-14-2"
         cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=UPDATE `{3}` a set name = '{4}' WHERE name IN (SELECT name FROM default:`bucket0`._default._default WHERE age > 10)'". \
+              "'statement=UPDATE `{3}` a set name = '{4}' WHERE name IN (SELECT name FROM default:`standard_bucket0`._default._default WHERE age > 10)'". \
             format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, new_name, self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
@@ -1037,10 +1037,10 @@ class RbacN1QL(QueryTests):
         self.create_users()
         #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
-        self.grant_role(role="query_select(bucket0)")
+        self.grant_role(role="query_select(`standard_bucket0`)")
         shell = RemoteMachineShellConnection(self.master)
         cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=DELETE FROM `{3}` a WHERE name IN (SELECT name FROM default:`bucket0`._default._default WHERE age > 10)'". \
+              "'statement=DELETE FROM `{3}` a WHERE name IN (SELECT name FROM default:`standard_bucket0`._default._default WHERE age > 10)'". \
             format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
@@ -1055,7 +1055,7 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=DELETE FROM `{3}` a WHERE name IN (SELECT name FROM default:`bucket0`._default._default WHERE age > 10)'". \
+              "'statement=DELETE FROM `{3}` a WHERE name IN (SELECT name FROM default:`standard_bucket0`._default._default WHERE age > 10)'". \
             format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
