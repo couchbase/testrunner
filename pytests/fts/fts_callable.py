@@ -189,6 +189,7 @@ class FTSCallable:
 
         return index
 
+
     def wait_for_indexing_complete(self, item_count = None):
         """
             Wait for index_count for any index to stabilize or reach the
@@ -283,11 +284,14 @@ class FTSCallable:
         """ Deletes all fts and es indexes if any"""
         for index in self.fts_indexes:
             index.delete()
-        self.es.delete_indices()
+        if self.es:
+            self.es.delete_indices()
 
     def flush_buckets(self, buckets=[]):
         self.cb_cluster.flush_buckets(buckets)
 
+    def delete_bucket(self, bucket_name):
+        self.cb_cluster.delete_bucket(bucket_name)
 
     def async_load_data(self):
         """ Loads data into CB and ES"""

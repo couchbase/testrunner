@@ -313,6 +313,9 @@ class UpgradeFTS(NewUpgradeBaseTest):
         errors = self._test_create_bucket_index()
         if len(errors) > 0:
             post_upgrade_errors['_test_create_bucket_index'] = errors
+        errors = self._test_scope_limit_num_fts_indexes()
+        if len(errors) > 0:
+            post_upgrade_errors['_test_scope_limit_num_fts_indexes'] = errors
         errors = self._test_backup_restore()
         if len(errors) > 0:
             post_upgrade_errors['_test_backup_restore'] = errors

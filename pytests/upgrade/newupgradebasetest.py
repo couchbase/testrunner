@@ -22,6 +22,7 @@ from TestInput import TestInputSingleton
 from lib.Cb_constants.CBServer import CbServer
 from pytests.fts.fts_base import QUERY
 from pytests.security.ntonencryptionBase import ntonencryptionBase
+from pytests.security.x509_multiple_CA_util import x509main
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from query_tests_helper import QueryHelperTests
@@ -220,6 +221,9 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.input.param("max_partitions_pindex", 32)
         self.index_kv_store = self.input.param("kvstore", None)
         self.fts_obj = None
+        self.validate_system_event_logs = TestInputSingleton.input.param("validate_sys_event_logs", False)
+        if self.validate_system_event_logs:
+            self.system_events.set_test_start_time()
         self.log.info("==============  NewUpgradeBaseTest setup has completed ==============")
 
     def tearDown(self):
@@ -234,6 +238,16 @@ class NewUpgradeBaseTest(BaseTestCase):
         if CbServer.use_https:
             self.log.info('###################### Disabling n2n encryption')
             ntonencryptionBase().disable_nton_cluster([self.master])
+        try:
+            if CbServer.multiple_ca:
+                CbServer.use_client_certs = False
+                CbServer.cacert_verify = False
+                self.x509 = x509main(host=self.master)
+                self.x509.teardown_certs(servers=TestInputSingleton.input.servers)
+                self.use_https = False
+                CbServer.use_https = False
+        except Exception as e:
+            self.log.info(e)
 
         self.log.info("==============  NewUpgradeBaseTest tearDown has started ==============")
         test_failed = (hasattr(self, '_resultForDoCleanups') and \
@@ -1167,6 +1181,9 @@ class NewUpgradeBaseTest(BaseTestCase):
             errors = self._test_create_bucket_index()
             if len(errors) > 0:
                 post_upgrade_errors['_test_create_bucket_index'] = errors
+            errors = self._test_scope_limit_num_fts_indexes()
+            if len(errors) > 0:
+                post_upgrade_errors['_test_scope_limit_num_fts_indexes'] = errors
             errors = self._test_backup_restore()
             if len(errors) > 0:
                 post_upgrade_errors['_test_backup_restore'] = errors
@@ -1277,6 +1294,38 @@ class NewUpgradeBaseTest(BaseTestCase):
     def enforce_tls_https(self, queue=None):
         ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
         CbServer.use_https = True
+        if queue is not None:
+            queue.put(True)
+
+    def enable_multiple_ca(self, queue=None):
+        CbServer.multiple_ca = True
+        self.passphrase_type = self.input.param("passphrase_type", "script")
+        self.encryption_type = self.input.param("encryption_type", "des3")
+        self.use_client_certs = self.input.param("use_client_certs", False)
+        self.cacert_verify = self.input.param("cacert_verify", False)
+        spec_file = self.input.param("spec_file", "default")
+        self.use_https = True
+        CbServer.use_https = True
+        CbServer.use_client_certs = self.use_client_certs
+        CbServer.cacert_verify = self.cacert_verify
+        ntonencryptionBase().disable_nton_cluster([self.master])
+        CbServer.x509 = x509main(host=self.master, encryption_type=self.encryption_type,
+                                 passphrase_type=self.passphrase_type)
+        for server in self.input.servers:
+            CbServer.x509.delete_inbox_folder_on_server(server=server)
+        CbServer.x509.generate_multiple_x509_certs(servers=self.input.servers, spec_file_name=spec_file)
+        self.log.info("Manifest #########\n {0}".format(json.dumps(CbServer.x509.manifest, indent=4)))
+        for server in self.input.servers:
+            _ = CbServer.x509.upload_root_certs(server)
+        CbServer.x509.upload_node_certs(servers=self.input.servers)
+        testuser = [{'id': 'clientuser', 'name': 'clientuser', 'password': 'password'}]
+        RbacBase().create_user_source(testuser, 'builtin', self.master)
+
+        # Assign user to role
+        role_list = [{'id': 'clientuser', 'name': 'clientuser', 'roles': 'admin'}]
+        RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
+        CbServer.x509.upload_client_cert_settings(server=self.master)
+        ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
         if queue is not None:
             queue.put(True)
 
@@ -1969,6 +2018,39 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         fts_callable.delete_fts_index("idx")
         fts_callable.flush_buckets(["default"])
+        return errors
+
+    def _test_scope_limit_num_fts_indexes(self):
+        self.log.info("="*20 + " _test_scope_limit_num_fts_indexes")
+        limit_scope = "inventory"
+        limit_value=3
+        errors = []
+        self.sample_bucket_name = "travel-sample"
+        self.sample_index_name = "travel-sample-index"
+        fts_node = self.get_nodes_from_services_map(service_type="fts")
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False)
+        self.fts_rest = RestConnection(fts_node)
+        self.fts_rest.load_sample(self.sample_bucket_name)
+        self.fts_rest.set_internalSetting("enforceLimits", True)
+        self.fts_rest.set_fts_tier_limit(bucket=self.sample_bucket_name, scope=limit_scope, limit=limit_value)
+        collection = ["airline"]
+        _type = self.__define_index_parameters_collection_related(container_type="collection", scope=limit_scope,
+                                                                  collection=collection)
+        for i in range(limit_value):
+            fts_callable.create_fts_index(name=f'{self.sample_index_name}_{i}', source_name=self.sample_bucket_name,
+                                          collection_index=True, _type=_type, scope=limit_scope,
+                                          collections=self.collection)
+        self.sleep(30)
+        try:
+            fts_callable.create_fts_index(name=f'{self.sample_index_name}_{i+2}', source_name=self.sample_bucket_name,
+                                          collection_index=True, _type=_type, scope=limit_scope,
+                                          collections=self.collection)
+        except Exception as e:
+            self.log.info(str(e))
+            if "num_fts_indexes" not in str(e):
+                errors = "expected error message not found"
+
+        fts_callable.delete_bucket(self.sample_bucket_name)
         return errors
 
     def _test_backup_restore(self):
@@ -3033,7 +3115,8 @@ class NewUpgradeBaseTest(BaseTestCase):
         else:
             rest.create_collection(bucket="default", scope=scope, collection=collection)
 
-    def __define_index_parameters_collection_related(self, container_type="bucket", scope=None, collection=None):
+    @staticmethod
+    def __define_index_parameters_collection_related(container_type="bucket", scope=None, collection=None):
         if container_type == 'bucket':
             _type = "emp"
         else:
