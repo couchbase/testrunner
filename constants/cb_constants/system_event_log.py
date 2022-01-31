@@ -63,6 +63,12 @@ class Security(object):
 
 class Views(object):
     """Mapping of Views related events - event_id. Valid range 10240:11263"""
+    DDocCreated=10240
+    DDocDeleted=10241
+    DDocModified=10242
+    DraftDDocDeployed=10243
+    ViewEngineCrash=10244
+    ViewEngineSettingsChange=10245
 
 
 class Query(object):
