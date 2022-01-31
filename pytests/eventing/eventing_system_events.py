@@ -3,7 +3,7 @@ from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_base import EventingBaseTest
 from lib.SystemEventLogLib.eventing_service_events import EventingServiceEvents
 from lib import global_vars
-import logging
+import logging, os
 
 log = logging.getLogger()
 
@@ -68,7 +68,9 @@ class EventingSystemEvents(EventingBaseTest):
         global_vars.system_event_logs.add_event(
             EventingServiceEvents.stop_debugger(self.eventing_node,
                                                 self.function_name))
-        self.rest.start_tracing()
+        os.system("""curl -v -u Administrator:password -XGET \
+                 http://{0}:8096/startTracing >/dev/null 2>&1 &"""
+                  .format(self.eventing_node.ip))
         global_vars.system_event_logs.add_event(
             EventingServiceEvents.start_tracing(self.eventing_node))
         self.rest.stop_tracing()

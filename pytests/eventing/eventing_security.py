@@ -35,7 +35,9 @@ class EventingSecurity(EventingBaseTest):
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.expiry = 3
         handler_code = self.input.param('handler_code', 'bucket_op')
-        if handler_code == 'bucket_op_with_timers':
+        if handler_code == 'bucket_op':
+            self.handler_code = "handler_code/ABO/insert_rebalance.js"
+        elif handler_code == 'bucket_op_with_timers':
             self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS
         # index is required for delete operation through n1ql
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
@@ -121,7 +123,7 @@ class EventingSecurity(EventingBaseTest):
     '''
     def test_eventing_with_enforce_tls_feature(self):
         ntonencryptionBase().disable_nton_cluster([self.master])
-        body = self.create_save_function_body(self.function_name, "handler_code/ABO/insert_rebalance.js")
+        body = self.create_save_function_body(self.function_name, self.handler_code)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False, batch_size=self.batch_size)
         self.deploy_function(body)
         self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
