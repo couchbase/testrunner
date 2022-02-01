@@ -263,8 +263,9 @@ class CliBaseTest(BaseTestCase):
                 self.shell.disconnect()
         self.times_teardown_called += 1
         serverInfo = self.servers[0]
-        if "enterprise" in self.cb_version:
-            rest = RestConnection(serverInfo)
+        rest = RestConnection(serverInfo)
+        cb_version = rest.get_nodes_version()
+        if "enterprise" in cb_version:
             zones = rest.get_zone_names()
             for zone in zones:
                 if zone != "Group 1":

@@ -596,7 +596,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                     cluster_port=18091,
                                                                     user=cluster_user,
                                                                     password=cluster_pwd)
-                self.assertTrue("SUCCESS: Server added" in output[0])
+                self.assertTrue(self._check_output("SUCCESS: Server added", output))
         else:
              raise Exception("Node add should be smaller total number vms in ini file")
 
@@ -616,7 +616,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                 cluster_host="localhost",
                                                                 user=cluster_user,
                                                                 password=cluster_pwd)
-            self.assertTrue(self.cli_rebalance_msg in output)
+            self.assertTrue(self._check_output(self.cli_rebalance_msg, output))
 
         self._create_bucket(remote_client)
         self.sleep(7, "time needs for bucket ready")
@@ -658,7 +658,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             cli_command = "server-readd"
             self.log.info("add node {0} back to cluster"\
                           .format(self.servers[nodes_add - nodes_rem - num].ip))
-            options = "--server-add=https{0}:1{1} --no-ssl-verify "\
+            options = "--server-add=https://{0}:1{1} --no-ssl-verify "\
                                                    .format(self.servers[nodes_add - nodes_rem - num].ip,
                                                     self.servers[nodes_add - nodes_rem - num].port)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
@@ -668,17 +668,6 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                 password=cluster_pwd)
             self.assertTrue(self._check_output(["DEPRECATED: Please use the recovery command ",
                                  "SUCCESS: Servers recovered"], output), "Server readd failed")
-
-            cli_command = "recovery"
-            options = "--server-recovery={0}:{1} --recovery-type=delta"\
-                                    .format(self.servers[nodes_add - nodes_rem - num].ip,
-                                            self.servers[nodes_add - nodes_rem - num].port)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                                                options=options,
-                                                                cluster_host="localhost",
-                                                                user=cluster_user,
-                                                                password=cluster_pwd)
-            self.assertTrue("SUCCESS: Servers recovered" in output[0], str(output))
 
         if int(nodes_readd) > int(nodes_failover):
             cli_command = "server-add"
@@ -693,10 +682,10 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                                     options=options,
                                                                     cluster_host="localhost",
-                                                                    cluster_port=8091,
+                                                                    cluster_port=18091,
                                                                     user=cluster_user,
                                                                     password=cluster_pwd)
-                self.assertTrue("SUCCESS: Server added" in output[0])
+                self.assertTrue(self._check_output("SUCCESS: Server added", output))
                 self.sleep(5)
         cli_command = "rebalance"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
@@ -725,7 +714,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                               options=options, cluster_host="localhost", \
                                                 user="Administrator", password="password")
             output_msg = "SUCCESS: Server added"
-            self.assertIn(output_msg, output[0])
+            self.assertIn(self._check_output(output_msg, output))
 
         cli_command = "rebalance-status"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
@@ -2488,7 +2477,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=self.eviction_policy)
         self.cluster.create_default_bucket(bucket_params)
-        self._create_sasl_buckets(self.master, num_sasl_buckets)
+        self._create_standard_buckets(self.master, num_sasl_buckets)
         self.buckets = RestConnection(self.master).get_buckets()
         if load_all is None:
             self.shell.execute_cbworkloadgen("Administrator", "password", 10000,
