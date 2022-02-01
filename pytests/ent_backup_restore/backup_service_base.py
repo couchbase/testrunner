@@ -622,14 +622,20 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             return self.plan_api.plan_get_with_http_info()
         return self.plan_api.plan_get()
 
-    def create_plan(self, plan_name, http_info=False, **kwargs):
+    def create_plan(self, plan_name, http_info=False, should_succeed=True, **kwargs):
         """ Creates a plan
 
         Attr:
             plan_name (str): The name of the new plan.
 
         """
-        self.sys_log_count[Tag.PLAN_CREATED] += 1
+        if "body" not in kwargs and should_succeed:
+           schedule = TaskTemplateSchedule(job_type="BACKUP", frequency=1, period="HOURS", time="22:00", start_now=False)
+           kwargs["body"] = Plan(name=plan_name, tasks=[TaskTemplate(name="my_task", task_type="BACKUP", schedule=schedule)])
+
+        if should_succeed:
+            self.sys_log_count[Tag.PLAN_CREATED] += 1
+
         if http_info:
             return self.plan_api.plan_name_post_with_http_info(plan_name, **kwargs)
         return self.plan_api.plan_name_post(plan_name, **kwargs)
