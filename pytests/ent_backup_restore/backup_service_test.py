@@ -466,7 +466,9 @@ class BackupServiceTest(BackupServiceBase):
 
         Params:
             all_buckets (bool): If True triggers a task that backups all buckets. Otherwise randomly picks a bucket.
-            sasl_buckets (int): The number of buckets to create.
+            standard_buckets (int): The number of buckets to create.
+
+        *** Previously used sasl_buckets, now moved to standard_buckets ***
 
         1. Create a Plan with a Backup Task.
         2. Add Repo and tie Plan to Repo.
@@ -477,7 +479,7 @@ class BackupServiceTest(BackupServiceBase):
         all_buckets = self.input.param("all_buckets", False)
 
         if len(self.buckets) < 2:
-            self.fail("At least 2 buckets are required for this test, set test param sasl_buckets=2")
+            self.fail("At least 2 buckets are required for this test, set test param standard_buckets=2")
 
         repo_name, plan_name, task_name = "my_repo", "my_plan", "my_task"
 
