@@ -5,6 +5,11 @@ from datetime import datetime
 import random
 from threading import Thread
 
+import global_vars
+
+from SystemEventLogLib.Events import EventHelper
+from SystemEventLogLib.gsi_events import IndexingServiceEvents
+from failover.AutoFailoverBaseTest import AutoFailoverBaseTest
 from couchbase_helper.documentgenerator import SDKDataLoader
 
 from .base_gsi import BaseSecondaryIndexingTests
@@ -18,7 +23,7 @@ log = logging.getLogger(__name__)
 QUERY_TEMPLATE = "SELECT {0} FROM %s "
 
 
-class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
+class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, AutoFailoverBaseTest):
     def setUp(self):
         super(UpgradeSecondaryIndex, self).setUp()
         self.initial_build_type = self.input.param('initial_build_type', None)
@@ -33,10 +38,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         self.toggle_disable_upgrade = self.input.param("toggle_disable_upgrade", False)
         query_template = QUERY_TEMPLATE
         query_template = query_template.format("job_title")
-        self.whereCondition= self.input.param("whereCondition", " job_title != \"Sales\" ")
+        self.whereCondition = self.input.param("whereCondition", " job_title != \"Sales\" ")
         query_template += " WHERE {0}".format(self.whereCondition)
         self.load_query_definitions = []
         self.initial_index_number = self.input.param("initial_index_number", 1)
+        self.run_mixed_mode_tests = self.input.param("run_mixed_mode_tests", False)
         if self.enable_dgm:
             if self.gsi_type == 'memory_optimized':
                 self.skipTest("DGM can be achieved only for plasma")
@@ -49,16 +55,15 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             self.load_query_definitions.append(query_definition)
         if not self.build_index_after_create:
             self.build_index_after_create = True
-            self.multi_create_index(buckets = self.buckets,
-                query_definitions = self.load_query_definitions)
+            self.multi_create_index(buckets=self.buckets,
+                                    query_definitions=self.load_query_definitions)
             self.build_index_after_create = False
         else:
-            self.multi_create_index(buckets = self.buckets,
+            self.multi_create_index(buckets=self.buckets,
                                     query_definitions=self.load_query_definitions)
         self.skip_metabucket_check = True
         if self.enable_dgm:
             self.assertTrue(self._is_dgm_reached())
-
 
     def tearDown(self):
         self.upgrade_servers = self.servers
@@ -119,31 +124,65 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         post_upgrade_index_stats = index_rest.get_all_index_stats()
 
         # self.log.info(f"PRE:{pre_upgrade_index_stats}")
-        # self.log.info(f"POST:{post_upgrade_index_stats}")
+        # self.log.info(f"PRE:{post_upgrade_index_stats}")
         self._post_upgrade_task(task='stats_comparison', stats_before_upgrade=pre_upgrade_index_stats,
                                 stats_after_upgrade=post_upgrade_index_stats)
         self._post_upgrade_task(task='create_collection')
+        if self.num_index_replicas > 0:
+            index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            if len(index_nodes) > 1:
+                self._post_upgrade_task(task='auto_failover')
+            else:
+                self.log.info("Can't run Auto-Failover tests for one Index node")
         self._post_upgrade_task(task='create_indexes')
         self._post_upgrade_task(task='run_query')
         self._post_upgrade_task(task='request_plus_scans')
         if self.enable_dgm:
             self.assertTrue(self._is_dgm_reached())
-        self._post_upgrade_task(task='rebalance_in', node=self.servers[4])
-        self._post_upgrade_task(task='rebalance_out', node=self.servers[4])
+        self._post_upgrade_task(task='rebalance_in', node=self.servers[self.nodes_init])
+        self._post_upgrade_task(task='rebalance_out', node=self.servers[self.nodes_init])
         self._post_upgrade_task(task='drop_all_indexes')
         # creating indexes again to check plasma sharding
         self._post_upgrade_task(task='create_indexes')
 
+        # Neo Features
+        self._post_upgrade_task(task='smart_batching')
+        self._post_upgrade_task(task='system_event')
+        self._post_upgrade_task(task='free_tier')
+
+
+    def _mixed_mode_tasks(self):
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        if index_node:
+            self.index_rest = RestConnection(index_node)
+
+        # Checking if System events are getting logged
+        system_event_api = f'{self.index_rest.baseUrl}/events'
+        status, content, header = self.index_rest.urllib_request(api=system_event_api)
+        err_msg_1 = "This http API endpoint isn't supported in mixed version clusters"
+        err_msg_2 = "Not found."
+        if err_msg_1 in str(content) or err_msg_2 in str(content):
+            pass
+        else:
+            self.fail(f"Failed while retrieving System Events logs. {content}")
+
+        # Checking smart-batching
+        add_nodes = self.servers[self.nodes_init:]
+        services = ['index'] * len(add_nodes)
+        rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
+                                                      to_remove=[], services=services)
+        self.validate_smart_batching_during_rebalance(rebalance_task)
+
     def _post_upgrade_task(self, task, num_replica=0, stats_before_upgrade=None, stats_after_upgrade=None,
                            node=None):
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
-        index_rest = RestConnection(index_node)
+        self.index_rest = RestConnection(index_node)
         system_query = 'select * from system:indexes;'
         if task == 'create_collection':
             self.prepare_collection_for_indexing(bucket_name=self.buckets[0].name, num_scopes=3, num_collections=3,
                                                  num_of_docs_per_collection=1000)
         elif task == 'create_indexes':
-            result = index_rest.get_indexer_metadata()
+            result = self.index_rest.get_indexer_metadata()
             if 'status' in result:
                 indexer_metadata = result['status']
             else:
@@ -202,7 +241,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                         self.fail(err)
                 new_index_count += 3
             self.wait_until_indexes_online()
-            indexer_metadata = index_rest.get_indexer_metadata()['status']
+            indexer_metadata = self.index_rest.get_indexer_metadata()['status']
             final_indexes = []
             for index in indexer_metadata:
                 final_indexes.append(index['indexName'])
@@ -258,14 +297,14 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                 self.sleep(120)
             self.log.info("Rebalance-In a new Indexer node for auto re-distribution of Indexes")
             redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
-            index_rest.set_index_settings(redistribute)
+            self.index_rest.set_index_settings(redistribute)
             add_nodes = [node]
             task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                                 to_remove=[], services=['index'])
             result = task.result()
             rebalance_status = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
-            indexer_metadata = index_rest.get_indexer_metadata()['status']
+            indexer_metadata = self.index_rest.get_indexer_metadata()['status']
             indexes_hosts = set()
             for index in indexer_metadata:
                 for host in index['hosts']:
@@ -332,6 +371,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                         if result == (index_count_dict[namespace] + num_ops):
                             self.log.info(f"Select count result for request_plus scan:{result}")
                             break
+
                         self.sleep(10, f"Query result is not matching the expected value. Actual: {result}, Expected:"
                                        f"{index_count_dict[namespace] + num_ops}")
                         count += 1
@@ -339,7 +379,89 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                         index_stats = self.index_rest.get_all_index_stats(text=True)
                         self.log.info(f"Index Stats: {index_stats}")
                         self.fail("Indexer not able to index all docs.")
+        elif task == 'system_event':
+            global_vars.system_event_logs = EventHelper()
+            self.system_events = global_vars.system_event_logs
+            self.system_events.set_test_start_time()
+            index_name = 'sys_event_idx'
+            index_gen = QueryDefinition(index_name=index_name, index_fields=['age'])
+            query = index_gen.generate_index_create_query(namespace=self.namespaces[0],
+                                                          defer_build=self.defer_build,
+                                                          num_replica=self.num_index_replicas)
+            self.run_cbq_query(server=self.n1ql_node, query=query)
+            indexer_metadata = self.index_rest.get_indexer_metadata()['status']
+            nodes_uuids = self.get_nodes_uuids()
+            for index in indexer_metadata:
+                if index['name'] == index_name:
+                    instance_id = index['instId']
+                    definition_id = index['defnId']
+                    replica_id = index['replicaId']
+                    node = index['hosts'][0].split(':')[0]
+                    indexer_id = nodes_uuids[node]
+                    self.system_events.add_event(IndexingServiceEvents.index_created(node=node,
+                                                                                     definition_id=definition_id,
+                                                                                     instance_id=instance_id,
+                                                                                     indexer_id=indexer_id,
+                                                                                     replica_id=replica_id))
+                    if not self.defer_build:
+                        self.system_events.add_event(
+                            IndexingServiceEvents.index_building(node=node, definition_id=definition_id,
+                                                                 instance_id=instance_id, indexer_id=indexer_id,
+                                                                 replica_id=replica_id))
+                        self.system_events.add_event(
+                            IndexingServiceEvents.index_online(node=node, definition_id=definition_id,
+                                                               instance_id=instance_id, indexer_id=indexer_id,
+                                                               replica_id=replica_id))
+            result = self.system_events.validate(server=self.master, ignore_order=True)
+            if result:
+                self.log.error(result)
+                self.fail("System Event validation failed")
 
+        elif task == 'free_tier':
+            expected_err = 'Limit for number of indexes that can be created per scope has been reached'
+            self.rest.set_internalSetting('enforceLimits', True)
+            self.updated_tier_limit = 5
+            namespace = self.namespaces[0]
+            _, keyspace = namespace.split(':')
+            bucket, scope, collection = keyspace.split('.')
+            self.index_rest.set_gsi_tier_limit(bucket=bucket, scope=scope,
+                                               limit=self.updated_tier_limit)
+            try:
+                for item in range(5):
+                    index_name = f'tier_limit_idx_{item}'
+                    query = f'create index {index_name} on {namespace}(age) with {{"num_replica": 1}}'
+                    self.run_cbq_query(server=self.n1ql_node, query=query)
+            except Exception as err:
+                if expected_err not in str(err):
+                    self.fail(err)
+
+        elif task == 'auto_failover':
+            self.enable_autofailover_and_validate()
+            self.sleep(5)
+            self.failover_actions[self.failover_action](self)
+            try:
+                self.disable_autofailover_and_validate()
+            except Exception as err:
+                pass
+            if not self.deny_autofailover:
+                self.bring_back_failed_nodes_up()
+                self.sleep(30)
+                self.log.info(self.server_to_fail[0])
+                self.nodes = self.rest.node_statuses()
+                self.log.info(self.nodes[0].id)
+                self.rest.add_back_node(f"ns_1@{self.server_to_fail[0].ip}")
+                self.rest.set_recovery_type(f"ns_1@{self.server_to_fail[0].ip}",
+                                            self.recovery_strategy)
+                self.rest.rebalance(otpNodes=[node.id for node in self.nodes])
+                msg = f"rebalance failed while recovering failover nodes {self.server_to_fail[0]}"
+                self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg)
+
+        elif task == 'smart_batching':
+            add_nodes = self.servers[self.nodes_init:]
+            services = ['index'] * len(add_nodes)
+            rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
+                                                          to_remove=[], services=services)
+            self.validate_smart_batching_during_rebalance(rebalance_task)
 
     def test_online_upgrade(self):
         services_in = []
@@ -380,6 +502,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         after_tasks = self.async_run_operations(buckets=self.buckets, phase="after")
         self.sleep(180)
         self._run_tasks([after_tasks])
+        self._mixed_mode_tasks()
 
     def test_online_upgrade_swap_rebalance(self):
         """
@@ -440,8 +563,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                             self.n1ql_node = n1ql_node
                             break
             rebalance = self.cluster.async_rebalance(active_nodes,
-                                                 [self.nodes_in_list[i]], [],
-                                                 services=node_services)
+                                                     [self.nodes_in_list[i]], [],
+                                                     services=node_services)
             rebalance.result()
             log.info("===== Node Rebalanced In with Upgraded version =====")
             self._run_tasks([kv_ops, in_between_tasks])
@@ -453,6 +576,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             self.multi_query_using_index()
         after_tasks = self.async_run_operations(buckets=self.buckets, phase="after")
         self._run_tasks([after_tasks])
+        self._mixed_mode_tasks()
 
     def test_online_upgrade_with_failover(self):
         before_tasks = self.async_run_operations(buckets=self.buckets,
@@ -510,7 +634,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                     log.info("Adding Back: {0}".format(node))
                     rest.add_back_node(cluster_node.id)
                     rest.set_recovery_type(otpNode=cluster_node.id,
-                                       recoveryType="full")
+                                           recoveryType="full")
             log.info("Adding node back to cluster...")
             rebalance = self.cluster.async_rebalance(active_nodes, [], [])
             rebalance.result()
@@ -539,7 +663,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                             raise e
                 self.multi_query_using_index()
                 self._execute_prepare_statement(prepare_statements)
-
+        self._mixed_mode_tasks()
 
     def test_online_upgrade_with_rebalance_failover(self):
         nodes_out_list = copy.deepcopy(self.nodes_out_list)
@@ -570,9 +694,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         rest = RestConnection(indexer_node)
         rest.set_downgrade_storage_mode_with_rest(self.disable_plasma_upgrade)
         failover_task = self.cluster.async_failover(
-                [self.master],
-                failover_nodes=[indexer_node],
-                graceful=False)
+            [self.master],
+            failover_nodes=[indexer_node],
+            graceful=False)
         failover_task.result()
         log.info("Node Failed over...")
         rest = RestConnection(self.master)
@@ -606,13 +730,13 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         self.add_built_in_server_user()
         for indexer_node in self.nodes_in_list:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                                         [indexer_node], [],
-                                                         services=["index"])
+                                                     [indexer_node], [],
+                                                     services=["index"])
             rebalance.result()
             rest = RestConnection(indexer_node)
             rest.set_downgrade_storage_mode_with_rest(self.disable_plasma_upgrade)
             deploy_node_info = ["{0}:{1}".format(indexer_node.ip,
-                                                         indexer_node.port)]
+                                                 indexer_node.port)]
             for bucket in self.buckets:
                 for query_definition in self.query_definitions:
                     query_definition.index_name = query_definition.index_name + "_replica"
@@ -638,7 +762,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         for node in kv_nodes:
             log.info("Rebalancing kv node {0} out to upgrade...".format(node.ip))
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [],
-                                                 [node])
+                                                     [node])
             rebalance.result()
             self.servers.remove(node)
             upgrade_th = self._async_update(self.upgrade_to, [node])
@@ -656,7 +780,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         query_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
         log.info("Rebalancing query nodes out to upgrade...")
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [],
-                                             query_nodes)
+                                                 query_nodes)
         rebalance.result()
         upgrade_th = self._async_update(self.upgrade_to, query_nodes)
         for th in upgrade_th:
@@ -674,7 +798,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         log.info("Rebalancing index nodes out to upgrade...")
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [],
-                                             index_nodes)
+                                                 index_nodes)
         rebalance.result()
         upgrade_th = self._async_update(self.upgrade_to, index_nodes)
         self.sleep(120)
@@ -701,10 +825,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
             rest = RestConnection(servers[0])
             date = datetime.now()
-            dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)//60))//24)%7
+            dayOfWeek = (date.weekday() + (date.hour + ((date.minute + 5) // 60)) // 24) % 7
             status, content, header = rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
-                                              indexFromHour=date.hour+((date.minute+1)//60),
-                                              indexFromMinute=(date.minute+1)%60)
+                                                                  indexFromHour=date.hour + ((date.minute + 1) // 60),
+                                                                  indexFromMinute=(date.minute + 1) % 60)
             self.assertTrue(status, "Error in setting Circular Compaction... {0}".format(content))
         self.multi_create_index(self.buckets, self.query_definitions)
         self._verify_bucket_count_with_index_count()
@@ -717,6 +841,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         # self._post_upgrade_task(task='stats_comparison', stats_before_upgrade=pre_upgrade_index_stats,
         #                         stats_after_upgrade=post_upgrade_index_stats)
         self._post_upgrade_task(task='create_collection')
+        self._post_upgrade_task(task='auto_failover')
         self._post_upgrade_task(task='create_indexes')
         if self.enable_dgm:
             self.assertTrue(self._is_dgm_reached())
@@ -727,6 +852,12 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         self._post_upgrade_task(task='drop_all_indexes')
         # creating indexes again to check plasma sharding
         self._post_upgrade_task(task='create_indexes')
+
+        # Neo Features
+        self._post_upgrade_task(task='smart_batching')
+        self._post_upgrade_task(task='system_event')
+        self._post_upgrade_task(task='free_tier')
+
 
     def test_online_upgrade_path_with_rebalance(self):
         pre_upgrade_tasks = self.async_run_operations(phase="before")
@@ -768,13 +899,13 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                 log.info("Upgrading the node...")
                 upgrade_th = self._async_update(self.upgrade_to, [node])
                 for th in upgrade_th:
-                     th.join()
+                    th.join()
                 self.sleep(120)
                 log.info("==== Upgrade Complete ====")
                 log.info("Adding node back to cluster...")
                 rebalance = self.cluster.async_rebalance(active_nodes,
-                                                 [node], [],
-                                                 services=node_services)
+                                                         [node], [],
+                                                         services=node_services)
                 rebalance.result()
                 # self.sleep(100)
                 node_version = RestConnection(node).get_nodes_versions()
@@ -796,12 +927,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         for thread in threads:
             thread.join()
         self.sleep(60)
-        self._verify_create_index_api(keyspace='standard_bucket0')
         buckets = self._create_plasma_buckets()
         self.load(self.gens_load, buckets=buckets, flag=self.item_flag, batch_size=self.batch_size)
         self.multi_create_index(buckets=buckets, query_definitions=self.query_definitions)
         self.multi_query_using_index(buckets=buckets, query_definitions=self.query_definitions)
-        self._verify_gsi_rebalance()
         self._verify_index_partitioning()
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         index_rest = RestConnection(index_nodes[0])
@@ -810,6 +939,12 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         self._post_upgrade_task(task='stats_comparison', stats_before_upgrade=pre_upgrade_index_stats,
                                 stats_after_upgrade=post_upgrade_index_stats)
         self._post_upgrade_task(task='create_collection')
+        if self.num_index_replicas > 0:
+            index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            if len(index_nodes) > 1:
+                self._post_upgrade_task(task='auto_failover')
+            else:
+                self.log.info("Can't run Auto-Failover tests for one Index node")
         self._post_upgrade_task(task='create_indexes')
         if self.enable_dgm:
             self.assertTrue(self._is_dgm_reached())
@@ -822,6 +957,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         self._post_upgrade_task(task='drop_all_indexes')
         # creating indexes again to check plasma sharding
         self._post_upgrade_task(task='create_indexes')
+
+        # Neo Features
+        self._post_upgrade_task(task='smart_batching')
+        self._post_upgrade_task(task='system_event')
+        self._post_upgrade_task(task='free_tier')
 
     def kv_mutations(self, docs=None):
         if not docs:
@@ -865,11 +1005,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         create_index_query_age = f"CREATE INDEX verify_api ON {keyspace}(age DESC)"
         try:
             query_result = self.n1ql_helper.run_cbq_query(query=create_index_query_age,
-                                           server=self.n1ql_node)
+                                                          server=self.n1ql_node)
         except Exception as ex:
             if old_api:
                 msgs = ["'syntax error - at DESC'",
-                    "This option is enabled after cluster is fully upgraded and there is no failed node"]
+                        "This option is enabled after cluster is fully upgraded and there is no failed node"]
                 desc_error_hit = False
                 for msg in msgs:
                     if msg in str(ex):
@@ -911,10 +1051,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
 
     def _create_replica_indexes(self, keyspace='default'):
         nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        create_index_query = f"CREATE INDEX index_replica_index ON {keyspace}(age) USING GSI  WITH {{'num_replica': {len(nodes)-1}}};"
+        create_index_query = f"CREATE INDEX index_replica_index ON {keyspace}(age) USING GSI  WITH {{'num_replica': {len(nodes) - 1}}};"
         try:
             query_result = self.n1ql_helper.run_cbq_query(query=create_index_query,
-                                           server=self.n1ql_node)
+                                                          server=self.n1ql_node)
         except Exception as ex:
             old_api = False
             node_map = self._get_nodes_with_version()
@@ -931,7 +1071,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         else:
             drop_index_query = f"DROP INDEX {keyspace}.index_replica_index"
             query_result = self.n1ql_helper.run_cbq_query(query=drop_index_query,
-                                           server=self.n1ql_node)
+                                                          server=self.n1ql_node)
 
     def _recreate_equivalent_indexes(self, index_node):
         node_map = self._get_nodes_with_version()
@@ -955,8 +1095,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                             for bucket in buckets:
                                 bucket = [x for x in self.buckets if x.name == bucket][0]
                                 self.create_index(bucket=bucket,
-                                              query_definition=query_definition,
-                                              deploy_node_info=deploy_node_info)
+                                                  query_definition=query_definition,
+                                                  deploy_node_info=deploy_node_info)
                                 self.sleep(20)
                             query_definition.index_name = index
                             for bucket in buckets:
@@ -1025,7 +1165,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
     def _get_nodes_with_version(self):
         rest_conn = RestConnection(self.master)
         nodes = rest_conn.get_nodes()
-        map  = {}
+        map = {}
         for cluster_node in nodes:
             map[cluster_node.ip] = {"version": cluster_node.version,
                                     "services": cluster_node.services}
@@ -1071,7 +1211,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             name = "plasma_bucket_" + str(i)
             buckets.append(name)
         bucket_size = self._get_bucket_size(self.quota,
-                                            len(self.buckets)+len(buckets))
+                                            len(self.buckets) + len(buckets))
         self._create_buckets(server=self.master, bucket_list=buckets,
                              bucket_size=bucket_size)
         testuser = []
@@ -1145,8 +1285,12 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         queries = []
         for bucket in self.buckets:
             create_partitioned_index1_query = f"CREATE INDEX partitioned_idx1 ON {bucket.name}(name, age, join_yr) " \
-                                              f"partition by hash(name, age, join_yr) USING GSI;"
-            create_index1_query = f"CREATE INDEX non_partitioned_idx1 ON {bucket.name}(name, age, join_yr) USING GSI;"
+                                              f"partition by hash(name, age, join_yr) "
+            create_index1_query = f"CREATE INDEX non_partitioned_idx1 ON {bucket.name}(name, age, join_yr) "
+
+            if self.num_index_replicas > 0:
+                create_partitioned_index1_query += f' with {{"num_replica": {self.num_index_replicas} }}'
+                create_index1_query += f' with {{"num_replica": {self.num_index_replicas} }}'
 
             try:
                 self.n1ql_helper.run_cbq_query(query=create_partitioned_index1_query, server=self.n1ql_node)
@@ -1250,7 +1394,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         for node in node_map.keys():
             if node == indexer_node.ip:
                 if node_map[node]["version"] < "5" or \
-                                self.gsi_type == "memory_optimized":
+                        self.gsi_type == "memory_optimized":
                     return
                 else:
                     if self.disable_plasma_upgrade:
@@ -1260,7 +1404,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                     for index_val in index_metadata:
                         if index_val["hosts"] == indexer_info:
                             self.assertEqual(index_val["indexType"], gsi_type,
-                                         "GSI type is not {0} after upgrade for index {1}".format(gsi_type, index_val["name"]))
+                                             "GSI type is not {0} after upgrade for index {1}".format(gsi_type,
+                                                                                                      index_val[
+                                                                                                          "name"]))
 
     def _verify_throttling(self, indexer_node):
         if self.use_https:
@@ -1279,11 +1425,15 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         batch_size = self.get_batch_size(indexer_node)
         self.assertGreaterEqual(batch_size, -1, "Batch size is less than -1. Failing")
         if batch_size == -1:
-            self.assertEqual(index_created, 0, "{0} indexes are in created state when batch size is -1".format(index_created))
+            self.assertEqual(index_created, 0,
+                             "{0} indexes are in created state when batch size is -1".format(index_created))
             return
         if batch_size == 0:
-            self.assertEqual(index_created, 0, "{0} indexes are in building when batch size is 0".format(index_building))
+            self.assertEqual(index_created, 0,
+                             "{0} indexes are in building when batch size is 0".format(index_building))
             return
         if batch_size > 0:
-            self.assertLessEqual(index_building, batch_size, "{0} indexes are in building when batch size is {1}".format(index_building, batch_size))
+            self.assertLessEqual(index_building, batch_size,
+                                 "{0} indexes are in building when batch size is {1}".format(index_building,
+                                                                                             batch_size))
             return

@@ -743,15 +743,13 @@ class N1QLHelper():
             except Exception as ex:
                 self.log.error('ERROR during index creation %s' % str(ex))
 
-    def create_primary_index(self, using_gsi=True, server=None):
+    def create_primary_index(self, using_gsi=True, server=None, num_index_replicas=0):
         if server is None:
             server = self.master
         for bucket in self.buckets:
             self.query = "CREATE PRIMARY INDEX ON %s " % bucket.name
-            if using_gsi:
-                self.query += " USING GSI"
-            if not using_gsi:
-                self.query += " USING VIEW "
+            if num_index_replicas > 0:
+                self.query += f' with {{"num_replica": {num_index_replicas} }}'
             if self.use_rest:
                 try:
                     self.log.info("Check if index existed in {0} on server {1}".format(bucket.name, server.ip))

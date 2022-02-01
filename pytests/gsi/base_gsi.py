@@ -5,13 +5,14 @@ import os
 import random
 import threading
 import time
+import json
 
 from couchbase_helper.cluster import Cluster
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from couchbase_helper.tuq_generators import TuqGenerators
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 from couchbase_helper.documentgenerator import SDKDataLoader
 from couchbase_helper.query_definitions import QueryDefinition
 from collection.collections_rest_client import CollectionsRest
@@ -72,6 +73,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         if self.partition_fields:
             self.partition_fields = self.partition_fields.split(',')
         self.num_partition = self.input.param('num_partition', 8)
+        self.transfer_batch_size = self.input.param("transfer_batch_size", 3)
+        self.rebalance_timeout = self.input.param("rebalance_timeout", 600)
         self.server_group_map = {}
         if not self.use_rest:
             query_definition_generator = SQLDefinitionGenerator()
@@ -1649,6 +1652,53 @@ class BaseSecondaryIndexingTests(QueryTests):
         rest = RestConnection(indexer_node)
         content = rest.cluster_status()
         return int(content['indexMemoryQuota'])
+
+    def get_nodes_uuids(self):
+        if self.use_https:
+            port = '18091'
+        else:
+            port = '8091'
+        api = f'http://{self.master.ip}:{port}/pools/default'
+        status, content, header = self.rest.urllib_request(api)
+        if not status:
+            raise Exception(content)
+        results = json.loads(content)['nodes']
+        node_ip_uuid_map = {}
+        for node in results:
+            ip = node['hostname'].split(':')[0]
+            node_ip_uuid_map[ip] = node['nodeUUID']
+        return node_ip_uuid_map
+
+    def validate_smart_batching_during_rebalance(self, rebalance_task):
+        while self.rest._rebalance_progress() == 100 and rebalance_task.state != 'CHECKING':
+            progress = self.rest._rebalance_progress()
+            state = rebalance_task.state
+            self.log.info(f'Progress:{progress}')
+            self.log.info(f'state:{state}')
+            self.sleep(5)
+        self.sleep(5)
+        # Validating no. of parallel concurrent build
+        start_time = time.time()
+        while self.rest._rebalance_progress() < 100:
+            indexer_metadata = self.index_rest.get_indexer_metadata()['status']
+            moving_indexes_count = 0
+            # self.log.info(indexer_metadata)
+            for index in indexer_metadata:
+                if index['status'] == 'Moving':
+                    moving_indexes_count += 1
+            self.log.info(f"No. of Indexes in Moving State: {moving_indexes_count}")
+            if moving_indexes_count > self.transfer_batch_size:
+                self.fail("No. of parallel index builds are more than 'transfer batch size'")
+
+            curr_time = time.time()
+            if curr_time - start_time > self.rebalance_timeout:
+                self.fail("Rebalance got stuck or it's taking longer than expect. Please check the logs")
+            self.sleep(5)
+
+        result = rebalance_task.result()
+        self.log.info(result)
+        rebalance_status = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
 
 class ConCurIndexOps():
     def __init__(self):

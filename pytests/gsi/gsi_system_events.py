@@ -7,7 +7,6 @@ __git_user__ = "hrajput89"
 __created_on__ = "11/24/21 11:40 am"
 
 """
-import json
 from concurrent.futures import ThreadPoolExecutor
 
 from collection.gsi.backup_restore_utils import IndexBackupClient
@@ -45,7 +44,7 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
              'suffix', 'filler1', 'phone', 'zipcode'])
         self.initial_index_num = self.input.param('initial_index_num', 2)
         self.index_drop_flag = self.input.param('index_drop_flag', False)
-        self.nodes_uuids = self._get_nodes_uuids()
+        self.nodes_uuids = self.get_nodes_uuids()
         self.log.info("==============  GSIFreeTier setup has completed ==============")
 
     def tearDown(self):
@@ -58,22 +57,6 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
 
     def suite_setUp(self):
         pass
-
-    def _get_nodes_uuids(self):
-        if self.use_https:
-            port = '18091'
-        else:
-            port = '8091'
-        api = f'http://{self.master.ip}:{port}/pools/default'
-        status, content, header = self.rest.urllib_request(api)
-        if not status:
-            raise Exception(content)
-        results = json.loads(content)['nodes']
-        node_ip_uuid_map = {}
-        for node in results:
-            ip = node['hostname'].split(':')[0]
-            node_ip_uuid_map[ip] = node['nodeUUID']
-        return node_ip_uuid_map
 
     def test_gsi_update_settings_system_events(self):
         query = f'CREATE PRIMARY index on {self.namespaces[0]}'
@@ -287,7 +270,7 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
         rebalance_status = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(rebalance_status)
         indexer_metadata_aft_reb = self.index_rest.get_indexer_metadata()['status']
-        self.nodes_uuids = self._get_nodes_uuids()
+        self.nodes_uuids = self.get_nodes_uuids()
 
         new_node = self.servers[self.nodes_init].ip
         for index in indexer_metadata_aft_reb:

@@ -28,8 +28,6 @@ class SmartBatching(BaseSecondaryIndexingTests):
         self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
                                             bucket_params=self.bucket_params)
         self.buckets = self.rest.get_buckets()
-        self.transfer_batch_size = self.input.param("transfer_batch_size", 3)
-        self.rebalance_timeout = self.input.param("rebalance_timeout", 600)
         self.use_defer_build = self.input.param("use_defer_build", False)
 
         self.add_nodes_num = self.input.param("add_nodes_num", 1)
@@ -52,37 +50,6 @@ class SmartBatching(BaseSecondaryIndexingTests):
 
     def suite_setUp(self):
         pass
-
-    def _validate_smart_batching_during_rebalance(self, rebalance_task):
-        while self.rest._rebalance_progress() == 100 and rebalance_task.state != 'CHECKING':
-            progress = self.rest._rebalance_progress()
-            state = rebalance_task.state
-            print(f'Progress:{progress}')
-            print(f'state:{state}')
-            self.sleep(5)
-        self.sleep(5)
-        # Validating no. of parallel concurrent build
-        start_time = time.time()
-        while self.rest._rebalance_progress() < 100:
-            indexer_metadata = self.index_rest.get_indexer_metadata()['status']
-            moving_indexes_count = 0
-            # self.log.info(indexer_metadata)
-            for index in indexer_metadata:
-                if index['status'] == 'Moving':
-                    moving_indexes_count += 1
-            self.log.info(f"No. of Indexes in Moving State: {moving_indexes_count}")
-            if moving_indexes_count > self.transfer_batch_size:
-                self.fail("No. of parallel index builds are more than 'transfer batch size'")
-
-            curr_time = time.time()
-            if curr_time - start_time > self.rebalance_timeout:
-                self.fail("Rebalance got stuck or it's taking longer than expect. Please check the logs")
-            self.sleep(5)
-
-        result = rebalance_task.result()
-        self.log.info(result)
-        rebalance_status = RestHelper(self.rest).rebalance_reached()
-        self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
 
     def test_batching_for_rebalance_in_indexer_node(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -119,7 +86,7 @@ class SmartBatching(BaseSecondaryIndexingTests):
                                                       to_remove=[], services=services)
 
         # self.sleep(60)
-        self._validate_smart_batching_during_rebalance(rebalance_task)
+        self.validate_smart_batching_during_rebalance(rebalance_task)
         indexer_metadata_after_rebalance = self.index_rest.get_indexer_metadata()['status']
         self.assertEqual(len(indexer_metadata_after_rebalance),
                          self.initial_index_num * (self.num_replicas + 1) * self.scope_num * self.collection_num)
@@ -175,7 +142,7 @@ class SmartBatching(BaseSecondaryIndexingTests):
         services = ['index'] * self.remove_nodes_num
         rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
                                                       to_remove=remove_nodes, services=services)
-        self._validate_smart_batching_during_rebalance(rebalance_task)
+        self.validate_smart_batching_during_rebalance(rebalance_task)
         indexer_metadata_after_rebalance = self.index_rest.get_indexer_metadata()['status']
         self.assertEqual(len(indexer_metadata_after_rebalance),
                          self.initial_index_num * (self.num_replicas + 1) * self.scope_num * self.collection_num)
@@ -233,7 +200,7 @@ class SmartBatching(BaseSecondaryIndexingTests):
         rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                                       to_remove=remove_nodes, services=services)
         self.sleep(30)
-        self._validate_smart_batching_during_rebalance(rebalance_task)
+        self.validate_smart_batching_during_rebalance(rebalance_task)
         indexer_metadata_after_rebalance = self.index_rest.get_indexer_metadata()['status']
         self.assertEqual(len(indexer_metadata_after_rebalance),
                          self.initial_index_num * (self.num_replicas + 1) * self.scope_num * self.collection_num)
@@ -304,7 +271,7 @@ class SmartBatching(BaseSecondaryIndexingTests):
                                                       to_remove=[], services=services)
 
         self.sleep(30)
-        self._validate_smart_batching_during_rebalance(rebalance_task)
+        self.validate_smart_batching_during_rebalance(rebalance_task)
         indexer_metadata_after_failover = self.index_rest.get_indexer_metadata()['status']
         self.assertEqual(len(indexer_metadata_after_failover),
                          self.initial_index_num * (self.num_replicas + 1) * self.scope_num * self.collection_num)
