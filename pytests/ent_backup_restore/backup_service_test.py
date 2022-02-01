@@ -576,7 +576,7 @@ class BackupServiceTest(BackupServiceBase):
         # Add invalid repositories
         for repo_name, body in invalid_repositories:
             # Add invalid repository and expect it to fail
-            self.assertTrue(self.create_repository(repo_name, body=body, http_info=True)[1] in [400, 404], f"An invalid repository configuration was added {repo_name, body}.")
+            self.assertTrue(self.create_repository(repo_name, body=body, http_info=True, should_succeed=False, set_cloud_creds=False)[1] in [400, 404], f"An invalid repository configuration was added {repo_name, body}.")
             # Delete repositories
             self.delete_all_repositories()
 

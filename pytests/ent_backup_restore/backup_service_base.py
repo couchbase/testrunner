@@ -634,7 +634,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             return self.plan_api.plan_name_post_with_http_info(plan_name, **kwargs)
         return self.plan_api.plan_name_post(plan_name, **kwargs)
 
-    def create_repository(self, repo_name, plan_name=None, bucket_name=None, body=None, http_info=False, should_succeed=True):
+    def create_repository(self, repo_name, plan_name=None, bucket_name=None, body=None, http_info=False, should_succeed=True, set_cloud_creds=True):
         """ Creates an active repository
 
         Creates an active repository with a filesystem archive. If the objstore provider is set, then
@@ -647,7 +647,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         if body is None:
             body = Body2(plan=plan_name, archive=self.backupset.directory, bucket_name=bucket_name)
 
-        if self.objstore_provider:
+        if self.objstore_provider and set_cloud_creds:
             body = self.set_cloud_credentials(body)
 
         # Add repositories and tie plan to repository
