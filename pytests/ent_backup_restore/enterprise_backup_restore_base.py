@@ -612,7 +612,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.fail(msg)
         self.log.info(msg)
 
-    def backup_cluster(self, threads_count=1):
+    def backup_cluster(self, threads_count=None):
+        if threads_count is None:
+            threads_count = self.threads_count
         url_format = ""
         secure_port = ""
         if self.backupset.secure_conn:
@@ -848,6 +850,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --resume"
         if self.no_progress_bar:
             args += " --no-progress-bar"
+        if self.multi_threads:
+            args += " --threads %s " % self.threads_count
         bucket_compression_mode = self.compression_mode
         if self.restore_compression_mode is not None:
             bucket_compression_mode = self.restore_compression_mode
