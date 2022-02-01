@@ -149,7 +149,7 @@ class QueryUDFTests(QueryTests):
                     if self.analytics:
                         self.assertTrue("Cannot find function with signature" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
                     else:
-                        self.assertTrue("Incorrect number of arguments supplied to function celsius" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
+                        self.assertTrue("Incorrect number of arguments supplied to function 'celsius'" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
                 else:
                     self.fail()
             try:
@@ -164,7 +164,7 @@ class QueryUDFTests(QueryTests):
                     if self.analytics:
                         self.assertTrue("Cannot find function with signature" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
                     else:
-                        self.assertTrue("Incorrect number of arguments supplied to function celsius" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
+                        self.assertTrue("Incorrect number of arguments supplied to function 'celsius'" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
                 else:
                     self.fail()
             try:
@@ -182,7 +182,7 @@ class QueryUDFTests(QueryTests):
                     if self.analytics:
                         self.assertTrue("Cannot find function with signature" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
                     else:
-                        self.assertTrue("Incorrect number of arguments supplied to function celsius" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
+                        self.assertTrue("Incorrect number of arguments supplied to function 'celsius'" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
                 else:
                     self.fail()
         finally:
@@ -265,7 +265,7 @@ class QueryUDFTests(QueryTests):
                 if self.analytics:
                     self.assertTrue('Cannot find function with signature' in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
                 else:
-                    self.assertTrue('Function not found' in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
+                    self.assertTrue('not found' in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
         finally:
             try:
                 if self.analytics:
@@ -292,7 +292,7 @@ class QueryUDFTests(QueryTests):
             if self.analytics:
                 self.assertTrue('DROP ANALYTICS FUNCTION func_does_not_exist' in str(e), "Error message is wrong {0}".format(str(e)))
             else:
-                self.assertTrue('Function not found func_does_not_exist' in str(e), "Error message is wrong {0}".format(str(e)))
+                self.assertTrue("Function 'func_does_not_exist' not found" in str(e), "Error message is wrong {0}".format(str(e)))
 
     def test_inline_function_syntax(self):
         try:
@@ -340,7 +340,7 @@ class QueryUDFTests(QueryTests):
                 self.fail()
         except Exception as e:
             self.log.info(str(e))
-            self.assertTrue('Function not found celsius' in str(e))
+            self.assertTrue("Function 'celsius' not found" in str(e))
         finally:
             try:
                 if self.analytics:
@@ -358,7 +358,7 @@ class QueryUDFTests(QueryTests):
             results = self.run_cbq_query("EXECUTE FUNCTION celsius(10)")
         except Exception as e:
             self.log.info(str(e))
-            self.assertTrue('Function not found celsius' in str(e))
+            self.assertTrue("Function 'celsius' not found" in str(e))
         try:
             results = self.run_cbq_query("EXECUTE FUNCTION celsius(10)", query_context='default:default.test')
             self.assertEqual(results['results'], [-12.222222222222221])
@@ -1170,15 +1170,15 @@ class QueryUDFTests(QueryTests):
     '''The stated udf limit is 500, make sure we can create and use 500 functions'''
     def test_udf_limits(self):
         try:
-            function_name=''
-            for i in range(0,500):
+            function_name = ''
+            for i in range(0, 500):
                 function_name = "func" + str(i)
                 self.run_cbq_query(query='CREATE OR REPLACE FUNCTION {0}(...) {{ (args[0] * 9/5) + 32 }}'.format(function_name))
 
             result = self.run_cbq_query(query="select * from system:functions")
             self.assertEqual(result['metrics']['resultCount'], 500)
 
-            for i in range(0,500):
+            for i in range(0, 500):
                 function_name = "func" + str(i)
                 results = self.run_cbq_query(query='EXECUTE FUNCTION {0}(10)'.format(function_name))
                 self.assertEqual(results['results'], [50])
@@ -1454,7 +1454,7 @@ class QueryUDFTests(QueryTests):
 
             results2 = self.run_cbq_query(
                 "ADVISE SELECT name FROM default:default.test.test1 LET maximum_no = func2(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END GROUP BY name LETTING letter = func3('old hotel','o') HAVING name > letter")
-            self.assertTrue('CREATE INDEX adv_DISTINCT_numbers ON `default`:`default`.`test`.`test1`(DISTINCT ARRAY `v` FOR v in `numbers` END)' in str(results2['results']), "Wrong index was advised, check advise output {0}".format(results2))
+            self.assertTrue('CREATE INDEX adv_DISTINCT_numbers ON `default`:`default`.`test`.`test1`(DISTINCT ARRAY `v` FOR `v` in `numbers` END)' in str(results2['results']), "Wrong index was advised, check advise output {0}".format(results2))
         finally:
             try:
                 self.delete_library("strings")
@@ -1546,7 +1546,7 @@ class QueryUDFTests(QueryTests):
             results = self.run_cbq_query("EXECUTE p1")
         except Exception as e:
             self.log.error(str(e))
-            self.assertTrue("Function not found func1" in str(e))
+            self.assertTrue("Function 'func1' not found" in str(e))
         finally:
             try:
                 self.run_cbq_query("DROP FUNCTION func1")
@@ -1697,21 +1697,21 @@ class QueryUDFTests(QueryTests):
             functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
-            res = self.curl_with_roles('CREATE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            res = self.curl_with_roles('CREATE OR REPLACE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
             if self.scoped:
                 self.assertEqual(res['status'], 'success')
             else:
                 self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
-            res = self.curl_with_roles('CREATE FUNCTION default:default.test2.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            res = self.curl_with_roles('CREATE OR REPLACE FUNCTION default:default.test2.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
             self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
-            res = self.curl_with_roles('CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS \"adder\" AT \"math\"')
+            res = self.curl_with_roles('CREATE OR REPLACE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS \"adder\" AT \"math\"')
             self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
-            res = self.curl_with_roles('CREATE FUNCTION default:celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            res = self.curl_with_roles('CREATE OR REPLACE FUNCTION default:celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
             if self.scoped:
                 self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
             else:
                 self.assertEqual(res['status'], 'success')
-            res = self.curl_with_roles('CREATE FUNCTION celsius1(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
+            res = self.curl_with_roles('CREATE OR REPLACE FUNCTION celsius1(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
             if self.scoped:
                 self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
             else:
