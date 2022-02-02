@@ -323,10 +323,19 @@ class QueryUDFN1QLTests(QueryTests):
         query = f'{self.statement} COLLECTION default'
         self.create_n1ql_function(function_name, query)
         # Execute function
-        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
-        self.log.info(function_result)
+        try:
+            function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+            self.log.info(function_result)
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 10109)
+            self.assertTrue('Requested resource not found' in error['msg'])
 
     def test_param_function_param(self):
+        functions = 'function add(a, b) { return a + b; }'
+        self.create_library('math', functions, 'add')
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION add(a, b) LANGUAGE JAVASCRIPT AS "add" AT "math"')
+
         function_name = 'param_function_param_default'
         functions = f'function {function_name}() {{\
             var number = 10;\
@@ -1512,13 +1521,13 @@ class QueryUDFN1QLTests(QueryTests):
         function_sleep = 'function sleep(delay) { var start = new Date().getTime(); while (new Date().getTime() < start + delay); return delay; }'
         self.create_library("sleep", function_sleep, function_names)
         self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(t) LANGUAGE JAVASCRIPT AS "{function_name}" AT "sleep"')
-        sleep_query = f"EXECUTE FUNCTION {function_name}(30000)"
+        sleep_query = f"EXECUTE FUNCTION {function_name}(300000)"
 
         try:
             self.run_cbq_query(sleep_query, query_params={'timeout':'10s'})
             self.fail("Query should have CBQ error'd")
         except CBQError as ex:
-            error = self.process_CBQE(ex)
+            error = self.process_CBQE(ex, 1)
             self.assertEqual(error['code'], 10109)
             self.assertTrue('sleep stopped after running beyond 10000 ms' in error['msg'], f"Error is not what we expected {str(ex)}")
 

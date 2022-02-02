@@ -1454,7 +1454,7 @@ class QueryUDFTests(QueryTests):
 
             results2 = self.run_cbq_query(
                 "ADVISE SELECT name FROM default:default.test.test1 LET maximum_no = func2(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END GROUP BY name LETTING letter = func3('old hotel','o') HAVING name > letter")
-            self.assertTrue('CREATE INDEX adv_DISTINCT_numbers ON `default`:`default`.`test`.`test1`(DISTINCT ARRAY `v` FOR `v` in `numbers` END)' in str(results2['results']), "Wrong index was advised, check advise output {0}".format(results2))
+            self.assertTrue('CREATE INDEX adv_DISTINCT_numbers ON `default`:`default`.`test`.`test1`(DISTINCT ARRAY `v` FOR `v` IN `numbers` END)' in str(results2['results']), "Wrong index was advised, check advise output {0}".format(results2))
         finally:
             try:
                 self.delete_library("strings")
