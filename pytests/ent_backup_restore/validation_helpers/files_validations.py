@@ -52,6 +52,9 @@ class BackupRestoreFilesValidations(BackupRestoreValidationBase):
             expected_meta_json['disable_ft_alias'] = True
         if self.backupset.disable_analytics:
             expected_meta_json['disable_analytics'] = True
+        if self.objstore_provider and self.objstore_provider.schema_prefix() == "gs://":
+            expected_meta_json['filter_vbuckets']['enabled'] = True
+            expected_meta_json['filter_vbuckets']['list'] = list(range(64))
         actual_meta_json = self.get_backup_meta_json()
         is_equal, not_equal, extra, not_present = self.compare_dictionary(expected_meta_json, actual_meta_json)
         return self.compare_dictionary_result_analyser(is_equal, not_equal, extra, not_present, "Backup Meta data json")

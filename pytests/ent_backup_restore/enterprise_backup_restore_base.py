@@ -529,6 +529,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.backupset.current_bkrs_client_version[:3] >= "7.0":
             if self.vbucket_filter is not None:
                 args += " --vbucket-filter {0}".format(self.vbucket_filter)
+        if type(self.objstore_provider) == GCP:
+            args += " --vbucket-filter 0-63"
 
         if self.backupset.log_to_stdout:
             args += " --log-to-stdout"
