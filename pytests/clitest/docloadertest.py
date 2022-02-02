@@ -124,7 +124,7 @@ class docloaderTests(CliBaseTest):
             stats_tasks.append(self.cluster.async_wait_for_stats(self.servers[:self.num_servers], bucket, '',
                                'curr_items_tot', '==', items * (available_replicas + 1)))
         for task in stats_tasks:
-            task.result(60)
+            task.result(30)
 
     def get_number_of_files(self, file):
         if self.os != "windows":

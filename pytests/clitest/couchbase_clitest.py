@@ -589,7 +589,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                            --server-add-username=Administrator \
                            --server-add-password=password \
                            --no-ssl-verify "\
-                           .format(self._convert_server_to_url(self.servers[num + 1]))
+                           .format(self.servers[num + 1].ip)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                                     options=options,
                                                                     cluster_host="localhost",
@@ -644,9 +644,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cli_command = "recovery"
         for num in range(nodes_failover):
             # try to set recovery when nodes failovered (MB-11230)
-            options = "--server-recovery=%s:%s --recovery-type=delta" \
-                      % (self.servers[nodes_add - nodes_rem - num].ip,
-                         self.servers[nodes_add - nodes_rem - num].port)
+            options = "--server-recovery=%s --recovery-type=delta" \
+                      % (self.servers[nodes_add - nodes_rem - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                                 options=options,
                                                                 cluster_host="localhost",
@@ -658,9 +657,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             cli_command = "server-readd"
             self.log.info("add node {0} back to cluster"\
                           .format(self.servers[nodes_add - nodes_rem - num].ip))
-            options = "--server-add=https://{0}:1{1} --no-ssl-verify "\
-                                                   .format(self.servers[nodes_add - nodes_rem - num].ip,
-                                                    self.servers[nodes_add - nodes_rem - num].port)
+            options = "--server-add={0} --no-ssl-verify "\
+                                                   .format(self.servers[nodes_add - nodes_rem - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                                 options=options,
                                                                 cluster_host="localhost",
@@ -677,8 +675,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                            --server-add-username=Administrator \
                            --server-add-password=password \
                            --no-ssl-verify " \
-                                               .format(self._convert_server_to_url(\
-                                                       self.servers[nodes_add -num]))
+                                               .format(self.servers[nodes_add -num].ip)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                                     options=options,
                                                                     cluster_host="localhost",
@@ -708,13 +705,13 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cli_command = "server-add"
         for num in range(nodes_add):
             options = "--server-add={0} --server-add-username=Administrator \
-                       --server-add-password=password"\
-                             .format(self._convert_server_to_url(self.servers[num + 1]))
+                       --server-add-password=password  --no-ssl-verify"\
+                             .format(self.servers[num + 1].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                                               options=options, cluster_host="localhost", \
                                                 user="Administrator", password="password")
             output_msg = "SUCCESS: Server added"
-            self.assertIn(self._check_output(output_msg, output))
+            self.assertTrue(self._check_output(output_msg, output))
 
         cli_command = "rebalance-status"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
@@ -2628,9 +2625,10 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                         bucket-config.json  data  full-text.json  gsi.json
                         range.json views.json """
                 backup_folder_content = ["bucket-config.json", "data",
-                                         "full-text.json", "gsi.json",
+                                         "full-text.json", "gsi.json", "gsi.metadata.json",
                                           "range.json", "views.json",
-                                          "query.json"]
+                                          "query.json", "query.metadata.json",
+                                          "ranges"]
                 for bucket in self.buckets:
                     out, err = self.shell.execute_command("ls %s%s/%s*/%s-*"
                                                 % (self.backup_path, backup_repo,
