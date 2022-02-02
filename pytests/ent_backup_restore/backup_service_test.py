@@ -209,21 +209,25 @@ class BackupServiceTest(BackupServiceBase):
         # Services
         services = ["data", "gsi", "cbas", "ft", "eventing","views"]
 
+        # Valid schedule/tasks
+        schedule = TaskTemplateSchedule(job_type="BACKUP", frequency=1, period="HOURS", time="22:00", start_now=False)
+        tasks = [TaskTemplate(name="my_task", task_type="BACKUP", schedule=schedule)]
+
         # Valid Plans
         valid_plans = \
         [
-            Plan(name="my_plan", description=None, services=None, tasks=None), # A plan with a name
-            Plan(name="a", description=None, services=None, tasks=None), # Name length equal to 1
-            Plan(name="a" * 50  , description=None, services=None, tasks=None), # Name length equal to 50
-            Plan(name="my_plan", description="A plan with a description", services=None, tasks=None), # A plan with a description
-            Plan(name="my_plan" , description="a", services=None, tasks=None), # Description length equal to 1 character
-            Plan(name="my_plan" , description="a" * 140, services=None, tasks=None), # Description length equal to 140 characters
-            Plan(name="my_plan" , description=None, services=services, tasks=None), # All services
+            Plan(name="my_plan", description=None, services=None, tasks=tasks), # A plan with a name
+            Plan(name="a", description=None, services=None, tasks=tasks), # Name length equal to 1
+            Plan(name="a" * 50  , description=None, services=None, tasks=tasks), # Name length equal to 50
+            Plan(name="my_plan", description="A plan with a description", services=None, tasks=tasks), # A plan with a description
+            Plan(name="my_plan" , description="a", services=None, tasks=tasks), # Description length equal to 1 character
+            Plan(name="my_plan" , description="a" * 140, services=None, tasks=tasks), # Description length equal to 140 characters
+            Plan(name="my_plan" , description=None, services=services, tasks=tasks), # All services
         ]
 
         # Individual services
         for service in services:
-            valid_plans.append(Plan(name="my_plan" , description=None, services=[service], tasks=None)), # Non existant service
+            valid_plans.append(Plan(name="my_plan" , description=None, services=[service], tasks=tasks)), # Non existant service
 
         # 10 random subset of services of size 3
         for i in range(0, 10):
