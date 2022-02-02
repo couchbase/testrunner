@@ -368,9 +368,10 @@ class CouchbaseCLI:
         if servers:
             options += " --server-add " + str(servers)
 
+        hostname = "https://{0}:1{1} --no-ssl-verify ".format(self.server.cluster_ip, self.server.port)
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("server-readd",
-                                                     self.hostname, options)
+                                                     hostname, options)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Servers recovered")
 
