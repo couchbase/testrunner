@@ -936,9 +936,9 @@ class RbacN1QL(QueryTests):
         self.grant_role(role="query_select(`standard_bucket0`)")
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=INSERT INTO default:`%s`._default._default (KEY UUID(), VALUE _name)" \
+              "'statement=INSERT INTO default:default._default._default (KEY UUID(), VALUE _name)" \
               " SELECT _name FROM default:`standard_bucket0`._default._default _name WHERE age > 10'" % \
-              (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name)
+              (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
         self.assertTrue(any("success" in line for line in output),
@@ -952,9 +952,9 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=INSERT INTO default:`%s`._default._default (KEY UUID(), VALUE _name)" \
+              "'statement=INSERT INTO default:default._default._default (KEY UUID(), VALUE _name)" \
               " SELECT _name FROM default:`standard_bucket0`._default._default _name WHERE age > 10'" % \
-              (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name)
+              (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
         self.assertTrue(any("User does not have credentials to run SELECT queries"
@@ -1006,9 +1006,9 @@ class RbacN1QL(QueryTests):
         self.grant_role(role="query_select(`standard_bucket0`)")
         shell = RemoteMachineShellConnection(self.master)
         new_name = "employee-14-2"
-        cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=UPDATE `{3}` a set name = '{4}' WHERE name IN (SELECT name FROM default:`standard_bucket0`._default._default WHERE age > 10)'". \
-            format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, new_name, self.curl_path)
+        cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d " \
+              "'statement=UPDATE `default` a set name = '{3}' WHERE name IN (SELECT name FROM default:`standard_bucket0`._default._default WHERE age > 10)'". \
+            format(self.users[0]['id'], self.users[0]['password'], self.master.ip, new_name, self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
         self.assertTrue(any("success" in line for line in output),
@@ -1022,9 +1022,9 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         new_name = "employee-14-2"
-        cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=UPDATE `{3}` a set name = '{4}' WHERE name IN (SELECT name FROM default:`standard_bucket0`._default._default WHERE age > 10)'". \
-            format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, new_name, self.curl_path)
+        cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d " \
+              "'statement=UPDATE `default` a set name = '{3}' WHERE name IN (SELECT name FROM default:`standard_bucket0`._default._default WHERE age > 10)'". \
+            format(self.users[0]['id'], self.users[0]['password'], self.master.ip, new_name, self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
         self.assertTrue(any("User does not have credentials to run SELECT queries"
@@ -1039,9 +1039,9 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         self.grant_role(role="query_select(`standard_bucket0`)")
         shell = RemoteMachineShellConnection(self.master)
-        cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=DELETE FROM `{3}` a WHERE name IN (SELECT name FROM default:`standard_bucket0`._default._default WHERE age > 10)'". \
-            format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, self.curl_path)
+        cmd = "{3} -u {0}:{1} http://{2}:8093/query/service -d " \
+              "'statement=DELETE FROM `default` a WHERE name IN (SELECT name FROM default:`standard_bucket0`._default._default WHERE age > 10)'". \
+            format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
         self.assertTrue(any("success" in line for line in output),
@@ -1054,9 +1054,9 @@ class RbacN1QL(QueryTests):
         #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
-        cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=DELETE FROM `{3}` a WHERE name IN (SELECT name FROM default:`standard_bucket0`._default._default WHERE age > 10)'". \
-            format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, self.curl_path)
+        cmd = "{3} -u {0}:{1} http://{2}:8093/query/service -d " \
+              "'statement=DELETE FROM `default` a WHERE name IN (SELECT name FROM default:`standard_bucket0`._default._default WHERE age > 10)'". \
+            format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
         self.assertTrue(any("User does not have credentials to run SELECT queries"
