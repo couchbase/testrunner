@@ -1101,7 +1101,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                            '  backup    Backup a Couchbase cluster']
             elif subcommand == "help":
                 content = ['cbbackupmgr help [<command>] [<args>]', '',
-                           '  archivelayout   View the archive directory layout structure']
+                           '  backup                Backup up data in your Couchbase cluster']
             else:
                 content = ['cbbackupmgr {0} [<args>]'.format(subcommand), '',
                            'Required Flags:']
