@@ -2342,8 +2342,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         if servers > 0:
             servers_to_recover = []
             for idx in range(servers):
-                servers_to_recover.append("https://%s:1%s" % (self.servers[idx + 1].ip,
-                                                     self.servers[idx + 1].port))
+                servers_to_recover.append("%s" % (self.servers[idx + 1].ip))
             servers_to_recover = ",".join(servers_to_recover)
 
         if invalid_recover_server:
@@ -2351,7 +2350,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         servers_to_add = []
         for idx in range(init_num_servers - 1):
-            servers_to_add.append("{0}".format(self._convert_server_to_url(self.servers[idx + 1])))
+            servers_to_add.append("{0}".format(self.servers[idx + 1].ip))
         servers_to_add = ",".join(servers_to_add)
 
         if initialized:

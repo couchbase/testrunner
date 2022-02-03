@@ -706,7 +706,7 @@ class CliBaseTest(BaseTestCase):
         for group in settings["groups"]:
             for node in group["nodes"]:
                 for rs in recovery_servers:
-                    if node["hostname"] == rs:
+                    if node["hostname"].startswith(rs):
                         if node["recoveryType"] != recovery_type:
                             log.info(
                                 "Node %s doesn't contain recovery type %s ",
