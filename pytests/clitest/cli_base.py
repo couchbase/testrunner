@@ -307,8 +307,14 @@ class CliBaseTest(BaseTestCase):
         """
         if expect_error:
             for line in output:
-                if "ERROR" in line and message in line:
-                    return True
+                if "error" in line.lower():
+                    if isinstance(message, list):
+                        for mesg in message:
+                            if mesg in line:
+                                return True
+                    elif isinstance(message, str):
+                        if message in line:
+                            return True
             log.info("Did not receive expected error message `ERROR: %s`", message)
             return False
         else:

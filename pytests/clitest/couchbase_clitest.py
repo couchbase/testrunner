@@ -2382,7 +2382,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             self.assertTrue(self.verifyRecoveryType(server, servers_to_recover, "full"),
                                                                "Servers not recovered")
         else:
-            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+            error_msgs = ['invalid node name or node can\'t be used for delta recovery']
+            error_msgs.append(error_msg)
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msgs),
                                                    "Expected error message not found")
 
     def test_change_admin_password_with_read_only_account(self):
