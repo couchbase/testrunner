@@ -20,6 +20,7 @@ from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_SPOCK,\
                           COUCHBASE_FROM_VULCAN, COUCHBASE_FROM_MAD_HATTER
 from testconstants import WIN_BACKUP_PATH, WIN_BACKUP_C_PATH, WIN_COUCHBASE_BIN_PATH
 from testconstants import LINUX_COUCHBASE_BIN_PATH
+from testconstants import CLUSTER_QUOTA_RATIO, INDEX_QUOTA
 
 
 
@@ -168,6 +169,16 @@ class CommunityTests(CommunityBaseTest):
         sherlock_services_in_ce = ["kv", "index,kv,n1ql"]
         watson_services_in_ce = ["kv", "index,kv,n1ql", "fts,index,kv,n1ql"]
         self.sleep(5, "wait for node reset done")
+        kv_quota = 0
+        while kv_quota == 0:
+            time.sleep(1)
+            kv_quota = int(self.rest.get_nodes_self().mcdMemoryReserved)
+        info = self.rest.get_nodes_self()
+        kv_quota = int(info.mcdMemoryReserved * (CLUSTER_QUOTA_RATIO + 0.2))
+        self.rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=INDEX_QUOTA)
+        self.rest.init_cluster_memoryQuota(self.input.membase_settings.rest_username,
+                                           self.input.membase_settings.rest_password,
+                                           kv_quota)
         try:
             self.log.info("Initialize node with services {0}"
                                   .format(self.start_node_services))
