@@ -44,7 +44,7 @@ class RbacN1QL(QueryTests):
                 self.sleep(20)
             except Exception as e:
                 self.log.info(str(e))
-        if self.bucket_name != "default" and self.bucket_name != "bucket0" and self.bucket_name != "default:default.test.test1":
+        if self.bucket_name != "default" and self.bucket_name != "`standard_bucket0`" and self.bucket_name != "default:default.test.test1":
             temp_name = self.bucket_name
             if "`" in self.bucket_name:
                 temp_name = self.bucket_name.split("`")[1]
