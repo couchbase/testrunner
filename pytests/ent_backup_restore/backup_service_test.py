@@ -3057,7 +3057,7 @@ class BackupServiceTest(BackupServiceBase):
             output, error = collector.remote_connection.execute_command(f"cat {collector.col_path}/{Collector.backup_service_log}")
 
             for line in output:
-                if 'test_doc-0' in output:
+                if 'test_docs-0' in output:
                     self.fail(f"The redacted key was found in the output: {line}")
 
             output = [line for line in output if 'Running command /opt/couchbase/bin/cbbackupmgr examine' in line]
