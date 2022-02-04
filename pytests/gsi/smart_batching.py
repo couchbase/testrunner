@@ -93,12 +93,13 @@ class SmartBatching(BaseSecondaryIndexingTests):
                                              num_of_docs_per_collection=self.num_of_docs_per_collection)
 
         for collection_namespace in self.namespaces:
+
             for item, index_field in zip(range(self.initial_index_num), self.index_field_set):
                 if self.use_defer_build:
                     defer_build = random.choice([True, False])
                 else:
                     defer_build = False
-                idx = f'idx_{item}'
+                idx = f'idx_{item}_{collection_namespace.split(":")[1].replace(".","_")}'
                 index_gen = QueryDefinition(index_name=idx, index_fields=index_field)
                 query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=defer_build,
                                                               num_replica=self.num_replicas)
@@ -117,7 +118,7 @@ class SmartBatching(BaseSecondaryIndexingTests):
         rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                                       to_remove=[], services=services)
 
-        self.sleep(60)
+        # self.sleep(60)
         self._validate_smart_batching_during_rebalance(rebalance_task)
         indexer_metadata_after_rebalance = self.index_rest.get_indexer_metadata()['status']
         self.assertEqual(len(indexer_metadata_after_rebalance),
@@ -156,7 +157,7 @@ class SmartBatching(BaseSecondaryIndexingTests):
                     defer_build = random.choice([True, False])
                 else:
                     defer_build = False
-                idx = f'idx_{item}'
+                idx = f'idx_{item}_{collection_namespace.split(":")[1].replace(".","_")}'
                 index_gen = QueryDefinition(index_name=idx, index_fields=index_field)
                 query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=defer_build,
                                                               num_replica=self.num_replicas)
@@ -212,7 +213,7 @@ class SmartBatching(BaseSecondaryIndexingTests):
                     defer_build = random.choice([True, False])
                 else:
                     defer_build = False
-                idx = f'idx_{item}'
+                idx = f'idx_{item}_{collection_namespace.split(":")[1].replace(".","_")}'
                 index_gen = QueryDefinition(index_name=idx, index_fields=index_field)
                 query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=defer_build,
                                                               num_replica=self.num_replicas)
@@ -270,7 +271,7 @@ class SmartBatching(BaseSecondaryIndexingTests):
                     defer_build = random.choice([True, False])
                 else:
                     defer_build = False
-                idx = f'idx_{item}'
+                idx = f'idx_{item}_{collection_namespace.split(":")[1].replace(".","_")}'
                 if self.partitoned_index:
                     partition_fields = index_field
                     index_gen = QueryDefinition(index_name=idx, index_fields=index_field,
