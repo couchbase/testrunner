@@ -35,7 +35,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         self.num_of_indexes = self.input.param('num_of_indexes', 1)
         self.services_in = self.input.param('services_in', None)
         self.server_out = self.input.param('server_out', None)
-        self.bucket_params = self._create_bucket_params(server=self.master, size=100,
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=self.eviction_policy, lww=self.lww)

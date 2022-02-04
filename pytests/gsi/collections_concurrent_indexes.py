@@ -40,7 +40,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         self.test_bucket = self.input.param('test_bucket', 'test_bucket')
         self.num_of_indexes = self.input.param('num_of_indexes', 1)
         self.indexer_crash_trigger = self.input.param('indexer_crash_trigger', None)
-        self.bucket_params = self._create_bucket_params(server=self.master, size=100,
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=self.eviction_policy, lww=self.lww)
