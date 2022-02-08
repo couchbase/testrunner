@@ -3105,17 +3105,9 @@ class XdcrCLITest(CliBaseTest):
                 cluster_host = self.dest_master.ip
             cert_info = "--retrieve-cert"
             if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-                cert_info = "--cluster-cert-info"
+                cert_info = " --regenerate-cert cert.pem"
                 output, _ = self.__execute_cli(cli_command="ssl-manage", options="{0} "\
                                          .format(cert_info), cluster_host=cluster_host)
-                if output[0][:4] == "\x1b[6n":
-                    output[0] = output[0][4:]
-                cert_file = open("cert.pem", "w")
-                """ cert must be in format PEM-encoded x509.  Need to add newline
-                    at the end of each line. """
-                for item in output:
-                    cert_file.write("%s\n" % item)
-                cert_file.close()
                 self.shell.copy_file_local_to_remote("cert.pem",
                                                 self.root_path + "cert.pem")
                 os.system("rm -f cert.pem")
@@ -3128,8 +3120,8 @@ class XdcrCLITest(CliBaseTest):
                                                "")[xdcr_cert is None]
             if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
                 if "enterprise" in self.cb_version:
-                    self.assertTrue(self._check_output("-----END CERTIFICATE-----",
-                                                                       output))
+                    msgs_check = ["-----END CERTIFICATE-----", "Certificate regenerate and copied"]
+                    self.assertTrue(self._check_output(msgs_check, output))
                 else:
                     self.assertTrue(self._check_output("ERROR: This http API"\
                                 " endpoint requires enterprise edition", output))
@@ -3417,15 +3409,9 @@ class XdcrCLITest(CliBaseTest):
         cli_command = "ssl-manage"
         cert_info = "--retrieve-cert"
         if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
-            cert_info = "--cluster-cert-info"
+            cert_info = " --regenerate-cert cert.pem "
             output, error = self.__execute_cli(cli_command=cli_command,
                                                            options=cert_info)
-            cert_file = open("cert.pem", "w")
-            """ cert must be in format PEM-encoded x509.  Need to add newline
-                at the end of each line. """
-            for item in output:
-                cert_file.write("%s\n" % item)
-            cert_file.close()
             self.shell.copy_file_local_to_remote(xdcr_cert,
                                             self.root_path + xdcr_cert)
             os.system("rm -f %s " % xdcr_cert)
@@ -3434,7 +3420,8 @@ class XdcrCLITest(CliBaseTest):
             output, error = self.__execute_cli(cli_command=cli_command, options=options)
         self.assertFalse(error, "Error thrown during CLI execution %s" % error)
         if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-                self.assertTrue(self._check_output("-----END CERTIFICATE-----", output))
+            msgs_check = ["-----END CERTIFICATE-----", "Certificate regenerate and copied"]
+            self.assertTrue(self._check_output(msgs_check, output))
         else:
            self.assertIn(XdcrCLITest.SSL_MANAGE_SUCCESS["retrieve"]\
                                           .replace("PATH", xdcr_cert), output[0])
