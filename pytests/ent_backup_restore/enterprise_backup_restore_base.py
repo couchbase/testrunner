@@ -1162,11 +1162,17 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if self.expires:
                 self.log.info("Remove expired items by checking them")
                 self._verify_all_buckets(self.backupset.restore_cluster_host)
+
+            output = remote_client.list_files(f"{bk_dir}/backup")
+            if not output:
+                self.fail("Could not read backup directory")
+            backups_on_disk = len(output) - 3
             status, msg = self.validation_helper.validate_restore(self.backupset.end,
                                                                   self.vbucket_seqno, current_vseqno,
                                                                   compare_uuid=compare_uuid,
                                                                   compare=seqno_compare_function,
-                                                                  get_replica=replicas, mode=mode)
+                                                                  get_replica=replicas, mode=mode,
+                                                                  backups_on_disk=backups_on_disk)
 
             """ limit the length of message printout to 3000 chars """
             info = str(msg)[:3000] + '..' if len(str(msg)) > 3000 else msg

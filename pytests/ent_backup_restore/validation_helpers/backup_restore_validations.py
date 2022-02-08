@@ -77,7 +77,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         return True, msg
 
     def validate_restore(self, backup_number, backup_vbucket_seqno, restored_vbucket_seqno, compare_uuid=False,
-                         compare="==", get_replica=False, mode="memory"):
+                         compare="==", get_replica=False, mode="memory", backups_on_disk=None):
         """
         Validates ep-engine stats and restored data
         :param backup_number: backup end number
@@ -101,7 +101,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         for bucket in self.buckets:
             kv_file_name = "{0}-{1}-{2}-{3}.json".format(bucket.name, "key_value", "backup", backup_number)
             kv_file_path = os.path.join(self.backup_validation_path, kv_file_name)
-            if backup_number == self.backupset.end:
+            if backup_number == self.backupset.end and backup_number == backups_on_disk:
                 backup_files = [f"{self.backup_validation_path}/" + f for f in listdir(self.backup_validation_path) if f"{bucket.name}-key_value-backup" in f]
                 backup_files.sort(key=os.path.getmtime)
                 kv_file_path = backup_files[-1]
