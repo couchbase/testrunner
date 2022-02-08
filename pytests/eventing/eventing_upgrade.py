@@ -12,6 +12,8 @@ from lib.membase.api.rest_client import RestConnection
 import logging
 from pytests.eventing.eventing_constants import HANDLER_CODE, EXPORTED_FUNCTION
 from testconstants import COUCHBASE_VERSION_2
+from pytests.security.ntonencryptionBase import ntonencryptionBase
+from lib.Cb_constants.CBServer import CbServer
 import os
 import json
 
@@ -38,6 +40,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.upgrade_version = self.input.param("upgrade_version")
         self.exported_handler_version = self.input.param("exported_handler_version", '6.6.1')
+        self.enable_n2n_encryption_and_tls = self.input.param("enable_n2n_encryption_and_tls", False)
         log.info("==============  EventingUpgrade setup has completed ==============")
 
     def tearDown(self):
@@ -68,6 +71,12 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
             success_upgrade &= self.queue.get()
         if not success_upgrade:
             self.fail("Upgrade failed!")
+        if self.enable_n2n_encryption_and_tls:
+            ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
+            CbServer.use_https = True
+            self.wait_for_handler_state("timers", "deployed")
+            self.pause_handler_by_name("timers")
+            self.resume_handler_by_name("timers")
         self.wait_for_handler_state("bucket_op", "undeployed")
         self.wait_for_handler_state("timers", "deployed")
         self.deploy_handler_by_name("bucket_op")
@@ -117,6 +126,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
         self.sleep(300)  ## wait for timers to fire
         self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
+        self.create_and_test_eventing_manage_functions_role()
         self.print_eventing_stats_from_all_eventing_nodes()
         self.skip_metabucket_check = True
 
@@ -139,6 +149,12 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
         self.add_built_in_server_user()
+        if self.enable_n2n_encryption_and_tls:
+            ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
+            CbServer.use_https = True
+            self.wait_for_handler_state("timers", "deployed")
+            self.pause_handler_by_name("timers")
+            self.resume_handler_by_name("timers")
         self.wait_for_handler_state("bucket_op", "undeployed")
         self.wait_for_handler_state("timers", "deployed")
         self.deploy_handler_by_name("bucket_op")
@@ -187,6 +203,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
         self.sleep(300)  ## wait for timers to fire
         self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
+        self.create_and_test_eventing_manage_functions_role()
         self.print_eventing_stats_from_all_eventing_nodes()
         self.skip_metabucket_check=True
 
@@ -210,6 +227,12 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
         self.add_built_in_server_user()
+        if self.enable_n2n_encryption_and_tls:
+            ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
+            CbServer.use_https = True
+            self.wait_for_handler_state("timers", "deployed")
+            self.pause_handler_by_name("timers")
+            self.resume_handler_by_name("timers")
         self.wait_for_handler_state("bucket_op", "undeployed")
         self.wait_for_handler_state("timers", "deployed")
         self.deploy_handler_by_name("bucket_op")
@@ -259,6 +282,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
         self.sleep(300)  ## wait for timers to fire
         self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
+        self.create_and_test_eventing_manage_functions_role()
         self.print_eventing_stats_from_all_eventing_nodes()
         self.skip_metabucket_check = True
 
@@ -282,6 +306,12 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
         self.add_built_in_server_user()
+        if self.enable_n2n_encryption_and_tls:
+            ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
+            CbServer.use_https = True
+            self.wait_for_handler_state("timers", "deployed")
+            self.pause_handler_by_name("timers")
+            self.resume_handler_by_name("timers")
         self.wait_for_handler_state("bucket_op", "undeployed")
         self.wait_for_handler_state("timers", "deployed")
         self.deploy_handler_by_name("bucket_op")
@@ -332,6 +362,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
         self.sleep(300)  ## wait for timers to fire
         self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
+        self.create_and_test_eventing_manage_functions_role()
         self.print_eventing_stats_from_all_eventing_nodes()
         self.skip_metabucket_check = True
 
@@ -411,6 +442,9 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
             success_upgrade &= self.queue.get()
         if not success_upgrade:
             self.fail("Upgrade failed!")
+        if self.enable_n2n_encryption_and_tls:
+            ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
+            CbServer.use_https = True
         self.wait_for_handler_state("bucket_op", "paused")
         self.wait_for_handler_state("timers", "paused")
         self.resume_handler_by_name("bucket_op")
@@ -461,6 +495,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
         self.sleep(300)  ## wait for timers to fire
         self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
+        self.create_and_test_eventing_manage_functions_role()
         self.print_eventing_stats_from_all_eventing_nodes()
         self.skip_metabucket_check = True
 
@@ -483,6 +518,9 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
         self.add_built_in_server_user()
+        if self.enable_n2n_encryption_and_tls:
+            ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
+            CbServer.use_https = True
         self.wait_for_handler_state("bucket_op", "paused")
         self.wait_for_handler_state("timers", "paused")
         self.resume_handler_by_name("bucket_op")
@@ -532,6 +570,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
         self.sleep(300)  ## wait for timers to fire
         self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
+        self.create_and_test_eventing_manage_functions_role()
         self.print_eventing_stats_from_all_eventing_nodes()
         self.skip_metabucket_check=True
 
@@ -783,6 +822,8 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         body['settings']['log_level'] = self.eventing_log_level
         body['depcfg']['curl'] = []
         body['depcfg']['buckets'] = []
+        body['function_scope'] = {"bucket": self.src_bucket_name,
+                                  "scope": "_default"}
         for binding in bucket_bindings:
             bind_map=binding.split(".")
             if  len(bind_map)< 3:
@@ -804,3 +845,13 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.deploy_handler_by_name("timers")
         self.pause_handler_by_name("bucket_op")
         self.pause_handler_by_name("timers")
+
+    def create_and_test_eventing_manage_functions_role(self):
+        payload = "name=" + "john" + "&roles=" + '''data_reader[metadata],data_writer[metadata],data_writer[dst_bucket],
+                                  data_dcp_reader[src_bucket],eventing_manage_functions[src_bucket:_default]''' + "&password=" + "asdasd"
+        self.rest.add_set_builtin_user(user_id="john", payload=payload)
+        self.create_handler("test", "handler_code/no_op.js")
+        self.deploy_handler_by_name("test")
+        self.pause_handler_by_name("test")
+        self.resume_handler_by_name("test")
+        self.undeploy_and_delete_function("test")
