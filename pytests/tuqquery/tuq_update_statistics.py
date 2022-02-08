@@ -332,11 +332,18 @@ class QueryUpdateStatsTests(QueryTests):
         self.run_cbq_query(query="DROP SCOPE `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`")
         self.sleep(1)
         # update stats after drop system scope
-        try:
-            self.run_cbq_query(query=update_stats, query_params={'timeout':'600s'})
-        except CBQError as ex:
-            self.log.info("Let's try update stas again at least once more as you might get exception first time")
-            self.run_cbq_query(query=update_stats, query_params={'timeout':'600s'})
+        try_count = 0
+        while True:
+            try:
+                try_count += 1
+                self.run_cbq_query(query=update_stats, query_params={'timeout':'600s'})
+                break
+            except CBQError as ex:
+                if try_count == 5:
+                    self.log.error(f"Update statistics failed: {ex}")
+                    self.fail()
+                else:
+                    self.log.info(f"Attempt# {try_count} of 5 failed. Let's try again")
         # check stats
         histogram = self.run_cbq_query(query=histogram_query)
         self.assertEqual(histogram['results'],histogram_expected)
@@ -469,7 +476,7 @@ class QueryUpdateStatsTests(QueryTests):
         if self.scope == '_default' and self.collection == '_default':
             min_size, max_size = 11507, 31591
         else:
-            min_size, max_size = 1968, 1968
+            min_size, max_size = 1332, 1332
         try:
             # run stats
             self.run_cbq_query(query=update_stats)
@@ -556,7 +563,7 @@ class QueryUpdateStatsTests(QueryTests):
     def test_missing_keyspace(self):
         error_code = 12003
         fake_keyspaces = {
-            "`fake-bucket`": "Keyspace not found in CB datastore: default:fake-bucket - cause: No bucket named 'fake-bucket'",
+            "`fake-bucket`": "Keyspace not found in CB datastore: default:fake-bucket - cause: No bucket named fake-bucket",
             "`travel-sample`.inventory.`fake-collection`": "Keyspace not found in CB datastore: default:travel-sample.inventory.fake-collection"
         }
         for keyspace in fake_keyspaces:

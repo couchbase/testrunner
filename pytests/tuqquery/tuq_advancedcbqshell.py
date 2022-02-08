@@ -306,7 +306,7 @@ class AdvancedQueryTests(QueryTests):
                 self.assertTrue("Too many input arguments to command" in o)
                 queries = ['\connect http://localhost:8091;', 'create primary index on bucketname;']
                 o = self.execute_commands_inside(self.cbqpath, '', queries, '', '', bucket.name, '' )
-                self.assertTrue("GSI CreatePrimaryIndex() - cause: Index #primary already exists." in o)
+                self.assertTrue("The index #primary already exists." in o)
 
     def test_history(self):
          for server in self.servers:
