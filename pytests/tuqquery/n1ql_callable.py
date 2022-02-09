@@ -20,6 +20,7 @@ class N1QLCallable:
             raise Exception("Need to specify at least 1 node.")
         self.nodes = nodes
         self.log = logger.Logger.get_logger()
+        self.rest = RestConnection(self.nodes[0])
 
     def run_n1ql_query(self, query="", node=None):
         if not node:
@@ -77,12 +78,26 @@ class N1QLCallable:
                 return node
         raise Exception("Cannot find any n1ql node!")
 
+    def _find_index_node(self):
+        services_map = self._get_services_map()
+        for node in self.nodes:
+            key = node.ip + ":" + node.port
+            services = services_map[key]
+            if "index" in services:
+                return node
+        raise Exception("Cannot find any index node!")
+
     def _get_services_map(self):
-        rest = RestConnection(self.nodes[0])
-        return rest.get_nodes_services()
+        return self.rest.get_nodes_services()
 
     def _drop_index(self, bucket, index):
         self.run_n1ql_query("drop index `{0}`.`{1}`".format(bucket, index))
 
     def _drop_primary_index(self, bucket):
         self.run_n1ql_query("drop primary index on `{0}`".format(bucket))
+
+    def set_gsi_scope_tier_limit(self, bucket, scope, scope_tier_limit):
+        self.rest.set_internalSetting('enforceLimits', True)
+        index_node = self._find_index_node()
+        index_rest = RestConnection(index_node)
+        index_rest.set_gsi_tier_limit(bucket=bucket, scope=scope, limit=scope_tier_limit)

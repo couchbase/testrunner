@@ -29,7 +29,6 @@ from query_tests_helper import QueryHelperTests
 from couchbase_helper.tuq_generators import JsonGenerator
 from fts.fts_base import FTSIndex, FTSBaseTest
 from pytests.fts.fts_callable import FTSCallable
-from pytests.tuqquery.n1ql_callable import N1QLCallable
 from pprint import pprint
 from testconstants import CB_REPO
 from testconstants import MV_LATESTBUILD_REPO
@@ -3105,6 +3104,21 @@ class NewUpgradeBaseTest(BaseTestCase):
                 if server.ip == node.ip:
                     server_set.append(server)
         return server_set
+
+    def gsi_scope_free_tier(self, bucket, scope, collection, scope_tier_limit):
+        expected_err = 'Limit for number of indexes that can be created per scope has been reached'
+        n1ql_obj = N1QLCallable(self.servers)
+        n1ql_obj.set_gsi_scope_tier_limit(bucket=bucket, scope=scope, scope_tier_limit=scope_tier_limit)
+        keyspace = f'{bucket}.{scope}.{collection}'
+        for item in range(scope_tier_limit + 2):
+            index_name = f'idx_tier_limit_{item}'
+            try:
+                n1ql_obj.create_gsi_index(keyspace=keyspace, name=index_name,
+                                          fields="email", using="gsi", is_primary=False,
+                                          index_condition="")
+            except Exception as err:
+                if expected_err not in str(err):
+                    self.fail(err)
 
     def _create_collections(self, scope=None, collection=None):
         rest = RestConnection(self.master)
