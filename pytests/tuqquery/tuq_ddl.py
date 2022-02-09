@@ -59,8 +59,9 @@ class QueryDDLTests(QueryTests):
     def test_drop_scope_collection_if_exists(self):
         self.run_cbq_query(f"DROP SCOPE {self.bucket}.scope1 IF EXISTS")
         self.run_cbq_query(f"CREATE SCOPE {self.bucket}.scope1")
+        self.sleep(5)
         self.run_cbq_query(f"CREATE COLLECTION {self.bucket}.scope1.collection1")
-
+        self.sleep(5)
         self.run_cbq_query(f"DROP COLLECTION {self.bucket}.scope1.collection1")
         self.run_cbq_query(f"DROP COLLECTION {self.bucket}.scope1.collection1 IF EXISTS")
 
