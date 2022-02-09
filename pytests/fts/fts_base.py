@@ -2327,6 +2327,7 @@ class CouchbaseCluster:
                     CbServer.cacert_verify = False
                     self.x509 = x509main(host=self.__master_node)
                     self.x509.teardown_certs(servers=TestInputSingleton.input.servers)
+                    CbServer.multiple_ca = False
             except Exception as e:
                 self.__log.info(e)
 
@@ -3984,6 +3985,8 @@ class FTSBaseTest(unittest.TestCase):
             skip_disable_nton = self._input.param("skip_disable_nton", False)
             if not skip_disable_nton:
                 ntonencryptionBase().disable_nton_cluster(self._input.servers)
+                self.use_https = False
+                CbServer.use_https = False
             if self.compare_es:
                 self.teardown_es()
 
