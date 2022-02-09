@@ -3,6 +3,7 @@
 import json
 import time
 import contextlib
+import re
 
 from concurrent.futures import(
     ThreadPoolExecutor
@@ -26,6 +27,8 @@ class GCP(provider.Provider):
         self.repo_name = repo_name
 
         self.resource = storage.Client()
+
+        self.not_found_error = re.compile("the specified bucket does not exist")
 
     def schema_prefix(self):
         """See super class"""

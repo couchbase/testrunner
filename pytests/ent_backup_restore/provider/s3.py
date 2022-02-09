@@ -33,6 +33,7 @@ class S3(provider.Provider):
             kwargs['aws_secret_access_key'] = self.secret_access_key
 
         self.resource = boto3.resource('s3', **kwargs)
+        self.not_found_error = re.compile("bucket '.*' not found")
 
     def schema_prefix(self):
         """See super class"""

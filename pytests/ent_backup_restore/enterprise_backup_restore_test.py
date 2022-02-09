@@ -4509,34 +4509,49 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
     def test_config_without_objstore_bucket(self):
         self.assertIsNotNone(self.objstore_provider, "Test requires an object store provider")
-        self.objstore_provider.remove_bucket()
+        temp_bucket = self.backupset.objstore_bucket
+        self.backupset.objstore_bucket = "invalidbucket"
         output, _ = self.backup_create(del_old_backup=False)
-        self.assertRegex(output[0].lower(), re.compile("bucket '.*' not found"))
+        self.backupset.objstore_bucket = temp_bucket
+        self.assertRegex(output[0].lower(), self.objstore_provider.not_found_error)
 
     def test_backup_without_objstore_bucket(self):
         self.assertIsNotNone(self.objstore_provider, "Test requires an object store provider")
-        self.objstore_provider.remove_bucket()
+        temp_bucket = self.backupset.objstore_bucket
+        self.backupset.objstore_bucket = "invalidbucket"
         output, _ = self.backup_cluster()
-        self.assertRegex(output[0].lower(), re.compile("bucket '.*' not found"))
+        self.backupset.objstore_bucket = temp_bucket
+        self.assertRegex(output[0].lower(), self.objstore_provider.not_found_error)
 
     def test_info_without_objstore_bucket(self):
         self.assertIsNotNone(self.objstore_provider, "Test requires an object store provider")
-        self.objstore_provider.remove_bucket()
+        temp_bucket = self.backupset.objstore_bucket
+        self.backupset.objstore_bucket = "invalidbucket"
         output, _ = self.backup_info()
-        self.assertIn('the specified bucket does not exist', output[0].lower())
+        self.backupset.objstore_bucket = temp_bucket
+        error_string = ""
+        if self.objstore_provider.schema_prefix() == "gs://":
+            error_string = "bucket doesn't exist"
+        elif self.objstore_provider.schema_prefix() == "s3://":
+            error_string = "the specified bucket does not exist"
+        self.assertIn(error_string, output[0].lower())
 
     def test_restore_without_objstore_bucket(self):
         self.assertIsNotNone(self.objstore_provider, "Test requires an object store provider")
-        self.objstore_provider.remove_bucket()
+        temp_bucket = self.backupset.objstore_bucket
+        self.backupset.objstore_bucket = "invalidbucket"
         self.restore_only = True
         output, _ = self.backup_restore()
-        self.assertRegex(output[0].lower(), re.compile("bucket '.*' not found"))
+        self.backupset.objstore_bucket = temp_bucket
+        self.assertRegex(output[0].lower(), self.objstore_provider.not_found_error)
 
     def test_remove_without_objstore_bucket(self):
         self.assertIsNotNone(self.objstore_provider, "Test requires an object store provider")
-        self.objstore_provider.remove_bucket()
+        temp_bucket = self.backupset.objstore_bucket
+        self.backupset.objstore_bucket = "invalidbucket"
         _, output, _ = self.backup_remove()
-        self.assertRegex(output[0].lower(), re.compile("bucket '.*' not found"))
+        self.backupset.objstore_bucket = temp_bucket
+        self.assertRegex(output[0].lower(), self.objstore_provider.not_found_error)
 
     def test_config_create_multiple_repos_with_remove_staging_directory(self):
         self.assertIsNotNone(self.objstore_provider, "Test requires an object store provider")
