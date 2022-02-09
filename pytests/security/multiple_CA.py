@@ -18,10 +18,13 @@ class MultipleCA(BaseTestCase):
         self.passphrase_type = self.input.param("passphrase_type", "script")
         self.encryption_type = self.input.param("encryption_type", "aes256")
         self.wildcard_dns = self.input.param("wildcard_dns", None)
+        self.passphrase_url = self.input.param("rest_url",
+                                               "https://testingsomething.free.beeceptor.com/")
         self.x509 = x509main(host=self.master, standard=self.standard,
                              encryption_type=self.encryption_type,
                              passphrase_type=self.passphrase_type,
-                             wildcard_dns=self.wildcard_dns)
+                             wildcard_dns=self.wildcard_dns,
+                             passhprase_url=self.passphrase_url)
         for server in self.servers:
             self.x509.delete_inbox_folder_on_server(server=server)
         sample_bucket = self.input.param("sample_bucket", "travel-sample")
