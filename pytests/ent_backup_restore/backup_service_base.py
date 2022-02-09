@@ -145,6 +145,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # Configure logging
         self.log = logger.Logger.get_logger()
 
+        if not hasattr(self, 'sys_log_count'):
+            self.sys_log_count = Counter()
+
         # Node to node encryption
         self.node_to_node_encryption = NodeToNodeEncryption(self.input.clusters[0][0])
 
