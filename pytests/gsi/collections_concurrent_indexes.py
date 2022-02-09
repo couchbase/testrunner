@@ -490,7 +490,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                         self.fail(err)
         self.log.info("Waiting for all indexes to be online...")
         self.wait_until_indexes_online()
-        
+        self.sleep(20)
         index_info = self.rest.get_indexer_metadata()['status']
         self.assertEqual(len(index_info), len(index_gen_list) * (self.num_replicas + 1))
         node_a_indexes, node_b_indexes = [], []

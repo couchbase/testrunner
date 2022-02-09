@@ -6,7 +6,6 @@ __email__ = "Hemant.Rajput@couchbase.com"
 __git_user__ = "hrajput89"
 __created_on__ = "14/10/20 1:10 pm"
 """
-
 import re
 
 from concurrent.futures import ThreadPoolExecutor
@@ -883,6 +882,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                     else:
                         self.fail(err)
         self.wait_until_indexes_online()
+        self.sleep(20)
         index_meta_info = self.rest.get_indexer_metadata()['status']
         self.assertEqual(len(index_meta_info), 10 * (self.num_replicas + 1))
 
@@ -903,6 +903,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
 
         self.wait_until_indexes_online()
         index_meta_info = self.rest.get_indexer_metadata()['status']
+        
         self.assertEqual(len(index_meta_info), 10 * (self.num_replicas + 1))
 
     def test_rebalance_indexer_nodes_with_multiple_BSC(self):

@@ -1260,7 +1260,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 self.master, non_master_nodes[0])
             self.sleep(10, "wait node to be unblocked")
         for backup_client in backup_clients:
-            restore_result = backup_client.restore()
+            restore_result = backup_client.restore(restore_args="--resume")
             self.assertTrue(restore_result[0], str(restore_result[1]))
             if self.use_cbbackupmgr:
                 backup_client.remove_backup()

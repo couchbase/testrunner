@@ -116,6 +116,7 @@ class CollectionsAlterIndex(BaseSecondaryIndexingTests):
         self.wait_until_indexes_online()
 
         # Just moving idx2 node of collection1, while keeping same node for replica
+        self.sleep(20)
         index_info = self.rest.get_indexer_metadata()['status']
         index_info_without_idx2 = copy.deepcopy(index_info)
         idx_name = 'idx2'

@@ -83,7 +83,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                 self.assertTrue(result, f"Index was successfully created with deletion of {self.item_to_delete}")
         except Exception as err:
             self.log.info(str(err))
-            self.sleep(5)
+            self.sleep(15)
             index_status = self.rest.get_index_status()
             self.assertFalse(index_status)
 
