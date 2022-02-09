@@ -2557,6 +2557,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         for bucket in buckets:
             count = 0
             keys_fail[bucket.name] = {}
+            if type(self.objstore_provider) == GCP:
+                restore_buckets_items[bucket.name] = 63
             if len(list(bk_file_data[bucket.name].keys())) != \
                     int(restore_buckets_items[bucket.name]):
                 self.fail("Total keys do not match")
