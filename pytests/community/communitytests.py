@@ -20,7 +20,7 @@ from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_SPOCK,\
                           COUCHBASE_FROM_VULCAN, COUCHBASE_FROM_MAD_HATTER
 from testconstants import WIN_BACKUP_PATH, WIN_BACKUP_C_PATH, WIN_COUCHBASE_BIN_PATH
 from testconstants import LINUX_COUCHBASE_BIN_PATH
-from testconstants import CLUSTER_QUOTA_RATIO, INDEX_QUOTA
+from testconstants import CLUSTER_QUOTA_RATIO, INDEX_QUOTA, FTS_QUOTA
 
 
 
@@ -174,18 +174,18 @@ class CommunityTests(CommunityBaseTest):
             time.sleep(1)
             kv_quota = int(self.rest.get_nodes_self().mcdMemoryReserved)
         info = self.rest.get_nodes_self()
-        kv_quota = int(info.mcdMemoryReserved * (CLUSTER_QUOTA_RATIO + 0.2))
+        kv_quota = int(info.mcdMemoryReserved * (CLUSTER_QUOTA_RATIO))
         self.rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=INDEX_QUOTA)
+        self.rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=FTS_QUOTA)
         self.rest.init_cluster_memoryQuota(self.input.membase_settings.rest_username,
                                            self.input.membase_settings.rest_password,
-                                           kv_quota)
+                                           kv_quota - INDEX_QUOTA - FTS_QUOTA - 100)
         try:
             self.log.info("Initialize node with services {0}"
                                   .format(self.start_node_services))
             status = self.rest.init_node_services(hostname=self.master.ip,
                                         services=[self.start_node_services])
-            init_node = self.cluster.async_init_node(self.master,
-                                            services = [self.start_node_services])
+            self.rest.init_cluster()
         except Exception as e:
             if e:
                 print(e)
@@ -197,7 +197,7 @@ class CommunityTests(CommunityBaseTest):
                          self.start_node_services not in watson_services_in_ce:
                 self.log.info("initial services setting enforced in Watson CE")
 
-        elif status and init_node.result() != 0:
+        elif status:
             add_node = False
             try:
                 self.log.info("node with services {0} try to add"
