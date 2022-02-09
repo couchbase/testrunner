@@ -38,6 +38,7 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
             self.openssl_path = "C:/Program Files/Couchbase/Server/bin/openssl"
             self.inbox_folder_path = "C:/Program Files/Couchbase/Server/var/lib/couchbase/inbox/"
         self.plain_passw_map = dict()
+        self.add_rbac_groups_roles(self.master)
         self.test_setup_finished = True
 
     def tearDown(self):
@@ -56,6 +57,36 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
                           -d '["{0}"]'""".format(bucket_name))
         shell.disconnect()
         self.sleep(60)
+
+    def add_rbac_groups_roles(self, server):
+        rest = RestConnection(server)
+        versions = rest.get_nodes_versions()
+        if versions[0] < "7.0":
+            group_roles = ['admin', 'cluster_admin', 'security_admin', 'ro_admin',
+                           'bucket_admin[travel-sample]', 'bucket_full_access[travel-sample]',
+                           'data_reader[travel-sample]', 'data_writer[travel-sample]', 'data_dcp_reader[travel-sample]', 'data_backup[travel-sample]', 'data_monitoring[travel-sample]']
+        else:
+            group_roles = ['admin', 'cluster_admin', 'security_admin_local', 'security_admin_external', 'ro_admin',
+                           'bucket_admin[travel-sample]', 'bucket_full_access[travel-sample]',
+                           'data_reader[travel-sample:_default:_default]', 'data_writer[travel-sample:_default:_default]', 'data_dcp_reader[travel-sample:_default:_default]', 'data_monitoring[travel-sample:_default:_default]',
+                           'data_backup[travel-sample]']
+        groups = []
+        for role in group_roles:
+            group_name = "group_" + role.split("[",1)[0]
+            groups.append(group_name)
+            roles = role
+            log.info("Group name -- {0} :: Roles -- {1}".format(group_name, roles))
+            rest.add_group_role(group_name, group_name, roles, None)
+
+        for group_name in groups:
+            user_name = "user_" + group_name
+            role = ''
+            password = "password"
+            payload = "name={0}&roles={1}&password={2}".format(user_name, role, password)
+            rest.add_set_builtin_user(user_name, payload)
+
+            log.info("Group name -- {0} :: User name -- {1}".format(group_name, user_name))
+            rest.add_user_group(group_name, user_name)
 
     def convert_to_pkcs8(self, node):
         """
