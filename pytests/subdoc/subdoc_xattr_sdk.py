@@ -222,7 +222,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
     def test_key_inside_characters_negative(self):
         k = 'xattrs'
         self.client.upsert(k, {})
-        for ch in "\".:;[]`":
+        for ch in "\".:[]`":
             try:
                 key = 'test' + ch + 'test'
                 self.log.info("test '%s' key" % key)
