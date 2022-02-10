@@ -22,7 +22,7 @@ class IndexingServiceEvents(object):
             Event.Fields.COMPONENT: Event.Component.INDEXING,
             Event.Fields.DESCRIPTION: 'Projector Settings Changed',
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.SUB_COMPONENT: "Indexer",
+            Event.Fields.SUB_COMPONENT: "Projector",
             Event.Fields.EXTRA_ATTRS: {"old_setting": old_setting, "new_setting": new_setting},
             Event.Fields.NODE_NAME: node
 
@@ -35,7 +35,7 @@ class IndexingServiceEvents(object):
             Event.Fields.COMPONENT: Event.Component.INDEXING,
             Event.Fields.DESCRIPTION: 'Query Client Settings Changed',
             Event.Fields.SEVERITY: Event.Severity.INFO,
-            Event.Fields.SUB_COMPONENT: "Indexer",
+            Event.Fields.SUB_COMPONENT: "GSIClient",
             Event.Fields.EXTRA_ATTRS: {"old_setting": old_setting, "new_setting": new_setting},
             Event.Fields.NODE_NAME: node
         }

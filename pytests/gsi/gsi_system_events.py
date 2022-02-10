@@ -76,18 +76,22 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
         return node_ip_uuid_map
 
     def test_gsi_update_settings_system_events(self):
+        query = f'CREATE PRIMARY index on {self.namespaces[0]}'
+        self.run_cbq_query(query)
+        self.wait_until_indexes_online()
         # Updating Indexer Settings and adding to system event to validate
         old_setting = {"indexer.settings.rebalance.redistribute_indexes": False,
-                       "indexer.cpu.throttle.target": 0.95,
+                       "indexer.cpu.throttle.target": 1,
                        "indexer.allowScheduleCreate": True}
         new_setting = {"indexer.settings.rebalance.redistribute_indexes": True,
-                       "indexer.cpu.throttle.target": 1.0,
+                       "indexer.cpu.throttle.target": 0.95,
                        "indexer.allowScheduleCreate": False}
         self.index_rest.set_index_settings(new_setting)
-        index_node = self.index_rest.ip
-        self.system_events.add_event(IndexingServiceEvents.index_settings_updated(old_setting=old_setting,
-                                                                                  new_setting=new_setting,
-                                                                                  node=index_node))
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for index_node in index_nodes:
+            self.system_events.add_event(IndexingServiceEvents.index_settings_updated(old_setting=old_setting,
+                                                                                      new_setting=new_setting,
+                                                                                      node=index_node.ip))
 
         # Updating Projector Settings and adding to system event to validate
         old_setting = {"projector.cpuProfile": False,
@@ -103,10 +107,10 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
                                                                                       node=index_node))
 
         # Updating Query Client Settings and adding to system event to validate
-        old_setting = {"queryport.client.waitForScheduledIndex": True,
+        old_setting = {"queryport.client.waitForScheduledIndex": False,
                        "queryport.client.usePlanner": True,
                        "queryport.client.log_level": "info"}
-        new_setting = {"queryport.client.waitForScheduledIndex": False,
+        new_setting = {"queryport.client.waitForScheduledIndex": True,
                        "queryport.client.usePlanner": False,
                        "queryport.client.log_level": "debug"}
         self.index_rest.set_index_settings(new_setting)

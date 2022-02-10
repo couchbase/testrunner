@@ -333,7 +333,7 @@ class PlannerGSI(BaseSecondaryIndexingTests):
         hosts = [server.ip for server in self.servers[:self.nodes_init]]
         for index in index_hosts_dict:
             index_hosts = sorted(index_hosts_dict[index])
-            self.assertEqual(hosts, index_hosts, "Index Placement is not matching expected value")
+            self.assertEqual(sorted(hosts), index_hosts, "Index Placement is not matching expected value")
 
     def test_index_placements_with_skewed_load(self):
         is_new_index_equivalent = self.input.param("is_new_index_equivalent", False)
