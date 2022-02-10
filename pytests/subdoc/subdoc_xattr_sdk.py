@@ -1112,8 +1112,8 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         result = rest.query_view('ddoc1', 'view1', self.buckets[0].name, query)
         self.assertEqual(result['total_rows'], 1, "1 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': 2, 'id': 'xattr',
-                                             'key': {'xattr': True}})
+        self.assertEqual(result['rows'][0], {'value': None, 'id': 'xattr',
+                                             'key': 'xattr'})
 
     def test_view_all_xattrs(self):
         k = 'xattr'
@@ -1494,10 +1494,19 @@ class XattrImportExportTests(ImportExportTests, SubdocBaseTest):
                     # https://issues.couchbase.com/browse/MB-24187
                     # https://issues.couchbase.com/browse/MB-24188
                     self.assertEqual(len(samples), len(exports))
+
+                    new_samples = list()
+                    new_exports = list()
+                    for data in samples:
+                        new_samples.append(str(json.loads(data)))
+                    samples = new_samples
+                    for data in exports:
+                        new_exports.append(str(json.loads(data)))
+                    exports = new_exports
+
                     if sorted(samples) == sorted(exports):
                         self.log.info("export and sample json match")
                     else:
-                        self.log.warning(sorted(exports))
                         self.fail("export and sample json does not match")
                     sample_file.close()
                     export_file.close()
