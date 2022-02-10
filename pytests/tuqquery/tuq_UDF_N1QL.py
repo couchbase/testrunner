@@ -2076,3 +2076,19 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.fail("Query should not have CBQ error'd")
+
+    def test_dml_consume(self):
+        function_name = 'consume_dml'
+        function_names = [function_name]
+        functions = f'function {function_name}() {{\
+            var query = UPDATE default SET a = "foo" WHERE job_title = "Engineer" RETURNING job_title;\
+        }}'
+        self.run_cbq_query('UPDATE default SET a = "" WHERE job_title = "Engineer"')
+        result = self.run_cbq_query('SELECT count(*) as count FROM default WHERE job_title = "Engineer"')
+        expected_count = result['results'][0]['count']
+        self.create_library(self.library_name, functions, function_names)
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+        result = self.run_cbq_query('SELECT count(*) as count FROM default WHERE a = "foo"')
+        actual_count = result['results'][0]['count']
+        self.assertEqual(expected_count, actual_count)
