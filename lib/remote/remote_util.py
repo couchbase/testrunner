@@ -1688,6 +1688,8 @@ class RemoteMachineShellConnection(KeepRefs):
                 info["os_name"] = 2008
             elif systeminfo["OS Name"].find("2016") != -1:
                 info["os_name"] = 2016
+            elif systeminfo["OS Name"].find("2019") != -1:
+                info["os_name"] = 2019
             if "System Type" in systeminfo:
                 info["os_arch"] = systeminfo["System Type"].find("64") and "x86_64" or "NONE"
             info.update(systeminfo)
@@ -3418,6 +3420,7 @@ class RemoteMachineShellConnection(KeepRefs):
         else:
             p = Popen(mac_check_cmd, shell=True, stdout=PIPE, stderr=PIPE)
             ver, err = p.communicate()
+
         if not err and ver:
             os_distro = "Mac"
             try:
