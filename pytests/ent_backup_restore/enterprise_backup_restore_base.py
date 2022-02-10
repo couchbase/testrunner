@@ -3400,7 +3400,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.number_of_backups_taken += 1
         self.log.info("backups after merge: " + str(self.backups))
         self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
-        if self.number_of_repeats < 2:
+        if self.number_of_repeats < 2 and not self.skip_validation:
             self.validate_backup_data()
         conn.disconnect()
 
@@ -3434,7 +3434,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.number_of_backups_taken += 1
         self.log.info("backups after merge: " + str(self.backups))
         self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
-        if self.number_of_repeats < 2:
+        if self.number_of_repeats < 2 and not self.skip_validation:
             self.validate_backup_data()
         conn.disconnect()
 
@@ -3472,7 +3472,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.number_of_backups_taken += 1
         self.log.info("backups after merge: " + str(self.backups))
         self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
-        if self.number_of_repeats < 2:
+        if self.number_of_repeats < 2 and not self.skip_validation:
             self.validate_backup_data()
         conn.disconnect()
 
