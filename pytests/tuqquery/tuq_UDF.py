@@ -860,12 +860,12 @@ class QueryUDFTests(QueryTests):
                 results = self.run_cbq_query(query="EXECUTE FUNCTION func1(1,3,5)")
             except Exception as e:
                 self.log.error(str(e))
-                self.assertTrue("Incorrect number of arguments supplied to function func1" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
+                self.assertTrue("Incorrect number of arguments supplied to function 'func1'" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
             try:
                 results = self.run_cbq_query(query="EXECUTE FUNCTION func1(1)")
             except Exception as e:
                 self.log.error(str(e))
-                self.assertTrue("Incorrect number of arguments supplied to function func1" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
+                self.assertTrue("Incorrect number of arguments supplied to function 'func1'" in str(e), "The error message is incorrect, please check it {0}".format(str(e)))
         finally:
             try:
                 self.delete_library("math")
@@ -2017,3 +2017,29 @@ class QueryUDFTests(QueryTests):
 
             except Exception as e:
                 self.log.error(str(e))
+
+    def test_library_name_validation(self):
+        invalid_names = [
+            "_libname", "lib$name", "lib@name", "lib!name", "lib^name", "lib*name", "lib(name", "lib)name",
+            "lib+name", "lib=name", "lib\[name", "lib\]name", "lib:name", "lib,name", "lib;name", "lib<name", "lib>name",
+            "_libname", "-libname", "lib\?name", "lib\\name", "lib\:name", "lib\#name"
+        ]
+        for name in invalid_names:
+            with self.subTest(f"Invalid Library name: {name}"):
+                url = f"http://{self.master.ip}:{self.n1ql_port}/evaluator/v1/libraries/{name}"
+                data = 'function add(a,b) { return a+b;}'
+                results = self.shell.execute_command(f"{self.curl_path} -X POST '{url}' -u Administrator:password -H 'content-type: application/json' -d '{data}'")
+                self.assertEqual(results[0], ['Library name can start with characters only in range A-Z, a-z, 0-9 and can contain characters only in range A-Z, a-z, 0-9, underscore and hyphen '])
+
+        valid_names = [
+            "libname", "LIBNAME", "LibName", "lib0name", "0libname", "libname0",
+            "lib_name", "libname_", "lib-name", "libname-", "999"
+        ]
+        for name in valid_names:
+            with self.subTest(f"Valid Library name: {name}"):
+                url = f"http://{self.master.ip}:{self.n1ql_port}/evaluator/v1/libraries/{name}"
+                data = 'function add(a,b) { return a+b;}'
+                results = self.shell.execute_command(f"{self.curl_path} -X POST '{url}' -u Administrator:password -H 'content-type: application/json' -d '{data}'")
+                self.assertEqual(results[0], ['{"status": "OK"}'])
+                results = self.shell.execute_command(f"{self.curl_path} -X DELETE '{url}' -u Administrator:password")
+                self.assertEqual(results[0], ['{"status": "OK"}'])
