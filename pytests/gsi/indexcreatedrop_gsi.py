@@ -245,7 +245,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
         except Exception as ex:
-            msg="Expression not indexable"
+            msg="not indexable"
             self.assertTrue(msg in str(ex),
                 " 5000 error not received as expected {0}".format(ex))
 

@@ -41,6 +41,12 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
                 log.info(ex)
         super(SecondaryIndexingPlasmaDGMRecoveryTests, self).tearDown()
 
+    def suite_setUp(self):
+        pass
+
+    def suite_tearDown(self):
+        pass
+
     def test_rebalance_in(self):
         pre_recovery_tasks = self.async_run_operations(phase="before")
         self._run_tasks([pre_recovery_tasks])
@@ -470,7 +476,7 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
                     log.info("build index failed with some unexpected error : {0}".format(str(ex)))
             else:
                 log.info("Build index did not fail")
-            self.sleep(autofailover_timeout + 10, "Wait for autofailover")
+            self.sleep(autofailover_timeout + 90, "Wait for autofailover")
             rebalance = self.cluster.async_rebalance(
                 self.servers[:self.nodes_init], [], servr_out)
             rebalance.result()

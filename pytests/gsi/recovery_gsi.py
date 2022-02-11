@@ -668,7 +668,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
         #self.load_docs(self.start_doc)
         #50
-        index_create_tasks = self.create_indexes(num=25, query_def_group="unique", defer_build=True)
+        index_create_tasks = self.create_indexes(num=250, query_def_group="unique", defer_build=True)
 
         for task in index_create_tasks:
             task.result()
