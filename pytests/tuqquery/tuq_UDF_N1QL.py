@@ -2092,3 +2092,40 @@ class QueryUDFN1QLTests(QueryTests):
         result = self.run_cbq_query('SELECT count(*) as count FROM default WHERE a = "foo"')
         actual_count = result['results'][0]['count']
         self.assertEqual(expected_count, actual_count)
+    
+    def test_error_handling(self):
+        function_name = "error_handling"
+        function_names = [function_name]
+        functions = f'function {function_name}() {{\
+            try {{\
+                var query1 = INSERT INTO default (KEY, VALUE) VALUES ("k004", {{"col1": 10 }});\
+                var query2 = INSERT INTO default (KEY, VALUE) VALUES ("k004", {{"col1": 10 }});\
+                return "Success!";\
+            }} catch(error) {{\
+                n1ql_error = JSON.parse(error.message);\
+                return {{\
+                    "caller": n1ql_error.caller,\
+                    "code": n1ql_error.code,\
+                    "reason": n1ql_error.cause,\
+                    "icode": n1ql_error.icause,\
+                    "key": n1ql_error.key,\
+                    "message": n1ql_error.message,\
+                    "retry": n1ql_error.retry,\
+                    "stack": error.stack\
+                }};\
+            }}\
+        }}'
+        self.create_library(self.library_name, functions, function_names)
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+        result = self.run_cbq_query(f"EXECUTE FUNCTION {function_name}()")
+        expected_result = [
+            {
+                'caller': 'couchbase:2088', 'code': 12009, 'icode': 'Duplicate Key: k004',
+                'key': 'datastore.couchbase.DML_error',
+                'message': 'DML Error, possible causes include concurrent modification. Failed to perform INSERT on key k004', 
+                'reason': {'caller': 'couchbase:1961', 'code': 17012, 'key': 'dml.statement.duplicatekey', 'message': 'Duplicate Key: k004'},
+                'retry': False,
+                'stack': 'Error\n    at error_handling (functions/n1ql.js:1:190)'
+            }
+        ]
+        self.assertEqual(result['results'], expected_result)
