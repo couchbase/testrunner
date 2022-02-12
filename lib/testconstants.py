@@ -140,7 +140,8 @@ MACOS_NAME = {"10.10":"Yosemite", "10.11":"El Capitan", "10.12":"Sierra", "10.13
               "10.14":"Mojave", "10.15":"Catalina"}
 
 SYSTEMD_SERVER = ["centos 8", "centos 7", "suse 12", "suse 15", "ubuntu 16.04", "ubuntu 18.04",
-                  "ubuntu 20.04", "debian 8", "debian 9", "debian 10", "rhel 8", "oel 7", "oel 8", "amazon linux release 2 (karoo)"]
+                  "ubuntu 20.04", "debian 8", "debian 9", "debian 10", "rhel 8", "oel 7", "oel 8", "debian 11",
+                  "amazon linux release 2 (karoo)"]
 WIN_NUM_ERLANG_PROCESS = 4
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
 WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
