@@ -146,6 +146,7 @@ class QueryUDFN1QLTests(QueryTests):
         self.start_txn = self.input.param("start_txn", "BEGIN WORK")
         self.end_txn = self.input.param("end_txn", "COMMIT WORK")
         self.within_txn = self.input.param("within_txn", False)
+        self.explicit_close = self.input.param("explicit_close", False)
         self.library_name = 'n1ql'
         self.log.info("==============  QueryUDFN1QLTests setup has completed ==============")
         self.log_config_info()
@@ -2083,6 +2084,11 @@ class QueryUDFN1QLTests(QueryTests):
         functions = f'function {function_name}() {{\
             var query = UPDATE default SET a = "foo" WHERE job_title = "Engineer" RETURNING job_title;\
         }}'
+        if self.explicit_close:
+            functions = f'function {function_name}() {{\
+                var query = UPDATE default SET a = "foo" WHERE job_title = "Engineer" RETURNING job_title;\
+                query.close();\
+            }}'
         self.run_cbq_query('UPDATE default SET a = "" WHERE job_title = "Engineer"')
         result = self.run_cbq_query('SELECT count(*) as count FROM default WHERE job_title = "Engineer"')
         expected_count = result['results'][0]['count']
