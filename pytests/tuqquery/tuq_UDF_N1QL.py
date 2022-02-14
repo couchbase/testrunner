@@ -206,7 +206,7 @@ class QueryUDFN1QLTests(QueryTests):
             except CBQError as ex:
                 error = self.process_CBQE(ex)
                 self.assertEqual(error['code'], 5010)
-                self.assertTrue('Error: not a readonly request' in error['msg'])
+                self.assertTrue('not a readonly request' in error['msg'])
         else:
             function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
             self.assertEqual(function_result['results'][0], query_result['results'])
@@ -295,7 +295,7 @@ class QueryUDFN1QLTests(QueryTests):
             except CBQError as ex:
                 error = self.process_CBQE(ex)
                 self.assertEqual(error['code'], 5010)
-                self.assertTrue('Error: not a readonly request' in error['msg'])
+                self.assertTrue('not a readonly request' in error['msg'])
         else:
             function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
             self.assertEqual(function_result['results'], self.ddls[self.statement]['function_expected'])
@@ -1649,7 +1649,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('Error: START_TRANSACTION statement is not supported within the transaction' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('START_TRANSACTION statement is not supported within the transaction' in error['msg'], f"Error is not what we expected {str(ex)}")
 
     def test_transaction_error_nostart(self):
         function_name = 'nostart_default'
@@ -1665,7 +1665,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue(f'Error: {self.end_txn} statement is not supported outside the transaction' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue(f'{self.end_txn} statement is not supported outside the transaction' in error['msg'], f"Error is not what we expected {str(ex)}")
 
     def test_transaction_dml(self):
         self.run_cbq_query("CREATE INDEX adv_job_title IF NOT EXISTS ON `default`(`job_title`)")
@@ -1709,7 +1709,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('Error: START_TRANSACTION statement is not supported within the transaction' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('START_TRANSACTION statement is not supported within the transaction' in error['msg'], f"Error is not what we expected {str(ex)}")
 
     def test_transaction_timedout_transaction(self):
         self.run_cbq_query("DELETE FROM default.`_default`.txn_scope")
@@ -1759,7 +1759,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 5010)
-            self.assertTrue('Error: not a readonly request' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('not a readonly request' in error['msg'], f"Error is not what we expected {str(ex)}")
 
     def test_transaction_nested_no_side_effect(self):
         function_name = 'nested_txn'
@@ -1777,7 +1777,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 5010)
-            self.assertTrue('Error: not a readonly request' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('not a readonly request' in error['msg'], f"Error is not what we expected {str(ex)}")
 
     def test_multiple_transactions(self):
         self.run_cbq_query("DELETE FROM default.`_default`.txn_scope")
