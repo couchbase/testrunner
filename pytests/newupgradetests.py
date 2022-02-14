@@ -2551,6 +2551,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                         self.sleep(10)
                         break
                 items_travel_sample = 63182
+                cb_version = RestConnection(self.master).get_nodes_version()
                 if cb_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT:
                     items_travel_sample = 63288
                 self.load_sample_buckets(servers=self.servers[:nodes_init],
