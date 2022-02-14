@@ -183,11 +183,11 @@ class QueryArrayFlatteningTests(QueryTests):
     def test_flatten_asc_desc(self):
         self.run_cbq_query(query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author ASC,r.ratings.Cleanliness DESC) FOR r IN reviews END, email, free_parking, country)")
         if self.use_unnest:
-            query = "SELECT * FROM default AS d unnest reviews as r WHERE r.author LIKE 'M%' and r.ratings.Cleanliness > 1 AND free_parking = True AND country is not null"
-            primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) unnest reviews as r WHERE r.author LIKE 'M%' and r.ratings.Cleanliness > 1 AND free_parking = True AND country is not null"
+            query = "SELECT * FROM default AS d unnest reviews as r WHERE r.author LIKE 'M%' and r.ratings.Cleanliness > 1 AND d.free_parking = True AND d.country is not null"
+            primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) unnest reviews as r WHERE r.author LIKE 'M%' and r.ratings.Cleanliness > 1 AND d.free_parking = True AND d.country is not null"
         else:
-            query = "SELECT * FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True AND country is not null"
-            primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND free_parking = True AND country is not null"
+            query = "SELECT * FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND d.free_parking = True AND d.country is not null"
+            primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END AND d.free_parking = True AND d.country is not null"
 
         if self.any_every:
             query = query.replace("ANY", "ANY AND EVERY")
@@ -590,15 +590,15 @@ class QueryArrayFlatteningTests(QueryTests):
 
     '''We expect the query to pick up the array with the keys flattened'''
     def test_flatten_index_selection(self):
-        self.run_cbq_query(query="create index idx1 on default(country, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking)")
+        self.run_cbq_query(query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking,country)")
         self.run_cbq_query(query="create index idx2 on default(country, DISTINCT ARRAY [r.author,r.ratings.Cleanliness] FOR r IN reviews END, email, free_parking)")
         if self.use_unnest:
-            query = "SELECT * FROM default AS d unnest reviews as r WHERE r.author LIKE 'M%' AND r.ratings.Cleanliness = 3 AND free_parking = TRUE AND country IS NOT NULL"
-            primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) unnest reviews as r WHERE r.author LIKE 'M%' AND r.ratings.Cleanliness = 3 AND free_parking = TRUE AND country IS NOT NULL"
+            query = "SELECT * FROM default AS d unnest reviews as r WHERE r.author LIKE 'M%' AND r.ratings.Cleanliness = 3 AND d.free_parking = TRUE AND d.country IS NOT NULL"
+            primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) unnest reviews as r WHERE r.author LIKE 'M%' AND r.ratings.Cleanliness = 3 AND d.free_parking = TRUE AND d.country IS NOT NULL"
         else:
-            query = "SELECT * FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' AND r.ratings.Cleanliness = 3 END AND free_parking = TRUE AND country IS NOT NULL"
-            primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' AND r.ratings.Cleanliness = 3 END AND free_parking = TRUE AND country IS NOT NULL"
-        explain_results = self.run_cbq_query(query="EXPLAIN " + query )
+            query = "SELECT * FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' AND r.ratings.Cleanliness = 3 END AND d.free_parking = TRUE AND d.country IS NOT NULL"
+            primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' AND r.ratings.Cleanliness = 3 END AND d.free_parking = TRUE AND d.country IS NOT NULL"
+        explain_results = self.run_cbq_query(query="EXPLAIN " + query)
         self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == "idx1",
                         "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
                             explain_results))
@@ -1324,8 +1324,7 @@ class QueryArrayFlatteningTests(QueryTests):
         self.run_cbq_query(
             query="CREATE INDEX idx1 ON default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, free_parking) WHERE ANY r IN default.reviews SATISFIES r.author LIKE 'M%' END")
         explain_results = self.run_cbq_query(query="explain delete from default d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness = 3 END AND free_parking = True")
-
-        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['index'] == 'idx1',
+        self.assertTrue('idx1' in str(explain_results),
                         "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
                             explain_results))
         self.asserTrue("covers" in str(explain_results), "This query should be covered by the index but it is not: plan {0}",format(explain_results))
@@ -1551,7 +1550,7 @@ class QueryArrayFlatteningTests(QueryTests):
         if self.use_all:
             self.assertTrue("covers" in str(explain_results), "The index is not covering, it should be. Check plan {0}".format(explain_results))
             self.assertTrue("filter_covers" in str(explain_results), "The index is not covering, it should be. Check plan {0}".format(explain_results))
-            self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['index'] == 'idx1',
+            self.assertTrue('idx1' in str(explain_results),
                             "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
                                 explain_results))
         else:
