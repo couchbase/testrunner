@@ -111,14 +111,19 @@ class GSIAutofailover(BaseSecondaryIndexingTests, AutoFailoverBaseTest):
         self.failover_actions[self.failover_action](self)
         try:
             rebalance_task.result()
-        except RebalanceFailedException:
-            pass
-        except ServerUnavailableException:
-            pass
         except Exception as err:
-            pass
-        else:
-            self.fail("Rebalance should fail since a node went down")
+            self.log.info("Rebalance failed with : {0}".format(str(err)))
+            if "Rebalance failed. See logs for detailed reason. You can try again" in str(err):
+                self.log.info(
+                    "Rebalance failed even before auto-failover had a chance to stop it self.server_to_fail.ip: {0}".format(
+                        str(err)))
+            elif not RestHelper(self.rest).is_cluster_rebalanced():
+                if self._auto_failover_message_present_in_logs(self.server_to_fail[0].ip):
+                    self.log.info("Rebalance interrupted due to auto-failover of nodes - message was seen in logs")
+                else:
+                    self.fail("Rebalance interrupted message was not seen in logs")
+            else:
+                self.fail("Rebalance was not aborted by auto fail-over")
         self.disable_autofailover_and_validate()
 
     def test_autofailover_and_addback_of_node(self):
