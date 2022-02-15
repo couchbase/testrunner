@@ -2797,6 +2797,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         if self.build_index:
             thread1.join()
         self.check_retry_rebalance_succeeded()
+        self.sleep(20)
         if self.rebalance_out and not self.build_index:
             map_after_rebalance, stats_map_after_rebalance = self._return_maps()
             # validate the results

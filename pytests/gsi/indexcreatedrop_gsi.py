@@ -235,8 +235,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)
 
     def test_failure_create_index_big_fields(self):
-        field_name = ""
-        field_name += ",".join([ str(a) for a in range(1, 100)]).replace(",", "_")
+        field_name = "_".join([str(a) for a in range(1, 100)])
         query_definition = QueryDefinition(index_name="test_failure_create_index_existing_index",
                                            index_fields=field_name, query_template="", groups=[])
         self.query = query_definition.generate_index_create_query(namespace=self.buckets[0], gsi_type=self.gsi_type)
@@ -245,9 +244,8 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
         except Exception as ex:
-            msg="not indexable"
-            self.assertTrue(msg in str(ex),
-                " 5000 error not received as expected {0}".format(ex))
+            msg = "not indexable"
+            self.assertTrue(msg in str(ex), " 5000 error not received as expected {0}".format(ex))
 
     def test_create_gsi_index_without_primary_index(self):
         self.indexes= self.input.param("indexes", "").split(":")
