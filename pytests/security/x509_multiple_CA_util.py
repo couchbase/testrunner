@@ -418,18 +418,16 @@ class x509main:
         # modify the extensions file to fill IP/DNS of the node
         temp_cert_extensions_file = "./pytests/security/x509_extension_files/server2.ext"
         copyfile(x509main.SERVER_EXT, temp_cert_extensions_file)
-        fin = open(temp_cert_extensions_file, "a+")
-        if ".com" in node_ip and self.wildcard_dns is None:
-            fin.write("\nsubjectAltName = DNS:{0}".format(node_ip))
-        elif self.wildcard_dns:
-            fin.write("\nsubjectAltName = DNS:{0}".format(self.wildcard_dns))
-        else:
-            fin.write("\nsubjectAltName = IP:{0}".format(node_ip))
-        fin.close()
+        with open(temp_cert_extensions_file, "a+") as fin:
+            if ".com" in node_ip and self.wildcard_dns is None:
+                fin.write("\nsubjectAltName = DNS:{0}".format(node_ip))
+            elif self.wildcard_dns:
+                fin.write("\nsubjectAltName = DNS:{0}".format(self.wildcard_dns))
+            else:
+                fin.write("\nsubjectAltName = IP:{0}".format(node_ip))
         # print file contents for easy debugging
-        fout = open(temp_cert_extensions_file, "r")
-        print((fout.read()))
-        fout.close()
+        with open(temp_cert_extensions_file, "r") as fout:
+            print(fout.read())
 
         shell = RemoteMachineShellConnection(self.slave_host)
         # create node CA private key
@@ -493,23 +491,21 @@ class x509main:
         # modify the extensions file to fill IP/DNS of the client for auth
         temp_cert_extensions_file = "./pytests/security/x509_extension_files/client2.ext"
         copyfile(x509main.CLIENT_EXT, temp_cert_extensions_file)
-        fin = open(temp_cert_extensions_file, "a+")
-        # it must be noted that if SAN.DNS is used, it will always be used for auth
-        # irrespective of other SANs in the certificate. So SAN.DNS must be a valid user
-        if self.alt_names == 'default':
-            fin.write("\nsubjectAltName = DNS:us.cbadminbucket.com")
-            fin.write("\nsubjectAltName = URI:www.cbadminbucket.com")
-        else:
-            if self.dns is not None:
-                fin.write("\nsubjectAltName = DNS:{0}".format(self.dns))
-            if self.uri is not None:
-                fin.write("\nsubjectAltName = URI:{0}".format(self.uri))
-        fin.close()
+        with open(temp_cert_extensions_file, "a+") as fin:
+            # it must be noted that if SAN.DNS is used, it will always be used for auth
+            # irrespective of other SANs in the certificate. So SAN.DNS must be a valid user
+            if self.alt_names == 'default':
+                fin.write("\nsubjectAltName = DNS:us.cbadminbucket.com")
+                fin.write("\nsubjectAltName = URI:www.cbadminbucket.com")
+            else:
+                if self.dns is not None:
+                    fin.write("\nsubjectAltName = DNS:{0}".format(self.dns))
+                if self.uri is not None:
+                    fin.write("\nsubjectAltName = URI:{0}".format(self.uri))
 
         # print file contents for easy debugging
-        fout = open(temp_cert_extensions_file, "r")
-        print((fout.read()))
-        fout.close()
+        with open(temp_cert_extensions_file, "r") as fout:
+            print(fout.read())
 
         shell = RemoteMachineShellConnection(self.slave_host)
         # create private key for client
@@ -712,21 +708,21 @@ class x509main:
     def write_client_cert_json_new(self):
         template_path = './pytests/security/' + x509main.CLIENT_CERT_AUTH_TEMPLATE
         config_json = x509main.CACERTFILEPATH + x509main.CLIENT_CERT_AUTH_JSON
-        target_file = open(config_json, 'w')
-        source_file = open(template_path, 'r')
-        client_cert = '{"state" : ' + "'" + self.client_cert_state + "'" + ", 'prefixes' : [ "
-        for line in source_file:
-            for path, prefix, delimeter in zip(self.paths, self.prefixs, self.delimeters):
-                line1 = line.replace("@2", "'" + path + "'")
-                line2 = line1.replace("@3", "'" + prefix + "'")
-                line3 = line2.replace("@4", "'" + delimeter + "'")
-                temp_client_cert = "{ " + line3 + " },"
-                client_cert = client_cert + temp_client_cert
-        client_cert = client_cert.replace("'", '"')
-        client_cert = client_cert[:-1]
-        client_cert = client_cert + " ]}"
+        with open(template_path, 'r') as source_file:
+            client_cert = '{"state" : ' + "'" + self.client_cert_state + "'" + ", 'prefixes' : [ "
+            for line in source_file:
+                for path, prefix, delimeter in zip(self.paths, self.prefixs, self.delimeters):
+                    line1 = line.replace("@2", "'" + path + "'")
+                    line2 = line1.replace("@3", "'" + prefix + "'")
+                    line3 = line2.replace("@4", "'" + delimeter + "'")
+                    temp_client_cert = "{ " + line3 + " },"
+                    client_cert = client_cert + temp_client_cert
+            client_cert = client_cert.replace("'", '"')
+            client_cert = client_cert[:-1]
+            client_cert = client_cert + " ]}"
         self.log.info("-- Log current config json file ---{0}".format(client_cert))
-        target_file.write(client_cert)
+        with open(config_json, 'w') as target_file:
+            target_file.write(client_cert)
 
     def upload_client_cert_settings(self, server=None):
         """
@@ -734,8 +730,9 @@ class x509main:
         """
         if server is None:
             server = self.host
-        data = open(x509main.CACERTFILEPATH + x509main.CLIENT_CERT_AUTH_JSON, 'rb'). \
-            read()
+        with open(x509main.CACERTFILEPATH + x509main.CLIENT_CERT_AUTH_JSON,
+                  'rb') as fh:
+            data = fh.read()
         rest = RestConnection(server)
         authorization = base64.encodebytes(('%s:%s' %
                                             (rest.username, rest.password)).encode()).decode()
