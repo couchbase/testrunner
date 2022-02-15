@@ -285,7 +285,7 @@ class OnPremBaseTestCase(unittest.TestCase):
                 else:
                     encryption_level = ntonencryptionBase.get_encryption_level_cli(self.master)
                     if encryption_level != self.ntonencrypt_level:
-                        raise Exception(f"Cluster level encryption mode not set to {self.ntonencrypt_level}."
+                        self.log.error(f"Cluster level encryption mode not set to {self.ntonencrypt_level}."
                                         f"Current status {encryption_level}")
 
             if self.input.param("log_info", None):
