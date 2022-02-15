@@ -2366,7 +2366,7 @@ class CouchbaseCluster:
         bucket_params['flush_enabled'] = flush_enabled
         bucket_params['lww'] = lww
         bucket_params['maxTTL'] = maxttl
-        if bucket_type == "membase":
+        if bucket_type == "membase" or bucket_type == "ephemeral":
             bucket_params['bucket_storage'] = bucket_storage
         return bucket_params
 
