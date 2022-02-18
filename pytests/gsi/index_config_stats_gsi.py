@@ -691,10 +691,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
                                      "Resident ratio not 1")
 
     def test_indexer_logs_for_leaked_password(self):
-        if self.use_https:
-            expected_msg = "https://%40index-cbauth@127.0.0.1:18091"
-        else:
-            expected_msg = "http://%40index-cbauth@127.0.0.1:8091"
+        expected_msg = "http://%40index-cbauth@127.0.0.1:8091"
         indexers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         self.assertGreater(len(indexers), 0, "No indexer found in cluster")
         for server in indexers:

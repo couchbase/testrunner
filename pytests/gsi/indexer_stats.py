@@ -119,14 +119,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
             "index_level_stats": ["resident_percent", "avg_disk_bps", "num_docs_pending", "num_docs_queued",
                                   "avg_drain_rate", "num_rows_returned", "progress_stat_time","build_progress",
                                   "memory_used", "data_size", "items_count", "num_flush_queued", "avg_scan_rate",
-                                  "avg_mutation_rate", "index_state", "last_rollback_time"]
-        }, "rebalancer": {
-            "indexer_level_stats": ["indexer_state"],
-            "index_level_stats": ["num_docs_pending",
-                                  "num_docs_processed",
-                                  "num_docs_queued",
-                                  "num_requests",
-                                  "num_completed_requests"]
+                                  "avg_mutation_rate", "index_state", "last_rollback_time", "combined_resident_percent"]
         }, "gsiClient": {
             "indexer_level_stats": [],
             "index_level_stats": ["progress_stat_time",
