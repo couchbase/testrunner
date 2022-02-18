@@ -115,6 +115,10 @@ class EventingBaseTest(QueryHelperTests):
         if not self.is_upgrade_test:
             self.collection_rest = CollectionsRest(self.master)
         self.non_default_collection=self.input.param('non_default_collection',False)
+        if self.non_default_collection:
+            self.function_scope = {"bucket": self.src_bucket_name, "scope": self.src_bucket_name}
+        else:
+            self.function_scope = {"bucket": self.src_bucket_name, "scope": "_default"}
         self.num_docs=2016
         self.is_binary=self.input.param('binary_doc',False)
         self.eventing_role=self.input.param('eventing_role', False)
@@ -255,7 +259,7 @@ class EventingBaseTest(QueryHelperTests):
             body['function_scope'] = {"bucket": self.src_bucket_name, "scope": self.src_bucket_name}
         else:
             body['function_scope'] = {"bucket": self.src_bucket_name, "scope": "_default"}
-        content1 = self.rest.create_function(body['appname'], body, username, password)
+        content1 = self.rest.create_function(body['appname'], body, self.function_scope, username, password)
         self.log.info("saving function {}".format(content1))
         return body
 
@@ -404,9 +408,9 @@ class EventingBaseTest(QueryHelperTests):
     def getActualMutations(self, num_nodes, name, on_delete):
         actual_dcp_mutations = 0
         if num_nodes <= 1:
-            stats = self.rest.get_event_processing_stats(name)
+            stats = self.rest.get_event_processing_stats(name, self.function_scope)
         else:
-            stats = self.rest.get_aggregate_event_processing_stats(name)
+            stats = self.rest.get_aggregate_event_processing_stats(name, self.function_scope)
 
         if on_delete:
             if "dcp_deletion" in stats:
@@ -427,7 +431,7 @@ class EventingBaseTest(QueryHelperTests):
         if self.print_eventing_handler_code_in_logs:
             log.info("Deploying the following handler code : {0} with \nbindings: {1} and \nsettings: {2}".format(body['appname'], body['depcfg'] , body['settings']))
             log.info("\n{0}".format(body['appcode']))
-        content1 = self.rest.lifecycle_operation(body['appname'], "deploy", username, password)
+        content1 = self.rest.lifecycle_operation(body['appname'], "deploy", self.function_scope, username, password)
         log.info("deploy Application : {0}".format(content1))
         if deployment_fail:
             res = json.loads(content1)
@@ -450,32 +454,32 @@ class EventingBaseTest(QueryHelperTests):
 
     def undeploy_function(self, body, username="Administrator", password="password"):
         self.refresh_rest_server()
-        content = self.rest.lifecycle_operation(body['appname'],"undeploy", username, password)
+        content = self.rest.lifecycle_operation(body['appname'],"undeploy", self.function_scope, username, password)
         log.info("Undeploy Application : {0}".format(body['appname']))
         self.wait_for_handler_state(body['appname'], "undeployed")
         return content
 
     def undeploy_function_by_name(self, name,wait_for_undeployment=True):
-        content = self.rest.lifecycle_operation(name,"undeploy")
+        content = self.rest.lifecycle_operation(name,"undeploy", self.function_scope)
         log.info("Undeploy Application : {0}".format(name))
         if wait_for_undeployment:
             self.wait_for_handler_state(name, "undeployed")
 
     def delete_function(self, body, username="Administrator", password="password"):
-        content1 = self.rest.delete_single_function(body['appname'], username, password)
+        content1 = self.rest.delete_single_function(body['appname'], self.function_scope, username, password)
         log.info("Delete Application : {0}".format(body['appname']))
         return content1
 
     def pause_function(self, body,wait_for_pause=True, username="Administrator", password="password"):
         self.refresh_rest_server()
-        self.rest.lifecycle_operation(body['appname'], "pause", username, password)
+        self.rest.lifecycle_operation(body['appname'], "pause", self.function_scope, username, password)
         log.info("Pause Application : {0}".format(body['appname']))
         if wait_for_pause:
             self.wait_for_handler_state(body['appname'], "paused")
 
     def resume_function(self, body,wait_for_resume=True, username="Administrator", password="password"):
         self.refresh_rest_server()
-        self.rest.lifecycle_operation(body['appname'], "resume", username, password)
+        self.rest.lifecycle_operation(body['appname'], "resume", self.function_scope, username, password)
         log.info("Resume Application : {0}".format(body['appname']))
         if wait_for_resume:
             self.wait_for_handler_state(body['appname'], "deployed")
@@ -548,9 +552,9 @@ class EventingBaseTest(QueryHelperTests):
             shell.disconnect()
 
     def print_execution_and_failure_stats(self, name):
-        out_event_execution = self.rest.get_event_execution_stats(name)
+        out_event_execution = self.rest.get_event_execution_stats(name, self.function_scope)
         log.info("Event execution stats : {0}".format(out_event_execution))
-        out_event_failure = self.rest.get_event_failure_stats(name)
+        out_event_failure = self.rest.get_event_failure_stats(name, self.function_scope)
         log.info("Event failure stats : {0}".format(out_event_failure))
 
     """
@@ -636,7 +640,7 @@ class EventingBaseTest(QueryHelperTests):
         for i in range(len(result['apps'])):
             res.append(result['apps'][i]['name'])
         for a in res:
-            self.rest.undeploy_function(a)
+            self.rest.undeploy_function(a, self.function_scope)
         for a in res:
             self.wait_for_handler_state(a, "undeployed")
         self.rest.delete_all_function()
@@ -826,19 +830,19 @@ class EventingBaseTest(QueryHelperTests):
 
     def deploy_handler_by_name(self,name,wait_for_bootstrap=True):
         self.refresh_rest_server()
-        self.rest.lifecycle_operation(name,"deploy")
+        self.rest.lifecycle_operation(name,"deploy", self.function_scope)
         if wait_for_bootstrap:
             self.wait_for_handler_state(name, "deployed")
 
     def pause_handler_by_name(self,name,wait_for_pause=True):
         self.refresh_rest_server()
-        self.rest.lifecycle_operation(name,"pause")
+        self.rest.lifecycle_operation(name,"pause", self.function_scope)
         if wait_for_pause:
             self.wait_for_handler_state(name, "paused")
 
     def resume_handler_by_name(self, name,wait_for_resume=True):
         self.refresh_rest_server()
-        self.rest.lifecycle_operation(name, "resume")
+        self.rest.lifecycle_operation(name, "resume", self.function_scope)
         log.info("Resume Application : {0}".format(name))
         if wait_for_resume:
             self.wait_for_handler_state(name, "deployed")
@@ -917,7 +921,7 @@ class EventingBaseTest(QueryHelperTests):
         return total_count
 
     def print_app_logs(self,name):
-        content = self.rest.get_app_logs(name)
+        content = self.rest.get_app_logs(name, self.function_scope)
         self.log.info("================== {} ============================================================".format(name))
         self.log.info(content)
         self.log.info("================== App logs end ===============================================================")
@@ -1189,7 +1193,7 @@ class EventingBaseTest(QueryHelperTests):
             body['function_scope'] = {"bucket": self.src_bucket_name, "scope": self.src_bucket_name}
         else:
             body['function_scope'] = {"bucket": self.src_bucket_name, "scope": "_default"}
-        self.rest.create_function(body['appname'], body, username, password)
+        self.rest.create_function(body['appname'], body, self.function_scope, username, password)
         self.log.info("saving function {}".format(body['appname']))
         return body
 

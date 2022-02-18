@@ -72,7 +72,7 @@ class EventingNegative(EventingBaseTest):
         for bucket in self.buckets:
             self.rest.delete_bucket(bucket.name)
         try:
-            self.rest.deploy_function(body['appname'], body)
+            self.rest.deploy_function(body['appname'], body, self.function_scope)
         except Exception as ex:
             if "ERR_BUCKET_MISSING" not in str(ex):
                 self.fail("Function save/deploy succeeded even when src/dst/metadata buckets doesn't exist")
@@ -238,7 +238,7 @@ class EventingNegative(EventingBaseTest):
         self.deploy_function(body, wait_for_bootstrap=False)
         body1 = {"count": 1}
         # Set retry to 1
-        self.rest.set_eventing_retry(body['appname'], body1)
+        self.rest.set_eventing_retry(body['appname'], body1, self.function_scope)
         try:
             # Try undeploying the function when it is still bootstrapping
             self.undeploy_function(body)
@@ -328,7 +328,7 @@ class EventingNegative(EventingBaseTest):
         # Use an invalid alias
         body['depcfg']['buckets'].append({"alias": "908!@#$%%^&&**", "bucket_name": self.dst_bucket_name})
         try:
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         except Exception as e:
             if "ERR_INVALID_CONFIG" not in str(e):
                 log.info(str(e))
@@ -339,7 +339,7 @@ class EventingNegative(EventingBaseTest):
         # Use an user_prefix greater than 16 chars
         body['settings']['user_prefix'] = "eventingeventingeventingeventingeventingeventingeventingeventingeventing"
         try:
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         except Exception as e:
             if "ERR_INVALID_CONFIG" not in str(e):
                 log.info(str(e))
@@ -351,7 +351,7 @@ class EventingNegative(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
         body['settings']['deployment_status'] = False
         body['settings']['processing_status'] = False
-        self.rest.create_function(body['appname'], body)
+        self.rest.create_function(body['appname'], body, self.function_scope)
         try:
             self.pause_function(body)
             self.fail("application is paused even before deployment")
@@ -364,7 +364,7 @@ class EventingNegative(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
-        self.rest.create_function(body['appname'], body)
+        self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body,wait_for_bootstrap=False)
         try:
             self.pause_function(body)
@@ -488,7 +488,7 @@ class EventingNegative(EventingBaseTest):
         self.deploy_function(body)
         update_body={"deployment_status":True, "processing_status":True, "dcp_stream_boundary":"everything"}
         try:
-            self.rest.set_settings_for_function(self.function_name,update_body)
+            self.rest.set_settings_for_function(self.function_name,update_body, self.function_scope)
         except Exception as e:
             if "ERR_INVALID_CONFIG" not in str(e):
                 raise Exception("Feed boundary updated when app is deployed")

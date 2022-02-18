@@ -60,11 +60,13 @@ class EventingSystemEvents(EventingBaseTest):
                                               self.handler_code)
         self.deploy_function(body)
         self.rest.enable_eventing_debugger()
-        self.rest.start_eventing_debugger(self.function_name)
+        self.rest.start_eventing_debugger(self.function_name,
+                                          self.function_scope)
         global_vars.system_event_logs.add_event(
             EventingServiceEvents.start_debugger(self.eventing_node,
                                                  self.function_name))
-        self.rest.stop_eventing_debugger(self.function_name)
+        self.rest.stop_eventing_debugger(self.function_name,
+                                         self.function_scope)
         global_vars.system_event_logs.add_event(
             EventingServiceEvents.stop_debugger(self.eventing_node,
                                                 self.function_name))
@@ -85,7 +87,7 @@ class EventingSystemEvents(EventingBaseTest):
         global_vars.system_event_logs.add_event(
             EventingServiceEvents.create_function(self.eventing_node,
                                                   self.function_name))
-        self.rest.export_function(self.function_name)
+        self.rest.export_function(self.function_name, self.function_scope)
         global_vars.system_event_logs.add_event(
             EventingServiceEvents.export_functions(self.eventing_node))
         self.import_function_from_directory("exported_functions/bucket_op.json")

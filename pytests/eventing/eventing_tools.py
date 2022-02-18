@@ -409,7 +409,7 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
         self.deploy_function(body,wait_for_bootstrap=False,deployment_status=False,processing_status=False)
         self.wait_for_handler_state(self.function_name, "deployed")
         # export the function that we have created
-        output = self.rest.export_function(self.function_name)
+        output = self.rest.export_function(self.function_name, self.function_scope)
         self.log.info("exported function: {}".format(output))
         self._couchbase_cli_eventing(eventing_node, self.function_name, "undeploy",
                                      "SUCCESS: Request to undeploy the function was accepted")
@@ -542,7 +542,7 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE,
                                               worker_count=3)
         self.deploy_function(body)
-        output = self.rest.export_function(self.function_name)
+        output = self.rest.export_function(self.function_name, self.function_scope)
         self.log.info("exported function: {}".format(output))
         self.pause_function(body)
         remote_client.write_remote_file_single_quote("/root", "test_export_function.json",

@@ -140,7 +140,7 @@ class EventingLifeCycle(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMER)
         self.deploy_function(body)
         # export the function that we have created
-        output = self.rest.export_function(self.function_name)
+        output = self.rest.export_function(self.function_name, self.function_scope)
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
         log.info("exported function")
@@ -167,9 +167,9 @@ class EventingLifeCycle(EventingBaseTest):
         # we don't have specific API for import, we reuse the API's
         self.function_name = "test_import_function"
         log.info("Saving the function for UI")
-        self.rest.save_function("test_import_function", body)  # we have hardcoded function name as it's imported
+        self.rest.save_function("test_import_function", body, self.function_scope)  # we have hardcoded function name as it's imported
         log.info("Deploy the function")
-        self.rest.deploy_function("test_import_function", body)  # we have hardcoded function name as it's imported
+        self.rest.deploy_function("test_import_function", body, self.function_scope)  # we have hardcoded function name as it's imported
         self.wait_for_handler_state("test_import_function", "deployed") # we have hardcoded function name as it's imported
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results("test_import_function", self.docs_per_day * 2016)
@@ -183,7 +183,7 @@ class EventingLifeCycle(EventingBaseTest):
         #enable debugger
         self.rest.enable_eventing_debugger()
         # Start eventing debugger
-        out1 = self.rest.start_eventing_debugger(self.function_name)
+        out1 = self.rest.start_eventing_debugger(self.function_name, self.function_scope)
         log.info(" Started eventing debugger : {0}".format(out1))
         # do some mutations
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -192,7 +192,7 @@ class EventingLifeCycle(EventingBaseTest):
         # get debugger url
         pattern = re.compile(eventing_ip.ip+':9140(.*)')
         while count < 10:
-            out2 = self.rest.get_eventing_debugger_url(self.function_name)
+            out2 = self.rest.get_eventing_debugger_url(self.function_name, self.function_scope)
             self.log.info("url generated {}".format(out2))
             url=json.loads(out2)
             matched = re.match(pattern, url["websocket"])
@@ -205,7 +205,7 @@ class EventingLifeCycle(EventingBaseTest):
         if not match:
             self.fail("Debugger url was not generated even after waiting for 300 secs...    ")
         # stop debugger
-        self.rest.stop_eventing_debugger(self.function_name)
+        self.rest.stop_eventing_debugger(self.function_name, self.function_scope)
         # undeploy and delete the function
         self.undeploy_and_delete_function(body)
 
@@ -216,14 +216,14 @@ class EventingLifeCycle(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
         self.deploy_function(body)
         try:
-            out1 = self.rest.start_eventing_debugger(self.function_name)
+            out1 = self.rest.start_eventing_debugger(self.function_name, self.function_scope)
         except Exception as e:
             msg=json.dumps(str(e))
             assert "ERR_DEBUGGER_DISABLED" in msg
         #enable debugger
         self.rest.enable_eventing_debugger()
         #start debugger
-        out1 = self.rest.start_eventing_debugger(self.function_name)
+        out1 = self.rest.start_eventing_debugger(self.function_name, self.function_scope)
         log.info(" Started eventing debugger : {0}".format(out1))
         # do some mutations
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -232,7 +232,7 @@ class EventingLifeCycle(EventingBaseTest):
         # get debugger url
         pattern = re.compile(eventing_ip.ip + ':9140(.*)')
         while count < 10:
-            out2 = self.rest.get_eventing_debugger_url(self.function_name)
+            out2 = self.rest.get_eventing_debugger_url(self.function_name, self.function_scope)
             url = json.loads(out2)
             matched = re.match(pattern, url["websocket"])
             if matched:
@@ -244,11 +244,11 @@ class EventingLifeCycle(EventingBaseTest):
         if not match:
             self.fail("Debugger url was not generated even after waiting for 300 secs...    ")
         # stop debugger
-        self.rest.stop_eventing_debugger(self.function_name)
+        self.rest.stop_eventing_debugger(self.function_name, self.function_scope)
         # disable debugger
         self.rest.disable_eventing_debugger()
         try:
-            out1 = self.rest.start_eventing_debugger(self.function_name)
+            out1 = self.rest.start_eventing_debugger(self.function_name, self.function_scope)
         except Exception as e:
             msg=json.dumps(str(e))
             assert "ERR_DEBUGGER_DISABLED" in msg
@@ -282,7 +282,7 @@ class EventingLifeCycle(EventingBaseTest):
         #enable debugger
         self.rest.enable_eventing_debugger()
         # Start eventing debugger
-        out1 = self.rest.start_eventing_debugger(self.function_name)
+        out1 = self.rest.start_eventing_debugger(self.function_name, self.function_scope)
         log.info(" Started eventing debugger : {0}".format(out1))
         # do some mutations
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -292,7 +292,7 @@ class EventingLifeCycle(EventingBaseTest):
         # get debugger url
         pattern = re.compile(eventing_ip.ip + ':9140(.*)')
         while count < 10:
-            out2 = self.rest.get_eventing_debugger_url(self.function_name)
+            out2 = self.rest.get_eventing_debugger_url(self.function_name, self.function_scope)
             url = json.loads(out2)
             matched = re.match(pattern, url["websocket"])
             if matched:
@@ -304,7 +304,7 @@ class EventingLifeCycle(EventingBaseTest):
         if not match:
             self.fail("Debugger url was not generated even after waiting for 300 secs...    ")
         # stop debugger
-        self.rest.stop_eventing_debugger(self.function_name)
+        self.rest.stop_eventing_debugger(self.function_name, self.function_scope)
         # undeploy and delete the function
         self.undeploy_and_delete_function(body)
 
@@ -335,7 +335,7 @@ class EventingLifeCycle(EventingBaseTest):
         #enable debugger
         self.rest.enable_eventing_debugger()
         # Start eventing debugger
-        out1 = self.rest.start_eventing_debugger(self.function_name)
+        out1 = self.rest.start_eventing_debugger(self.function_name, self.function_scope)
         log.info(" Started eventing debugger : {0}".format(out1))
         # do some mutations
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -344,7 +344,7 @@ class EventingLifeCycle(EventingBaseTest):
         # get debugger url
         pattern = re.compile(eventing_ip.ip + ':9140(.*)')
         while count < 10:
-            out2 = self.rest.get_eventing_debugger_url(self.function_name)
+            out2 = self.rest.get_eventing_debugger_url(self.function_name, self.function_scope)
             url = json.loads(out2)
             matched = re.match(pattern, url["websocket"])
             if matched:
@@ -356,7 +356,7 @@ class EventingLifeCycle(EventingBaseTest):
         if not match:
             self.fail("Debugger url was not generated even after waiting for 300 secs...    ")
         # stop debugger
-        self.rest.stop_eventing_debugger(self.function_name)
+        self.rest.stop_eventing_debugger(self.function_name, self.function_scope)
         # undeploy and delete the function
         self.undeploy_and_delete_function(body)
 
@@ -368,12 +368,12 @@ class EventingLifeCycle(EventingBaseTest):
         body['depcfg']['curl'].append(
             {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type, "username": self.curl_username,
              "password": self.curl_password, "cookies": self.cookies})
-        self.rest.create_function(body['appname'], body)
+        self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         #enable debugger
         self.rest.enable_eventing_debugger()
         # Start eventing debugger
-        out1 = self.rest.start_eventing_debugger(self.function_name)
+        out1 = self.rest.start_eventing_debugger(self.function_name, self.function_scope)
         log.info(" Started eventing debugger : {0}".format(out1))
         # do some mutations
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -382,7 +382,7 @@ class EventingLifeCycle(EventingBaseTest):
         # get debugger url
         pattern = re.compile(eventing_ip.ip + ':9140(.*)')
         while count < 10:
-            out2 = self.rest.get_eventing_debugger_url(self.function_name)
+            out2 = self.rest.get_eventing_debugger_url(self.function_name, self.function_scope)
             url = json.loads(out2)
             matched = re.match(pattern, url["websocket"])
             if matched:
@@ -394,7 +394,7 @@ class EventingLifeCycle(EventingBaseTest):
         if not match:
             self.fail("Debugger url was not generated even after waiting for 300 secs...    ")
         # stop debugger
-        self.rest.stop_eventing_debugger(self.function_name)
+        self.rest.stop_eventing_debugger(self.function_name, self.function_scope)
         # undeploy and delete the function
         self.undeploy_and_delete_function(body)
 
@@ -409,7 +409,7 @@ class EventingLifeCycle(EventingBaseTest):
         self.rest.create_function(body['appname'],body)
         self.deploy_function(body)
         # export the function that we have created
-        output = self.rest.export_function(self.function_name)
+        output = self.rest.export_function(self.function_name, self.function_scope)
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
         log.info("exported function")
@@ -429,7 +429,7 @@ class EventingLifeCycle(EventingBaseTest):
         #enable debugger
         self.rest.enable_eventing_debugger()
         # Start eventing debugger
-        out1 = self.rest.start_eventing_debugger(self.function_name)
+        out1 = self.rest.start_eventing_debugger(self.function_name, self.function_scope)
         log.info(" Started eventing debugger : {0}".format(out1))
         # do some mutations
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -439,7 +439,7 @@ class EventingLifeCycle(EventingBaseTest):
         # get debugger url
         pattern = re.compile(eventing_ip.ip + ':9140(.*)')
         while count < 10:
-            out2 = self.rest.get_eventing_debugger_url(self.function_name)
+            out2 = self.rest.get_eventing_debugger_url(self.function_name, self.function_scope)
             url = json.loads(out2)
             matched = re.match(pattern, url["websocket"])
             if matched:
@@ -451,7 +451,7 @@ class EventingLifeCycle(EventingBaseTest):
         if not match:
             self.fail("Debugger url was not generated even after waiting for 300 secs...    ")
         # stop debugger
-        self.rest.stop_eventing_debugger(self.function_name)
+        self.rest.stop_eventing_debugger(self.function_name, self.function_scope)
         # undeploy and delete the function
         self.undeploy_and_delete_function(body)
 
@@ -498,11 +498,11 @@ class EventingLifeCycle(EventingBaseTest):
         body1 = self.create_save_function_body(self.function_name + "1", "handler_code/appcode_after_update.js")
         body['depcfg']['buckets'].append(
             {"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1, "access": "rw"})
-        self.rest.create_function(body['appname'], body)
+        self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
         self.pause_function(body)
-        self.rest.update_function_appcode(body1['appcode'], self.function_name)
+        self.rest.update_function_appcode(body1['appcode'], self.function_name, self.function_scope)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         self.resume_function(body)

@@ -406,7 +406,7 @@ class EventingSanity(EventingBaseTest):
                                               "access": "rw"})
         else:
             body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
-        self.rest.create_function(body['appname'], body)
+        self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         # print timer context and alarm
         self.print_timer_alarm_context()
@@ -439,7 +439,7 @@ class EventingSanity(EventingBaseTest):
                                               "scope_name":self.src_bucket_name,"collection_name":self.src_bucket_name})
         else:
             body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
-        self.rest.create_function(body['appname'], body)
+        self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         if self.non_default_collection:
             self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)

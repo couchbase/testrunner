@@ -526,7 +526,7 @@ class EventingBucket(EventingBaseTest):
                                               worker_count=3)
         # create an alias so that src bucket as well so that we can read data from source bucket
         body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
-        self.rest.create_function(body['appname'], body)
+        self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         # sleep intentionally added as we are validating no mutations are processed by eventing
         self.sleep(60)

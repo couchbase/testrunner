@@ -119,7 +119,7 @@ class EventingConcurrency(EventingBaseTest):
                                               worker_count=3)
         # create an another alias for the same bucket
         body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name})
-        self.rest.create_function(body['appname'], body)
+        self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)

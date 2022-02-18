@@ -89,7 +89,7 @@ class EventingRBACSupport(EventingBaseTest):
                                               username="john", password="asdasd")
         body['settings']['dcp_stream_boundary'] = "from_now"
         self.rest.update_function(self.function_name, body, username="john", password="asdasd")
-        function_details = self.rest.get_function_details(self.function_name, username="john", password="asdasd")
+        function_details = self.rest.get_function_details(self.function_name, self.function_scope, username="john", password="asdasd")
         body1 = json.loads(function_details)
         assert body1['settings']['dcp_stream_boundary'] == "from_now", "Function settings did not get updated."
         self.delete_function(body, username="john", password="asdasd")
@@ -102,7 +102,7 @@ class EventingRBACSupport(EventingBaseTest):
             assert "ERR_FORBIDDEN" in str(e), True
         body = self.create_save_function_body(self.function_name, "handler_code/ABO/insert_rebalance.js")
         try:
-            self.rest.get_function_details(self.function_name, username="john", password="asdasd")
+            self.rest.get_function_details(self.function_name, self.function_scope, username="john", password="asdasd")
         except Exception as e:
             assert "ERR_FORBIDDEN" in str(e), True
         try:
@@ -207,12 +207,12 @@ class EventingRBACSupport(EventingBaseTest):
     def test_to_ensure_user_with_sufficient_privileges_can_export_eventing_functions_and_vice_versa(self):
         body = self.create_save_function_body(self.function_name, "handler_code/ABO/insert_rebalance.js",
                                               username="john", password="asdasd")
-        self.rest.export_function(self.function_name, username="john", password="asdasd")
+        self.rest.export_function(self.function_name, self.function_scope, username="john", password="asdasd")
         payload = "name=" + "john" + "&roles=" + '''data_reader[metadata],data_writer[metadata],data_writer[dst_bucket],
                                                          data_dcp_reader[src_bucket]'''
         self.rest.add_set_builtin_user(user_id="john", payload=payload)
         try:
-            self.rest.export_function(self.function_name, username="john", password="asdasd")
+            self.rest.export_function(self.function_name, self.function_scope, username="john", password="asdasd")
         except Exception as e:
             self.log.info(e)
         self.delete_function(body)

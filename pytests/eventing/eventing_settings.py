@@ -112,7 +112,7 @@ class EventingSettings(EventingBaseTest):
             for log_level in ['TRACE', 'INFO', 'ERROR', 'WARNING', 'DEBUG']:
                 body['settings']['log_level'] = log_level
                 log.info("Changing log level to {0}".format(log_level))
-                self.rest.set_settings_for_function(body['appname'], body['settings'])
+                self.rest.set_settings_for_function(body['appname'], body['settings'], self.function_scope)
                 self.sleep(5)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         if self.is_sbm:
@@ -186,13 +186,13 @@ class EventingSettings(EventingBaseTest):
         # pause the function
         self.pause_function(body)
         #update bucket settings
-        body1=self.rest.get_function_details(body['appname'])
+        body1=self.rest.get_function_details(body['appname'], self.function_scope)
         body1=json.loads(body1)
         del body1['settings']['dcp_stream_boundary']
         body1['settings']['description'] = "Adding a new description"
         body1['depcfg']['buckets'] = []
         body1['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name})
-        self.rest.update_function(body['appname'], body1)
+        self.rest.update_function(body['appname'], body1, self.function_scope)
         # update all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='update')
@@ -221,7 +221,7 @@ class EventingSettings(EventingBaseTest):
         # This is an important sleep, without this undeploy doesn't finish properly and subsequent deploy hangs
         self.sleep(30)
         # update bucket settings
-        body1 = self.rest.get_function_details(body['appname'])
+        body1 = self.rest.get_function_details(body['appname'], self.function_scope)
         body1 = json.loads(body1)
         del body1['settings']['dcp_stream_boundary']
         body1['settings']['description'] = "Adding a new description"
@@ -231,7 +231,7 @@ class EventingSettings(EventingBaseTest):
         abs_file_path = os.path.join(script_dir, HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION)
         fh = open(abs_file_path, "r")
         body1['appcode'] = fh.read()
-        self.rest.update_function(body['appname'], body1)
+        self.rest.update_function(body['appname'], body1, self.function_scope)
         # update all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='update')
@@ -263,7 +263,7 @@ class EventingSettings(EventingBaseTest):
         try:
             body = self.create_save_function_body(self.function_name, self.handler_code)
             body['settings']['timer_context_size']=19
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         except Exception as e:
             self.log.info(e)
             assert "ERR_INVALID_CONFIG" in str(e) and "timer_context_size value can not be less than 20 bytes" in str(e), True
@@ -272,7 +272,7 @@ class EventingSettings(EventingBaseTest):
         try:
             body = self.create_save_function_body(self.function_name, self.handler_code)
             body['settings']['timer_context_size']=200000000
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         except Exception as e:
             self.log.info(e)
             assert "ERR_INVALID_CONFIG" in str(e) and "timer_context_size value can not be more than 20MB" in str(e), True
@@ -280,7 +280,7 @@ class EventingSettings(EventingBaseTest):
     def test_timer_context_max_size_less_than_handler_size(self):
         body = self.create_save_function_body(self.function_name, "handler_code/timer_context_size.js")
         body['settings']['timer_context_size'] = 20
-        self.rest.create_function(body['appname'], body)
+        self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
@@ -294,7 +294,7 @@ class EventingSettings(EventingBaseTest):
         try:
             body = self.create_save_function_body(self.function_name, self.handler_code)
             body['settings']['timer_context_size']=None
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         except Exception as e:
             self.log.info(e)
             assert "ERR_INVALID_CONFIG" in str(e) and "timer_context_size must be a number" in str(e), True
@@ -303,7 +303,7 @@ class EventingSettings(EventingBaseTest):
         try:
             body = self.create_save_function_body(self.function_name, self.handler_code)
             body['depcfg']['buckets'].append({"alias": "new_bucket", "bucket_name": "new_bucket", "access": "rw"})
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         except Exception as e:
             self.log.info(e)
             assert "ERR_BUCKET_MISSING" in str(e), True
@@ -324,8 +324,8 @@ class EventingSettings(EventingBaseTest):
         body['depcfg']['source_scope'] = "_default"
         body['depcfg']['source_collection'] = "_default"
         # update handler config via new api call
-        self.rest.update_eventing_config_per_function(body['depcfg'], self.function_name)
-        log.info(self.rest.get_eventing_config_per_function(self.function_name))
+        self.rest.update_eventing_config_per_function(body['depcfg'], self.function_name, self.function_scope)
+        log.info(self.rest.get_eventing_config_per_function(self.function_name, self.function_scope))
         self.deploy_function(body)
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -337,7 +337,7 @@ class EventingSettings(EventingBaseTest):
         try:
             body = self.create_save_function_body(self.function_name, self.handler_code)
             del body['settings']
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         except Exception as e:
             self.log.info(e)
             assert "ERR_INVALID_CONFIG" in str(e) and "processing_status is required" in str(e), True

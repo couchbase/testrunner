@@ -142,7 +142,7 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
         self.src_bucket_name="travel-sample"
         body = self.create_save_function_body(self.function_name, "handler_code/logger.js")
         body['settings']['app_log_max_size']=3768300
-        self.rest.create_function(body['appname'], body)
+        self.rest.create_function(body['appname'], body, self.function_scope)
         # deploy a function without any alias
         self.deploy_function(body)
         self.verify_doc_count_collections("dst_bucket._default._default", 31591)

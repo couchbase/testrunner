@@ -42,7 +42,7 @@ class EventingCollections(EventingBaseTest):
         body['depcfg']['buckets'].append(
             {"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name, "scope_name": self.src_bucket_name,
              "collection_name": self.src_bucket_name})
-        self.rest.create_function(body['appname'], body)
+        self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
@@ -64,7 +64,7 @@ class EventingCollections(EventingBaseTest):
         body['depcfg']['buckets'].append(
             {"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name, "scope_name": self.src_bucket_name,
              "collection_name": self.src_bucket_name})
-        self.rest.create_function(body['appname'], body)
+        self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
@@ -86,7 +86,7 @@ class EventingCollections(EventingBaseTest):
         body['depcfg']['buckets'].append(
             {"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name, "scope_name": self.src_bucket_name,
              "collection_name": self.src_bucket_name})
-        self.rest.create_function(body['appname'], body)
+        self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         self.pause_function(body)
@@ -105,7 +105,7 @@ class EventingCollections(EventingBaseTest):
         body['depcfg']['buckets'].append(
             {"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name, "scope_name": self.src_bucket_name,
              "collection_name": self.src_bucket_name})
-        self.rest.create_function(body['appname'], body)
+        self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         self.pause_function(body)
@@ -125,7 +125,7 @@ class EventingCollections(EventingBaseTest):
         body['depcfg']['buckets'].append(
             {"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name, "scope_name": self.src_bucket_name,
              "collection_name": self.src_bucket_name})
-        self.rest.create_function(body['appname'], body)
+        self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
@@ -147,7 +147,7 @@ class EventingCollections(EventingBaseTest):
         body['depcfg']['buckets'].append(
             {"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name, "scope_name": self.src_bucket_name,
              "collection_name": self.src_bucket_name})
-        self.rest.create_function(body['appname'], body)
+        self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",
@@ -169,7 +169,7 @@ class EventingCollections(EventingBaseTest):
                                                         src_namespace="src_bucket.src_bucket.src_bucket",
                                                         collection_bindings=["src_bucket.src_bucket.src_bucket.src_bucket.r",
                                                         "dst_bucket.dst_bucket.dst_bucket.coll_"+str(i)+".rw"])
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
             self.deploy_function(body)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
         for i in range(3):
@@ -183,7 +183,7 @@ class EventingCollections(EventingBaseTest):
                                                         src_namespace="src_bucket.src_bucket.coll_"+str(i),
                                                         collection_bindings=["src_bucket.src_bucket.src_bucket.coll_"+str(i)+".r",
                                                         "dst_bucket.dst_bucket.dst_bucket.dst_bucket.rw"])
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
             self.deploy_function(body)
             self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.coll_"+str(i),wait_for_loading=False)
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs*3)
@@ -197,7 +197,7 @@ class EventingCollections(EventingBaseTest):
                                                         meta_namespace="metadata.metadata.coll_"+str(i),
                                                         collection_bindings=["src_bucket.src_bucket.src_bucket.src_bucket.r",
                                                         "dst_bucket.dst_bucket.dst_bucket.dst_bucket.rw"])
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
             self.deploy_function(body,wait_for_bootstrap=False)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
         self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs*3)
@@ -208,7 +208,7 @@ class EventingCollections(EventingBaseTest):
             body = self.create_function_with_collection(self.function_name, "handler_code/ABO/insert_rand.js",
                                                  src_namespace="src_bucket.src_bucket.src_bucket",
                                                  meta_namespace="src_bucket.src_bucket.src_bucket")
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         except Exception as e:
             self.log.info(e)
             assert "ERR_SRC_MB_SAME" in str(e) and "source keyspace same as metadata keyspace" in str(e), True

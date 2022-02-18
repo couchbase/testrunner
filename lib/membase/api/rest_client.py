@@ -5179,12 +5179,15 @@ class RestConnection(object):
            Eventing lifecycle operation 
     '''
 
-    def lifecycle_operation(self, name, operation, username="Administrator", password="password"):
+    def lifecycle_operation(self, name, operation, function_scope=None, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
             authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name +"/"+ operation
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'POST', headers=headers)
@@ -5197,9 +5200,12 @@ class RestConnection(object):
     '''
         Save the Function so that it is visible in UI
     '''
-    def save_function(self, name, body):
+    def save_function(self, name, body, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
         url = "_p/event/saveAppTempStore/?name=" + name
+        if function_scope is not None:
+            url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'POST', headers=headers,
@@ -5211,9 +5217,12 @@ class RestConnection(object):
     '''
             Deploy the Function
     '''
-    def deploy_function(self, name, body):
+    def deploy_function(self, name, body, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
         url = "_p/event/setApplication/?name=" + name
+        if function_scope is not None:
+            url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'POST', headers=headers,
@@ -5241,12 +5250,15 @@ class RestConnection(object):
     '''
             Undeploy the Function
     '''
-    def set_settings_for_function(self, name, body, username="Administrator", password="password"):
+    def set_settings_for_function(self, name, body, function_scope=None, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
             authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name +"/settings"
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'POST', headers=headers,
@@ -5260,12 +5272,15 @@ class RestConnection(object):
             deploy the Function 
     '''
 
-    def deploy_function_by_name(self, name, username="Administrator", password="password"):
+    def deploy_function_by_name(self, name, function_scope=None, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
             authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name + "/settings"
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         body = {"deployment_status": True, "processing_status": True}
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5279,12 +5294,15 @@ class RestConnection(object):
                pause the Function 
     '''
 
-    def pause_function_by_name(self, name, username="Administrator", password="password"):
+    def pause_function_by_name(self, name, function_scope=None, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
             authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name + "/settings"
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         body = {"deployment_status": True, "processing_status": False}
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5297,12 +5315,15 @@ class RestConnection(object):
     '''
         undeploy the Function 
     '''
-    def undeploy_function(self, name, username="Administrator", password="password"):
+    def undeploy_function(self, name, function_scope=None, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
             authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name +"/settings"
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         body= {"deployment_status": False, "processing_status": False}
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -5331,12 +5352,15 @@ class RestConnection(object):
     '''
             Delete single function
     '''
-    def delete_single_function(self, name, username="Administrator", password="password"):
+    def delete_single_function(self, name, function_scope=None, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
             authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'DELETE', headers=headers)
@@ -5347,9 +5371,12 @@ class RestConnection(object):
     '''
             Delete the Function from UI
     '''
-    def delete_function_from_temp_store(self, name):
+    def delete_function_from_temp_store(self, name, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
         url = "_p/event/deleteAppTempStore/?name=" + name
+        if function_scope is not None:
+            url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'DELETE', headers=headers)
@@ -5360,9 +5387,12 @@ class RestConnection(object):
     '''
             Delete the Function
     '''
-    def delete_function(self, name):
+    def delete_function(self, name, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
         url = "_p/event/deleteApplication/?name=" + name
+        if function_scope is not None:
+            url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'DELETE', headers=headers)
@@ -5373,13 +5403,16 @@ class RestConnection(object):
     '''
             Export the Function
     '''
-    def export_function(self, name, username="Administrator", password="password"):
+    def export_function(self, name, function_scope=None, username="Administrator", password="password"):
         export_map = {}
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
             authorization = self.get_authorization(username, password)
         url = "api/v1/export/" + name
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers)
@@ -5466,7 +5499,7 @@ class RestConnection(object):
     '''
              Get Eventing processing stats
     '''
-    def get_event_processing_stats(self, name, eventing_map=None, username="Administrator", password="password"):
+    def get_event_processing_stats(self, name, function_scope=None, eventing_map=None, username="Administrator", password="password"):
         if eventing_map is None:
             eventing_map = {}
         if self.eventing_role:
@@ -5474,6 +5507,9 @@ class RestConnection(object):
         else:
             authorization = self.get_authorization(username, password)
         url = "getEventProcessingStats?name=" + name
+        if function_scope is not None:
+            url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers)
@@ -5490,7 +5526,7 @@ class RestConnection(object):
     '''
             Get Aggregate Eventing processing stats
     '''
-    def get_aggregate_event_processing_stats(self, name, eventing_map=None, username="Administrator", password="password"):
+    def get_aggregate_event_processing_stats(self, name, function_scope=None, eventing_map=None, username="Administrator", password="password"):
         if eventing_map is None:
             eventing_map = {}
         if self.eventing_role:
@@ -5498,6 +5534,9 @@ class RestConnection(object):
         else:
             authorization = self.get_authorization(username, password)
         url = "getAggEventProcessingStats?name=" + name
+        if function_scope is not None:
+            url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers)
@@ -5514,7 +5553,7 @@ class RestConnection(object):
     '''
             Get Eventing execution stats
     '''
-    def get_event_execution_stats(self, name, eventing_map=None, username="Administrator", password="password"):
+    def get_event_execution_stats(self, name, function_scope=None, eventing_map=None, username="Administrator", password="password"):
         if eventing_map is None:
             eventing_map = {}
         if self.eventing_role:
@@ -5522,6 +5561,9 @@ class RestConnection(object):
         else:
             authorization = self.get_authorization(username, password)
         url = "getExecutionStats?name=" + name
+        if function_scope is not None:
+            url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers)
@@ -5538,7 +5580,7 @@ class RestConnection(object):
     '''
             Get Eventing failure stats
     '''
-    def get_event_failure_stats(self, name, eventing_map=None, username="Administrator", password="password"):
+    def get_event_failure_stats(self, name, function_scope=None, eventing_map=None, username="Administrator", password="password"):
         if eventing_map is None:
             eventing_map = {}
         if self.eventing_role:
@@ -5546,6 +5588,9 @@ class RestConnection(object):
         else:
             authorization = self.get_authorization(username, password)
         url = "getFailureStats?name=" + name
+        if function_scope is not None:
+            url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers)
@@ -5628,13 +5673,16 @@ class RestConnection(object):
     '''
             Start debugger
     '''
-    def start_eventing_debugger(self, name):
+    def start_eventing_debugger(self, name, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
         url="/pools/default"
         api = self.baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers)
         url = "_p/event/startDebugger/?name=" + name
+        if function_scope is not None:
+            url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'POST', headers=headers, params=content)
@@ -5645,9 +5693,12 @@ class RestConnection(object):
     '''
             Stop debugger
     '''
-    def stop_eventing_debugger(self, name):
+    def stop_eventing_debugger(self, name, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
         url = "_p/event/stopDebugger/?name=" + name
+        if function_scope is not None:
+            url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'POST', headers=headers)
@@ -5658,9 +5709,12 @@ class RestConnection(object):
     '''
             Get debugger url
     '''
-    def get_eventing_debugger_url(self, name):
+    def get_eventing_debugger_url(self, name, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
         url = "_p/event/getDebuggerUrl/?name=" + name
+        if function_scope is not None:
+            url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'POST', headers=headers)
@@ -5711,9 +5765,12 @@ class RestConnection(object):
     '''
             update eventing config function wise
     '''
-    def update_eventing_config_per_function(self, body, name):
+    def update_eventing_config_per_function(self, body, name, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
         url = "api/v1/functions/" + name + "/config"
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'POST', headers=headers,
@@ -5725,9 +5782,12 @@ class RestConnection(object):
     '''
             GET eventing config for single function
     '''
-    def get_eventing_config_per_function(self, name):
+    def get_eventing_config_per_function(self, name, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
         url = "api/v1/functions/" + name + "/config"
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers, params='')
@@ -5738,9 +5798,12 @@ class RestConnection(object):
     '''
             Update function appcode
     '''
-    def update_function_appcode(self, body, name):
+    def update_function_appcode(self, body, name, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
         url = "api/v1/functions/" + name + "/appcode"
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'POST', headers=headers, params=body)
@@ -5751,9 +5814,12 @@ class RestConnection(object):
     '''
             Get function appcode
     '''
-    def get_function_appcode(self, name):
+    def get_function_appcode(self, name, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
         url = "api/v1/functions/" + name + "/appcode"
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers, params='')
@@ -5779,24 +5845,30 @@ class RestConnection(object):
     '''
               Get application logs
     '''
-    def get_app_logs(self,handler_name, username="Administrator", password="password"):
+    def get_app_logs(self,handler_name, function_scope=None, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
             authorization = self.get_authorization(username, password)
-        url = "getAppLog?aggregate=true&name="+handler_name
+        url = "getAppLog?aggregate=true&name=" + handler_name
+        if function_scope is not None:
+            url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers)
         if status:
             return content
 
-    def create_function(self, name, body, username="Administrator", password="password"):
+    def create_function(self, name, body, function_scope=None, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
             authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'POST', headers=headers,
@@ -5805,12 +5877,15 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
-    def update_function(self, name, body, username="Administrator", password="password"):
+    def update_function(self, name, body, function_scope=None, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
             authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         body['appname']=name
@@ -5820,12 +5895,15 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
-    def get_function_details(self, name, username="Administrator", password="password"):
+    def get_function_details(self, name, function_scope=None, username="Administrator", password="password"):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
             authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers)
@@ -5846,12 +5924,15 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
-    def set_eventing_retry(self, name, body):
+    def set_eventing_retry(self, name, body, function_scope=None):
         if self.eventing_role:
             authorization = self.get_authorization("eventing_admin", "password")
         else:
             authorization = self.get_authorization(self.username, self.password)
         url = "api/v1/functions/" + name + "/retry"
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'POST', headers=headers,

@@ -101,7 +101,7 @@ class EventingRecovery(EventingBaseTest):
             body['depcfg']['curl'] = []
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                                            "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
@@ -178,7 +178,7 @@ class EventingRecovery(EventingBaseTest):
             body['depcfg']['curl'] = []
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                                            "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         #pause handler
         if self.pause_resume:
@@ -264,7 +264,7 @@ class EventingRecovery(EventingBaseTest):
             body['depcfg']['curl'] = []
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                                            "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         # pause handler
         if self.pause_resume:
@@ -315,7 +315,7 @@ class EventingRecovery(EventingBaseTest):
             body['depcfg']['curl'] = []
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                                            "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         # pause handler
         if self.pause_resume:
@@ -405,7 +405,7 @@ class EventingRecovery(EventingBaseTest):
             body['depcfg']['curl'] = []
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                                            "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         # pause handler
         if self.pause_resume:
@@ -493,7 +493,7 @@ class EventingRecovery(EventingBaseTest):
             body['depcfg']['curl'] = []
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                                            "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         # load some data
         if not self.is_expired:
@@ -578,7 +578,7 @@ class EventingRecovery(EventingBaseTest):
             body['depcfg']['curl'] = []
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                                            "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         try:
             # partition the eventing node when its processing mutations
@@ -639,7 +639,7 @@ class EventingRecovery(EventingBaseTest):
             body['depcfg']['curl'] = []
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                                            "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
@@ -668,7 +668,7 @@ class EventingRecovery(EventingBaseTest):
             body['depcfg']['curl'] = []
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                                            "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         # load some data
         if self.non_default_collection:
@@ -698,7 +698,7 @@ class EventingRecovery(EventingBaseTest):
             body['depcfg']['curl'] = []
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                                            "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         # load some data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -730,7 +730,7 @@ class EventingRecovery(EventingBaseTest):
             body['depcfg']['curl'] = []
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                                            "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         try:
             # partition the eventing node when its processing mutations
@@ -768,7 +768,7 @@ class EventingRecovery(EventingBaseTest):
                 body['depcfg']['curl'].append(
                     {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                      "username": self.curl_username, "password": self.curl_password, "cookies": self.cookies})
-                self.rest.create_function(body['appname'], body)
+                self.rest.create_function(body['appname'], body, self.function_scope)
             self.deploy_function(body)
             # Wait for eventing to catch up with all the update mutations and verify results
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -793,7 +793,7 @@ class EventingRecovery(EventingBaseTest):
                 body['depcfg']['curl'].append(
                     {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                      "username": self.curl_username, "password": self.curl_password, "cookies": self.cookies})
-                self.rest.create_function(body['appname'], body)
+                self.rest.create_function(body['appname'], body, self.function_scope)
             self.deploy_function(body)
             # pause handler
             if self.pause_resume:
@@ -834,7 +834,7 @@ class EventingRecovery(EventingBaseTest):
             body['depcfg']['curl'] = []
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                                            "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         try:
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
@@ -868,7 +868,7 @@ class EventingRecovery(EventingBaseTest):
             body['depcfg']['curl'] = []
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                                            "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         try:
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
@@ -910,7 +910,7 @@ class EventingRecovery(EventingBaseTest):
                 body['depcfg']['curl'].append(
                     {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                      "username": self.curl_username, "password": self.curl_password, "cookies": self.cookies})
-                self.rest.create_function(body['appname'], body)
+                self.rest.create_function(body['appname'], body, self.function_scope)
             self.deploy_function(body)
             # pause handler
             if self.pause_resume:
@@ -966,7 +966,7 @@ class EventingRecovery(EventingBaseTest):
             body['depcfg']['curl'] = []
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                                            "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         # load data
         if self.non_default_collection:
@@ -1052,7 +1052,7 @@ class EventingRecovery(EventingBaseTest):
             body['depcfg']['curl'] = []
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                                            "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         # load data
         if self.non_default_collection:
@@ -1157,7 +1157,7 @@ class EventingRecovery(EventingBaseTest):
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                                            "username": self.curl_username, "password": self.curl_password,
                                            "cookies": self.cookies})
-            self.rest.create_function(body['appname'], body)
+            self.rest.create_function(body['appname'], body, self.function_scope)
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)

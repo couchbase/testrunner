@@ -68,7 +68,7 @@ class EventingBucketCache(EventingBaseTest):
                  "collection_name": self.dst_bucket_name1, "access": "rw"})
         else:
             body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1, "access": "rw"})
-        self.rest.update_function(body['appname'], body)
+        self.rest.update_function(body['appname'], body, self.function_scope)
         if self.non_default_collection:
             self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
         else:
@@ -100,7 +100,7 @@ class EventingBucketCache(EventingBaseTest):
                  "collection_name": self.dst_bucket_name1, "access": "rw"})
         else:
             body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1, "access": "rw"})
-        self.rest.update_function(body['appname'], body)
+        self.rest.update_function(body['appname'], body, self.function_scope)
         if self.non_default_collection:
             self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
         else:
@@ -135,7 +135,7 @@ class EventingBucketCache(EventingBaseTest):
             body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1, "access": "rw"})
         # set cache age to 1 min to ensure no expiry
         body['settings']['bucket_cache_age'] = 60000
-        self.rest.update_function(body['appname'], body)
+        self.rest.update_function(body['appname'], body, self.function_scope)
         if self.non_default_collection:
             self.load_data_to_collection(1, "src_bucket.src_bucket.src_bucket")
         else:
@@ -173,7 +173,7 @@ class EventingBucketCache(EventingBaseTest):
             body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1, "access": "rw"})
         # set cache age to 1 min to ensure no expiry
         body['settings']['bucket_cache_age'] = 60000
-        self.rest.update_function(body['appname'], body)
+        self.rest.update_function(body['appname'], body, self.function_scope)
         if self.non_default_collection:
             self.load_data_to_collection(1, "src_bucket.src_bucket.src_bucket")
         else:
@@ -204,13 +204,13 @@ class EventingBucketCache(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, "handler_code/ABO/cache_compare_values.js")
         try:
             body['settings']['bucket_cache_age'] = 0
-            self.rest.update_function(body['appname'], body)
+            self.rest.update_function(body['appname'], body, self.function_scope)
         except Exception as e:
             self.log.info(e)
             assert "ERR_INVALID_CONFIG" in str(e) and "bucket_cache_age can not be zero or negative" in str(e), True
         try:
             body['settings']['bucket_cache_size'] = -10
-            self.rest.update_function(body['appname'], body)
+            self.rest.update_function(body['appname'], body, self.function_scope)
         except Exception as e:
             self.log.info(e)
             assert "ERR_INVALID_CONFIG" in str(e) and "bucket_cache_size can not be zero or negative" in str(e), True
