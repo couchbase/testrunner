@@ -85,9 +85,12 @@ class ntonencryptionBase:
             return None
         else:
             json_acceptable_string = output[0].replace("'", "\"")
-            security_dict = json.loads(json_acceptable_string)
-            if "clusterEncryptionLevel" in security_dict:
-                return security_dict["clusterEncryptionLevel"]
+            if '"clusterEncryptionLevel": "control"' in json_acceptable_string:
+                return "control"
+            elif '"clusterEncryptionLevel": "all"' in json_acceptable_string:
+                return "all"
+            elif '"clusterEncryptionLevel": "strict"' in json_acceptable_string:
+                return "strict"
             else:
                 return None
 
