@@ -39,6 +39,7 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
             self.inbox_folder_path = "C:/Program Files/Couchbase/Server/var/lib/couchbase/inbox/"
         self.plain_passw_map = dict()
         self.add_rbac_groups_roles(self.master)
+        self.add_ldap_users(self.master)
         self.test_setup_finished = True
 
     def tearDown(self):
@@ -87,6 +88,51 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
 
             log.info("Group name -- {0} :: User name -- {1}".format(group_name, user_name))
             rest.add_user_group(group_name, user_name)
+
+    def add_ldap_users(self, server):
+        rest = RestConnection(server)
+
+        # setup LDAP and enable LDAP user authentication
+        hosts = '172.23.120.205'
+        port = '389'
+        encryption = 'None'
+        ldapDN = 'ou=Users,dc=couchbase,dc=com'
+        bindDN = 'cn=Manager,dc=couchbase,dc=com'
+        bindPass = 'p@ssword'
+        authenticationEnabled = 'true'
+        ldapObjectClass = 'inetOrgPerson'
+        userDNMapping = '{"template":"cn=%u,ou=Users,dc=couchbase,dc=com"}'
+        param = {
+            'hosts': '{0}'.format(hosts),
+            'port': '{0}'.format(port),
+            'encryption': '{0}'.format(encryption),
+            'bindDN': '{0}'.format(bindDN),
+            'bindPass': '{0}'.format(bindPass),
+            'authenticationEnabled': '{0}'.format(authenticationEnabled),
+            'userDNMapping': '{0}'.format(userDNMapping)
+        }
+        rest.setup_ldap(param, '')
+
+        versions = rest.get_nodes_versions()
+        if versions[0] < "7.0":
+            roles = '''cluster_admin,security_admin,ro_admin,
+                    bucket_admin[travel-sample],bucket_full_access[travel-sample],
+                    data_reader[travel-sample],data_writer[travel-sample],data_dcp_reader[travel-sample],
+                    data_backup[travel-sample],data_monitoring[travel-sample]'''
+        else:
+            roles = '''cluster_admin,security_admin_local,security_admin_external,ro_admin,
+                    bucket_admin[travel-sample],bucket_full_access[travel-sample],
+                    data_reader[travel-sample:_default:_default],
+                    data_writer[travel-sample:_default:_default],
+                    data_dcp_reader[travel-sample:_default:_default],
+                    data_monitoring[travel-sample:_default:_default],
+                    data_backup[travel-sample]'''
+
+        # add external users
+        user_name = "bjones"
+        payload = "name={0}&roles={1}".format(user_name, roles)
+        log.info("User name -- {0} :: Roles -- {1}".format(user_name, roles))
+        rest.add_external_user(user_name, payload)
 
     def convert_to_pkcs8(self, node):
         """
