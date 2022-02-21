@@ -115,10 +115,14 @@ class EventingBaseTest(QueryHelperTests):
         if not self.is_upgrade_test:
             self.collection_rest = CollectionsRest(self.master)
         self.non_default_collection=self.input.param('non_default_collection',False)
-        if self.non_default_collection:
-            self.function_scope = {"bucket": self.src_bucket_name, "scope": self.src_bucket_name}
+        self.global_function_scope = self.input.param('global_function_scope', False)
+        if self.global_function_scope:
+            self.function_scope = {"bucket": "*", "scope": "*"}
         else:
-            self.function_scope = {"bucket": self.src_bucket_name, "scope": "_default"}
+            if self.non_default_collection:
+                self.function_scope = {"bucket": self.src_bucket_name, "scope": self.src_bucket_name}
+            else:
+                self.function_scope = {"bucket": self.src_bucket_name, "scope": "_default"}
         self.num_docs=2016
         self.is_binary=self.input.param('binary_doc',False)
         self.eventing_role=self.input.param('eventing_role', False)
@@ -255,10 +259,7 @@ class EventingBaseTest(QueryHelperTests):
             if self.auth_type=="bearer":
                 body['depcfg']['curl'][0]['bearer_key']=self.bearer_key
         body['settings']['language_compatibility']=language_compatibility
-        if self.non_default_collection:
-            body['function_scope'] = {"bucket": self.src_bucket_name, "scope": self.src_bucket_name}
-        else:
-            body['function_scope'] = {"bucket": self.src_bucket_name, "scope": "_default"}
+        body['function_scope'] = self.function_scope
         content1 = self.rest.create_function(body['appname'], body, self.function_scope, username, password)
         self.log.info("saving function {}".format(content1))
         return body
@@ -1189,10 +1190,7 @@ class EventingBaseTest(QueryHelperTests):
                      "username": self.curl_username, "password": self.curl_password, "allow_cookies": self.cookies,"validate_ssl_certificate": validate_ssl})
             if self.auth_type=="bearer":
                 body['depcfg']['curl'][0]['bearer_key']=self.bearer_key
-        if self.non_default_collection:
-            body['function_scope'] = {"bucket": self.src_bucket_name, "scope": self.src_bucket_name}
-        else:
-            body['function_scope'] = {"bucket": self.src_bucket_name, "scope": "_default"}
+        body['function_scope'] = self.function_scope
         self.rest.create_function(body['appname'], body, self.function_scope, username, password)
         self.log.info("saving function {}".format(body['appname']))
         return body

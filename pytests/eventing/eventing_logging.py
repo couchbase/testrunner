@@ -140,6 +140,7 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
     def test_log_rotation(self):
         self.load_sample_buckets(self.server, "travel-sample")
         self.src_bucket_name="travel-sample"
+        self.function_scope = {"bucket": self.src_bucket_name, "scope": "_default"}
         body = self.create_save_function_body(self.function_name, "handler_code/logger.js")
         body['settings']['app_log_max_size']=3768300
         self.rest.create_function(body['appname'], body, self.function_scope)
