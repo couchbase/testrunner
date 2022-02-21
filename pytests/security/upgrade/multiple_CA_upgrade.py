@@ -21,6 +21,7 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
         super(MultipleCAUpgrade, self).setUp()
         self.initial_version = self.input.param("initial_version", '6.6.3-9799')
         self.upgrade_version = self.input.param("upgrade_version", "7.1.0-1745")
+        self.base_version = RestConnection(self.master).get_nodes_versions()[0]
         self.enc_key_mixed_mode = self.input.param("enc_key_mixed_mode", False)
         if self.enc_key_mixed_mode in ["True", True]:
             self.enc_key_mixed_mode = True
@@ -61,16 +62,19 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
 
     def add_rbac_groups_roles(self, server):
         rest = RestConnection(server)
-        versions = rest.get_nodes_versions()
-        if versions[0] < "7.0":
-            group_roles = ['admin', 'cluster_admin', 'security_admin', 'ro_admin',
-                           'bucket_admin[travel-sample]', 'bucket_full_access[travel-sample]',
-                           'data_reader[travel-sample]', 'data_writer[travel-sample]', 'data_dcp_reader[travel-sample]', 'data_backup[travel-sample]', 'data_monitoring[travel-sample]']
+        group_roles = ['admin', 'cluster_admin', 'ro_admin',
+                    'bucket_admin[travel-sample]', 'bucket_full_access[travel-sample]']
+        if self.base_version < "7.0":
+            group_roles.extend(['security_admin', 'data_reader[travel-sample]',
+                            'data_writer[travel-sample]', 'data_dcp_reader[travel-sample]',
+                            'data_backup[travel-sample]', 'data_monitoring[travel-sample]'])
         else:
-            group_roles = ['admin', 'cluster_admin', 'security_admin_local', 'security_admin_external', 'ro_admin',
-                           'bucket_admin[travel-sample]', 'bucket_full_access[travel-sample]',
-                           'data_reader[travel-sample:_default:_default]', 'data_writer[travel-sample:_default:_default]', 'data_dcp_reader[travel-sample:_default:_default]', 'data_monitoring[travel-sample:_default:_default]',
-                           'data_backup[travel-sample]']
+            group_roles.extend(['security_admin_local', 'security_admin_external',
+                            'data_reader[travel-sample:_default:_default]',
+                            'data_writer[travel-sample:_default:_default]',
+                            'data_dcp_reader[travel-sample:_default:_default]',
+                            'data_monitoring[travel-sample:_default:_default]',
+                            'data_backup[travel-sample]'])
         groups = []
         for role in group_roles:
             group_name = "group_" + role.split("[",1)[0]
@@ -96,11 +100,9 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
         hosts = '172.23.120.205'
         port = '389'
         encryption = 'None'
-        ldapDN = 'ou=Users,dc=couchbase,dc=com'
         bindDN = 'cn=Manager,dc=couchbase,dc=com'
         bindPass = 'p@ssword'
         authenticationEnabled = 'true'
-        ldapObjectClass = 'inetOrgPerson'
         userDNMapping = '{"template":"cn=%u,ou=Users,dc=couchbase,dc=com"}'
         param = {
             'hosts': '{0}'.format(hosts),
@@ -113,26 +115,87 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
         }
         rest.setup_ldap(param, '')
 
-        versions = rest.get_nodes_versions()
-        if versions[0] < "7.0":
-            roles = '''cluster_admin,security_admin,ro_admin,
-                    bucket_admin[travel-sample],bucket_full_access[travel-sample],
-                    data_reader[travel-sample],data_writer[travel-sample],data_dcp_reader[travel-sample],
-                    data_backup[travel-sample],data_monitoring[travel-sample]'''
+        roles = '''cluster_admin,ro_admin,
+                bucket_admin[travel-sample],bucket_full_access[travel-sample],'''
+        if self.base_version < "7.0":
+            roles = roles + '''security_admin,
+                            data_reader[travel-sample],
+                            data_writer[travel-sample],
+                            data_dcp_reader[travel-sample],
+                            data_backup[travel-sample],
+                            data_monitoring[travel-sample]'''
         else:
-            roles = '''cluster_admin,security_admin_local,security_admin_external,ro_admin,
-                    bucket_admin[travel-sample],bucket_full_access[travel-sample],
-                    data_reader[travel-sample:_default:_default],
-                    data_writer[travel-sample:_default:_default],
-                    data_dcp_reader[travel-sample:_default:_default],
-                    data_monitoring[travel-sample:_default:_default],
-                    data_backup[travel-sample]'''
+            roles = roles + '''security_admin_local,security_admin_external,
+                            data_reader[travel-sample:_default:_default],
+                            data_writer[travel-sample:_default:_default],
+                            data_dcp_reader[travel-sample:_default:_default],
+                            data_monitoring[travel-sample:_default:_default],
+                            data_backup[travel-sample]'''
 
         # add external users
         user_name = "bjones"
         payload = "name={0}&roles={1}".format(user_name, roles)
         log.info("User name -- {0} :: Roles -- {1}".format(user_name, roles))
         rest.add_external_user(user_name, payload)
+
+    def validate_rbac_users_post_upgrade(self, server):
+        expected_user_roles = {'cbadminbucket': ['admin'],
+                    'user_group_data_backup': ['data_backup[travel-sample]'],
+                    'user_group_security_admin': ['security_admin_local', 'security_admin_external'],
+                    'user_group_ro_admin': ['ro_admin'],
+                    'user_group_admin': ['admin'],
+                    'user_group_bucket_full_access': ['bucket_full_access[travel-sample]'],
+                    'user_group_cluster_admin': ['cluster_admin'],
+                    'user_group_bucket_admin': ['bucket_admin[travel-sample]'],
+                    'bjones': [
+                        'data_backup[travel-sample]',
+                        'bucket_full_access[travel-sample]', 'bucket_admin[travel-sample]',
+                        'security_admin_local', 'security_admin_external',
+                        'ro_admin', 'cluster_admin']}
+        if self.base_version < "7.0":
+            expected_user_roles.update(
+                    {'user_group_data_reader': ['data_reader[travel-sample][*][*]'],
+                    'user_group_data_writer': ['data_writer[travel-sample][*][*]'],
+                    'user_group_data_monitoring': ['data_monitoring[travel-sample][*][*]'],
+                    'user_group_data_dcp_reader': ['data_dcp_reader[travel-sample][*][*]']})
+            expected_user_roles['bjones'].extend(['data_writer[travel-sample][*][*]',
+                        'data_reader[travel-sample][*][*]',
+                        'data_monitoring[travel-sample][*][*]',
+                        'data_dcp_reader[travel-sample][*][*]'])
+        else:
+            expected_user_roles.update(
+                    {'user_group_data_reader': ['data_reader[travel-sample][_default][_default]'],
+                    'user_group_data_writer': ['data_writer[travel-sample][_default][_default]'],
+                    'user_group_data_monitoring': ['data_monitoring[travel-sample][_default][_default]'],
+                    'user_group_data_dcp_reader': ['data_dcp_reader[travel-sample][_default][_default]']})
+            expected_user_roles['bjones'].extend(['data_writer[travel-sample][_default][_default]',
+                        'data_reader[travel-sample][_default][_default]',
+                        'data_monitoring[travel-sample][_default][_default]',
+                        'data_dcp_reader[travel-sample][_default][_default]'])
+
+        rest = RestConnection(server)
+        content = rest.retrieve_user_roles()
+        observed_user_roles = {}
+        for items in content:
+            roles_list = []
+            for role in items['roles']:
+                roles_str = role['role']
+                if 'bucket_name' in role:
+                    roles_str = roles_str + "[" + role['bucket_name'] + "]"
+                    if 'scope_name' in role:
+                        roles_str = roles_str + "[" + role['scope_name'] + "]"
+                        if 'collection_name' in role:
+                            roles_str = roles_str + "[" + role['collection_name'] + "]"
+                roles_list.append(roles_str)
+                observed_user_roles[items['id']] = roles_list
+
+        if len(observed_user_roles) != len(expected_user_roles):
+            self.fail("Validation of RBAC user roles post upgrade failed. Mismatch in the number of users.")
+        for user in expected_user_roles:
+            if set(expected_user_roles[user]) != set(observed_user_roles[user]):
+                self.fail("Validation of RBAC user roles post upgrade failed. Mismatch in the roles of {0}."
+                          .format(user))
+        self.log.info("Validation of RBAC user roles post upgrade -- SUCCESS")
 
     def convert_to_pkcs8(self, node):
         """
@@ -264,6 +327,7 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
 
         self.wait_for_rebalance_to_complete(task)
         self.auth(servers=self.servers)
+        self.validate_rbac_users_post_upgrade(self.master)
 
     def test_multiple_CAs_online(self):
         """
@@ -325,3 +389,4 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
         self.x509_new.delete_unused_out_of_the_box_CAs(server=self.master)
         self.x509_new.upload_client_cert_settings(server=nodes_in_cluster[0])
         self.auth(servers=nodes_in_cluster)
+        self.validate_rbac_users_post_upgrade(self.master)
