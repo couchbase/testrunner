@@ -3547,7 +3547,11 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         remote_client.log_command_output(output, error)
         if error and not [x for x in output if 'created successfully in archive' in x]:
             self.fail("cbbackupmgr config failed")
-        cmd = "cbbackupmgr backup --archive {0} --repo example{1} --cluster couchbase://127.0.0.1 --username {2} --password {3}".format(
+        if self.use_https:
+            cmd = "cbbackupmgr backup --archive {0} --repo example{1} --cluster https://127.0.0.1:18091 --username {2} --password {3} --no-ssl-verify".format(
+            self.backup_path, self.rand, username, password)
+        else:
+            cmd = "cbbackupmgr backup --archive {0} --repo example{1} --cluster couchbase://127.0.0.1 --username {2} --password {3}".format(
             self.backup_path, self.rand, username, password)
         command = "{0}{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
@@ -3561,8 +3565,12 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
     def _create_restore(self, server, username="Administrator",
                         password="password"):
         remote_client = RemoteMachineShellConnection(server)
-        cmd = "cbbackupmgr restore --archive {0} --repo example{1} --cluster couchbase://127.0.0.1 --username {2} --password {3} --force-updates".format(
+        if self.use_https:
+            cmd = "cbbackupmgr restore --archive {0} --repo example{1} --cluster https://127.0.0.1:18091 --username {2} --password {3} --force-updates --no-ssl-verify".format(
             self.backup_path, self.rand, username, password)
+        else:
+            cmd = "cbbackupmgr restore --archive {0} --repo example{1} --cluster couchbase://127.0.0.1 --username {2} --password {3} --force-updates".format(
+                self.backup_path, self.rand, username, password)
         command = "{0}{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
