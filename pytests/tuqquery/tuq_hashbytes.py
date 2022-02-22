@@ -24,13 +24,13 @@ class QueryHashBytesTests(QueryTests):
     def hashbytes(self, value, algorithm):
         if type(value) == dict:
             string = json.dumps(value, separators=(',', ':'), sort_keys=True)
-        elif type(value) == int:
+        elif type(value) in [int, float]:
             string = str(value)
         else:
             string = value
         if algorithm.upper() == "MD4":
-            cmd = subprocess.getoutput(f'echo -n {string} | openssl md4')
-            return cmd
+            cmd = subprocess.getoutput(f'/bin/echo -n {string} | openssl md4')
+            return cmd.replace("(stdin)= ", "")
         if algorithm.upper() == "MD5":
             return hashlib.md5(string.encode()).hexdigest()
         if algorithm.upper() == "SHA224":
