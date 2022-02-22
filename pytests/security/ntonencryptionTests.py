@@ -379,7 +379,9 @@ class ntonencryptionTest(BaseTestCase):
         self.log.info( 'before cert generate')
         x509main(self.master)._generate_cert(copy_servers, type='openssl', encryption='', key_length=1024, client_ip='172.16.1.174', alt_names='non_default', dns=None, uri=None,wildcard_dns=self.wildcard_dns)
         x509main(self.master).setup_master()
-        x509main().setup_cluster_nodes_ssl(servs_inout)
+        for server in servs_inout:
+            x509main(server).setup_master()
+        x509main().setup_cluster_nodes_ssl(servs_inout, reload_cert=True)
 
 
 
@@ -451,7 +453,9 @@ class ntonencryptionTest(BaseTestCase):
         self.log.info( 'before cert generate')
         x509main(self.master)._generate_cert(copy_servers, type='openssl', encryption='', key_length=1024, client_ip='172.16.1.174', alt_names='non_default', dns=None, uri=None,wildcard_dns=self.wildcard_dns)
         x509main(self.master).setup_master()
-        x509main().setup_cluster_nodes_ssl(servs_inout)
+        for server in servs_inout:
+            x509main(server).setup_master()
+        x509main().setup_cluster_nodes_ssl(servs_inout, reload_cert=True)
         for service in self.services_in.split("-"):
             services_in.append(service.split(":")[0])
         self.log.info ("list of services to be added after formatting {0}".format(services_in))
@@ -501,7 +505,9 @@ class ntonencryptionTest(BaseTestCase):
         self.log.info( 'before cert generate')
         x509main(self.master)._generate_cert(copy_servers, type='openssl', encryption='', key_length=1024, client_ip='172.16.1.174', alt_names='non_default', dns=None, uri=None,wildcard_dns=self.wildcard_dns)
         x509main(self.master).setup_master()
-        x509main().setup_cluster_nodes_ssl(servs_inout)
+        for server in servs_inout:
+            x509main(server).setup_master()
+        x509main().setup_cluster_nodes_ssl(servs_inout, reload_cert=True)
         for service in self.services_in.split("-"):
             services_in.append(service.split(":")[0])
         self.log.info ("list of services to be added after formatting {0}".format(services_in))
