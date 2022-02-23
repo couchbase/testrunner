@@ -714,6 +714,8 @@ class RebalanceTask(Task):
         self.to_add = to_add
         self.to_remove = to_remove
         self.start_time = None
+        if services is not None and not services:
+            services = ["kv"]
         self.services = services
         self.monitor_vbuckets_shuffling = False
         self.sleep_before_rebalance = sleep_before_rebalance
