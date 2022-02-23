@@ -297,6 +297,10 @@ class x509tests(BaseTestCase):
         if (rebalance):
             rest.rebalance(known_nodes, [serv_out])
             self.assertTrue(self.check_rebalance_complete(rest), "Issue with rebalance")
+            x509main(servs_inout[1]).non_local_CA_upload(server=servs_inout[1], allow=True)
+            x509main(servs_inout[1])._upload_cluster_ca_certificate(self.master.rest_username,
+                                                                    self.master.rest_password)
+            x509main(servs_inout[1])._reload_node_certificate(host=servs_inout[1])
             rest.add_node('Administrator', 'password', servs_inout[1].ip)
         else:
             rest.add_back_node(serv_out)
