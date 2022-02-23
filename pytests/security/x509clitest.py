@@ -8,11 +8,11 @@ import ssl
 import socket
 import paramiko
 
-
 from security.x509main import x509main
 from security.x509tests import x509tests
 from remote.remote_util import RemoteMachineShellConnection
 from clitest.cli_base import CliBaseTest
+
 
 class ServerInfo():
     def __init__(self,
@@ -21,13 +21,11 @@ class ServerInfo():
                  ssh_username,
                  ssh_password,
                  ssh_key=''):
-
         self.ip = ip
         self.ssh_username = ssh_username
         self.ssh_password = ssh_password
         self.port = port
         self.ssh_key = ssh_key
-
 
 
 class X509clitest(x509tests):
@@ -42,24 +40,30 @@ class X509clitest(x509tests):
     def tearDown(self):
         super(X509clitest, self).tearDown()
 
-    def _copy_root_crt(self):
-        x509main(self.master)._create_inbox_folder(self.master)
+    def _copy_root_crt(self, server=None):
+        if server is None:
+            server = self.master
+        x509main(server)._create_inbox_folder(server)
         src_chain_file = x509main.CACERTFILEPATH + x509main.CACERTFILE
         dest_chain_file = self.install_path + x509main.CHAINFILEPATH + "/root.crt"
-        x509main(self.master)._copy_node_key_chain_cert(self.master, src_chain_file, dest_chain_file)
+        x509main(server)._copy_node_key_chain_cert(server, src_chain_file, dest_chain_file)
 
     def setup_master(self):
         self._copy_root_crt()
         output, error = self._upload_cert_cli()
 
-    def _upload_cert_cli(self):
+    def _upload_cert_cli(self, server=None):
+        if server is None:
+            server = self.master
         path_to_root_cert = self.install_path + x509main.CHAINFILEPATH + "/root.crt"
-        self._copy_root_crt()
+        self._copy_root_crt(server=server)
         cli_command = 'ssl-manage'
         options = "--upload-cluster-ca={0}".format(path_to_root_cert)
-        remote_client = RemoteMachineShellConnection(self.master)
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
+        remote_client = RemoteMachineShellConnection(server)
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+                                                            options=options, cluster_host="localhost",
+                                                            user=self.ldapUser, password=self.ldapPass)
+        remote_client.disconnect()
         return output, error
 
     def _setup_cluster_nodes(self, host):
@@ -78,7 +82,9 @@ class X509clitest(x509tests):
         options = "--set-node-certificate"
         remote_client = RemoteMachineShellConnection(host)
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
+                                                            options=options, cluster_host="localhost",
+                                                            user=self.ldapUser, password=self.ldapPass)
+        remote_client.disconnect()
         return output, error
 
     def _setup_all_cluster_nodes(self, servers):
@@ -89,6 +95,7 @@ class X509clitest(x509tests):
         shell = RemoteMachineShellConnection(host)
         command = 'cat ' + (path_cert + cert_name)
         output = shell.execute_command(command)
+        shell.disconnect()
         return output
 
     def _retrieve_cluster_cert_extended(self, server):
@@ -96,7 +103,9 @@ class X509clitest(x509tests):
         options = "--cluster-cert-info --extended"
         remote_client = RemoteMachineShellConnection(server)
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
+                                                            options=options, cluster_host="localhost",
+                                                            user=self.ldapUser, password=self.ldapPass)
+        remote_client.disconnect()
         return output, error
 
     def _download_cluster_cert(self, server):
@@ -104,7 +113,9 @@ class X509clitest(x509tests):
         options = "--cluster-cert-info"
         remote_client = RemoteMachineShellConnection(server)
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
+                                                            options=options, cluster_host="localhost",
+                                                            user=self.ldapUser, password=self.ldapPass)
+        remote_client.disconnect()
         return output, error
 
     def _download_node_cert(self, server):
@@ -112,13 +123,15 @@ class X509clitest(x509tests):
         options = "--node-cert-info"
         remote_client = RemoteMachineShellConnection(server)
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host=server.ip + ":8091", user=self.ldapUser, password=self.ldapPass)
+                                                            options=options, cluster_host=server.ip + ":8091",
+                                                            user=self.ldapUser, password=self.ldapPass)
+        remote_client.disconnect()
         return output, error
-
 
     def test_upload_cluster_ca(self):
         output, error = self._upload_cert_cli()
-        self.assertTrue("SUCCESS: Uploaded cluster certificate" in output[0], "Error message is incorrect")
+        if "SUCCESS: Uploaded cluster certificate" not in output[1]:
+            self.fail("Unexpected return message {0}".format(output[1]))
 
     def test_setup_nodes(self):
         self.setup_master()
@@ -142,7 +155,8 @@ class X509clitest(x509tests):
             self.assertEqual(status, 200, "Not able to login via SSL code")
 
     def test_end_to_end_after_cluster(self):
-        output, error = self._upload_cert_cli()
+        for server in self.servers:
+            output, error = self._upload_cert_cli(server=server)
         self._setup_all_cluster_nodes(self.servers)
         servers_in = self.servers[1:]
         self.cluster.rebalance(self.servers, servers_in, [])
@@ -151,16 +165,15 @@ class X509clitest(x509tests):
             self.assertEqual(status, 200, "Not able to login via SSL code")
 
     def test_retrieve_cluster_cert(self):
-        i =0
+        i = 0
         output, error = self._upload_cert_cli()
         output, error = self._retrieve_cluster_cert_extended(self.master)
         self.assertTrue("CN=Root Authority" in output[4], "Mismatch in Subject CN")
         self.assertTrue("uploaded" in output[5], "Mismatch in type of certifcate")
         self.assertTrue("Certificate is not signed with cluster CA." in output[9], "Mismatch in warning message")
-        self.assertTrue("ns_1@"+self.master.ip in output[10], "Mismatch in node value")
+        self.assertTrue("ns_1@" + self.master.ip in output[10], "Mismatch in node value")
         orig_cert = self._read_crt(self.slave_host, x509main.CACERTFILEPATH, x509main.CACERTFILE)
         self.assertTrue(((output[3])[45:92] in orig_cert[0]), "Certificates dont match")
-
 
     def test_download_cluster_cert(self):
         output, error = self._upload_cert_cli()
@@ -170,12 +183,11 @@ class X509clitest(x509tests):
         if output[1] not in orig_cert[0]:
             self.assertFalse(True, 'Downloaded cert and orig cert don"t match')
 
-
     def test_node_cert(self):
         output, error = self._upload_cert_cli()
         output, error = self._setup_cluster_nodes(self.master)
         output, error = self._download_node_cert(self.master)
-        if "CN="+self.master.ip not in output[3]:
+        if "CN=" + self.master.ip not in output[3]:
             self.assertFalse(True, "CN does not match")
         orig_cert = self._read_crt(self.slave_host, x509main.CACERTFILEPATH, self.master.ip + ".crt")
         if (output[2])[45:92] not in orig_cert[0]:
