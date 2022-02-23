@@ -2062,12 +2062,22 @@ class RemoteMachineShellConnection(KeepRefs):
 
     def _check_output(self, word_check, output):
         found = False
-        if len(output) >=1 :
-            for x in output:
-                if word_check.lower() in x.lower():
-                    log.info("Found '{0}' in output".format(word_check))
-                    found = True
-                    break
+        if len(output) >= 1:
+            if isinstance(word_check, list):
+                for ele in word_check:
+                    for x in output:
+                        if ele.lower() in str(x.lower()):
+                            log.info("Found '{0} in output".format(ele))
+                            found = True
+                            break
+            elif isinstance(word_check, str):
+                for x in output:
+                    if word_check.lower() in str(x.lower()):
+                        log.info("Found '{0}' in output".format(word_check))
+                        found = True
+                        break
+            else:
+                self.log.error("invalid {0}".format(word_check))
         return found
 
     def couchbase_upgrade_win(self, architecture, windows_name, version, startup_retries=5, startup_poll_interval=5):
@@ -2270,10 +2280,11 @@ class RemoteMachineShellConnection(KeepRefs):
                                                          debug=debug_logs)
 
             if "SUSE" in self.info.distribution_type:
-                if error and error[0] == 'insserv: Service network is missed in the runlevels 2'\
-                                         ' 4 to use service couchbase-server':
-                        log.info("Ignore this error for opensuse os")
-                        error = []
+                msgs_check = ["insserv: Service network is missed in the runlevels 2 4",
+                              "You have successfully installed Couchbase Server"]
+                if self._check_output(msgs_check, error):
+                    log.info("Ignore this error for opensuse os")
+                    error = []
             if output:
                 server_ip = "\n\n**** Installing on server: {0} ****".format(self.ip)
                 output.insert(0, server_ip)
@@ -3136,20 +3147,23 @@ class RemoteMachineShellConnection(KeepRefs):
                     log.info("\nIf couchbase server is running with this error."
                               "\nGo to log_command_output to add error mesg to bypass it.")
                     success = False
-        for line in output:
-            if debug:
-                log.info(line)
-            if any(s.encode("utf-8").lower() in line.encode("utf-8").lower() for s in track_words):
-                if "Warning" in line and "hugepages" in line:
-                    log.info("There is a warning about transparent_hugepage may be in used when install cb server.\
-                              So we will disable transparent_hugepage in this vm")
-                    output, error = self.execute_command("echo never > /sys/kernel/mm/transparent_hugepage/enabled")
-                    self.log_command_output(output, error, debug=debug)
-                    success = True
-                else:
-                    success = False
-                    log.error('something wrong happened on {0}!!! output:{1}, error:{2}, track_words:{3}'
-                              .format(self.ip, output, error, track_words))
+        if self._check_output(list(track_words), output):
+            success = False
+            install_ok = False
+            if self._check_output("hugepages", output):
+                log.info("There is a warning about transparent_hugepage may be in used when install cb server.\
+                                          So we will disable transparent_hugepage in this vm")
+                output, error = self.execute_command(
+                    "echo never > /sys/kernel/mm/transparent_hugepage/enabled")
+                success = True
+                install_ok = True
+            if self._check_output("successfully installed couchbase server", output):
+                success = True
+                install_ok = True
+            if not install_ok:
+                log.error(
+                    'something wrong happened on {0}!!! output:{1}, error:{2}, track_words:{3}'
+                    .format(self.ip, output, error, track_words))
         return success
 
     def execute_commands_inside(self, main_command,query, queries,bucket1,password,bucket2,source,subcommands=[], min_output_size=0,
