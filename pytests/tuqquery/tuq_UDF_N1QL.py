@@ -206,7 +206,7 @@ class QueryUDFN1QLTests(QueryTests):
             except CBQError as ex:
                 error = self.process_CBQE(ex)
                 self.assertEqual(error['code'], 5010)
-                self.assertTrue('not a readonly request' in error['msg'])
+                self.assertTrue('not a readonly request' in str(error))
         else:
             function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
             self.assertEqual(function_result['results'][0], query_result['results'])
@@ -286,7 +286,7 @@ class QueryUDFN1QLTests(QueryTests):
         # Run pre-req prior to DDL
         pre_query = self.ddls[self.statement]['pre']
         self.run_cbq_query(pre_query)
-        self.sleep(5)
+        self.sleep(10)
         # Execute function
         if self.test_sideeffect:
             try:
@@ -295,7 +295,7 @@ class QueryUDFN1QLTests(QueryTests):
             except CBQError as ex:
                 error = self.process_CBQE(ex)
                 self.assertEqual(error['code'], 5010)
-                self.assertTrue('not a readonly request' in error['msg'])
+                self.assertTrue('not a readonly request' in str(error))
         else:
             function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
             self.assertEqual(function_result['results'], self.ddls[self.statement]['function_expected'])
@@ -330,7 +330,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('Requested resource not found' in error['msg'])
+            self.assertTrue('Requested resource not found' in str(error))
 
     def test_param_function_param(self):
         functions = 'function add(a, b) { return a + b; }'
@@ -442,7 +442,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('User does not have credentials to run' in error['msg'])
+            self.assertTrue('User does not have credentials to run' in str(error))
 
     def test_circumvent_udf_rbac(self):
         # Create user with execute external function role only
@@ -489,7 +489,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('User does not have credentials to run' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('User does not have credentials to run' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_datetime_value(self):
         function_name = 'datetime_value'
@@ -610,7 +610,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('Invalid data type for named parameters: "undefined" is not a valid type' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('Invalid data type for named parameters' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_looped_calls(self):
         # Create a js function that executes the js function that calls it
@@ -649,7 +649,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('nested javascript calls' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('nested javascript calls' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_nested_loop_timeout(self):
         # create a function that will just sleep so that we can hit the timeout instead of the nested loop limit
@@ -698,7 +698,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('Evaluator error Function timed out' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('stopped after running beyond 120000 ms' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_nested_udf_inline(self):
         # Create an inline function on scope that user does not have perms on
@@ -867,7 +867,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('No bucket named _default' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('No bucket named _default' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_query_context_cross_scope(self):
         # Create an inline function on scope that user does not have perms on
@@ -936,7 +936,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('No bucket named _default' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('No bucket named _default' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_query_context_prepared(self):
         self.run_cbq_query('DELETE FROM system:prepareds WHERE name LIKE "engineer%"')
@@ -973,7 +973,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('No such prepared statement: engineer_count, context: default:' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('No such prepared statement: engineer_count, context: default:' in str(error), f"Error is not what we expected {str(ex)}")
 
         try:
             #execute function in wrong scope should error
@@ -1017,7 +1017,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('Keyspace not found in CB datastore: default:_default' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('Keyspace not found in CB datastore: default:_default' in str(error), f"Error is not what we expected {str(ex)}")
 
         try:
             #execute function in wrong scope should error
@@ -1026,7 +1026,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('Keyspace not found in CB datastore: default:default.test._default' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('Keyspace not found in CB datastore: default:default.test._default' in str(error), f"Error is not what we expected {str(ex)}")
 
         prepared_results = self.run_cbq_query(query="select * from system:prepareds")
         self.assertEqual(prepared_results['results'][0]['prepareds']['name'],'engineer_count(default:default._default)', f"the prepared name is wrong please check prepareds {prepared_results}")
@@ -1063,7 +1063,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('Keyspace not found in CB datastore: default:default._default.default' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('Keyspace not found in CB datastore: default:default._default.default' in str(error), f"Error is not what we expected {str(ex)}")
 
         try:
             #execute function in wrong scope should error
@@ -1072,7 +1072,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('Keyspace not found in CB datastore: default:default.test.default' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('Keyspace not found in CB datastore: default:default.test.default' in str(error), f"Error is not what we expected {str(ex)}")
 
         prepared_results = self.run_cbq_query(query="select * from system:prepareds")
         self.assertEqual(prepared_results['results'][0]['prepareds']['name'],'engineer_count', f"the prepared name is wrong please check prepareds {prepared_results}")
@@ -1195,7 +1195,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 4040)
-            self.assertTrue('No such prepared statement: engineer_count, context: default:' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('No such prepared statement: engineer_count, context: default:' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_parameter_values(self):
         function_name = 'param_values_default'
@@ -1467,7 +1467,7 @@ class QueryUDFN1QLTests(QueryTests):
             var job = j;\
             var year = y;\
             var month = m;\
-            var inset = INSERT INTO default (KEY, VALUE) VALUES ("key1", {{ "type" : "hotel", "name" : "new hotel" }}) RETURNING *;\
+            var inset = INSERT INTO default (KEY, VALUE) VALUES ("key1000", {{ "type" : "hotel", "name" : "new hotel" }}) RETURNING *;\
             var query = SELECT name FROM default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 3;\
             var acc = [];\
             for (const row of query) {{\
@@ -1530,7 +1530,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex, 1)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('sleep stopped after running beyond 10000 ms' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('sleep stopped after running beyond 10000 ms' in str(error), f"Error is not what we expected {str(ex)}")
 
         try:
             self.run_cbq_query(sleep_query, query_params={'timeout':'600s'})
@@ -1538,7 +1538,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('sleep stopped after running beyond 120000 ms' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('sleep stopped after running beyond 120000 ms' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_try_catch(self):
         function_name = "syntax_error"
@@ -1559,7 +1559,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('bucket does not exist' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('bucket does not exist' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_transaction_commit(self):
         self.run_cbq_query("DELETE FROM default.`_default`.txn_scope")
@@ -1835,7 +1835,7 @@ class QueryUDFN1QLTests(QueryTests):
             var job = j;\
             var year = y;\
             var month = m;\
-            var inset = INSERT INTO default (KEY, VALUE) VALUES ("key1", {{ "type" : "hotel", "name" : "new hotel" }}) RETURNING *;\
+            var inset = INSERT INTO default (KEY, VALUE) VALUES ("key001", {{ "type" : "hotel", "name" : "new hotel" }}) RETURNING *;\
             var query = SELECT name FROM default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 3;\
             var acc = [];\
             for (const row of query) {{\

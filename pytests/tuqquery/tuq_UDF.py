@@ -1140,7 +1140,7 @@ class QueryUDFTests(QueryTests):
                 results = self.run_cbq_query(query="EXECUTE FUNCTION func1(1,3)")
             except Exception as e:
                 self.log.error(str(e))
-                self.assertTrue('no such library in worker' in str(e),
+                self.assertTrue('Library or function missing' in str(e),
                                 "The query failed for the wrong reason {0}".format(str(e)))
 
             try:
