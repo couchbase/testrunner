@@ -220,6 +220,8 @@ def main():
     parser.add_option('--subcomponent_regex', dest='subcomponent_regex', default=None)
     parser.add_option('-e', '--extraParameters', dest='extraParameters', default=None)
     parser.add_option('-y', '--serverType', dest='serverType', type="choice", default=DEFAULT_SERVER_TYPE, choices=[VM, AWS, DOCKER, GCP, AZURE])  # or could be Docker
+    # override server type passed to executor job e.g. CAPELLA_LOCAL
+    parser.add_option('--server_type_name', dest='server_type_name', default=None)
     parser.add_option('-u', '--url', dest='url', default=None)
     parser.add_option('-j', '--jenkins', dest='jenkins', default=None)
     parser.add_option('-b', '--branch', dest='branch', default='master')
@@ -513,8 +515,9 @@ def main():
         launchString = launchString + '&cherrypick=' + urllib.parse.quote(options.cherrypick)
     if options.architecture != DEFAULT_ARCHITECTURE:
         launchString = launchString + '&arch=' + options.architecture
-    if options.serverType != DEFAULT_SERVER_TYPE:
-        launchString = launchString + '&server_type=' + options.serverType
+    if options.serverType != DEFAULT_SERVER_TYPE or options.server_type_name is not None:
+        server_type = options.serverType if options.server_type_name is None else options.server_type_name
+        launchString = launchString + '&server_type=' + server_type
     currentDispatcherJobUrl = OS.getenv("BUILD_URL")
     currentExecutorParams = get_jenkins_params.get_params(
         currentDispatcherJobUrl)
