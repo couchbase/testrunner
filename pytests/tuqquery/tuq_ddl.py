@@ -67,3 +67,18 @@ class QueryDDLTests(QueryTests):
 
         self.run_cbq_query(f"DROP SCOPE {self.bucket}.scope1")
         self.run_cbq_query(f"DROP SCOPE {self.bucket}.scope1 IF EXISTS")
+
+    def test_create_function_if_not_exists(self):
+        self.run_cbq_query("DROP FUNCTION fun1 IF EXISTS")
+
+        self.run_cbq_query("CREATE FUNCTION fun1(a) { a * 1000}")
+        self.run_cbq_query("CREATE FUNCTION fun1(a) IF NOT EXISTS { a * 1000}")
+
+    def test_drop_function_if_exists(self):
+        self.run_cbq_query("DROP FUNCTION fun1 IF EXISTS")
+        self.run_cbq_query("CREATE FUNCTION fun1(a) { a * 1000}")
+
+        self.run_cbq_query("DROP FUNCTION fun1")
+        self.run_cbq_query("DROP FUNCTION fun1 IF EXISTS")
+        self.run_cbq_query("DROP FUNCTION fun1 IF EXISTS")
+
