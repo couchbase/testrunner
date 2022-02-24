@@ -318,7 +318,7 @@ class basic_ops(BaseTestCase):
             value = value.decode("utf-8")
         self.assertEqual(stats['ep_compression_mode'], value)
         self.assertEqual(int(stats['ep_item_compressor_num_compressed']), items)
-        self.assertNotEqual(int(stats['vb_active_itm_memory']), int(stats['vb_active_itm_memory_uncompressed']))
+        self.assertNotEqual(int(stats['vb_active_ht_item_memory']), int(stats['vb_active_ht_item_memory_uncompressed']))
 
     def test_compression_active_and_off(self):
         '''
