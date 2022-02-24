@@ -104,7 +104,13 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
             if backup_number == self.backupset.end and backup_number == backups_on_disk:
                 backup_files = [f"{self.backup_validation_path}/" + f for f in listdir(self.backup_validation_path) if f"{bucket.name}-key_value-backup" in f]
                 backup_files.sort(key=os.path.getmtime)
-                kv_file_path = backup_files[-1]
+                try:
+                    kv_file_path = backup_files[-1]
+                except IndexError as e:
+                    if self.backupset.deleted_buckets:
+                        return True, "Deleted bucket, will not check"
+                    else:
+                        raise e
             backedup_kv = {}
             if os.path.exists(kv_file_path):
                 try:
