@@ -41,14 +41,15 @@ class EventingRBACSupport(EventingBaseTest):
                                       master=self.master, use_rest=True)
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         self.users = self.input.param('users', None)
-        list_of_users = eval(eval(self.users))
-        for user in list_of_users:
-            u = [{'id': user['id'], 'password': user['password'], 'name': user['name']}]
-            RbacBase().create_user_source(u, 'builtin', self.master)
-            user_role_list = [{'id': user['id'], 'name': user['name'], 'roles': user['roles']}]
-            RbacBase().add_user_role(user_role_list, self.rest, 'builtin')
-        status, content, header = rbacmain(self.master)._retrieve_user_roles()
-        self.log.info(json.loads(content))
+        if self.users:
+            list_of_users = eval(eval(self.users))
+            for user in list_of_users:
+                u = [{'id': user['id'], 'password': user['password'], 'name': user['name']}]
+                RbacBase().create_user_source(u, 'builtin', self.master)
+                user_role_list = [{'id': user['id'], 'name': user['name'], 'roles': user['roles']}]
+                RbacBase().add_user_role(user_role_list, self.rest, 'builtin')
+            status, content, header = rbacmain(self.master)._retrieve_user_roles()
+            self.log.info(json.loads(content))
         handler_code = self.input.param('handler_code', 'bucket_op')
         if handler_code == 'bucket_op':
             self.handler_code = "handler_code/ABO/insert_rebalance.js"
@@ -240,3 +241,33 @@ class EventingRBACSupport(EventingBaseTest):
         except Exception as e:
             assert "ERR_INVALID_REQUEST" in str(e) and "Function scope cannot be changed" in str(e), True
         self.delete_function(body)
+
+    def test_same_function_name_in_different_function_scope(self):
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.function_scope = {"bucket": "*", "scope": "*"}
+        body1 = self.create_save_function_body(self.function_name, self.handler_code)
+        self.rest.delete_single_function(self.function_name, body['function_scope'])
+        self.rest.delete_single_function(self.function_name, body1['function_scope'])
+
+    def test_multiple_same_function_names_in_same_function_scope(self):
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        try:
+            self.create_save_function_body(self.function_name, self.handler_code)
+        except Exception as e:
+            self.log.info(e)
+            assert "ERR_APP_ALREADY_DEPLOYED" in str(e) and "another function with same name is already deployed" in str(e), True
+        self.undeploy_and_delete_function(body)
+
+    def test_dropping_function_scope_when_handler_is_deployed_or_paused(self):
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
+        # drop function scope
+        self.rest.delete_bucket(self.src_bucket_name)
+        # wait for function to undeploy and delete
+        self.sleep(15)
+        # check whether function is deleted or not
+        content = json.loads(self.rest.get_list_of_eventing_functions())
+        assert content['functions'] == [], "Function was not deleted"

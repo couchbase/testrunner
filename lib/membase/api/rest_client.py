@@ -5464,6 +5464,24 @@ class RestConnection(object):
         return json.loads(content)
 
     '''
+            return list of eventing functions
+    '''
+    def get_list_of_eventing_functions(self):
+        if self.eventing_role:
+            authorization = self.get_authorization("eventing_admin", "password")
+        else:
+            authorization = self.get_authorization(self.username, self.password)
+        url = "api/v1/list/functions"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json',
+                   'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET',
+                                                     headers=headers)
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
             Ensure that the eventing node is out of bootstrap node
     '''
 
