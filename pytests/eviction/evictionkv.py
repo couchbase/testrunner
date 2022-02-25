@@ -238,30 +238,30 @@ class EvictionKV(EvictionBase):
         output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default"
                                               " all -u Administrator -p password | grep ephemeral")
         if self.input.param('eviction_policy', 'noEviction') == 'noEviction':
-            self.assertEqual([' ep_bucket_type:                                        ephemeral',
-                               ' ep_ephemeral_full_policy:                              fail_new_data',
-                               ' ep_ephemeral_metadata_mark_stale_chunk_duration:       20',
-                               ' ep_ephemeral_metadata_purge_age:                       86400',
-                               ' ep_ephemeral_metadata_purge_interval:                  60',
-                               ' ep_ephemeral_metadata_purge_stale_chunk_duration:      20'], output)
+            self.assertEqual([' ep_bucket_type:                                            ephemeral',
+                               ' ep_ephemeral_full_policy:                                  fail_new_data',
+                               ' ep_ephemeral_metadata_mark_stale_chunk_duration:           20',
+                               ' ep_ephemeral_metadata_purge_age:                           86400',
+                               ' ep_ephemeral_metadata_purge_interval:                      60',
+                               ' ep_ephemeral_metadata_purge_stale_chunk_duration:          20'], output)
         else:
-            self.assertEqual([' ep_bucket_type:                                        ephemeral',
-                               ' ep_ephemeral_full_policy:                              auto_delete',
-                               ' ep_ephemeral_metadata_mark_stale_chunk_duration:       20',
-                               ' ep_ephemeral_metadata_purge_age:                       86400',
-                               ' ep_ephemeral_metadata_purge_interval:                  60',
-                               ' ep_ephemeral_metadata_purge_stale_chunk_duration:      20'], output)
+            self.assertEqual([' ep_bucket_type:                                            ephemeral',
+                               ' ep_ephemeral_full_policy:                                  auto_delete',
+                               ' ep_ephemeral_metadata_mark_stale_chunk_duration:           20',
+                               ' ep_ephemeral_metadata_purge_age:                           86400',
+                               ' ep_ephemeral_metadata_purge_interval:                      60',
+                               ' ep_ephemeral_metadata_purge_stale_chunk_duration:          20'], output)
 
         output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default "
                                               "vbucket-details -u Administrator -p password "
                                               "| grep seqlist_deleted_count")
-        self.assertEqual(' vb_0:seqlist_deleted_count:            0', output[0])
-
+        self.assertEqual(' vb_0:seqlist_deleted_count:                0', output[0])
+        time.sleep(10)
         item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
         self.log.info('rest.get_bucket(self.buckets[0]).stats.itemCount: %s' % item_count)
         output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default all"
                                               " -u Administrator -p password | grep curr_items")
-        self.assertEqual(' curr_items:                                            %s' % item_count, output[0])
+        self.assertEqual(' curr_items:                                                %s' % item_count, output[0])
 
         self.log.info('The number of items when almost reached OOM is {0}'.format(item_count))
 
@@ -284,13 +284,13 @@ class EvictionKV(EvictionBase):
         self.log.info("items count after we tried to add +50 per : %s" % item_count)
         output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default all"
                                               " -u Administrator -p password | grep curr_items")
-        self.assertEqual(' curr_items:                                            %s' % item_count, output[0])
+        self.assertEqual(' curr_items:                                                %s' % item_count, output[0])
 
         output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default "
                                               "vbucket-details -u Administrator -p password "
                                               "| grep seqlist_deleted_count")
         if self.input.param('eviction_policy', 'noEviction') == 'noEviction':
-            self.assertEqual(' vb_0:seqlist_deleted_count:            0', output[0], 'have deleted items!')
+            self.assertEqual(' vb_0:seqlist_deleted_count:                0', output[0], 'have deleted items!')
         else:
             self.assertTrue(int(output[0].replace('vb_0:seqlist_deleted_count:', '').strip()) > 0,
                             'no deleted items!')
@@ -310,7 +310,7 @@ class EvictionKV(EvictionBase):
                 self.fail("Views not allowed for ephemeral buckets")
             except DesignDocCreationException as e:
                 self.assertEqual(e._message,
-                                  'Error occured design document _design/ddoc1: b\'{"error":"not_found","reason":"views are supported only on couchbase buckets"}\\n\'')
+                                 'Error occured design document _design/ddoc1: b\'{"error":"not_found","reason":"views are supported only on couchbase buckets with couchstore storage backend"}\\n\'')
 
 
 class EphemeralBackupRestoreTest(EvictionBase):
