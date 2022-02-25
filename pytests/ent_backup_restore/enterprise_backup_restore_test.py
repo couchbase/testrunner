@@ -3477,6 +3477,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
         cmd = "cbindex -type list -auth %s:%s" % (self.master.rest_username,
                                                   self.master.rest_password)
+        if self.input.param("x509", False):
+            cmd += f" -use_tls -cacert {self.x509.CACERTFILEPATH}all/all_ca.pem"
         shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = shell.execute_command(command)
