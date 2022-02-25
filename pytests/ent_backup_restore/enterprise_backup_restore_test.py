@@ -3455,6 +3455,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
               " -auth %s:%s" % (self.test_storage_mode,
                                 self.master.rest_username,
                                 self.master.rest_password)
+        if self.input.param("x509", False):
+            cmd += f" -use_tls -cacert {self.x509.CACERTFILEPATH}all/all_ca.pem"
         shell = RemoteMachineShellConnection(self.backupset.cluster_host)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = shell.execute_command(command)
@@ -3465,7 +3467,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_cluster_validate()
 
         rest_target = RestConnection(self.backupset.restore_cluster_host)
-        if "ephemeral" not in self.bucket_type:
+        if "ephemeral" not in self.bucket_type and self.backupset.restore_cluster_host.cluster_ip != self.backupset.cluster_host.cluster_ip:
             rest_target.add_node(self.input.clusters[0][1].rest_username,
                                  self.input.clusters[0][1].rest_password,
                                  self.input.clusters[0][1].cluster_ip, services=['kv', 'index'])
