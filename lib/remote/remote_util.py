@@ -3164,6 +3164,9 @@ class RemoteMachineShellConnection(KeepRefs):
                 log.error(
                     'something wrong happened on {0}!!! output:{1}, error:{2}, track_words:{3}'
                     .format(self.ip, output, error, track_words))
+        elif debug and output:
+            for line in output:
+                log.info(line)
         return success
 
     def execute_commands_inside(self, main_command,query, queries,bucket1,password,bucket2,source,subcommands=[], min_output_size=0,

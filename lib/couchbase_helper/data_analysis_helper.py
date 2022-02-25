@@ -140,7 +140,8 @@ class DataAnalyzer(object):
             Result[bucket] = self.find_data_distribution(info)
         return Result
 
-    def compare_all_dataset(self,headerInfo,sourceMap,targetMap,comparisonMap=None):
+    def compare_all_dataset(self,headerInfo,sourceMap,targetMap,comparisonMap=None,
+                                                                upgrade_test=False):
         """
             Method to compare data sets and given as input of two bucket maps
 
@@ -168,7 +169,8 @@ class DataAnalyzer(object):
         for bucket in list(sourceMap.keys()):
             info1 = sourceMap[bucket]
             info2 = targetMap[bucket]
-            Result[bucket] = self.compare_data_maps(info1,info2,headerInfo,"key")
+            Result[bucket] = self.compare_data_maps(info1,info2,headerInfo,"key",
+                                                    comparisonMap, upgrade_test)
         return Result
 
     def compare_per_node_dataset(self,headerInfo,sourceMap,targetMap,comparisonMap=None):
@@ -203,7 +205,8 @@ class DataAnalyzer(object):
             for node in list(sourceMap[bucket].keys()):
                 info1 = sourceMap[bucket][node]
                 info2 = targetMap[bucket][node]
-                Result[bucket][node] = self.compare_data_maps(info1,info2,headerInfo,"key")
+                Result[bucket][node] = self.compare_data_maps(info1,info2,headerInfo,"key",
+                                                              comparisonMap, upgrade_test)
         return Result
 
     def compare_stats_dataset(self,bucketmap1,bucketmap2,mainKey,comparisonMap=None, mapBucket=None):
@@ -348,7 +351,8 @@ class DataAnalyzer(object):
         std  =  (diffSum/len(array))**(.5)
         return {"max":max_val,"min":min_val, "total" : total, "mean" : mean, "std" :  std}
 
-    def compare_data_maps(self,info1,info2,headerInfo,mainKey,comparisonMap=None):
+    def compare_data_maps(self,info1,info2,headerInfo,mainKey,comparisonMap=None,
+                                                               upgrade_test=False):
         """ Method to help comparison of datasets """
         updatedItemsMap = {}
         deletedItemsList = list(set(info1.keys()) - set(info2.keys()))
@@ -362,8 +366,20 @@ class DataAnalyzer(object):
                 for i in range(len(data1)):
                     if comparisonMap != None and headerInfo[i] in list(comparisonMap.keys()):
                         self.compare_values(data1[i],data2[i],fields[i],reason,comparisonMap[headerInfo[i]])
-                    elif data1[i] !=  data2[i]:
-                        reason[fields[i]] = "Expected {0} :: Actual {1}".format(data1[i],data2[i])
+                    elif data1[i] != data2[i]:
+                        if upgrade_test and "dtype" in fields[i]:
+                            """" in upgrade test, cb stores uncompressed in 6.x and compressed
+                                 in 7.x
+                                 Data type must be in value 0, 1, 2, 3, 4 """
+                            data_type = [0, 1, 2, 3, 4]
+                            if int(data1[i].rstrip()) in data_type and \
+                               int(data2[i].rstrip()) in data_type:
+                                continue
+                            else:
+                                reason[fields[i]] = "Incorrect data type. Expected {0} :: Actual {1}"\
+                                                    .format(data1[i],data2[i])
+                        else:
+                            reason[fields[i]] = "Expected {0} :: Actual {1}".format(data1[i],data2[i])
             else:
                 reason["number of value mismatch"] = "Number of values mismatch :: Expected values {0} \n Actual values {1}".format(data1,data2)
             if len(reason) > 0:

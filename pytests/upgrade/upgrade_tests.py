@@ -300,7 +300,7 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                     self.buckets, path=None)
             self.data_analysis_active_replica_all(
                 disk_active_dataset, disk_replica_dataset,
-                list(self.in_servers_pool.values()), self.buckets, path=None)
+                self.get_nodes_in_cluster_after_upgrade(), self.buckets, path=None)
             """ check vbucket distribution analysis after rebalance """
             self.vb_distribution_analysis(
                 servers=list(self.in_servers_pool.values()),

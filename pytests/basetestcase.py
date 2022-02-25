@@ -1982,7 +1982,8 @@ class BaseTestCase(unittest.TestCase):
         info, disk_active_dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False,
                                                                      getReplica=False, mode=mode)
         self.log.info(" Begin Verification for Active Vs Replica ")
-        comparison_result = self.data_analyzer.compare_all_dataset(info, disk_replica_dataset, disk_active_dataset)
+        comparison_result = self.data_analyzer.compare_all_dataset(info, disk_replica_dataset, disk_active_dataset,
+                                                                                    upgrade_test=self.upgrade_test)
         logic, summary, output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems=False,
                                                                          addedItems=False, updatedItems=False)
         self.assertTrue(logic, summary)
