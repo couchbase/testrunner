@@ -3394,11 +3394,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         task.result()
         self.backup_cluster_validate()
         rest_target = RestConnection(self.backupset.restore_cluster_host)
-        rest_target.add_node(self.input.clusters[0][1].rest_username,
-                             self.input.clusters[0][1].rest_password,
-                             self.input.clusters[0][1].cluster_ip, services=['kv', 'index'])
-        rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
-        rebalance.result()
+        if self.input.clusters[0][1].ip != self.servers[1].ip:
+            rest_target.add_node(self.input.clusters[0][1].rest_username,
+                                 self.input.clusters[0][1].rest_password,
+                                 self.input.clusters[0][1].cluster_ip, services=['kv', 'index'])
+            rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
+            rebalance.result()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
         try:
             result = self.cluster.query_view(self.backupset.restore_cluster_host,
