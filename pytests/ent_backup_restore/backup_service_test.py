@@ -334,7 +334,7 @@ class BackupServiceTest(BackupServiceBase):
     def test_plan_task_limits(self):
         """ Test the min and max limits on task creation
 
-        Create a plan with no Tasks and expect the operation to succeed.
+        Create a plan with no Tasks and expect the operation to fail.
         Create a plan with 1 Task and expect the operation to succeed.
         Create a plan with 14 Tasks and expect the operation to succeed.
         Create a plans with > 14 Tasks and expect the operation to fail.
@@ -345,14 +345,14 @@ class BackupServiceTest(BackupServiceBase):
             return TaskTemplate(name=f"my_task{i}", task_type="BACKUP", schedule=generic_backup_schedule, merge_options=None, full_backup=None)
 
         # Add 0, 1 and 14 Tasks in a Plan and expect it to succeed.
-        for no_of_tasks in [0, 1, 14]:
+        for no_of_tasks in [1, 14]:
             # Add plan with an valid Task (Should succeed)
             self.assertEqual(self.create_plan("my_plan", http_info=True, body=Plan(name="my_plan", tasks=[get_task(i) for i in range(0, no_of_tasks)]))[1], 200)
 
             self.delete_plan("my_plan")
 
         # Add 15, 20 and 100 Tasks in a Plan and expect it to fail.
-        for no_of_tasks in [15, 20, 100]:
+        for no_of_tasks in [0, 15, 20, 100]:
             # Add plan with an invalid Task (Should fail)
             self.assertEqual(self.create_plan("my_plan", http_info=True, body=Plan(name="my_plan", tasks=[get_task(i) for i in range(0, no_of_tasks)]))[1], 400)
 
@@ -410,10 +410,14 @@ class BackupServiceTest(BackupServiceBase):
         """
         # Create a plan
         plan_name = "my_plan"
-        self.create_plan(plan_name, body=Plan(name=plan_name, tasks=None))
+        self.create_plan(plan_name)
 
         # Add plan with the same the name and expect it fail.
-        self.assertEqual(self.create_plan(plan_name, http_info=True, body=Plan(name=plan_name, tasks=None))[1], 400)
+        try:
+            self.create_plan(plan_name)
+        except Exception as e:
+            if e.status != 400:
+                self.fail(f"Output of plan create was {e.status}")
 
     def test_deleted_plans_name_can_be_reused(self):
         """ Add a plan, delete the plan and check if its name can be reused.
@@ -452,8 +456,8 @@ class BackupServiceTest(BackupServiceBase):
             # Rest API Configuration
             configuration = HttpConfigurationFactory(target).create_configuration()
 
-            self.sys_log_count[PLAN_CREATED] += 1
-            _, status, _, response_data = PlanApi(ApiClient(configuration)).plan_name_post_with_http_info(plan_name, http_info=True, body=Plan(name=plan_name,tasks=[TaskTemplate(name=f"my_task{target.ip.split('.')[-1]}", task_type="BACKUP", schedule=schedule)]))
+            self.sys_log_count[Tag.PLAN_CREATED] += 1
+            _, status, _, response_data = PlanApi(ApiClient(configuration)).plan_name_post_with_http_info(plan_name,  body=Plan(name=plan_name,tasks=[TaskTemplate(name=f"my_task{target.ip.split('.')[-1]}", task_type="BACKUP", schedule=schedule)]))
             return status
 
         # Create repos on two different servers simultaneously
