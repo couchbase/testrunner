@@ -1680,9 +1680,9 @@ class QueryUDFTests(QueryTests):
             self.assertEqual(res['status'], 'success')
 
             res = self.curl_with_roles('EXECUTE FUNCTION func1("old hotel")')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('select raw func1("old hotel")')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
         finally:
             try:
                 self.delete_library("math")
@@ -1752,36 +1752,36 @@ class QueryUDFTests(QueryTests):
             if self.scoped:
                 self.assertEqual(res['status'], 'success')
             else:
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('CREATE FUNCTION default:default.test2.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS \"adder\" AT \"math\"')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('CREATE FUNCTION default:celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
             if self.scoped:
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             else:
                 self.assertEqual(res['status'], 'success')
             res = self.curl_with_roles('CREATE FUNCTION celsius1(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
             if self.scoped:
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             else:
                 self.assertEqual(res['status'], 'success')
 
             if self.scoped:
                 res = self.curl_with_roles('SELECT default:default.test.celsius(10)')
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
                 res = self.curl_with_roles('EXECUTE FUNCTION default:default.test.celsius(10)')
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             else:
                 res = self.curl_with_roles('SELECT RAW celsius(10)')
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
                 res = self.curl_with_roles('SELECT RAW celsius1(10)')
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
                 res = self.curl_with_roles('EXECUTE FUNCTION celsius(10)')
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
                 res = self.curl_with_roles('EXECUTE FUNCTION celsius1(10)')
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
         finally:
             try:
                 self.delete_library("math")
@@ -1801,15 +1801,15 @@ class QueryUDFTests(QueryTests):
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             res = self.curl_with_roles('CREATE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('CREATE FUNCTION default:default.test2.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS \"adder\" AT \"math\"')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('CREATE FUNCTION default:celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('CREATE FUNCTION celsius1(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
 
             self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
             self.run_cbq_query(query='CREATE FUNCTION default:celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
@@ -1819,42 +1819,42 @@ class QueryUDFTests(QueryTests):
 
             res = self.curl_with_roles('SELECT RAW celsius(10)')
             if self.scoped:
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'],
+                self.assertTrue('User does not have credentials' in str(res),
                                 "Error message is wrong: {0}".format(str(res)))
             else:
                 self.assertEqual(res['results'], [-12.222222222222221])
             res = self.curl_with_roles('SELECT RAW celsius1(10)')
             if self.scoped:
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'],
+                self.assertTrue('User does not have credentials' in str(res),
                                 "Error message is wrong: {0}".format(str(res)))
             else:
                 self.assertEqual(res['results'], [-12.222222222222221])
             res = self.curl_with_roles('EXECUTE FUNCTION celsius(10)')
             if self.scoped:
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'],
+                self.assertTrue('User does not have credentials' in str(res),
                                 "Error message is wrong: {0}".format(str(res)))
             else:
                 self.assertEqual(res['results'], [-12.222222222222221])
             res = self.curl_with_roles('EXECUTE FUNCTION celsius1(10)')
             if self.scoped:
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'],
+                self.assertTrue('User does not have credentials' in str(res),
                                 "Error message is wrong: {0}".format(str(res)))
             else:
                 self.assertEqual(res['results'], [-12.222222222222221])
             res = self.curl_with_roles('SELECT RAW func1(10,20)')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('EXECUTE FUNCTION func1(10)')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('SELECT RAW default:default.test.celsius1(10)')
             if self.scoped:
                 self.assertEqual(res['results'], [-12.222222222222221])
             else:
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('EXECUTE FUNCTION default:default.test.celsius1(10)')
             if self.scoped:
                 self.assertEqual(res['results'], [-12.222222222222221])
             else:
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
         finally:
             try:
                 self.delete_library("math")
@@ -1923,39 +1923,39 @@ class QueryUDFTests(QueryTests):
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             res = self.curl_with_roles('CREATE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('CREATE FUNCTION default:default.test2.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('CREATE FUNCTION default:celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('CREATE FUNCTION celsius1(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('CREATE FUNCTION default:default.test.func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
             if self.scoped:
                 self.assertEqual(res['status'], 'success')
             else:
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('CREATE FUNCTION default:default.test2.func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
             if self.scoped:
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'],
+                self.assertTrue('User does not have credentials' in str(res),
                                 "Error message is wrong: {0}".format(str(res)))
             else:
                 self.assertEqual(res['status'], 'success')
 
             if self.scoped:
                 res = self.curl_with_roles('SELECT RAW default:default.test.func1(10,20)')
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'],
+                self.assertTrue('User does not have credentials' in str(res),
                                 "Error message is wrong: {0}".format(str(res)))
                 res = self.curl_with_roles('EXECUTE FUNCTION default:default.test.func1(10,20)')
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'],
+                self.assertTrue('User does not have credentials' in str(res),
                                 "Error message is wrong: {0}".format(str(res)))
             else:
                 res = self.curl_with_roles('SELECT RAW func1(10,20)')
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
                 res = self.curl_with_roles('EXECUTE FUNCTION func1(10,20)')
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
         finally:
             try:
                 self.delete_library("math")
@@ -1974,15 +1974,15 @@ class QueryUDFTests(QueryTests):
             function_names = ["adder", "multiplier"]
             created = self.create_library("math", functions, function_names)
             res = self.curl_with_roles('CREATE FUNCTION default:default.test.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('CREATE FUNCTION default:default.test2.celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('CREATE FUNCTION default:celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
             res = self.curl_with_roles('CREATE FUNCTION celsius1(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
-            self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+            self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
 
             self.run_cbq_query(query='CREATE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
             self.run_cbq_query(query='CREATE FUNCTION default:celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9')
@@ -1996,13 +1996,13 @@ class QueryUDFTests(QueryTests):
                 self.assertEqual(res['results'], [30])
             else:
                 res = self.curl_with_roles('SELECT RAW celsius(10)')
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
                 res = self.curl_with_roles('SELECT RAW celsius1(10)')
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
                 res = self.curl_with_roles('EXECUTE FUNCTION celsius(10)')
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
                 res = self.curl_with_roles('EXECUTE FUNCTION celsius1(10)')
-                self.assertTrue('User does not have credentials' in res['errors'][0]['msg'], "Error message is wrong: {0}".format(str(res)))
+                self.assertTrue('User does not have credentials' in str(res), "Error message is wrong: {0}".format(str(res)))
                 res = self.curl_with_roles('SELECT RAW func1(10,20)')
                 self.assertEqual(res['results'], [30])
                 res = self.curl_with_roles('EXECUTE FUNCTION func1(10,20)')

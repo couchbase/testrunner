@@ -286,7 +286,7 @@ class QueryUDFN1QLTests(QueryTests):
         # Run pre-req prior to DDL
         pre_query = self.ddls[self.statement]['pre']
         self.run_cbq_query(pre_query)
-        self.sleep(10)
+        self.sleep(30)
         # Execute function
         if self.test_sideeffect:
             try:
@@ -792,7 +792,7 @@ class QueryUDFN1QLTests(QueryTests):
             except CBQError as ex:
                 error = self.process_CBQE(ex)
                 self.assertEqual(error['code'], 10104)
-                self.assertTrue('Incorrect number of arguments supplied' in error['msg'],
+                self.assertTrue('Incorrect number of arguments supplied' in str(error),
                                 f"Error is not what we expected {str(ex)}")
         else:
             # Execute function w/ correct query context
@@ -813,7 +813,7 @@ class QueryUDFN1QLTests(QueryTests):
             except CBQError as ex:
                 error = self.process_CBQE(ex)
                 self.assertEqual(error['code'], 10104)
-                self.assertTrue('Incorrect number of arguments supplied' in error['msg'], f"Error is not what we expected {str(ex)}")
+                self.assertTrue('Incorrect number of arguments supplied' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_letting_having_groupby(self):
         string_functions = 'function concater(a,b) { var text = ""; var x; for (x in a) {if (x = b) { return x; }} return "n"; } function comparator(a, b) {if (a > b) { return "old hotel"; } else { return "new hotel" }}'
@@ -982,7 +982,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('No such prepared statement: engineer_count, context: default:default.test' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('No such prepared statement: engineer_count, context: default:default.test' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_udf_prepare_query_context(self):
         self.run_cbq_query('DELETE FROM system:prepareds WHERE name LIKE "engineer%"')
@@ -1156,7 +1156,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 4040)
-            self.assertTrue('No such prepared statement: engineer_count, context: default:default.test' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('No such prepared statement: engineer_count, context: default:default.test' in str(error), f"Error is not what we expected {str(ex)}")
 
         try:
             prepared_results = self.run_cbq_query(query="EXECUTE engineer_count", query_context="default:")
@@ -1164,7 +1164,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 4040)
-            self.assertTrue('No such prepared statement: engineer_count, context: default:' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('No such prepared statement: engineer_count, context: default:' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_nested_udf_prepare_query_context_global_negative(self):
         self.run_cbq_query('DELETE FROM system:prepareds WHERE name LIKE "engineer%"')
@@ -1187,7 +1187,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 5010)
-            self.assertTrue('Keyspace not found in CB datastore: default:default._default.default' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('Keyspace not found in CB datastore: default:default._default.default' in str(error), f"Error is not what we expected {str(ex)}")
 
         try:
             prepared_results = self.run_cbq_query(query="EXECUTE engineer_count", query_context="default:default.test")
@@ -1579,6 +1579,7 @@ class QueryUDFN1QLTests(QueryTests):
         self.create_library(self.library_name, functions, function_names)
         self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
         udf = self.run_cbq_query(f"EXECUTE FUNCTION {function_name}()")
+        self.sleep(10)
         self.assertEqual(udf['results'][0], [{'txn_scope': {'a': 1, 'b': 2}}])
         result = self.run_cbq_query("SELECT * FROM default.`_default`.txn_scope")
         self.assertEqual(result['results'], [{'txn_scope': {'a': 1, 'b': 2}}])
@@ -1649,7 +1650,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('START_TRANSACTION statement is not supported within the transaction' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('START_TRANSACTION statement is not supported within the transaction' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_transaction_error_nostart(self):
         function_name = 'nostart_default'
@@ -1665,7 +1666,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue(f'{self.end_txn} statement is not supported outside the transaction' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue(f'{self.end_txn} statement is not supported outside the transaction' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_transaction_dml(self):
         self.run_cbq_query("CREATE INDEX adv_job_title IF NOT EXISTS ON `default`(`job_title`)")
@@ -1709,7 +1710,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('START_TRANSACTION statement is not supported within the transaction' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('START_TRANSACTION statement is not supported within the transaction' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_transaction_timedout_transaction(self):
         self.run_cbq_query("DELETE FROM default.`_default`.txn_scope")
@@ -1732,7 +1733,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 17010)
-            self.assertTrue('Transaction timeout' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('Transaction timeout' in str(error), f"Error is not what we expected {str(ex)}")
         try:
             udf = self.run_cbq_query(f"EXECUTE FUNCTION {function_name}()")
             results = self.run_cbq_query("select * from default.`_default`.txn_scope")
@@ -1759,7 +1760,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 5010)
-            self.assertTrue('not a readonly request' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('not a readonly request' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_transaction_nested_no_side_effect(self):
         function_name = 'nested_txn'
@@ -1777,7 +1778,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 5010)
-            self.assertTrue('not a readonly request' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('not a readonly request' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_multiple_transactions(self):
         self.run_cbq_query("DELETE FROM default.`_default`.txn_scope")
@@ -1827,7 +1828,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('Function timed out' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('Function timed out' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_transaction_with_udf(self):
         function_name = 'param_from_var_default'
@@ -2025,7 +2026,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('bucket does not exist' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('bucket does not exist' in str(error), f"Error is not what we expected {str(ex)}")
         results = self.run_cbq_query("select * from default.`_default`.txn_scope")
         self.assertEqual(results['results'], [],
                          f"Results are not as expected, expected: [] ,  actual: {results}")
@@ -2053,7 +2054,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('nested_txn stopped after running beyond 120000 ms' in error['msg'], f"Error is not what we expected {str(ex)}")
+            self.assertTrue('nested_txn stopped after running beyond 120000 ms' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_transaction_multiple_node(self):
         self.run_cbq_query("DELETE FROM default.`_default`.txn_scope")
