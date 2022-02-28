@@ -3653,8 +3653,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         try:
             rest_src.remove_all_replications()
             rest_src.remove_all_remote_clusters()
+            kwargs = {}
+            if self.input.param("enforce_tls", False):
+                kwargs["demandEncryption"] = 1
+                kwargs["certificate"] = rest_dest.get_cluster_ceritificate()
             rest_src.add_remote_cluster(self.servers[1].ip, self.servers[1].port, self.backupset.cluster_host_username,
-                                        self.backupset.cluster_host_password, "C2")
+                                        self.backupset.cluster_host_password, "C2", **kwargs)
             rest_dest.create_bucket(bucket='default', ramQuotaMB=512)
             self.sleep(10)
             repl_id = rest_src.start_replication('continuous', 'default', "C2")
@@ -3665,7 +3669,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.sleep(10)
             self.backup_create()
             self.backup_cluster_validate()
-            self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+            self.backup_restore_validate(compare_uuid=False, seqno_compare_function="<=")
             for task in tasks:
                 task.result()
         finally:
