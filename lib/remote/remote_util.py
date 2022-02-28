@@ -4658,7 +4658,8 @@ class RemoteMachineShellConnection(KeepRefs):
         if self.info.distribution_type.lower() == 'mac':
             cb_client = "%scouchbase-cli" % (MAC_COUCHBASE_BIN_PATH)
 
-        cluster_param = (" -c http://{0}".format(cluster_host),
+        protocol = "https" if cluster_host.split(':')[-1] == "18091" else "http"
+        cluster_param = (" -c {1}://{0}".format(cluster_host, protocol),
                          "")[cluster_host is None]
         if cluster_param is not None:
             cluster_param += (":{0}".format(cluster_port), "")[cluster_port is None]
@@ -4675,6 +4676,7 @@ class RemoteMachineShellConnection(KeepRefs):
                              "")[cluster_host is None]
             cluster_param += (":{0}".format(cluster_port), ":18091 ")[cluster_port is None]
         command = cb_client + " " + cli_command + cluster_param + user_param + passwd_param + " " + options
+        if protocol == "https": command += " --no-ssl-verify"
         if _stdin:
             command = "echo %s | %s" % (_stdin, command)
         log.info("command to run: {0}".format(command))
