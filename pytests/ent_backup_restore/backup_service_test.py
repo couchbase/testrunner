@@ -2740,7 +2740,7 @@ class BackupServiceTest(BackupServiceBase):
         self.create_repository_with_default_plan(repo_name)
 
         # Create eventing related stuff
-        self.src_bucket_name, self.dst_bucket_name, self.metadata_bucket_name, self.use_memory_manager = "bucket0", "bucket1", "bucket2", True
+        self.src_bucket_name, self.dst_bucket_name, self.metadata_bucket_name, self.use_memory_manager = "standard_bucket0", "standard_bucket1", "standard_bucket2", True
         eventing_body = self.create_save_function_body("eventing_function", HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
         self.deploy_function(eventing_body)
 
@@ -2906,6 +2906,7 @@ class BackupServiceTest(BackupServiceBase):
         # Connect the links after the restore completes
         connect()
 
+        self.sleep(10)
         # Check the dataverse and links are restored
         value = json.loads(rest_connection.execute_statement_on_cbas("SELECT VALUE COUNT(*) FROM dataset1", None, username=username, password=password))
         self.assertEqual(value['results'], [30])

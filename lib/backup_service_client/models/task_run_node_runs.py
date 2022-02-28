@@ -128,7 +128,7 @@ class TaskRunNodeRuns(object):
         :param status: The status of this TaskRunNodeRuns.  # noqa: E501
         :type: str
         """
-        allowed_values = ["unknown", "failed", "done", "running", "waiting"]  # noqa: E501
+        allowed_values = ["unknown", "failed", "done", "running", "waiting", "skipped"]  # noqa: E501
         if status not in allowed_values:
             raise ValueError(
                 "Invalid value for `status` ({0}), must be one of {1}"  # noqa: E501
