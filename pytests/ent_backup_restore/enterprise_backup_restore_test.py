@@ -3455,8 +3455,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
               " -auth %s:%s" % (self.test_storage_mode,
                                 self.master.rest_username,
                                 self.master.rest_password)
-        if self.input.param("x509", False):
-            cmd += f" -use_tls -cacert {self.x509.CACERTFILEPATH}all/all_ca.pem"
+        if self.input.param("enforce_tls", False):
+            if self.input.param("x509", False):
+                cmd += f" -use_tls -cacert {self.x509.CACERTFILEPATH}all/all_ca.pem"
+            else:
+                cmd += " -use_tls -cacert /opt/couchbase/var/lib/couchbase/config/certs/ca.pem"
         shell = RemoteMachineShellConnection(self.backupset.cluster_host)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = shell.execute_command(command)
@@ -3477,8 +3480,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
         cmd = "cbindex -type list -auth %s:%s" % (self.master.rest_username,
                                                   self.master.rest_password)
-        if self.input.param("x509", False):
-            cmd += f" -use_tls -cacert {self.x509.CACERTFILEPATH}all/all_ca.pem"
+        if self.input.param("enforce_tls", False):
+            if self.input.param("x509", False):
+                cmd += f" -use_tls -cacert {self.x509.CACERTFILEPATH}all/all_ca.pem"
+            else:
+                cmd += " -use_tls -cacert /opt/couchbase/var/lib/couchbase/config/certs/ca.pem"
         shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = shell.execute_command(command)
