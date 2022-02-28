@@ -358,10 +358,12 @@ class QueryMagmaTests(QueryTests):
         self.conn.delete_all_buckets()
         time.sleep(5)
         self.conn.create_bucket(bucket="default", ramQuotaMB=256, proxyPort=11220, storageBackend="magma", replicaNumber=0)
+        time.sleep(5)
         for i in range(0, num_extra_buckets):
             self.conn.create_bucket(bucket="bucket{0}".format(i), ramQuotaMB=256, proxyPort=11220, storageBackend="magma", replicaNumber=0)
-            self.run_cbq_query("CREATE PRIMARY INDEX on bucket{0}".format(i))
-        self.run_cbq_query("CREATE PRIMARY INDEX on default")
+            time.sleep(20)
+            self.run_cbq_query("CREATE PRIMARY INDEX on `bucket{0}`".format(i))
+        self.run_cbq_query("CREATE PRIMARY INDEX on `default`")
         self.buckets = self.conn.get_buckets()
         self.query_buckets = self.buckets
         self.gen_create = SDKDataLoader(num_ops=self.num_items)
