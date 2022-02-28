@@ -9,7 +9,7 @@ class QueryContextTests(QueryTests):
         self.log.info("==============  QuerySanityTests setup has started ==============")
         self.special_scope = self.input.param('special_scope', '')
         self.special_collection = self.input.param('special_collection', '')
-        if self.bucket_name != "default" and self.bucket_name != "bucket0" and self.bucket_name != "default:default.test.test1":
+        if self.bucket_name != "default" and self.bucket_name != "standard_bucket0" and self.bucket_name != "default:default.test.test1":
             self.rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=100)
             time.sleep(10)
             self.query_bucket = self.bucket_name
@@ -139,3 +139,5 @@ class QueryContextTests(QueryTests):
         except Exception as e:
             self.log.error("Scope/Collection unable to be created with valid special characters: {0}".format(str(e)))
             self.fail()
+        finally:
+            self.rest.delete_bucket(bucket=self.bucket_name)
