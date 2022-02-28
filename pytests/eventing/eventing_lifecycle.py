@@ -458,7 +458,7 @@ class EventingLifeCycle(EventingBaseTest):
     # MB-42177
     def test_single_function_filter(self):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
-        function_details = self.rest.get_function_details(body['appname'])
+        function_details = self.rest.get_function_details(body['appname'], self.function_scope)
         body1 = json.loads(function_details)
         assert body1['appname'] == self.function_name, True
 
