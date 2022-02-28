@@ -779,12 +779,9 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             namespace="default:" + bucket)
         self.run_cbq_query(query)
         self.sleep(5, "wait for index to drop")
-        # out_nodes = [
-        #    node for node in self.indexer_nodes if self.master.ip != node.ip]
-        # if len(out_nodes) > 1:
-        #    out_node = out_nodes[1]
-        # else:
-        out_node = self.indexer_nodes[1]
+        out_nodes = [
+           node for node in self.indexer_nodes if self.master.ip != node.ip]
+        out_node = out_nodes[0]
         rebalance = self.cluster.async_rebalance(
             self.servers[:self.nodes_init], [], [out_node])
         reached = RestHelper(self.rest).rebalance_reached()
@@ -796,8 +793,9 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        time.sleep(30)
         indexes_after_restore = [index for index in self.rest.get_indexer_metadata()['status']
-                                 if index['name'] == replica_index.index_name]
+                                 if index['indexName'] == replica_index.index_name]
         if len(index_nodes) > self.num_index_replicas:
             self.assertEqual(len(indexes_after_restore), len(indexes_before_backup))
         else:

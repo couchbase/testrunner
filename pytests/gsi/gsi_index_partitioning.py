@@ -3771,9 +3771,12 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 if index["name"] == index_name:
                     self.log.info("Expected Hosts : {0}".format(expected_hosts))
                     self.log.info("Actual Hosts   : {0}".format(index["hosts"]))
+                    #TODO revert after bug fix  https://issues.couchbase.com/browse/MB-51119
+                    if self.use_https:
+                        expected_hosts = ["{}:18091".format(host.split(":")[0]) for host in expected_hosts]
                     self.assertEqual(index["hosts"], expected_hosts,
-                                     "Planner did not ignore excluded node during index creation for {0}".format(
-                                         index_name))
+                                         "Planner did not ignore excluded node during index creation for {0}".format(
+                                             index_name))
                     index_validated += 1
 
         self.assertEqual(index_validated, (self.num_index_replicas + 1),
