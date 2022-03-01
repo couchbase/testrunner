@@ -4097,7 +4097,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 rest = RestConnection(node)
                 self.bkrs_undeploy_and_delete_function(body, rest, node)
             self.rest = RestConnection(self.master)
-            raise Exception('Test failed.  Just clean up eventing function until MB-47236 fixed')
 
     def test_bkrs_logs_when_no_mutations_received(self):
         """
