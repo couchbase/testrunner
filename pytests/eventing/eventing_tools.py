@@ -258,7 +258,8 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
         # import the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "import",
                                      "SUCCESS: Events imported",
-                                     file_name="Function_396275055_test_export_function.json")
+                                     file_name="Function_396275055_test_export_function.json",
+                                     function_scope=False)
         # deploy the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "deploy --boundary from-everything",
                                      "SUCCESS: Request to deploy the function was accepted")
@@ -283,7 +284,8 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
                                      skip_stats_validation=True)
         # list the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "list",
-                                     " Status: deployed")
+                                     " Status: deployed", name=False,
+                                     function_scope=False)
         # export the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "export",
                                      "SUCCESS: Function exported to: Function_396275055_test_export_function2.json",
@@ -296,7 +298,7 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
         # export-all functions
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "export-all",
                                      "SUCCESS: All functions exported to: export_all.json",
-                                    file_name="export_all.json", name=False)
+                                    file_name="export_all.json", name=False, function_scope=False)
         # check if the exported function actually exists
         exists = remote_client.file_exists("/root", "export_all.json")
         # check if the exported file exists
@@ -335,7 +337,8 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
         # import the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "import",
                                      "SUCCESS: Events imported",
-                                     file_name="Function_396275055_test_export_function.json")
+                                     file_name="Function_396275055_test_export_function.json",
+                                     function_scope=False)
         # deploy the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "deploy --boundary from-now",
                                      "SUCCESS: Request to deploy the function was accepted")
@@ -363,7 +366,8 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
                                      skip_stats_validation=True)
         # list the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "list",
-                                     " Status: deployed")
+                                     " Status: deployed", name=False,
+                                     function_scope=False)
         # export the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "export",
                                      "SUCCESS: Function exported to: Function_396275055_test_export_function2.json",
@@ -376,7 +380,8 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
         # export-all functions
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "export-all",
                                      "SUCCESS: All functions exported to: export_all.json",
-                                    file_name="export_all.json", name=False)
+                                    file_name="export_all.json", name=False,
+                                     function_scope=False)
         # check if the exported function actually exists
         exists = remote_client.file_exists("/root", "export_all.json")
         # check if the exported file exists
@@ -424,7 +429,8 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
         # import the function from cli
         self._couchbase_cli_eventing(eventing_node, self.function_name, "import",
                                      "SUCCESS: Events imported",
-                                     file_name="test_export_function.json")
+                                     file_name="test_export_function.json",
+                                     function_scope=False)
         # deploy the function
         self._couchbase_cli_eventing(eventing_node, self.function_name,
                                      "deploy --boundary from-now",
@@ -548,16 +554,21 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
         remote_client.write_remote_file_single_quote("/root", "test_export_function.json",
                                                      json.dumps(output, indent=4))
         # import the function from cli
-        self._couchbase_cli_eventing(eventing_node, self.function_name, "import",
-                                     "SUCCESS: Events imported",
-                                     file_name="test_export_function.json")
+        try:
+            self._couchbase_cli_eventing(eventing_node, self.function_name, "import",
+                                         "SUCCESS: Events imported",
+                                         file_name="test_export_function.json",
+                                         function_scope=False)
+        except Exception as e:
+            self.log.info(e)
+            assert "ERR_INVALID_REQUEST" in str(e) and "another function with same name is already present" in str(e), True
         status = self.rest.get_composite_eventing_status()
         for i in range(len(status['apps'])):
             if status['apps'][i]['name'] == self.function_name and status['apps'][i]['composite_status'] != "paused":
                 self.fail("Handler state changed which is not expected")
         self.undeploy_and_delete_function(body)
 
-    def _couchbase_cli_eventing(self, host, function_name, operation, result, file_name=None, name=True):
+    def _couchbase_cli_eventing(self, host, function_name, operation, result, file_name=None, name=True, function_scope=True):
         remote_client = RemoteMachineShellConnection(host)
         cmd = "couchbase-cli eventing-function-setup -c {0} -u {1} -p {2} --{3} ".format(
             host.ip, host.rest_username, host.rest_password, operation)
@@ -565,6 +576,8 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
             cmd += " --name {0}".format(function_name)
         if file_name:
             cmd += " --file {0}".format(file_name)
+        if function_scope:
+            cmd += " --bucket '{0}' --scope '{1}'".format(self.function_scope["bucket"], self.function_scope["scope"])
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         log.info(command)
         output, error = remote_client.execute_command(command)

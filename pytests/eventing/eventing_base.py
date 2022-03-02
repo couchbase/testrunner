@@ -851,7 +851,7 @@ class EventingBaseTest(QueryHelperTests):
     def check_word_count_eventing_log(self,function_name,word,expected_count,return_count_only=False):
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         array_of_counts = []
-        command = "cat /opt/couchbase/var/lib/couchbase/data/@eventing/"+ function_name +"* | grep -a \""+word+"\" | wc -l"
+        command = "cat /opt/couchbase/var/lib/couchbase/data/@eventing/b_travel-sample/s__default/"+ function_name +"* | grep -a \""+word+"\" | wc -l"
         for eventing_node in eventing_nodes:
             shell = RemoteMachineShellConnection(eventing_node)
             count, error = shell.execute_non_sudo_command(command)
@@ -873,7 +873,7 @@ class EventingBaseTest(QueryHelperTests):
     def check_number_of_files(self):
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         array_of_counts = []
-        command = "cd /opt/couchbase/var/lib/couchbase/data/@eventing;ls | wc -l"
+        command = "cd /opt/couchbase/var/lib/couchbase/data/@eventing/b_travel-sample/s__default;ls | wc -l"
         for eventing_node in eventing_nodes:
             shell = RemoteMachineShellConnection(eventing_node)
             count, error = shell.execute_non_sudo_command(command)
