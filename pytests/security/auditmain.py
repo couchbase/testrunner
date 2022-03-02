@@ -453,7 +453,7 @@ class audit:
         Boolean - True if data from audit.log matches with expectedResult
     '''
 
-    def validateData(self, data, expectedResult):
+    def validateData(self, data, expectedResult, disable_hostname_verification=True):
         log.info (" Event from audit.log -- {0}".format(data))
         flag = True
         ignore = False
@@ -491,7 +491,11 @@ class audit:
                             if data[items][seclevel] != tempValue:
                                 log.info('Mis-Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'
                                          .format(tempValue, data[items][seclevel], seclevel))
-                                flag = False
+                                if tempLevel == 'local:ip' or tempLevel == 'remote:ip':
+                                    if not disable_hostname_verification:
+                                        flag = False
+                                else:
+                                    flag = False
                 else:
                     if (items == 'port' and data[items] >= 30000 and data[items] <= 65535):
                         log.info ("Matching port is an ephemeral port -- actual port is {0}".format(data[items]))
@@ -564,13 +568,13 @@ class audit:
         fieldVerification - Boolean - True if all matching fields have been found.
         valueVerification - Boolean - True if data matches with expected Results
     '''
-    def validateEvents(self, expectedResults, n1ql_audit=False):
+    def validateEvents(self, expectedResults, disable_hostname_verification=True, n1ql_audit=False):
         defaultField, mandatoryFields, mandatorySecLevel, optionalFields, optionalSecLevel = self.returnFieldsDef(self.eventDef, self.eventID)
         actualEvent = self.returnEvent(self.eventID)
         fieldVerification = self.validateFieldActualLog(actualEvent, self.eventID, 'ns_server', self.defaultFields, mandatoryFields, \
                                                     mandatorySecLevel, optionalFields, optionalSecLevel, self.method, n1ql_audit)
         expectedResults = dict(list(defaultField.items()) + list(expectedResults.items()))
-        valueVerification = self.validateData(actualEvent, expectedResults)
+        valueVerification = self.validateData(actualEvent, expectedResults, disable_hostname_verification)
         return fieldVerification, valueVerification
 
     '''

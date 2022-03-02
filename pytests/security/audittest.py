@@ -35,6 +35,7 @@ class auditTest(BaseTestCase):
     def setUp(self):
         super(auditTest, self).setUp()
         auditTemp = audit(host=self.master)
+        self.disable_hostname_verification = self.input.param("disable_hostname_verification", True)
         try:
             if "ip6" in self.master.ip or self.master.ip.startswith("["):
                 self.ipAddress = auditTemp.getLocalIPV6Address()
@@ -69,9 +70,9 @@ class auditTest(BaseTestCase):
         content = rest.set_user_roles(user_id=username, payload=payload)
 
     #Wrapper around auditmain
-    def checkConfig(self, eventID, host, expectedResults, n1ql_audit=False):
+    def checkConfig(self, eventID, host, expectedResults, disable_hostname_verification=True, n1ql_audit=False):
         Audit = audit(eventID=self.eventID, host=host)
-        fieldVerification, valueVerification = Audit.validateEvents(expectedResults, n1ql_audit)
+        fieldVerification, valueVerification = Audit.validateEvents(expectedResults, disable_hostname_verification, n1ql_audit)
         self.assertTrue(fieldVerification, "One of the fields is not matching")
         self.assertTrue(valueVerification, "Values for one of the fields is not matching")
 
@@ -159,7 +160,7 @@ class auditTest(BaseTestCase):
             self.sleep(10)
             rest.flush_bucket(expectedResults['bucket_name'])
 
-        self.checkConfig(self.eventID, self.master, expectedResults)
+        self.checkConfig(self.eventID, self.master, expectedResults, self.disable_hostname_verification)
 
     def test_bucket_select_audit(self):
         # security.audittest.auditTest.test_bucket_select_audit,default_bucket=false,id=20492
