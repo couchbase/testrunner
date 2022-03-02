@@ -4636,7 +4636,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.start = 1
         self.backupset.end = 1
         self._all_buckets_flush()
-        self.backup_restore_validate()
+        compare = ">=" if self.objstore_provider and self.objstore_provider.schema_prefix() == "gs://" else "=="
+        self.backup_restore_validate(seqno_compare_function=compare)
 
     def test_restore_single_incr_backup(self):
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
