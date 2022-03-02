@@ -129,7 +129,7 @@ class auditTest(BaseTestCase):
             rest.change_bucket_props(bucket=expectedResults['bucket_name'],
                                      ramQuotaMB=expectedResults['ram_quota'] // 1048576,
                                      replicaNumber=expectedResults['num_replicas'],
-                                     proxyPort='11211', replica_index=1, threadsNumber=1,
+                                     proxyPort='11211', replicaIndex=1,
                                      maxTTL=expectedResults['max_ttl'])
 
         elif (ops in ['delete']):
