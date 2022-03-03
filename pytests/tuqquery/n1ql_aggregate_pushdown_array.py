@@ -1002,6 +1002,8 @@ class AggregatePushdownClass(QueryTests):
             else:
                 if "where t" not in query:
                     allow_pushdown = False
+            if "distinct" in str(index_name):
+                allow_pushdown = False
         else:
             where_field = ""
             for field in index_fields:
