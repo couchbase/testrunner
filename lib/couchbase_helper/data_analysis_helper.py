@@ -589,7 +589,7 @@ class DataCollector(object):
                             num = int(tokens[0])
                         value = ivalue.split()
                         if vb in map_data.keys() and \
-                                (num == num_map[vb] or num > num_map[vb]):
+                                (num == num_map[vb] or num < num_map[vb]):
                             map_data[vb][key] = value[0]
                         elif vb in map_data.keys() and key == "num_entries":
                             map_data[vb][key] = value[0]
