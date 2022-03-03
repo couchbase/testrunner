@@ -1161,7 +1161,11 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         for namespace in self.namespaces:
             query = f'select count(age) from {namespace} where age >= 0'
             result = self.run_cbq_query(query=query)['results'][0]['$1']
-            self.assertEqual(num_docs, result, "Doc count not matching")
+            if self.dgm_run:
+                self.assertTrue(result > num_docs,
+                                f"Doc count not matching expected value")
+            else:
+                self.assertEqual(num_docs, result, "Doc count not matching")
 
     # def test_large_value_in_metadata_store(self):
     #     '''

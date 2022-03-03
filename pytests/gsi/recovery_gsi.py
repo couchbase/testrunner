@@ -1897,9 +1897,14 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         result = self.n1ql_helper.run_cbq_query(query=use_index_query, server=self.n1ql_node,
                                                 scan_consistency=CONSISTENCY_REQUEST)["results"][0]["$1"]
         expected_result = self.docs_per_day * 2 * 2016
-        self.assertEqual(result, expected_result, "Indexer hasn't recovered properly from in-memory as"
-                                                  " indexes haven't catch up with "
-                                                  "request_plus/consistency_request")
+        if self.dgm_run:
+            self.assertEqual(result > expected_result, "Indexer hasn't recovered properly from in-memory as"
+                                                       " indexes haven't catch up with "
+                                                       "request_plus/consistency_request")
+        else:
+            self.assertEqual(result, expected_result, "Indexer hasn't recovered properly from in-memory as"
+                                                      " indexes haven't catch up with "
+                                                      "request_plus/consistency_request")
         self.log.info("Indexer continues to index as expected")
 
     def test_partial_rollback(self):
