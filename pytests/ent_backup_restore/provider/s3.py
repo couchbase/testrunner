@@ -50,7 +50,7 @@ class S3(provider.Provider):
             self.resource.create_bucket(Bucket=self.bucket, CreateBucketConfiguration=configuration)
         except botocore.exceptions.ClientError as error:
             error_code = error.response['Error']['Code']
-            if error_code != 'BucketAlreadyExists':
+            if error_code not in ('BucketAlreadyExists', 'BucketAlreadyOwnedByYou'):
                 raise error
 
     def teardown(self, info, remote_client):
