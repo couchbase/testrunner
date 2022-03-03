@@ -3353,7 +3353,9 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         Merge all the existing backups in the backupset.
         :return: Nothing
         """
-        self.backup_merge_validate(repeats=self.number_of_repeats, skip_validation=self.skip_validation)
+        skip_validation = self.skip_validation
+        if self.backupset.start != 1: skip_validation = True
+        self.backup_merge_validate(repeats=self.number_of_repeats, skip_validation=skip_validation)
 
     def merge_with_ops(self):
         """
