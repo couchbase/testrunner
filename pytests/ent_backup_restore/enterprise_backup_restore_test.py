@@ -2830,7 +2830,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         for i in range(1, self.num_items + 1):
             key = "doc" + str(i)
             if cluster_host_data[key]["cas"] != restore_host_data[key]["cas"]:
-                self.fail("CAS mismatch for key: {0}".format(key))
+                if not self.backupset.force_updates:
+                    self.fail("CAS mismatch for key: {0}".format(key))
             if cluster_host_data[key]["flags"] != restore_host_data[key]["flags"]:
                 self.fail("Flags mismatch for key: {0}".format(key))
         self.log.info("Successfully validated cluster host data cas and flags " \
