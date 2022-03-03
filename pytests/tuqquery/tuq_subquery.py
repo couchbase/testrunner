@@ -399,7 +399,7 @@ class QuerySubqueryTests(QueryTests):
         error_code = [5370, 5010]
         error_message = [
             "Unable to run subquery - cause: No secondary index available for keyspace default in correlated subquery.",
-            "Error evaluating projection. - cause: Unable to run subquery - cause: No secondary index available for keyspace default in correlated subquery."
+            "Error evaluating projection"
         ]
         try:
             self.run_cbq_query(query=correlated_query)
