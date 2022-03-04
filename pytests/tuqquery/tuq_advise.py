@@ -428,7 +428,7 @@ class QueryAdviseTests(QueryTests):
             self.fail()
 
     def test_array_func(self):
-        field_list =['`roomType`','DISTINCT ARRAY [`s`.`level`, `s`.`size`, `s`.`num`] FOR `s` in `rooms` END','`guestCode`','`startTime`','`endTime`','array_distinct(ifmissing((array_star(`rooms`).`num`), []))']
+        field_list =['`roomType`','DISTINCT ARRAY [`s`.`level`, `s`.`size`, `s`.`num`] FOR `s` IN `rooms` END','`guestCode`','`startTime`','`endTime`','array_distinct(ifmissing((array_star(`rooms`).`num`), []))']
         try:
             results_fake_field = self.run_cbq_query(query="advise SELECT META(p).id, ARRAY_DISTINCT(IFMISSING(rooms[*].num,[])) FROM `travel-sample` AS p WHERE type = 'hotel' AND (guestCode = IFNULL($guestCode, '') OR guestCode = '') AND (roomType = IFNULL($roomType,'R') OR roomType = IFNULL($roomType,'D') ) AND ($checkinTime BETWEEN startTime AND endTime) AND (ANY s IN rooms SATISFIES [s.`level`,s.size, s.num] = [$level, $size, $num] END)", server=self.master)
             self.log.info("Advised index is {0}".format(results_fake_field))
@@ -447,7 +447,7 @@ class QueryAdviseTests(QueryTests):
             self.fail()
 
     def test_user_generated_advise(self):
-        field_list =['`status`','`type`','DISTINCT ARRAY `v`.`key` FOR `v` in `operationContext` END','`userRef`.`name`','`startTime`']
+        field_list =['`status`','`type`','DISTINCT ARRAY `v`.`key` FOR `v` IN `operationContext` END','`userRef`.`name`','`startTime`']
         try:
             results_fake_field = self.run_cbq_query(query='ADVISE SELECT result.* FROM (SELECT meta().id, startTime FROM `processMonitoring` WHERE type = "ProcessMonitorDTO"  AND status = "Running" AND userRef.name LIKE "fir%" AND ANY v IN operationContext SATISFIES v.`key` IN ["SITE_ID::ISite_100","SITE_ID::ISite_101"] END INTERSECT SELECT meta().id, startTime FROM `processMonitoring`  WHERE type = "ProcessMonitorDTO"  AND status = "Running" AND userRef.name LIKE "fir%" AND ANY v IN operationContext SATISFIES v.`key` ="FWAId::IFrameworkAgreement_100" END) AS result ORDER BY startTime ASC LIMIT 10 OFFSET 0', server=self.master)
             for field in field_list:

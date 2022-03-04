@@ -286,7 +286,7 @@ class QueryUDFN1QLTests(QueryTests):
         # Run pre-req prior to DDL
         pre_query = self.ddls[self.statement]['pre']
         self.run_cbq_query(pre_query)
-        self.sleep(30)
+        self.sleep(5)
         # Execute function
         if self.test_sideeffect:
             try:
@@ -299,6 +299,7 @@ class QueryUDFN1QLTests(QueryTests):
         else:
             function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
             self.assertEqual(function_result['results'], self.ddls[self.statement]['function_expected'])
+            self.sleep(30)
             # Run post check
             post_query = self.ddls[self.statement]['post']
             post_expected = self.ddls[self.statement]['post_expected']
@@ -774,16 +775,16 @@ class QueryUDFN1QLTests(QueryTests):
             # Execute function w/ correct query context
             function_result = self.run_cbq_query(f'select {function_name}("Engineer", 2011, 10)',
                                                  query_context='default:default._default')
-            expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
+            expected_result = {'$1': [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]}
             actual_result = function_result['results'][0]
-            self.assertEqual(actual_result, expected_result)
+            self.assertEqual(actual_result, expected_result, f"The results are wrong, actual_result : {actual_result} , expected: {expected_result}")
 
             # Execute function relative path should be picked up from the context of the udf
             function_result = self.run_cbq_query(
                 f'select default:default._default.{function_name}("Engineer", 2011, 10)')
-            expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
+            expected_result = {'$1': [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]}
             actual_result = function_result['results'][0]
-            self.assertEqual(actual_result, expected_result)
+            self.assertEqual(actual_result, expected_result, f"The results are wrong, actual_result : {actual_result} , expected: {expected_result}")
             try:
                 # Execute function w/ incorrect query context, incorrect function should be used
                 function_result = self.run_cbq_query(f'select {function_name}("Engineer", 2011, 10)',
@@ -791,7 +792,7 @@ class QueryUDFN1QLTests(QueryTests):
                 self.fail("Query should have CBQ error'd")
             except CBQError as ex:
                 error = self.process_CBQE(ex)
-                self.assertEqual(error['code'], 10104)
+                self.assertTrue("10104" in str(error), f'Error code is wrong please check the error: {error}')
                 self.assertTrue('Incorrect number of arguments supplied' in str(error),
                                 f"Error is not what we expected {str(ex)}")
         else:
@@ -799,20 +800,20 @@ class QueryUDFN1QLTests(QueryTests):
             function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}("Engineer", 2011, 10)', query_context='default:default._default')
             expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
             actual_result = function_result['results'][0]
-            self.assertEqual(actual_result, expected_result)
+            self.assertEqual(actual_result, expected_result, f"The results are wrong, actual_result : {actual_result} , expected: {expected_result}")
 
             # Execute function relative path should be picked up from the context of the udf
             function_result = self.run_cbq_query(f'EXECUTE FUNCTION default:default._default.{function_name}("Engineer", 2011, 10)')
             expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
             actual_result = function_result['results'][0]
-            self.assertEqual(actual_result, expected_result)
+            self.assertEqual(actual_result, expected_result, f"The results are wrong, actual_result : {actual_result} , expected: {expected_result}")
             try:
                 # Execute function w/ incorrect query context, incorrect function should be used
                 function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}("Engineer", 2011, 10)', query_context='default:default.test')
                 self.fail("Query should have CBQ error'd")
             except CBQError as ex:
                 error = self.process_CBQE(ex)
-                self.assertEqual(error['code'], 10104)
+                self.assertTrue("10104" in str(error), f'Error code is wrong please check the error: {error}')
                 self.assertTrue('Incorrect number of arguments supplied' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_letting_having_groupby(self):
@@ -2099,7 +2100,7 @@ class QueryUDFN1QLTests(QueryTests):
         result = self.run_cbq_query('SELECT count(*) as count FROM default WHERE a = "foo"')
         actual_count = result['results'][0]['count']
         self.assertEqual(expected_count, actual_count)
-    
+
     def test_error_handling(self):
         function_name = "error_handling"
         function_names = [function_name]
@@ -2127,10 +2128,10 @@ class QueryUDFN1QLTests(QueryTests):
         result = self.run_cbq_query(f"EXECUTE FUNCTION {function_name}()")
         expected_result = [
             {
-                'caller': 'couchbase:2088', 'code': 12009, 'icode': 'Duplicate Key: k004',
+                'caller': 'couchbase:2098', 'code': 12009, 'icode': 'Duplicate Key: k004',
                 'key': 'datastore.couchbase.DML_error',
-                'message': 'DML Error, possible causes include concurrent modification. Failed to perform INSERT on key k004', 
-                'reason': {'caller': 'couchbase:1961', 'code': 17012, 'key': 'dml.statement.duplicatekey', 'message': 'Duplicate Key: k004'},
+                'message': 'DML Error, possible causes include concurrent modification. Failed to perform INSERT on key k004',
+                'reason': {'caller': 'couchbase:1971', 'code': 17012, 'key': 'dml.statement.duplicatekey', 'message': 'Duplicate Key: k004'},
                 'retry': False,
                 'stack': 'Error\n    at error_handling (functions/n1ql.js:1:190)'
             }

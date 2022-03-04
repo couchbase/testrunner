@@ -743,15 +743,15 @@ class QueryAdvisorTests(QueryTests):
 
     def test_negative_invalid_arg(self):
         query = "SELECT ADVISOR({'action': 'start', 'duration': '10s', 'invalid': 10});"
-        error_message = "Advisor: Invalid arguments."
+        error_message = "Advisor: Invalid arguments"
         error_code = 10503
         try:
             results = self.run_cbq_query(query=query, server=self.master)
             self.fail("Start session did not fail. Error expected: {0}".format(error_message))
         except CBQError as ex:
             error = self.process_CBQE(ex)
-            self.assertEqual(error['code'], error_code)
-            self.assertEqual(error['msg'], error_message)
+            self.assertEqual(str(error_code) in str(error), f'Error code is wrong please check the error: {error}')
+            self.assertTrue(error_message in str(error), f"The error message is not what we expected please check error: {error}")
         else:
             self.fail("There were no errors. Error expected: {0}".format(error_message))
 
