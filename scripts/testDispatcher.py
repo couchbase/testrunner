@@ -239,6 +239,8 @@ def main():
                       default='172.23.104.162:8081')
     parser.add_option('--addl_server_manager', dest='ADDL_SERVER_MANAGER',
                       default='172.23.104.162:8081')
+    parser.add_option('--test_suite_db', dest="TEST_SUITE_DB",
+                      default='172.23.104.162')
     parser.add_option('-z', '--timeout', dest='TIMEOUT', default = '60')
     parser.add_option('-w', '--check_vm', dest='check_vm', default="False")
     parser.add_option('--ssh_poll_interval', dest='SSH_POLL_INTERVAL', default="20")
@@ -278,6 +280,8 @@ def main():
         SERVER_MANAGER=options.SERVER_MANAGER
     if options.ADDL_SERVER_MANAGER:
         ADDL_SERVER_MANAGER = options.ADDL_SERVER_MANAGER
+    if options.TEST_SUITE_DB:
+        TEST_SUITE_DB = options.TEST_SUITE_DB
     if options.TIMEOUT:
         TIMEOUT=int(options.TIMEOUT)
     if options.SSH_POLL_INTERVAL:
