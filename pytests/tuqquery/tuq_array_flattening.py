@@ -1327,7 +1327,7 @@ class QueryArrayFlatteningTests(QueryTests):
         self.assertTrue('idx1' in str(explain_results),
                         "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
                             explain_results))
-        self.asserTrue("covers" in str(explain_results), "This query should be covered by the index but it is not: plan {0}",format(explain_results))
+        self.assertTrue("covers" in str(explain_results), "This query should be covered by the index but it is not: plan {0}",format(explain_results))
         delete_results = self.run_cbq_query(query="delete from default d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness = 3 END AND free_parking = True")
         self.assertTrue(delete_results['status'] == 'success',
                         "Index was not successfully created! {0}".format(delete_results))
@@ -1922,6 +1922,51 @@ class QueryArrayFlatteningTests(QueryTests):
 
         self.compare_against_primary(query, primary_query)
 
+    ##############################################################################################
+    #
+    #   UNKNOWN TESTING
+    ##############################################################################################
+
+    def test_unknown_array_index_key_unnest(self):
+        self.load_unknowns()
+
+        unnest_query = "SELECT META(d).id FROM default AS d USE INDEX (ix2) UNNEST d.arr1 AS v WHERE v.id IS NULL"
+        unnest_explain_results = self.run_cbq_query(query='EXPLAIN ' + unnest_query)
+        self.assertTrue("ix2" in str(unnest_explain_results), f"The correct index is not being used, please check {unnest_explain_results}")
+        self.assertTrue("covers" not in str(unnest_explain_results), f"The correct index is not being used, please check {unnest_explain_results}")
+
+        unnest_results = self.run_cbq_query(query=unnest_query)
+        self.assertEqual(unnest_results['results'], [{"id": "k01"}, {"id": "k05"}, {"id": "k05"}])
+
+        unnest_query2 = 'SELECT META(d).id FROM default AS d USE INDEX (ix3) UNNEST d.arr1 AS v WHERE v.id IS NULL'
+        unnest_explain_results2 = self.run_cbq_query(query='EXPLAIN ' + unnest_query2)
+        self.assertTrue("ix3" in str(unnest_explain_results), f"The correct index is not being used, please check {unnest_explain_results2}")
+        unnest_results2 = self.run_cbq_query(query=unnest_query2)
+        self.assertEqual(unnest_results2['results'], [{"id": "k01"}, {"id": "k05"}, {"id": "k05"}])
+
+    def test_unkown_array_index_key_any(self):
+        self.load_unknowns()
+
+        any_query = "SELECT META(d).id FROM default AS d USE INDEX (ix2) WHERE any v in arr1 SATISFIES v.id IS NULL END"
+        explain_any_results = self.run_cbq_query(query='EXPLAIN ' + any_query)
+        self.assertTrue("ix2" in str(explain_any_results), f"The correct index is not being used, please check {explain_any_results}")
+        self.assertTrue("covers" not in str(explain_any_results), f"The correct index is not being used, please check {explain_any_results}")
+
+
+        any_results = self.run_cbq_query(query=any_query)
+        self.assertEqual(any_results['results'], [{"id": "k01"}, {"id": "k05"}])
+
+
+    def test_unkown_array_index_key_any_every(self):
+        self.load_unknowns()
+
+        any_every_query = "SELECT META(d).id FROM default AS d USE INDEX (ix2) WHERE any and every v in arr1 SATISFIES v.id IS NULL END"
+        explain_any_every_results = self.run_cbq_query(query='EXPLAIN ' + any_every_query)
+        self.assertTrue("ix2" in str(explain_any_every_results), f"The correct index is not being used, please check {explain_any_every_results}")
+        self.assertTrue("covers" not in str(explain_any_every_results), f"The correct index is not being used, please check {explain_any_every_results}")
+
+        any_every_results = self.run_cbq_query(query=any_every_query)
+        self.assertEqual(any_every_results['results'], [{"id": "k05"}])
 
     ##############################################################################################
     #
@@ -1958,6 +2003,17 @@ class QueryArrayFlatteningTests(QueryTests):
         self.run_cbq_query(query = upsert1)
         self.run_cbq_query(query = upsert2)
         self.run_cbq_query(query = upsert3)
+
+    def load_unknowns(self):
+        self.run_cbq_query(query='UPSERT into default (key, value) values("k01", { "c1": "a", "arr1": [ {"id":NULL}, {"id":7}] })')
+        self.run_cbq_query(query='UPSERT into default (key, value) values("k02", { "c1": "a", "arr1": NULL})')
+        self.run_cbq_query(query='UPSERT into default (key, value) values("k03", { "c1": "a", "arr1": 5})')
+        self.run_cbq_query(query='UPSERT into default (key, value) values("k05", { "c1": "a", "arr1": [{"id":NULL},{"id":NULL}] })')
+        try:
+            self.run_cbq_query(query='create index ix2 ON default(ALL ARRAY v.id FOR v IN arr1 END)')
+            self.run_cbq_query(query='create index ix3 ON default(ALL ARRAY v.id FOR v IN arr1 END, arr1)')
+        except Exception as ex:
+            pass
 
     def compare_against_primary(self,query="", primary_query=""):
         query_results = self.run_cbq_query(query=query)
