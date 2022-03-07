@@ -416,8 +416,12 @@ class BaseSecondaryIndexingTests(QueryTests):
             alter_index_query = f'ALTER INDEX {index_name} on {namespace} ' \
                 f'WITH {{"action": "move", "nodes":{nodes}}}'
         elif action == 'replica_count':
-            alter_index_query = f'ALTER INDEX {index_name} on {namespace} ' \
-                f' WITH {{"action":"replica_count","num_replica": {num_replicas}}}'
+            if nodes is not None:
+                alter_index_query = f'ALTER INDEX {index_name} on {namespace} ' \
+                                    f' WITH {{"action":"replica_count","num_replica": {num_replicas}, "nodes":{nodes}}}'
+            else:
+                alter_index_query = f'ALTER INDEX {index_name} on {namespace} ' \
+                    f' WITH {{"action":"replica_count","num_replica": {num_replicas}}}'
         elif action == 'drop_replica':
             alter_index_query = f'ALTER INDEX {index_name} ON {namespace} ' \
                 f'WITH {{"action":"drop_replica","replicaId": {replica_id}}}'
@@ -926,6 +930,18 @@ class BaseSecondaryIndexingTests(QueryTests):
                     if index_val["num_docs_pending"] or index_val["num_docs_queued"]:
                         return False
         return True
+
+    def get_persistent_snapshot_count(self, index_node, index_name):
+        """
+        Returns the number of persistent snapshots for a MOI index for a specific node
+        """
+        index_rest = RestConnection(index_node)
+        index_map = index_rest.get_index_stats_collections()
+        for keyspace in list(index_map.keys()):
+            self.log.info("Keyspace: {0}".format(keyspace))
+            for idx_name, idx_val in index_map[keyspace].items():
+                if idx_name == index_name:
+                    return idx_val["num_snapshots"]
 
 
     def _get_items_count_collections(self, index_node, keyspace, index_name):

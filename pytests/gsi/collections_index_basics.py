@@ -8,15 +8,13 @@ __created_on__ = "26/05/20 2:13 pm"
 
 """
 import random
-import string
 
 from concurrent.futures import ThreadPoolExecutor
 
 from couchbase_helper.documentgenerator import SDKDataLoader
 from couchbase_helper.query_definitions import QueryDefinition
 from .base_gsi import BaseSecondaryIndexingTests
-
-from collections import defaultdict
+from membase.api.rest_client import RestConnection
 
 
 class CollectionsIndexBasics(BaseSecondaryIndexingTests):
@@ -1250,3 +1248,47 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
     #
     #     index_info = self.rest.get_indexer_metadata()['status']
     #     self.assertEqual(len(index_info), 10 * 6)
+
+    def test_mutations_for_persistent_snapshot(self):
+        '''
+        Create a memory optimized index. Make changes in the indexer settings. Perform some mutations and validate that
+        the persistent snapshots are getting created.
+        https://issues.couchbase.com/browse/MB-50034
+        '''
+        if self.gsi_type != 'memory_optimized':
+            self.skipTest("Peristent snapshot test is meant for memory optimized indexes")
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        self.prepare_collection_for_indexing()
+        collection_namespace = self.namespaces[0]
+        index_gen1 = QueryDefinition(index_name='idx1', index_fields=['age'])
+        query = index_gen1.generate_index_create_query(namespace=collection_namespace)
+        self.run_cbq_query(query=query)
+        self.wait_until_indexes_online()
+        snapshot_count_before = self.get_persistent_snapshot_count(index_nodes[0], 'idx1')
+        query = f'select count(*) from {collection_namespace} where age is not missing'
+        self.run_cbq_query(query=query)
+        total_doc_count_before = self.run_cbq_query(query=query)['results'][0]['$1']
+        for index_node in index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 10})
+        self.sleep(10)
+        scope, collection = self.namespaces[0].split(":")[1].split(".")[1], self.namespaces[0].split(":")[1].split(".")[
+            2]
+        self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection,
+                                        percent_create=0,
+                                        percent_update=50, percent_delete=50, scope=scope,
+                                        collection=collection, json_template="Person")
+        tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
+                                                        batch_size=10 ** 4)
+        for task in tasks:
+            task.result()
+        self.sleep(20)
+        total_doc_count_after = self.run_cbq_query(query=query)['results'][0]['$1']
+        snapshot_count_after = self.get_persistent_snapshot_count(index_nodes[0], 'idx1')
+        self.assertNotEqual(total_doc_count_before, total_doc_count_after,
+                            f'Indexing not happening after editing index settings.'
+                            f'Count of docs before:{total_doc_count_before}. '
+                            f'Count of docs after {total_doc_count_after}')
+        self.assertNotEqual(snapshot_count_before, snapshot_count_after, f'Indexing not happening after editing index settings'
+                                                                         f':Snapshot count before {snapshot_count_before}. '
+                                                                         f'Snapshot count after {snapshot_count_after}')
