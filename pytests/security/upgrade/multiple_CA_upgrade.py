@@ -8,6 +8,7 @@ from lib.Cb_constants.CBServer import CbServer
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.security.ntonencryptionBase import ntonencryptionBase
+from pytests.security.x509main import x509main as x509mainold
 from pytests.security.x509_multiple_CA_util import x509main, Validation
 from pytests.upgrade.newupgradebasetest import NewUpgradeBaseTest
 from couchbase.bucket import Bucket
@@ -16,20 +17,66 @@ from couchbase.exceptions import CouchbaseError, CouchbaseInputError
 log = logging.getLogger()
 
 
+class LdapContainer:
+    """
+    Some generic docker commands and a helper function to
+    start an ldap container
+    #TODo: support commands for all OS. For now, since the test runs only on
+    #ToDO... particular set of centos VMs, it should be fine.
+    """
+
+    ldap_ca = "./pytests/security/x509_extension_files/ldap_container_ca.crt"
+    container_name = "sumedh"
+    hostname = "ldap.example.org"
+    port = 389
+    ssl_port = 636
+    bindDN = "cn=admin,dc=example,dc=org"
+    bindPass = "admin"
+    ldap_user = "admin"
+
+    @staticmethod
+    def start_docker(shell):
+        o, e = shell.execute_command("systemctl start docker")
+        log.info('Output of starting containers is {0} and error message is {1}'.format(o, e))
+
+    @staticmethod
+    def stop_all_containers(shell):
+        o, e = shell.execute_command("docker stop $(docker ps -a -q)")
+        log.info('Output of stopping containers is {0} and error message is {1}'.format(o, e))
+
+    @staticmethod
+    def remove_all_containers(shell):
+        o, e = shell.execute_command("docker rm $(docker ps -a -q)")
+        log.info('Output of removing containers is {0} and error message is {1}'.format(o, e))
+
+    def start_ldap_container(self, shell):
+        o, e = shell.execute_command("docker run --name " + self.container_name +
+                                     " --hostname " + self.hostname +
+                                     " -p 389:389 -p 636:636 " +
+                                     " --env LDAP_TLS_VERIFY_CLIENT=try" +
+                                     " --detach osixia/openldap:1.5.0")
+        log.info('Output of removing containers is {0} and error message is {1}'.format(o, e))
+
+
 class MultipleCAUpgrade(NewUpgradeBaseTest):
     def setUp(self):
         self.test_setup_finished = False
         log.info("==============  Multiple CA Upgrade setup has started ==============")
         super(MultipleCAUpgrade, self).setUp()
+
         self.initial_version = self.input.param("initial_version", '6.6.3-9799')
         self.upgrade_version = self.input.param("upgrade_version", "7.1.0-1745")
-        self.base_version = RestConnection(self.master).get_nodes_versions()[0]
         self.enc_key_mixed_mode = self.input.param("enc_key_mixed_mode", False)
+        self.skip_rbac_internal_users_setup = self.input.param("skip_rbac_internal_users_setup",
+                                                               False)
+        self.skip_ldap_external_user_setup = self.input.param("skip_ldap_external_user_setup",
+                                                              False)
+
+        self.base_version = RestConnection(self.master).get_nodes_versions()[0]
         if self.enc_key_mixed_mode in ["True", True]:
             self.enc_key_mixed_mode = True
         else:
             self.enc_key_mixed_mode = False
-        self.load_sample_bucket(self.master, "travel-sample")
         shell = RemoteMachineShellConnection(self.master)
         self.windows_test = False
         if shell.extract_remote_info().distribution_type == "windows":
@@ -41,8 +88,13 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
             self.openssl_path = "C:/Program Files/Couchbase/Server/bin/openssl"
             self.inbox_folder_path = "C:/Program Files/Couchbase/Server/var/lib/couchbase/inbox/"
         self.plain_passw_map = dict()
-        self.add_rbac_groups_roles(self.master)
-        self.add_ldap_users(self.master)
+
+        self.load_sample_bucket(self.master, "travel-sample")
+        if not self.skip_rbac_internal_users_setup:
+            self.add_rbac_groups_roles(self.master)
+        if not self.skip_ldap_external_user_setup:
+            self.setup_ldap_config(server=self.master)
+            self.add_ldap_user(self.master)
         self.test_setup_finished = True
 
     def tearDown(self):
@@ -63,6 +115,9 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
         self.sleep(60)
 
     def add_rbac_groups_roles(self, server):
+        """
+        Adds group with RBAC roles and adds users to groups
+        """
         rest = RestConnection(server)
         group_roles = ['admin', 'cluster_admin', 'ro_admin',
                     'bucket_admin[travel-sample]', 'bucket_full_access[travel-sample]',
@@ -95,17 +150,13 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
             log.info("Group name -- {0} :: User name -- {1}".format(group_name, user_name))
             rest.add_user_group(group_name, user_name)
 
-    def add_ldap_users(self, server):
-        rest = RestConnection(server)
-
-        # setup LDAP and enable LDAP user authentication
-        hosts = '172.23.120.205'
-        port = '389'
-        encryption = 'None'
-        bindDN = 'cn=Manager,dc=couchbase,dc=com'
-        bindPass = 'p@ssword'
-        authenticationEnabled = 'true'
-        userDNMapping = '{"template":"cn=%u,ou=Users,dc=couchbase,dc=com"}'
+    @staticmethod
+    def get_ldap_params(hosts='172.23.120.205', port='389', encryption='None',
+                        bindDN='cn=Manager,dc=couchbase,dc=com', bindPass='p@ssword',
+                        serverCertValidation='false',
+                        cacert=None,
+                        authenticationEnabled='true',
+                        userDNMapping='{"template":"cn=%u,ou=Users,dc=couchbase,dc=com"}'):
         param = {
             'hosts': '{0}'.format(hosts),
             'port': '{0}'.format(port),
@@ -115,8 +166,27 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
             'authenticationEnabled': '{0}'.format(authenticationEnabled),
             'userDNMapping': '{0}'.format(userDNMapping)
         }
+        if encryption is not None:
+            param['serverCertValidation'] = serverCertValidation
+            if cacert is not None:
+                param['cacert'] = cacert
+        return param
+
+    def setup_ldap_config(self, server, param=None):
+        """
+        Setups ldap configuration on couchbase
+        :param: (optional) - ldap config parameters
+        :server: server to make REST connection to setup ldap on CB cluster
+        """
+        if param is None:
+            param = self.get_ldap_params()
+        rest = RestConnection(server)
         rest.setup_ldap(param, '')
 
+    def add_ldap_user(self, server, user_name="bjones"):
+        """
+        Add an ldap user to CB cluster with RBAC roles
+        """
         roles = '''cluster_admin,ro_admin,
                 bucket_admin[travel-sample],bucket_full_access[travel-sample],
                 data_backup[travel-sample],'''
@@ -133,11 +203,20 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
                             data_dcp_reader[travel-sample:_default:_default],
                             data_monitoring[travel-sample:_default:_default]'''
 
-        # add external users
-        user_name = "bjones"
         payload = "name={0}&roles={1}".format(user_name, roles)
         log.info("User name -- {0} :: Roles -- {1}".format(user_name, roles))
+        rest = RestConnection(server)
         rest.add_external_user(user_name, payload)
+
+    def make_rest_call_with_ldap_user(self, ldap_rest, api=None):
+        """
+        :ldap_rest" - Rest connection object ldap user's credentials
+        :api: - (optional) String url to make rest GET request
+        """
+        if api is None:
+            api = "https://%s:18091/nodes/self" % self.master.ip
+        status, content, response = ldap_rest._http_request(api=api, timeout=10)
+        return status, content, response
 
     def validate_rbac_users_post_upgrade(self, server):
         expected_user_roles = {'cbadminbucket': ['admin'],
@@ -277,6 +356,13 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
                     else:
                         self.fail("Validation failed. The user should not have permission to "
                                   "read the given bucket")
+
+    @staticmethod
+    def copy_file_from_slave_to_server(server, src, dst):
+        log.info("Copying file from slave to server {0}, src{1}, dst{2}".format(server, src, dst))
+        shell = RemoteMachineShellConnection(server)
+        shell.copy_file_local_to_remote(src, dst)
+        shell.disconnect()
 
     def convert_to_pkcs8(self, node):
         """
@@ -473,3 +559,87 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
         self.auth(servers=nodes_in_cluster)
         self.validate_rbac_users_post_upgrade(self.master)
         self.validate_user_roles_sdk(self.master)
+
+    def test_upgrade_with_ldap_root_cert(self):
+        """
+        1. Setup a cluster with x509 certs with n2n encryption enabled.
+        2. Start an ldap container with a root certificate.
+        3. Setup an ldap client connection from CB cluster to ldap server.
+        4. Create an ldap user.
+        5. Upgrade the CB cluster offline.
+        6. Add ldap's root cert to cluster's trusted CAs and make ldap
+        client connection from CB to ldap server using cluster's trusted CAs
+        7. Validate ldap user authentication works
+        """
+        self.log.info("------------- test started-------------")
+        self.generate_x509_certs(self.servers)
+        self.upload_x509_certs(self.servers)
+        ntonencryptionBase().setup_nton_cluster(servers=self.servers,
+                                                clusterEncryptionLevel="all")
+
+        # setup and start ldap container
+        self.log.info("Setting up ldap container")
+        self.docker = LdapContainer()
+        shell = RemoteMachineShellConnection(self.master)
+        self.docker.start_docker(shell)
+        self.docker.stop_all_containers(shell)
+        self.docker.remove_all_containers(shell)
+        self.docker.start_ldap_container(shell)
+        shell.disconnect()
+
+        # Setup ldap config and add an ldap user
+        self.log.info("Setting up ldap config and creating ldap user")
+        param = self.get_ldap_params(hosts='ldap.example.org', port='636', encryption='TLS',
+                                     bindDN='cn=admin,dc=example,dc=org', bindPass="admin",
+                                     serverCertValidation='false',
+                                     userDNMapping='{"template":"cn=%u,dc=example,dc=org"}')
+        self.setup_ldap_config(server=self.master, param=param)
+        self.add_ldap_user(server=self.master, user_name=self.docker.ldap_user)
+
+        for node in self.servers:
+            self.log.info("-------------Performing upgrade on node {0} to version------------- {1}".
+                          format(node, self.upgrade_version))
+            upgrade_threads = self._async_update(upgrade_version=self.upgrade_version,
+                                                 servers=[node])
+            for threads in upgrade_threads:
+                threads.join()
+            self.log.info("Upgrade finished")
+
+        # Add multiple CAs with strict level of n2n encryption
+        CbServer.use_https = True
+        ntonencryptionBase().setup_nton_cluster(servers=self.servers,
+                                                clusterEncryptionLevel="strict")
+        self._reset_original(self.servers)
+        self.x509_new = x509main(host=self.master, standard="pkcs8",
+                                 encryption_type="aes256",
+                                 passphrase_type="script")
+        self.x509_new.generate_multiple_x509_certs(servers=self.servers)
+        for server in self.servers:
+            _ = self.x509_new.upload_root_certs(server)
+        self.x509_new.upload_node_certs(servers=self.servers)
+        self.x509_new.delete_unused_out_of_the_box_CAs(server=self.master)
+
+        # Upload ldap's root CA to cluster's trusted CAs
+        self.log.info("Copying ldap CA to inbox/CA folder")
+        # TODO: Change the hardcoded path (for now it's okay since the VM on which container is running is fixed )
+        self.copy_file_from_slave_to_server(server=self.master, src=self.docker.ldap_ca,
+                                            dst="/opt/couchbase/var/lib/couchbase/inbox/CA/ldap_container_ca.crt")
+        self.log.info("Uploading ldap CA to CB")
+        self.x509_new.upload_root_certs(self.master)
+
+        self.log.info("Changing ldap config to use CB trusted CAs")
+        param = self.get_ldap_params(hosts=self.docker.hostname, port=str(self.docker.ssl_port),
+                                     encryption='TLS',
+                                     bindDN=self.docker.bindDN, bindPass=self.docker.bindPass,
+                                     serverCertValidation='true',
+                                     userDNMapping='{"template":"cn=%u,dc=example,dc=org"}')
+        self.setup_ldap_config(server=self.master, param=param)
+
+        # Validate ldap user post upgrade
+        ldap_rest = RestConnection(self.master)
+        ldap_rest.username = self.docker.ldap_user
+        ldap_rest.password = self.docker.bindPass
+        status, content, response = self.make_rest_call_with_ldap_user(ldap_rest=ldap_rest)
+        if not status:
+            self.fail("Rest call with ldap user credentials failed with content "
+                      "{0}, response{1}".format(content, response))
