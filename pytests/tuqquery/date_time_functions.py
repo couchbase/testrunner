@@ -328,3 +328,21 @@ class DateTimeFunctionClass(QueryTests):
             str_actual = str_actual[:str_actual.find("T")]
 
             self.assertEqual(str_actual, str_expected, "{0} failed ".format(query))
+
+    def test_date_add_calendar_month(self):
+        result = self.run_cbq_query("SELECT DATE_ADD_STR('2020-01-31 00:00:00Z', 1, 'calendar_month')")
+        self.assertEqual(result['results'][0]['$1'], "2020-02-29 00:00:00Z")
+
+        result = self.run_cbq_query("SELECT DATE_ADD_STR('2020-02-29 00:00:00Z', -1, 'calendar_month')")
+        self.assertEqual(result['results'][0]['$1'], "2020-01-31 00:00:00Z")
+
+        result = self.run_cbq_query("SELECT DATE_ADD_STR('2020-01-31 00:00:00Z', 13, 'calendar_month')")
+        self.assertEqual(result['results'][0]['$1'], "2021-02-28 00:00:00Z")
+
+    def test_date_range_calendar_month(self):
+        result = self.run_cbq_query("select DATE_RANGE_STR('2020-01-31','2021-07-01','calendar_month', 3)")
+        self.assertEqual(result['results'][0]['$1'], ["2020-01-31", "2020-04-30", "2020-07-31", "2020-10-31", "2021-01-31", "2021-04-30"])
+
+        result = self.run_cbq_query("select DATE_RANGE_STR('2021-07-01', '2020-01-31', 'calendar_month',-3)")
+        self.assertEqual(result['results'][0]['$1'], ["2021-07-01", "2021-04-01", "2021-01-01", "2020-10-01", "2020-07-01", "2020-04-01"]
+)
