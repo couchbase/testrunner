@@ -2931,7 +2931,6 @@ class RestConnection(object):
             log.error("Bucket {0} was not loaded completely")
             log.error("Last response is: {0}".format(str(response)))
 
-
     # figure out the proxy port
     def create_bucket(self, bucket='',
                       ramQuotaMB=1,
@@ -2982,6 +2981,10 @@ class RestConnection(object):
 
         # bucket storage is applicable only for membase bucket
         if bucketType == "membase":
+            if storageBackend == "magma":
+                if ramQuotaMB in range(256, 1024) and ramQuotaMB < self.get_internalSettings("magmaMinMemoryQuota"):
+                    log.info("Setting magmaMinMemoryQuota to {0} MB".format(ramQuotaMB))
+                    self.set_internalSetting("magmaMinMemoryQuota", ramQuotaMB)
             init_params['storageBackend'] = storageBackend
 
         params = urllib.parse.urlencode(init_params)
