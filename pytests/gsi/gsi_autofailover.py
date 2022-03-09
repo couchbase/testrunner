@@ -16,7 +16,7 @@ from membase.api.rest_client import RestConnection
 from membase.api.exception import RebalanceFailedException, ServerUnavailableException
 
 
-class GSIAutofailover(BaseSecondaryIndexingTests, AutoFailoverBaseTest):
+class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
     def setUp(self):
         super(GSIAutofailover, self).setUp()
         self.log.info("==============  GSIAutofailover setup has started ==============")
