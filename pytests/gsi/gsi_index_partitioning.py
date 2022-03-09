@@ -1725,7 +1725,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                                            server=self.n1ql_node)
         except Exception as ex:
             self.log.info(str(ex))
-            if not "the operation will automaticaly retry after cluster is back to normal" in str(ex):
+            if not "the operation will automatically retry after cluster is back to normal" in str(ex):
                 self.fail(
                     "index drop failed with error : {0}".format(str(ex)))
             else:
@@ -3772,9 +3772,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                     self.log.info("Expected Hosts : {0}".format(expected_hosts))
                     self.log.info("Actual Hosts   : {0}".format(index["hosts"]))
                     #TODO revert after bug fix  https://issues.couchbase.com/browse/MB-51119
-                    if self.use_https:
-                        expected_hosts = ["{}:18091".format(host.split(":")[0]) for host in expected_hosts]
-                    self.assertEqual(index["hosts"], expected_hosts,
+                    #ignoring port validation and just checking for the host IP
+                    expected_hosts = ["{}".format(host.split(":")[0]) for host in expected_hosts]
+                    actual_hosts = [f.split(":")[0] for f in index['hosts']]
+                    self.assertEqual(actual_hosts, expected_hosts,
                                          "Planner did not ignore excluded node during index creation for {0}".format(
                                              index_name))
                     index_validated += 1

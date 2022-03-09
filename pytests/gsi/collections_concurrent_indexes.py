@@ -874,6 +874,9 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             self.assertTrue(f'{node_b.ip}:{node_b.port}' not in index['hosts'])
         
     def test_insufficient_nodes_during_schedule_indexes(self):
+        '''
+        MB-51158
+        '''
         num_of_docs = 10 ** 5
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if len(index_nodes) != 2:
@@ -999,10 +1002,11 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             except Exception as err:
                 self.log.info(err)
             finally:
-                self.wait_until_indexes_online()
                 self.resume_blocked_incoming_network_from_node(self.master, node_b)
+                self.wait_until_indexes_online()
         index_info = self.rest.get_indexer_metadata()['status']
         failed_schedule_indexes = [index['name'] for index in index_info if index['status'] == 'Error']
+        self.log.info(f"Indexes that failed to get scheduled: {failed_schedule_indexes}")
         self.assertTrue(len(failed_schedule_indexes) == 0)
         for index in index_info:
             if index['name'] not in failed_schedule_indexes:
