@@ -167,6 +167,7 @@ class basic_ops(BaseTestCase):
                 opaque, rep_time, persist_time, persisted, cas = \
                     client.observe(key)
 
+            time.sleep(10)
             # Evict the key
             try:
                 rc = mcd.evict_key(key)
