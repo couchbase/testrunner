@@ -1898,7 +1898,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                                                 scan_consistency=CONSISTENCY_REQUEST)["results"][0]["$1"]
         expected_result = self.docs_per_day * 2 * 2016
         if self.dgm_run:
-            self.assertEqual(result > expected_result, "Indexer hasn't recovered properly from in-memory as"
+            self.assertTrue(result > expected_result, "Indexer hasn't recovered properly from in-memory as"
                                                        " indexes haven't catch up with "
                                                        "request_plus/consistency_request")
         else:
