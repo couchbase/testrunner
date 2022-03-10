@@ -14,6 +14,7 @@ from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_4DOT6,\
                           COUCHBASE_FROM_SPOCK, COUCHBASE_FROM_VULCAN,\
                           COUCHBASE_FROM_CHESHIRE_CAT
 from scripts.install import InstallerJob
+from ep_mc_bin_client import MemcachedClient, MemcachedError
 
 class CreateBucketTests(BaseTestCase):
     def setUp(self):
@@ -117,8 +118,19 @@ class CreateBucketTests(BaseTestCase):
                 return
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(self.bucket_name, self.rest),
                             msg='failed to start up bucket with name "{0}'.format(self.bucket_name))
-            gen_load = BlobGenerator('buckettest', 'buckettest-', self.value_size, start=0, end=self.num_items)
-            self._load_all_buckets(self.server, gen_load, "create", 0)
+            if self.bucket_type == "memcached":
+                mc = MemcachedClient(self.master.ip, 11210)
+                mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
+                mc.bucket_select(self.bucket_name)
+                for i in range(self.num_items):
+                    Key = "key" + str(i)
+                    try:
+                        mc.set(Key, 0, 0, "value1")
+                    except MemcachedError as error:
+                        self.fail("Error on creating a doc")
+            else:
+                gen_load = BlobGenerator('buckettest', 'buckettest-', self.value_size, start=0, end=self.num_items)
+                self._load_all_buckets(self.server, gen_load, "create", 0)
             self.cluster.bucket_delete(self.server, self.bucket_name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(self.bucket_name, self.rest, timeout_in_seconds=60),
                             msg='bucket "{0}" was not deleted even after waiting for 30 seconds'.format(self.bucket_name))
