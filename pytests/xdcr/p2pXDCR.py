@@ -1,7 +1,5 @@
 from .xdcrnewbasetests import XDCRNewBaseTest
 from .xdcrnewbasetests import NodeHelper
-from .xdcrnewbasetests import FloatingServers
-from lib.tasks.task import NodesFailureTask
 import random
 import time
 
@@ -150,14 +148,22 @@ class XDCRP2PTests(XDCRNewBaseTest):
                                                      rebalance=True)
 
         if node_failure:
-            tasks = []
             for cluster in self.get_cluster_objects_for_input(node_failure):
-                tasks.append(
-                    NodesFailureTask(cluster.get_master_node(), [random.choice(cluster.get_nodes())],
-                                     node_failure_type, 60))
-            for task in tasks:
-                if task:
-                    task.result()
+                nodes = cluster.get_nodes()
+                chosen_node = nodes[-1]
+                if node_failure_type == "enable_firewall":
+                    NodeHelper.enable_firewall(chosen_node)
+                    time.sleep(60)
+                    NodeHelper.disable_firewall(chosen_node)
+                if node_failure_type == "kill_goxdcr":
+                    NodeHelper.kill_goxdcr(chosen_node)
+                if node_failure_type == "restart_machine":
+                    NodeHelper.reboot_server(chosen_node)
+                if node_failure_type == "restart_couchbase":
+                    NodeHelper.do_a_warm_up(chosen_node)
+                time.sleep(150)
+                for node in nodes[:-1]:
+                    self.verify_p2p_discovery(nodes[-1], node)
 
         self.perform_update_delete()
         self.verify_results()

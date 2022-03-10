@@ -144,10 +144,11 @@ class XDCRSecurityTests(XDCRNewBaseTest):
                     CbServer.x509.rotate_certs(cluster.get_nodes())
             if delete_certs:
                 for cluster in self.get_cluster_objects_for_input(delete_certs):
-                    CbServer.x509.delete_trusted_CAs(cluster.get_nodes())
+                    for node in cluster.get_nodes():
+                        CbServer.x509.delete_trusted_CAs(node)
             if restart_pkey_nodes:
                 for cluster in self.get_cluster_objects_for_input(restart_pkey_nodes):
-                    for node in cluster.get_nodes()[1:]:
+                    for node in cluster.get_nodes():
                         shell = RemoteMachineShellConnection(node)
                         shell.restart_couchbase()
                         shell.disconnect()

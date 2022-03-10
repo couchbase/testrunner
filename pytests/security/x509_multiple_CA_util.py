@@ -667,12 +667,13 @@ class x509main:
                     servers.append(copy.deepcopy(server))
                     break
         self.log.info("nodes affected {0}".format(servers))
-        for server in servers:
-            _ = self.upload_root_certs(server=server, root_ca_names=root_ca_names)
-        self.upload_node_certs(servers=servers)
-        self.create_ca_bundle()
-        self.delete_trusted_CAs(server=servers[0], ids=old_ids,
-                                mark_deleted=False)
+        if len(servers):
+            for server in servers:
+                _ = self.upload_root_certs(server=server, root_ca_names=root_ca_names)
+            self.upload_node_certs(servers=servers)
+            self.create_ca_bundle()
+            self.delete_trusted_CAs(server=servers[0], ids=old_ids,
+                                    mark_deleted=False)
 
     def upload_root_certs(self, server=None, root_ca_names=None):
         """
