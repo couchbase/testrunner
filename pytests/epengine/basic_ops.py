@@ -116,7 +116,9 @@ class basic_ops(BaseTestCase):
             while persisted == 0:
                 opaque, rep_time, persist_time, persisted, cas = client.observe(KEY_NAME + str(i))
 
+        start_time = time.time()
         self._load_doc_data_all_buckets(batch_size=1000)
+        end_time = time.time()
 
         for i in range(1000):
             try:
@@ -127,7 +129,8 @@ class basic_ops(BaseTestCase):
                 self.fail("Exception with del_with meta - {0}".format(exp))
         self.cluster.compact_bucket(self.master, "default")
         if self.maxttl:
-            self.sleep(self.maxttl)
+            time_to_sleep = (self.maxttl - (end_time - start_time)) + 20
+            self.sleep(int(time_to_sleep))
         else:
             self.sleep(60)
         active_bucket_items = rest.get_active_key_count("default")
