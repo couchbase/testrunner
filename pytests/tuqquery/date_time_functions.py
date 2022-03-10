@@ -344,5 +344,11 @@ class DateTimeFunctionClass(QueryTests):
         self.assertEqual(result['results'][0]['$1'], ["2020-01-31", "2020-04-30", "2020-07-31", "2020-10-31", "2021-01-31", "2021-04-30"])
 
         result = self.run_cbq_query("select DATE_RANGE_STR('2021-07-01', '2020-01-31', 'calendar_month',-3)")
-        self.assertEqual(result['results'][0]['$1'], ["2021-07-01", "2021-04-01", "2021-01-01", "2020-10-01", "2020-07-01", "2020-04-01"]
-)
+        self.assertEqual(result['results'][0]['$1'], ["2021-07-01", "2021-04-01", "2021-01-01", "2020-10-01", "2020-07-01", "2020-04-01"])
+
+    def test_str_to_millis(self):
+        dates = ["1985-03-26T11:22:53-06", "1985-03-26T11:22:53-0600", "1985-03-26T11:22:53-06:00"]
+        for date in dates:
+            with self.subTest(f'Date: {date}'):
+                result = self.run_cbq_query(f'select STR_TO_MILLIS("{date}")')
+                self.assertEqual(result['results'][0]['$1'], 480705773000)
