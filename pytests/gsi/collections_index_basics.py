@@ -915,6 +915,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         collection = 'test_collection'
         self.prepare_collection_for_indexing()
         self.collection_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
+        self.sleep(30)
         index_gen = QueryDefinition(index_name='idx', index_fields=['age'])
 
         collection_namespace = f'default:{self.test_bucket}.{scope}.{collection}'

@@ -1807,12 +1807,20 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self.create_index(bucket="default", query_definition=query_definition)
 
         # Checking item_count in all indexes
-        self.sleep(timeout=10, message="Allowing indexes to index all item in bucket")
-        rest = RestConnection(self.master)
-        for item in range(4):
-            indexed_item = rest.get_index_stats()["default"]["idx_{0}".format(item)]["items_count"]
-            self.assertEqual(indexed_item, self.docs_per_day * 2016, "Failed to index all the item in bucket")
-
+        # Check whether all the indexes have indexed all the items
+        all_items_indexed_flag = False
+        for i in range(20):
+            result_list = []
+            rest = RestConnection(self.master)
+            for item in range(4):
+                indexed_item = rest.get_index_stats()["default"]["idx_{0}".format(item)]["items_count"]
+                result_list.append(indexed_item == self.docs_per_day * 2016)
+            if len([item for item in result_list if item]) == 4:
+                all_items_indexed_flag = True
+                break
+            self.sleep(10)
+        if not all_items_indexed_flag:
+            self.fail("Failed to index all the items in the bucket.")
         data_nodes = self.get_kv_nodes()
         node_b, node_c = (None, None)
         for node in data_nodes:

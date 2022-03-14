@@ -73,7 +73,7 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
         self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
                                             bucket_params=self.bucket_params)
         self.buckets = self.rest.get_buckets()
-        self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection)
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=10**5)
         self._create_indexes()
         self.enable_autofailover_and_validate()
         self.sleep(5)
@@ -94,7 +94,7 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
         self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
                                             bucket_params=self.bucket_params)
         self.buckets = self.rest.get_buckets()
-        self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection)
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=10 ** 5)
         self._create_indexes()
         # enable auto failover and canAbortRebalance
         self.enable_autofailover_and_validate()
@@ -102,12 +102,13 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
         rebalance_task = self.cluster.async_rebalance(servers=self.servers,
                                                       to_add=self.servers_to_add,
                                                       to_remove=self.servers_to_remove,
-                                                      services=['kv']
+                                                      services=['kv', 'index']
                                                       )
         self.sleep(20)
         reached = RestHelper(self.rest).rebalance_reached(percentage=20)
         self.assertTrue(reached, "Rebalance failed or did not reach {0}%".format(20))
-        # Do a fail over action - reboot, hang, kill. This is defined in the conf file
+        # Do a fail over action - reboot, hang, kill. This is defined in the conf file. Test sometimes fail
+        # because the rebalance action is completed fast and there's no way to induce a failure.
         self.failover_actions[self.failover_action](self)
         try:
             rebalance_task.result()

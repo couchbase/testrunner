@@ -93,7 +93,7 @@ class UpgradePartialParititionedIndex(UpgradeSecondaryIndex):
             query="UPDATE `{0}` USE KEYS '{1}' SET status = 'ERROR'".format(self.bucket_name, update_error),
             server=self.n1ql_node)
 
-        time.sleep(40)
+        time.sleep(5)
 
         pending_results = self.n1ql_helper.run_cbq_query('SELECT meta().id FROM `{0}` WHERE createdDateTime BETWEEN 1 AND 10 AND status = "PENDING" order by meta().id'.format(self.bucket_name))
         success_results = self.n1ql_helper.run_cbq_query('SELECT meta().id FROM `{0}` WHERE createdDateTime BETWEEN 1 AND 10 AND status = "SUCCESS" order by meta().id'.format(self.bucket_name))
@@ -191,27 +191,15 @@ class UpgradePartialParititionedIndex(UpgradeSecondaryIndex):
                     'SELECT meta().id FROM `{0}` WHERE createdDateTime BETWEEN 1 AND 10 AND status = "SUCCESS" order by meta().id'.format(
                         self.bucket_name))
                 if key == "K1":
-                    if self.mixed_mode_kv:
-                        pending_expected = [{u'id': u'K1'},{u'id': u'K2'}, {u'id': u'K3'}, {u'id': u'K4'}]
-                        success_expected = [{u'id': u'K1'},{u'id': u'K2'}, {u'id': u'K3'}]
-                        self.assertEqual(pending_results['results'], pending_expected)
-                        self.assertEqual(success_results['results'], success_expected)
-                    else:
-                        pending_expected = [{u'id': u'K1'}]
-                        success_expected = [{u'id': u'K2'}, {u'id': u'K3'}]
-                        self.assertEqual(pending_results['results'], pending_expected)
-                        self.assertEqual(success_results['results'], success_expected)
+                    pending_expected = [{u'id': u'K1'}]
+                    success_expected = [{u'id': u'K2'}, {u'id': u'K3'}]
+                    self.assertEqual(pending_results['results'], pending_expected)
+                    self.assertEqual(success_results['results'], success_expected)
                 if key == "K2":
-                    if self.mixed_mode_kv:
-                        pending_expected = [{u'id': u'K1'},{u'id': u'K2'},{u'id': u'K3'}, {u'id': u'K4'}]
-                        success_expected = [{u'id': u'K1'},{u'id': u'K2'}, {u'id': u'K3'}]
-                        self.assertEqual(pending_results['results'], pending_expected)
-                        self.assertEqual(success_results['results'], success_expected)
-                    else:
-                        pending_expected = [{u'id': u'K1'},{u'id': u'K2'}]
-                        success_expected = [{u'id': u'K3'}]
-                        self.assertEqual(pending_results['results'], pending_expected)
-                        self.assertEqual(success_results['results'], success_expected)
+                    pending_expected = [{u'id': u'K1'},{u'id': u'K2'}]
+                    success_expected = [{u'id': u'K3'}]
+                    self.assertEqual(pending_results['results'], pending_expected)
+                    self.assertEqual(success_results['results'], success_expected)
 
         self.n1ql_helper.run_cbq_query(
             query="UPDATE `{0}` USE KEYS {1} SET status = 'PENDING'".format(self.bucket_name, update_pending),
@@ -225,22 +213,13 @@ class UpgradePartialParititionedIndex(UpgradeSecondaryIndex):
         error_results = self.n1ql_helper.run_cbq_query(
             'SELECT meta().id FROM `{0}` WHERE createdDateTime BETWEEN 1 AND 10 AND status = "ERROR" order by meta().id'.format(self.bucket_name))
 
-        if self.mixed_mode_kv:
-            pending_expected = [{u'id': u'K1'}, {u'id': u'K2'}, {u'id': u'K3'},{u'id': u'K4'}]
-            success_expected = [{u'id': u'K1'}, {u'id': u'K2'}, {u'id': u'K3'}]
-            error_expected = [{u'id': u'K4'}]
+        pending_expected = [{u'id': u'K1'}, {u'id': u'K2'}]
+        success_expected = [{u'id': u'K3'}]
+        error_expected = [{u'id': u'K4'}]
 
-            self.assertEqual(pending_results['results'], pending_expected)
-            self.assertEqual(success_results['results'], success_expected)
-            self.assertEqual(error_results['results'], error_expected)
-        else:
-            pending_expected = [{u'id': u'K1'}, {u'id': u'K2'}]
-            success_expected = [{u'id': u'K3'}]
-            error_expected = [{u'id': u'K4'}]
-
-            self.assertEqual(pending_results['results'], pending_expected)
-            self.assertEqual(success_results['results'], success_expected)
-            self.assertEqual(error_results['results'], error_expected)
+        self.assertEqual(pending_results['results'], pending_expected)
+        self.assertEqual(success_results['results'], success_expected)
+        self.assertEqual(error_results['results'], error_expected)
         try:
             self.n1ql_helper.run_cbq_query(query="CREATE PRIMARY INDEX on `standard_bucket0`", server=self.n1ql_node)
             self.wait_until_indexes_online()

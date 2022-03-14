@@ -67,7 +67,8 @@ class GSIProjectorTests(GSIIndexPartitioningTests):
                                           memoryQuota=256)
 
         for bucket in self.buckets:
-            self.shell.execute_cbworkloadgen(self.rest.username, self.rest.password, self.number_of_documents, 100, bucket.name, self.doc_size, '-j')
+            self.shell.execute_cbworkloadgen(self.rest.username, self.rest.password, self.number_of_documents, 100, bucket.name, self.doc_size, '-j',
+                                             timeout=3600)
 
         create_index_query = "CREATE INDEX idx4 ON default(age) where age < 15 USING GSI"
 
@@ -129,7 +130,8 @@ class GSIProjectorTests(GSIIndexPartitioningTests):
                                           memoryQuota=256)
 
         for bucket in self.buckets:
-            self.shell.execute_cbworkloadgen(self.rest.username, self.rest.password, self.number_of_documents, 100, bucket.name, self.doc_size, '-j')
+            self.shell.execute_cbworkloadgen(self.rest.username, self.rest.password, self.number_of_documents, 100, bucket.name, self.doc_size, '-j',
+                                             timeout=3600)
 
         for bucket in self.buckets:
             build_index_query = "BUILD INDEX ON %s(idx1,idx2,idx3) USING GSI" % bucket.name

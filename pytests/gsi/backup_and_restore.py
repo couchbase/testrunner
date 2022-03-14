@@ -771,7 +771,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             len(replica_indexes_before_backup), self.num_index_replicas + 1)
         indexes_before_backup = [
             index for index in replica_indexes_before_backup
-            if index['name'] == replica_index.index_name]
+            if index['indexName'] == replica_index.index_name]
         namespaces = ["_default._default"]
         backup_result = backup_client.backup(namespaces=namespaces)
         self.assertTrue(backup_result[0], str(backup_result[1]))
@@ -780,7 +780,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.run_cbq_query(query)
         self.sleep(5, "wait for index to drop")
         out_nodes = [
-           node for node in self.indexer_nodes if self.master.ip != node.ip]
+           node for node in self.indexer_nodes if node.ip not in  [self.master.ip, self.indexer_nodes[0].ip]]
         out_node = out_nodes[0]
         rebalance = self.cluster.async_rebalance(
             self.servers[:self.nodes_init], [], [out_node])
