@@ -352,3 +352,26 @@ class DateTimeFunctionClass(QueryTests):
             with self.subTest(f'Date: {date}'):
                 result = self.run_cbq_query(f'select STR_TO_MILLIS("{date}")')
                 self.assertEqual(result['results'][0]['$1'], 480705773000)
+
+    def test_date_trunc_str(self):
+        date = "2016-05-18T03:59:59.123Z"
+        expected = {
+            'millennium': '2000-01-01T00:00:00Z',
+            'century': '2000-01-01T00:00:00Z',
+            'decade': '2010-01-01T00:00:00Z',
+            'year': '2016-01-01T00:00:00Z',
+            'quarter': '2016-04-01T00:00:00Z',
+            'month': '2016-05-01T00:00:00Z',
+            'calendar_month': '2016-05-01T00:00:00Z',
+            'week': '2016-05-15T00:00:00Z',
+            'iso_week': '2016-05-16T00:00:00Z',
+            'day': '2016-05-18T00:00:00Z',
+            'hour': '2016-05-18T03:00:00Z',
+            'minute': '2016-05-18T03:59:00Z',
+            'second': '2016-05-18T03:59:59Z',
+            'millisecond': '2016-05-18T03:59:59.123Z'
+        }
+        for date_part in expected:
+            with self.subTest(f'Date part: {date_part}'):
+                result = self.run_cbq_query(f"SELECT DATE_TRUNC_STR('{date}', '{date_part}')")
+                self.assertEqual(result['results'][0]['$1'], expected[date_part], f"Failed to truncate to {date_part}. We got {result['results'][0]['$1']} instead of {expected[date_part]}")
