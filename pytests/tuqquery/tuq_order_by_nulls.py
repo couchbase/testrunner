@@ -357,3 +357,38 @@ class OrderByNullsTests(QueryTests):
 
     def _unload_test_data(self):
         self.cluster.bucket_delete(self.master, self.test_buckets)
+
+    def test_order_by_param(self):
+        self.run_cbq_query('DELETE FROM system:prepareds WHERE name = "v5"')
+        self.run_cbq_query('DELETE FROM default WHERE meta().id in ["t1","t2","t3"]')
+        self.run_cbq_query('insert into default (key,value) values("t1",{"a":1}),("t2",{"a":2}),("t3",{"a":null})')
+        self.run_cbq_query(f'prepare v5 from select * from default as d where meta().id in ["t1","t2","t3"] order by d.[$c] $o nulls $n')
+
+        with self.subTest('ASC/FIRST'):
+            expected = self.run_cbq_query(f'select * from default as d where meta().id in ["t1","t2","t3"] order by a asc nulls first')
+            actual = self.run_cbq_query('execute v5 using {"c": "a", "o":"asc", "n":"first"}')
+            self.assertEqual(actual['results'], expected['results'])
+        with self.subTest('ASC/LAST'):
+            expected = self.run_cbq_query(f'select * from default as d where meta().id in ["t1","t2","t3"] order by a asc nulls last')
+            actual = self.run_cbq_query('execute v5 using {"c": "a", "o":"asc", "n":"last"}')
+            self.assertEqual(actual['results'], expected['results'])
+        with self.subTest('DESC/FIRST'):
+            expected = self.run_cbq_query(f'select * from default as d where meta().id in ["t1","t2","t3"] order by a desc nulls first')
+            actual = self.run_cbq_query('execute v5 using {"c": "a", "o":"desc", "n":"first"}')
+            self.assertEqual(actual['results'], expected['results'])
+        with self.subTest('DESC/LAST'):
+            expected = self.run_cbq_query(f'select * from default as d where meta().id in ["t1","t2","t3"] order by a desc nulls last')
+            actual = self.run_cbq_query('execute v5 using {"c": "a", "o":"desc", "n":"last"}')
+            self.assertEqual(actual['results'], expected['results'])
+        with self.subTest('DESC/MISSING'):
+            expected = self.run_cbq_query(f'select * from default as d where meta().id in ["t1","t2","t3"] order by a desc nulls last')
+            actual = self.run_cbq_query('execute v5 using {"c": "a", "o":"desc"}')
+            self.assertEqual(actual['results'], expected['results'])
+        with self.subTest('ASC/MISSING'):
+            expected = self.run_cbq_query(f'select * from default as d where meta().id in ["t1","t2","t3"] order by a asc nulls first')
+            actual = self.run_cbq_query('execute v5 using {"c": "a", "o":"asc"}')
+            self.assertEqual(actual['results'], expected['results'])
+        with self.subTest('MISSING/MISSING'):
+            expected = self.run_cbq_query(f'select * from default as d where meta().id in ["t1","t2","t3"] order by a asc nulls first')
+            actual = self.run_cbq_query('execute v5 using {"c": "a"}')
+            self.assertEqual(actual['results'], expected['results'])
