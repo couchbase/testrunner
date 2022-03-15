@@ -273,6 +273,7 @@ class QueryExpirationTests(QueryTests):
         self.wait_for_bucket_docs({self.sample_bucket: result_count}, 5, 120)
         self._wait_for_index_online(self.sample_bucket, self.sample_bucket_index)
         num_docs = self.get_item_count(self.master, bucket)
+        self.log.info(f'num_docs is {num_docs}')
         get_doc_ids_query = 'SELECT META().id FROM {0}'.format(query_sample_bucket)
         result = self.run_cbq_query(get_doc_ids_query)
         doc_ids_for_new_insertion = ['k00', 'k01', 'k02', 'k03']
@@ -293,12 +294,12 @@ class QueryExpirationTests(QueryTests):
         for query in query_with_zero_ttl:
             self.run_cbq_query(query)
 
+        self.sleep(10)
         select_exp_query = "SELECT META().id, META().expiration FROM {0}".format(query_default_bucket)
         result = self.run_cbq_query(select_exp_query)
         for item in result['results']:
             if item['id'] in doc_ids_for_new_insertion:
                 self.assertEqual(item['expiration'], 0, "Expiration is not set to 0 for new insertions")
-
         new_num_docs = self.get_item_count(self.master, bucket)
         self.assertEqual(new_num_docs, num_docs + len(query_with_zero_ttl) - 1 + result_count,
                          "Some of newly inserted docs are missing")
@@ -542,6 +543,7 @@ class QueryExpirationTests(QueryTests):
         for query in query_with_zero_ttl:
             self.run_cbq_query(query)
 
+        self.sleep(10)
         select_exp_query = "SELECT META().id, META().expiration FROM {0}".format(query_default_bucket)
         result = self.run_cbq_query(select_exp_query)
         for item in result['results']:
@@ -617,6 +619,7 @@ class QueryExpirationTests(QueryTests):
                                          ' WHERE b.type = "brewery" LIMIT {1}'.format(query_sample_bucket,
                                                                                       update_count)
         self.run_cbq_query(update_field_with_expiry_query)
+        self.sleep(10)
         check_update_query = 'SELECT COUNT(type) FROM {0} where type = "Brewery"'.format(query_sample_bucket)
         result = self.run_cbq_query(check_update_query)
         self.assertEqual(result['results'][0]['$1'], update_count * 3,  # for previous 2 updates + this update
