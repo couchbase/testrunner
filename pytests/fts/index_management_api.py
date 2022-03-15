@@ -314,9 +314,9 @@ class IndexManagementAPI(FTSBaseTest):
                                                   expected_no_of_results=None)
         self.log.info("Hits: %s" % hits)
         self.log.info("Matches: %s" % matches)
-        if "pindex not available" in str(status["errors"]):
+        if "pindex not available" in matches:
             self.log.info("Expected error \"pindex not available\" exits in errors of query : {0}"
-                          .format(status["errors"]))
+                          .format(matches))
         else:
             self.fail("Expected error \"pindex not available\" not found")
 
@@ -329,7 +329,7 @@ class IndexManagementAPI(FTSBaseTest):
                                                           expected_hits=None,
                                                           expected_no_of_results=None)
         self.log.info("Hits: %s" % hits)
-        if "errors" in status.keys():
+        if "errors" in status.keys() and status["errors"]:
             self.fail("Errors found while running query : {0}".format(status["errors"]))
 
     def test_query_control_n1fty(self):
