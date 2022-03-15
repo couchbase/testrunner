@@ -72,7 +72,7 @@ class basic_ops(BaseTestCase):
         while persisted == 0:
                 opaque, rep_time, persist_time, persisted, cas = client.observe(KEY_NAME)
 
-
+        time.sleep(10)
         try:
             rc = mcd.evict_key(KEY_NAME)
 
@@ -224,7 +224,7 @@ class basic_ops(BaseTestCase):
         document_size = self.input.param('document_size')
         # generate docs with size >=  1MB , See MB-29333
         gens_load = self.generate_docs_bigdata(docs_per_day=(25 * docs_per_day), document_size=document_size)
-        self.load(gens_load, buckets=self.src_bucket, verify_data=False, batch_size=10)
+        self.load(gens_load, buckets=self.src_bucket, verify_data=False, batch_size=docs_per_day)
 
         # check if all the documents(250) are loaded else the test has failed with "Memcached Error 134"
         mc = MemcachedClient(self.master.ip, 11210)
@@ -242,7 +242,7 @@ class basic_ops(BaseTestCase):
         document_size = self.input.param('document_size')
         # generate docs with size >=  1MB , See MB-29333
         gens_load = self.generate_docs_bigdata(docs_per_day=(25 *docs_per_day), document_size=document_size)
-        self.load(gens_load, buckets=self.src_bucket, verify_data=False, batch_size=10)
+        self.load(gens_load, buckets=self.src_bucket, verify_data=False, batch_size=docs_per_day)
 
         # check if all the documents(125) are loaded else the test has failed with "Memcached Error 134"
         mc = MemcachedClient(self.master.ip, 11210)
