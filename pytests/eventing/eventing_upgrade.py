@@ -822,8 +822,8 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         body['settings']['log_level'] = self.eventing_log_level
         body['depcfg']['curl'] = []
         body['depcfg']['buckets'] = []
-        body['function_scope'] = {"bucket": self.src_bucket_name,
-                                  "scope": "_default"}
+        body['function_scope'] = {"bucket": "*",
+                                  "scope": "*"}
         for binding in bucket_bindings:
             bind_map=binding.split(".")
             if  len(bind_map)< 3:
