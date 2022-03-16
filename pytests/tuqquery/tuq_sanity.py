@@ -1871,7 +1871,7 @@ class QuerySanityTests(QueryTests):
                     self.assertTrue(plan['~children'][0]['index'] == 'ix1')
 
                     self.query = 'select d.x,d.y from {0} d where x IN (select raw b.x from {0} b  where b.x  ' \
-                                 'IN (select raw d.x from {0} c  use keys["kk02"]))'.format(query_bucket)
+                                 'IN (select raw c.x from {0} c  use keys["kk02"]))'.format(query_bucket)
                     actual_result = self.run_cbq_query()
                     diffs = DeepDiff(actual_result['results'], [{'y': 101, 'x': 100}], ignore_order=True)
                     if diffs:
