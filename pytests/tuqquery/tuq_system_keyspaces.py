@@ -54,6 +54,7 @@ class QuerySystemKeyspacesTests(QueryTests):
             self.collections_helper.create_collection(bucket_name="default", scope_name='scope1',
                                                       collection_name="collection" + str(i))
         self.run_cbq_query(query="DROP collection default:default.scope1.collection7")
+        self.sleep(10)
         results = self.run_cbq_query(query="select * from system:all_keyspaces")
         for result in results['results']:
             if result['all_keyspaces']['name'] == "collection7" and result['all_keyspaces']['scope'] == "scope1":
@@ -63,6 +64,7 @@ class QuerySystemKeyspacesTests(QueryTests):
             found = False
             self.collections_helper.create_collection(bucket_name="default", scope_name='scope1',
                                                       collection_name="collection7")
+            self.sleep(10)
             results = self.run_cbq_query(query="select * from system:all_keyspaces")
             for result in results['results']:
                 if result['all_keyspaces']['name'] == "collection7" and result['all_keyspaces']['scope'] == "scope1":
@@ -92,7 +94,9 @@ class QuerySystemKeyspacesTests(QueryTests):
             self.collections_helper.create_scope(bucket_name="default", scope_name='scope' + str(x))
             for y in range(0, 10):
                 self.collections_helper.create_collection(bucket_name="default", scope_name='scope' + str(x), collection_name="collection" + str(y))
+        self.sleep(10)
         self.collections_helper.delete_scope(bucket_name="default", scope_name='scope1')
+        self.sleep(10)
         results = self.run_cbq_query(query="select * from system:all_keyspaces where `scope` = 'scope1'")
         self.assertTrue(results['metrics']['resultCount'] == 0, "Found a keyspace from the scope that was dropped! {0}".format(results))
         results = self.run_cbq_query(query="select * from system:all_keyspaces")

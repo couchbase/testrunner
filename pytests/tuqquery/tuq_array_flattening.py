@@ -1018,9 +1018,14 @@ class QueryArrayFlatteningTests(QueryTests):
         explain_results = self.run_cbq_query(query="EXPLAIN " + query)
         self.run_cbq_query(query="CREATE PRIMARY INDEX ON `travel-sample`.inventory.hotel")
         self.assertTrue("idx1" in str(explain_results),"The query should be using idx1, check explain results {0}".format(explain_results))
-        self.assertTrue("covers" in str(explain_results),
-                        "The index is not covering, it should be. Check plan {0}".format(explain_results))
-        self.assertTrue("index_group_aggs" in str(explain_results), "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
+        if self.use_unnest:
+            self.assertTrue("covers" not in str(explain_results),
+                            "The index is not covering, it should be. Check plan {0}".format(explain_results))
+            self.assertTrue("index_group_aggs" not in str(explain_results), "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
+        else:
+            self.assertTrue("covers" in str(explain_results),
+                            "The index is not covering, it should be. Check plan {0}".format(explain_results))
+            self.assertTrue("index_group_aggs" in str(explain_results), "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
 
         self.compare_against_primary(query, primary_query)
 
@@ -1044,10 +1049,16 @@ class QueryArrayFlatteningTests(QueryTests):
         self.run_cbq_query(query="CREATE PRIMARY INDEX ON `travel-sample`.inventory.hotel")
         self.assertTrue("idx1" in str(explain_results),
                         "The query should be using idx1, check explain results {0}".format(explain_results))
-        self.assertTrue("covers" in str(explain_results),
-                        "The index is not covering, it should be. Check plan {0}".format(explain_results))
-        self.assertTrue("index_group_aggs" in str(explain_results),
-                        "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
+        if self.use_unnest:
+            self.assertTrue("covers" not in str(explain_results),
+                            "The index is not covering, it should be. Check plan {0}".format(explain_results))
+            self.assertTrue("index_group_aggs" not in str(explain_results),
+                            "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
+        else:
+            self.assertTrue("covers" in str(explain_results),
+                            "The index is not covering, it should be. Check plan {0}".format(explain_results))
+            self.assertTrue("index_group_aggs" in str(explain_results),
+                            "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
 
         self.compare_against_primary(query, primary_query)
 
@@ -1991,7 +2002,7 @@ class QueryArrayFlatteningTests(QueryTests):
     def test_unknown_array_index_key_unnest(self):
         self.load_unknowns_array_key()
 
-        unnest_query = "SELECT META(d).id FROM default AS d USE INDEX (ix2) UNNEST d.arr1 AS v WHERE v.id IS NULL"
+        unnest_query = "SELECT META(d).id FROM default AS d USE INDEX (ix2) UNNEST d.arr1 AS v WHERE v.id IS NULL ORDER by META(d).id"
         unnest_explain_results = self.run_cbq_query(query='EXPLAIN ' + unnest_query)
         self.assertTrue("ix2" in str(unnest_explain_results), f"The correct index is not being used, please check {unnest_explain_results}")
         self.assertTrue("covers" not in str(unnest_explain_results), f"The correct index is not being used, please check {unnest_explain_results}")
@@ -1999,7 +2010,7 @@ class QueryArrayFlatteningTests(QueryTests):
         unnest_results = self.run_cbq_query(query=unnest_query)
         self.assertEqual(unnest_results['results'], [{"id": "k01"}, {"id": "k05"}, {"id": "k05"}])
 
-        unnest_query2 = 'SELECT META(d).id FROM default AS d USE INDEX (ix3) UNNEST d.arr1 AS v WHERE v.id IS NULL'
+        unnest_query2 = 'SELECT META(d).id FROM default AS d USE INDEX (ix3) UNNEST d.arr1 AS v WHERE v.id IS NULL ORDER BY META(d).id'
         unnest_explain_results2 = self.run_cbq_query(query='EXPLAIN ' + unnest_query2)
         self.assertTrue("ix3" in str(unnest_explain_results2), f"The correct index is not being used, please check {unnest_explain_results2}")
         unnest_results2 = self.run_cbq_query(query=unnest_query2)
