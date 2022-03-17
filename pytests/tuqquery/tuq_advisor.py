@@ -743,15 +743,15 @@ class QueryAdvisorTests(QueryTests):
 
     def test_negative_invalid_arg(self):
         query = "SELECT ADVISOR({'action': 'start', 'duration': '10s', 'invalid': 10});"
-        error_message = "Advisor: Invalid arguments"
+        error_message = "Advisor: Invalid arguments."
         error_code = 10503
         try:
             results = self.run_cbq_query(query=query, server=self.master)
             self.fail("Start session did not fail. Error expected: {0}".format(error_message))
         except CBQError as ex:
             error = self.process_CBQE(ex)
-            self.assertEqual(str(error_code) in str(error), f'Error code is wrong please check the error: {error}')
-            self.assertTrue(error_message in str(error), f"The error message is not what we expected please check error: {error}")
+            self.assertEqual(error_code, error['reason']['code'], f'Error code is wrong please check the error: {error}')
+            self.assertEqual(error_message, error['reason']['message'], f"The error message is not what we expected please check error: {error}")
         else:
             self.fail("There were no errors. Error expected: {0}".format(error_message))
 
@@ -916,8 +916,9 @@ class QueryAdvisorTests(QueryTests):
             self.fail()
 
     def test_session_collection_context(self):
-        advise_index1 = "CREATE INDEX adv_lower_city_country ON `airport`(lower(`city`),`country`)"
-        advise_index2 = "CREATE INDEX adv_country_lower_city ON `airport`(`country`,lower(`city`))"
+        advise_index1 = "CREATE INDEX adv_lower_city_country ON `default`:`travel-sample`.`inventory`.`airport`(lower(`city`),`country`)"
+        advise_index2 = "CREATE INDEX adv_country_lower_city ON `default`:`travel-sample`.`inventory`.`airport`(`country`,lower(`city`))"
+
         query1='SELECT airportname FROM airport WHERE lower(city) = "lyon" AND country = "France"'
         query_contexts = ["", f"default:`{self.bucket_name}`.inventory", f"default:`{self.bucket_name}`._default"]
         self.wait_for_index_online(bucket='travel-sample', scope='inventory', collection='airport', index='def_inventory_airport_primary')
