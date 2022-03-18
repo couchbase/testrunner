@@ -3228,11 +3228,10 @@ class XdcrCLITest(CliBaseTest):
                 output_error = output_error.replace("HOSTNAME",\
                                (self.servers[xdcr_hostname].ip,\
                                      "")[xdcr_hostname is None])
-
             for element in output:
                 self.log.info("element {0}".format(element))
-                if "ERROR: unable to set up xdcr remote site remote (400) Bad Request" \
-                        in element:
+                if self._check_output("unable to set up xdcr remote site remote (400) Bad Request",
+                        output):
                     self.log.info("match {0}".format(element))
                     return True
                 elif "Error: hostname (ip) is missing" in element:
@@ -3247,16 +3246,15 @@ class XdcrCLITest(CliBaseTest):
                             in element:
                         self.log.info("match {0}".format(element))
                         return True
-                    elif "ERROR: Authentication failed. Verify username and password." \
-                            in element:
+                    elif self._check_output("Authentication failed. Verify username and password.",
+                            output):
                         self.log.info("match {0}".format(element))
                         return True
                     elif "Certificate must be a single, PEM-encoded x509 certificate" \
                             in element:
                         self.log.info("match {0}".format(element))
                         return True
-                    elif "ERROR: Invalid remote cluster." \
-                            in element:
+                    elif self._check_output("Invalid remote cluster.", output):
                         self.log.info("match {0}".format(element))
                         return True
             self.assertFalse("output string did not match")
