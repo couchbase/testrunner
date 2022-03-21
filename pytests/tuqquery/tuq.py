@@ -1681,14 +1681,19 @@ class QueryTests(BaseTestCase):
         primary_query = query % (bucket, "#primary")
         primary_result = self.run_cbq_query(primary_query)
         self.rest.set_query_index_api_mode(3)
-        self.log.info(" Analyzing Actual Result")
-
-        actual_result = [x['$1'] for x in primary_result["results"] if x['$1']]
         self.log.info(" Analyzing Expected Result")
-        expected_result = [x['$1'] for x in result["results"] if x['$1']]
+
+        expected_result = [x['$1'] for x in primary_result["results"] if x['$1']]
+        self.log.info(" Analyzing Actual Result")
+        actual_result = [x['$1'] for x in result["results"] if x['$1']]
         if len(actual_result) != len(expected_result):
+            self.log.error(f"Result sets do not match in length! actual: {len(actual_result)} , expected: {len(expected_result)}")
             return False
-        if _result_compare(actual_result, expected_result):
+        diffs = DeepDiff(actual_result, expected_result, ignore_order=True, ignore_string_type_changes=True)
+        if diffs:
+            self.log.info(diffs)
+            return False
+        else:
             return True
         return False
 
