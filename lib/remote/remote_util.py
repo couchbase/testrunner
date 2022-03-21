@@ -4675,6 +4675,7 @@ class RemoteMachineShellConnection(KeepRefs):
             cluster_param = (" -c https://{0}".format(cluster_host),
                              "")[cluster_host is None]
             cluster_param += (":{0}".format(cluster_port), ":18091 ")[cluster_port is None]
+            protocol = "https"
         command = cb_client + " " + cli_command + cluster_param + user_param + passwd_param + " " + options
         if protocol == "https": command += " --no-ssl-verify"
         if _stdin:
