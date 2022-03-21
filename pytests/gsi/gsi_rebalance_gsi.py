@@ -50,6 +50,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.alter_index = self.input.param("alter_index", None)
         if self.ansi_join:
             self.rest.load_sample("travel-sample")
+            self.sleep(10)
 
     def tearDown(self):
         super(SecondaryIndexingRebalanceTests, self).tearDown()
@@ -64,6 +65,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.run_operation(phase="before")
         expected_result = None
         if self.ansi_join:
+            self.sleep(10)
             expected_result = self.ansi_join_query(stage="pre_rebalance")
         self.sleep(30)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
@@ -425,6 +427,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
     def test_hard_failover_and_delta_recovery_and_gsi_rebalance(self):
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         if self.ansi_join:
+            self.sleep(10)
             expected_result = self.ansi_join_query(stage="pre_rebalance")
         self.run_operation(phase="before")
         self.sleep(30)
@@ -480,6 +483,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
     def test_graceful_failover_and_full_recovery_and_gsi_rebalance(self):
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         if self.ansi_join:
+            self.sleep(10)
             expected_result = self.ansi_join_query(stage="pre_rebalance")
         self.run_operation(phase="before")
         self.sleep(30)
@@ -512,6 +516,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
     def test_graceful_failover_and_delta_recovery_and_gsi_rebalance(self):
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         if self.ansi_join:
+            self.sleep(10)
             expected_result = self.ansi_join_query(stage="pre_rebalance")
         self.run_operation(phase="before")
         self.sleep(30)
