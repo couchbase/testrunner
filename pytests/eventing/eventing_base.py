@@ -125,12 +125,6 @@ class EventingBaseTest(QueryHelperTests):
                 self.function_scope = {"bucket": self.src_bucket_name, "scope": "_default"}
         self.num_docs=2016
         self.is_binary=self.input.param('binary_doc',False)
-        self.eventing_role=self.input.param('eventing_role', False)
-        if self.eventing_role:
-            self.eventing_role_username="eventing_admin"
-            self.eventing_role_password="password"
-            payload="name="+self.eventing_role_username+"&roles=eventing_admin"+"&password="+self.eventing_role_password
-            RestConnection(self.master).add_set_builtin_user(self.eventing_role_username,payload)
         log.info("==============  EventingBaseTest setup has completed ==============")
 
     def tearDown(self):
