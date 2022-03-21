@@ -561,9 +561,15 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                     else:
                         self.fail(err)
         self.wait_until_indexes_online()
-        index_meta_info = self.rest.get_indexer_metadata()['status']
-        self.assertEqual(len(index_meta_info), len(index_field_list) * (self.num_replicas + 1))
-
+        all_items_indexed_flag = False
+        for i in range(20):
+            index_meta_info = self.rest.get_indexer_metadata()['status']
+            if len(index_meta_info) == len(index_field_list) * (self.num_replicas + 1):
+                all_items_indexed_flag = True
+                break
+            self.sleep(10)
+        if not all_items_indexed_flag:
+            self.fail("Failed to index all the items in the bucket.")
         self.log.info('Starting Rebalance out process')
         remove_nodes = [self.servers[2]]
         task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
@@ -581,6 +587,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         index_meta_info = self.rest.get_indexer_metadata()['status']
         self.assertEqual(len(index_lists) * 2, len(index_meta_info),
                          "Some Index/es  is/are missing due to rebalance failover")
+        self.sleep(30)
         for index_field in index_field_list:
             query = f"select count(*) from {collection_namespace} where {index_field} is not null"
             count = self.run_cbq_query(query=query)['results'][0]['$1']
@@ -643,9 +650,15 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                     else:
                         self.log.error(err)
         self.wait_until_indexes_online()
-        index_meta_info = self.rest.get_indexer_metadata()['status']
-        self.assertEqual(len(index_meta_info), len(index_field_list) * (self.num_replicas + 1))
-
+        all_items_indexed_flag = False
+        for i in range(20):
+            index_meta_info = self.rest.get_indexer_metadata()['status']
+            if len(index_meta_info) == len(index_field_list) * (self.num_replicas + 1):
+                all_items_indexed_flag = True
+                break
+            self.sleep(10)
+        if not all_items_indexed_flag:
+            self.fail("Failed to index all the items in the bucket.")
         self.log.info('Starting Rebalance Swap process')
         add_nodes = [self.servers[2]]
         remove_nodes = [self.servers[1]]
@@ -662,10 +675,11 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         except Exception as err:
             self.log.info(err)
         self.wait_until_indexes_online()
-        self.sleep(5)
+        self.sleep(30)
         index_meta_info = self.rest.get_indexer_metadata()['status']
         self.assertEqual(len(index_lists) * 2, len(index_meta_info),
                          "Some Index/es  is/are missing due to rebalance failover")
+        self.sleep(30)
         for index_field in index_field_list:
             query = f"select count(*) from {collection_namespace} where {index_field} is not null"
             count = self.run_cbq_query(query=query)['results'][0]['$1']

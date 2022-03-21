@@ -118,6 +118,7 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
         self.system_events.add_event(IndexingServiceEvents.query_client_settings_updated(old_setting=old_setting,
                                                                                          new_setting=new_setting,
                                                                                          node=index_node))
+        self.sleep(60)
         result = self.system_events.validate(server=self.master, ignore_order=True)
         if result:
             self.log.error(result)
