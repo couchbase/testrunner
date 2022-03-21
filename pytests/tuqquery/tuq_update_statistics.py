@@ -476,7 +476,7 @@ class QueryUpdateStatsTests(QueryTests):
         if self.scope == '_default' and self.collection == '_default':
             min_size, max_size = 11507, 31591
         else:
-            min_size, max_size = 1332, 1332
+            min_size, max_size = 1424, 1968
         try:
             # run stats
             self.run_cbq_query(query=update_stats)
@@ -486,9 +486,9 @@ class QueryUpdateStatsTests(QueryTests):
             if self.sample_size >= min_size and self.sample_size <=max_size:
                 self.assertEqual(distribution['results'][0]['sampleSize'], self.sample_size)
             elif self.sample_size >= max_size:
-                self.assertEqual(distribution['results'][0]['sampleSize'], max_size)
+                self.assertTrue(distribution['results'][0]['sampleSize'] >= min_size)
             else:
-                self.assertEqual(distribution['results'][0]['sampleSize'], min_size)
+                self.assertEqual(distribution['results'][0]['sampleSize'], max_size)
         except Exception as e:
             self.log.error(f"Update statistics failed: {e}")
             self.fail()
