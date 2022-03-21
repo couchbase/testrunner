@@ -267,7 +267,7 @@ class EventingRBACSupport(EventingBaseTest):
         # drop function scope
         self.rest.delete_bucket(self.src_bucket_name)
         # wait for function to undeploy and delete
-        self.sleep(15)
+        self.wait_for_handler_internal_undeployment_and_deletion(self.function_name)
         # check whether function is deleted or not
         content = json.loads(self.rest.get_list_of_eventing_functions())
         assert content['functions'] == [], "Function was not deleted"

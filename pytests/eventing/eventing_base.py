@@ -1213,3 +1213,17 @@ class EventingBaseTest(QueryHelperTests):
         fh = open(abs_file_path, "r")
         body = fh.read()
         self.rest.import_function(body)
+
+    def wait_for_handler_internal_undeployment_and_deletion(self, name,
+                                                            iterations=60):
+        msg = "Waiting for {0} to undergo internal undeployment and deletion " \
+              "after dropping function scope".format(name)
+        self.sleep(10, message=msg)
+        result = self.rest.get_composite_eventing_status()
+        count = 0
+        while result['apps'] is not None and count < iterations:
+            self.sleep(10, message=msg)
+            result = self.rest.get_composite_eventing_status()
+            count += 1
+        if count == iterations:
+            raise Exception("Function undeployment and deletion did not occur")
