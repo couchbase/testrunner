@@ -292,6 +292,8 @@ LOG_FILE_NAMES = ['cbcollect_info.log', 'couchbase.log', 'couchstore_local.log',
 CB_DOWNLOAD_SERVER = "172.23.126.166"
 CB_DOWNLOAD_SERVER_FQDN = "latestbuilds.service.couchbase.com"
 #CB_DOWNLOAD_SERVER = "10.0.0.117:8080"
+# test from current version to future version, build number needs to add 30000 to get correct build
+FUTURE_BUILD_NUMBER=30000
 
 # old url MV_LATESTBUILD_REPO = "http://builds.hq.northscale.net/latestbuilds/"
 MV_LATESTBUILD_REPO = "http://latestbuilds.service.couchbase.com/"

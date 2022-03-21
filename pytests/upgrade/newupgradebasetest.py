@@ -38,7 +38,7 @@ from testconstants import COUCHBASE_VERSION_3
 from testconstants import COUCHBASE_VERSIONS
 from testconstants import SHERLOCK_VERSION
 from testconstants import CB_VERSION_NAME
-from testconstants import COUCHBASE_FROM_VERSION_3
+from testconstants import COUCHBASE_FROM_VERSION_3, FUTURE_BUILD_NUMBER
 from testconstants import COUCHBASE_MP_VERSION
 from testconstants import CE_EE_ON_SAME_FOLDER
 from collection.collections_cli_client import CollectionsCLI
@@ -71,6 +71,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.initial_version = self.input.param('initial_version', '2.5.1-1083')
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
         self.upgrade_versions = self.input.param('upgrade_version', '2.0.1-170-rel')
+        self.upgrade_to_future_build = self.input.param('upgrade_to_future_build', False)
         self.travel_sample_bucket = self.input.param("travel_sample_bucket", False)
         self.call_ftsCallable = True
         self.upgrade_versions = self.upgrade_versions.split(";")
@@ -461,6 +462,10 @@ class NewUpgradeBaseTest(BaseTestCase):
     def _upgrade(self, upgrade_version, server, queue=None, skip_init=False, info=None,
                  save_upgrade_config=False, fts_query_limit=None, debug_logs=False):
         try:
+            if self.upgrade_to_future_build:
+                tmp = upgrade_version.split("-")
+                tmp[1] = str(int(tmp[1]) + FUTURE_BUILD_NUMBER)
+                upgrade_version = "-".join(tmp)
             remote = RemoteMachineShellConnection(server)
             appropriate_build = self._get_build(server, upgrade_version, remote, info=info)
             self.assertTrue(appropriate_build.url,

@@ -16,7 +16,8 @@ from remote.remote_util import RemoteMachineShellConnection
 from .newupgradebasetest import NewUpgradeBaseTest
 from rebalance.rebalance_base import RebalanceBaseTest
 from couchbase_helper.documentgenerator import BlobGenerator
-from testconstants import COUCHBASE_FROM_SPOCK, COUCHBASE_FROM_CHESHIRE_CAT
+from testconstants import COUCHBASE_FROM_SPOCK, COUCHBASE_FROM_CHESHIRE_CAT,\
+                          FUTURE_BUILD_NUMBER
 
 
 
@@ -241,6 +242,10 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
             if out_nodes:
                 self.log.info("Here is free nodes {0}".format(out_nodes))
                 self.initial_version = self.upgrade_versions[0]
+                if self.upgrade_to_future_build:
+                    tmp = self.upgrade_versions[0].split("-")
+                    tmp[1] = str(int(tmp[1]) + FUTURE_BUILD_NUMBER)
+                    self.initial_version = "-".join(tmp)
                 self._install(out_nodes)
             else:
                 self.log.info("No free nodes")
