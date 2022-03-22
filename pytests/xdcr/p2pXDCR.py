@@ -158,7 +158,7 @@ class XDCRP2PTests(XDCRNewBaseTest):
                 if node_failure_type == "kill_goxdcr":
                     NodeHelper.kill_goxdcr(chosen_node)
                 if node_failure_type == "restart_machine":
-                    NodeHelper.reboot_server(chosen_node)
+                    NodeHelper.reboot_server(chosen_node, self)
                 if node_failure_type == "restart_couchbase":
                     NodeHelper.do_a_warm_up(chosen_node)
                 time.sleep(150)
