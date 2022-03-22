@@ -1163,7 +1163,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.log.info("Remove expired items by checking them")
                 self._verify_all_buckets(self.backupset.restore_cluster_host)
 
-            output = remote_client.list_files(f"{bk_dir}/backup")
+            info = remote_client.extract_remote_info().type.lower()
+            check_dir = bk_dir if info != "windows" else bk_dir.replace("C\\:", "/cygdrive/c")
+            output = remote_client.list_files(f"{check_dir}/backup")
             if not output:
                 self.fail("Could not read backup directory")
             backups_on_disk = len(output) - 3
