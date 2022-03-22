@@ -67,7 +67,6 @@ class auditcli(BaseTestCase):
                 #rest.ldapUserRestOperation(True, [[self.ldapUser]], exclude=None)
                 self.set_user_role(rest, self.ldapUser)
 
-
     def tearDown(self):
         super(auditcli, self).tearDown()
 
@@ -172,7 +171,7 @@ class auditcli(BaseTestCase):
                 cli_command = 'failover'
                 self.log.info("failover node {0}".format(self.servers[nodes_add - nodes_rem - num].ip))
                 options = "--server-failover={0}:8091".format(self.servers[nodes_add - nodes_rem - num].ip)
-                options += " --force"
+                options += " --hard"
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
                 self.log.info("add back node {0} to cluster".format(self.servers[nodes_add - nodes_rem - num ].ip))
                 cli_command = "server-readd"
