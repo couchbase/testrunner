@@ -166,7 +166,7 @@ class auditcli(BaseTestCase):
                 expectedResults = {'source':source, "real_userid:user":self.ldapUser, 'user':self.master.rest_username, "ip":'::1', "port":57457, 'type':'hard', 'nodes':'[ns_1@' + self.servers[nodes_add - nodes_rem - num].ip + ']'}
                 self.checkConfig(self.eventID, self.master, expectedResults)
 
-        if (cli_command == "server-readd"):
+        if (cli_command == "recovery"):
             for num in range(nodes_readd):
                 cli_command = 'failover'
                 self.log.info("failover node {0}".format(self.servers[nodes_add - nodes_rem - num].ip))
@@ -174,8 +174,8 @@ class auditcli(BaseTestCase):
                 options += " --hard"
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
                 self.log.info("add back node {0} to cluster".format(self.servers[nodes_add - nodes_rem - num ].ip))
-                cli_command = "server-readd"
-                options = "--server-add={0}:8091 ".format(self.servers[nodes_add - nodes_rem - num ].ip)
+                cli_command = "recovery"
+                options = "--server-recovery={0}:8091 --recovery-type full".format(self.servers[nodes_add - nodes_rem - num ].ip)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
                 expectedResults = {'node':'ns_1@' + self.servers[nodes_add - nodes_rem - num ].ip, 'type':'full', "real_userid:user":self.ldapUser, 'source':source, 'user':self.master.rest_username, "ip":'::1', "port":57457}
                 self.checkConfig(self.eventID, self.master, expectedResults)
