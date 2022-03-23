@@ -170,7 +170,7 @@ class XDCRSecurityTests(XDCRNewBaseTest):
 
         if rebalance_in:
             for cluster in self.get_cluster_objects_for_input(rebalance_in):
-                cluster.async_rebalance_in()
+                cluster.rebalance_in()
 
         if failover:
             for cluster in self.get_cluster_objects_for_input(failover):
@@ -179,11 +179,11 @@ class XDCRSecurityTests(XDCRNewBaseTest):
 
         if rebalance_out:
             for cluster in self.get_cluster_objects_for_input(rebalance_out):
-                cluster.async_rebalance_out()
+                cluster.rebalance_out()
 
         if swap_rebalance:
             for cluster in self.get_cluster_objects_for_input(swap_rebalance):
-                cluster.async_swap_rebalance()
+                cluster.swap_rebalance()
 
         if pause:
             for cluster in self.get_cluster_objects_for_input(pause):

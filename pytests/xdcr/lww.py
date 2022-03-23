@@ -1420,7 +1420,7 @@ class Lww(XDCRNewBaseTest):
         self._upsert(conn=dest_def, doc_id='lww-0', key='key', val='value')
         self._upsert(conn=dest_def, doc_id='lww-0', key='key1', val='value1')
         self._upsert(conn=c3_def, doc_id='lww-0', key='key2', val='value2')
-        src_def.remove(key='lww-0', scope='scope_1', collection='collection_1')
+        #src_def.remove(key='lww-0', scope='scope_1', collection='collection_1')
 
         self._wait_for_replication_to_catchup()
 

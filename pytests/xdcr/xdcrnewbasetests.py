@@ -3393,14 +3393,24 @@ class XDCRNewBaseTest(unittest.TestCase):
                     Utility.get_rc_name(
                         src_cluster.get_name(),
                         dest_cluster.get_name()),
-                    self._demand_encryption
+                    self._demand_encryption,
+                    self._replicator_role,
+                    self._multiple_ca,
+                    self._client_cert,
+                    self._client_key,
+                    self._systemeventlog
                 )
             if "<" in tokens[counter + 1]:
                 dest_cluster.add_remote_cluster(
                     src_cluster,
                     Utility.get_rc_name(
                         dest_cluster.get_name(), src_cluster.get_name()),
-                    self._demand_encryption
+                    self._demand_encryption,
+                    self._replicator_role,
+                    self._multiple_ca,
+                    self._client_cert,
+                    self._client_key,
+                    self._systemeventlog
                 )
             counter += 2
 
