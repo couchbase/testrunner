@@ -492,22 +492,22 @@ class QueryAdviseTests(QueryTests):
             for field in field_list2:
                 self.assertTrue(field in
                                 results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
-                                    'indexes'][1]['index_statement'],
+                                    'indexes'][0]['index_statement'],
                                 "The field is missing from the recommended index: {0}, Index Advised {1}".format(field, results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
-                                    'indexes'][1]['index_statement']))
+                                    'indexes'][0]['index_statement']))
             for field in field_list3:
                 self.assertTrue(field in
                                 results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
-                                    'indexes'][2]['index_statement'],
+                                    'indexes'][1]['index_statement'],
                                 "The field is missing from the recommended index: {0}, Index Advised {1}".format(field, results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
-                                    'indexes'][2]['index_statement']))
+                                    'indexes'][1]['index_statement']))
 
             for field in field_list4:
                 self.assertTrue(field in
                                 results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
-                                    'indexes'][3]['index_statement'],
+                                    'indexes'][1]['index_statement'],
                                 "The field is missing from the recommended index: {0}, Index Advised {1}".format(field, results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
-                                    'indexes'][3]['index_statement']))
+                                    'indexes'][1]['index_statement']))
         except Exception as e:
             self.log.info("Advise statement failed: {0}".format(e))
             self.fail()

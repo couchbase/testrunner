@@ -1649,11 +1649,10 @@ class WindowFunctionsTest(QueryTests):
             db_dict[char_key] = res['agg']
         test_dict = {}
         for alpha in self.alphabet:
-            test_query = "select array_agg(decimal_field) from {0} where char_field='{1}'".format(self.query_bucket,
+            test_query = "select array_agg(decimal_field) from {0} where decimal_field is not null and char_field='{1}'".format(self.query_bucket,
                                                                                                   alpha)
             test_result = self.run_cbq_query(test_query)
             test_dict[alpha] = test_result['results'][0]
-
         for alpha in self.alphabet:
             if alpha in db_dict.keys():
                 db_value = db_dict[alpha]

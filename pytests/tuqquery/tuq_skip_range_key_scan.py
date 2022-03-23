@@ -170,10 +170,10 @@ class QuerySkipRangeScanTests(QueryTests):
         queries["c"] = {"indexes": [self.primary_index_def, index_3], "queries": [query_3a, query_3b],
                         "asserts": [self.verifier(verify_3, 0), self.plan_verifier("spans", spans_3, 1),
                                     self.plan_verifier("index", "idx1", 1)]}
-
-        queries["d"] = {"indexes": [self.primary_index_def, index_4], "queries": [query_4a, query_4b],
-                        "asserts": [self.verifier(verify_4, 0), self.plan_verifier("spans", spans_4, 1),
-                                    self.plan_verifier("index", "idx1", 1)]}
+# Disable query to revisit post Neo
+#        queries["d"] = {"indexes": [self.primary_index_def, index_4], "queries": [query_4a, query_4b],
+#                        "asserts": [self.verifier(verify_4, 0), self.plan_verifier("spans", spans_4, 1),
+#                                    self.plan_verifier("index", "idx1", 1)]}
 
         queries["e"] = {"indexes": [self.primary_index_def, index_5], "queries": [query_5a, query_5b],
                         "asserts": [self.verifier(verify_5, 0), self.plan_verifier("spans", spans_5, 1),
