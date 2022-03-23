@@ -318,7 +318,7 @@ class EventingNegative(EventingBaseTest):
         # create a string with space and other special chars
         err_msg = 'Function name can only start with characters in range A-Z, a-z, 0-9 and can only contain characters in range A-Z, a-z, 0-9, underscore and hyphen'
         try:
-            body = self.create_save_function_body("abc@#$%^&*() +", HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
+            body = self.create_save_function_body("abc@$", HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
         except Exception as e:
             if err_msg not in str(e):
                 self.fail("Deployment is expected to be failed when space is present in function name expected err message {}".format(err_msg))
