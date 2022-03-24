@@ -43,6 +43,7 @@ class QuerySystemKeyspacesTests(QueryTests):
             for y in range(0, 10):
                 self.collections_helper.create_collection(bucket_name="default", scope_name='scope' + str(x), collection_name="collection" + str(y))
                 keyspace_names.append(('scope' + str(x), 'collection' + str(y)))
+        self.sleep(3)
         self.verify_all_keyspaces(keyspace_names)
 
     def test_drop_keyspace(self):
