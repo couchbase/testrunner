@@ -1129,15 +1129,26 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             # Building some indexes twice
             build_query = f'Build index on {collection_namespace}({",".join(indexes_to_build)})'
             self.run_cbq_query(query=build_query)
-            self.sleep(10)
-            self.run_cbq_query(query=build_query)
 
             # Building all indexes with some already built
             build_query = f'Build index on {collection_namespace}({",".join(indexes)})'
             self.run_cbq_query(query=build_query)
+            self.sleep(10)
             self.wait_until_indexes_online()
         except Exception as err:
-            self.fail(str(err))
+            err_msg = "Build index fails. Some index will be retried building in the background"
+            if err_msg in str(err):
+                self.sleep(10)
+                result = self.wait_until_indexes_online()
+                if not result:
+                    self.log.info("Index status check timed out. Retrying one more time")
+                    result = self.wait_until_indexes_online()
+                    if not result:
+                        self.fail("Still not finished building. Check the logs")
+                    else:
+                        self.log.info("All indexes are built")
+            else:
+                self.fail(str(err))
 
     def test_build_multiple_index_concurrently_across_collections(self):
         num_docs = 1000
