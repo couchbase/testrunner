@@ -2048,6 +2048,8 @@ class CouchbaseCluster:
             RestConnection(self.__master_node).set_fts_ram_quota(fts_quota)
 
     def get_node(self, ip, port):
+        if CbServer.use_https:
+            port = CbServer.ssl_port_map.get(str(port), str(port))
         for node in self.__nodes:
             if ip == node.ip and port == node.port:
                 return node
