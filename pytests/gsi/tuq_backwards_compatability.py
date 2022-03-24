@@ -245,8 +245,16 @@ class UpgradeBackwardsCollections(UpgradeSecondaryIndex):
             self.log.info("indexes already exist")
 
         # Make sure we are able to create prepared statements after the upgrade on default bucket
-        self.n1ql_helper.run_cbq_query(query='PREPARE p3 as SELECT * FROM {0}.`_default`.`_default` where name = "employee-9"'.format(self.bucket_name))
-        self.n1ql_helper.run_cbq_query(query='PREPARE p4 as SELECT * FROM {0}.`_default`.`_default` where join_day = 9'.format(self.bucket_name))
+        try:
+            self.n1ql_helper.run_cbq_query(query='PREPARE p3 as SELECT * FROM {0}.`_default`.`_default` where name = "employee-9"'.format(self.bucket_name))
+        except Exception as e:
+            self.log.info("Let's try prepare again in case could not find scope on first try")
+            self.n1ql_helper.run_cbq_query(query='PREPARE p3 as SELECT * FROM {0}.`_default`.`_default` where name = "employee-9"'.format(self.bucket_name))
+        try:
+            self.n1ql_helper.run_cbq_query(query='PREPARE p4 as SELECT * FROM {0}.`_default`.`_default` where join_day = 9'.format(self.bucket_name))
+        except Exception as e:
+            self.log.info("Let's try prepare again in case could not find scope onf first try")
+            self.n1ql_helper.run_cbq_query(query='PREPARE p4 as SELECT * FROM {0}.`_default`.`_default` where join_day = 9'.format(self.bucket_name))
 
         result = self.n1ql_helper.run_cbq_query(query='EXECUTE p1')
         self.assertEqual(result['metrics']['resultCount'], 72)
