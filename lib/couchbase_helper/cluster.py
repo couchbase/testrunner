@@ -1,3 +1,4 @@
+from lib.Cb_constants.CBServer import CbServer
 from tasks.future import Future
 from tasks.taskmanager import TaskManager
 from tasks.task import *
@@ -316,7 +317,7 @@ class Cluster(object):
         return _task
 
     def async_rebalance(self, servers, to_add, to_remove, use_hostnames=False,
-                        services=None, sleep_before_rebalance=None):
+                        services=None, sleep_before_rebalance=None, cluster_config=None):
         """Asyncronously rebalances a cluster
 
         Parameters:
@@ -327,9 +328,13 @@ class Cluster(object):
 
         Returns:
             RebalanceTask - A task future that is a handle to the scheduled task"""
-        _task = RebalanceTask(servers, to_add, to_remove,
-                              use_hostnames=use_hostnames, services=services,
-                              sleep_before_rebalance=sleep_before_rebalance)
+        if CbServer.capella_run:
+            assert cluster_config is not None, "cluster config must be supplied if capella rebalance"
+            _task = CapellaRebalanceTask(to_add, to_remove, services, cluster_config)
+        else:
+            _task = RebalanceTask(servers, to_add, to_remove,
+                                use_hostnames=use_hostnames, services=services,
+                                sleep_before_rebalance=sleep_before_rebalance)
         self.task_manager.schedule(_task)
         return _task
 

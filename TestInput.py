@@ -30,6 +30,7 @@ class TestInput(object):
         self.cbas = []
         self.cbbackupmgr = {}
         self.bkrs_client = None
+        self.capella = dict()
         #servers , each server can have u,p,port,directory
 
     def param(self, name, *args):
@@ -114,6 +115,8 @@ class TestInputServer(object):
         self.upgraded = False
         self.collections_map = {}
         self.cbbackupmgr = {}
+        self.hosted_on_cloud = False
+        self.dummy = False
 
     def __str__(self):
         #ip_str = "ip:{0}".format(self.ip)
@@ -196,7 +199,9 @@ class TestInputParser():
         else:
             input = TestInputParser.parse_from_command_line(argv)
         input.test_params = params
-
+        for server in input.servers:
+            if 'run_as_user' in input.test_params and input.test_params['run_as_user'] != server.rest_username:
+                server.rest_username = input.test_params['run_as_user']
         if "num_clients" not in list(input.test_params.keys()) and input.clients:   # do not override the command line value
             input.test_params["num_clients"] = len(input.clients)
         if "num_nodes" not in list(input.test_params.keys()) and input.servers:
@@ -209,7 +214,7 @@ class TestInputParser():
         servers = []
         ips = []
         input = TestInput()
-        config = configparser.ConfigParser()
+        config = configparser.ConfigParser(interpolation=None)
         config.read(file)
         sections = config.sections()
         global_properties = {}
@@ -227,7 +232,9 @@ class TestInputParser():
         input.cbbackupmgr = {}
         for section in sections:
             result = re.search('^cluster', section)
-            if section == 'servers':
+            if section == "capella":
+                input.capella = TestInputParser.get_capella_config(config, section)  
+            elif section == 'servers':
                 ips = TestInputParser.get_server_ips(config, section)
             elif section == 'clients':
                 client_ips = TestInputParser.get_server_ips(config, section)
@@ -290,6 +297,13 @@ class TestInputParser():
         input.clients = client_ips
 
         return input
+
+    @staticmethod
+    def get_capella_config(config, section):
+        capella = dict()
+        for option in config.options(section):
+            capella[option] = config.get(section, option)
+        return capella
 
     @staticmethod
     def get_server_options(servers, membase_settings, global_properties):

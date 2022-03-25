@@ -93,8 +93,8 @@ class SDKClient(object):
         except AuthenticationException:
             # Try using default user created by the tests, if any, in case there is no user with bucket name in the
             # cluster.
-            username = "cbadminbucket"
-            password = 'password'
+            username = CbServer.rest_username
+            password = CbServer.rest_password
             try:
                 self.cluster = Cluster(self.connection_string,
                                        ClusterOptions(PasswordAuthenticator(username, password)))

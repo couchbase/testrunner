@@ -1,8 +1,8 @@
 from .tuq import QueryTests
 from membase.api.exception import CBQError
 from membase.helper.bucket_helper import BucketOperationHelper
-from collection.collections_n1ql_client import CollectionsN1QL
-
+from lib.collection.collections_n1ql_client import CollectionsN1QL
+from lib.Cb_constants.CBServer import CbServer
 
 class QueryCollectionsEnd2EndTests(QueryTests):
 
@@ -32,6 +32,19 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 }
             ],
             "tests": ["bucket1.scope1.collection1"]
+        },
+        "e2e_default_1scope_1collection": {
+            "buckets": [
+                {
+                    "name": "default",
+                    "scopes": [
+                        {"name": "scope1",
+                         "collections": [{"name": "collection1"}]
+                         }
+                    ]
+                }
+            ],
+            "tests": ["default.scope1.collection1"]
         },
         "e2e_1bucket_1scope_2collections": {
             "buckets": [
@@ -243,7 +256,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
         if not test_data or test_data == {}:
             raise ValueError(f"Test name {test_name} is incorrect, please check .conf file.")
         test_objects_created, error = \
-            self.collections_helper.create_bucket_scope_collection_multi_structure_cli(cluster=self.cluster,
+            self.collections_helper.create_bucket_scope_collection_multi_structure(cluster=self.cluster,
                                                                                    existing_buckets=self.buckets,
                                                                                    bucket_params=self.bucket_params,
                                                                                    data_structure=test_data)
@@ -681,7 +694,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
             bucket_name, scope_name, collection_name = self._extract_object_names(full_keyspace_name=keyspace)
 
             # alter secondary index. Expected result - success.
-            if self.rest.is_enterprise_edition():
+            if self.rest.is_enterprise_edition() and not CbServer.capella_run:
                 try:
                     query = "ALTER INDEX "+keyspace+".idx_val WITH {'action': 'replica_count', 'num_replica': 1}"
 
@@ -708,7 +721,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                                    "message": "Build of secondary index for collection is failed."})
                     pass
             else:
-                self.log.info("Skipping Alter index in Community Edition as it is an EE only feature.")
+                self.log.info("Skipping Alter index in Capella or Community Edition as it is an EE only feature.")
 
 
             # infer collection. Expected result - success.

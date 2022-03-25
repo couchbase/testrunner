@@ -20,8 +20,10 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         self.n1ql_server = self.get_nodes_from_services_map(
             service_type="n1ql")
         self.create_primary_index = False
-        shell = RemoteMachineShellConnection(self.servers[0])
-        info = shell.extract_remote_info().type.lower()
+        info = "linux"
+        if not self.capella_run:
+            shell = RemoteMachineShellConnection(self.servers[0])
+            info = shell.extract_remote_info().type.lower()
         if info == 'linux':
             self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
             self.backup_path = testconstants.LINUX_BACKUP_PATH

@@ -26,23 +26,24 @@ class MovingTopFTS(FTSBaseTest):
         super(MovingTopFTS, self).setUp()
         rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         rest.set_disableFileTransferRebalance(self.disable_file_transfer_rebalance)
-        self.index_path = rest.get_index_path()
-        if self.index_path == "/data":
-            self.reset_data_mount_point(self._cb_cluster.get_fts_nodes())
+        if not self.capella_run:
+            self.index_path = rest.get_index_path()
+            if self.index_path == "/data":
+                self.reset_data_mount_point(self._cb_cluster.get_fts_nodes())
 
     def tearDown(self):
         super(MovingTopFTS, self).tearDown()
-        if self.index_path == "/data":
+        if not self.capella_run and self.index_path == "/data":
             try:
                 self.reset_data_mount_point(self._cb_cluster.get_fts_nodes())
             except Exception as err:
                 self.log.info(str(err))
 
-    def suite_setUp(self):
-        self.log.info("*** MovingTopFTS: suite_setUp() ***")
+    # def suite_setUp(self):
+    #     self.log.info("*** MovingTopFTS: suite_setUp() ***")
 
-    def suite_tearDown(self):
-        self.log.info("*** MovingTopFTS: suite_tearDown() ***")
+    # def suite_tearDown(self):
+    #     self.log.info("*** MovingTopFTS: suite_tearDown() ***")
 
     """ Topology change during indexing"""
 

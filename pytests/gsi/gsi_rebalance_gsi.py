@@ -30,20 +30,21 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.num_retries = self.input.param("num_retries", 1)
         self.build_index = self.input.param("build_index", False)
         self.rebalance_out = self.input.param("rebalance_out", False)
-        shell = RemoteMachineShellConnection(self.servers[0])
-        info = shell.extract_remote_info().type.lower()
-        if info == 'linux':
-            if self.nonroot:
-                self.cli_command_location = testconstants.LINUX_NONROOT_CB_BIN_PATH
+        if not self.capella_run:
+            shell = RemoteMachineShellConnection(self.servers[0])
+            info = shell.extract_remote_info().type.lower()
+            if info == 'linux':
+                if self.nonroot:
+                    self.cli_command_location = testconstants.LINUX_NONROOT_CB_BIN_PATH
+                else:
+                    self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
+            elif info == 'windows':
+                self.cmd_ext = ".exe"
+                self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH_RAW
+            elif info == 'mac':
+                self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
             else:
-                self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
-        elif info == 'windows':
-            self.cmd_ext = ".exe"
-            self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH_RAW
-        elif info == 'mac':
-            self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
-        else:
-            raise Exception("OS not supported.")
+                raise Exception("OS not supported.")
         self.rand = random.randint(1, 1000000000)
         self.alter_index = self.input.param("alter_index", None)
         if self.ansi_join:
@@ -53,11 +54,11 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
     def tearDown(self):
         super(SecondaryIndexingRebalanceTests, self).tearDown()
 
-    def suite_setUp(self):
-        pass
+    # def suite_setUp(self):
+    #     pass
 
-    def suite_tearDown(self):
-        pass
+    # def suite_tearDown(self):
+    #     pass
 
     def test_gsi_rebalance_out_indexer_node(self):
         self.run_operation(phase="before")
@@ -92,7 +93,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # rebalance in a node
         services_in = ["index"]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
-                                                 services=services_in)
+                                                 services=services_in, cluster_config=self.cluster_config)
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()

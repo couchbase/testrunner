@@ -86,7 +86,9 @@ class SDKClient(object):
             # cluster.
             try:
                 cluster = Cluster(self.connection_string, bucket_class=CouchbaseBucket)
-                cluster.authenticate(PasswordAuthenticator("cbadminbucket", 'password'))
+                username = CbServer.rest_username
+                password = CbServer.rest_password
+                cluster.authenticate(PasswordAuthenticator(username, password))
                 self.cb = cluster.open_bucket(self.bucket)
             except AuthError:
                 raise

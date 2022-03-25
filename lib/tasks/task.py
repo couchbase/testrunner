@@ -43,6 +43,7 @@ from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4
     THROUGHPUT_CONCURRENCY, ALLOW_HTP, CBAS_QUOTA, CLUSTER_QUOTA_RATIO
 
 from TestInput import TestInputServer, TestInputSingleton
+from lib.Cb_constants.CBServer import CbServer
 
 try:
     CHECK_FLAG = False
@@ -77,6 +78,7 @@ except Exception as e:
 # import stacktracer
 # stacktracer.trace_start("trace.html",interval=30,auto=True) # Set auto flag to always update file!
 
+from lib.capella.internal_api import capella_utils as CapellaAPI
 
 CONCURRENCY_LOCK = Semaphore(THROUGHPUT_CONCURRENCY)
 PENDING = 'PENDING'
@@ -704,6 +706,76 @@ class ScopeDeleteTask(Task):
         task_manager.schedule(self)
 
 
+class CapellaRebalanceTask(Task):
+    def __init__(self, to_add, to_remove, services, cluster_config):
+        Task.__init__(self, "CapellaRebalanceTask")
+
+        self.rest_username = cluster_config.username
+        self.rest_password = cluster_config.password
+
+        provider, _, compute, disk_type, disk_iops, disk_size = CapellaAPI.spec_options_from_input(TestInputSingleton.input)
+
+        # get current servers list
+        # remove to_remove
+        # add to_add
+
+        self.pod = CbServer.pod
+        self.tenant = CbServer.tenant
+        self.cluster_id = CbServer.cluster_id
+
+        servers = CapellaAPI.get_nodes_formatted(self.pod, self.tenant, self.cluster_id)
+
+        final_servers = []
+        remove_ips = [server.ip for server in to_remove]
+
+        for server in servers:
+            if server.ip not in remove_ips:
+                final_servers.append(server)
+
+        for i, server in enumerate(to_add):
+            if services:
+                server.services = services[i] or ["kv"]
+            final_servers.append(server)
+
+        services_count = CapellaAPI.get_service_counts(final_servers)
+        scale_params = CapellaAPI.create_specs(provider, services_count, compute, disk_type, disk_iops, disk_size)
+        self.scale_params = {"specs": scale_params}
+        self.cluster_config = cluster_config
+
+    def execute(self, task_manager):
+        try:
+            response, content = CapellaAPI.scale(
+                self.pod, self.tenant, self.cluster_id, self.scale_params)
+            if response.status != 202:
+                print(content)
+            assert response.status == 202
+            self.state = CHECKING
+            task_manager.schedule(self)
+        except Exception as e:
+            self.state = FINISHED
+            self.set_exception(e)
+
+    def check(self, task_manager):
+        content = CapellaAPI.jobs(self.pod, self.tenant, self.cluster_id)
+        state = CapellaAPI.get_cluster_state(
+            self.pod, self.tenant, self.cluster_id)
+        if content.get("data") or state != "healthy":
+            for data in content.get("data"):
+                data = data.get("data")
+                if data.get("clusterId") == self.cluster_id:
+                    step, progress = data.get("currentStep"), data.get(
+                        "completionPercentage")
+                    self.log.info("{}: Status=={}, State=={}, Progress=={}%".format(
+                        "Scaling", state, step, progress))
+            task_manager.schedule(self, 10)
+        else:
+            servers = CapellaAPI.get_nodes_formatted(
+                self.pod, self.tenant, self.cluster_id, self.rest_username, self.rest_password)
+            self.cluster_config.update_servers(servers)
+            self.state = FINISHED
+            self.set_result(True)
+
+
 class RebalanceTask(Task):
     def __init__(self, servers, to_add=[], to_remove=[],
                  do_stop=False, progress=30,
@@ -942,23 +1014,19 @@ class StatsWaitTask(Task):
         stat_result = 0
         for server in self.servers:
             try:
-                shell = RemoteMachineShellConnection(server)
-                cbstat = Cbstats(shell)
-                stats = cbstat.all_stats(self.bucket, stat_name=self.param)
+                client = self._get_connection(server)
+                stats = client.stats(self.param)
                 if self.stat not in stats:
                     self.state = FINISHED
                     self.set_exception(Exception("Stat {0} not found".format(self.stat)))
-                    shell.disconnect()
                     return
                 if stats[self.stat].isdigit():
                     stat_result += int(stats[self.stat])
                 else:
                     stat_result = stats[self.stat]
-                shell.disconnect()
             except EOFError as ex:
                 self.state = FINISHED
                 self.set_exception(ex)
-                shell.disconnect()
                 return
         if not self._compare(self.comparison, str(stat_result), self.value):
             self.log.warning("Not Ready: %s %s %s %s expected on %s, %s bucket" % (self.stat, stat_result,
@@ -979,18 +1047,16 @@ class StatsWaitTask(Task):
     def _stringify_servers(self):
         return ''.join([repr(server.ip + ":" + str(server.port)) for server in self.servers])
 
-    def _get_connection(self, server, admin_user='cbadminbucket', admin_pass='password'):
+    def _get_connection(self, server):
         if server not in self.conns:
             for i in range(3):
                 try:
-                    self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket, admin_user=admin_user,
-                                                                             admin_pass=admin_pass)
+                    self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket)
                     return self.conns[server]
                 except (EOFError, socket.error):
                     self.log.error("failed to create direct client, retry in 1 sec")
                     time.sleep(1)
-            self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket, admin_user=admin_user,
-                                                                     admin_pass=admin_pass)
+            self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket)
         return self.conns[server]
 
     def _compare(self, cmp_type, a, b):
@@ -2555,8 +2621,8 @@ class VerifyCollectionDocCountTask(Task):
         self.src_conn = CollectionsStats(src.get_master_node())
         self.dest_conn = CollectionsStats(dest.get_master_node())
 
-        self.src_stats = self.src_conn.get_collection_stats(self.bucket)[0]
-        self.dest_stats = self.dest_conn.get_collection_stats(self.bucket)[0]
+        self.src_stats = self.src_conn.get_collection_stats(self.bucket)
+        self.dest_stats = self.dest_conn.get_collection_stats(self.bucket)
 
     def execute(self, task_manager):
         try:

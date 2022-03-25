@@ -170,7 +170,7 @@ class N1QLHelper():
             bucket = index['bucket'].replace("()","")
             index_name = index['name']
             if index['using'] != 'fts':
-                self.run_cbq_query("drop index {0}.{1}".format(bucket, index_name))
+                self.run_cbq_query("drop index {0}.`{1}`".format(bucket, index_name))
         for index in current_indexes:
             bucket = index['bucket']
             index_name = index['name']
@@ -267,7 +267,7 @@ class N1QLHelper():
         rest = RestConnection(server)
 
         if self.n1ql_port is None or self.n1ql_port == '':
-            self.n1ql_port = self.input.param("n1ql_port", 8093)
+            self.n1ql_port = rest.query_port
             if not self.n1ql_port:
                 self.log.info(" n1ql_port is not defined, processing will not proceed further")
                 raise Exception("n1ql_port is not defined, processing will not proceed further")

@@ -26,6 +26,7 @@ from couchbase_helper.stats_tools import StatsCommon
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from TestInput import TestInputSingleton
+from lib.collection.collections_rest_client import CollectionsRest
 from lib.couchbase_helper.documentgenerator import GeoSpatialDataLoader, WikiJSONGenerator
 from lib.collection.collections_stats import CollectionsStats
 from lib.memcached.helper.data_helper import KVStoreAwareSmartClient
@@ -52,7 +53,8 @@ from couchbase_cli import CouchbaseCLI
 from pytests.security.x509_multiple_CA_util import x509main
 from lib.SystemEventLogLib.Events import EventHelper
 from lib import global_vars
-
+from lib.capella.internal_api import capella_utils as CapellaAPI
+from lib.capella.internal_api import pod, tenant
 
 class RenameNodeException(FTSException):
     """Exception thrown when converting ip to hostname failed
@@ -1334,12 +1336,13 @@ class FTSIndex:
 
         if status:
             self.__cluster.get_indexes().remove(self)
-            if not self.__cluster.are_index_files_deleted_from_disk(self.name):
-                self.__log.error("Status: {0} but index file for {1} not yet "
-                                 "deleted!".format(status, self.name))
-            else:
-                self.__log.info("Validated: all index files for {0} deleted from "
-                                "disk".format(self.name))
+            if not TestInputSingleton.input.param("capella_run", False):
+                if not self.__cluster.are_index_files_deleted_from_disk(self.name):
+                    self.__log.error("Status: {0} but index file for {1} not yet "
+                                     "deleted!".format(status, self.name))
+                else:
+                    self.__log.info("Validated: all index files for {0} deleted from "
+                                    "disk".format(self.name))
         elif not status and "index not found" in content_json['error']:
             self.__log.warning(f"The following index is found in testware cluster, but is not found in CB cluster: {self.name}. Testware cluster is cleaned up.")
             self.__cluster.get_indexes().remove(self)
@@ -2035,9 +2038,14 @@ class CouchbaseCluster:
         # to avoid querying certain nodes that undergo crash/reboot scenarios
         self.__bypass_fts_nodes = []
         self.__bypass_n1ql_nodes = []
+        self.capella_run = TestInputSingleton.input.param("capella_run", False)
         self.__separate_nodes_on_services()
         self.__set_fts_ram_quota()
         self.sdk_compression = sdk_compression
+
+    def update_servers(self, servers):
+        self.__nodes = servers
+        self.__master_node = servers[0]
 
     def __str__(self):
         return "Couchbase Cluster: %s, Master Ip: %s" % (
@@ -2273,6 +2281,9 @@ class CouchbaseCluster:
                  TestInputSingleton.input.param("fdb_compact_threshold", None)):
             for node in self.__fts_nodes:
                 NodeHelper.set_cbft_env_fdb_options(node)
+
+    def update_nodes_list(self, server):
+        self.__nodes.append(server)
 
     def cleanup_cluster(
             self,
@@ -2725,8 +2736,6 @@ class CouchbaseCluster:
         return total_hits, hit_list, time_taken, status, facets
 
     def get_buckets(self):
-        if not self.__buckets:
-            self.__buckets = RestConnection(self.__master_node).get_buckets()
         return self.__buckets
 
     def get_bucket_by_name(self, bucket_name):
@@ -2892,6 +2901,8 @@ class CouchbaseCluster:
                                                         start=0,
                                                         end=num_items)
         tasks = []
+        if not self.__buckets:
+            self.__buckets = RestConnection(self.__master_node).get_buckets()
         for bucket in self.__buckets:
             gen = copy.deepcopy(self._kv_gen[OPS.CREATE])
             tasks.append(
@@ -3365,7 +3376,7 @@ class CouchbaseCluster:
             "Starting rebalance-in nodes:{0} at {1} cluster {2}".format(
                 to_add_node, self.__name, self.__master_node.ip))
         task = self.__clusterop.async_rebalance(self.__nodes, to_add_node, [],
-                                                services=services)
+                                                services=services, cluster_config=self)
         self.__nodes.extend(to_add_node)
         return task
 
@@ -3708,6 +3719,9 @@ class FTSBaseTest(unittest.TestCase):
     def setUp(self):
         unittest.TestCase.setUp(self)
         self._input = TestInputSingleton.input
+        self.capella_run = self._input.param("capella_run", CbServer.capella_run)
+        CbServer.capella_run = self.capella_run
+        self.set_impossible_params()
         self.elastic_node = self._input.elastic
         self.log = logger.Logger.get_logger()
         self.__init_logger()
@@ -3745,6 +3759,9 @@ class FTSBaseTest(unittest.TestCase):
         sdk_compression = self._input.param("sdk_compression", True)
         self.num_index_partitions = TestInputSingleton.input.param("num_partitions", 1)
 
+        if self.capella_run:
+            self.capella_servers_setup()
+
         self.master = self._input.servers[0]
         first_node = copy.deepcopy(self.master)
         self.cli_client = CollectionsCLI(self.master)
@@ -3766,8 +3783,10 @@ class FTSBaseTest(unittest.TestCase):
         if self.java_sdk_client:
             self.log.info("Building docker image with java sdk client")
             JavaSdkSetup()
-
-        self.__setup_for_test()
+        if self.capella_run:
+            self.__setup_for_test_capella()
+        else:
+            self.__setup_for_test()
 
         if self.multiple_ca:
             CbServer.multiple_ca = True
@@ -3804,11 +3823,102 @@ class FTSBaseTest(unittest.TestCase):
         self.log.info(
             "==== FTSbasetests setup is finished for test #{0} {1} ===="
                 .format(self.__case_number, self._testMethodName))
-        if not self.skip_log_scan:
+        if not self.skip_log_scan and not self.capella_run:
             self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.__case_number}'
             _tasks = self._cb_cluster.async_log_scan(self._input.servers, self.log_scan_file_prefix+"_BEFORE")
             for _task in _tasks:
                 _task.result()
+
+
+    def create_capella_config(self):
+        services_count = {}
+        for service in self._cluster_services:
+            service = ",".join(sorted(service.split(",")))
+            if service in services_count:
+                services_count[service] += 1
+            else:
+                services_count[service] = 1
+
+        config = CapellaAPI.create_capella_config(self._input, services_count)
+
+        return config
+
+
+    def capella_servers_setup(self):
+        CbServer.use_https = True
+        CbServer.rest_username = self._input.membase_settings.rest_username
+        CbServer.rest_password = self._input.membase_settings.rest_password
+        self.pod = pod(self._input.capella["pod"])
+        self.tenant = tenant(
+            self._input.capella["tenant_id"],
+            self._input.capella["capella_user"],
+            self._input.capella["capella_pwd"],
+        )
+        self.tenant.project_id = self._input.capella["project_id"]
+        CbServer.pod = self.pod
+        CbServer.tenant = self.tenant
+
+        cluster_details = self.create_capella_config()
+
+        cluster_id, _, _ = CapellaAPI.create_cluster(self.pod, self.tenant, cluster_details)
+
+        self.cluster_id = cluster_id
+        CbServer.cluster_id = cluster_id
+
+        CapellaAPI.add_allowed_ip(self.pod, self.tenant, self.cluster_id)
+        CapellaAPI.create_db_user(self.pod, self.tenant, self.cluster_id, self._input.membase_settings.rest_username, self._input.membase_settings.rest_password)
+
+        servers = CapellaAPI.get_nodes_formatted(
+            self.pod, self.tenant, self.cluster_id, self._input.membase_settings.rest_username, self._input.membase_settings.rest_password)
+        for server in self._input.servers:
+            server.dummy = True
+        for i, server in enumerate(servers):
+            server.services = ",".join(server.services)
+            self._input.servers[i] = server
+
+
+    def __setup_for_test_capella(self):
+        no_buckets = self._input.param("no_buckets", False)
+        server_list = list(filter(lambda server: not server.dummy, copy.deepcopy(self._input.servers)))
+        for server in server_list[1:]:
+            self._cb_cluster.update_nodes_list(server)
+
+        self._cb_cluster.get_indexes()
+        if self._cb_cluster.get_indexes():
+            self._cb_cluster.delete_all_fts_indexes()
+        for node in self._cb_cluster.get_nodes():
+            BucketOperationHelper.delete_all_buckets_or_assert(
+                [node],
+                self)
+        if self.compare_es:
+            self.setup_es()
+
+        self.__set_free_servers()
+        if not no_buckets:
+            self.__create_buckets()
+            if self.container_type == "collection":
+                for bucket in self._cb_cluster.get_buckets():
+                    if type(self.collection) is list:
+                        for c in self.collection:
+                            self._cb_cluster._create_collection(bucket=bucket.name, scope=self.scope, collection=c, cli_client=self.cli_client)
+                    else:
+                        self._cb_cluster._create_collection(bucket=bucket.name, scope=self.scope, collection=self.collection, cli_client=self.cli_client)
+        self._master = self._cb_cluster.get_master_node()
+
+
+    def set_impossible_params(self):
+        """ Skip various params that are impossible if there is no SSH access to the nodes
+        """
+        def set(param, value):
+            setattr(self, param, value)
+            TestInputSingleton.input.test_params[param] = value
+        if self.capella_run:
+            set("skip_cleanup", True)
+            set("skip-cleanup", True)
+            set("skip_log_scan", True)
+            set("skip_init_check_cbserver", True)
+            set("use_https", True)
+            set("reset_services", False)
 
     def __decode_fail(self, errors):
         for err in errors:
@@ -3833,7 +3943,7 @@ class FTSBaseTest(unittest.TestCase):
     def __is_cleanup_not_needed(self):
         return ((self.__is_test_failed() and
                  self._input.param("stop-on-failure", False)) or
-                self._input.param("skip-cleanup", False))
+                self._input.param("skip-cleanup", False) or self._input.param("skip_cleanup", False))
 
     def __is_cluster_run(self):
         return len(set([server.ip for server in self._input.servers])) == 1
@@ -3917,6 +4027,8 @@ class FTSBaseTest(unittest.TestCase):
 
     def tearDown(self):
         """Clusters cleanup"""
+        if self.capella_run:
+            CapellaAPI.destroy_cluster(self.pod, self.tenant, self.cluster_id)
         sys_event_validation_failure = None
         if self.validate_system_event_logs:
             sys_event_validation_failure = \
@@ -3960,7 +4072,7 @@ class FTSBaseTest(unittest.TestCase):
             if hasattr(self, '_outcome') and self._outcome.errors[1][1]:
                 self._outcome.errors = []
                 self.log.info("This is marked as a negative test and contains "
-                              "errors as expected, hence not failing it")
+                                "errors as expected, hence not failing it")
             else:
                 raise FTSException("Negative test passed!")
 
@@ -5268,14 +5380,16 @@ class FTSBaseTest(unittest.TestCase):
                 elastic_port = self.elastic_node.port
                 elastic_username = self.elastic_node.es_username
                 elastic_password = self.elastic_node.es_password
-            return SDKDataLoader(num_ops = self._num_items, percent_create = 100,
-                                           percent_update=0, percent_delete=0, scope=self.scope,
-                                           collection=self.collection,
-                                           json_template=dataset,
-                                           start=start, end=start+num_items,
-                                           es_compare=self.compare_es, es_host=elastic_ip, es_port=elastic_port,
-                                           es_login=elastic_username, es_password=elastic_password, key_prefix=dataset+"_",
-                                           upd_del_shift=self._num_items, output=data_loader_output
+            return SDKDataLoader(num_ops=self._num_items, percent_create=100,
+                                 percent_update=0, percent_delete=0, scope=self.scope,
+                                 collection=self.collection,
+                                 json_template=dataset,
+                                 username=self.master.rest_username,
+                                 password=self.master.rest_password,
+                                 start=start, end=start+num_items,
+                                 es_compare=self.compare_es, es_host=elastic_ip, es_port=elastic_port,
+                                 es_login=elastic_username, es_password=elastic_password, key_prefix=dataset+"_",
+                                 upd_del_shift=self._num_items, output=data_loader_output
                                  )
 
     def populate_create_gen(self,data_loader_output=False):

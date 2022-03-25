@@ -47,32 +47,35 @@ from TestInput import TestInputSingleton, TestInputServer
 from scripts.java_sdk_setup import JavaSdkSetup
 from tasks.future import Future
 
+from lib.cluster_config import ClusterConfig
+
 try:
     from pytests.security.x509_multiple_CA_util import x509main as x509main_multiple_ca
 except ImportError:
     print("Import x509main failed")
 
 
-class BaseTestCase(unittest.TestCase):
+class OnPremBaseTestCase(unittest.TestCase):
     def setUp(self):
         start_time = time.time()
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
+        self.parse_params()
         self.primary_index_created = False
-        self.use_sdk_client = self.input.param("use_sdk_client", False)
-        self.analytics = self.input.param("analytics", False)
-        if self.input.param("log_level", None):
+       
+        if self.log_level:
             self.log.setLevel(level=0)
             for hd in self.log.handlers:
                 if str(hd.__class__).find('FileHandler') != -1:
                     hd.setLevel(level=logging.DEBUG)
                 else:
-                    hd.setLevel(level=getattr(logging, self.input.param("log_level", None)))
+                    hd.setLevel(level=getattr(logging, self.log_level))
+        self.cluster_config = None
         self.servers = self.input.servers
         self.buckets = []
         self.bucket_base_params = {'membase': {}}
         self.master = self.servers[0]
-        self.upgrade_test = self.input.param("upgrade_test", False)
+        
 
         self.indexManager = self.servers[0]
         if not hasattr(self, 'cluster'):
@@ -86,10 +89,6 @@ class BaseTestCase(unittest.TestCase):
             if self.master.ssh_username != "root":
                 self.nonroot = True
         shell.disconnect()
-        """ some tests need to bypass checking cb server at set up
-            to run installation """
-        self.skip_init_check_cbserver = \
-            self.input.param("skip_init_check_cbserver", False)
         self.data_collector = DataCollector()
         self.data_analyzer = DataAnalyzer()
         self.result_analyzer = DataAnalysisResultAnalyzer()
@@ -111,118 +110,23 @@ class BaseTestCase(unittest.TestCase):
         # System event logs object and test parameter
         global_vars.system_event_logs = EventHelper()
         self.system_events = global_vars.system_event_logs
-        self.validate_system_event_logs = \
-            self.input.param("validate_sys_event_logs", False)
 
         try:
-            self.skip_setup_cleanup = self.input.param("skip_setup_cleanup", False)
-            self.vbuckets = self.input.param("vbuckets", 1024)
-            self.collection = self.input.param("collection", False)
-            self.scope_num = self.input.param("scope_num", 4)
-            self.collection_num = self.input.param("collection_num", [2] * self.scope_num)
-            self.index_quota_percent = self.input.param("index_quota_percent", None)
-            self.targetIndexManager = self.input.param("targetIndexManager", False)
-            self.targetMaster = self.input.param("targetMaster", False)
-            self.reset_services = self.input.param("reset_services", False)
-            self.auth_mech = self.input.param("auth_mech", "PLAIN")
-            self.wait_timeout = self.input.param("wait_timeout", 60)
-            # number of case that is performed from testrunner( increment each time)
-            self.case_number = self.input.param("case_number", 0)
-            self.total_testcases = self.input.param("total_testcases", 1)
-            self.last_case_fail = self.input.param("last_case_fail",
-                                                   False)
-            self.default_bucket = self.input.param("default_bucket", True)
-            self.parallelism = self.input.param("parallelism", False)
-            if self.default_bucket:
-                self.default_bucket_name = self.input.param('default_bucket_name', 'default')
-            self.skip_standard_buckets = self.input.param("skip_standard_buckets", False)
-            self.standard_buckets = self.input.param("standard_buckets", 0)
-            # list of list [[2,1,1],[3,1,2,1],[4,1,1,2,3]]
-            self.standard_buckets_scope = self.input.param("bucket_scope", [2] * self.standard_buckets)
             if self.skip_standard_buckets:
                 self.standard_buckets = 0
                 BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers, test_case=self)
-            self.num_buckets = self.input.param("num_buckets", 0)
-            self.verify_unacked_bytes = self.input.param("verify_unacked_bytes", False)
-            self.enable_flow_control = self.input.param("enable_flow_control", False)
-            self.total_buckets = self.default_bucket + self.standard_buckets
-            self.num_servers = self.input.param("servers", len(self.servers))
-            # initial number of items in the cluster
-            self.nodes_init = self.input.param("nodes_init", 1)
-            self.nodes_in = self.input.param("nodes_in", 1)
-            self.nodes_out = self.input.param("nodes_out", 1)
-            self.services_init = self.input.param("services_init", None)
-            self.services_in = self.input.param("services_in", None)
-            self.forceEject = self.input.param("forceEject", False)
-            self.force_kill_memcached = TestInputSingleton.input.param('force_kill_memcached', False)
-            self.num_items = self.input.param("items", 1000)
-            self.value_size = self.input.param("value_size", 512)
-            self.dgm_run = self.input.param("dgm_run", False)
-            self.active_resident_threshold = float(self.input.param("active_resident_threshold", 100))
-            # max items number to verify in ValidateDataTask, None - verify all
-            self.max_verify = self.input.param("max_verify", None)
-            # we don't change consistent_view on server by default
-            self.disabled_consistent_view = self.input.param("disabled_consistent_view", None)
-            self.rebalanceIndexWaitingDisabled = self.input.param("rebalanceIndexWaitingDisabled", None)
-            self.rebalanceIndexPausingDisabled = self.input.param("rebalanceIndexPausingDisabled", None)
-            self.maxParallelIndexers = self.input.param("maxParallelIndexers", None)
-            self.maxParallelReplicaIndexers = self.input.param("maxParallelReplicaIndexers", None)
-            self.quota_percent = self.input.param("quota_percent", None)
+            
             self.port = None
-            self.log_message = self.input.param("log_message", None)
-            self.log_info = self.input.param("log_info", None)
-            self.log_location = self.input.param("log_location", None)
-            self.stat_info = self.input.param("stat_info", None)
-            self.port_info = self.input.param("port_info", None)
-            if not hasattr(self, 'skip_buckets_handle'):
-                self.skip_buckets_handle = self.input.param("skip_buckets_handle", False)
-            self.nodes_out_dist = self.input.param("nodes_out_dist", None)
-            self.absolute_path = self.input.param("absolute_path", True)
-            self.test_timeout = self.input.param("test_timeout", 3600)  # kill hang test and jump to next one.
-            self.enable_bloom_filter = self.input.param("enable_bloom_filter", False)
-            self.enable_time_sync = self.input.param("enable_time_sync", False)
-            self.gsi_type = self.input.param("gsi_type", 'plasma')
-            # bucket parameters go here,
-            self.bucket_size = self.input.param("bucket_size", None)
-            self.bucket_type = self.input.param("bucket_type", 'membase')
-            self.bucket_storage = self.input.param("bucket_storage", 'couchstore')
-            self.num_replicas = self.input.param("replicas", 1)
-            self.enable_replica_index = self.input.param("index_replicas", 1)
-            self.skip_bucket_setup = self.input.param("skip_bucket_setup", False)
-            self.eviction_policy = self.input.param("eviction_policy", 'valueOnly')  # or 'fullEviction'
+            
             # for ephemeral bucket is can be noEviction or nruEviction
             if self.bucket_type == 'ephemeral' and self.eviction_policy == 'valueOnly':
                 # use the ephemeral bucket default
                 self.eviction_policy = 'noEviction'
 
-                # for ephemeral buckets it
-            self.sasl_password = self.input.param("sasl_password", 'password')
-            self.lww = self.input.param("lww",
-                                        False)  # only applies to LWW but is here because the bucket is created here
-            self.maxttl = self.input.param("maxttl", None)
-            self.compression_mode = self.input.param("compression_mode", 'passive')
-            self.sdk_compression = self.input.param("sdk_compression", True)
             self.sasl_bucket_name = "bucket"
-            self.sasl_bucket_priority = self.input.param("sasl_bucket_priority", None)
-            self.standard_bucket_priority = self.input.param("standard_bucket_priority", None)
-            # end of bucket parameters spot (this is ongoing)
-            self.disable_diag_eval_on_non_local_host = self.input.param("disable_diag_eval_non_local", False)
-            self.ntonencrypt = self.input.param('ntonencrypt', 'disable')
-            self.ntonencrypt_level = self.input.param('ntonencrypt_level', 'control')
-            self.hostname = self.input.param('hostname', False)
-            self.x509enable = self.input.param('x509enable', False)
-            self.enable_secrets = self.input.param("enable_secrets", False)
-            self.secret_password = self.input.param("secret_password", 'p@ssw0rd')
-            self.skip_load = self.input.param('skip_load', False)
-            self.skip_log_scan = self.input.param("skip_log_scan", False)
-            self.disable_ipv6_grub = self.input.param("disable_ipv6_grub",False)
-            self.upgrade_addr_family = self.input.param("upgrade_addr_family",None)
+            
             self.skip_metabucket_check = False
-            self.enable_dp = self.input.param("enable_dp", False)
-            self.ipv4_only = self.input.param("ipv4_only", False)
-            self.ipv6_only = self.input.param("ipv6_only", False)
-            self.use_https = self.input.param("use_https", False)
-            self.enforce_tls = self.input.param("enforce_tls", False)
+            
             if self.use_https:
                 CbServer.use_https = True
 
@@ -561,6 +465,116 @@ class BaseTestCase(unittest.TestCase):
         end_time = time.time()
         total_time = end_time - start_time
         self.log.info("Time to execute basesetup : %s" % total_time)
+
+    def parse_params(self):
+        self.log_level = self.input.param("log_level", None)
+        self.use_sdk_client = self.input.param("use_sdk_client", False)
+        self.analytics = self.input.param("analytics", False)
+        self.testrunner_client = self.input.param("testrunner_client", None)
+        self.validate_system_event_logs = self.input.param("validate_sys_event_logs", False)
+        self.upgrade_test = self.input.param("upgrade_test", False)
+        self.skip_setup_cleanup = self.input.param("skip_setup_cleanup", False)
+        self.vbuckets = self.input.param("vbuckets", 1024)
+        self.collection = self.input.param("collection", False)
+        self.scope_num = self.input.param("scope_num", 4)
+        self.collection_num = self.input.param("collection_num", [2] * self.scope_num)
+        self.index_quota_percent = self.input.param("index_quota_percent", None)
+        self.targetIndexManager = self.input.param("targetIndexManager", False)
+        self.targetMaster = self.input.param("targetMaster", False)
+        self.reset_services = self.input.param("reset_services", False)
+        self.auth_mech = self.input.param("auth_mech", "PLAIN")
+        self.wait_timeout = self.input.param("wait_timeout", 60)
+        # number of case that is performed from testrunner( increment each time)
+        self.case_number = self.input.param("case_number", 0)
+        self.total_testcases = self.input.param("total_testcases", 1)
+        self.last_case_fail = self.input.param("last_case_fail",
+                                                False)
+        self.default_bucket = self.input.param("default_bucket", True)
+        self.parallelism = self.input.param("parallelism", False)
+        if self.default_bucket:
+            self.default_bucket_name = self.input.param('default_bucket_name', 'default')
+        self.skip_standard_buckets = self.input.param("skip_standard_buckets", False)
+        self.standard_buckets = self.input.param("standard_buckets", 0)
+        # list of list [[2,1,1],[3,1,2,1],[4,1,1,2,3]]
+        self.standard_buckets_scope = self.input.param("bucket_scope", [2] * self.standard_buckets)
+        self.num_buckets = self.input.param("num_buckets", 0)
+        self.verify_unacked_bytes = self.input.param("verify_unacked_bytes", False)
+        self.enable_flow_control = self.input.param("enable_flow_control", False)
+        self.total_buckets = self.default_bucket + self.standard_buckets
+        self.num_servers = self.input.param("servers", len(self.input.servers))
+        # initial number of items in the cluster
+        self.nodes_init = self.input.param("nodes_init", 1)
+        self.nodes_in = self.input.param("nodes_in", 1)
+        self.nodes_out = self.input.param("nodes_out", 1)
+        self.services_init = self.input.param("services_init", None)
+        self.services_in = self.input.param("services_in", None)
+        self.forceEject = self.input.param("forceEject", False)
+        self.force_kill_memcached = self.input.param('force_kill_memcached', False)
+        self.num_items = self.input.param("items", 1000)
+        self.value_size = self.input.param("value_size", 512)
+        self.dgm_run = self.input.param("dgm_run", False)
+        self.active_resident_threshold = float(self.input.param("active_resident_threshold", 100))
+        # max items number to verify in ValidateDataTask, None - verify all
+        self.max_verify = self.input.param("max_verify", None)
+        # we don't change consistent_view on server by default
+        self.disabled_consistent_view = self.input.param("disabled_consistent_view", None)
+        self.rebalanceIndexWaitingDisabled = self.input.param("rebalanceIndexWaitingDisabled", None)
+        self.rebalanceIndexPausingDisabled = self.input.param("rebalanceIndexPausingDisabled", None)
+        self.maxParallelIndexers = self.input.param("maxParallelIndexers", None)
+        self.maxParallelReplicaIndexers = self.input.param("maxParallelReplicaIndexers", None)
+        self.quota_percent = self.input.param("quota_percent", None)
+        self.log_message = self.input.param("log_message", None)
+        self.log_info = self.input.param("log_info", None)
+        self.log_location = self.input.param("log_location", None)
+        self.stat_info = self.input.param("stat_info", None)
+        self.port_info = self.input.param("port_info", None)
+        if not hasattr(self, 'skip_buckets_handle'):
+            self.skip_buckets_handle = self.input.param("skip_buckets_handle", False)
+        self.nodes_out_dist = self.input.param("nodes_out_dist", None)
+        self.absolute_path = self.input.param("absolute_path", True)
+        self.test_timeout = self.input.param("test_timeout", 3600)  # kill hang test and jump to next one.
+        self.enable_bloom_filter = self.input.param("enable_bloom_filter", False)
+        self.enable_time_sync = self.input.param("enable_time_sync", False)
+        self.gsi_type = self.input.param("gsi_type", 'plasma')
+        # bucket parameters go here,
+        self.bucket_size = self.input.param("bucket_size", None)
+        self.bucket_type = self.input.param("bucket_type", 'membase')
+        self.bucket_storage = self.input.param("bucket_storage", 'couchstore')
+        self.num_replicas = self.input.param("replicas", 1)
+        self.enable_replica_index = self.input.param("index_replicas", 1)
+        self.skip_bucket_setup = self.input.param("skip_bucket_setup", False)
+        self.eviction_policy = self.input.param("eviction_policy", 'valueOnly')  # or 'fullEviction'
+        # for ephemeral buckets it
+        self.sasl_password = self.input.param("sasl_password", 'password')
+        self.lww = self.input.param("lww", False)  # only applies to LWW but is here because the bucket is created here
+        self.maxttl = self.input.param("maxttl", None)
+        self.compression_mode = self.input.param("compression_mode", 'passive')
+        self.sdk_compression = self.input.param("sdk_compression", True)
+        self.sasl_bucket_priority = self.input.param("sasl_bucket_priority", None)
+        self.standard_bucket_priority = self.input.param("standard_bucket_priority", None)
+        # end of bucket parameters spot (this is ongoing)
+        self.disable_diag_eval_on_non_local_host = self.input.param("disable_diag_eval_non_local", False)
+        self.ntonencrypt = self.input.param('ntonencrypt', 'disable')
+        self.ntonencrypt_level = self.input.param('ntonencrypt_level', 'control')
+        self.hostname = self.input.param('hostname', False)
+        self.x509enable = self.input.param('x509enable', False)
+        self.enable_secrets = self.input.param("enable_secrets", False)
+        self.secret_password = self.input.param("secret_password", 'p@ssw0rd')
+        self.skip_load = self.input.param('skip_load', False)
+        self.skip_log_scan = self.input.param("skip_log_scan", False)
+        self.disable_ipv6_grub = self.input.param("disable_ipv6_grub",False)
+        self.upgrade_addr_family = self.input.param("upgrade_addr_family",None)
+        self.enable_dp = self.input.param("enable_dp", False)
+        self.ipv4_only = self.input.param("ipv4_only", False)
+        self.ipv6_only = self.input.param("ipv6_only", False)
+        self.use_https = self.input.param("use_https", False)
+        self.enforce_tls = self.input.param("enforce_tls", False)
+        """ some tests need to bypass checking cb server at set up
+            to run installation """
+        self.skip_init_check_cbserver = \
+            self.input.param("skip_init_check_cbserver", False)
+        self.capella_run = self.input.param("capella_run", False)
+        CbServer.capella_run = self.capella_run
 
     def set_alternate_address_all_nodes(self):
         for node in self.servers:
@@ -2571,6 +2585,8 @@ class BaseTestCase(unittest.TestCase):
         servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         index_map = None
         for server in servers:
+            if server.dummy:
+                continue
             key = "{0}:{1}".format(server.ip, server.port)
             if perNode:
                 if index_map == None:
@@ -2597,6 +2613,8 @@ class BaseTestCase(unittest.TestCase):
                 ip = tokens[0]
                 port = int(tokens[1])
                 for server in servers:
+                    if server.dummy:
+                        continue
                     """ In tests use hostname, if IP in ini file use IP, we need
                         to convert it to hostname to compare it with hostname
                         in cluster """
@@ -2842,7 +2860,6 @@ class BaseTestCase(unittest.TestCase):
         return change_dist_map
 
     def set_testrunner_client(self):
-        self.testrunner_client = self.input.param("testrunner_client", None)
         if self.testrunner_client is not None:
             os.environ[testconstants.TESTRUNNER_CLIENT] = self.testrunner_client
 
@@ -3235,3 +3252,10 @@ class BaseTestCase(unittest.TestCase):
 
         self.log.info("done")
         return tasks
+
+from capella_basetestcase import BaseTestCase as CapellaBaseTestCase
+
+if TestInputSingleton.input.param("capella_run", False):
+    BaseTestCase = CapellaBaseTestCase
+else:
+    BaseTestCase = OnPremBaseTestCase

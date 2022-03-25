@@ -16,6 +16,8 @@ class QueryTests(BaseTestCase):
         self.run_async = self.input.param("run_async", True)
         self.version = self.input.param("cbq_version", "git_repo")
         for server in self.servers:
+            if server.dummy:
+                continue
             rest = RestConnection(server)
             temp = rest.cluster_status()
             self.log.info("Initial status of {0} cluster is {1}".format(server.ip, temp['nodes'][0]['status']))
@@ -31,6 +33,7 @@ class QueryTests(BaseTestCase):
         gsi_type = self.gsi_type
         if not indexer_rest.is_enterprise_edition:
            gsi_type = "forestdb"
+
         doc = {"indexer.settings.storage_mode": gsi_type}
         indexer_rest.set_index_settings_internal(doc)
         self.log.info("Allowing the indexer to complete restart after setting the internal settings")
@@ -106,7 +109,8 @@ class QueryTests(BaseTestCase):
                 raise ex
 
     def tearDown(self):
-        self.check_gsi_logs_for_panic()
+        if not self.capella_run:
+            self.check_gsi_logs_for_panic()
         if hasattr(self, 'n1ql_helper'):
             if hasattr(self, 'skip_cleanup') and not self.skip_cleanup:
                 self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")

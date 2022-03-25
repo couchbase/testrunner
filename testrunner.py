@@ -24,14 +24,13 @@ from xunit import XUnitTestResult
 from TestInput import TestInputParser, TestInputSingleton
 from optparse import OptionParser, OptionGroup
 from scripts.collect_server_info import cbcollectRunner, couch_dbinfo_Runner
-from scripts.measure_sched_delays import SchedDelays
-from scripts.getcoredumps import Getcoredumps, Clearcoredumps
+
 import signal
 import shutil
 import glob
 import xml.dom.minidom
 import logging
-from remote.remote_util import RemoteMachineShellConnection
+# from remote.remote_util import RemoteMachineShellConnection
 
 
 
@@ -517,6 +516,7 @@ def clear_old_core_dumps(_input, path):
             log.error("Unable to clear core dumps on {0} : {1}".format(server.ip, e))
 
 def get_core_dumps(_input, path):
+    from scripts.getcoredumps import Getcoredumps, Clearcoredumps
     ret = False
     for server in _input.servers:
         print(("grabbing core dumps files from {0}".format(server.ip)))
@@ -581,6 +581,7 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
         print(("Cases from GROUPs '{0}' will be excluded".format(runtime_test_params["EXCLUDE_GROUP"])))
 
     if TestInputSingleton.input.param("get-delays", False):
+        from scripts.measure_sched_delays import SchedDelays
         # start measure_sched_delays on all servers
         sd = SchedDelays(TestInputSingleton.input.servers)
         sd.start_measure_sched_delays()
@@ -780,9 +781,9 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
         except AttributeError as ex:
             pass
     if "makefile" not in TestInputSingleton.input.test_params:
-        print("During the test, Remote Connections: %s, Disconnections: %s" %
-                (RemoteMachineShellConnection.connections,
-                RemoteMachineShellConnection.disconnections))
+        # print("During the test, Remote Connections: %s, Disconnections: %s" %
+        #         (RemoteMachineShellConnection.connections,
+        #         RemoteMachineShellConnection.disconnections))
 
         if TestInputSingleton.input.param("get-delays", False):
             sd.stop_measure_sched_delay()

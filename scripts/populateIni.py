@@ -22,6 +22,7 @@ def main():
     parser.add_option('-p', '--os', dest='os')
     parser.add_option('-k', '--keyValue', dest='keyValue')
     parser.add_option('-r', '--replaceValue', dest='replaceValue')
+    parser.add_option('-m', '--skip_mem_info', dest='skip_mem_info', action='store_true', default=False)
     options, args = parser.parse_args()
 
     print('the ini file is', options.inifile)
@@ -68,22 +69,24 @@ def main():
                 if not server.ssh_password:
                     server.ssh_password = DEFAULT_LINUX_PWD
             test_servers.append(server)
-        runner = memInfoRunner(test_servers)
-        runner.run()
-        orig_servers = servers
-        servers = []
-        if len(runner.succ) > 0:
-            sorted_by_mem = sorted(runner.succ.items(), key=lambda item: int(item[1]))
-            print('the servers memory info is', sorted_by_mem)
-            for (k,v) in sorted_by_mem:
-                servers.append(k)
-        for (server, e) in runner.fail:
-            print("CAN'T GET MEMORY FROM {0}: {1}".format(server, e))
-            servers.append(server)
-        for nomemserver in orig_servers:
-            if nomemserver not in servers:
-                print("CAN'T GET MEMORY FROM {0}: unknown error".format(server))
-                servers.append(nomemserver)
+
+        if not options.skip_mem_info:
+            runner = memInfoRunner(test_servers)
+            runner.run()
+            orig_servers = servers
+            servers = []
+            if len(runner.succ) > 0:
+                sorted_by_mem = sorted(runner.succ.items(), key=lambda item: int(item[1]))
+                print('the servers memory info is', sorted_by_mem)
+                for (k,v) in sorted_by_mem:
+                    servers.append(k)
+            for (server, e) in runner.fail:
+                print("CAN'T GET MEMORY FROM {0}: {1}".format(server, e))
+                servers.append(server)
+            for nomemserver in orig_servers:
+                if nomemserver not in servers:
+                    print("CAN'T GET MEMORY FROM {0}: unknown error".format(server))
+                    servers.append(nomemserver)
 
     addPoolServers = []
 

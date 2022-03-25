@@ -131,7 +131,7 @@ class EventingRebalance(EventingBaseTest):
         # rebalance in a eventing node when eventing is processing mutations
         services_in = ["eventing"]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
-                                                 services=services_in)
+                                                 services=services_in, cluster_config=self.cluster_config)
         reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
@@ -165,7 +165,7 @@ class EventingRebalance(EventingBaseTest):
         # Get all eventing nodes
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         # rebalance out all eventing nodes
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], nodes_out_list)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], nodes_out_list, cluster_config=self.cluster_config)
         reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()

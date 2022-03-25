@@ -1,26 +1,32 @@
-import time
-from lib.remote.remote_util import RemoteMachineShellConnection
-
+from memcached.helper.data_helper import MemcachedClientHelper
 
 class CollectionsStats(object):
     def __init__(self, node):
         self.node = node
-        self.shell = RemoteMachineShellConnection(self.node)
+        self.clients = {}
 
-    def get_collection_stats(self, bucket):
-        output, error = self.shell.execute_cbstats(bucket, "collections", cbadmin_user="Administrator")
-        return output, error
+    def client(self, bucket):
+        if bucket not in self.clients:
+            self.clients[bucket] = MemcachedClientHelper.direct_client(self.node, bucket)
+        return self.clients[bucket]
+
+    def get_collection_stats(self, bucket, client=None):
+        client = client or self.client(bucket)
+        stats = client.stats("collections")
+        # Produce same output as cbstats
+        output = []
+        for key, value in stats.items():
+            output.append("{}: {}".format(key, value))
+        return output
 
     def get_collection_vb_stats(self, bucket, vbid=None):
         cmd = "collections-details"
         if vbid:
             cmd += vbid
-        output, error = self.shell.execute_cbstats(bucket, cmd)
-        return output, error
+        return self.client(bucket).stats(cmd)
 
     def get_scope_stats(self, bucket):
-        output, error = self.shell.execute_cbstats(bucket, "scopes")
-        return output, error
+        return self.client(bucket).stats("scopes")
 
     def get_scope_vb_stats(self, bucket, vbid=None):
         cmd = "scopes-details"
@@ -31,17 +37,16 @@ class CollectionsStats(object):
 
     def get_scope_id(self, bucket, scope, cbstats=None):
         if not cbstats:
-            cbstats, _ = self.get_collection_stats(bucket)
+            cbstats = self.get_collection_stats(bucket)
         for stat in cbstats:
             stat = stat.replace(' ', '')
             if ":scope_name:" + scope in stat:
                 return stat.split(":")[0]
         return None
 
-    def get_collection_id(self, bucket, scope, collection, cbstats=None):
+    def get_collection_id(self, bucket, scope, collection, cbstats=None, hex=False):
         if not cbstats:
-            time.sleep(10)
-            cbstats, _ = self.get_collection_stats(bucket)
+            cbstats = self.get_collection_stats(bucket)
         scope_id = self.get_scope_id(bucket, scope, cbstats)
         for stat in cbstats:
             stat = stat.replace(' ', '')
@@ -60,8 +65,7 @@ class CollectionsStats(object):
             nodes = [node]
         for node in nodes:
             if not cbstats:
-                cbstats, _ = RemoteMachineShellConnection(node).execute_cbstats(bucket, "collections",
-                                                                            cbadmin_user="Administrator")
+                cbstats = self.get_collection_stats(bucket, MemcachedClientHelper.direct_client(node, bucket))
             scope_id = self.get_scope_id(bucket, scope, cbstats)
             id_counts = {}
             for stat in cbstats:
@@ -83,8 +87,7 @@ class CollectionsStats(object):
             nodes = [node]
         for node in nodes:
             if not cbstats:
-                cbstats, _ = RemoteMachineShellConnection(node).execute_cbstats(bucket, "collections",
-                                                                            cbadmin_user="Administrator")
+                cbstats = self.get_collection_stats(bucket, MemcachedClientHelper.direct_client(node, bucket))
             collection_id = self.get_collection_id(bucket, scope, collection, cbstats)
             id_counts = {}
             for stat in cbstats:
@@ -107,8 +110,7 @@ class CollectionsStats(object):
         else:
             nodes = [node]
         for node in nodes:
-            cbstats, _ = RemoteMachineShellConnection(node).execute_cbstats(bucket, "collections",
-                                                                            cbadmin_user="Administrator")
+            cbstats = self.get_collection_stats(bucket, MemcachedClientHelper.direct_client(node, bucket))
             collection_id = self.get_collection_id(bucket, scope, collection, cbstats)
             scope_id = self.get_scope_id(bucket, scope, cbstats)
             id_counts = {}
@@ -122,4 +124,3 @@ class CollectionsStats(object):
                 if id == f'{scope_id}:{collection_id}':
                     count += id_counts[id]
         return count
-

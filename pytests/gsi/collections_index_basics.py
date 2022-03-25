@@ -442,7 +442,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                 query = primary_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
             self.wait_until_indexes_online()
-            self.sleep(10)
+            self.sleep(60)
 
             # Creating Partitioned index
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build)
@@ -451,10 +451,11 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                 query = index_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
             self.wait_until_indexes_online()
-            self.sleep(5)
+            self.sleep(60)
 
             # Validating index partition
             index_metadata = self.rest.get_indexer_metadata()['status']
+            self.log.info("Index metadata after index partition query :{}".format(index_metadata))
             for index in index_metadata:
                 if index['name'] != arr_index:
                     continue
@@ -482,10 +483,11 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                 query = index_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
             self.wait_until_indexes_online(defer_build=self.defer_build)
-            self.sleep(5)
+            self.sleep(60)
 
             # Validating index partition
             index_metadata = self.rest.get_indexer_metadata()['status']
+            self.log.info("Index metadata after Creating partial partitioned index :{}".format(index_metadata))
             for index in index_metadata:
                 if index['name'] != arr_index:
                     continue
@@ -872,8 +874,8 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         if self.gsi_type == 'memory_optimized':
             self.skipTest("DGM can be achieved only for plasma")
         dgm_server = self.get_nodes_from_services_map(service_type="index")
-        self.get_dgm_for_plasma(indexer_nodes=[dgm_server])
         self.prepare_collection_for_indexing(num_of_docs_per_collection=10 ** 5)
+        self.get_dgm_for_plasma(indexer_nodes=[dgm_server])
         collection_namespace = self.namespaces[0]
         index_gen = QueryDefinition(index_name='idx', index_fields=['age', 'city', 'firstName', 'country'])
         try:

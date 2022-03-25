@@ -13,12 +13,6 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 
 class RebalanceInTests(RebalanceBaseTest):
 
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     def setUp(self):
         super(RebalanceInTests, self).setUp()
 
@@ -222,7 +216,7 @@ class RebalanceInTests(RebalanceBaseTest):
 
         rebalance_task = self.cluster.async_rebalance(
             self.servers[:self.nodes_init], servs_in, [],
-            sleep_before_rebalance=self.sleep_before_rebalance)
+            sleep_before_rebalance=self.sleep_before_rebalance, cluster_config=self.cluster_config)
 
         rebalance_task.result()
         for task in tasks:

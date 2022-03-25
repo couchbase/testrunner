@@ -9,6 +9,7 @@ from collections import defaultdict
 from queue import Queue
 from subprocess import call
 from threading import Thread
+from lib.Cb_constants.CBServer import CbServer
 
 import crc32
 import logger
@@ -120,6 +121,8 @@ class BucketOperationHelper:
     def delete_all_buckets_or_assert(servers, test_case, timeout=200):
         log = logger.Logger.get_logger()
         for serverInfo in servers:
+            if serverInfo.dummy:
+                continue
             rest = RestConnection(serverInfo)
             # retrying to get buckets with poll_interval and limit of retries
             buckets = rest.get_buckets(num_retries=3, poll_interval=5)
@@ -241,8 +244,12 @@ class BucketOperationHelper:
         return False
 
     @staticmethod
-    def wait_for_vbuckets_ready_state(node, bucket, timeout_in_seconds=300, log_msg='', admin_user='cbadminbucket',
-                                      admin_pass='password'):
+    def wait_for_vbuckets_ready_state(node, bucket, timeout_in_seconds=300, log_msg='', admin_user=None,
+                                      admin_pass=None):
+        if admin_user is None:
+            admin_user = node.rest_username
+        if admin_pass is None:
+            admin_pass = node.rest_password
         log = logger.Logger.get_logger()
         start_time = time.time()
         end_time = start_time + timeout_in_seconds

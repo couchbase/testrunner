@@ -66,3 +66,11 @@ class CbServer(object):
     sys_event_log_max_size = 3072
     # Time within which the UUID cannot be duplicated in server (in seconds)
     sys_event_log_uuid_uniqueness_time = 60
+
+    capella_run = False
+    rest_username = "cbadminbucket"
+    rest_password = "password"
+
+    pod = None
+    tenant = None
+    cluster_id = None

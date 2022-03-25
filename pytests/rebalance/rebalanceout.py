@@ -193,7 +193,7 @@ class RebalanceOutTests(RebalanceBaseTest):
                     self.master, gen_delete, "delete", 0)
         rebalance = self.cluster.async_rebalance(
             self.servers[:1], [], servs_out,
-            sleep_before_rebalance=self.sleep_before_rebalance)
+            sleep_before_rebalance=self.sleep_before_rebalance, cluster_config=self.cluster_config)
 
         rebalance.result()
         for task in tasks:

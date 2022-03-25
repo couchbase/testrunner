@@ -14,7 +14,7 @@ from lib.couchbase_helper.tuq_generators import JsonGenerator
 from lib.membase.api.rest_client import RestConnection
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
-from pytests.basetestcase import BaseTestCase
+from basetestcase import BaseTestCase
 from testconstants import INDEX_QUOTA, MIN_KV_QUOTA, EVENTING_QUOTA
 from pytests.query_tests_helper import QueryHelperTests
 
@@ -24,11 +24,11 @@ log = logging.getLogger()
 class EventingBaseTest(QueryHelperTests):
     panic_count = 0
     ## added to ignore error
-    def suite_setUp(self):
-        pass
+    # def suite_setUp(self):
+    #     pass
 
-    def suite_tearDown(self):
-        pass
+    # def suite_tearDown(self):
+    #     pass
 
 
     def setUp(self):
@@ -141,7 +141,8 @@ class EventingBaseTest(QueryHelperTests):
     def tearDown(self):
         log.info("==============  EventingBaseTest tearDown has started ==============")
         # catch panics and print it in the test log
-        self.check_eventing_logs_for_panic()
+        if not self.capella_run:
+            self.check_eventing_logs_for_panic()
         rest = RestConnection(self.master)
         buckets = rest.get_buckets()
         meta_bucket=False

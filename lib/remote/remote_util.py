@@ -9,6 +9,8 @@ import logging
 import stat
 import json
 import signal
+from decorator import decorator
+from typing import Callable, Dict, Iterator, List
 
 import TestInput
 from subprocess import Popen, PIPE
@@ -56,7 +58,7 @@ from testconstants import LINUX_NONROOT_CB_BIN_PATH,\
 from membase.api.rest_client import RestConnection, RestHelper
 from cluster_run_manager import KeepRefs
 
-from Cb_constants.CBServer import CbServer
+from lib.Cb_constants.CBServer import CbServer
 
 log = logger.Logger.get_logger()
 logging.getLogger("paramiko").setLevel(logging.WARNING)
@@ -195,11 +197,20 @@ class RemoteMachineHelper(object):
                     count += 1
             return count
 
+@decorator
+def not_for_capella(method: Callable, *args, **kwargs):
+    if CbServer.capella_run:
+        log.warning("This is a capella_run so will not have remote machine connection")
+        return None
+    else:
+        return method(*args, **kwargs)
+
 class RemoteMachineShellConnection(KeepRefs):
     connections = 0
     disconnections = 0
     _ssh_client = None
 
+    @not_for_capella
     def __init__(self, username='root',
                  pkey_location='',
                  ip='', port=''):
@@ -237,7 +248,12 @@ class RemoteMachineShellConnection(KeepRefs):
             log.info("Can't establish SSH session with {0}".format(self.ip))
             exit(1)
 
+    @not_for_capella
     def __init__(self, serverInfo, exit_on_failure=True):
+        # This makes it easy to find places where SSH is being used because a stack trace can be printed
+        if CbServer.capella_run:
+            raise Exception("no SSH allowed in Capella")
+
         # let's create a connection
         super(RemoteMachineShellConnection, self).__init__()
         self.username = serverInfo.ssh_username

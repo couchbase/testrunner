@@ -847,13 +847,13 @@ class XdcrCLITest(CliBaseTest):
                 for stats in col_stats:
                     if isinstance(col_stats, str):
                         col_stats = col_stats.split(",")
-                    for x in stats:
+                    for key, value in stats:
                         if self.custom_scopes and not self.custom_collections:
                             break
                         if self.custom_collections or self.buckets[0].name == "default":
                             load_sc_item_id = load_scope_id_src + ":" + load_collection_id_src + ":items"
-                            if load_sc_item_id in x:
-                                items_in_cluster += int(x.split(':')[-1].strip()) #des_items = stats.rpartition(":")[2].strip()
+                            if load_sc_item_id in key:
+                                items_in_cluster += int(value)
                 if self.num_items == items_in_cluster:
                     items_match = True
 

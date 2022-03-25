@@ -107,9 +107,12 @@ class QueryTests(BaseTestCase):
         self.udfs = self.input.param("udfs", False)
         self.encoded_prepare = self.input.param("encoded_prepare", False)
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
-        shell = RemoteMachineShellConnection(self.master)
-        type = shell.extract_remote_info().distribution_type
-        shell.disconnect()
+        if not self.capella_run:
+            shell = RemoteMachineShellConnection(self.master)
+            type = shell.extract_remote_info().distribution_type
+            shell.disconnect()
+        else:
+            type = ""
         self.path = testconstants.LINUX_COUCHBASE_BIN_PATH
         self.array_indexing = self.input.param("array_indexing", False)
         self.load_sample = self.input.param("load_sample", False)
@@ -145,16 +148,20 @@ class QueryTests(BaseTestCase):
             self.path = testconstants.MAC_COUCHBASE_BIN_PATH
         if self.primary_indx_type.lower() == "gsi":
             self.gsi_type = self.input.param("gsi_type", 'plasma')
-        if self.input.param("reload_data", False):
-            self.log.info("--> reload_data: false")
+        self.reload_data = self.input.param("reload_data", False)
+        if self.reload_data:
+            self.log.info(f"--> reload_data: {self.reload_data}")
             if self.analytics:
                 self.cluster.rebalance([self.master, self.cbas_node], [], [self.cbas_node], services=['cbas'])
             for bucket in self.buckets:
                 self.cluster.bucket_flush(self.master, bucket=bucket, timeout=180000)
             # Adding sleep after flushing buckets (see CBQE-5838)
-            self.sleep(210)
+            self.sleep(10)
             self.gens_load = self.gen_docs(self.docs_per_day)
-            self.load(self.gens_load, batch_size=1000, flag=self.item_flag)
+            verify_data = True
+            if CbServer.capella_run:
+                verify_data = False
+            self.load(self.gens_load, batch_size=1000, flag=self.item_flag, verify_data=verify_data)
             if self.analytics:
                 self.cluster.rebalance([self.master, self.cbas_node], [self.cbas_node], [], services=['cbas'])
         if not (hasattr(self, 'skip_generation') and self.skip_generation):
@@ -199,7 +206,6 @@ class QueryTests(BaseTestCase):
     def suite_setUp(self):
         self.log.info("==============  QueryTests suite_setup has started ==============")
         try:
-            os = self.shell.extract_remote_info().type.lower()
             changed = False
             self.collections_helper = CollectionsN1QL(self.master)
             # if os != 'windows':
@@ -211,7 +217,7 @@ class QueryTests(BaseTestCase):
                 else:
                     self.log.info("-->gens_load flat_json, batch_size=1000")
                     verify_data = True
-                    if self.enforce_tls:
+                    if self.enforce_tls or CbServer.capella_run:
                         verify_data = False
                     self.load(self.gens_load, batch_size=1000, flag=self.item_flag, verify_data=verify_data)
             if not self.input.param("skip_build_tuq", True):
@@ -392,7 +398,7 @@ class QueryTests(BaseTestCase):
         # Load Emp Dataset
         self.cluster.bucket_flush(self.master)
         # Adding sleep after flushing buckets (see CBQE-5838)
-        self.sleep(210)
+        self.sleep(30)
 
         if end > 0:
             self._kv_gen = NapaDataLoader("napa_",
