@@ -49,9 +49,12 @@ NON_ROOT_DOWNLOAD_DIR = {"LINUX_DISTROS": "/home/nonroot/",
 DEFAULT_INSTALL_DIR = {"LINUX_DISTROS": "/opt/couchbase",
                        "MACOS_VERSIONS": "/Applications/Couchbase\ Server.app",
                        "WINDOWS_SERVER": "/cygdrive/c/Program\ Files/Couchbase/Server"}
-DEFAULT_NONROOT_INSTALL_DIR = {"LINUX_DISTROS": "/home/nonroot/opt/couchbase/",
+DEFAULT_NONROOT_INSTALL_DIR = {"LINUX_DISTROS": "/home/nonroot/cb/opt/couchbase/",
                        "MACOS_VERSIONS": "/Applications/Couchbase\ Server.app",
                        "WINDOWS_SERVER": "/cygdrive/c/Program\ Files/Couchbase/Server"}
+
+CB_NON_PACKAGE_INSTALLER_URL = "https://packages.couchbase.com/cb-non-package-installer/cb-non-package-installer"
+CB_NON_PACKAGE_INSTALLER_NAME = "cb-non-package-installer"
 
 DEFAULT_CLI_PATH = \
     {
@@ -170,6 +173,91 @@ CMDS = {
 }
 
 NON_ROOT_CMDS = {
+    "deb": {
+        "uninstall":
+            UNMOUNT_NFS_CMD +
+            "dpkg --purge $(dpkg -l | grep couchbase | awk '{print $2}' | xargs echo); kill -9 `ps -ef |egrep couchbase|cut -f3 -d' '`; " +
+            "rm /var/lib/dpkg/info/couchbase-server.*; " +
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0;"
+            "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0;"
+            "rm -rf " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb ",
+        "pre_install": None,
+        "install":
+            "mkdir " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb;"
+            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; "
+            "./cb-non-package-installer --install --package buildpath --install-location " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/",
+        "post_install":
+            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "/cb/opt/couchbase/; "
+            "./bin/couchbase-server --start",
+        "post_install_retry": "./bin/couchbase-server --start",
+        "init": None,
+        "cleanup": "ls -td " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "couchbase*.deb | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
+    },
+    "dmg": {
+        "uninstall":
+            "osascript -e 'quit app \"Couchbase Server\"'; "
+            "rm -rf " + DEFAULT_INSTALL_DIR["MACOS_VERSIONS"] + "; "
+            "rm -rf ~/Library/Application\ Support/Couchbase; "
+            "rm -rf ~/Library/Application\ Support/membase; "
+            "rm -rf ~/Library/Python/couchbase-py; "
+            "launchctl list | grep couchbase-server | xargs -n 3 | cut -f3 -d' ' | xargs -n 1 launchctl stop; "
+            "umount /Volumes/Couchbase* > /dev/null && echo 1 || echo 0",
+        "pre_install": "HDIUTIL_DETACH_ATTACH",
+        "install":
+            "rm -rf /Applications\Couchbase\ Server.app; "
+            "launchctl list | grep couchbase-server | xargs -n 3 | cut -f3 -d' ' | xargs -n 1 launchctl stop; "
+            "cp -R mountpoint/Couchbase\ Server.app /Applications/Couchbase\ Server.app; "
+            "open /Applications/Couchbase\ Server.app > /dev/null && echo 1 || echo 0",
+        "post_install": "launchctl list | grep couchbase-server > /dev/null && echo 1 || echo 0",
+        "post_install_retry": None,
+        "init": None,
+        "cleanup": "ls -td " + DOWNLOAD_DIR["MACOS_VERSIONS"] + "couchbase*.dmg | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
+    },
+    "msi": {
+        "uninstall":
+            "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; "
+            "msiexec /x installed-msi /passive",
+        "pre_install": "",
+        "install":
+            "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; "
+            "msiexec /i buildbinary /passive /L*V install_status.txt",
+        "post_install":
+            "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; "
+            "vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; " +
+            "grep 'buildversion.*[Configuration\|Installation] completed successfully.' install_status.txt && echo 1 || echo 0",
+        "post_install_retry":
+            "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; "
+            "msiexec /i buildbinary /passive /L*V install_status.txt",
+        "init": None,
+        "cleanup": "ls -td " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "couchbase*.msi | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
+    },
+    "rpm": {
+        "pre_install":
+            "ls -l "+DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"]+"bin/",
+        "uninstall":
+            NON_ROOT_DOWNLOAD_DIR[
+                "LINUX_DISTROS"] + "cb/opt/couchbase/bin/couchbase-server --stop; " +
+            UNMOUNT_NFS_CMD +
+            DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"]+"bin/couchbase-server -k; kill -9 `ps "
+                                                         "-ef |egrep couchbase|cut -f3 -d' '`; " +
+            "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0; " +
+            "rm -rf " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb ",
+        "install":
+            # cb-non-package-installer requires empty dir to extract files to
+            "mkdir " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb;"
+            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; "
+            "./cb-non-package-installer --install --package buildpath --install-location " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/",
+        "suse_install":
+            "mkdir " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb;"
+            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; " 
+            "./cb-non-package-installer --install --package buildpath --install-location " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/",
+        "post_install": NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/opt/couchbase/bin/couchbase-server --start",
+        "post_install_retry": None,
+        "init": None,
+        "cleanup": "rm -f *-diag.zip; ls -td " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "couchbase*.rpm | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
+    }
+}
+NON_ROOT_MANUAL_CMDS = {
     "deb": {
         "uninstall":
             UNMOUNT_NFS_CMD +

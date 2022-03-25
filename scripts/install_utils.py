@@ -844,6 +844,22 @@ def download_build():
                                                 , debug_build=True)
     log.debug("Done downloading build binary")
 
+def download_cb_non_package_installer():
+    log.debug("Downloading install script now")
+    for node in NodeHelpers:
+        cmd_master = install_constants.DOWNLOAD_CMD[node.info.deliverable_type]
+        download_dir =  __get_download_dir(node)
+        if "curl" in cmd_master:
+            cmd = cmd_master.format(install_constants.CB_NON_PACKAGE_INSTALLER_URL,
+                                    node.build.path)
+        elif "wget" in cmd_master:
+            cmd = cmd_master.format(download_dir,
+                                    install_constants.CB_NON_PACKAGE_INSTALLER_URL)
+        if cmd:
+            node.shell.execute_command(cmd, debug=True)
+        node.shell.execute_command("chmod a+x {0}{1}".format(download_dir,
+                                                             install_constants.CB_NON_PACKAGE_INSTALLER_NAME))
+
 def check_and_retry_download_binary_local(node):
     log.info("Downloading build binary to {0}..".format(node.build.path))
     if node.build.debug_build_present:
@@ -933,6 +949,8 @@ def check_file_size(node, debug_build=False):
 def check_and_retry_download_binary(cmd, node, path, debug_build=False):
     if "amazonaws" in cmd:
         cmd += " --no-check-certificate "
+    if node.shell.nonroot:
+        download_cb_non_package_installer()
     duration, event, timeout = install_constants.WAIT_TIMES[node.info.deliverable_type]["download_binary"]
     start_time = time.time()
     while time.time() < start_time + timeout:
