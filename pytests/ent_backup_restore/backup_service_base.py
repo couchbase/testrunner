@@ -1216,7 +1216,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         1. Runs preamble.
         2. Deletes all plans.
         """
-        if self.input.param("validate_sys_event_logs", False):
+        if self.input.param("validate_sys_event_failures", False):
             event_rest = SystemEventRestHelper([self.master])
             try:
                 events = [e for e in event_rest.get_events(server=self.master, since_time=self.log_start) if e["event_id"] in list(Tag)]
