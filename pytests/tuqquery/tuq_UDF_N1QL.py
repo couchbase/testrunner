@@ -1462,6 +1462,28 @@ class QueryUDFN1QLTests(QueryTests):
         actual_result = function_result['results'][0]
         self.assertEqual(actual_result, expected_result)
 
+    def test_multiple_inner(self):
+        function_name = 'multiple_inner'
+        functions = f'function {function_name}() {{\
+            var res=[];\
+            var q1 = SELECT * FROM [1,2,3,4,5] AS t ORDER BY t;\
+            for (const doc of q1) {{\
+                res.push(doc);\
+                var q2 = SELECT COUNT(*) FROM [1,2,3] AS s;\
+                q2.close();\
+            }}\
+            q1.close();\
+            return res;\
+        }}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+        expected_result = [{"t": 1}, {"t": 2}, {"t": 3}, {"t": 4}, {"t": 5}]
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
     def test_multiple_iterator(self):
         function_name = 'param_from_var_default'
         functions = f'function {function_name}(j, y, m) {{\
