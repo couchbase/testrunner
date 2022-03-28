@@ -487,6 +487,8 @@ class QueryUpdateStatsTests(QueryTests):
                 self.assertEqual(distribution['results'][0]['sampleSize'], self.sample_size)
             elif self.sample_size >= max_size:
                 self.assertTrue(distribution['results'][0]['sampleSize'] >= min_size)
+            elif self.scope == '_default':
+                self.assertEqual(distribution['results'][0]['sampleSize'], min_size)
             else:
                 self.assertEqual(distribution['results'][0]['sampleSize'], max_size)
         except Exception as e:
