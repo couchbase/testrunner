@@ -52,6 +52,8 @@ class XDCRServiceEvents(object):
     def create_replication(node, source_bucket, target_bucket, id, remote_ref_name, filter_expression):
         if not filter_expression:
             filter_expression = "false"
+        else:
+            filter_expression = "true"
         return {
             Event.Fields.NODE_NAME: node,
             Event.Fields.EVENT_ID: XDCR.CreateReplication,
