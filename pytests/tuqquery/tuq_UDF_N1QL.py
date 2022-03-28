@@ -1304,34 +1304,6 @@ class QueryUDFN1QLTests(QueryTests):
             var job = j;\
             var year = y;\
             var month = m;\
-            var query_string = "SELECT " + projection + " FROM default WHERE job_title = \\\"" + job + "\\\" AND join_yr = " + year + " AND join_mo = " + month + " ORDER by name LIMIT 3";\
-            var query = N1QL(query_string);\
-            var acc = [];\
-            for (const row of query) {{\
-                acc.push(row);\
-            }}\
-            return acc;}}'
-        self.create_library(self.library_name, functions, [function_name])
-        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(...) LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
-
-        # Execute function
-        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(1,"Engineer",2011,10)')
-        expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
-        actual_result = function_result['results'][0]
-        self.assertEqual(actual_result, expected_result)
-
-        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(0,"Engineer",2011,10)')
-        expected_result = [{'job_title': 'Engineer'}, {'job_title': 'Engineer'}, {'job_title': 'Engineer'}]
-        actual_result = function_result['results'][0]
-        self.assertEqual(actual_result, expected_result)
-
-        function_name = 'param_from_var_default'
-        functions = f'function {function_name}(selector, j, y, m) {{\
-            var projection = "";\
-            if (selector){{ projection = "name";}} else {{ projection = "job_title"; }}\
-            var job = j;\
-            var year = y;\
-            var month = m;\
             var query_string = "SELECT " + projection + " FROM default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 3";\
             var query = N1QL(query_string, {{"job":job, "month": month, "year": year}});\
             var acc = [];\
@@ -1343,12 +1315,14 @@ class QueryUDFN1QLTests(QueryTests):
 
         # Execute function
         function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(1,"Engineer",2011,10)')
-        expected_result = [{'name': 'employee-1'}, {'name': 'employee-10'}, {'name': 'employee-11'}]
+        expected_result = self.run_cbq_query("SELECT name FROM default use index(`#primary`) WHERE job_title = 'Engineer' AND join_yr = 2011 AND join_mo = 10 ORDER by name LIMIT 3")
+        expected_result = expected_result['results']
         actual_result = function_result['results'][0]
         self.assertEqual(actual_result, expected_result)
 
         function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(0,"Engineer",2011,10)')
-        expected_result = [{'job_title': 'Engineer'}, {'job_title': 'Engineer'}, {'job_title': 'Engineer'}]
+        expected_result = self.run_cbq_query("SELECT job_title FROM default use index(`#primary`) WHERE job_title = 'Engineer' AND join_yr = 2011 AND join_mo = 10 ORDER by name LIMIT 3")
+        expected_result = expected_result['results']
         actual_result = function_result['results'][0]
         self.assertEqual(actual_result, expected_result)
 

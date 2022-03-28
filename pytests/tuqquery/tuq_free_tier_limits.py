@@ -123,6 +123,12 @@ class QueryFreeLimits(QueryTests):
         self.set_query_limits(username="limited2", limits=limits_user_2)
         query = "EXECUTE FUNCTION sleep(10000)"
 
+        functions = 'function sleep(delay) { var start = new Date().getTime(); while (new Date().getTime() < start + delay); return delay; }'
+        function_names = ["sleep"]
+        self.create_library("sleep", functions, function_names)
+        self.run_cbq_query(query="CREATE OR REPLACE FUNCTION sleep(t) LANGUAGE JAVASCRIPT AS \"sleep\" AT \"sleep\"")
+
+
         # Run 2 queries for user 1 and 2 queries for user 2 in a different thread
         t51 = threading.Thread(name='run_first', target=self.run_dummy_query_thread, args=("limited1", 20000))
         t51.start()
