@@ -689,7 +689,9 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.assertEqual(results['results'], [{"$1": 1968}])
 
             results = self.run_cbq_query(query=create_scope)
+            self.sleep(3)
             results = self.run_cbq_query(query=create_collection)
+            self.sleep(3)
             results = self.run_cbq_query(query=f'SELECT `path` FROM system:keyspaces WHERE `scope` = "{scope}"')
             self.assertEqual(results['results'][0]['path'], f"default:travel-sample.{scope}.airport")
 
