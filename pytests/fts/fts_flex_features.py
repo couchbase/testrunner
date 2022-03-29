@@ -1,4 +1,6 @@
 from .fts_base import FTSBaseTest, INDEX_DEFAULTS, QUERY, download_from_s3
+from deepdiff import DeepDiff
+import json
 
 class FlexFeaturesFTS(FTSBaseTest):
 
@@ -130,15 +132,21 @@ class FlexFeaturesFTS(FTSBaseTest):
         self.load_data(generator=None)
         self.wait_till_items_in_bucket_equal(self._num_items)
 
-        sort_directions = ["ASC", "DESC", ""]
-        limits = ["LIMIT 10", ""]
-        offsets = ["OFFSET 5", ""]
+        sort_directions = ["ASC", "DESC", "ASC,ASC", "ASC,DESC", "DESC,ASC", "DESC,DESC"]
+        limits = ["10", ""]
+        offsets = ["5", ""]
+        order_by = ["meta().id", "emp_id", "name,emp_id"]
         custom_mapping = self._input.param("custom_mapping", False)
         _data_types = {
-            "text": {"field": "type", "flex_condition": "type='emp'"},
-            "number": {"field": "mutated", "flex_condition": "mutated=0"},
-            "boolean": {"field": "is_manager", "flex_condition": "is_manager=true"},
-            "datetime": {"field": "join_date", "flex_condition": "join_date > '2001-10-09' AND join_date < '2020-10-09'"}
+            "text": {"field": "type", "flex_condition": "type='emp'", "fts_query": {"field": "type", "term": "emp"}},
+            "number": {"field": "mutated", "flex_condition": "mutated=0",
+                       "fts_query": {"field": "mutated",
+                                     "inclusive_max": True, "inclusive_min": True, "max": 0, "min": 0}},
+            "boolean": {"field": "is_manager", "flex_condition": "is_manager=true",
+                        "fts_query": {"bool": True, "field": "is_manager"}},
+            "datetime": {"field": "join_date", "flex_condition": "join_date > '2001-10-09' AND join_date < '2020-10-09'",
+                         "fts_query": {"end": "2020-10-09", "field": "join_date", "inclusive_end": False,
+                                       "inclusive_start": False, "start": "2001-10-09"}}
         }
         index_configuration = self._input.param("index_config", "FTS_GSI")
         if index_configuration == "FTS":
@@ -158,18 +166,43 @@ class FlexFeaturesFTS(FTSBaseTest):
             for sort_direction in sort_directions:
                 for limit in limits:
                     for offset in offsets:
-                        flex_query = "select meta().id from `default`.scope1.collection1 USE INDEX({0}) where {1} order by {2} {3} {4} {5}".\
-                            format(index_hint, _data_types[_key]['flex_condition'], "meta().id", sort_direction, limit, offset)
-                        gsi_query = "select meta().id from `default`.scope1.collection1 USE INDEX({0}) where {1} order by {2} {3} {4} {5}".\
-                            format(index_hint, _data_types[_key]['flex_condition'], "meta().id", sort_direction, limit, offset)
-                        test = {}
-                        test['flex_query'] = flex_query
-                        test['gsi_query'] = gsi_query
-                        test['flex_result'] = {}
-                        test['flex_explain'] = {}
-                        test['gsi_result'] = {}
-                        test['errors'] = []
-                        tests.append(test)
+                        for ob in order_by:
+                            ob_field2 = sort_direction_2 = ""
+                            if len(ob.split(",")) == 2 and len(sort_direction.split(",")) == 2:
+                                ob_field1,ob_field2 = ob.split(",")
+                                sort_direction_1, sort_direction_2 = sort_direction.split(",")
+                            elif len(ob.split(",")) == 1 and len(sort_direction.split(",")) == 1:
+                                ob_field1 = ob
+                                sort_direction_1 = sort_direction
+                            else:
+                                continue
+                            flex_query = f"select meta().id from `default`.scope1.collection1 USE INDEX({index_hint}) "\
+                                f"where {_data_types[_key]['flex_condition']} order by {ob_field1} {sort_direction_1} "\
+                                f"{f',{ob_field2} {sort_direction_2}' if ob_field2 != '' else ''} " \
+                                f"{f'LIMIT {limit}' if limit != '' else ''} {f'OFFSET {offset}' if offset != '' else ''}"
+                            gsi_query = f"select meta().id from `default`.scope1.collection1 USE INDEX(USING GSI) " \
+                                f"where {_data_types[_key]['flex_condition']} order by {ob_field1} {sort_direction_1} " \
+                                f"{f',{ob_field2} {sort_direction_2}' if ob_field2 != '' else ''} " \
+                                f"{f'LIMIT {limit}' if limit != '' else ''} {f'OFFSET {offset}' if offset != '' else ''}"
+                            test = {'flex_query': flex_query, 'gsi_query': gsi_query, 'flex_result': {}, 'flex_explain': {},
+                                    'gsi_result': {}, 'errors': []}
+                            search_query = {"query": _data_types[_key]['fts_query'], "score": "none"}
+                            if limit != "":
+                                if limit != "":
+                                    search_query["size"] = int(limit)
+                                if offset != "":
+                                    search_query["from"] = int(offset)
+                                else:
+                                    search_query["from"] = 0
+                                if ob == "meta().id":
+                                    search_query["sort"] = [f'{"-" if sort_direction == "DESC" else ""}_id']
+                                elif len(ob.split(",")) == 2:
+                                    search_query["sort"] = [f"-{ob_field1}" if sort_direction_1 == "DESC" else f"{ob_field1}",
+                                                            f"-{ob_field2}" if sort_direction_2 == "DESC" else f"{ob_field2}"]
+                                else:
+                                    search_query["sort"] = [f"-{ob_field1}" if sort_direction_1 == "DESC" else f"{ob_field1}"]
+                            test['fts_query'] = search_query
+                            tests.append(test)
 
         self._cb_cluster.run_n1ql_query("create primary index on `default`.scope1.collection1")
         self.sleep(10)
@@ -179,9 +212,9 @@ class FlexFeaturesFTS(FTSBaseTest):
         self._cb_cluster.run_n1ql_query("drop primary index on `default`.scope1.collection1")
         self.sleep(10)
 
-        errors_found = self._perform_results_checks(tests=tests,
-                                                    index_configuration=index_configuration,
-                                                    custom_mapping=custom_mapping, check_pushdown=False)
+        errors_found = self._perform_results_checks_order_by(tests=tests,
+                                                             index_configuration=index_configuration,
+                                                             custom_mapping=custom_mapping, check_pushdown=True)
         if errors_found:
             self.fail("Errors are detected for ORDER BY Flex queries. Check logs for details.")
 
@@ -445,6 +478,60 @@ class FlexFeaturesFTS(FTSBaseTest):
             if test['flex_result'] != test['gsi_result']:
                 error = {}
                 error['error_message'] = "Flex query results and GSI query results are different."
+                error['query'] = test['flex_query']
+                error['indexing_config'] = index_configuration
+                error['custom_mapping'] = str(custom_mapping)
+                error['collections'] = str(self.collection)
+                test['errors'].append(error)
+
+        errors_found = False
+        for test in tests:
+            if len(test['errors']) > 0:
+                errors_found = True
+                self.log.error("The following errors are detected:\n")
+                for error in test['errors']:
+                    self.log.error("="*10)
+                    self.log.error(error['error_message'])
+                    self.log.error("query: " + error['query'])
+                    self.log.error("indexing config: " + error['indexing_config'])
+                    self.log.error("custom mapping: " + str(error['custom_mapping']))
+                    self.log.error("collections set: " + str(error['collections']))
+        return errors_found
+
+    def _perform_results_checks_order_by(self, tests=None, index_configuration="", custom_mapping=False, check_pushdown=True):
+        for test in tests:
+            self.log.info("=======================================================================")
+            self.log.info(f"Flex Query: {test['flex_query']}")
+            result = self._cb_cluster.run_n1ql_query("explain " + test['flex_query'])
+            if check_pushdown:
+                actual_query = json.loads(result['results'][0]['plan']['~children'][0]['~children'][0]['search_info']['query'])
+                diffs = DeepDiff(actual_query,
+                                 test['fts_query'], ignore_order=True, ignore_numeric_type_changes=True)
+                self.log.info(f"FTS query which is pushed down: {actual_query}")
+                if diffs:
+                    self.log.info("-->actual vs expected diffs found:{}".format(diffs))
+                    error = {}
+                    error['error_message'] = "Diffs found" + str({"diffs": diffs, "actual": actual_query, "expected": test["fts_query"],
+                                                                  "flex_query": test['flex_query']})
+                    error['query'] = test['flex_query']
+                    error['indexing_config'] = index_configuration
+                    error['custom_mapping'] = str(custom_mapping)
+                    error['collections'] = str(self.collection)
+                    test['errors'].append(error)
+            result = self._cb_cluster.run_n1ql_query(test['flex_query'])
+            test['flex_result'] = result['results']
+            if result['status'] != 'success':
+                error = {}
+                error['error_message'] = "Flex query was not executed successfully."
+                error['query'] = test['flex_query']
+                error['indexing_config'] = index_configuration
+                error['custom_mapping'] = str(custom_mapping)
+                error['collections'] = str(self.collection)
+                test['errors'].append(error)
+            if test['flex_result'] != test['gsi_result']:
+                error = {}
+                error['error_message'] = f"Flex query results and GSI query results are different. " \
+                    f"Flex Results: {test['flex_result']}, GSI results: {test['gsi_result']} "
                 error['query'] = test['flex_query']
                 error['indexing_config'] = index_configuration
                 error['custom_mapping'] = str(custom_mapping)
