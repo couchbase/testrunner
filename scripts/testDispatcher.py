@@ -129,7 +129,7 @@ def get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version, p
         return cloud_provision.aws_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture), None
     elif options.serverType == GCP:
         ssh_key_path = OS.environ.get("GCP_SSH_KEY")
-        return cloud_provision.gcp_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture)
+        return cloud_provision.gcp_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture), None
     elif options.serverType == AZURE:
         """ Azure uses template with pw enable login.  No need key """
         ssh_key_path = ""

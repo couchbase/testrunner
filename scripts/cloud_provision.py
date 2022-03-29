@@ -4,16 +4,19 @@ import boto3
 import paramiko
 from google.cloud.compute_v1 import ImagesClient, InstancesClient, ZoneOperationsClient
 from google.cloud.compute_v1.types.compute import AccessConfig, AttachedDisk, AttachedDiskInitializeParams, BulkInsertInstanceRequest, BulkInsertInstanceResource, DeleteInstanceRequest, GetFromFamilyImageRequest, InstanceProperties, ListInstancesRequest, NetworkInterface, Operation
+from google.cloud.dns import Client as DnsClient
+import dns.resolver
 import time
+import io
 """
   Azure needs to install azure cli 'az' in dispatcher slave
 """
 
-def post_provisioner(host, username, ssh_key_path):
+def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(host, username=username, key_filename=ssh_key_path)
-    ssh.exec_command("echo 'couchbase' | sudo passwd --stdin root",)
+    ssh.exec_command("echo 'couchbase' | sudo passwd --stdin root")
     ssh.exec_command("sudo sed -i '/#PermitRootLogin yes/c\PermitRootLogin yes' /etc/ssh/sshd_config")
     ssh.exec_command("sudo sed -i '/PermitRootLogin no/c\PermitRootLogin yes' /etc/ssh/sshd_config")
     ssh.exec_command("sudo sed -i '/PermitRootLogin forced-commands-only/c\#PermitRootLogin forced-commands-only' /etc/ssh/sshd_config")
@@ -21,6 +24,24 @@ def post_provisioner(host, username, ssh_key_path):
     ssh.exec_command("sudo service sshd restart")
     # terminate the instance after 12 hours
     ssh.exec_command("sudo shutdown -P +720")
+
+    if modify_hosts:
+        # add hostname to /etc/hosts so node-init-hostname works by binding to 127.0.0.1
+        # as recommended in https://docs.couchbase.com/server/current/cloud/couchbase-cloud-deployment.html
+        sftp = ssh.open_sftp()
+        with io.BytesIO() as fl:
+            sftp.getfo('/etc/hosts', fl)
+            hosts = fl.getvalue().decode()
+            modified_hosts = str()
+            for line in hosts.splitlines():
+                ip, hostnames = line.split(maxsplit=1)
+                if ip == "127.0.0.1":
+                    hostnames += f" {host}"
+                modified_hosts += f"{ip} {hostnames}\n"
+            # need to be root to write to /etc/hosts so write to a new file and move it with sudo
+            sftp.putfo(io.BytesIO(modified_hosts.encode()), '/tmp/newhosts')
+            ssh.exec_command("sudo mv /tmp/newhosts /etc/hosts")
+
 
 def aws_terminate(name):
     ec2_client = boto3.client('ec2')
@@ -114,6 +135,9 @@ ZONE = "us-central1-a"
 PROJECT = "couchbase-qe"
 DISK_SIZE_GB = 40
 SSH_USERNAME = "couchbase"
+# Long term we should move the provisioning to a server manager that handles these variables in a config file rather than hardcoding
+CLOUD_DNS_DOMAIN_NAME = "couchbase6.com"
+CLOUD_DNS_ZONE_NAME = "couchbase6"
 
 def gcp_terminate(name):
     client = InstancesClient()
@@ -121,6 +145,7 @@ def gcp_terminate(name):
         instances = client.list(ListInstancesRequest(project=PROJECT, zone=ZONE, filter=f"labels.name = {name}"))
         for instance in instances:
             client.delete(DeleteInstanceRequest(instance=instance.name, project=PROJECT, zone=ZONE))
+        delete_dns_records(instances)
     except Exception:
         return
 
@@ -148,7 +173,57 @@ def gcp_wait_for_operation(operation):
 
         time.sleep(1)
 
-# returns two lists, external ips and internal ips
+
+def hostname_from_ip(ip, for_dns=False):
+    hostname = f"gcp-{ip.replace('.', '-')}.{CLOUD_DNS_DOMAIN_NAME}"
+    if for_dns:
+        hostname += "."
+    return hostname
+
+
+def ip_from_instance(instance):
+    return instance.network_interfaces[0].access_configs[0].nat_i_p
+
+
+def delete_dns_records(instances):
+    modify_dns_records(instances, delete=True)
+
+
+def create_dns_records(instances):
+    modify_dns_records(instances, delete=False)
+
+
+def modify_dns_records(instances, delete):
+    zone = DnsClient().zone(CLOUD_DNS_ZONE_NAME, CLOUD_DNS_DOMAIN_NAME)
+    changes = zone.changes()
+    for instance in instances:
+        ip = ip_from_instance(instance)
+        hostname = hostname_from_ip(ip, for_dns=True)
+        resource_record_set = zone.resource_record_set(
+            name=hostname, rrdatas=[ip], record_type="A", ttl=60)
+        if delete:
+            changes.delete_record_set(resource_record_set)
+        else:
+            changes.add_record_set(resource_record_set)
+    changes.create()
+
+
+def wait_for_dns_propagation(instances):
+    propagated = False
+    while not propagated:
+        propagated = True
+        for instance in instances:
+            ip = ip_from_instance(instance)
+            hostname = hostname_from_ip(ip)
+            try:
+                answer = dns.resolver.resolve(hostname)
+                propagated &= answer[0].to_text() == ip
+            except Exception:
+                propagated = False
+                time.sleep(1)
+                continue
+
+
 def gcp_get_servers(name, count, os, type, ssh_key_path, architecture):
     machine_type = "e2-standard-4"
 
@@ -171,13 +246,17 @@ def gcp_get_servers(name, count, os, type, ssh_key_path, architecture):
 
     instances = list(InstancesClient().list(ListInstancesRequest(project=PROJECT, zone=ZONE, filter=f"labels.name = {name}")))
 
-    internal_ips = [instance.network_interfaces[0].network_i_p for instance in instances]
-    ips = [instance.network_interfaces[0].access_configs[0].nat_i_p for instance in instances]
+    create_dns_records(instances)
 
-    for ip in ips:
-        post_provisioner(ip, SSH_USERNAME, ssh_key_path)
+    wait_for_dns_propagation(instances)
 
-    return ips, internal_ips
+    hostnames = [hostname_from_ip(ip_from_instance(instance))
+                 for instance in instances]
+
+    for hostname in hostnames:
+        post_provisioner(hostname, SSH_USERNAME, ssh_key_path, modify_hosts=True)
+
+    return hostnames
 
 AZ_TEMPLATE_MAP = {
     "couchbase"  : "qe-image-20211129",
