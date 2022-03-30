@@ -1433,7 +1433,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # rebalance out a indexer node
         try:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
-            self.sleep(7)
+            # self.sleep(7)
             # reboot a kv node during gsi rebalance
             self.reboot_node(kv_server[1])
             reached = RestHelper(self.rest).rebalance_reached()
