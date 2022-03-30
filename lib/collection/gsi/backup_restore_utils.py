@@ -63,6 +63,23 @@ class IndexBackupClient(object):
 
     def _backup_with_tool(self, namespaces, include, config_args, backup_args):
         remote_client = RemoteMachineShellConnection(self.backup_node)
+        os_platform = remote_client.extract_remote_info().type.lower()
+        if os_platform == 'linux':
+            if remote_client.nonroot:
+                self.cli_command_location = testconstants.LINUX_NONROOT_CB_BIN_PATH
+            else:
+                self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
+            self.backup_path = testconstants.LINUX_BACKUP_PATH
+        elif os_platform == 'windows':
+            self.cmd_ext = ".exe"
+            self.cli_command_location =\
+                testconstants.WIN_COUCHBASE_BIN_PATH_RAW
+            self.backup_path = testconstants.WIN_BACKUP_C_PATH
+        elif os_platform == 'mac':
+            self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
+            self.backup_path = testconstants.LINUX_BACKUP_PATH
+        else:
+            raise Exception("OS not supported.")
         command = self.cli_command_location + "cbbackupmgr config --archive {0} --repo backup_{1} {2}".format(
             self.backup_path, self.rand, self.disabled_services)
         if not config_args:

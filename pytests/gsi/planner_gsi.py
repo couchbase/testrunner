@@ -16,7 +16,9 @@ from membase.api.rest_client import RestHelper, RestConnection
 from .base_gsi import BaseSecondaryIndexingTests
 from remote.remote_util import RemoteMachineShellConnection
 from gsi.collections_concurrent_indexes import powerset
-
+from lib.testconstants import \
+    LINUX_COUCHBASE_BIN_PATH, LINUX_NONROOT_CB_BIN_PATH, \
+    WIN_COUCHBASE_BIN_PATH
 
 class PlannerGSI(BaseSecondaryIndexingTests):
     def setUp(self):
@@ -63,7 +65,13 @@ class PlannerGSI(BaseSecondaryIndexingTests):
             port = '18091'
         else:
             port = '8091'
-        cmd = f'/opt/couchbase/bin/cbindexplan  -command=retrieve -cluster="127.0.0.1:{port}" ' \
+        bin_path = os.path.join(LINUX_COUCHBASE_BIN_PATH,'cbindexplan')
+        if self.shell.extract_remote_info().type.lower() == 'linux':
+            if self.nonroot:
+                bin_path = os.path.join(LINUX_NONROOT_CB_BIN_PATH,'cbindexplan')
+        elif self.shell.extract_remote_info().type.lower() == 'windows':
+            bin_path = os.path.join(WIN_COUCHBASE_BIN_PATH,'cbindexplan')
+        cmd = f'{bin_path}  -command=retrieve -cluster="127.0.0.1:{port}" ' \
               f'-username="Administrator" -password="password" -getUsage -numNewReplica {count}' \
               f' -output {output_file}'
         remote.execute_command(cmd)

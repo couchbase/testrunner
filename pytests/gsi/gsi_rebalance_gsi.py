@@ -34,9 +34,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         info = shell.extract_remote_info().type.lower()
         if info == 'linux':
             if self.nonroot:
-                nonroot_base_path = "/home/{0}".format(self.master.ssh_username)
-                self.cli_command_location = nonroot_base_path + \
-                                       testconstants.LINUX_COUCHBASE_BIN_PATH
+                self.cli_command_location = testconstants.LINUX_NONROOT_CB_BIN_PATH
             else:
                 self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
         elif info == 'windows':
@@ -2822,9 +2820,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
     def _cbindex_move(self, src_node, dst_node, index_list, alter_index=False, queue=None,run_from_dst=False,username="Administrator", password="password",
                       expect_failure=False, bucket="default", remote_host=None):
-        ip_address = str(dst_node).replace("ip:", "").replace(" port",
-                                                              "").replace(
-            " ssh_username:root", "").replace(" ssh_username:Administrator", "")
+        ip_address = f"{dst_node.ip}:{dst_node.port}"
         if alter_index:
             alter_index_query = 'ALTER INDEX default.' + index_list + ' WITH {{"action":"move","nodes": ["{0}"]}}'.format(
                 ip_address)
@@ -2885,7 +2881,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                     host_names_after_rebalance.append(index_map[bucket][index]['hosts'])
             for node in host_names_after_rebalance:
                 index_distribution_map_after_rebalance[node] = index_distribution_map_after_rebalance.get(node, 0) + 1
-            ip_address = str(dst_node).replace("ip:", "").replace(" port", "").replace(" ssh_username:root", "").replace(" ssh_username:Administrator", "")
+            ip_address = f"{dst_node.ip}:{dst_node.port}"
             log.info(ip_address)
             log.info(index_distribution_map_after_rebalance)
             if ip_address in index_distribution_map_after_rebalance:
