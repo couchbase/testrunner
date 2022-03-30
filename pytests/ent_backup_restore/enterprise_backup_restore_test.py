@@ -3664,7 +3664,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             kwargs = {}
             if self.input.param("enforce_tls", False):
                 kwargs["demandEncryption"] = 1
-                trusted_ca = rest_dest.get_trusted_CAs()[4]["pem"]
+                trusted_ca = rest_dest.get_trusted_CAs()[-1]["pem"]
                 kwargs["certificate"] = trusted_ca
             rest_src.add_remote_cluster(self.servers[1].ip, self.servers[1].port, self.backupset.cluster_host_username,
                                         self.backupset.cluster_host_password, "C2", **kwargs)
