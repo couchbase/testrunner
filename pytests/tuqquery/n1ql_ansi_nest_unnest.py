@@ -83,7 +83,7 @@ class QueryANSINestUnnestTests(QueryTests):
         self.run_cbq_query(query)
 
     def test_array_indexing_left_hand_array_unnest_IN(self):
-        query = "select * from {0} d unnest d.passwords INNER JOIN {1} s ON (s.home IN (ALL ARRAY t for t in " \
+        query = "select * from {0} d unnest d.passwords INNER JOIN {1} s ON (s.home IN (ARRAY t for t in " \
                 "d.travel_history END))".format(self.default_query_bucket, self.standard_query_bucket)
         self.run_cbq_query(query)
 

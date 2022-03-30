@@ -541,7 +541,7 @@ class QueryANSIJOINSTests(QueryTests):
         idx_list.append((idx2, (self.query_bucket, "id")))
 
         query = "select * from {1} d INNER JOIN {0} t ON (t.id IN " \
-                "(DISTINCT ARRAY v.RAM for v in d.VMs END))".format(self.query_bucket, self.default_query_bucket)
+                "ARRAY_DISTINCT(ARRAY v.RAM for v in d.VMs END))".format(self.query_bucket, self.default_query_bucket)
         queries_to_run.append((query, 1008))
         self.run_common_body(index_list=idx_list, queries_to_run=queries_to_run)
 
