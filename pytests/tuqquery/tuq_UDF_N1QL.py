@@ -1458,6 +1458,73 @@ class QueryUDFN1QLTests(QueryTests):
         actual_result = function_result['results'][0]
         self.assertEqual(actual_result, expected_result)
 
+    def test_inner_insert(self):
+        self.run_cbq_query("DELETE FROM default WHERE implicit_close = True")
+        function_name = 'implicit_close'
+        # Function will iterate over 11 rows from select, we should not hit default limit (10)
+        # since insert iterator does not return row and should will be implicitly close
+        functions = f'function {function_name}() {{\
+            var res=[];\
+            var q1 = SELECT * FROM [1,2,3,4,5,6,7,8,9,10,11] AS a;\
+            for (const doc of q1) {{\
+                var q2 = INSERT INTO default VALUES (UUID(), {{"implicit_close": True}});\
+            }}\
+            return "Success";\
+        }}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+        expected_result = "Success"
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+    def test_inner_select(self):
+        function_name = 'implicit_close'
+        # Function need to iterate over less than 10 rows given there is no explicit close
+        # and it will open 10 iterarors which is default max.
+        functions = f'function {function_name}() {{\
+            var res=[];\
+            var q1 = SELECT * FROM [1,2,3,4,5,6,7,8,9] AS a;\
+            for (const doc of q1) {{\
+                var q2 = SELECT COUNT(*) FROM [1,2,3] AS b;\
+            }}\
+            return "Success";\
+        }}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+
+        # Execute function
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+        expected_result = "Success"
+        actual_result = function_result['results'][0]
+        self.assertEqual(actual_result, expected_result)
+
+    def test_inner_select_exception(self):
+        function_name = 'implicit_close'
+        # Function will terate over more than 10 rows. Given there is no explicit close
+        # it will open 10+ iterarors and reach max of 10.
+        functions = f'function {function_name}() {{\
+            var res=[];\
+            var q1 = SELECT * FROM [1,2,3,4,5,6,7,8,9,10,11] AS a;\
+            for (const doc of q1) {{\
+                var q2 = SELECT COUNT(*) FROM [1,2,3] AS b;\
+            }}\
+            return "Success";\
+        }}'
+        self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+
+        # Execute function
+        try:
+            self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+            self.log.fail("We should have hit max ")
+        except CBQError as ex:
+            error = self.process_CBQE(ex, 0)
+            self.assertEqual(error['code'], 10109)
+            self.assertEqual(error['reason']['details']['Exception'], " Active iterator limit of 10 reached. Close unused iterators and retry")
+
     def test_multiple_iterator(self):
         function_name = 'param_from_var_default'
         functions = f'function {function_name}(j, y, m) {{\
