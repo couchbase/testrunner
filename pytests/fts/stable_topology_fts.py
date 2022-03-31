@@ -2781,7 +2781,7 @@ class StableTopFTS(FTSBaseTest):
             self.cli_client.delete_scope(scope=drop_name)
         else:
             self._cb_cluster.delete_bucket("default")
-        self.sleep(20)
+        self.sleep(60)
 
         for idx in self._cb_cluster.get_indexes():
             status,dfn = rest.get_fts_index_definition(idx.name)
