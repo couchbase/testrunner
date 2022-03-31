@@ -64,7 +64,6 @@ class cbstatsTests(CliBaseTest):
             count = 0
             for key, vb_id in keys_map.items():
                 output, error = self.shell.execute_cbstats(self.buckets[0], self.command, key, vb_id)
-                self.sleep(20)
                 self.verify_results(output, error)
                 count += 1
                 if self.master.ip.endswith("amazonaws.com") and count == 10:

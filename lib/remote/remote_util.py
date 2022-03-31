@@ -4680,6 +4680,12 @@ class RemoteMachineShellConnection(KeepRefs):
         if protocol == "https": command += " --no-ssl-verify"
         if _stdin:
             command = "echo %s | %s" % (_stdin, command)
+        if not self.is_enterprise(self.info.type.lower()):
+            log.info("This cluster is CE.")
+            protocol = "http"
+            command = command.replace("https", "http")
+            command = command.replace("18091", "8091")
+            command = command.replace("--no-ssl-verify", "")
         log.info("command to run: {0}".format(command))
         output, error = self.execute_command(command, debug=False, use_channel=True)
         return output, error
