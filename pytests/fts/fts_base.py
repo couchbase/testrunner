@@ -2076,7 +2076,11 @@ class CouchbaseCluster:
                 ip = "127.0.0.1"
             else:
                 ip = node_ip.rsplit(':', 1)[0]
-            node = self.get_node(ip, node_ip.rsplit(':', 1)[1])
+            port = node_ip.rsplit(':', 1)[1]
+            node = self.get_node(ip, port)
+            if node is None and CbServer.use_https:
+                port = CbServer.ssl_port_map.get(str(port), str(port))
+                node = self.get_node(ip, port)
             if node:
                 if "fts" in services:
                     self.__fts_nodes.append(node)
