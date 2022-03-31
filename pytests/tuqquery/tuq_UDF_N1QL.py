@@ -1312,6 +1312,7 @@ class QueryUDFN1QLTests(QueryTests):
             }}\
             return acc;}}'
         self.create_library(self.library_name, functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(...) LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
 
         # Execute function
         function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}(1,"Engineer",2011,10)')
