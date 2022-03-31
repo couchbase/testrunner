@@ -3630,6 +3630,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if self.bucket_type != "ephemeral":
             self._create_restore_cluster()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+        if self.enforce_tls:
+            self.master.port = '8091'
+            self.master.protocol = "http://"
+            for server in self.servers:
+                server.port = '8091'
         rest_target_fts = RestConnection(self.input.clusters[0][1])
         status = False
         try:
