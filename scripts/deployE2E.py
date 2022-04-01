@@ -1,4 +1,5 @@
 import socket
+import string
 import subprocess
 import sys, os
 import site
@@ -35,8 +36,13 @@ class DeployE2EServices:
         self.dockerE2EContainersDeleteCommand = "docker rm -f bookingService_container profileService_container " \
                                             "inventoryService_container "
 
-        self.setBookingHostname()
+        self.setHostIP()
+        self.bookingHostname = self.hostIP
         print("Booking host will be deployed on : {0}".format(self.bookingHostname))
+
+        self.getBookingEndpoint()
+        self.getProfileEndpoint()
+        self.getInventoryEndpoint()
 
     def deploy(self):
         self.printCapellaDetails()
@@ -97,7 +103,7 @@ class DeployE2EServices:
         except Exception as ex:
             print("Exception while removing existing dockercontainers.May be no E2E containers existed on this host")
 
-    def setBookingHostname(self):
+    def setHostIP(self):
         if sys.platform.startswith("linux"):  # could be "linux", "linux2", "linux3", ...
             self.bookingHostname = os.system("hostname -i")
         elif sys.platform == "darwin":
@@ -109,7 +115,24 @@ class DeployE2EServices:
                 IP = '127.0.0.1'
             finally:
                 st.close()
-            self.bookingHostname=IP
+            self.hostIP=IP
+
+    def getBookingEndpoint(self):
+        bookingEndpoint = "{0}:{1}".format(self.hostIP,8070)
+        print(bookingEndpoint)
+        return bookingEndpoint
+
+    def getProfileEndpoint(self):
+        profileEndpoint = "{0}:{1}".format(self.hostIP,8090)
+        print(profileEndpoint)
+        return profileEndpoint
+
+    def getInventoryEndpoint(self):
+        inventoryEndpoint = "{0}:{1}".format(self.hostIP,9010)
+        print(inventoryEndpoint)
+        return inventoryEndpoint
+
+
 
 
 if __name__ == "__main__":
