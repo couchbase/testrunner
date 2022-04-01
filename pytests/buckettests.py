@@ -158,6 +158,8 @@ class CreateBucketTests(BaseTestCase):
         if self.reset_node_services:
             """ reset node to set services correctly: index,kv,n1ql """
             self.rest.force_eject_node()
+            if self.input.param('enable_ipv6', False):
+                self.reset_and_enable_ipv6(self.master)
             status = False
 
             try:
@@ -239,6 +241,8 @@ class CreateBucketTests(BaseTestCase):
         self.rest.force_eject_node()
 
         shell = RemoteMachineShellConnection(self.master)
+        if self.input.param('enable_ipv6', False):
+            self.reset_and_enable_ipv6(self.master)
         set_index_storage_type = ""
         if self.node_version[:5] in COUCHBASE_FROM_WATSON:
             set_index_storage_type = " --index-storage-setting=memopt "
@@ -330,7 +334,10 @@ class CreateBucketTests(BaseTestCase):
             use rest to reset node to set services correctly: index,kv,n1ql """
         if self.node_version[:5] in COUCHBASE_FROM_VULCAN:
             self.rest.force_eject_node()
+
             shell = RemoteMachineShellConnection(self.master)
+            if self.input.param('enable_ipv6', False):
+                self.reset_and_enable_ipv6(self.master)
             set_index_storage_type = " --index-storage-setting=memopt "
             options = ' --cluster-port=8091 \
                         --cluster-ramsize=300 \
@@ -343,7 +350,6 @@ class CreateBucketTests(BaseTestCase):
 
             self.log.info("Add new user after reset node! ")
             self.add_built_in_server_user(node=self.master)
-            shell = RemoteMachineShellConnection(self.master)
             bucket_type = self.input.param("bucket_type", "couchbase")
             options = ' --bucket=default \
                         --bucket-type={0} \
