@@ -1,7 +1,7 @@
 from lib.remote.remote_util import RemoteMachineShellConnection
 
 
-class ServerInfo():
+class ServerInfo:
 
     def __init__(self,
                  ip,
@@ -33,6 +33,8 @@ class TestSSL:
         output, error = shell.execute_command("cd {0};"
                                               "git clone {1}"
                                               .format(self.path, TestSSL.TestSSL_URL))
+        shell.log_command_output(output, error)
+        output, error = shell.execute_command("yum install bind-utils -y")
         shell.log_command_output(output, error)
         shell.disconnect()
 

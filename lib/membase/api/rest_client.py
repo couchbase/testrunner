@@ -6050,6 +6050,18 @@ class RestConnection(object):
         status, content, header = self._http_request(self.baseUrl + "controller/uploadClusterCA", 'POST', headers=headers, params=certificate)
         return status, content
 
+    def set_min_tls_version(self, service='global', version='tlsv1.2'):
+        """
+        Sets the tls min version at per-service/global level
+        """
+        url = 'settings/security/tlsMinVersion'
+        if service in ['data', 'fullTextSearch', 'index',
+                       'eventing', 'query', 'analytics', 'backup', 'clusterManager']:
+            url = 'settings/security/' + service + '/tlsMinVersion'
+        api = self.baseUrl + url
+        status, content, header = self._http_request(api, 'POST', params=version)
+        return status, content
+
     def load_trusted_CAs(self):
         """
         Instructs the cluster to load trusted CAs(.pem files) from the node's inbox/CA folder
