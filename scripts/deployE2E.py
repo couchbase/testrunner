@@ -15,7 +15,7 @@ class DeployE2EServices:
         self.capellaUsername = capellaUsername
         self.capellaPassword = capellaPassword
 
-        self.e2eRepo = "git clone https://github.com/couchbaselabs/e2e-app.git"
+        #self.e2eRepo = "git clone https://github.com/couchbaselabs/e2e-app.git"
 
         self.bookingServiceName = "booking"
         self.bookingServiceDockerRunCommand = "docker run -d -t -i -p 8070:8082 -e CAPELLA_USERNAME={0} -e " \
@@ -36,6 +36,7 @@ class DeployE2EServices:
         self.dockerE2EContainersDeleteCommand = "docker rm -f bookingService_container profileService_container " \
                                             "inventoryService_container "
 
+        self.hostIP = None
         self.setHostIP()
         self.bookingHostname = self.hostIP
         print("Booking host will be deployed on : {0}".format(self.bookingHostname))
@@ -45,35 +46,40 @@ class DeployE2EServices:
         self.getInventoryEndpoint()
 
     def deploy(self):
-        self.printCapellaDetails()
-        self.downloadE2ERepo()
-        self.deleteExistingDockerContainersOnHost()
-        self.deployService(self.bookingServiceName,
-                           self.bookingServiceDockerRunCommand.format(self.capellaUsername, self.capellaPassword,
-                                                                      self.capellaHostname))
-        self.deployService(self.profileServiceName,
-                           self.profileServiceDockerRunCommand.format(self.capellaUsername, self.capellaPassword,
-                                                                      self.capellaHostname,
-                                                                      self.bookingHostname))
-        self.deployService(self.inventoryServiceName,
-                           self.inventoryServiceDockerRunCommand.format(self.capellaUsername, self.capellaPassword,
-                                                                        self.capellaHostname))
+        try:
+            os.chdir('e2e-app')
+            self.printCapellaDetails()
+            #self.downloadE2ERepo()
+            self.deleteExistingDockerContainersOnHost()
+            self.deployService(self.bookingServiceName,
+                               self.bookingServiceDockerRunCommand.format(self.capellaUsername, self.capellaPassword,
+                                                                          self.capellaHostname))
+            self.deployService(self.profileServiceName,
+                               self.profileServiceDockerRunCommand.format(self.capellaUsername, self.capellaPassword,
+                                                                          self.capellaHostname,
+                                                                          self.bookingHostname))
+            self.deployService(self.inventoryServiceName,
+                               self.inventoryServiceDockerRunCommand.format(self.capellaUsername, self.capellaPassword,
+                                                                            self.capellaHostname))
+            os.chdir('..')
+        except:
+            self.deleteExistingDockerContainersOnHost()
 
     def printCapellaDetails(self):
         print(
             "Mock Capella details are DB_HOSTNAME: " + self.capellaHostname + " DB_USERNAME: " + self.capellaUsername + " DB_PASSWORD: " + self.capellaPassword)
 
-    def downloadE2ERepo(self):
-        try:
-            os.system("rm -rf e2e-app")
-
-            print("Downloading e2e Repo:{0} ".format(self.e2eRepo))
-          #  git.repo.base.Repo.clone_from(self.e2eRepo, "e2e-app")
-            os.system(self.e2eRepo)
-
-            os.chdir('e2e-app')
-        except Exception as ex:
-            raise Exception("Error Downloading E2E Repo. Exiting!!. Exception Details:{0}".format(ex))
+    # def downloadE2ERepo(self):
+    #     try:
+    #         os.system("rm -rf e2e-app")
+    #
+    #         print("Downloading e2e Repo:{0} ".format(self.e2eRepo))
+    #       #  git.repo.base.Repo.clone_from(self.e2eRepo, "e2e-app")
+    #         os.system(self.e2eRepo)
+    #
+    #         os.chdir('e2e-app')
+    #     except Exception as ex:
+    #         raise Exception("Error Downloading E2E Repo. Exiting!!. Exception Details:{0}".format(ex))
 
     def deployService(self, serviceName, dockerRunCommand):
         self.createDockerImage(serviceName)
@@ -105,7 +111,7 @@ class DeployE2EServices:
 
     def setHostIP(self):
         if sys.platform.startswith("linux"):  # could be "linux", "linux2", "linux3", ...
-            self.bookingHostname = os.system("hostname -i")
+            self.hostIP = os.system("hostname -i")
         elif sys.platform == "darwin":
             st = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             try:
