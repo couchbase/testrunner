@@ -1802,7 +1802,7 @@ class BaseRQGTests(BaseTestCase):
             self.rest.delete_bucket(bucket.name)
         self.buckets = []
         # Create New Buckets
-        self._create_buckets(self.master, bucket_list, server_id=None, bucket_size=300)
+        self._create_buckets(self.master, bucket_list, server_id=None, bucket_size=100)
         # Wait till the buckets are up
         self.sleep(15)
         # Read Data from mysql database and populate the couchbase server
@@ -1832,10 +1832,7 @@ class BaseRQGTests(BaseTestCase):
             for bucket in self.buckets:
                 self.rest.delete_bucket(bucket.name)
         self.buckets = []
-        if self.change_bucket_properties or self.gsi_type == "memory_optimized":
-            bucket_size = 100
-        else:
-            bucket_size = 200
+        bucket_size = 100
 
         if self.change_bucket_properties:
             shell = RemoteMachineShellConnection(self.master)
