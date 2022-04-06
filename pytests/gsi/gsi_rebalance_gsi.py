@@ -2820,9 +2820,9 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
     def _cbindex_move(self, src_node, dst_node, index_list, alter_index=False, queue=None,run_from_dst=False,username="Administrator", password="password",
                       expect_failure=False, bucket="default", remote_host=None):
-        if dst_node != ' ':
+        try:
             ip_address = f"{dst_node.ip}:{dst_node.port}"
-        else:
+        except AttributeError:
             ip_address = dst_node
         if alter_index:
             alter_index_query = 'ALTER INDEX default.' + index_list + ' WITH {{"action":"move","nodes": ["{0}"]}}'.format(
