@@ -111,7 +111,7 @@ class DeployE2EServices:
 
     def setHostIP(self):
         if sys.platform.startswith("linux"):  # could be "linux", "linux2", "linux3", ...
-            self.hostIP = os.popen('hostname -i').read().strip()
+            self.hostIP = os.popen('ifconfig eth0 | grep "inet " | xargs | cut -d" " -f 2').read().strip()
         elif sys.platform == "darwin":
             st = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             try:
