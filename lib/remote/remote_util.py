@@ -3983,7 +3983,10 @@ class RemoteMachineShellConnection(KeepRefs):
             o, r = self.execute_command(cmd)
             self.log_command_output(o, [])
         else:
-            o, r = self.execute_command("killall -SIGSTOP memcached")
+            if self.nonroot:
+                o, r = self.execute_command("killall -SIGSTOP memcached.bin")
+            else:
+                o, r = self.execute_command("killall -SIGSTOP memcached")
             self.log_command_output(o, r)
         log.info("wait %s seconds to make node down." % timesleep)
         time.sleep(timesleep)
@@ -3995,15 +3998,18 @@ class RemoteMachineShellConnection(KeepRefs):
             o, r = self.execute_command(cmd)
             self.log_command_output(o, [])
         else:
-            o, r = self.execute_command("killall -SIGCONT memcached")
+            if self.nonroot:
+                o, r = self.execute_command("killall -SIGCONT memcached.bin")
+            else:
+                o, r = self.execute_command("killall -SIGCONT memcached")
             self.log_command_output(o, r)
 
     def pause_beam(self):
-        o, r = self.execute_command("killall -SIGSTOP beam")
+        o, r = self.execute_command("killall -SIGSTOP beam.smp")
         self.log_command_output(o, r)
 
     def unpause_beam(self):
-        o, r = self.execute_command("killall -SIGCONT beam")
+        o, r = self.execute_command("killall -SIGCONT beam.smp")
         self.log_command_output(o, r)
 
 
