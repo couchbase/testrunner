@@ -985,3 +985,15 @@ class BaseSecondaryIndexingTests(QueryTests):
         # wait till node is ready after warmup
         ClusterOperationHelper.wait_for_ns_servers_or_assert([node], self,
                                                              wait_if_warmup=True)
+
+    def get_persistent_snapshot_count(self, index_node, index_name):
+        """
+        Returns the number of persistent snapshots for a MOI index for a specific node
+        """
+        index_rest = RestConnection(index_node)
+        index_map = index_rest.get_index_stats()
+        for keyspace in list(index_map.keys()):
+            self.log.info("Keyspace: {0}".format(keyspace))
+            for idx_name, idx_val in index_map[keyspace].items():
+                if idx_name == index_name:
+                    return idx_val["num_snapshots"]

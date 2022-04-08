@@ -1158,6 +1158,48 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self._verify_bucket_count_with_index_count()
         self.multi_query_using_index()
 
+    def test_mutations_for_persistent_snapshot(self):
+        '''
+        Create a memory optimized index. Make changes in the indexer settings. Perform some mutations and validate that
+        the persistent snapshots are getting created.
+        https://issues.couchbase.com/browse/MB-50034
+        '''
+        if self.gsi_type != 'memory_optimized':
+            self.skipTest("Peristent snapshot test is meant for memory optimized indexes")
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for bucket in self.buckets:
+            self.cluster.bucket_delete(self.master, bucket=bucket)
+        # Create default bucket
+        default_params = self._create_bucket_params(
+            server=self.master, size=self.bucket_size,
+            replicas=self.num_replicas, bucket_type=self.bucket_type,
+            enable_replica_index=self.enable_replica_index,
+            eviction_policy=self.eviction_policy, lww=self.lww,
+            maxttl=self.maxttl, compression_mode=self.compression_mode)
+        self.cluster.create_default_bucket(default_params)
+        self.buckets = RestConnection(self.master).get_buckets()
+        # loading data to bucket
+        gens_load = self.generate_docs(num_items=self.docs_per_day)
+        self.load(gens_load, flag=self.item_flag, batch_size=self.batch_size, op_type="create", verify_data=False)
+        index_gen1 = QueryDefinition(index_name='idx1', index_fields=['name'])
+        query = index_gen1.generate_index_create_query()
+        self.n1ql_helper.run_cbq_query(query=query)
+        self.wait_until_indexes_online()
+        snapshot_count_before = self.get_persistent_snapshot_count(index_nodes[0], 'idx1')
+        query = 'select count(*) from {} where name is not missing'.format('default')
+        self.n1ql_helper.run_cbq_query(query=query)
+        for index_node in index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 10})
+        self.sleep(10)
+        gens_load = self.generate_docs(num_items=self.docs_per_day)
+        self.load(gens_load, flag=self.item_flag, batch_size=self.batch_size, op_type="update", verify_data=False)
+        self.sleep(20)
+        snapshot_count_after = self.get_persistent_snapshot_count(index_nodes[0], 'idx1')
+        self.assertNotEqual(snapshot_count_before, snapshot_count_after,
+                            'Indexing not happening after editing index settings. Snapshot count before {}. Snapshot count after {}'.
+                            format(snapshot_count_before, snapshot_count_after))
+
     def _create_replica_indexes(self):
         query_definitions = []
         if not self.use_replica:
