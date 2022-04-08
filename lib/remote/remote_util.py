@@ -211,7 +211,7 @@ class RemoteMachineShellConnection(KeepRefs):
         """ in nonroot, we could extract Couchbase Server at
             any directory that non root user could create
         """
-        self.nr_home_path = "/home/%s/" % self.username
+        self.nr_home_path = "/home/%s/cb/" % self.username
         if self.username == 'root':
             self.use_sudo = False
         elif self.username != "Administrator":
@@ -246,7 +246,7 @@ class RemoteMachineShellConnection(KeepRefs):
         self.input = TestInput.TestInputParser.get_test_input(sys.argv)
         self.use_sudo = True
         self.nonroot = False
-        self.nr_home_path = "/home/%s/" % self.username
+        self.nr_home_path = "/home/%s/cb/" % self.username
         if self.username == 'root':
             self.use_sudo = False
         elif self.username != "Administrator":
@@ -2916,7 +2916,7 @@ class RemoteMachineShellConnection(KeepRefs):
                 output, error = self.execute_command("hdiutil unmount " + '"' + "/Volumes/" + volume + '"')
                 self.log_command_output(output, error)
         if self.nonroot:
-            if self.nr_home_path != "/home/%s/" % self.username:
+            if self.nr_home_path != "/home/%s/cb/" % self.username:
                 log.info("remove all non default install dir")
                 output, error = self.execute_command("rm -rf %s"
                                                         % self.nr_home_path)
@@ -2932,7 +2932,7 @@ class RemoteMachineShellConnection(KeepRefs):
                                                       % self.nr_home_path)
                 self.log_command_output(output, error)
             if "nr_install_dir" not in self.input.test_params:
-                self.nr_home_path = "/home/%s/" % self.username
+                self.nr_home_path = "/home/%s/cb/" % self.username
                 output, error = self.execute_command(" :> %s"
                                              % NR_INSTALL_LOCATION_FILE)
                 self.log_command_output(output, error)
