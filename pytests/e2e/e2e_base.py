@@ -14,7 +14,7 @@ class E2EBaseTest(BaseTestCase):
         super(E2EBaseTest, self).tearDown()
 
     def setup_services(self):
-        self.service_handler = DeployE2EServices(self.master.ip, "user1", "Couch@123")
+        self.service_handler = DeployE2EServices(self.master.ip, "Administrator", "password")
         self.service_handler.deploy()
         self.booking_endpoint = self.service_handler.getBookingEndpoint()
         self.profile_endpoint = self.service_handler.getProfileEndpoint()

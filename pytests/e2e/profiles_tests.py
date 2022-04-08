@@ -9,9 +9,9 @@ class ProfilesTests(E2EBaseTest):
     def tearDown(self):
         E2EBaseTest.tearDown(self)
 
-    def create_user(username="test_username", password="test_password", first_name="test_firstname",
+    def create_user(self, username="test_username", password="test_password", first_name="test_firstname",
                     last_name="test_lastname"):
-        ep = "{0}/{1}".format(self.get_profile_endpoint(), "createUser")
+        ep = "http://{0}/{1}".format(self.profile_endpoint, "createUser")
         self.log.info("Creating user '%s'".format(username))
         response = RestHelper.post_request(
             ep, {"username": username, "password": password,
