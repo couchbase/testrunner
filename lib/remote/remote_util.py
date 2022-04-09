@@ -4387,8 +4387,7 @@ class RemoteMachineShellConnection(KeepRefs):
                            debug=False):
         transfer_command = "%scbtransfer" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
-            transfer_command = '/home/%s%scbtransfer' % (self.username,
-                                                         LINUX_COUCHBASE_BIN_PATH)
+            transfer_command = '%scbtransfer' % (LINUX_NONROOT_CB_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             transfer_command = "\"%scbtransfer.exe\"" % (WIN_COUCHBASE_BIN_PATH_RAW)
@@ -4422,9 +4421,8 @@ class RemoteMachineShellConnection(KeepRefs):
             data_set_location_flag = "-d"
         linux_couchbase_path = LINUX_CB_PATH
         if self.nonroot:
-            cbdocloader_command = "/home/%s%scbdocloader" % (self.username,
-                                                             LINUX_COUCHBASE_BIN_PATH)
-            linux_couchbase_path = "/home/%s%s" % (self.username, LINUX_CB_PATH)
+            cbdocloader_command = "%scbdocloader" % (LINUX_NONROOT_CB_BIN_PATH)
+            linux_couchbase_path = "/home/%s/cb/%s" % (self.username, LINUX_CB_PATH)
         self.extract_remote_info()
         command = "%s -u %s -p %s %s %s:%s -b %s %s %s %s %ssamples/%s.zip"\
                                                                      % (cbdocloader_command,
@@ -4470,8 +4468,7 @@ class RemoteMachineShellConnection(KeepRefs):
     def execute_cbcollect_info(self, file, options=""):
         cbcollect_command = "%scbcollect_info" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
-            cbcollect_command = "/home/%s%scbcollect_info" % (self.username,
-                                                              LINUX_COUCHBASE_BIN_PATH)
+            cbcollect_command = "%scbcollect_info" % (LINUX_NONROOT_CB_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             cbcollect_command = "%scbcollect_info.exe" % (WIN_COUCHBASE_BIN_PATH)
@@ -4488,9 +4485,8 @@ class RemoteMachineShellConnection(KeepRefs):
         couch_dbinfo_command = "%scouch_dbinfo" % (LINUX_COUCHBASE_BIN_PATH)
         cb_data_path = "/"
         if self.nonroot:
-            couch_dbinfo_command = "/home/%s%scouch_dbinfo" % (self.username,
-                                                               LINUX_COUCHBASE_BIN_PATH)
-            cb_data_path = "/home/%s/" % self.username
+            couch_dbinfo_command = "%scouch_dbinfo" % (LINUX_NONROOT_CB_BIN_PATH)
+            cb_data_path = "/home/%s/cb/" % self.username
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             couch_dbinfo_command = "%scouch_dbinfo.exe" % (WIN_COUCHBASE_BIN_PATH)
@@ -4508,8 +4504,7 @@ class RemoteMachineShellConnection(KeepRefs):
                                                   cbadmin_password="password"):
         cbepctl_command = "%scbepctl" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
-            cbepctl_command = "/home/%s%scbepctl" % (self.username,
-                                                     LINUX_COUCHBASE_BIN_PATH)
+            cbepctl_command = "%scbepctl" % (LINUX_NONROOT_CB_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             cbepctl_command = "%scbepctl.exe" % (WIN_COUCHBASE_BIN_PATH)
@@ -4534,8 +4529,7 @@ class RemoteMachineShellConnection(KeepRefs):
     def execute_cbvdiff(self, bucket, node_str, password=None):
         cbvdiff_command = "%scbvdiff" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
-            cbvdiff_command = "/home/%s%scbvdiff" % (self.username,
-                                                     LINUX_COUCHBASE_BIN_PATH)
+            cbvdiff_command = "%scbvdiff" % (LINUX_NONROOT_CB_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             cbvdiff_command = "%scbvdiff.exe" % (WIN_COUCHBASE_BIN_PATH)
@@ -4556,8 +4550,7 @@ class RemoteMachineShellConnection(KeepRefs):
                                       print_results=False, options=""):
         cbstat_command = "%scbstats" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
-            cbstat_command = "/home/%s%scbstats" % (self.username,
-                                                    LINUX_COUCHBASE_BIN_PATH)
+            cbstat_command = "%scbstats" % (LINUX_NONROOT_CB_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             cbstat_command = "%scbstats.exe" % (WIN_COUCHBASE_BIN_PATH)
@@ -4595,8 +4588,7 @@ class RemoteMachineShellConnection(KeepRefs):
             connection_method = " -6 "
         cbstat_command = "%smcstat" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
-            cbstat_command = "/home/%s%smcstat" % (self.username,
-                                                    LINUX_COUCHBASE_BIN_PATH)
+            cbstat_command = "%smcstat" % (LINUX_NONROOT_CB_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             cbstat_command = "%smcstat.exe" % (WIN_COUCHBASE_BIN_PATH)
@@ -4629,8 +4621,7 @@ class RemoteMachineShellConnection(KeepRefs):
             options += " --no-ssl-verify"
         cb_client = "{0}couchbase-cli".format(LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
-            cb_client = "/home/{0}{1}couchbase-cli".format(self.username,
-                                                     LINUX_COUCHBASE_BIN_PATH)
+            cb_client = "{0}couchbase-cli".format(LINUX_NONROOT_CB_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             cb_client = "{0}couchbase-cli.exe".format(WIN_COUCHBASE_BIN_PATH)
@@ -4653,8 +4644,7 @@ class RemoteMachineShellConnection(KeepRefs):
             options += " --no-ssl-verify"
         cb_client = "%scouchbase-cli" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
-            cb_client = "/home/%s%scouchbase-cli" % (self.username,
-                                                     LINUX_COUCHBASE_BIN_PATH)
+            cb_client = "%scouchbase-cli" % (LINUX_NONROOT_CB_BIN_PATH)
         self.extract_remote_info()
         os_name = "unix"
         if self.info.type.lower() == 'windows':
@@ -4714,8 +4704,7 @@ class RemoteMachineShellConnection(KeepRefs):
     def _get_cbworkloadgen_command(self):
         cbworkloadgen_command = "%scbworkloadgen" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
-            cbworkloadgen_command = "/home/%s%scbworkloadgen" % (self.username,
-                                                        LINUX_COUCHBASE_BIN_PATH)
+            cbworkloadgen_command = "%scbworkloadgen" % (LINUX_NONROOT_CB_BIN_PATH)
         self.extract_remote_info()
 
         if self.info.distribution_type.lower() == 'mac':
@@ -4792,8 +4781,7 @@ class RemoteMachineShellConnection(KeepRefs):
     def execute_vbuckettool(self, keys, prefix=None):
         command = "%stools/vbuckettool" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
-            command = "/home/%s%stools/vbuckettool" % (self.username,
-                                                       LINUX_COUCHBASE_BIN_PATH)
+            command = "%stools/vbuckettool" % (LINUX_NONROOT_CB_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             command = "%stools/vbuckettool.exe" % (WIN_COUCHBASE_BIN_PATH)
@@ -5086,7 +5074,7 @@ class RemoteMachineShellConnection(KeepRefs):
             nonroot_path_start = "/"
         if os_name != 'windows':
             if self.nonroot:
-                if self.file_exists('/home/%s%s' % (self.username, LINUX_CB_PATH), VERSION_FILE):
+                if self.file_exists('/home/%s/cb/%s' % (self.username, LINUX_CB_PATH), VERSION_FILE):
                     output = self.read_remote_file('/home/%s%s' % (self.username, LINUX_CB_PATH),
                                                                    VERSION_FILE)
                 else:
