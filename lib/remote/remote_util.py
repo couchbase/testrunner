@@ -5075,7 +5075,7 @@ class RemoteMachineShellConnection(KeepRefs):
         if os_name != 'windows':
             if self.nonroot:
                 if self.file_exists('/home/%s/cb/%s' % (self.username, LINUX_CB_PATH), VERSION_FILE):
-                    output = self.read_remote_file('/home/%s%s' % (self.username, LINUX_CB_PATH),
+                    output = self.read_remote_file('/home/%s/cb/%s' % (self.username, LINUX_CB_PATH),
                                                                    VERSION_FILE)
                 else:
                     log.info("couchbase server at {0} may not installed yet"
