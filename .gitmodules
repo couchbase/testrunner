@@ -1,6 +1,6 @@
 [submodule "java_sdk_client"]
 	path = java_sdk_client
 	url = https://github.com/couchbaselabs/java_sdk_client
-[submodule "e2e-app"]
-	path = e2e-app
-	url = https://github.com/couchbaselabs/e2e-app
+[submodule "gauntlet"]
+	path = gauntlet
+	url = https://github.com/pavithra-mahamani/gauntlet
