@@ -47,7 +47,7 @@ class DeployE2EServices:
 
     def deploy(self):
         try:
-            os.chdir('e2e-app')
+            os.chdir('gauntlet')
             self.printCapellaDetails()
             #self.downloadE2ERepo()
             self.deleteExistingDockerContainersOnHost()
@@ -62,8 +62,9 @@ class DeployE2EServices:
                                self.inventoryServiceDockerRunCommand.format(self.capellaUsername, self.capellaPassword,
                                                                             self.capellaHostname))
             os.chdir('..')
-        except:
-            self.deleteExistingDockerContainersOnHost()
+        except Exception as ex:
+                print("Error while deploying. So quitting Gauntlet deployment!!. Exception details: {0}".format(ex))
+                self.deleteExistingDockerContainersOnHost()
 
     def printCapellaDetails(self):
         print(
@@ -85,29 +86,30 @@ class DeployE2EServices:
         self.createDockerImage(serviceName)
         try:
             print("Docker command to deploy {0}Service: {1}".format(serviceName, dockerRunCommand))
-            os.system(dockerRunCommand)
+            subprocess.call(dockerRunCommand, shell=True, cwd=os.getcwd())
         except Exception as ex:
-            raise Exception(
-                "Docker run exception for service: {0} . Exiting!!. Exception Details:{0}".format(serviceName, ex))
+            print(
+                "Docker run exception for service: {0} . Exiting!!. Exception Details:{1}".format(serviceName, ex))
+            raise ex
 
     def createDockerImage(self, serviceName):
         try:
             createDockerImageCommand = "sh createDockerImages.sh {0} false".format(serviceName)
             print("Command for creating {0} docker Image:  {1}".format(serviceName,
                                                                        createDockerImageCommand))
-
-            os.system(createDockerImageCommand)
+            subprocess.call(createDockerImageCommand, shell=True, cwd=os.getcwd())
             print("Completed creating {0} docker Image. Now deploying it!!".format(serviceName))
-        except Exception as ex:
-            raise Exception("Exception while creating docker image for service: {0}. Exiting!!. Exception "
-                            "Details:{1}".format(serviceName, ex))
+        except Exception as  ex:
+            print("Exception while creating docker image for service: {0}. Exiting!!. Exception "
+                            "Details:{1} \n".format(serviceName,ex))
+            raise ex
 
     def deleteExistingDockerContainersOnHost(self):
         try:
-            os.system(self.dockerContainerListCommand)
-            os.system(self.dockerE2EContainersDeleteCommand)
+            subprocess.call(self.dockerContainerListCommand, shell=True, cwd=os.getcwd())
+            subprocess.call(self.dockerE2EContainersDeleteCommand, shell=True, cwd=os.getcwd())
         except Exception as ex:
-            print("Exception while removing existing dockercontainers.May be no E2E containers existed on this host")
+            print("Exception while removing existing dockercontainers.May be no E2E containers existed on this host \n")
 
     def setHostIP(self):
         if sys.platform.startswith("linux"):  # could be "linux", "linux2", "linux3", ...
@@ -137,9 +139,6 @@ class DeployE2EServices:
         inventoryEndpoint = "{0}:{1}".format(self.hostIP,9010)
         print(inventoryEndpoint)
         return inventoryEndpoint
-
-
-
 
 if __name__ == "__main__":
     DeployE2EServices(sys.argv[1], sys.argv[2], sys.argv[3]).deploy()
