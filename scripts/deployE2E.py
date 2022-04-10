@@ -20,17 +20,18 @@ class DeployE2EServices:
         self.bookingServiceName = "booking"
         self.bookingServiceDockerRunCommand = "docker run -d -t -i -p 8070:8082 -e CAPELLA_USERNAME={0} -e " \
                                               "CAPELLA_PASSWORD={1} -e DB_HOSTNAME={2} --name bookingService_container " \
-                                              "e2e:booking "
+                                              "couchbaseqe/gauntlet:booking"
 
         self.profileServiceName = "profile"
         self.profileServiceDockerRunCommand = "docker run -d -t -i -p 8090:5000 -e CAPELLA_USERNAME={0} -e " \
                                               "CAPELLA_PASSWORD={1} -e DB_HOSTNAME={2} -e BOOKING_HOST={3} -e " \
-                                              "BOOKING_PORT=8070 --name profileService_container e2e:profile "
+                                              "BOOKING_PORT=8070 --name profileService_container " \
+                                              "couchbaseqe/gauntlet:profile "
 
         self.inventoryServiceName = "inventory"
         self.inventoryServiceDockerRunCommand = "docker run -d -t -i -p 9010:10000 -e CAPELLA_USERNAME={0} -e " \
                                                 "CAPELLA_PASSWORD={1} -e DB_HOSTNAME={2}  --name " \
-                                                "inventoryService_container e2e:inventory "
+                                                "inventoryService_container couchbaseqe/gauntlet:inventory"
 
         self.dockerContainerListCommand = "docker container ls -a"
         self.dockerE2EContainersDeleteCommand = "docker rm -f bookingService_container profileService_container " \
@@ -61,6 +62,8 @@ class DeployE2EServices:
             self.deployService(self.inventoryServiceName,
                                self.inventoryServiceDockerRunCommand.format(self.capellaUsername, self.capellaPassword,
                                                                             self.capellaHostname))
+            subprocess.call(self.dockerContainerListCommand, shell=True, cwd=os.getcwd())
+
             os.chdir('..')
         except Exception as ex:
                 print("Error while deploying. So quitting Gauntlet deployment!!. Exception details: {0}".format(ex))
@@ -83,7 +86,7 @@ class DeployE2EServices:
     #         raise Exception("Error Downloading E2E Repo. Exiting!!. Exception Details:{0}".format(ex))
 
     def deployService(self, serviceName, dockerRunCommand):
-        self.createDockerImage(serviceName)
+        #self.createDockerImage(serviceName)
         try:
             print("Docker command to deploy {0}Service: {1}".format(serviceName, dockerRunCommand))
             subprocess.call(dockerRunCommand, shell=True, cwd=os.getcwd())
