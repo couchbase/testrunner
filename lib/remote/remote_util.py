@@ -5052,15 +5052,24 @@ class RemoteMachineShellConnection(KeepRefs):
     def is_enterprise(self, os_name):
         enterprise = False
         if os_name != 'windows':
-            if self.file_exists("/opt/couchbase/etc/", "runtime.ini"):
-                output = self.read_remote_file("/opt/couchbase/etc/", "runtime.ini")
-                for x in output:
-                    x = x.strip()
-                    if x and "license = enterprise" in x:
-                        enterprise = True
+            runtime_file_path = ""
+            if self.nonroot:
+                if self.file_exists("{0}/opt/couchbase/etc/".format(self.nr_home_path),
+                                    "runtime.ini"):
+                    runtime_file_path = "{0}/opt/couchbase/etc/".format(self.nr_home_path)
+                else:
+                    log.info("couchbase server at {0} may not installed yet in nonroot server"
+                             .format(self.ip))
+            elif self.file_exists("/opt/couchbase/etc/", "runtime.ini"):
+                runtime_file_path = "/opt/couchbase/etc/"
             else:
                 log.info("couchbase server at {0} may not installed yet"
-                          .format(self.ip))
+                                                        .format(self.ip))
+            output = self.read_remote_file(runtime_file_path, "runtime.ini")
+            for x in output:
+                x = x.strip()
+                if x and "license = enterprise" in x:
+                    enterprise = True
         else:
             log.info("only check cb edition in unix enviroment")
         return enterprise
