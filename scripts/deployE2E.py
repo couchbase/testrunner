@@ -1,3 +1,7 @@
+# Draft script to quickly deploy and teardown services. Note: This will be short lived and it is using subprocess so might lead to a bad exception handling
+# New script with better exception handling using python SDK's will be up soon.
+# TODO Gauntlet and E2E are used interchangebly due to E2E repo re-naming to gauntlet. To be addressed in new script
+
 import socket
 import string
 import subprocess
@@ -18,6 +22,8 @@ class DeployE2EServices:
         #self.e2eRepo = "git clone https://github.com/couchbaselabs/e2e-app.git"
 
         self.bookingServiceName = "booking"
+
+        #TODO remove command based execution from subprocess and handle using python SDK's
         self.bookingServiceDockerRunCommand = "docker run -d -t -i -p 8070:8082 -e CAPELLA_USERNAME={0} -e " \
                                               "CAPELLA_PASSWORD={1} -e DB_HOSTNAME={2} --name bookingService_container " \
                                               "couchbaseqe/gauntlet:booking"
@@ -36,6 +42,8 @@ class DeployE2EServices:
         self.dockerContainerListCommand = "docker container ls -a"
         self.dockerE2EContainersDeleteCommand = "docker rm -f bookingService_container profileService_container " \
                                             "inventoryService_container "
+
+        self.dockerE2EImagesDeleteCommand = "docker rmi -f couchbaseqe/gauntlet:profile couchbaseqe/gauntlet:booking couchbaseqe/gauntlet:inventory"
 
         self.hostIP = None
         self.setHostIP()
@@ -112,7 +120,15 @@ class DeployE2EServices:
             subprocess.call(self.dockerContainerListCommand, shell=True, cwd=os.getcwd())
             subprocess.call(self.dockerE2EContainersDeleteCommand, shell=True, cwd=os.getcwd())
         except Exception as ex:
-            print("Exception while removing existing dockercontainers.May be no E2E containers existed on this host \n")
+            print("Exception while removing existing dockercontainers.May be no Gauntlet containers existed on this host \n")
+
+
+    def deleteExistingDockerImagesOnHost(self):
+        try:
+            subprocess.call(self.dockerE2EImagesDeleteCommand, shell=True, cwd=os.getcwd())
+        except Exception as ex:
+            print("Exception while removing existing docker Images.May be no Gauntlet Images existed on this host \n")
+
 
     def setHostIP(self):
         if sys.platform.startswith("linux"):  # could be "linux", "linux2", "linux3", ...
@@ -142,6 +158,10 @@ class DeployE2EServices:
         inventoryEndpoint = "{0}:{1}".format(self.hostIP,9010)
         print(inventoryEndpoint)
         return inventoryEndpoint
+
+    def tearDown(self):
+        self.deleteExistingDockerContainersOnHost()
+        self.deleteExistingDockerImagesOnHost()
 
 if __name__ == "__main__":
     DeployE2EServices(sys.argv[1], sys.argv[2], sys.argv[3]).deploy()
