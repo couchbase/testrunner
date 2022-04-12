@@ -72,8 +72,10 @@ class CollectionsAlterIndex(BaseSecondaryIndexingTests):
 
         new_index_node = None
         for node in index_nodes:
+            if node.ip in idx2_replica_host:
+                idx2_replica_host = f'{node.ip}:{self.node_port}'
             if node.ip not in idx2_host and node.ip not in idx2_replica_host:
-                new_index_node = f'{node.ip}:8091'
+                new_index_node = f'{node.ip}:{self.node_port}'
                 break
         # Just moving idx2 node, while keeping same node for replica
         self.alter_index_replicas(index_name='idx2', namespace=collection_namespace, action='move',
@@ -131,8 +133,10 @@ class CollectionsAlterIndex(BaseSecondaryIndexingTests):
 
         new_index_node = None
         for node in index_nodes:
+            if node.ip in idx2_replica_host:
+                idx2_replica_host = f'{node.ip}:{self.node_port}'
             if node.ip not in idx2_host and node.ip not in idx2_replica_host:
-                new_index_node = f'{node.ip}:8091'
+                new_index_node = f'{node.ip}:{self.node_port}'
                 break
 
         self.log.info(f"Current hosts for index idx2: {idx2_host} and idx2(replica 1): {idx2_replica_host}")
