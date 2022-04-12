@@ -11,8 +11,11 @@ class RestHelper(object):
         return response
 
     @staticmethod
-    def post_request(url, data):
-        response = requests.post(url, data)
+    def post_request(url, payload):
+        headers = {'Content-type': 'application/json',
+                   'Accept': 'application/json'}
+
+        response = requests.post(url, headers=headers, json=payload)
         return response
 
     @staticmethod

@@ -1,7 +1,6 @@
 # Draft script to quickly deploy and teardown services. Note: This will be short lived and it is using subprocess so might lead to a bad exception handling
 # New script with better exception handling using python SDK's will be up soon.
 # TODO Gauntlet and E2E are used interchangebly due to E2E repo re-naming to gauntlet. To be addressed in new script
-
 import socket
 import string
 import subprocess
@@ -9,6 +8,7 @@ import sys, os
 import site
 from importlib import reload
 reload(site)
+import time
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -57,6 +57,7 @@ class DeployE2EServices:
     def deploy(self):
         try:
             os.chdir('gauntlet')
+
             self.printCapellaDetails()
             #self.downloadE2ERepo()
             self.deleteExistingDockerContainersOnHost()
@@ -70,12 +71,22 @@ class DeployE2EServices:
             self.deployService(self.inventoryServiceName,
                                self.inventoryServiceDockerRunCommand.format(self.capellaUsername, self.capellaPassword,
                                                                             self.capellaHostname))
+            time.sleep(10)
             subprocess.call(self.dockerContainerListCommand, shell=True, cwd=os.getcwd())
+
+            time.sleep(10)
+            subprocess.call("docker logs bookingService_container", shell=True, cwd=os.getcwd())
+
+            time.sleep(10)
+            subprocess.call("docker logs inventoryService_container", shell=True, cwd=os.getcwd())
+
+            time.sleep(10)
+            subprocess.call("docker logs profileService_container", shell=True, cwd=os.getcwd())
 
             os.chdir('..')
         except Exception as ex:
                 print("Error while deploying. So quitting Gauntlet deployment!!. Exception details: {0}".format(ex))
-                self.deleteExistingDockerContainersOnHost()
+                self.tearDown()
 
     def printCapellaDetails(self):
         print(
