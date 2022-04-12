@@ -71,12 +71,14 @@ class CollectionsAlterIndex(BaseSecondaryIndexingTests):
                 break
 
         new_index_node = None
+        if self.use_https:
+            port = '18091'
+        else:
+            port = '8091'
         for node in index_nodes:
+            if node.ip in idx2_replica_host:
+                idx2_replica_host = f'{node.ip}:{node.port}'
             if node.ip not in idx2_host and node.ip not in idx2_replica_host:
-                if self.use_https:
-                    port = '18091'
-                else:
-                    port = '8091'
                 new_index_node = f'{node.ip}:{port}'
                 break
         # Just moving idx2 node, while keeping same node for replica
@@ -135,12 +137,14 @@ class CollectionsAlterIndex(BaseSecondaryIndexingTests):
                 break
 
         new_index_node = None
+        if self.use_https:
+            port = '18091'
+        else:
+            port = '8091'
         for node in index_nodes:
+            if node.ip in idx2_replica_host:
+                idx2_replica_host = f'{node.ip}:{node.port}'
             if node.ip not in idx2_host and node.ip not in idx2_replica_host:
-                if self.use_https:
-                    port = '18091'
-                else:
-                    port = '8091'
                 new_index_node = f'{node.ip}:{port}'
                 break
 
