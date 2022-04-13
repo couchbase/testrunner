@@ -304,11 +304,11 @@ class NodeHelper:
     def reboot_server(server, test_case, wait_timeout=60):
         remote_client = RemoteMachineShellConnection(server)
         remote_client.reboot_node()
-        remote_client.disconnect()
         # wait for restart and warmup on all node
         ClusterOperationHelper.wait_for_ns_servers_or_assert([server], test_case, wait_if_warmup=True)
         # disable firewall on these nodes
-        NodeHelper.disable_firewall(server)
+        remote_client.disable_firewall()
+        remote_client.disconnect()
 
     @staticmethod
     def enable_firewall(
