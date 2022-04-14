@@ -117,7 +117,7 @@ class BaseRQGTests(BaseTestCase):
             self.keyword_list = self.query_helper._read_keywords_from_file("b/resources/rqg/n1ql_info/keywords.txt")
             self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
             self.check_explain_plan = self.input.param("explain_plan", False)
-            self.index_limit = self.input.param("index_limit", 5)
+            self.index_limit = self.input.param("index_limit", 15)
             self.float_round_level = self.input.param("float_round_level", 0)
             self.delta = self.input.param("delta", 0)
             self.window_function_test = self.input.param("window_function_test", False)
