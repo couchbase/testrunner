@@ -534,7 +534,10 @@ class BaseRQGTests(BaseTestCase):
 
     def n1ql_query_runner_wrapper(self, n1ql_query="", server=None, query_params={}, scan_consistency=None, verbose=True, query_context=None):
         if self.use_advisor:
-            queries = n1ql_query.split(' UNION ')
+            if "UNION ALL" in n1ql_query:
+                queries = n1ql_query.split(' UNION ALL ')
+            else:
+                queries = n1ql_query.split(' UNION ')
             for q in queries:
                 query = re.sub(r"^\((.*?)\)$", r"\1", q.strip())
                 self.create_secondary_index(n1ql_query=query)
