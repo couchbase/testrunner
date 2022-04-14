@@ -77,7 +77,7 @@ class CollectionsAlterIndex(BaseSecondaryIndexingTests):
             port = '8091'
         for node in index_nodes:
             if node.ip in idx2_replica_host:
-                idx2_replica_host = f'{node.ip}:{node.port}'
+                idx2_replica_host = f'{node.ip}:{port}'
             if node.ip not in idx2_host and node.ip not in idx2_replica_host:
                 new_index_node = f'{node.ip}:{port}'
                 break
@@ -143,7 +143,7 @@ class CollectionsAlterIndex(BaseSecondaryIndexingTests):
             port = '8091'
         for node in index_nodes:
             if node.ip in idx2_replica_host:
-                idx2_replica_host = f'{node.ip}:{node.port}'
+                idx2_replica_host = f'{node.ip}:{port}'
             if node.ip not in idx2_host and node.ip not in idx2_replica_host:
                 new_index_node = f'{node.ip}:{port}'
                 break
