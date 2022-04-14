@@ -4549,12 +4549,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         temp_bucket = self.backupset.objstore_bucket
         self.backupset.objstore_bucket = "invalidbucket"
         output, _ = self.backup_info()
-        self.backupset.objstore_bucket = temp_bucket
         error_string = ""
         if self.objstore_provider.schema_prefix() == "gs://":
             error_string = "bucket doesn't exist"
         elif self.objstore_provider.schema_prefix() == "s3://":
             error_string = f"bucket '{self.backupset.objstore_bucket}' not found"
+        self.backupset.objstore_bucket = temp_bucket
         self.assertIn(error_string, output[0].lower())
 
     def test_restore_without_objstore_bucket(self):
