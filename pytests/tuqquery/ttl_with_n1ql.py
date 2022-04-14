@@ -853,7 +853,7 @@ class QueryExpirationTests(QueryTests):
         """
         @summary: Testing delete query with docs for which expiration is set.
         """
-        expiration_time = 1 * 90
+        expiration_time = 2 * 90
         limit_count = 10
 
         # Loading travel-sample bucket
@@ -901,7 +901,7 @@ class QueryExpirationTests(QueryTests):
         result_count = result_count - 10
 
         update_expiry_query = "UPDATE {0} as b SET META(b).expiration = {1}" \
-                              " WHERE type = 'airline'".format(query_sample_bucket, expiration_time // 10)
+                              " WHERE type = 'airline'".format(query_sample_bucket, 10)
         self.run_cbq_query(update_expiry_query)
         doc_updated_query = "SELECT COUNT(*) FROM {0} as b where META(b).expiration > 0 and "\
                             "type = 'airline'".format(query_sample_bucket)
