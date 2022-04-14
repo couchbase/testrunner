@@ -100,9 +100,9 @@ class audit:
                 self.currentLogFile = audit.MACLOGFILEPATH
         else:
             if self.nonroot:
-                auditconfigpath = "/home/%s%s" % (self.host.ssh_username,
+                auditconfigpath = "/home/%s/cb%s" % (self.host.ssh_username,
                                                   audit.LINCONFIGFILEPATH)
-                self.currentLogFile = "/home/%s%s" % (self.host.ssh_username,
+                self.currentLogFile = "/home/%s/cb%s" % (self.host.ssh_username,
                                                       audit.LINLOGFILEPATH)
             else:
                 auditconfigpath = audit.LINCONFIGFILEPATH
