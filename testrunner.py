@@ -590,12 +590,12 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
        from hanging_threads import start_monitoring
        hanging_threads_frozen_time = int(TestInputSingleton.input.param("hanging_threads", 120))
        hanging_threads_test_interval = int(TestInputSingleton.input.param("test_interval", 1000))
-       monitoring_thread = start_monitoring(seconds_frozen=hanging_threads_frozen_time, test_interval=hanging_threads_test_interval) 
+       monitoring_thread = start_monitoring(seconds_frozen=hanging_threads_frozen_time, test_interval=hanging_threads_test_interval)
 
-    logs_folder="."
-    test_exec_count=0
+    logs_folder = "."
+    test_exec_count = 0
+    tests_to_execute = list()
     for name in names:
-        start_time = time.time()
         argument_split = [a.strip() for a in re.split("[,]?([^,=]+)=", name)[1:]]
         params = dict(list(zip(argument_split[::2], argument_split[1::2])))
 
@@ -620,6 +620,15 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
                 set(runtime_test_params["EXCLUDE_GROUP"].split(";")).issubset(set(params["GROUP"].split(";"))):
                     print(("test '{0}' skipped, is in an excluded group".format(name)))
                     continue
+        tests_to_execute.append(name)
+
+    total_tcs = len(tests_to_execute)
+
+    for name in tests_to_execute:
+        start_time = time.time()
+        argument_split = [a.strip() for a in re.split("[,]?([^,=]+)=", name)[1:]]
+        params = dict(list(zip(argument_split[::2], argument_split[1::2])))
+
         log.info("--> Running test: {}".format(name))
         test_exec_count += 1
         # Create Log Directory
@@ -639,6 +648,7 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
         TestInputSingleton.input.test_params = params
         TestInputSingleton.input.test_params.update(runtime_test_params)
         TestInputSingleton.input.test_params["case_number"] = case_number
+        TestInputSingleton.input.test_params["total_testcases"] = total_tcs
         TestInputSingleton.input.test_params["last_case_fail"] = \
             str(last_case_fail)
         TestInputSingleton.input.test_params["teardown_run"] = \
@@ -792,7 +802,7 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
                 except Exception as e:
                     print("Unable to stop hung thread, killing python process")
                     os.kill(os.getpid(), signal.SIGKILL)
-    
+
     if "makefile" in TestInputSingleton.input.test_params:
         # print out fail for those tests which failed and do sys.exit() error code
         fail_count = 0
@@ -830,7 +840,7 @@ def filter_fields(testname):
                 if fw != testwords[-1]:
                     line = line + ","
 
-        return line    
+        return line
     else:
         testwords = testname.split(",")
         line = []
@@ -1064,4 +1074,3 @@ def watcher():
 
 if __name__ == "__main__":
     watcher()
-
