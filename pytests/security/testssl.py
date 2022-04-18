@@ -47,33 +47,35 @@ class TestSSLTests(BaseTestCase):
         """
         Verifies the TLS minimum version of the cluster with the check_version
         """
-        self.check_version = self.input.param("check_version", "1.3")
-        self.log.info("Verifying for minimum version = {0}".format(self.check_version))
         tls_versions = ["1.3  ", "1.2  ", "1.1  ", "1  "]
-        for node in self.servers:
-            self.log.info("Testing node {0}".format(node.ip))
-            ports_to_scan = self.get_service_ports(node)
-            ports_to_scan.extend(self.ports_to_scan)
-            for node_port in ports_to_scan:
-                self.log.info("Port being tested: {0}".format(node_port))
-                cmd = self.testssl.TEST_SSL_FILENAME + " -p --warnings off --color 0 {0}:{1}" \
-                    .format(node.ip, node_port)
-                self.log.info("The command is {0}".format(cmd))
-                shell = RemoteMachineShellConnection(self.slave_host)
-                output, error = shell.execute_command(cmd)
-                shell.disconnect()
-                output = output.decode().split("\n")
-                output1 = ''.join(output)
-                self.assertFalse("error" in output1.lower(), msg=output)
-                self.assertTrue("tls" in output1.lower(), msg=output)
-                for line in output:
-                    for version in tls_versions:
-                        if "TLS " + version in line and version >= str(self.check_version):
-                            self.assertTrue("offered" in line,
-                                            msg="TLS {0} is incorrect disabled".format(version))
-                        elif "TLS " + version in line and version < str(self.check_version):
-                            self.assertTrue("not offered" in line,
-                                            msg="TLS {0} is incorrect enabled".format(version))
+        for check_version in tls_versions:
+            self.log.info("Verifying for minimum version = {0}".format(check_version))
+            rest = RestConnection(self.master)
+            rest.set_min_tls_version(version="tlsv" + check_version.strip())
+            for node in self.servers:
+                self.log.info("Testing node {0}".format(node.ip))
+                ports_to_scan = self.get_service_ports(node)
+                ports_to_scan.extend(self.ports_to_scan)
+                for node_port in ports_to_scan:
+                    self.log.info("Port being tested: {0}".format(node_port))
+                    cmd = self.testssl.TEST_SSL_FILENAME + " -p --warnings off --color 0 {0}:{1}" \
+                        .format(node.ip, node_port)
+                    self.log.info("The command is {0}".format(cmd))
+                    shell = RemoteMachineShellConnection(self.slave_host)
+                    output, error = shell.execute_command(cmd)
+                    shell.disconnect()
+                    output = output.decode().split("\n")
+                    output1 = ''.join(output)
+                    self.assertFalse("error" in output1.lower(), msg=output)
+                    self.assertTrue("tls" in output1.lower(), msg=output)
+                    for line in output:
+                        for version in tls_versions:
+                            if "TLS " + version in line and version >= str(check_version):
+                                self.assertTrue("offered" in line,
+                                                msg="TLS {0} is incorrect disabled".format(version))
+                            elif "TLS " + version in line and version < str(check_version):
+                                self.assertTrue("not offered" in line,
+                                                msg="TLS {0} is incorrect enabled".format(version))
 
     def test_tls_1_dot_2_blocking(self):
         """
