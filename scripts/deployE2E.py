@@ -1,25 +1,43 @@
-# Draft script to quickly deploy and teardown services. Note: This will be short lived and it is using subprocess so might lead to a bad exception handling
+# Draft script to quickly deploy and teardown services.
+# Note: This will be short lived and it is using subprocess
+# so might lead to a bad exception handling
 # New script with better exception handling using python SDK's will be up soon.
-# TODO Gauntlet and E2E are used interchangebly due to E2E repo re-naming to gauntlet. To be addressed in new script
+# TODO: Gauntlet and E2E are used interchangebly due to
+#       E2E repo re-naming to gauntlet. To be addressed in new script
+import logging
+import os
 import socket
-import string
 import subprocess
-import sys, os
+import sys
 import site
+import time
 from importlib import reload
 reload(site)
-import time
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
 
 
 class DeployE2EServices:
-    def __init__(self, capellaHostname, capellaUsername, capellaPassword):
-        self.capellaHostname = capellaHostname
-        self.capellaUsername = capellaUsername
-        self.capellaPassword = capellaPassword
+    def __init__(self, capella_hostname, capella_username, capella_password):
+        self.log = logging.getLogger()
 
-        #self.e2eRepo = "git clone https://github.com/couchbaselabs/e2e-app.git"
+        self.capellaHostname = capella_hostname
+        self.capellaUsername = capella_username
+        self.capellaPassword = capella_password
+
+        # self.e2eRepo = "git clone https://github.com/couchbaselabs/e2e-app.git"
+        self.services_to_run = dict()
+        self.services_to_run['profile'] = dict()
+        self.services_to_run['booking'] = dict()
+        self.services_to_run['inventory'] = dict()
+
+        self.services_to_run['profile'] = dict()
+        self.services_to_run['booking'] = dict()
+        self.services_to_run['inventory'] = dict()
+
+        self.services_to_run["booking"]["container_port_map"] = {8070: 8082}
+        self.services_to_run["profile"]["container_port_map"] = {8090: 5000}
+        self.services_to_run["inventory"]["container_port_map"] = {9010: 10000}
 
         self.bookingServiceName = "booking"
 
@@ -45,14 +63,9 @@ class DeployE2EServices:
 
         self.dockerE2EImagesDeleteCommand = "docker rmi -f couchbaseqe/gauntlet:profile couchbaseqe/gauntlet:booking couchbaseqe/gauntlet:inventory"
 
-        self.hostIP = None
-        self.setHostIP()
+        self.hostIP = self.get_host_ip()
         self.bookingHostname = self.hostIP
         print("Booking host will be deployed on : {0}".format(self.bookingHostname))
-
-        self.getBookingEndpoint()
-        self.getProfileEndpoint()
-        self.getInventoryEndpoint()
 
     def deploy(self):
         try:
@@ -140,39 +153,35 @@ class DeployE2EServices:
         except Exception as ex:
             print("Exception while removing existing docker Images.May be no Gauntlet Images existed on this host \n")
 
+    def get_host_ip(self):
+        ip = None
 
-    def setHostIP(self):
-        if sys.platform.startswith("linux"):  # could be "linux", "linux2", "linux3", ...
-            self.hostIP = os.popen('ifconfig eth0 | grep "inet " | xargs | cut -d" " -f 2').read().strip()
+        # could be "linux", "linux2", "linux3", ...
+        if sys.platform.startswith("linux"):
+            ip = os.popen(
+                'ifconfig eth0 | grep "inet " | xargs | cut -d" " -f 2')\
+                .read().strip()
         elif sys.platform == "darwin":
             st = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             try:
                 st.connect(('10.255.255.255', 1))
-                IP = st.getsockname()[0]
-            except Exception as ex:
-                IP = '127.0.0.1'
+                ip = st.getsockname()[0]
+            except Exception:
+                ip = '127.0.0.1'
             finally:
                 st.close()
-            self.hostIP=IP
+        self.log.info("Host_ip = %s" % ip)
+        return ip
 
-    def getBookingEndpoint(self):
-        bookingEndpoint = "{0}:{1}".format(self.hostIP,8070)
-        print(bookingEndpoint)
-        return bookingEndpoint
-
-    def getProfileEndpoint(self):
-        profileEndpoint = "{0}:{1}".format(self.hostIP,8090)
-        print(profileEndpoint)
-        return profileEndpoint
-
-    def getInventoryEndpoint(self):
-        inventoryEndpoint = "{0}:{1}".format(self.hostIP,9010)
-        print(inventoryEndpoint)
-        return inventoryEndpoint
+    def get_endpoint(self, service_name):
+        port = list(self.services_to_run[service_name][
+            'container_port_map'].keys())[0]
+        return "%s:%s" % (self.hostIP, port)
 
     def tearDown(self):
         self.deleteExistingDockerContainersOnHost()
         self.deleteExistingDockerImagesOnHost()
+
 
 if __name__ == "__main__":
     DeployE2EServices(sys.argv[1], sys.argv[2], sys.argv[3]).deploy()
