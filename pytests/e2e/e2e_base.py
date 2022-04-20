@@ -8,6 +8,7 @@ from scripts.deployE2E import DeployE2EServices
 class E2EBaseTest(BaseTestCase):
     def setUp(self):
         super(E2EBaseTest, self).setUp()
+        self.log.info("==== Starting E2E Base Test setUp() ====")
         self.service_handler = DeployE2EServices(self.master.ip,
                                                  "Administrator", "password")
 
@@ -28,6 +29,7 @@ class E2EBaseTest(BaseTestCase):
             result = self.__deploy_flight_inventory()
             if not result:
                 raise Exception("Failed to deploy flight inventory")
+        self.log.info("==== Finished E2E Base Test setUp() ====")
 
     def tearDown(self):
         if self.case_number == self.total_testcases:
