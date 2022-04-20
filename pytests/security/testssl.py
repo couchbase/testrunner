@@ -225,3 +225,37 @@ class TestSSLTests(BaseTestCase):
         ntonencryptionBase().setup_nton_cluster(servers=self.servers,
                                                 clusterEncryptionLevel="strict")
         self.test_port_security()
+
+    def test_tls_1_dot_3_ciphers(self):
+        """
+        Verifies Couchbase supports all TLS 1.3 ciphers when TLS minimum version set to 1.3
+        """
+        rest = RestConnection(self.master)
+        rest.set_min_tls_version(version="tlsv1.3")
+        for node in self.servers:
+            self.log.info("Testing node {0}".format(node.ip))
+            ports_to_scan = self.get_service_ports(node)
+            ports_to_scan.extend(self.ports_to_scan)
+            for node_port in ports_to_scan:
+                self.log.info("Port being tested: {0}".format(node_port))
+                cmd = self.testssl.TEST_SSL_FILENAME + " -e --warnings off --color 0 {0}:{1}" \
+                    .format(node.ip, node_port)
+                self.log.info("The command is {0}".format(cmd))
+                shell = RemoteMachineShellConnection(self.slave_host)
+                output, error = shell.execute_command(cmd)
+                shell.disconnect()
+                output = output.decode().split("\n")
+                check_next = 0
+                tls_1_dot_3_ciphers = ["TLS_AES_256_GCM_SHA384", "TLS_AES_128_GCM_SHA256",
+                                       "TLS_CHACHA20_POLY1305_SHA256", "TLS_AES_128_CCM_SHA256",
+                                       "TLS_AES_128_CCM_8_SHA256"]
+                for line in output:
+                    if check_next == 1:
+                        if line == '':
+                            check_next = 0
+                        else:
+                            if line.split()[-1] not in tls_1_dot_3_ciphers:
+                                self.fail("Cipher used not under TLS 1.3 supported cipher suites")
+
+                    elif "--------" in line:
+                        check_next = 1
