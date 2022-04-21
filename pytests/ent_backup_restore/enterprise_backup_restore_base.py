@@ -1071,9 +1071,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         error_str = "Error restoring cluster: Transfer failed. " \
                     "Check the logs for more information."
         if error_str in res:
-            bk_log_file_name = "backup.log"
-            if "6.5" <= RestConnection(self.backupset.backup_host).get_nodes_version():
-                bk_log_file_name = "backup-*.log"
+            bk_log_file_name = "backup*log"
 
             command = (
                 f"cat {self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
@@ -1110,9 +1108,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.assertTrue(error_found, "Expected error not found: %s" % expected_error)
             return
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        bk_log_file_name = "backup.log"
-        if "6.5" <= RestConnection(self.backupset.backup_host).get_nodes_version():
-            bk_log_file_name = "backup-*.log"
+        bk_log_file_name = "backup*log"
         ipv6_raw_format = [":", "[", "]"]
         ipv6_raw_ip = False
         bk_raw_ipv6_dir = ""
