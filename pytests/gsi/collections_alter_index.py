@@ -71,19 +71,22 @@ class CollectionsAlterIndex(BaseSecondaryIndexingTests):
                 break
 
         new_index_node = None
+        old_index_node = None
         if self.use_https:
             port = '18091'
         else:
             port = '8091'
         for node in index_nodes:
             if node.ip in idx2_replica_host:
-                idx2_replica_host = f'{node.ip}:{port}'
+                old_index_node = f"{node.ip}:{port}"
             if node.ip not in idx2_host and node.ip not in idx2_replica_host:
-                new_index_node = f'{node.ip}:{port}'
+                new_index_node = f"{node.ip}:{port}"
+            if old_index_node and new_index_node:
                 break
         # Just moving idx2 node, while keeping same node for replica
+        self.sleep(30, "Giving some time before trying alter index")
         self.alter_index_replicas(index_name='idx2', namespace=collection_namespace, action='move',
-                                  nodes=[idx2_replica_host, new_index_node])
+                                  nodes=[old_index_node, new_index_node])
         self.sleep(10)
         self.wait_until_indexes_online()
         index_info = self.get_index_map()[self.test_bucket]
@@ -137,21 +140,23 @@ class CollectionsAlterIndex(BaseSecondaryIndexingTests):
                 break
 
         new_index_node = None
+        old_index_node = None
         if self.use_https:
             port = '18091'
         else:
             port = '8091'
         for node in index_nodes:
             if node.ip in idx2_replica_host:
-                idx2_replica_host = f'{node.ip}:{port}'
+                old_index_node = f"{node.ip}:{port}"
             if node.ip not in idx2_host and node.ip not in idx2_replica_host:
-                new_index_node = f'{node.ip}:{port}'
+                new_index_node = f"{node.ip}:{port}"
+            if old_index_node and new_index_node:
                 break
-
-        self.log.info(f"Current hosts for index idx2: {idx2_host} and idx2(replica 1): {idx2_replica_host}")
-        self.log.info(f"New hosts should be for index idx2: {new_index_node} and idx2(replica 1): {idx2_replica_host}")
+        self.sleep(30, "Giving some time before trying alter index")
+        self.log.info(f"Current hosts for index idx2: {idx2_host} and idx2(replica 1): {old_index_node}")
+        self.log.info(f"New hosts should be for index idx2: {new_index_node} and idx2(replica 1): {old_index_node}")
         self.alter_index_replicas(index_name='idx2', namespace=collection_namespace1, action='move',
-                                  nodes=[idx2_replica_host, new_index_node])
+                                  nodes=[old_index_node, new_index_node])
         self.sleep(10)
         self.wait_until_indexes_online()
 
