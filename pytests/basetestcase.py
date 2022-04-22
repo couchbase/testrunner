@@ -317,6 +317,7 @@ class BaseTestCase(unittest.TestCase):
                 return
 
             if self.use_https:
+                CbServer.use_https = True
                 if self.enforce_tls:
                     self.log.info("#####Enforcing TLS########")
                     ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
