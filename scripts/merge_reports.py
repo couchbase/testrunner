@@ -12,16 +12,15 @@ log = logging.getLogger(__name__)
 logging.info(__name__)
 logging.getLogger().setLevel(logging.INFO)
 import argparse
+from testconstants import FILTER_TEST_FIELDS
 
 
 def filter_fields(testname, run_params=""):
     if "logs_folder:" in testname:
         testwords = testname.split(",")
         line = ""
-        filter_test_params = ['logs_folder', 'conf_file',
-                              'cluster_name:', 'ini:', 'case_number:',
-                              'num_nodes:', 'spec:', 'is_container:',
-                              'last_case_fail:', 'teardown_run:']
+        filter_test_params = ["".join([filter_field, ':']) for
+                              filter_field in FILTER_TEST_FIELDS]
         filter_test_params.extend([param.split("=")[0] for param in
                             run_params.split(',')])
         for fw in testwords:
@@ -37,10 +36,8 @@ def filter_fields(testname, run_params=""):
     else:
         testwords = testname.split(",")
         line = []
-        filter_test_params = ['logs_folder=', 'conf_file=',
-                              'cluster_name=', 'ini=', 'case_number=',
-                              'num_nodes=', 'spec=', 'is_container=',
-                              'last_case_fail=', 'teardown_run=']
+        filter_test_params = ["".join([filter_field, '=']) for
+                              filter_field in FILTER_TEST_FIELDS]
         filter_test_params.extend([param.split("=")[0] for param in
                             run_params.split(',')])
         for fw in testwords:

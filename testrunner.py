@@ -820,18 +820,17 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
 
 def filter_fields(testname):
     # TODO: Fix for old xml style
+    from testconstants import FILTER_TEST_FIELDS
     if "logs_folder:" in testname:
         testwords = testname.split(",")
         line = ""
         for fw in testwords:
-            if not fw.startswith("logs_folder") and not fw.startswith("conf_file") \
-                    and not fw.startswith("cluster_name:") \
-                    and not fw.startswith("ini:") \
-                    and not fw.startswith("case_number:") \
-                    and not fw.startswith("num_nodes:") \
-                    and not fw.startswith("spec:") \
-                    and not fw.startswith("last_case_fail:") \
-                    and not fw.startswith("teardown_run:"):
+            filter_testword = False
+            for test_field in FILTER_TEST_FIELDS:
+                if fw.startswith("".join([test_field, ":"])):
+                    filter_testword = True
+                    break
+            if not filter_testword:
                 if not "\":" in fw or "query:" in fw:
                     #log.info("Replacing : with ={}".format(fw))
                     line = line + fw.replace(":", "=", 1)
@@ -839,20 +838,17 @@ def filter_fields(testname):
                     line = line + fw
                 if fw != testwords[-1]:
                     line = line + ","
-
         return line
     else:
         testwords = testname.split(",")
         line = []
         for fw in testwords:
-            if not fw.startswith("logs_folder=") and not fw.startswith("conf_file=") \
-                    and not fw.startswith("cluster_name=") \
-                    and not fw.startswith("ini=") \
-                    and not fw.startswith("case_number=") \
-                    and not fw.startswith("num_nodes=") \
-                    and not fw.startswith("spec=") \
-                    and not fw.startswith("last_case_fail=") \
-                    and not fw.startswith("teardown_run="):
+            filter_testword = False
+            for test_field in FILTER_TEST_FIELDS:
+                if fw.startswith("".join([test_field, "="])):
+                    filter_testword = True
+                    break
+            if not filter_testword:
                 line.append(fw)
         return ",".join(line)
 

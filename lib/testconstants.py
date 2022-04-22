@@ -344,3 +344,7 @@ IS_CONTAINER = False
 FUZZY_FTS_LARGE_DATASET = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/fuzzy_large_dataset.json"
 FUZZY_FTS_SMALL_DATASET = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/fuzzy_small_dataset.json"
 GCP_AUTH_PATH = "/root/.config/gcloud/application_default_credentials.json"
+FILTER_TEST_FIELDS = ['logs_folder', 'conf_file', 'cluster_name',
+                      'ini', 'case_number','num_nodes', 'spec',
+                      'last_case_fail', 'teardown_run', 'is_container',
+                      'total_testcases']
