@@ -115,6 +115,7 @@ class x509main:
     def _get_install_path(self, host):
         shell = RemoteMachineShellConnection(host)
         os_type = shell.extract_remote_info().distribution_type
+        shell.disconnect()
         self.log.info("OS type is {0}".format(os_type))
         if os_type == 'windows':
             install_path = x509main.WININSTALLPATH
