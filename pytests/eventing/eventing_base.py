@@ -123,8 +123,19 @@ class EventingBaseTest(QueryHelperTests):
                 self.function_scope = {"bucket": self.src_bucket_name, "scope": self.src_bucket_name}
             else:
                 self.function_scope = {"bucket": self.src_bucket_name, "scope": "_default"}
-        self.num_docs=2016
-        self.is_binary=self.input.param('binary_doc',False)
+        self.num_docs = self.input.param('number_of_documents', 2016)
+        self.is_binary = self.input.param('binary_doc',False)
+        self.couchstore_bucket_quota = self.input.param('couchstore_bucket_quota', 200)
+        self.magma_bucket_quota = self.input.param('magma_bucket_quota', 512)
+        self.document_size = self.input.param('document_size', 512)
+        if self.bucket_storage == "magma":
+            self.bucket_size = self.magma_bucket_quota
+            self.rest.update_memcached_settings(
+                num_reader_threads="disk_io_optimized",
+                num_writer_threads="disk_io_optimized")
+        else:
+            self.bucket_size = self.couchstore_bucket_quota
+        self.metadata_bucket_size = 2 * self.bucket_size
         log.info("==============  EventingBaseTest setup has completed ==============")
 
     def tearDown(self):
@@ -1089,13 +1100,15 @@ class EventingBaseTest(QueryHelperTests):
         if is_create:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=100, percent_update=0,
                                         percent_delete=0, scope=collection_list[1], collection=collection_list[2],
-                                            doc_expiry=expiry,json_template=template)
+                                            doc_expiry=expiry, json_template=template, doc_size=self.document_size)
         elif is_delete:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=0, percent_delete=100,
-                                            scope=collection_list[1], collection=collection_list[2],json_template=template)
+                                            scope=collection_list[1], collection=collection_list[2],json_template=template,
+                                            doc_size=self.document_size)
         elif is_update:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=100, percent_delete=0,
-                                            scope=collection_list[1], collection=collection_list[2],doc_expiry=expiry,json_template=template)
+                                            scope=collection_list[1], collection=collection_list[2],doc_expiry=expiry,json_template=template,
+                                            doc_size=self.document_size)
         task=self.cluster.async_load_gen_docs(self.master, collection_list[0], self.gen_create, pause_secs=1,
                                          timeout_secs=300,exp=expiry)
         if wait_for_loading:
@@ -1113,13 +1126,15 @@ class EventingBaseTest(QueryHelperTests):
         if is_create:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=100, percent_update=0,
                                         percent_delete=0, scope=collection_list[1], collection=collection_list[2],
-                                            doc_expiry=expiry,json_template=template)
+                                            doc_expiry=expiry,json_template=template, doc_size=self.document_size)
         elif is_delete:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=0, percent_delete=100,
-                                            scope=collection_list[1], collection=collection_list[2],json_template=template)
+                                            scope=collection_list[1], collection=collection_list[2],json_template=template,
+                                            doc_size=self.document_size)
         elif is_update:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=100, percent_delete=0,
-                                            scope=collection_list[1], collection=collection_list[2],doc_expiry=expiry,json_template=template)
+                                            scope=collection_list[1], collection=collection_list[2], doc_expiry=expiry, json_template=template,
+                                            doc_size=self.document_size)
         task=self.data_ops_javasdk_loader_in_batches_to_collection(collection_list[0],sdk_data_loader=self.gen_create,
                                                                     batch_size=self.batch_size)
         if wait_for_loading:

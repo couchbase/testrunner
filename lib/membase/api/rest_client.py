@@ -3268,6 +3268,19 @@ class RestConnection(object):
         cmd = 'ns_config:set(ensure_full_commit_enabled, {0}).'.format(value)
         return self.diag_eval(cmd)
 
+    def update_memcached_settings(self, num_reader_threads="default",
+                                  num_writer_threads="default",
+                                  num_storage_threads="default"):
+        api = self.baseUrl + "pools/default/settings/memcached/global"
+        params = {"num_reader_threads": num_reader_threads,
+                  "num_writer_threads": num_writer_threads,
+                  "num_storage_threads": num_storage_threads}
+        params = urllib.parse.urlencode(params)
+        status, content, header = self._http_request(api, 'POST', params)
+        if not status:
+            raise Exception(content)
+        return status
+
     def get_internalSettings(self, param):
             """allows to get internalSettings values for:
             indexAwareRebalanceDisabled, rebalanceIndexWaitingDisabled,
