@@ -155,9 +155,7 @@ class AutoFailoverBaseTest(BaseTestCase):
         :return: True If the setting was set with the timeout, else return
         False
         """
-        status = self.rest.update_autofailover_settings(True,
-                                                        self.timeout,
-                                                        self.can_abort_rebalance,
+        status = self.rest.update_autofailover_settings(True, self.timeout,
                                                         maxCount=self.max_count)
         return status
 
@@ -167,7 +165,7 @@ class AutoFailoverBaseTest(BaseTestCase):
         :return: True If the setting was disabled, else return
         False
         """
-        status = self.rest.update_autofailover_settings(False, 120, False)
+        status = self.rest.update_autofailover_settings(False, 120)
         return status
 
     def enable_autofailover_and_validate(self):
@@ -186,10 +184,6 @@ class AutoFailoverBaseTest(BaseTestCase):
                          "Incorrect timeout set. Expected timeout : {0} "
                          "Actual timeout set : {1}".format(self.timeout,
                                                            settings.timeout))
-        self.assertEqual(self.can_abort_rebalance, settings.can_abort_rebalance,
-                         "Incorrect can_abort_rebalance set. Expected can_abort_rebalance : {0} "
-                         "Actual can_abort_rebalance set : {1}".format(self.can_abort_rebalance,
-                                                                       settings.can_abort_rebalance))
 
     def disable_autofailover_and_validate(self):
         """
@@ -589,7 +583,6 @@ class AutoFailoverBaseTest(BaseTestCase):
                                                   "delta")
         self.multi_node_failures = self.input.param("multi_node_failures",
                                                     False)
-        self.can_abort_rebalance = self.input.param("can_abort_rebalance", True)
         self.num_node_failures = self.input.param("num_node_failures", 1)
         self.deny_autofailover = self.input.param("deny_autofailover", None)
         self.services = self.input.param("services", None)

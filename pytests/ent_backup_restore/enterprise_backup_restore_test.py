@@ -3919,7 +3919,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         2. Scan backup logs for bad keywords.
 
         Keywords:
-        1. CBQE-6034/MB-41131 - Check cbbackupmgr's build version/hash set correctly at build time 
+        1. CBQE-6034/MB-41131 - Check cbbackupmgr's build version/hash set correctly at build time
         by scanning for 'cbbackupmgr version Unknown' in the logs.
         2. Scan for 'panic' in the logs.
         """
@@ -4116,8 +4116,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                       "Version was run with {}".format(version))
 
         rest_conn = RestConnection(self.backupset.cluster_host)
-        rest_conn.update_autofailover_settings(enabled=False,
-                                               timeout=0)
+        rest_conn.update_autofailover_settings(enabled=False, timeout=0)
 
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
                             end=self.num_items)
@@ -5329,4 +5328,3 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                             backup=back_name, collection_string=buck_name, all_flag=all_flag))
                         print_tree(buck)
                         check_buck(buck)
-

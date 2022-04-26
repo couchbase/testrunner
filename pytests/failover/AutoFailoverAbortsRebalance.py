@@ -63,7 +63,7 @@ class AutoFailoverAbortsRebalance(AutoFailoverBaseTest, BaseTestCase):
         pass
 
     def test_failure_scenarios_during_rebalance_in_of_node_A(self):
-        # enable auto failover and canAbortRebalance
+        # enable auto failover
         self.enable_autofailover_and_validate()
         self.sleep(5)
         # Start rebalance in
@@ -94,7 +94,7 @@ class AutoFailoverAbortsRebalance(AutoFailoverBaseTest, BaseTestCase):
 
     def test_failure_scenarios_during_recovery_of_node_A(self):
         self.recovery_type = self.input.param("recovery_type", 'full')
-        # enable auto failover and canAbortRebalance
+        # enable auto failover
         self.enable_autofailover_and_validate()
         self.sleep(5)
         # do a graceful failover
@@ -129,7 +129,7 @@ class AutoFailoverAbortsRebalance(AutoFailoverBaseTest, BaseTestCase):
         self.disable_autofailover_and_validate()
 
     def test_failure_scenarios_during_rebalance_out_of_node_A(self):
-        # enable auto failover and canAbortRebalance
+        # enable auto failover
         self.enable_autofailover_and_validate()
         self.sleep(5)
         # Start rebalance out
@@ -159,7 +159,7 @@ class AutoFailoverAbortsRebalance(AutoFailoverBaseTest, BaseTestCase):
         self.disable_autofailover_and_validate()
 
     def test_failure_scenarios_during_rebalance_out_of_failedover_node_A(self):
-        # enable auto failover and canAbortRebalance
+        # enable auto failover
         self.enable_autofailover_and_validate()
         # failover a node
         self.cluster.failover([self.master], failover_nodes=[self.servers[self.server_index_to_fail]], graceful=False)
@@ -191,7 +191,7 @@ class AutoFailoverAbortsRebalance(AutoFailoverBaseTest, BaseTestCase):
 
     def test_failure_scenarios_during_rebalance_out_of_failedover_other_than_node_A(self):
         self.server_index_to_failover = self.input.param("server_index_to_failover", None)
-        # enable auto failover and canAbortRebalance
+        # enable auto failover
         self.enable_autofailover_and_validate()
         # failover a node
         self.cluster.failover([self.master], failover_nodes=[self.servers[self.server_index_to_failover]],
@@ -226,7 +226,7 @@ class AutoFailoverAbortsRebalance(AutoFailoverBaseTest, BaseTestCase):
     def test_failure_scenarios_during_recovery_of_node_other_than_node_A(self):
         self.server_index_to_failover = self.input.param("server_index_to_failover", None)
         self.recovery_type = self.input.param("recovery_type", 'full')
-        # enable auto failover and canAbortRebalance
+        # enable auto failover
         self.enable_autofailover_and_validate()
         self.sleep(5)
         # do a graceful failover

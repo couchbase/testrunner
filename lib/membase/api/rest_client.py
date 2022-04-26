@@ -3072,24 +3072,22 @@ class RestConnection(object):
             settings.enabled = json_parsed["enabled"]
             settings.count = json_parsed["count"]
             settings.timeout = json_parsed["timeout"]
-            settings.failoverOnDataDiskIssuesEnabled = json_parsed["failoverOnDataDiskIssues"]["enabled"]
-            settings.failoverOnDataDiskIssuesTimeout = json_parsed["failoverOnDataDiskIssues"]["timePeriod"]
+            settings.failoverOnDataDiskIssuesEnabled = \
+                json_parsed["failoverOnDataDiskIssues"]["enabled"]
+            settings.failoverOnDataDiskIssuesTimeout = \
+                json_parsed["failoverOnDataDiskIssues"]["timePeriod"]
             settings.maxCount = json_parsed["maxCount"]
-            if json_parsed["canAbortRebalance"]:
-                settings.can_abort_rebalance = json_parsed["canAbortRebalance"]
         return settings
 
-    def update_autofailover_settings(self, enabled, timeout, canAbortRebalance=False, enable_disk_failure=False,
+    def update_autofailover_settings(self, enabled, timeout,
+                                     enable_disk_failure=False,
                                      disk_timeout=120, maxCount=1):
-        params_dict = {}
+        params_dict = dict()
         params_dict['timeout'] = timeout
         if enabled:
             params_dict['enabled'] = 'true'
-
         else:
             params_dict['enabled'] = 'false'
-        if canAbortRebalance:
-            params_dict['canAbortRebalance'] = 'true'
         if enable_disk_failure:
             params_dict['failoverOnDataDiskIssues[enabled]'] = 'true'
             params_dict['failoverOnDataDiskIssues[timePeriod]'] = disk_timeout
@@ -6276,6 +6274,7 @@ class Node(object):
     def cluster_ip(self):
         return self.internal_ip or self.ip
 
+
 class AutoFailoverSettings(object):
     def __init__(self):
         self.enabled = True
@@ -6284,7 +6283,6 @@ class AutoFailoverSettings(object):
         self.failoverOnDataDiskIssuesEnabled = False
         self.failoverOnDataDiskIssuesTimeout = 0
         self.maxCount = 1
-        self.can_abort_rebalance = False
 
 
 class AutoReprovisionSettings(object):
