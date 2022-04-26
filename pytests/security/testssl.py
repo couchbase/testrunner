@@ -1,3 +1,4 @@
+import json
 import time
 
 from lib.Cb_constants.CBServer import CbServer
@@ -15,7 +16,7 @@ class TestSSLTests(BaseTestCase):
         super(TestSSLTests, self).setUp()
         self.testssl = TestSSL()
         self.slave_host = TestSSL.SLAVE_HOST
-        self.ports_to_scan = ["18091", "18092"]
+        self.ports_to_scan = [18091, 18092]
 
     def tearDown(self):
         super(TestSSLTests, self).tearDown()
@@ -259,3 +260,93 @@ class TestSSLTests(BaseTestCase):
 
                     elif "--------" in line:
                         check_next = 1
+
+    def test_tls_cipher_ordering(self):
+        """
+        Checks cipher-suites used is a subset of preconfigured list of cipher-suites.
+        Checks for TLS 1.2 and TLS 1.3
+        Also checks the order of cipher suites:
+            i. TLSv1.3: The order of the 1.3 cipher-suites is determined based on available
+            hardware.
+            ii. < TLSv1.3: Cipher-suites are used by a service in the order in which the
+            cipher-suites appear in the list established for the service.
+        """
+        for node in self.servers:
+            self.log.info("Testing node {0}".format(node.ip))
+            ports_to_scan = self.get_service_ports(node)
+            ports_to_scan.extend(self.ports_to_scan)
+            for node_port in ports_to_scan:
+                self.log.info("Port being tested: {0}".format(node_port))
+                cmd = self.testssl.TEST_SSL_FILENAME + " --warnings off --color 0 {0}:{1}" \
+                    .format(node.ip, node_port)
+                self.log.info("The command is {0}".format(cmd))
+                shell = RemoteMachineShellConnection(self.slave_host)
+                output, error = shell.execute_command(cmd)
+                shell.disconnect()
+                output = output.decode().split("\n")
+                check_next = 0
+                stmt = ""
+                tls_1_dot_2_obtained_list = []
+                tls_1_dot_3_obtained_list = []
+                for line in output:
+                    if check_next == 1:
+                        if line == "":
+                            check_next = 0
+                            stmt = ""
+                        elif "TLSv1.3 (" in line:
+                            stmt = "TLSv1.3 ("
+                        elif stmt == "TLSv1.2 (":
+                            tls_1_dot_2_obtained_list.append(line.split()[-1])
+                        elif stmt == "TLSv1.3 (":
+                            tls_1_dot_3_obtained_list.append(line.split()[-1])
+                    elif "TLSv1.2 (" in line:
+                        check_next = 1
+                        stmt = "TLSv1.2 ("
+
+                # Get the preconfigured list of cipher-suites
+                shell = RemoteMachineShellConnection(self.master)
+                output, error = shell.execute_couchbase_cli(cli_command="setting-security",
+                                                            options="--get",
+                                                            cluster_host="localhost",
+                                                            user="Administrator",
+                                                            password="password")
+                shell.disconnect()
+                content = json.loads(output[0])
+                services_ports_map = {11207: "data", 18094: "fullTextSearch", 19102: "index",
+                                      18096: "eventing", 18093: "query", 18095: "analytics",
+                                      18097: "backup", 18091: "clusterManager",
+                                      18092: "clusterManager"}
+                cipher_order_list = content[services_ports_map[node_port]]["supportedCipherSuites"]
+
+                # Verifies TLS 1.2 cipher-suites is a subset of preconfigured list of
+                # cipher-suites and follows the order of the same
+                is_present = False
+                it = iter(cipher_order_list)
+                if all(ciphers in it for ciphers in tls_1_dot_2_obtained_list):
+                    is_present = True
+                self.assertTrue(is_present, msg="Obtained list of TLS 1.2 cipher-suites is not a "
+                                                "subsequence of pre-configured list of "
+                                                "cipher-suites on port: {0} :: service: {1}"
+                                .format(node_port, services_ports_map[node_port]))
+
+                # Verifies TLS 1.3 cipher-suites is a subset of preconfigured list of
+                # cipher-suites
+                is_present = False
+                if all(ciphers in cipher_order_list for ciphers in tls_1_dot_3_obtained_list):
+                    is_present = True
+                self.assertTrue(is_present, msg="Obtained list of TLS 1.3 cipher-suites is not a "
+                                                "subset of pre-configured list of cipher-suites on "
+                                                "port: {0} :: service: {1}"
+                                .format(node_port, services_ports_map[node_port]))
+
+                # Verifies TLS 1.3 cipher-suites is a subset of preconfigured list of
+                # cipher-suites and follows the order of the same
+                is_present = False
+                it = iter(cipher_order_list)
+                if all(ciphers in it for ciphers in tls_1_dot_3_obtained_list):
+                    is_present = True
+                if not is_present:
+                    self.log.info("Obtained list of TLS 1.3 cipher-suites is not a "
+                                  "subsequence of pre-configured list of cipher-suites. "
+                                  "(TLS 1.3 Cipher-Suite Limitation) on port: {0} :: service: {1}"
+                                  .format(node_port, services_ports_map[node_port]))
