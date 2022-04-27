@@ -316,19 +316,6 @@ class BaseTestCase(unittest.TestCase):
                               .format(self.case_number, self._testMethodName))
                 return
 
-            if self.use_https:
-                CbServer.use_https = True
-                if self.enforce_tls:
-                    self.log.info("#####Enforcing TLS########")
-                    ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
-                    for i in range(2):
-                        status = ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master])
-                        if status:
-                            break
-                        else:
-                            self.sleep(10)
-                    if not status:
-                        self.fail("Port binding after enforcing TLS incorrect")
             if not self.skip_init_check_cbserver:
                 self.log.info("initializing cluster")
                 self.reset_cluster()
@@ -371,6 +358,21 @@ class BaseTestCase(unittest.TestCase):
                 self.log.info("done initializing cluster")
             else:
                 self.quota = ""
+
+            if self.use_https:
+                CbServer.use_https = True
+                if self.enforce_tls:
+                    self.log.info("#####Enforcing TLS########")
+                    ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
+                    for i in range(2):
+                        status = ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master])
+                        if status:
+                            break
+                        else:
+                            self.sleep(10)
+                    if not status:
+                        self.fail("Port binding after enforcing TLS incorrect")
+
             if self.input.param("log_info", None):
                 self.change_log_info()
             if self.input.param("log_location", None):

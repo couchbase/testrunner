@@ -84,7 +84,6 @@ class CollectionsAlterIndex(BaseSecondaryIndexingTests):
             if old_index_node and new_index_node:
                 break
         # Just moving idx2 node, while keeping same node for replica
-        self.sleep(30, "Giving some time before trying alter index")
         self.alter_index_replicas(index_name='idx2', namespace=collection_namespace, action='move',
                                   nodes=[old_index_node, new_index_node])
         self.sleep(10)
