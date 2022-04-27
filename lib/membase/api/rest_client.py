@@ -345,6 +345,9 @@ class RestConnection(object):
         if self.hostname:
             url_host = "%s" % self.hostname
         self.baseUrl = generic_url % (url_host, self.port)
+        if "http:" in self.baseUrl and (self.port.startswith("180") or \
+                                        self.port.startswith("191")):
+            self.baseUrl = generic_url % (url_host, self.port[1:])
         self.fts_baseUrl = generic_url % (url_host, self.fts_port)
         self.index_baseUrl = generic_url % (url_host, self.index_port)
         self.query_baseUrl = generic_url % (url_host, self.query_port)
