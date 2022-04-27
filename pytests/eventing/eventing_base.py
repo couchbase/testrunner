@@ -124,6 +124,8 @@ class EventingBaseTest(QueryHelperTests):
             else:
                 self.function_scope = {"bucket": self.src_bucket_name, "scope": "_default"}
         self.num_docs = self.input.param('number_of_documents', 2016)
+        if self.is_sbm:
+            self.num_docs = self.num_docs // 2
         self.is_binary = self.input.param('binary_doc',False)
         self.couchstore_bucket_quota = self.input.param('couchstore_bucket_quota', 200)
         self.magma_bucket_quota = self.input.param('magma_bucket_quota', 512)
