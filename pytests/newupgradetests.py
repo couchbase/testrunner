@@ -2338,10 +2338,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.sleep(30)
             map_after_rebalance, stats_map_after_rebalance = \
                 self._return_maps()
-            self.n1ql_helper.verify_indexes_redistributed(
-                map_before_rebalance, map_after_rebalance,
-                stats_map_before_rebalance, stats_map_after_rebalance,
-                [self.servers[3]], [self.servers[1]], swap_rebalance=True)
+            self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                          stats_map_before_rebalance, stats_map_after_rebalance,
+                                                          [self.servers[3]], [self.servers[1]], swap_rebalance=True,
+                                                          use_https=self.use_https)
         self.post_upgrade(self.servers[:3])
 
     def test_offline_upgrade_with_add_new_services(self):
