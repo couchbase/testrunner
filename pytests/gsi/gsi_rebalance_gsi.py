@@ -144,7 +144,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.ansi_join_query()
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True)
+                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_cbindex_move_after_rebalance_in(self):
@@ -172,7 +173,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes, [], swap_rebalance=True)
+                                                      to_add_nodes, [], swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_cbindex_move_with_mutations_and_query(self):
@@ -203,7 +205,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes, [], swap_rebalance=True)
+                                                      to_add_nodes, [], swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_create_index_when_gsi_rebalance_in_progress(self):
@@ -302,7 +305,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
                                                       [self.servers[self.nodes_init]], [index_server],
-                                                      swap_rebalance=True)
+                                                      swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_gsi_rebalance_works_when_querying_is_in_progress(self):
@@ -329,7 +333,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
                                                       [self.servers[self.nodes_init]], [index_server],
-                                                      swap_rebalance=True)
+                                                      swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_gsi_rebalance_works_when_mutations_are_in_progress(self):
@@ -362,7 +367,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
                                                       [self.servers[self.nodes_init]], [index_server],
-                                                      swap_rebalance=True)
+                                                      swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_build_index_when_gsi_rebalance_in_progress(self):
@@ -418,8 +424,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         if self.ansi_join:
             self.ansi_join_query()
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
-                                                      stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      [], [], )
+                                                      stats_map_before_rebalance, stats_map_after_rebalance, [], [])
         self.run_operation(phase="after")
 
     def test_hard_failover_and_delta_recovery_and_gsi_rebalance(self):
@@ -450,8 +455,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         if self.ansi_join:
             self.ansi_join_query()
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
-                                                      stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      [], [], )
+                                                      stats_map_before_rebalance, stats_map_after_rebalance, [], [])
         self.run_operation(phase="after")
 
     def test_hard_failover_and_gsi_rebalance(self):
@@ -505,8 +509,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         if self.ansi_join:
             self.ansi_join_query()
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
-                                                      stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      [], [], )
+                                                      stats_map_before_rebalance, stats_map_after_rebalance, [], [])
         self.run_operation(phase="after")
 
     def test_graceful_failover_and_delta_recovery_and_gsi_rebalance(self):
@@ -537,8 +540,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         if self.ansi_join:
             self.ansi_join_query()
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
-                                                      stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      [], [], )
+                                                      stats_map_before_rebalance, stats_map_after_rebalance, [], [])
         self.run_operation(phase="after")
 
     def test_gsi_rebalance_works_with_mutations_query_in_progress(self):
@@ -571,7 +573,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
                                                       [self.servers[self.nodes_init]], [index_server],
-                                                      swap_rebalance=True)
+                                                      swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_gsi_rebalance_stop_rebalance_and_start_again(self):
@@ -602,7 +605,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
                                                       [self.servers[self.nodes_init]], [index_server],
-                                                      swap_rebalance=True)
+                                                      swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_verify_gsi_rebalance_does_not_work_during_create_drop_and_build_index(self):
@@ -649,7 +653,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # # validate the results
         # self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
         #                                               stats_map_before_rebalance, stats_map_after_rebalance,
-        #                                               [self.servers[self.nodes_init]], [], swap_rebalance=True)
+        #                                               [self.servers[self.nodes_init]], [], swap_rebalance=True,
+        #                                               use_https=self.use_https)
         # index_servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         # # run a /cleanupRebalance after a rebalance failure
         # for index_server in index_servers:
@@ -694,7 +699,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes1, [], swap_rebalance=True)
+                                                      to_add_nodes1, [], swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_cbindex_move_when_gsi_rebalance_is_in_progress(self):
@@ -728,7 +734,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes, [], swap_rebalance=True)
+                                                      to_add_nodes, [], swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_rebalance_of_kv_node_during_index_creation_and_building(self):
@@ -843,7 +850,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
                                                       [self.servers[self.nodes_init]], [index_server],
-                                                      swap_rebalance=True)
+                                                      swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_bucket_compaction_when_gsi_rebalance_in_progress(self):
@@ -875,7 +883,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
                                                       [self.servers[self.nodes_init]], [index_server],
-                                                      swap_rebalance=True)
+                                                      swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_gsi_rebalance_when_indexer_is_in_paused_state(self):
@@ -1053,7 +1062,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True)
+                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_gsi_rebalance_with_2_nodes_out_and_1_node_in(self):
@@ -1074,7 +1084,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes, nodes_out_list, swap_rebalance=True)
+                                                      to_add_nodes, nodes_out_list, swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_mulitple_equivalent_index_on_same_node_and_rebalance_to_multiple_nodes(self):
@@ -1104,7 +1115,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True)
+                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_mulitple_equivalent_index_on_multiple_nodes_and_rebalance_to_single_node(self):
@@ -1133,7 +1145,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes, nodes_out_list, swap_rebalance=True)
+                                                      to_add_nodes, nodes_out_list, swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_cbindex_move_negative_indexnames(self):
@@ -1176,8 +1189,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.sleep(30)
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
-                                                      stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      [], [], )
+                                                      stats_map_before_rebalance, stats_map_after_rebalance, [], [])
         self.run_operation(phase="after")
 
     def test_index_failover_when_ddl_in_progress(self):
@@ -1338,7 +1350,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes, [], swap_rebalance=True)
+                                                      to_add_nodes, [], swap_rebalance=True,
+                                                      use_https=self.use_https)
 
     def test_kv_failover_when_cbindex_move_in_progress(self):
         self.run_operation(phase="before")
@@ -1371,7 +1384,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes, [], swap_rebalance=True)
+                                                      to_add_nodes, [], swap_rebalance=True,
+                                                      use_https=self.use_https)
         # do a full recovery and rebalance
         self.rest.set_recovery_type('ns_1@' + kv_server.ip, "full")
         self.rest.add_back_node('ns_1@' + kv_server.ip)
@@ -1715,7 +1729,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True)
+                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_reboot_on_indexer_node_during_gsi_rebalance(self):
@@ -1783,7 +1798,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes, [], swap_rebalance=True)
+                                                      to_add_nodes, [], swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_kill_n1ql_during_gsi_rebalance(self):
@@ -1814,7 +1830,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True)
+                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_kill_indexer_during_gsi_rebalance(self):
@@ -1876,8 +1893,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
-                                                      stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      [], [index_node])
+                                                      stats_map_before_rebalance, stats_map_after_rebalance, [],
+                                                      [index_node])
         self.run_operation(phase="after")
         self.sleep(30)
 
@@ -1924,8 +1941,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
-                                                      stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      [], [index_server])
+                                                      stats_map_before_rebalance, stats_map_after_rebalance, [],
+                                                      [index_server])
         self.run_operation(phase="after")
 
     def test_induce_fts_failure_during_gsi_rebalance(self):
@@ -1959,7 +1976,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True)
+                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_cbindex_move_on_deferred_index_then_build_index(self):
@@ -2110,7 +2128,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True)
+                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_cbindex_move_with_reboot_of_source_node(self):
@@ -2254,7 +2273,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True)
+                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_gsi_rebalance_with_different_scan_consistency(self):
@@ -2285,7 +2305,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True)
+                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_gsi_rebalance_out_last_indexer_node_and_add_one_indexer_node(self):
@@ -2329,7 +2350,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results, indexes should be redistributed even in case of rebalance in
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      [self.servers[self.nodes_init]], [], swap_rebalance=True)
+                                                      [self.servers[self.nodes_init]], [], swap_rebalance=True,
+                                                      use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_gsi_rebalance_with_disable_index_move_as_true(self):
@@ -2364,8 +2386,9 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results, Indexes should not be redistributed as disable_index_move was set as True
         try:
             self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
-                                                        stats_map_before_rebalance, stats_map_after_rebalance,
-                                                        to_add_nodes, to_remove_nodes, swap_rebalance=True)
+                                                          stats_map_before_rebalance, stats_map_after_rebalance,
+                                                          to_add_nodes, to_remove_nodes, swap_rebalance=True,
+                                                          use_https=self.use_https)
         except Exception as ex:
             if "some indexes are missing after rebalance" not in str(ex):
                 self.fail("gsi rebalance failed with unexpected error: {0}".format(str(ex)))
@@ -2743,7 +2766,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      to_add_nodes, [], swap_rebalance=True)
+                                                      to_add_nodes, [], swap_rebalance=True, use_https=self.use_https)
         self.run_operation(phase="after")
 
     def test_retry_rebalance(self):
@@ -2796,8 +2819,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             map_after_rebalance, stats_map_after_rebalance = self._return_maps()
             # validate the results
             self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
-                                                      stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      [], [index_server])
+                                                          stats_map_before_rebalance, stats_map_after_rebalance, [],
+                                                          [index_server])
     def create_workload_index(self):
         workload_index = "CREATE INDEX idx12345 ON default(name)"
         self.n1ql_helper.run_cbq_query(query=workload_index,
@@ -2875,7 +2898,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                     host_names_after_rebalance.append(index_map[bucket][index]['hosts'])
             for node in host_names_after_rebalance:
                 index_distribution_map_after_rebalance[node] = index_distribution_map_after_rebalance.get(node, 0) + 1
-            ip_address = str(dst_node).replace("ip:", "").replace(" port", "").replace(" ssh_username:root", "").replace(" ssh_username:Administrator", "")
+            ip_address = f"{dst_node.ip}:{self.node_port}"
             log.info(ip_address)
             log.info(index_distribution_map_after_rebalance)
             if ip_address in index_distribution_map_after_rebalance:
@@ -3169,7 +3192,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
                                                       [self.servers[self.nodes_init + 1]],
-                                                      [self.servers[self.index_node_out]], swap_rebalance=True)
+                                                      [self.servers[self.index_node_out]], swap_rebalance=True,
+                                                      use_https=self.use_https)
 
     def load_buckets_with_high_ops(self, server, bucket, items, batch=20000,
                                    threads=5, start_document=0, instances=1, ttl=0):

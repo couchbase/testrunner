@@ -1018,7 +1018,8 @@ class N1QLHelper():
         self.shell.execute_command("export CBAUTH_REVRPC_URL=\"http://{0}:{1}@{2}:{3}/query\"".format(server.rest_username, server.rest_password, server.ip, server.port))
 
     def verify_indexes_redistributed(self, map_before_rebalance, map_after_rebalance, stats_map_before_rebalance,
-                                     stats_map_after_rebalance, nodes_in, nodes_out, swap_rebalance=False):
+                                     stats_map_after_rebalance, nodes_in, nodes_out, swap_rebalance=False,
+                                     use_https=False):
         # verify that number of indexes before and after rebalance are same
         no_of_indexes_before_rebalance = 0
         no_of_indexes_after_rebalance = 0
@@ -1069,10 +1070,14 @@ class N1QLHelper():
                 self.log.info("rebalanced out node still present after rebalance {0} : {1}".format(node_out,
                                                                                                    indexer_nodes_after_rebalance))
                 raise Exception("rebalanced out node still present after rebalance")
+        if use_https:
+            port = '18091'
+        else:
+            port = '8091'
         if swap_rebalance:
             for node_in in nodes_in:
                 # strip of unnecessary data for comparison
-                ip_address = str(node_in).replace("ip:", "").replace(" port", "").replace(" ssh_username:root", "").replace(" ssh_username:Administrator", "")
+                ip_address = f"{node_in.ip}:{port}"
                 if ip_address not in indexer_nodes_after_rebalance:
                     self.log.info("swap rebalanced in node is not distributed any indexes")
                     raise Exception("swap rebalanced in node is not distributed any indexes")
