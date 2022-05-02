@@ -363,7 +363,14 @@ class BaseTestCase(unittest.TestCase):
                 if self.enforce_tls:
                     self.log.info("#####Enforcing TLS########")
                     ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
-                    status = ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master])
+                    status = False
+                    for i in range(4):
+                        self.log.info("check_if_services_obey_tls iteration number {}".format(i))
+                        status = ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master])
+                        if status:
+                            break
+                        else:
+                            self.sleep(10)
                     if not status:
                         self.fail("Port binding after enforcing TLS incorrect")
             if self.ipv4_only:
