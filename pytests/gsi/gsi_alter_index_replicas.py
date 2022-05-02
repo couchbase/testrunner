@@ -989,7 +989,8 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             wait_for_pending=30)
 
         failover_task.result()
-
+        if self.index_servers[0].ip == self.servers[1].ip:
+            self.rest = RestConnection(self.master)
         rebalance = self.cluster.async_rebalance(
             self.servers[:self.nodes_init],
             [], [self.servers[1]])

@@ -330,7 +330,7 @@ class PlannerGSI(BaseSecondaryIndexingTests):
             else:
                 index_hosts_dict[index_name] = [host]
 
-        hosts = [server.ip for server in self.servers[:self.nodes_init]]
+        hosts = sorted([server.ip for server in self.servers[:self.nodes_init]])
         for index in index_hosts_dict:
             index_hosts = sorted(index_hosts_dict[index])
             self.assertEqual(hosts, index_hosts, "Index Placement is not matching expected value")
