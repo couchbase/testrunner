@@ -3354,9 +3354,9 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             for i in range(0, len(nodes)):
                 if nodes[i] not in ("empty", "invalid"):
                     nodes[i] = self.servers[int(nodes[i])].ip + ":" + \
-                               self.servers[int(nodes[i])].port
+                               self.node_port
                 elif nodes[i] == "invalid":
-                    nodes[i] = invalid_ip + ":" + "8091"
+                    nodes[i] = invalid_ip + ":" + self.node_port
                 elif nodes[i] == "empty":
                     nodes[i] = ""
         else:

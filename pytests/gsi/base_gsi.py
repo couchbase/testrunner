@@ -95,6 +95,10 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.defer_build = self.defer_build and self.use_gsi_for_secondary
         self.num_index_replicas = self.input.param("num_index_replica", 0)
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        if self.use_https:
+            self.node_port = '18091'
+        else:
+            self.node_port = '8091'
         if index_node:
             self.index_rest = RestConnection(index_node)
             # New settings for schedule Indexes
