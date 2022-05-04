@@ -298,11 +298,11 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         expected_num_replicas = num_index_replicas + self.num_change_replica
         nodes_with_replicas = []
         nodes_list = []
-        i=0
+        i = 0
 
         for server in self.servers:
-            nodes_list.append((i,'{0}:{1}'.format(server.ip,server.port)))
-            i+=1
+            nodes_list.append((i,'{0}:{1}'.format(server.ip, self.node_port)))
+            i += 1
 
         if self.replica_index:
             create_index_query = "CREATE INDEX " + index_name_prefix + \
@@ -383,15 +383,14 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
     '''Do the same alter index tests on an index created with a node list'''
     def test_alter_index_with_node_list(self):
-        i=0
+        i = 0
         nodes_list=[]
         index_name_prefix = "random_index_" + str(random.randint(100000, 999999))
         expected_num_replicas = self.num_index_replicas + self.num_change_replica
-
-        for server in self.servers:
+        for _ in self.servers:
             if i <= self.num_index_replicas:
-                nodes_list.append('{0}:{1}'.format(self.servers[i].ip,self.servers[i].port))
-                i+=1
+                nodes_list.append('{0}:{1}'.format(self.servers[i].ip, self.node_port))
+                i += 1
 
         create_index_query = "CREATE INDEX " + index_name_prefix + \
                              " ON default(age) USING GSI  WITH {{'num_replica': {0},'nodes':{1}}};".format(self.num_index_replicas, nodes_list)
@@ -1405,11 +1404,10 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         index_name_prefix = "random_index_" + str(random.randint(100000, 999999))
         nodes_with_replicas = []
         nodes_list = []
-        i=0
-
+        i = 0
         for server in self.servers:
-            nodes_list.append((i,'{0}:{1}'.format(server.ip,server.port)))
-            i+=1
+            nodes_list.append((i,'{0}:{1}'.format(server.ip, self.node_port)))
+            i += 1
 
         create_index_query = "CREATE INDEX " + index_name_prefix + \
                              " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(self.num_index_replicas)
@@ -1469,8 +1467,10 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                                                          get_all_nodes=False)
         rest = RestConnection(index_node)
 
+        self.sleep(10)
         indexes = rest.get_indexer_metadata()
 
+        rebalance_out_node_ip, rebalance_out_node = None, None
         for index in indexes['status']:
             if '(replica ' in index['name'] and index['hosts'][0] != (self.master.ip + ":" + self.master.port):
                 rebalance_out_node_ip = index['hosts'][0]
@@ -1520,7 +1520,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + \
-                             " ON default(age) USING GSI  WITH {{'num_replica': {0},'nodes': {1}}};".format(self.num_index_replicas,nodes)
+                             " ON default(age) USING GSI  WITH {{'num_replica': {0},'nodes': {1}}};".format(self.num_index_replicas, nodes)
 
         self._create_index_query(index_statement=create_index_query, index_name=index_name_prefix)
 

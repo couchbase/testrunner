@@ -1645,16 +1645,13 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         nodes_out_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         # rebalance out a node
         shell = RemoteMachineShellConnection(kv_node)
-        if self.use_https:
-            port = '18091'
-        else:
-            port = '8091'
+
         command = "{0}couchbase-cli rebalance -c {1} -u {2} -p {3} --server-remove={4}:{5}".format(
             self.cli_command_location,
             kv_node.ip, kv_node.rest_username,
             kv_node.rest_password,
             nodes_out_list.ip,
-            port)
+            self.node_port)
         o, e = shell.execute_non_sudo_command(command)
         shell.log_command_output(o, e)
         self.sleep(30)
@@ -2527,14 +2524,12 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         services_in = ["index"]
         # rebalance in a node
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                                 [self.servers[
-                                                      self.nodes_init]], [],
+                                                 to_add_nodes, [],
                                                  services=services_in)
         rebalance.result()
-
         query = "CREATE PRIMARY INDEX p1 on default USING GSI with {{'nodes':\"{0}:{1}\"}}".format(
             self.servers[self.nodes_init].ip,
-            self.servers[self.nodes_init].port)
+            self.node_port)
         self.n1ql_helper.run_cbq_query(query=query,
                                        server=self.n1ql_node)
 
@@ -2843,12 +2838,9 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
     def _cbindex_move(self, src_node, dst_node, index_list, alter_index=False, queue=None,run_from_dst=False,username="Administrator", password="password",
                       expect_failure=False, bucket="default", remote_host=None):
-        if self.use_https:
-            port = '18091'
-        else:
-            port = '8091'
+
         try:
-            ip_address = f"{dst_node.ip}:{port}"
+            ip_address = f"{dst_node.ip}:{self.node_port}"
         except AttributeError:
             ip_address = dst_node
         if alter_index:

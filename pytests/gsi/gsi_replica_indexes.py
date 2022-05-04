@@ -3353,18 +3353,14 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             src_nodes = self.nodes
         nodes = []
         invalid_ip = "10.111.151.256"
-        if self.use_https:
-            port = '18091'
-        else:
-            port = '8091'
         if src_nodes:
             nodes = src_nodes.split(":")
             for i in range(0, len(nodes)):
                 if nodes[i] not in ("empty", "invalid"):
                     nodes[i] = self.servers[int(nodes[i])].ip + ":" + \
-                               self.servers[int(nodes[i])].port
+                               self.node_port
                 elif nodes[i] == "invalid":
-                    nodes[i] = invalid_ip + ":" + port
+                    nodes[i] = invalid_ip + ":" + self.node_port
                 elif nodes[i] == "empty":
                     nodes[i] = ""
         else:
