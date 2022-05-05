@@ -5178,6 +5178,18 @@ class RestConnection(object):
         return json.loads(content)
 
     '''
+    Update user password
+    '''
+    def update_password(self, user_id, password):
+        url = "settings/rbac/users/local/" + user_id
+        api = self.baseUrl + url
+        params = urllib.parse.urlencode({'password': password})
+        status, content, header = self._http_request(api, 'PATCH', params)
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
     Add/Update user role assignment
     user_id=userid of the user to act on
     password=<new password>'''
