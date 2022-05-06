@@ -5180,11 +5180,14 @@ class RestConnection(object):
     '''
     Update user password
     '''
-    def update_password(self, user_id, password):
+    def update_password(self, user_id, new_password, username="Administrator", password="password"):
         url = "settings/rbac/users/local/" + user_id
         api = self.baseUrl + url
-        params = urllib.parse.urlencode({'password': password})
-        status, content, header = self._http_request(api, 'PATCH', params)
+        params = urllib.parse.urlencode({'password': new_password})
+        authorization = self.get_authorization(username, password)
+        headers = {'Content-type': 'application/x-www-form-urlencoded',
+                   'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'PATCH', params, headers=headers)
         if not status:
             raise Exception(content)
         return content
