@@ -371,9 +371,9 @@ class EventingSanity(EventingBaseTest):
 
     def test_expired_mutation(self):
         if self.non_default_collection:
-            self.load_data_to_collection(self.docs_per_day*self.num_docs,"src_bucket.src_bucket.src_bucket",expiry=10)
+            self.load_data_to_collection(self.docs_per_day*self.num_docs,"src_bucket.src_bucket.src_bucket",expiry=100, wait_for_loading=False)
         else:
-            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",expiry=10)
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",expiry=100, wait_for_loading=False)
         # set expiry pager interval
         ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 1, bucket=self.src_bucket_name)
         body = self.create_save_function_body(self.function_name, "handler_code/bucket_op_expired.js")

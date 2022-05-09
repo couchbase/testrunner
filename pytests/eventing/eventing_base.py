@@ -1109,10 +1109,19 @@ class EventingBaseTest(QueryHelperTests):
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=100, percent_delete=0,
                                             scope=collection_list[1], collection=collection_list[2],doc_expiry=expiry,json_template=template,
                                             doc_size=self.document_size)
-        task=self.cluster.async_load_gen_docs(self.master, collection_list[0], self.gen_create, pause_secs=1,
+        if self.dgm_run:
+            task = self.data_ops_javasdk_loader_in_batches_to_collection(
+                collection_list[0], sdk_data_loader=self.gen_create,
+                batch_size=self.batch_size, exp=expiry)
+        else:
+            task=self.cluster.async_load_gen_docs(self.master, collection_list[0], self.gen_create, pause_secs=1,
                                          timeout_secs=300,exp=expiry)
         if wait_for_loading:
-            task.result()
+            if self.dgm_run:
+                for t in task:
+                    t.result()
+            else:
+                task.result()
         else:
             return task
 
