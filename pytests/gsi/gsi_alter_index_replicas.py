@@ -306,7 +306,8 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         if self.replica_index:
             create_index_query = "CREATE INDEX " + index_name_prefix + \
-                                 " ON default(age) USING GSI  WITH {{'nodes': '{0}:{1}'}};".format(self.master.ip,self.master.port)
+                                 " ON default(age) USING GSI  WITH {{'nodes': '{0}:{1}'}};".format(self.master.ip,
+                                                                                                   self.node_port)
         else:
             create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI;"
 
@@ -1709,7 +1710,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         replica_id = None
         for index in index_metadata['status']:
-            if index['hosts'][0] == (self.servers[1].ip + ":" + self.servers[1].port):
+            if index['hosts'][0] == (self.servers[1].ip + ":" + self.node_port):
                 replica_id = index['replicaId']
 
         error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=replica_id)
