@@ -1272,8 +1272,9 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         host_name = index_map['default']['idx1 (replica 1)']['hosts']
 
         for server in self.servers:
-            if host_name == (server.ip + ':' + server.port) and server != self.master:
+            if host_name == (server.ip + ':' + self.node_port) and server != self.master:
                 stop_node = server
+                break
 
         try:
             remote = RemoteMachineShellConnection(stop_node)
@@ -1473,13 +1474,13 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         rebalance_out_node_ip, rebalance_out_node = None, None
         for index in indexes['status']:
-            if '(replica ' in index['name'] and index['hosts'][0] != (self.master.ip + ":" + self.master.port):
+            if '(replica ' in index['name'] and index['hosts'][0] != (self.master.ip + ":" + self.node_port):
                 rebalance_out_node_ip = index['hosts'][0]
                 replica_name = index['name']
                 replica_id = index['replicaId']
 
         for server in self.servers:
-            if (server.ip + ":" + server.port) == rebalance_out_node_ip and server != self.master:
+            if (server.ip + ":" + self.node_port) == rebalance_out_node_ip and server != self.master:
                 rebalance_out_node = server
 
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [rebalance_out_node])
