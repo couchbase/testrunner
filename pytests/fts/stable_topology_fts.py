@@ -44,8 +44,9 @@ class StableTopFTS(FTSBaseTest):
 
     def create_simple_default_index(self, data_loader_output=False):
         plan_params = self.construct_plan_params()
-        self.load_data(generator=None, data_loader_output=data_loader_output)
-        self.wait_till_items_in_bucket_equal(self._num_items//2)
+        self.load_data(generator=None, data_loader_output=data_loader_output, num_items=self._num_items)
+        if not (self.bucket_storage == "magma"):
+            self.wait_till_items_in_bucket_equal(self._num_items//2)
         self.create_fts_indexes_all_buckets(plan_params=plan_params)
         if self.restart_couchbase:
             self._cb_cluster.restart_couchbase_on_all_nodes()
