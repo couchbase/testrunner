@@ -305,13 +305,14 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         stats_map_before_rebalance = self.get_index_stats(perNode=False)
 
         failover_task = self.cluster.async_failover(self.servers[:self.nodes_init],
-            failover_nodes=self.servers[2:self.nodes_init], graceful=False, wait_for_pending=180)
+                                                    failover_nodes=self.servers[2:self.nodes_init], graceful=False,
+                                                    wait_for_pending=180)
         failover_task.result()
 
         # Adding new nodes to server_group_3
         node_in = [self.servers[4], self.servers[5]]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], node_in, [],
-                                                  services=["kv,index,n1ql", "index"])
+                                                 services=["kv,index,n1ql", "index"])
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
@@ -391,13 +392,14 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         self.assertEqual(len(index_meta_info), len(index_lists) * (self.num_replicas + 1))
 
         failover_task = self.cluster.async_failover(self.servers[:self.nodes_init],
-            failover_nodes=self.servers[2:self.nodes_init], graceful=False, wait_for_pending=180)
+                                                    failover_nodes=self.servers[2:self.nodes_init], graceful=False,
+                                                    wait_for_pending=180)
         failover_task.result()
 
         # Adding new nodes to group1
         node_in = [self.servers[4], self.servers[5]]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], node_in, [],
-                                                  services=["kv,index,n1ql", "index"])
+                                                 services=["kv,index,n1ql", "index"])
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
@@ -405,16 +407,18 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_meta_info = index_metadata = self.rest.get_indexer_metadata()['status']
         for index in index_meta_info:
             hosts = index['hosts']
-            self.assertTrue(f"{self.servers[2].ip}:8091" not in hosts, f"Index stats are not correct. {index}")
-            self.assertTrue(f"{self.servers[3].ip}:8091" not in hosts, f"Index stats are not correct. {index}")
-            self.assertTrue((f"{self.servers[4].ip}:8091" in hosts) or (f"{self.servers[5].ip}:8091" in hosts),
+            self.assertTrue(f"{self.servers[2].ip}:{self.node_port}" not in hosts,
+                            f"Index stats are not correct. {index}")
+            self.assertTrue(f"{self.servers[3].ip}:{self.node_port}" not in hosts,
+                            f"Index stats are not correct. {index}")
+            self.assertTrue((f"{self.servers[4].ip}:{self.node_port}" in hosts) or (
+                        f"{self.servers[5].ip}:{self.node_port}" in hosts),
                             f"Index stats are not correct. {index}")
             self.assertEqual(index['numPartition'], 8)
 
         query = f'select count(*) from {collection_namespace}  where age > 20 and city like "%%"'
         result = self.run_cbq_query(query=query)['results'][0]['$1']
         self.assertNotEqual(result, 0)
-
 
     def test_create_replica_index_with_server_groups(self):
         nodes = self._get_node_list()
@@ -854,7 +858,6 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             self.n1ql_helper.verify_replica_indexes_build_status(index_map,
                                                                  len(nodes) - 1,
                                                                  defer_build=False)
-
 
     def test_build_index_while_another_index_building(self):
         index_name_age = "age_index_" + str(
@@ -1599,7 +1602,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         self.log.info(nodes)
 
         eq_index_node = self.servers[int(self.eq_index_node)].ip + ":" + \
-                        self.servers[int(self.eq_index_node)].port
+                        self.node_port
 
         # Create Equivalent Index
         equivalent_index_query = "CREATE INDEX eq_index ON default(age) USING GSI  WITH {{'nodes': '{0}'}};".format(
@@ -1887,7 +1890,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             self.log.info(output)
         self.log.info("Retrying rebalance")
         rebalance1 = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                                 [], [node_out])
+                                                  [], [node_out])
         self.sleep(30)
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
@@ -2166,22 +2169,21 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if self.expected_err_msg:
             expect_failure = True
 
-
         output, error = self._cbindex_move(src_node=self.servers[0],
-                                       node_list=dest_nodes,
-                                       index_list=index_name_prefix,
-                                       expect_failure=expect_failure,
+                                           node_list=dest_nodes,
+                                           index_list=index_name_prefix,
+                                           expect_failure=expect_failure,
                                            alter_index=self.alter_index)
         self.sleep(30)
         if self.expected_err_msg:
-          if self.expected_err_msg not in error[0]:
-            self.fail("Move index failed with unexpected error")
+            if self.expected_err_msg not in error[0]:
+                self.fail("Move index failed with unexpected error")
         else:
-          index_map = self.get_index_map()
-          self.n1ql_helper.verify_replica_indexes([index_name_prefix],
-                                                index_map,
-                                                len(dest_nodes) - 1,
-                                                dest_nodes)
+            index_map = self.get_index_map()
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map,
+                                                    len(dest_nodes) - 1,
+                                                    dest_nodes)
 
     def test_move_index_failed_node(self):
         node_out = self.servers[self.node_out]
@@ -2230,13 +2232,13 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         self.sleep(30)
         if self.expected_err_msg:
             if self.expected_err_msg not in error[0]:
-               self.fail("Move index failed with unexpected error")
+                self.fail("Move index failed with unexpected error")
             else:
-               index_map = self.get_index_map()
-               self.n1ql_helper.verify_replica_indexes([index_name_prefix],
-                                                    index_map,
-                                                    len(dest_nodes) - 1,
-                                                    dest_nodes)
+                index_map = self.get_index_map()
+                self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                        index_map,
+                                                        len(dest_nodes) - 1,
+                                                        dest_nodes)
 
     def test_dest_node_fails_during_move_index(self):
         node_out = self.servers[self.node_out]
@@ -2276,16 +2278,17 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         threads = []
         if self.alter_index:
             alter_index_query = 'ALTER INDEX default.' + index_name_prefix + ' WITH {{"action":"move","nodes": ["{0}","{1}"]}}'.format(
-            dest_nodes[0], dest_nodes[1])
+                dest_nodes[0], dest_nodes[1])
             threads.append(
-            Thread(target=self.n1ql_helper.run_cbq_query(query=alter_index_query, server=self.n1ql_node), name="alter_index",
-                   args=(self.servers[0], dest_nodes, index_name_prefix,
-                         expect_failure)))
+                Thread(target=self.n1ql_helper.run_cbq_query(query=alter_index_query, server=self.n1ql_node),
+                       name="alter_index",
+                       args=(self.servers[0], dest_nodes, index_name_prefix,
+                             expect_failure)))
         else:
             threads.append(
-            Thread(target=self._cbindex_move, name="move_index",
-                   args=(self.servers[0], dest_nodes, index_name_prefix,
-                         expect_failure)))
+                Thread(target=self._cbindex_move, name="move_index",
+                       args=(self.servers[0], dest_nodes, index_name_prefix,
+                             expect_failure)))
         threads.append(
             Thread(target=self.cluster.async_failover, name="failover", args=(
                 self.servers[:self.nodes_init], [node_out], self.graceful)))
@@ -2320,11 +2323,11 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                                                 self.num_index_replicas)
 
         index_metadata = None
-        for i in range(0, self.nodes_init-1):
+        for i in range(0, self.nodes_init - 1):
             node_index_metadata = RestConnection(
                 self.servers[i]).get_indexer_metadata()
             self.log.info("Index metadata for %s : %s" % (
-            self.servers[i].ip, node_index_metadata))
+                self.servers[i].ip, node_index_metadata))
             if index_metadata:
                 if node_index_metadata != index_metadata:
                     self.fail("Index metadata not replicated properly")
@@ -2505,7 +2508,6 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                         "items_count"]
             except Exception as err:
                     self.fail(err)
-
             self.log.info("# Before Rollback Docs processed by %s = %s" % (
                 index_name, num_docs_processed_before_rollback[index_name]))
 
@@ -2840,7 +2842,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
         if self.eq_index_node is not None:
             eq_index_node = self.servers[int(self.eq_index_node)].ip + ":" + \
-                            self.servers[int(self.eq_index_node)].port
+                            self.node_port
 
             # Create Equivalent Index
             equivalent_index_query = "CREATE INDEX eq_index ON default(age) USING GSI  WITH {{'nodes': '{0}'}};".format(
@@ -2866,7 +2868,6 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             if json:
                 self._validate_cbindexplan_result(json, "plan",
                                                   expected_node_list)
-
 
     def test_failover_with_replica_with_concurrent_querying_using_use_index(self):
         self.run_operation(phase="before")
@@ -2993,7 +2994,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
     def test_prepare_statement_on_failedover_equivalent_index_with_replicas(self):
         self.run_operation(phase="before")
         eq_index_node = self.servers[int(self.eq_index_node)].ip + ":" + \
-                        self.servers[int(self.eq_index_node)].port
+                        self.node_port
 
         # Create Equivalent Index
         equivalent_index_query = "CREATE INDEX eq_index ON default(age) USING GSI  WITH {{'nodes': '{0}'}};".format(
@@ -3171,7 +3172,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 self.log.info("# Requests served by %s = %s" % (
                     index_name, num_request_served))
                 if num_request_served > hash["index_name"]:
-                    count+=1
+                    count += 1
                 hash["index_name"] = num_request_served
                 if num_request_served == 0:
                     load_balanced = False
@@ -3265,8 +3266,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             hostname, _ = self.n1ql_helper.get_index_details_using_index_name(
                 index_name, index_map)
             num_request_served = \
-            index_stats[hostname]['default'][index_name][
-                "num_completed_requests"]
+                index_stats[hostname]['default'][index_name][
+                    "num_completed_requests"]
             self.log.info("# Requests served by %s = %s" % (
                 index_name, num_request_served))
             hash_before[index_name] = num_request_served
@@ -3293,8 +3294,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             hostname, _ = self.n1ql_helper.get_index_details_using_index_name(
                 index_name, index_map)
             num_request_served = \
-            index_stats[hostname]['default'][index_name][
-                "num_completed_requests"]
+                index_stats[hostname]['default'][index_name][
+                    "num_completed_requests"]
             self.log.info("# Requests served by %s = %s" % (
                 index_name, num_request_served))
             hash_after[index_name] = num_request_served
@@ -3341,8 +3342,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         self.sleep(30)
 
         result_before = \
-        self.n1ql_helper.run_cbq_query(query="prep_stmt", is_prepared=True,
-                                       server=self.n1ql_server)['results']
+            self.n1ql_helper.run_cbq_query(query="prep_stmt", is_prepared=True,
+                                           server=self.n1ql_server)['results']
 
         index_map = self.get_index_map()
         self.log.info(index_map)
@@ -3382,7 +3383,6 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             sorted(result_before) == sorted(result_after),
             msg % (result_before[:100], result_before[-100:],
                    result_after[:100], result_after[-100:]))
-
 
     def _get_node_list(self, node_list=None):
         # 1. Parse node string
@@ -3426,7 +3426,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                       username="Administrator", password="password",
                       alter_index=False):
         node_list = str(node_list).replace("\'", "\"")
-        src_node_ip = src_node.ip + ":" + src_node.port
+        src_node_ip = src_node.ip + ":" + self.node_port
         output = None
         error = []
 
@@ -3436,7 +3436,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             try:
                 self.n1ql_helper.run_cbq_query(query=alter_index_query, server=self.n1ql_node)
             except Exception as ex:
-                output=""
+                output = ""
                 error.append(str(ex))
         else:
             cmd = """cbindex -type move -server '{0}' -auth '{4}:{5}' -index '{1}' -bucket {2} -with '{{"nodes":{3}}}'""".format(
@@ -3466,7 +3466,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 "cbindex move started successfully : {0}".format(output))
         return output, error
 
-    def _cbindex_create(self, node, index_name, fields,bucket="default", username="Administrator", password="password",num_replica=1):
+    def _cbindex_create(self, node, index_name, fields, bucket="default", username="Administrator", password="password",
+                        num_replica=1):
         cmd = """cbindex -type=create -auth '{0}:{1}' -bucket {2}  -index {3} -fields={4} -using gsi -with '{{"num_replica":{5}}}'""".format(
             username, password, bucket, index_name, fields, num_replica)
         self.log.info(cmd)
@@ -3487,7 +3488,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
         idx_json = self._generate_index_json_for_cbindex_plan(num_replica,
                                                               bucket, field)
-        src_node_ip = src_node.ip + ":" + src_node.port
+        src_node_ip = src_node.ip + ":" + self.node_port
         cmd = """cbindexplan -command=plan -indexes='{0}/index.json' -cluster='{1}' -username='{2}' -password='{3}' -output='plan.json'""".format(
             self.cli_command_location, src_node_ip, username, password)
         self.log.info(cmd)
@@ -3537,17 +3538,18 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                     expected_num_recommended_nodes += 1
                     if expected_node_list:
                         expected_node_list.append(self.servers[
-                                        int(self.eq_index_node)].ip + ":" + \
-                                    self.servers[int(self.eq_index_node)].port)
+                                                      int(self.eq_index_node)].ip + ":" + \
+                                                  self.node_port)
 
-                self.assertEqual(expected_num_recommended_nodes, num_recommended_nodes, "cbindexplan doesnt give recommendations for all replicas" )
+                self.assertEqual(expected_num_recommended_nodes, num_recommended_nodes,
+                                 "cbindexplan doesnt give recommendations for all replicas")
 
                 # Validate if there is an expected node list, the placement recommendation matches it
                 if expected_node_list:
                     actual_node_list.sort()
                     expected_node_list.sort()
-                    self.assertListEqual(actual_node_list, expected_node_list, "Placement recommendation not matching expected node list")
-
+                    self.assertListEqual(actual_node_list, expected_node_list,
+                                         "Placement recommendation not matching expected node list")
 
     def _generate_index_json_for_cbindex_plan(self, num_replica, bucket, field):
         idx_json = {}
@@ -3582,12 +3584,17 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         remote_client.log_command_output(output, error)
         if error and not [x for x in output if 'created successfully in archive' in x]:
             self.fail("cbbackupmgr config failed")
-        cmd = "cbbackupmgr backup --archive {0} --repo example{1} --cluster couchbase://127.0.0.1 --username {2} --password {3}".format(
-            self.backup_path, self.rand, username, password)
+        if self.use_https:
+            cmd = "cbbackupmgr backup --archive {0} --repo example{1} --cluster https://127.0.0.1:18091 --username {2} --password {3} --no-ssl-verify".format(
+                self.backup_path, self.rand, username, password)
+        else:
+            cmd = "cbbackupmgr backup --archive {0} --repo example{1} --cluster couchbase://127.0.0.1 --username {2} --password {3}".format(
+                self.backup_path, self.rand, username, password)
         command = "{0}{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error and not [x for x in output if 'Backup successfully completed' in x or 'Backup completed successfully' in x]:
+        if error and not [x for x in output if
+                          'Backup successfully completed' in x or 'Backup completed successfully' in x]:
             self.fail("cbbackupmgr backup failed")
         elif not [x for x in output if 'Backup successfully completed' in x or 'Backup completed successfully' in x]:
             self.log.error(output)
@@ -3596,8 +3603,13 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
     def _create_restore(self, server, username="Administrator",
                         password="password"):
         remote_client = RemoteMachineShellConnection(server)
-        cmd = "cbbackupmgr restore --archive {0} --repo example{1} --cluster couchbase://127.0.0.1 --username {2} --password {3} --force-updates".format(
-            self.backup_path, self.rand, username, password)
+        if self.use_https:
+            cmd = "cbbackupmgr restore --archive {0} --repo example{1} --cluster https://127.0.0.1:18091 --username {2} --password {3} --force-updates --no-ssl-verify".format(
+                self.backup_path, self.rand, username, password)
+        else:
+            cmd = "cbbackupmgr restore --archive {0} --repo example{1} --cluster couchbase://127.0.0.1 --username {2} --password {3} --force-updates".format(
+                self.backup_path, self.rand, username, password)
+
         command = "{0}{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)

@@ -343,6 +343,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         self.prepare_collection_for_indexing(json_template="Employee")
         collection_namespace = self.namespaces[0]
         primary_gen = QueryDefinition(index_name='`#primary`')
+        self.sleep(30)
         doc_count = self.run_cbq_query(query=f'select count(*) from {collection_namespace}')['results'][0]['$1']
         arr_index = "arr_index"
         # preparing index
@@ -362,6 +363,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             # Creating Array index
             query = f"create index {arr_index} on {collection_namespace}(ALL ARRAY v.name for v in VMs END) "
             self.run_cbq_query(query=query)
+            self.sleep(10)
             result = self.wait_until_indexes_online()
             if not result:
                 self.wait_until_indexes_online(timeout=1200)

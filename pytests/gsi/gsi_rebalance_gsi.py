@@ -2564,12 +2564,12 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
         query = "CREATE PRIMARY INDEX p1 on default USING GSI with {{'nodes':\"{0}:{1}\"}}".format(
             self.servers[self.nodes_init].ip,
-            self.servers[self.nodes_init].port)
+            self.node_port)
         self.n1ql_helper.run_cbq_query(query=query,
                                        server=self.n1ql_node)
 
         alter_idx_query = "ALTER INDEX default.p1 with {{'action':'','nodes':\"{0}:{1}\"}}".format(
-            index_server.ip, index_server.port)
+            index_server.ip, self.node_port)
         try:
             result = self.n1ql_helper.run_cbq_query(query=alter_idx_query,
                                                     server=self.n1ql_node)
@@ -2646,7 +2646,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
         query = "CREATE PRIMARY INDEX p1 on default USING GSI with {{'nodes':\"{0}:{1}\"}}".format(
             self.servers[self.nodes_init].ip,
-            self.servers[self.nodes_init].port)
+            self.node_port)
         self.n1ql_helper.run_cbq_query(query=query,
                                        server=self.n1ql_node)
 

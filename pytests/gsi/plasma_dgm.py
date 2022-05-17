@@ -28,7 +28,9 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
             self.rest.set_index_settings({"indexer.plasma.backIndex.evictSweepInterval": self.sweep_interval})
             self.rest.set_index_settings({"indexer.plasma.backIndex.enableInMemoryCompression": True})
             self.rest.set_index_settings({"indexer.plasma.mainIndex.enableInMemoryCompression": True})
-        self.deploy_node_info = ["{0}:{1}".format(self.dgmServer.ip, self.dgmServer.port)]
+            # add if condition
+            self.rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 60000})
+        self.deploy_node_info = ["{0}:{1}".format(self.dgmServer.ip, self.node_port)]
         self.load_query_definitions = []
         self.initial_index_number = self.input.param("initial_index_number", 5)
         for x in range(self.initial_index_number):
