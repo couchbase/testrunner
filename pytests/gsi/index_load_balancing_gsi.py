@@ -30,7 +30,7 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
         for query_definition in self.query_definitions:
             for bucket in self.buckets:
                 deploy_node_info = ["{0}:{1}".format(
-                    index_servers[node_count].ip, index_servers[node_count].port)]
+                    index_servers[node_count].ip, self.node_port)]
                 self.create_index(bucket.name,
                     query_definition, deploy_node_info=deploy_node_info)
                 node_count += 1
@@ -59,7 +59,7 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
         for query_definition in self.query_definitions:
             for bucket in self.buckets:
                 deploy_node_info = ["{0}:{1}".format(index_servers[node_count].ip,
-                    index_servers[node_count].port)]
+                    self.node_port)]
                 self.log.info("Creating {0} index on bucket {1} on node {2}...".format(
                     query_definition.index_name, bucket.name, deploy_node_info[0]
                 ))

@@ -391,7 +391,10 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
             self._update_document(doc["_id"], doc)
 
     def _update_document(self, key, document):
-        url = 'couchbase://{ip}/default'.format(ip=self.master.ip)
+        if self.use_https:
+            url = 'couchbases://{ip}/default?ssl=no_verify'.format(ip=self.master.ip)
+        else:
+            url = 'couchbase://{ip}/default'.format(ip=self.master.ip)
         if self.upgrade_to.startswith("4"):
             bucket = Bucket(url)
         else:

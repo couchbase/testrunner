@@ -171,7 +171,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             IndexBackupClient(index_node, self.use_cbbackupmgr, bucket.name)
             for bucket in self.buckets]
         for backup_client in index_backup_clients:
-            backup_result = backup_client.backup()
+            backup_result = backup_client.backup(use_https=self.use_https)
             self.assertTrue(
                 backup_result[0],
                 msg="Backup failed for {0} with {1}".format(
@@ -187,7 +187,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.log.info(f"System Indexes: {result}")
         self.log.info(f"Indexes Metadata: {indexer_metadata}")
         for backup_client in index_backup_clients:
-            restore_result = backup_client.restore()
+            restore_result = backup_client.restore(use_https=self.use_https)
             self.assertTrue(
                 restore_result[0],
                 msg="Restore failed for {0} with {1}".format(
@@ -266,13 +266,13 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     for index in indexer_stats_before_backup['status']
                     if index['bucket'] == bucket.name
                     and index['scope'] in scopes]
-                backup_result = backup_client.backup(scopes)
+                backup_result = backup_client.backup(scopes, use_https=self.use_https)
                 self.assertTrue(
                     backup_result[0],
                     "backup failed for {0} with {1}".format(
                         scopes, backup_result[1]))
                 self._drop_indexes(indexes_before_backup)
-                restore_result = backup_client.restore()
+                restore_result = backup_client.restore(use_https=self.use_https)
                 self.assertTrue(
                     restore_result[0],
                     "restore failed for {0} with {1}".format(
@@ -311,13 +311,13 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     if bucket.name == index['bucket']
                     and "{0}.{1}".format(index['scope'], index['collection'])
                     in collection_namespaces]
-                backup_result = backup_client.backup(collection_namespaces)
+                backup_result = backup_client.backup(collection_namespaces, use_https=self.use_https)
                 self.assertTrue(
                     backup_result[0],
                     "backup failed for {0} with {1}".format(
                         collection_namespaces, backup_result[1]))
                 self._drop_indexes(indexes_before_backup)
-                restore_result = backup_client.restore()
+                restore_result = backup_client.restore(use_https=self.use_https)
                 self.assertTrue(
                     restore_result[0],
                     "restore failed for {0} with {1}".format(
@@ -348,7 +348,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             for excluded_scopes in scopes_combinations:
                 indexer_stats_before_backup = self.rest.get_indexer_metadata()
                 backup_result = backup_client.backup(
-                    excluded_scopes, include=False)
+                    excluded_scopes, include=False, use_https=self.use_https)
                 self.assertTrue(
                     backup_result[0],
                     "restore failed for {0} with {1}".format(
@@ -361,7 +361,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     if bucket.name == index['bucket']
                     and index['scope'] in backedup_scopes]
                 self._drop_indexes(indexes_before_backup)
-                restore_result = backup_client.restore()
+                restore_result = backup_client.restore(use_https=self.use_https)
                 self.assertTrue(
                     restore_result[0],
                     "restore failed for {0} with {1}".format(
@@ -395,7 +395,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             for collection_namespaces in collection_namespaces_list:
                 indexer_stats_before_backup = self.rest.get_indexer_metadata()
                 backup_result = backup_client.backup(
-                    collection_namespaces, include=False)
+                    collection_namespaces, include=False, use_https=self.use_https)
                 self.assertTrue(
                     backup_result[0],
                     "backup failed for {0} with {1}".format(
@@ -411,7 +411,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     and "{0}.{1}".format(index['scope'], index['collection'])
                     in backedup_collections]
                 self._drop_indexes(indexes_before_backup)
-                restore_result = backup_client.restore()
+                restore_result = backup_client.restore(use_https=self.use_https)
                 self.assertTrue(
                     restore_result[0],
                     "restore failed for {0} with {1}".format(
@@ -441,12 +441,12 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         backup_client = IndexBackupClient(self.master,
                                           self.use_cbbackupmgr,
                                           original_bucket)
-        backup_result = backup_client.backup()
+        backup_result = backup_client.backup(use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         remap_bucket = "remap_bucket"
         self._recreate_bucket_structure(remap_bucket)
         backup_client.set_restore_bucket(remap_bucket)
-        restore_result = backup_client.restore()
+        restore_result = backup_client.restore(use_https=self.use_https)
         self.assertTrue(restore_result[0], str(restore_result[1]))
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
@@ -470,7 +470,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             for index in indexer_metadata['status']
             if index['bucket'] == original_bucket
             and index['scope'] == original_scope]
-        backup_result = backup_client.backup(namespaces=[original_scope])
+        backup_result = backup_client.backup(namespaces=[original_scope], use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         remap_bucket = "remap_bucket" if self.bucket_remap\
                        else original_bucket
@@ -488,7 +488,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         mappings = ["{0}:{1}".format(original_scope, remap_scope)]
         if self.bucket_remap:
             self.rest.delete_bucket(backup_client.backup_bucket)
-        restore_result = backup_client.restore(mappings)
+        restore_result = backup_client.restore(mappings, use_https=self.use_https)
         self.assertTrue(restore_result[0], str(restore_result[1]))
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
@@ -513,7 +513,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             for index in indexer_metadata['status']
             if index['bucket'] == original_bucket
             and index['scope'] == original_scope]
-        backup_result = backup_client.backup(namespaces=[original_scope])
+        backup_result = backup_client.backup(namespaces=[original_scope], use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         collections = self.rest.get_scope_collections(
             original_bucket, original_scope)
@@ -541,7 +541,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             in zip(original_namespaces, remap_namespaces)]
         if self.bucket_remap:
             self.rest.delete_bucket(backup_client.backup_bucket)
-        restore_result = backup_client.restore(mappings)
+        restore_result = backup_client.restore(mappings, use_https=self.use_https)
         self.assertTrue(restore_result[0], str(restore_result[1]))
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
@@ -572,7 +572,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         collections = self.rest.get_scope_collections(
             original_bucket, scopes[1])
         original_namespace = "{0}.{1}".format(scopes[1], collections[0])
-        backup_result = backup_client.backup(namespaces=include_namespaces)
+        backup_result = backup_client.backup(namespaces=include_namespaces, use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         self.rest.delete_scope(original_bucket, scopes[1])
         remap_bucket = "remap_bucket" if self.bucket_remap\
@@ -601,7 +601,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         mappings.append(f'{original_namespace}:{remap_namespace}')
         if self.bucket_remap:
             self.rest.delete_bucket(backup_client.backup_bucket)
-        restore_result = backup_client.restore(mappings)
+        restore_result = backup_client.restore(mappings, use_https=self.use_https)
         self.assertTrue(restore_result[0], str(restore_result[1]))
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
@@ -657,7 +657,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             index for index in indexer_stats['status']
             if index['bucket'] == bucket and index['scope'] == scope
         ]
-        backup_result = backup_client.backup(include_namespaces)
+        backup_result = backup_client.backup(include_namespaces, use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         self.rest.delete_scope(bucket, scope)
         remap_bucket = "remap_bucket" if self.bucket_remap\
@@ -670,7 +670,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.sleep(5, "Allow scope-collection to be online")
         if self.bucket_remap:
             self.rest.delete_bucket(backup_client.backup_bucket)
-        restore_result = backup_client.restore()
+        restore_result = backup_client.restore(use_https=self.use_https)
         self.assertTrue(restore_result[0], str(restore_result[1]))
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
@@ -709,7 +709,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             if index['bucket'] == bucket and index['scope'] == scope
         ]
         include_namespaces = [scope]
-        backup_result = backup_client.backup(include_namespaces)
+        backup_result = backup_client.backup(include_namespaces, use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         self.rest.delete_scope(bucket, scope)
         remap_bucket = "remap_bucket" if self.bucket_remap\
@@ -722,7 +722,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.sleep(5, "Allow scope-collection to be online")
         if self.bucket_remap:
             self.rest.delete_bucket(backup_client.backup_bucket)
-        restore_result = backup_client.restore()
+        restore_result = backup_client.restore(use_https=self.use_https)
         self.assertTrue(restore_result[0], str(restore_result[1]))
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
@@ -755,7 +755,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         query = replica_index.generate_index_create_query(
             namespace="default:" + bucket,
             deploy_node_info=[
-                node.ip + ":" + node.port
+                node.ip + ":" + self.node_port
                 for node in self.indexer_nodes],
             defer_build=self.defer_build,
             num_replica=self.num_index_replicas
@@ -773,7 +773,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             index for index in replica_indexes_before_backup
             if index['indexName'] == replica_index.index_name]
         namespaces = ["_default._default"]
-        backup_result = backup_client.backup(namespaces=namespaces)
+        backup_result = backup_client.backup(namespaces=namespaces, use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         query = replica_index.generate_index_drop_query(
             namespace="default:" + bucket)
@@ -788,7 +788,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         self.sleep(10)
-        restore_result = backup_client.restore()
+        restore_result = backup_client.restore(use_https=self.use_https)
         self.assertTrue(restore_result[0], str(restore_result[1]))
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
@@ -832,7 +832,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         query = partition_index.generate_index_create_query(
             namespace="default:" + bucket,
             deploy_node_info=[
-                node.ip + ":" + node.port
+                node.ip + ":" + self.node_port
                 for node in self.indexer_nodes],
             defer_build=self.defer_build,
             partition_by_fields=partition_fields
@@ -846,7 +846,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             index for index in self.rest.get_indexer_metadata()['status']
             if index['name'].startswith(partition_index.index_name)]
         namespaces = ["_default._default"]
-        backup_result = backup_client.backup(namespaces=namespaces)
+        backup_result = backup_client.backup(namespaces=namespaces, use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         query = partition_index.generate_index_drop_query(
             namespace="default:" + bucket)
@@ -861,7 +861,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         self.sleep(10)
-        restore_result = backup_client.restore()
+        restore_result = backup_client.restore(use_https=self.use_https)
         self.assertTrue(restore_result[0], str(restore_result[1]))
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
@@ -886,7 +886,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         query = partition_index.generate_index_create_query(
             namespace=namespace,
             deploy_node_info=[
-                node.ip + ":" + node.port
+                node.ip + ":" + self.node_port
                 for node in self.indexer_nodes],
             defer_build=self.defer_build,
             partition_by_fields=partition_fields
@@ -911,7 +911,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         basic_indexes_before_backup = list(filter(
             lambda index: index['name'].startswith(basic_index.index_name),
             index_stats_before_backup['status']))
-        backup_result = backup_client.backup(namespaces=namespaces)
+        backup_result = backup_client.backup(namespaces=namespaces, use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         query = partition_index.generate_index_drop_query(namespace=namespace)
         self.run_cbq_query(query)
@@ -927,7 +927,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         query = basic_index.generate_index_create_query(
             namespace=namespace,
             deploy_node_info=[
-                node.ip + ":" + node.port
+                node.ip + ":" + self.node_port
                 for node in self.indexer_nodes],
             defer_build=self.defer_build,
             partition_by_fields=partition_fields
@@ -935,7 +935,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.run_cbq_query(query)
         self.sleep(5, "wait for index to create")
         for i in range(10):
-            restore_result = backup_client.restore()
+            restore_result = backup_client.restore(use_https=self.use_https)
             self.assertTrue(restore_result[0], str(restore_result[1]))
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
@@ -976,7 +976,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         query = replica_index.generate_index_create_query(
             namespace=namespace,
             deploy_node_info=[
-                node.ip + ":" + node.port
+                node.ip + ":" + self.node_port
                 for node in self.indexer_nodes],
             defer_build=self.defer_build,
             num_replica=self.num_index_replicas
@@ -1000,7 +1000,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         basic_indexes_before_backup = list(filter(
             lambda index: index['name'].startswith(basic_index.index_name),
             index_stats_before_backup['status']))
-        backup_result = backup_client.backup(namespaces=namespaces)
+        backup_result = backup_client.backup(namespaces=namespaces, use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         query = replica_index.generate_index_drop_query(namespace=namespace)
         self.run_cbq_query(query)
@@ -1015,7 +1015,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         query = basic_index.generate_index_create_query(
             namespace=namespace,
             deploy_node_info=[
-                node.ip + ":" + node.port
+                node.ip + ":" + self.node_port
                 for node in self.indexer_nodes],
             defer_build=self.defer_build,
             num_replica=self.num_index_replicas
@@ -1023,7 +1023,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.run_cbq_query(query)
         self.sleep(5, "wait for index to create")
         for i in range(10):
-            restore_result = backup_client.restore()
+            restore_result = backup_client.restore(use_https=self.use_https)
             self.assertTrue(restore_result[0], str(restore_result[1]))
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
@@ -1053,7 +1053,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         backup_client = IndexBackupClient(self.indexer_nodes[0],
                                           self.use_cbbackupmgr,
                                           bucket)
-        backup_result = backup_client.backup()
+        backup_result = backup_client.backup(use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         index_fields = ['`newField1`', '`newField2`']
         self._drop_indexes(indexer_stats_before_backup['status'])
@@ -1068,7 +1068,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 namespace=namespace, defer_build=self.defer_build)
             self.run_cbq_query(query)
             self.sleep(5, "wait for index to create")
-        restore_result = backup_client.restore()
+        restore_result = backup_client.restore(use_https=self.use_https)
         self.assertTrue(restore_result[0], str(restore_result[1]))
         indexer_stats_after_restore = self.rest.get_indexer_metadata()
         self.assertEqual(
@@ -1092,7 +1092,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         indexer_stats_before_backup = self.rest.get_indexer_metadata()
         rebalance = self.cluster.async_rebalance(
             self.servers[:self.nodes_init], [], out_nodes)
-        backup_result = backup_client.backup()
+        backup_result = backup_client.backup(use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
@@ -1102,7 +1102,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         rebalance = self.cluster.async_rebalance(
             self.servers[:self.nodes_init], out_nodes, [],
             services=["index"])
-        restore_result = backup_client.restore()
+        restore_result = backup_client.restore(use_https=self.use_https)
         self.assertTrue(restore_result[0], str(restore_result[1]))
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
@@ -1123,7 +1123,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         rebalance = self.cluster.async_rebalance(
             self.servers[:self.nodes_init], out_nodes, [],
             services=["index"])
-        backup_result = backup_client.backup()
+        backup_result = backup_client.backup(use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
@@ -1131,7 +1131,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.sleep(10)
         rebalance = self.cluster.async_rebalance(
             self.servers[:self.nodes_init], [], out_nodes)
-        restore_result = backup_client.restore()
+        restore_result = backup_client.restore(use_https=self.use_https)
         self.assertTrue(restore_result[0], str(restore_result[1]))
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
@@ -1151,7 +1151,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         query = replica_index.generate_index_create_query(
             namespace=namespace,
             deploy_node_info=[
-                node.ip + ":" + node.port
+                node.ip + ":" + self.node_port
                 for node in self.indexer_nodes],
             defer_build=self.defer_build,
             num_replica=self.num_replicas
@@ -1166,10 +1166,10 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                                           bucket)
         indexer_status_before_backup = self.rest.get_indexer_metadata()
         self.log.info(indexer_status_before_backup['status'])
-        backup_result = backup_client.backup()
+        backup_result = backup_client.backup(use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         self._drop_indexes(indexer_status_before_backup['status'])
-        restore_result = backup_client.restore()
+        restore_result = backup_client.restore(use_https=self.use_https)
         self.assertTrue(restore_result[0], str(restore_result[1]))
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
@@ -1191,10 +1191,10 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                                       replica_id=idx['replicaId'])
         self.sleep(10, "wait for indexes to drop")
         indexer_status_before_backup = self.rest.get_indexer_metadata()
-        backup_result = backup_client.backup()
+        backup_result = backup_client.backup(use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         self._drop_indexes(indexer_status_before_backup['status'])
-        restore_result = backup_client.restore()
+        restore_result = backup_client.restore(use_https=self.use_https)
         self.assertTrue(restore_result[0], str(restore_result[1]))
         indexer_status_after_restore = self.rest.get_indexer_metadata()
         replica_indexes = [
@@ -1223,7 +1223,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             for bucket in self.buckets:
                 backup_client = IndexBackupClient(
                     self.master, self.use_cbbackupmgr, bucket.name)
-                backup_result = backup_client.backup()
+                backup_result = backup_client.backup(use_https=self.use_https)
                 self.assertFalse(
                     backup_result[0],
                     "Backup failed {0} with {1}".format(
@@ -1236,7 +1236,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 self.master, non_master_nodes[0])
             self.sleep(30, "wait node to be unblocked")
         for backup_client in backup_clients:
-            backup_result = backup_client.backup(backup_args="--resume")
+            backup_result = backup_client.backup(backup_args="--resume", use_https=self.use_https)
             self.assertTrue(backup_result[0], str(backup_result[1]))
         self._drop_indexes(indexer_stats_before_backup['status'])
         try:
@@ -1244,7 +1244,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 self.master, non_master_nodes[0])
             self.sleep(10, "wait node to be blocked")
             for backup_client in backup_clients:
-                restore_result = backup_client.restore()
+                restore_result = backup_client.restore(use_https=self.use_https)
                 self.assertFalse(restore_result[0], str(restore_result[1]))
         except Exception:
             raise
@@ -1253,7 +1253,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 self.master, non_master_nodes[0])
             self.sleep(10, "wait node to be unblocked")
         for backup_client in backup_clients:
-            restore_result = backup_client.restore(restore_args="--resume")
+            restore_result = backup_client.restore(restore_args="--resume", use_https=self.use_https)
             self.assertTrue(restore_result[0], str(restore_result[1]))
             if self.use_cbbackupmgr:
                 backup_client.remove_backup()
@@ -1282,13 +1282,13 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             namespaces = ",".join(namespaces)
             config_args = "?include={0}&exclude={1}".format(
                 namespaces, namespaces)
-        backup_result = backup_client.backup(config_args=config_args)
+        backup_result = backup_client.backup(config_args=config_args, use_https=self.use_https)
         self.assertFalse(backup_result[0], str(backup_result[1]))
-        backup_result = backup_client.backup()
+        backup_result = backup_client.backup(use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
-        restore_result = backup_client.restore(restore_args=config_args)
+        restore_result = backup_client.restore(restore_args=config_args, use_https=self.use_https)
         self.assertFalse(restore_result[0], str(restore_result[1]))
-        restore_result = backup_client.restore()
+        restore_result = backup_client.restore(use_https=self.use_https)
         self.assertTrue(restore_result[0], str(restore_result[1]))
 
     def test_backup_restore_with_overlapping_paths(self):
@@ -1309,19 +1309,19 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         namespaces.extend(list(scope_namespaces))
         namespaces.extend(list(collection_namespaces))
         self.log.info(namespaces)
-        backup_result = backup_client.backup(namespaces)
+        backup_result = backup_client.backup(namespaces, use_https=self.use_https)
         self.assertFalse(backup_result[0], str(backup_result[1]))
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
-        backup_result = backup_client.backup(namespaces, include=False)
+        backup_result = backup_client.backup(namespaces, include=False, use_https=self.use_https)
         self.assertFalse(backup_result[0], str(backup_result[1]))
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
-        backup_result = backup_client.backup()
+        backup_result = backup_client.backup(use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         mappings = list(
             map(lambda namespace: f"{namespace}:{namespace}", namespaces))
-        restore_result = backup_client.restore(mappings)
+        restore_result = backup_client.restore(mappings, use_https=self.use_https)
         self.assertFalse(restore_result[0], str(restore_result[1]))
 
     def test_backup_with_invalid_keyspaces(self):
@@ -1338,14 +1338,14 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             self.master, self.use_cbbackupmgr, bucket)
         invalid_backup_client = IndexBackupClient(
             self.master, self.use_cbbackupmgr, invalid_bucket)
-        backup_result = invalid_backup_client.backup()
+        backup_result = invalid_backup_client.backup(use_https=self.use_https)
         if self.use_cbbackupmgr:
             if not [msg for msg in backup_result[1] if f"Could not backup bucket '{invalid_bucket[0]}' because it does not exist on the cluster" in msg]:
                 self.fail(str(backup_result[1]))
             invalid_backup_client.remove_backup()
         else:
             self.assertTrue(backup_result[0], str(backup_result[1]))
-        backup_result = backup_client.backup([invalid_scope])
+        backup_result = backup_client.backup([invalid_scope], use_https=self.use_https)
         if self.use_cbbackupmgr:
             namespace = "{0}.{1}".format(bucket, invalid_scope)
             if not [msg for msg in backup_result[1] if f"Could not backup scope '{namespace}' because it does not exist on the cluster" in msg]:
@@ -1353,7 +1353,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             backup_client.remove_backup()
         else:
             self.assertTrue(backup_result[0], str(backup_result[1]))
-        backup_result = backup_client.backup([invalid_scope], include=False)
+        backup_result = backup_client.backup([invalid_scope], include=False, use_https=self.use_https)
         if self.use_cbbackupmgr:
             namespace = "{0}.{1}".format(bucket, invalid_scope)
             if not [msg for msg in backup_result[1] if f"Excluded scope '{namespace}' does not exist on the cluster" in msg]:
@@ -1362,7 +1362,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         else:
             self.assertTrue(backup_result[0], str(backup_result[1]))
         backup_result = backup_client.backup(
-            [f"{scope}.{invalid_collection}"])
+            [f"{scope}.{invalid_collection}"], use_https=self.use_https)
         if self.use_cbbackupmgr:
             namespace = "{0}.{1}.{2}".format(bucket, scope, invalid_collection)
             if not [msg for msg in backup_result[1] if f"Could not backup collection '{namespace}' because it does not exist on the cluster" in msg]:
@@ -1371,7 +1371,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         else:
             self.assertTrue(backup_result[0], str(backup_result[1]))
         backup_result = backup_client.backup(
-            [f"{scope}.{invalid_collection}"], include=False)
+            [f"{scope}.{invalid_collection}"], include=False, use_https=self.use_https)
         if self.use_cbbackupmgr:
             namespace = "{0}.{1}.{2}".format(bucket, scope, invalid_collection)
             if not [msg for msg in backup_result[1] if f"Excluded collection '{namespace}' does not exist on the cluster" in msg]:
@@ -1390,28 +1390,28 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         bucket = self.buckets[0].name
         backup_client = IndexBackupClient(
             self.master, self.use_cbbackupmgr, bucket)
-        backup_result = backup_client.backup()
+        backup_result = backup_client.backup(use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         backup_client.set_restore_bucket(invalid_bucket)
-        restore_result = backup_client.restore()
+        restore_result = backup_client.restore(use_https=self.use_https)
         self.assertFalse(restore_result[0], restore_result[1])
         backup_client.set_restore_bucket(bucket)
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
         namespace = [scope]
-        backup_result = backup_client.backup(namespace)
+        backup_result = backup_client.backup(namespace, use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         mappings = ["{0}:{1}".format(scope, invalid_scope)]
-        restore_result = backup_client.restore(mappings)
+        restore_result = backup_client.restore(mappings, use_https=self.use_https)
         self.assertFalse(restore_result[0], restore_result[1])
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
         namespace = ["{0}.{1}".format(scope, collection)]
-        backup_result = backup_client.backup(namespace)
+        backup_result = backup_client.backup(namespace, use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         map_arg = "{0}.{1}".format(scope, invalid_collection)
         mappings = ["{0}:{1}".format(namespace[0], map_arg)]
-        restore_result = backup_client.restore(mappings)
+        restore_result = backup_client.restore(mappings, use_https=self.use_https)
         self.assertFalse(restore_result[0], restore_result[1])
 
 
@@ -1447,13 +1447,13 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
 
         self.sleep(1, "Wait till indexes available in stats")
         self.wait_until_indexes_online(defer_build=self.defer_build, schedule_index=True)
-        backup_result = backup_client.backup()
+        backup_result = backup_client.backup(use_https=self.use_https)
         self.assertTrue(backup_result[0], str(backup_result[1]))
         indexes_before_backup = self.rest.get_indexer_metadata()['status']
         index_names_before_backup = set(map(lambda idx: idx['name'], indexes_before_backup))
         self.wait_until_indexes_online(defer_build=self.defer_build, schedule_index=True)
         self._drop_indexes(indexes_before_backup)
-        backup_client.restore()
+        backup_client.restore(use_https=self.use_https)
         self.sleep(10, "wait to complete restore")
         self.rest.set_index_settings(self.schedule_index_enable)
         indexes_after_restore = self.rest.get_indexer_metadata()['status']
@@ -1513,7 +1513,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 scheduled_indexes_present = True
                 indexes_before_backup =\
                     self.rest.get_indexer_metadata()['status']
-                backup_result = backup_client.backup()
+                backup_result = backup_client.backup(use_https=self.use_https)
                 self.assertTrue(backup_result[0], str(backup_result[1]))
             else:
                 self.wait_until_indexes_online(defer_build=self.defer_build)
@@ -1537,7 +1537,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     raise
         self.wait_until_indexes_online(defer_build=self.defer_build)
         self._drop_indexes(indexes_before_backup)
-        backup_client.restore()
+        backup_client.restore(use_https=self.use_https)
         self.sleep(10, "wait to complete restore")
         indexes_after_restore = self.rest.get_indexer_metadata()['status']
         indexes_before_backup = list(
@@ -1574,7 +1574,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                         query = idx_def.generate_index_create_query(
                             namespace,
                             deploy_node_info=[
-                                node.ip + ":" + node.port
+                                node.ip + ":" + self.node_port
                                 for node in self.indexer_nodes],
                             defer_build=self.defer_build,
                             partition_by_fields=partition_fields)
@@ -1602,7 +1602,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 scheduled_indexes_present = True
                 indexes_before_backup =\
                     self.rest.get_indexer_metadata()['status']
-                backup_result = backup_client.backup()
+                backup_result = backup_client.backup(use_https=self.use_https)
                 self.assertTrue(backup_result[0], str(backup_result[1]))
             else:
                 self.wait_until_indexes_online(defer_build=self.defer_build)
@@ -1626,7 +1626,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     raise
         self.wait_until_indexes_online(defer_build=self.defer_build)
         self._drop_indexes(indexes_before_backup)
-        backup_client.restore()
+        backup_client.restore(use_https=self.use_https)
         self.sleep(10, "wait to complete restore")
         indexes_after_restore = self.rest.get_indexer_metadata()['status']
         msg = "\nIndex_names_before_backup: " + str(indexes_before_backup)
@@ -1686,7 +1686,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 scheduled_indexes_present = True
                 indexes_before_backup =\
                     self.rest.get_indexer_metadata()['status']
-                backup_result = backup_client.backup()
+                backup_result = backup_client.backup(use_https=self.use_https)
                 self.assertTrue(backup_result[0], str(backup_result[1]))
             else:
                 self.wait_until_indexes_online(defer_build=self.defer_build)
@@ -1717,7 +1717,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             query = idx_def.generate_index_create_query(
                 namespace, defer_build=self.defer_build)
             self.run_cbq_query(query=query)
-        backup_client.restore()
+        backup_client.restore(use_https=self.use_https)
         self.sleep(10, "wait to complete restore")
         indexes_after_restore = self.rest.get_indexer_metadata()['status']
         msg = "\nIndex_names_before_backup: " + str(indexes_before_backup)
@@ -1782,7 +1782,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 scheduled_indexes_present = True
                 indexes_before_backup =\
                     self.rest.get_indexer_metadata()['status']
-                backup_result = backup_client.backup()
+                backup_result = backup_client.backup(use_https=self.use_https)
                 self.assertTrue(backup_result[0], str(backup_result[1]))
             else:
                 self.wait_until_indexes_online(defer_build=self.defer_build)
@@ -1813,7 +1813,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             query = idx_def.generate_index_create_query(
                 namespace, defer_build=self.defer_build)
             self.run_cbq_query(query=query)
-        backup_client.restore()
+        backup_client.restore(use_https=self.use_https)
         self.sleep(10, "wait to complete restore")
         indexes_after_restore = self.rest.get_indexer_metadata()['status']
         msg = "\nIndex_names_before_backup: " + str(indexes_before_backup)
@@ -1877,7 +1877,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 indexes_before_backup =\
                     self.rest.get_indexer_metadata()['status']
                 scopes = set(map(lambda idx: idx['scope'], scheduled_indexes))
-                backup_result = backup_client.backup(namespaces=scopes)
+                backup_result = backup_client.backup(namespaces=scopes, use_https=self.use_https)
                 self.assertTrue(backup_result[0], str(backup_result[1]))
             else:
                 self.wait_until_indexes_online(defer_build=self.defer_build)
@@ -1902,7 +1902,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.rest.set_index_settings(schedule_index_enable)
         self.wait_until_indexes_online(defer_build=self.defer_build)
         self._drop_indexes(indexes_before_backup)
-        backup_client.restore()
+        backup_client.restore(use_https=self.use_https)
         self.sleep(10, "wait to complete restore")
         indexes_after_restore = self.rest.get_indexer_metadata()['status']
         msg = "\nIndex_names_before_backup: " + str(indexes_before_backup)
@@ -1963,7 +1963,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 indexes_before_backup =\
                     self.rest.get_indexer_metadata()['status']
                 scopes = set(map(lambda idx: idx['scope'], scheduled_indexes))
-                backup_client.backup(namespaces=scopes, include=False)
+                backup_client.backup(namespaces=scopes, include=False, use_https=self.use_https)
             else:
                 self.wait_until_indexes_online(defer_build=self.defer_build)
                 self._drop_indexes(indexes_before_backup)
@@ -1987,7 +1987,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.rest.set_index_settings(schedule_index_enable)
         self.wait_until_indexes_online(defer_build=self.defer_build)
         self._drop_indexes(indexes_before_backup)
-        backup_client.restore()
+        backup_client.restore(use_https=self.use_https)
         self.sleep(10, "wait to complete restore")
         indexes_after_restore = self.rest.get_indexer_metadata().get(
             "status", None)
@@ -2053,7 +2053,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             if scheduled_indexes:
                 scheduled_indexes_present = True
                 scopes = set(map(lambda idx: idx['scope'], scheduled_indexes))
-                backup_result = backup_client.backup(namespaces=scopes)
+                backup_result = backup_client.backup(namespaces=scopes, use_https=self.use_https)
                 self.assertTrue(backup_result[0], str(backup_result[1]))
                 indexes_before_backup =\
                     self.rest.get_indexer_metadata()['status']
@@ -2085,7 +2085,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.rest.create_scope(bucket, remap_scope)
         self.rest.create_collection(bucket, remap_scope, collection)
         mappings = ["{0}:{1}".format(scope, remap_scope)]
-        backup_client.restore(mappings)
+        backup_client.restore(mappings, use_https=self.use_https)
         self.sleep(10, "wait to complete restore")
         indexes_after_restore = self.rest.get_indexer_metadata()['status']
         msg = "\nIndex_names_before_backup: " + str(indexes_before_backup)
@@ -2146,7 +2146,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 scheduled_indexes_present = True
                 indexes_before_backup =\
                     self.rest.get_indexer_metadata()['status']
-                backup_client.backup()
+                backup_client.backup(use_https=self.use_https)
             else:
                 self.wait_until_indexes_online(defer_build=self.defer_build)
                 self._drop_indexes(indexes_before_backup)
@@ -2179,7 +2179,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         self.sleep(10)
-        backup_client.restore()
+        backup_client.restore(use_https=self.use_https)
         self.sleep(10, "wait to complete restore")
         indexes_after_restore = self.rest.get_indexer_metadata()['status']
         msg = "\nIndex_names_before_backup: " + str(indexes_before_backup)

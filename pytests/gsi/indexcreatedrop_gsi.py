@@ -61,12 +61,12 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             for bucket in self.buckets:
                 query_definition_map[bucket.name] =[]
                 for server in servers:
-                    index_name = "index_name_ip_{0}_port_{1}_{2}".format(server.ip.replace(".", "_"), server.port, bucket.name)
+                    index_name = "index_name_ip_{0}_port_{1}_{2}".format(server.ip.replace(".", "_"), self.node_port, bucket.name)
                     query_definition = QueryDefinition(index_name=index_name, index_fields=["join_yr"],
                                                        query_template="", groups=[])
                     query_definition_map[bucket.name].append(query_definition)
                     query_definitions.append(query_definition)
-                    node_key = "{0}:{1}".format(server.ip, server.port)
+                    node_key = "{0}:{1}".format(server.ip, self.node_port)
                     deploy_node_info = [node_key]
                     if node_key not in list(verification_map.keys()):
                         verification_map[node_key] = {}
@@ -101,7 +101,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
                 query_definition = QueryDefinition(index_name=index_name, index_fields=["join_yr"], query_template="",
                                                    groups=[])
                 query_definitions.append(query_definition)
-                deploy_node_info = ["{0}:{1}".format(server.ip, server.port)]
+                deploy_node_info = ["{0}:{1}".format(server.ip, self.node_port)]
                 tasks.append(self.async_create_index(self.buckets[0], query_definition, deploy_node_info = deploy_node_info))
             for task in tasks:
                 task.result()
@@ -123,7 +123,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
                     query_definition = QueryDefinition(index_name=index_name + "_" + str(index),
                                                        index_fields=["join_yr"], query_template="", groups=[])
                     query_definitions.append(query_definition)
-                    deploy_node_info = ["{0}:{1}".format(server.ip, server.port)]
+                    deploy_node_info = ["{0}:{1}".format(server.ip, self.node_port)]
                     tasks.append(self.async_create_index(self.buckets[0], query_definition, deploy_node_info = deploy_node_info))
             for task in tasks:
                 task.result()
@@ -161,7 +161,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             self.log.info(ex)
         query_definitions = []
         servers = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
-        deploy_node_info = ["{0}:{1}".format(servers[0].ip, servers[0].port)]
+        deploy_node_info = ["{0}:{1}".format(servers[0].ip, self.node_port)]
         self.query = "CREATE PRIMARY INDEX ON {0} using gsi".format(self.buckets[0].name)
         deployment_plan = {}
         if deploy_node_info  != None:

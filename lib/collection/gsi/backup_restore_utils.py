@@ -61,7 +61,7 @@ class IndexBackupClient(object):
                    self.restore_buckets)
         return obj
 
-    def _backup_with_tool(self, namespaces, include, config_args, backup_args):
+    def _backup_with_tool(self, namespaces, include, config_args, backup_args, use_https=False):
         remote_client = RemoteMachineShellConnection(self.backup_node)
         os_platform = remote_client.extract_remote_info().type.lower()
         if os_platform == 'linux':
@@ -72,7 +72,7 @@ class IndexBackupClient(object):
             self.backup_path = testconstants.LINUX_BACKUP_PATH
         elif os_platform == 'windows':
             self.cmd_ext = ".exe"
-            self.cli_command_location =\
+            self.cli_command_location = \
                 testconstants.WIN_COUCHBASE_BIN_PATH_RAW
             self.backup_path = testconstants.WIN_BACKUP_C_PATH
         elif os_platform == 'mac':
@@ -97,15 +97,20 @@ class IndexBackupClient(object):
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if error or not [
-                x for x in output
-                if 'created successfully in archive' in x] and not [
-                    x for x in output
-                    if "`backup_" + str(self.rand) + "` exists" in x]:
+            x for x in output
+            if 'created successfully in archive' in x] and not [
+            x for x in output
+            if "`backup_" + str(self.rand) + "` exists" in x]:
             self.is_backup_exists = False
             return self.is_backup_exists, output
-        cmd = "cbbackupmgr backup --archive {0} --repo backup_{1} --cluster couchbase://{2} --username {3} --password {4}".format(
-            self.backup_path, self.rand, self.backup_node.ip,
-            self.backup_node.rest_username, self.backup_node.rest_password)
+        if use_https:
+            cmd = f"cbbackupmgr backup --archive {self.backup_path} --repo backup_{self.rand} " \
+                  f"--cluster couchbases://{self.backup_node.ip} --username {self.backup_node.rest_username} " \
+                  f"--password {self.backup_node.rest_password} --no-ssl-verify"
+        else:
+            cmd = f"cbbackupmgr backup --archive {self.backup_path} --repo backup_{self.rand} " \
+                  f"--cluster couchbase://{self.backup_node.ip} --username {self.backup_node.rest_username} " \
+                  f"--password {self.backup_node.rest_password}"
         command = "{0}{1}".format(self.cli_command_location, cmd)
         if backup_args:
             command += " {0}".format(backup_args)
@@ -113,20 +118,28 @@ class IndexBackupClient(object):
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if error or not [x for x in output if 'Backup successfully completed'
-                         in x or 'Backup completed successfully' in x]:
+                                              in x or 'Backup completed successfully' in x]:
             self.is_backup_exists = False
             return self.is_backup_exists, output
         self.is_backup_exists = True
         return self.is_backup_exists, output
 
-    def _restore_with_tool(self, mappings, namespaces, include, restore_args):
+    def _restore_with_tool(self, mappings, namespaces, include, restore_args, use_https=False):
         if not self.is_backup_exists:
             return self.is_backup_exists, "Backup not found"
         remote_client = RemoteMachineShellConnection(self.backup_node)
-        command = "{0}cbbackupmgr restore --archive {1} --repo backup_{2} --cluster couchbase://{3} --username {4} --password {5} --force-updates {6}".format(
-            self.cli_command_location, self.backup_path, self.rand,
-            self.restore_node.ip, self.restore_node.rest_username,
-            self.restore_node.rest_password, self.disabled_services)
+        if use_https:
+            command = "{0}cbbackupmgr restore --archive {1} --repo backup_{2} --cluster couchbases://{3}" \
+                      " --username {4} --password {5} --force-updates {6} --no-ssl-verify".format(
+                self.cli_command_location, self.backup_path, self.rand,
+                self.restore_node.ip, self.restore_node.rest_username,
+                self.restore_node.rest_password, self.disabled_services)
+        else:
+            command = "{0}cbbackupmgr restore --archive {1} --repo backup_{2} --cluster couchbase://{3}" \
+                      " --username {4} --password {5} --force-updates {6}".format(
+                self.cli_command_location, self.backup_path, self.rand,
+                self.restore_node.ip, self.restore_node.rest_username,
+                self.restore_node.rest_password, self.disabled_services)
         if not restore_args:
             mapping_args = ""
             if mappings:
@@ -160,23 +173,23 @@ class IndexBackupClient(object):
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if error or not [x for x in output if 'Restore completed successfully'
-                         in x]:
+                                              in x]:
             self.log.error(output)
             return False, output
         return True, output
 
     def backup(
-            self, namespaces=[], include=True, config_args="", backup_args=""):
+            self, namespaces=[], include=True, config_args="", backup_args="", use_https=False):
         if self.use_cbbackupmgr:
             return self._backup_with_tool(
-                namespaces, include, config_args, backup_args)
+                namespaces, include, config_args, backup_args, use_https)
         return self._backup_with_rest(namespaces, include, config_args)
 
     def restore(
-            self, mappings=[], namespaces=[], include=True, restore_args=""):
+            self, mappings=[], namespaces=[], include=True, restore_args="", use_https=False):
         if self.use_cbbackupmgr:
             return self._restore_with_tool(
-                mappings, namespaces, include, restore_args)
+                mappings, namespaces, include, restore_args, use_https)
         return self._restore_with_rest(
             mappings, namespaces, include, restore_args)
 
@@ -266,7 +279,7 @@ class IndexBackupClient(object):
     def set_backup_node(self, backup_node):
         self.backup_rest = RestConnection(backup_node)
         self.backup_node = backup_node
-        self.backup_api =\
+        self.backup_api = \
             self.backup_rest.index_baseUrl + "api/v1/bucket/{0}/backup{1}"
         self.is_backup_exists = False
         self.backup_data = {}
@@ -277,7 +290,7 @@ class IndexBackupClient(object):
             self.backup_path = testconstants.LINUX_BACKUP_PATH
         elif info == 'windows':
             self.cmd_ext = ".exe"
-            self.cli_command_location =\
+            self.cli_command_location = \
                 testconstants.WIN_COUCHBASE_BIN_PATH_RAW
             self.backup_path = testconstants.WIN_BACKUP_C_PATH
         elif info == 'mac':
@@ -289,5 +302,5 @@ class IndexBackupClient(object):
     def set_restore_node(self, restore_node):
         self.restore_rest = RestConnection(restore_node)
         self.restore_node = restore_node
-        self.restore_api =\
+        self.restore_api = \
             self.restore_rest.index_baseUrl + "api/v1/bucket/{0}/backup{1}"

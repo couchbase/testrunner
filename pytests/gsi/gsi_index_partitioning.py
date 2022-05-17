@@ -29,7 +29,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.rest = RestConnection(self.index_servers[0])
         self.node_list = []
         for server in self.index_servers:
-            self.node_list.append(server.ip + ":" + server.port)
+            self.node_list.append(server.ip + ":" + self.node_port)
 
         self.num_queries = self.input.param("num_queries", 100)
         self.num_index_partitions = self.input.param("num_index_partitions", 8)
@@ -918,7 +918,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         hosts = index_metadata["status"][0]["hosts"]
         self.log.info("Actual nodes : {0}".format(hosts))
-        node_out_str = node_out.ip + ":" + node_out.port
+        node_out_str = node_out.ip + ":" + self.node_port
         self.assertTrue(node_out_str not in hosts,
                         "Partitioned index not created on expected hosts")
 
@@ -951,7 +951,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         hosts = index_metadata["status"][0]["hosts"]
         self.log.info("Actual nodes : {0}".format(hosts))
-        node_out_str = node_out.ip + ":" + node_out.port
+        node_out_str = node_out.ip + ":" + self.node_port
         self.assertTrue(node_out_str not in hosts,
                         "Partitioned index not created on expected hosts")
 
@@ -1020,7 +1020,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             if index_metadata != {}:
                 hosts = index_metadata["status"][0]["hosts"]
                 self.log.info("Actual nodes : {0}".format(hosts))
-                node_out_str = node_out.ip + ":" + node_out.port
+                node_out_str = node_out.ip + ":" + self.node_port
                 self.assertTrue(node_out_str not in hosts,
                                 "Partitioned index not created on expected hosts")
             else:
@@ -1036,7 +1036,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.log.info(index_metadata)
 
             hosts = index_metadata["status"][0]["hosts"]
-            node_out_str = node_out.ip + ":" + node_out.port
+            node_out_str = node_out.ip + ":" + self.node_port
             self.assertTrue(node_out_str in hosts,
                             "Partitioned index not created on all hosts")
 
@@ -1075,7 +1075,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             if index_metadata != {}:
                 hosts = index_metadata["status"][0]["hosts"]
                 self.log.info("Actual nodes : {0}".format(hosts))
-                node_out_str = node_out.ip + ":" + node_out.port
+                node_out_str = node_out.ip + ":" + self.node_port
                 self.assertTrue(node_out_str not in hosts,
                                 "Partitioned index not created on expected hosts")
             else:
@@ -1091,7 +1091,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.log.info(index_metadata)
 
             hosts = index_metadata["status"][0]["hosts"]
-            node_out_str = node_out.ip + ":" + node_out.port
+            node_out_str = node_out.ip + ":" + self.node_port
             self.assertTrue(node_out_str in hosts,
                             "Partitioned index not created on all hosts")
 
@@ -2663,11 +2663,11 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.sleep(30)
 
         node_out = self.servers[self.node_out]
-        #port = node_out.port
+        #port = self.node_port
         #if self.use_https:
-        #    port = CbServer.ssl_port_map.get(str(node_out.port),
-        #                                          str(node_out.port))
-        node_out_str = node_out.ip + ":" + str(node_out.port)
+        #    port = CbServer.ssl_port_map.get(str(self.node_port),
+        #                                          str(self.node_port))
+        node_out_str = node_out.ip + ":" + str(self.node_port)
 
         # Get Index Names
         index_names = ["idx1", "pidx1"]
@@ -2766,7 +2766,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.sleep(30)
 
         node_out = self.servers[self.node_out]
-        node_out_str = node_out.ip + ":" + str(node_out.port)
+        node_out_str = node_out.ip + ":" + str(self.node_port)
 
         # Get Index Names
         index_names = ["idx1", "pidx1"]
@@ -2875,7 +2875,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.sleep(30)
 
         node_in = self.servers[self.nodes_init]
-        node_in_str = node_in.ip + ":" + str(node_in.port)
+        node_in_str = node_in.ip + ":" + str(self.node_port)
         services_in = ["index"]
 
         # Get Index Names
@@ -2971,10 +2971,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.sleep(30)
 
         node_out = self.servers[self.node_out]
-        node_out_str = node_out.ip + ":" + str(node_out.port)
+        node_out_str = node_out.ip + ":" + str(self.node_port)
 
         node_in = self.servers[self.nodes_init]
-        node_in_str = node_in.ip + ":" + str(node_in.port)
+        node_in_str = node_in.ip + ":" + str(self.node_port)
         services_in = ["index"]
 
         # Get Index Names
@@ -3073,7 +3073,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.sleep(30)
 
         node_out = self.servers[self.node_out]
-        node_out_str = node_out.ip + ":" + str(node_out.port)
+        node_out_str = node_out.ip + ":" + str(self.node_port)
 
         # Get Index Names
         index_names = ["idx1", "pidx1"]
@@ -3175,7 +3175,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.sleep(30)
 
         node_out = self.servers[self.node_out]
-        node_out_str = node_out.ip + ":" + str(node_out.port)
+        node_out_str = node_out.ip + ":" + str(self.node_port)
 
         # Get Index Names
         index_names = ["idx1", "pidx1"]
@@ -3282,7 +3282,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.sleep(30)
 
         node_out = self.servers[self.node_out]
-        node_out_str = node_out.ip + ":" + str(node_out.port)
+        node_out_str = node_out.ip + ":" + str(self.node_port)
 
         # Get Index Names
         index_names = ["idx1", "pidx1"]
@@ -3362,7 +3362,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.sleep(30)
 
         node_out = self.servers[self.node_out]
-        node_out_str = node_out.ip + ":" + str(node_out.port)
+        node_out_str = node_out.ip + ":" + str(self.node_port)
 
         # Get Index Names
         index_names = ["idx1"]
@@ -3430,7 +3430,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.sleep(30)
 
         node_out = self.servers[self.node_out]
-        node_out_str = node_out.ip + ":" + str(node_out.port)
+        node_out_str = node_out.ip + ":" + str(self.node_port)
 
         # Get Index Names
         index_names = ["idx1"]
@@ -3538,7 +3538,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.sleep(30)
 
         node_in = self.servers[self.nodes_init]
-        node_in_str = node_in.ip + ":" + str(node_in.port)
+        node_in_str = node_in.ip + ":" + str(self.node_port)
         services_in = ["index"]
 
         # Get Index Names
@@ -3677,7 +3677,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                          "All index replicas not created")
 
         node_out = self.servers[self.node_out]
-        node_out_str = node_out.ip + ":" + str(node_out.port)
+        node_out_str = node_out.ip + ":" + str(self.node_port)
 
         # failover and rebalance out a indexer node
         failover_task = self.cluster.async_failover(
@@ -3784,7 +3784,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                          "All index replicas not created")
 
         node_out = self.servers[self.node_out]
-        node_out_str = node_out.ip + ":" + str(node_out.port)
+        node_out_str = node_out.ip + ":" + str(self.node_port)
 
         # failover and rebalance out a indexer node
         nodes_all = self.rest.node_statuses()
@@ -3880,9 +3880,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_node_list = self.node_list
         index_node_list.append(
-            self.servers[self.nodes_init].ip + ":" + self.servers[
-                self.nodes_init].port)
-        index_node_list.remove(index_server.ip + ":" + index_server.port)
+            self.servers[self.nodes_init].ip + ":" + self.node_port)
+        index_node_list.remove(index_server.ip + ":" + self.node_port)
         index_node_list.sort()
         validated = False
 
@@ -3899,7 +3898,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
     def test_index_scans_one_node_memory_saturated(self):
         index_server = self.index_servers[0]
-        index_server_str = index_server.ip + ":" + index_server.port
+        index_server_str = index_server.ip + ":" + self.node_port
         create_index_query1 = "CREATE PRIMARY INDEX ON default USING GSI with {{'nodes':['{0}']}}".format(
             index_server_str)
         create_index_query2 = "CREATE INDEX idx_job_title ON default(job_title) USING GSI with {{'nodes':['{0}']}}".format(
@@ -3986,7 +3985,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 "index_metadata"] = self.rest.get_indexer_metadata()
 
         node_out = self.servers[self.node_out]
-        node_out_str = node_out.ip + ":" + str(node_out.port)
+        node_out_str = node_out.ip + ":" + str(self.node_port)
 
         node_nw_partition_out = self.servers[self.node_out - 1]
         self.start_firewall_on_node(node_nw_partition_out)
@@ -4078,7 +4077,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 "index_metadata"] = self.rest.get_indexer_metadata()
 
         node_out = self.servers[self.node_out]
-        node_out_str = node_out.ip + ":" + str(node_out.port)
+        node_out_str = node_out.ip + ":" + str(self.node_port)
 
         # Network partition out Server Group
         server_group_out = self.input.param("server_group_out", None)
@@ -4710,11 +4709,11 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         expected_host_list_after = copy.deepcopy(host_list_before)
         for node in nodes_in:
-            node_str = node.ip + ":" + str(node.port)
+            node_str = node.ip + ":" + str(self.node_port)
             expected_host_list_after.append(node_str)
 
         for node in nodes_out:
-            node_str = node.ip + ":" + str(node.port)
+            node_str = node.ip + ":" + str(self.node_port)
             if node_str in expected_host_list_after:
                 expected_host_list_after.remove(node_str)
 

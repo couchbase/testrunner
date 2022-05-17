@@ -519,12 +519,12 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
         backup_client = IndexBackupClient(backup_node=self.master,
                                           use_cbbackupmgr=True,
                                           backup_bucket=bucket)
-        backup_result = backup_client.backup([f'{scope}.{collection}'])
+        backup_result = backup_client.backup([f'{scope}.{collection}'], use_https=self.use_https)
         self.log.info(backup_result)
 
         for query in drop_indexes_query:
             self.run_cbq_query(query=query)
-        restore_result = backup_client.restore()
+        restore_result = backup_client.restore(use_https=self.use_https)
         self.log.info(restore_result)
         indexer_stats_after_restore = self.rest.get_indexer_metadata()['status']
         backup_client.remove_backup()

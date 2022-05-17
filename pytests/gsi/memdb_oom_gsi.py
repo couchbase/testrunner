@@ -29,7 +29,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
             self.log.info("Setting indexer memory quota to {0} MB...".format(self.indexMemQuota))
             rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=self.indexMemQuota)
             self.sleep(30)
-        self.deploy_node_info = ["{0}:{1}".format(self.oomServer.ip, self.oomServer.port)]
+        self.deploy_node_info = ["{0}:{1}".format(self.oomServer.ip, self.node_port)]
         self.load_query_definitions = []
         for x in range(self.initial_index_number):
             index_name = "index_name_"+str(x)

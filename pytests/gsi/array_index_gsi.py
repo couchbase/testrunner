@@ -337,7 +337,10 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
                                          query_definitions=[query_definition])
 
     def _update_document(self, bucket_name, key, document):
-        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=bucket_name)
+        if self.use_https:
+            url = 'couchbases://{ip}/{name}?ssl=no_verify'.format(ip=self.master.ip, name=bucket_name)
+        else:
+            url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=bucket_name)
         bucket = Bucket(url, username=bucket_name, password="password")
         bucket.upsert(key, document)
 

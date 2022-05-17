@@ -329,7 +329,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 if index_node_count < len(self.index_nodes_out):
                     node_index = index_node_count
                     self.deploy_node_info = ["{0}:{1}".format(self.index_nodes_out[index_node_count].ip,
-                                                              self.index_nodes_out[index_node_count].port)]
+                                                              self.node_port)]
                     if query_definition.index_name not in self.index_lost_during_move_out:
                         self.index_lost_during_move_out.append(query_definition.index_name)
                     index_node_count += 1
@@ -1660,9 +1660,12 @@ class BaseSecondaryIndexingTests(QueryTests):
     def get_nodes_uuids(self):
         if self.use_https:
             port = '18091'
+            connection_protocol = 'https'
         else:
             port = '8091'
-        api = f'http://{self.master.ip}:{port}/pools/default'
+            connection_protocol = 'http'
+
+        api = f'{connection_protocol}://{self.master.ip}:{port}/pools/default'
         status, content, header = self.rest.urllib_request(api)
         if not status:
             raise Exception(content)

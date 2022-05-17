@@ -29,7 +29,7 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
             log.info("Setting indexer memory quota to {0} MB...".format(self.indexMemQuota))
             self.rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=self.indexMemQuota)
             self.sleep(30)
-        self.deploy_node_info = ["{0}:{1}".format(self.dgmServer.ip, self.dgmServer.port)]
+        self.deploy_node_info = ["{0}:{1}".format(self.dgmServer.ip, self.node_port)]
         self.multi_create_index(
             buckets=self.buckets, query_definitions=self.query_definitions,
             deploy_node_info=self.deploy_node_info)
@@ -317,7 +317,10 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
         return buckets
 
     def _update_document(self, bucket_name, key, document):
-        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=bucket_name)
+        if self.use_https
+            url = 'couchbases://{ip}/{name}?ssl=no_verify'.format(ip=self.master.ip, name=bucket_name)
+        else:
+            url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=bucket_name)
         bucket = Bucket(url, username=bucket_name, password="password")
         bucket.upsert(key, document)
 
