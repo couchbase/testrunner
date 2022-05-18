@@ -370,6 +370,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.multi_root_certs:
             self.setup_multi_root_certs()
 
+        self.backupset.read_only = False
+
     def clean_up(self, server, skip_eject_and_rebalance=False):
         """ Clean up files and directories left by backup testing.
 
@@ -681,6 +683,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --log-to-stdout"
         if self.backupset.auto_select_threads:
             args += " --auto-select-threads"
+        if self.backupset.sqlite:
+            args += " --storage sqlite"
         user_env = ""
         password_env = ""
         if self.backupset.user_env:
@@ -724,6 +728,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.number_of_backups_taken += 1
         self.log.info("Finished taking backup  with args: {0}".format(args))
         remote_client.disconnect()
+        if self.input.param("read_only_archive", False) and not self.backupset.read_only:
+            self.make_archive_read_only()
         return output, error
 
     def backup_cluster_validate(self, skip_backup=False, repeats=1,
@@ -1639,6 +1645,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 get_exit_code=True)
         remote_client.log_command_output(output, error)
         if error or exit_code:
+            if not error: error = output
             return False, error, "Merging backup failed"
         elif not output:
             self.log.info("process cbbackupmgr may be killed")
@@ -3066,6 +3073,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             shell.execute_command(f"mkdir -p {self.x509.CACERTFILEPATH}all")
             shell.copy_file_local_to_remote(f"{self.x509.CACERTFILEPATH}all/all_ca.pem", f"{self.x509.CACERTFILEPATH}all/all_ca.pem")
 
+    def make_archive_read_only(self):
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        # Get current .backup file from remote
+        conf_file_contents = remote_client.read_remote_file(self.backupset.directory, ".backup")
+        self.assertIsNotNone(conf_file_contents, "Could not read .backup file")
+
+        conf_file_contents = conf_file_contents[0][:-1].replace('"read_only":false', '"read_only":true')
+        # Write modified .backup back to remote
+        remote_client.write_remote_file_single_quote(self.backupset.directory, ".backup", conf_file_contents)
+
+        # Flag that backup has been made read_only
+        self.backupset.read_only = True
+
 
 class Backupset:
     def __init__(self):
@@ -3138,6 +3158,7 @@ class Backupset:
         self.disable_ft_alias = False
         self.disable_analytics = False
         self.auto_create_buckets = False
+        self.sqlite = False
 
         # Common configuration which is to be shared accross cloud providers
         self.objstore_access_key_id = ""
