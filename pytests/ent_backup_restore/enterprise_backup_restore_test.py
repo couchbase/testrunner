@@ -4883,6 +4883,43 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         else:
             self.assertIn("an Enterprise Edition feature", output[0])
 
+    def test_negative_read_only_archive(self):
+        # Load docs into cluster
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self.log.info("*** start to load items to all buckets")
+        self._load_all_buckets(self.master, gen, "create", self.expires)
+        self.log.info("*** done to load items to all buckets")
+
+        # Enable SQLite if we are doing compaction
+        self.backupset.sqlite = self.input.param("compact", False)
+
+        # Create a backup and make it read-only
+        self.backup_create_validate()
+        self.backup_cluster_validate()
+
+        # Make auth invalid if required
+        if self.input.param("invalid_auth", False):
+            self.backupset.cluster_host_username = "BADUSERNAME"
+            self.backupset.cluster_host_password = "BADPASSWORD"
+
+        # Compaction does not work on rift, so require parameter
+        if self.input.param("compact", False):
+            status, output, msg = self.backup_compact()
+            self.assertIn("read-only", output[0])
+        else:
+            # Perform backup
+            try:
+                self.backup_cluster_validate()
+            except Exception as e:
+                if "read-only" not in str(e):
+                    raise e
+            # Perform merge
+            status, output, msg = self.backup_merge()
+            self.assertIn("read-only", output[0])
+            # Perform remove
+            status, output, msg = self.backup_remove()
+            self.assertIn("read-only", output[0])
+
     def test_analytics_synonyms(self):
         """ Test analytics synonyms can be restored
 
