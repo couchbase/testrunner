@@ -95,7 +95,8 @@ class SystemEventRestHelper:
 
         response = requests.get(api, params=get_params,
                                 auth=(rest.username,
-                                      rest.password))
+                                      rest.password),
+                                verify=False)
 
         # MB-49617: Exception handling for non-json (plain text) case
         try:
