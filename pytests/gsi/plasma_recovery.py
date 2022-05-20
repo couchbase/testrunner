@@ -631,7 +631,7 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
     def test_multiple_recovery_with_nondgm_indexer(self):
         dgm_node = self.get_nodes_from_services_map(service_type="index",
                                                         get_all_nodes=True)[0]
-        self.deploy_node_info = ["{0}:{1}".format(dgm_node.ip, dgm_node.port)]
+        self.deploy_node_info = ["{0}:{1}".format(dgm_node.ip, self.node_port)]
         self.multi_create_index(
             buckets=self.buckets, query_definitions=self.query_definitions,
             deploy_node_info=self.deploy_node_info)
@@ -723,7 +723,7 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
             if ("create_index" not in ops_map):
                 indexes_lost = self._find_index_lost_when_indexer_down()
                 deploy_node_info = ["{0}:{1}".format(index_nodes[0].ip,
-                                                     index_nodes[0].port)]
+                                                     self.node_port)]
                 for query_definition in self.query_definitions:
                     if query_definition.index_name in indexes_lost:
                         query_definition.index_name = query_definition.index_name + "_replica"
@@ -741,12 +741,8 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
         rest = RestConnection(self.master)
         index_map = rest.get_index_status()
         log.info("index_map: {0}".format(index_map))
-        if self.use_https:
-            port = '18091'
-        else:
-            port = '8091'
         for index_node in self.index_nodes_out:
-            host = "{0}:{1}".format(index_node.ip, port)
+            host = "{0}:{1}".format(index_node.ip, self.node_port)
             for index in index_map.values():
                 for keys, vals in index.items():
                     if vals["hosts"] == host:

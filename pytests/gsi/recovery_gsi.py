@@ -1991,7 +1991,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             if ("create_index" not in ops_map):
                 indexes_lost = self._find_index_lost_when_indexer_down()
                 deploy_node_info = ["{0}:{1}".format(index_nodes[0].ip,
-                                                     index_nodes[0].port)]
+                                                     self.node_port)]
                 for query_definition in self.query_definitions:
                     if query_definition.index_name in indexes_lost:
                         query_definition.index_name = query_definition.index_name + "_replica"
@@ -2009,12 +2009,8 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         rest = RestConnection(self.master)
         index_map = rest.get_index_status()
         log.info("index_map: {0}".format(index_map))
-        if self.use_https:
-            port = '18091'
-        else:
-            port = '8091'
         for index_node in self.index_nodes_out:
-            host = "{0}:{1}".format(index_node.ip, port)
+            host = "{0}:{1}".format(index_node.ip, self.node_port)
             for index in index_map.values():
                 for keys, vals in index.items():
                     if vals["hosts"] == host:
