@@ -1993,8 +1993,15 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
             hostname, _ = self.n1ql_helper.get_index_details_using_index_name(
                 index_name, index_map)
-            num_request_served = index_stats[hostname]['default'][index_name][
-                "num_completed_requests"]
+            try:
+                num_request_served = index_stats[hostname]['default'][index_name][
+                    "num_completed_requests"]
+            except KeyError as err:
+                hostname = hostname.replace('18091', '8091')
+                num_request_served = index_stats[hostname]['default'][index_name][
+                    "num_completed_requests"]
+            except Exception as err:
+                self.fail(err)
             self.log.info("# Requests served by %s = %s" % (
                 index_name, num_request_served))
             if num_request_served == 0:
@@ -2045,8 +2052,15 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
             hostname, _ = self.n1ql_helper.get_index_details_using_index_name(
                 index_name, index_map)
-            num_request_served = index_stats[hostname]['default'][index_name][
-                "num_completed_requests"]
+            try:
+                num_request_served = index_stats[hostname]['default'][index_name][
+                    "num_completed_requests"]
+            except KeyError as err:
+                hostname = hostname.replace('18091', '8091')
+                num_request_served = index_stats[hostname]['default'][index_name][
+                    "num_completed_requests"]
+            except Exception as err:
+                self.fail(err)
             self.log.info("# Requests served by %s = %s" % (
                 index_name, num_request_served))
             if num_request_served == 0:
@@ -2103,8 +2117,15 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
             hostname, _ = self.n1ql_helper.get_index_details_using_index_name(
                 index_name, index_map)
-            num_request_served = index_stats[hostname]['default'][index_name][
-                "num_completed_requests"]
+            try:
+                num_request_served = index_stats[hostname]['default'][index_name][
+                    "num_completed_requests"]
+            except KeyError as err:
+                hostname = hostname.replace('18091', '8091')
+                num_request_served = index_stats[hostname]['default'][index_name][
+                    "num_completed_requests"]
+            except Exception as err:
+                self.fail(err)
             self.log.info("# Requests served by %s = %s" % (
                 index_name, num_request_served))
             if num_request_served == 0:
@@ -2405,8 +2426,15 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
             hostname, _ = self.n1ql_helper.get_index_details_using_index_name(
                 index_name, index_map)
-            num_docs_processed = index_stats[hostname]['default'][index_name][
-                "num_docs_processed"]
+            try:
+                num_docs_processed = index_stats[hostname]['default'][index_name][
+                    "num_completed_requests"]
+            except KeyError as err:
+                hostname = hostname.replace('18091', '8091')
+                num_docs_processed = index_stats[hostname]['default'][index_name][
+                    "num_completed_requests"]
+            except Exception as err:
+                self.fail(err)
             self.log.info("# Docs processed by %s = %s" % (
                 index_name, num_docs_processed))
             if num_docs_processed != 0:
@@ -2465,9 +2493,19 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
             hostname, _ = self.n1ql_helper.get_index_details_using_index_name(
                 index_name, index_map)
-            num_docs_processed_before_rollback[index_name] = \
-            index_stats[hostname]['default'][index_name][
-                "items_count"]
+
+            try:
+                num_docs_processed_before_rollback[index_name] = \
+                    index_stats[hostname]['default'][index_name][
+                        "items_count"]
+            except KeyError as err:
+                hostname = hostname.replace('18091', '8091')
+                num_docs_processed_before_rollback[index_name] = \
+                    index_stats[hostname]['default'][index_name][
+                        "items_count"]
+            except Exception as err:
+                    self.fail(err)
+
             self.log.info("# Before Rollback Docs processed by %s = %s" % (
                 index_name, num_docs_processed_before_rollback[index_name]))
 
@@ -3088,8 +3126,13 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
             hostname, _ = self.n1ql_helper.get_index_details_using_index_name(
                 index_name, index_map)
-            num_request_served = index_stats[hostname]['default'][index_name][
-                "num_completed_requests"]
+            try:
+                num_request_served = index_stats[hostname]['default'][index_name]["num_completed_requests"]
+            except KeyError as err:
+                hostname = hostname.replace('18091', '8091')
+                num_request_served = index_stats[hostname]['default'][index_name]["num_completed_requests"]
+            except Exception as err:
+                self.fail(err)
             self.log.info("# Requests served by %s = %s" % (
                 index_name, num_request_served))
             hash["index_name"] = num_request_served

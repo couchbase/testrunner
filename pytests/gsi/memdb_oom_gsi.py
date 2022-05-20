@@ -348,7 +348,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         :return:
         """
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[1]
-        deploy_node_info = ["{0}:{1}".format(index_node.ip, index_node.port)]
+        deploy_node_info = ["{0}:{1}".format(index_node.ip, self.node_port)]
         index_name = "replica_index"
         replica_definition = QueryDefinition(index_name=index_name, index_fields=["job_title"],
                                              query_template=self.query_template, groups=["simple"])
@@ -434,7 +434,8 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         Verifies if indexer is Online
         :return:
         """
-        host = "{0}:8091".format(self.oomServer.ip)
+
+        host = "{0}:{1}".format(self.oomServer.ip, self.node_port)
         rest = RestConnection(self.oomServer)
         index_status = rest.get_index_status()
         for index in index_status.values():

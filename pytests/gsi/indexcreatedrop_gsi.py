@@ -78,9 +78,11 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             self.log.info(index_map)
             for bucket in self.buckets:
                 for node in list(index_map.keys()):
+                    ip, port = node.split(':')
+                    verification_node = f'{ip}:{self.node_port}'
                     self.log.info(" verifying node {0}".format(node))
-                    self.assertTrue(verification_map[node][bucket.name] in list(index_map[node][bucket.name].keys()), \
-                        "for bucket {0} and node {1}, could not find key {2} in {3}".format(bucket.name, node, verification_map[node][bucket.name], index_map))
+                    self.assertTrue(verification_map[verification_node][bucket.name] in list(index_map[node][bucket.name].keys()), \
+                        "for bucket {0} and node {1}, could not find key {2} in {3}".format(bucket.name, verification_node, verification_map[verification_node][bucket.name], index_map))
         except Exception as ex:
             self.log.info(ex)
             raise
