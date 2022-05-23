@@ -386,7 +386,7 @@ class EventingSanity(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_cancel_timer(self):
-        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size)
+        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size, replicas=0)
         self.cluster.create_standard_bucket(name=self.dst_bucket_name1, port=STANDARD_BUCKET_PORT + 1,
                                             bucket_params=bucket_params)
         query = "create primary index on {}".format(self.dst_bucket_name1)
@@ -408,10 +408,6 @@ class EventingSanity(EventingBaseTest):
         self.deploy_function(body)
         # print timer context and alarm
         self.print_timer_alarm_context()
-        if self.non_default_collection:
-            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
-        else:
-            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
         # Wait for eventing to catch up with all the update mutations and verify results
         if self.non_default_collection:
             self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket",is_delete=True)
@@ -424,7 +420,7 @@ class EventingSanity(EventingBaseTest):
         else:
             self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * self.num_docs)
             self.verify_doc_count_collections("dst_bucket._default._default", 0)
-        self.assertEqual(self.get_stats_value(self.function_name,"execution_stats.timer_cancel_counter"),self.docs_per_day * self.num_docs)
+        self.assertEqual(self.get_stats_value(self.function_name,"execution_stats.timer_cancel_counter"),self.docs_per_day * 2016)
         self.undeploy_and_delete_function(body)
 
     def test_advance_bucket_op(self):
