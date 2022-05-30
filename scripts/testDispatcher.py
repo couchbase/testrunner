@@ -1,3 +1,4 @@
+import base64
 import sys
 import urllib.request, urllib.error, urllib.parse
 import urllib.request, urllib.parse, urllib.error
@@ -685,7 +686,7 @@ def main():
                 descriptor = testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] + '-' + time.strftime('%b-%d-%X') + '-' + options.version
 
                 if options.serverType == GCP:
-                    # GCP labels are limited to 63 characters which might be too small. 
+                    # GCP labels are limited to 63 characters which might be too small.
                     # Must also start with a lowercase letter. Just use a UUID which is 32 characters.
                     descriptor = "testrunner-" + str(uuid4())
                 elif options.serverType == AWS:
@@ -840,7 +841,19 @@ def main():
                     else:
                         release_servers(options, descriptor)
                 else:
-                    response, content = httplib2.Http(timeout=TIMEOUT).request(url, 'GET')
+                    doc = cb.get("jenkins_cred")
+                    if not doc.success:
+                        raise Exception(
+                            "Cred doc missing in QE_Test-Suites bucket")
+                    doc = doc.value
+                    credentials = "%s:%s" % (doc["username"], doc["password"])
+                    auth = base64.encodebytes(credentials.encode('utf-8'))
+                    auth = auth.decode('utf-8').rstrip('\n')
+                    header = {'Content-Type': 'application/json',
+                              'Authorization': 'Basic %s' % auth,
+                              'Accept': '*/*'}
+                    response, content = httplib2.Http(timeout=TIMEOUT)\
+                        .request(url, 'GET', headers=header)
                     print("Response is: {0}".format(str(response)))
                     print("Content is: {0}".format(str(content)))
                     if int(response['status'])>=400:
