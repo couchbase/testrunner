@@ -3,6 +3,8 @@ import logging
 import math
 import os
 import random
+import re
+import subprocess
 import threading
 import time
 import json
@@ -75,6 +77,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.num_partition = self.input.param('num_partition', 8)
         self.transfer_batch_size = self.input.param("transfer_batch_size", 3)
         self.rebalance_timeout = self.input.param("rebalance_timeout", 600)
+        self.missing_field_desc = self.input.param("missing_field_desc", False)
         self.server_group_map = {}
         if not self.use_rest:
             query_definition_generator = SQLDefinitionGenerator()
@@ -1675,6 +1678,25 @@ class BaseSecondaryIndexingTests(QueryTests):
             ip = node['hostname'].split(':')[0]
             node_ip_uuid_map[ip] = node['nodeUUID']
         return node_ip_uuid_map
+
+    def get_mutation_vectors(self):
+        self.log.info("Grepping for 'MutationResult' in java_sdk_loader.log")
+        out = subprocess.check_output(['wc', '-l', 'java_sdk_loader.log'], universal_newlines=True).strip().split()[0]
+        if eval(out) != 0:
+            out = subprocess.check_output(['grep', 'MutationResult', 'java_sdk_loader.log'],
+                                          universal_newlines=True).strip().split('\n')
+            return set(out)
+        else:
+            return set()
+
+    def convert_mutation_vector_to_scan_vector(self, mvectors):
+        vectors = re.findall(r'.*?vbID=(.*?), vbUUID=(.*?), seqno=(.*?),', str(mvectors))
+        scan_vector = {}
+        for vector in vectors:
+            vector = list(vector)
+            scan_vector[str(vector[0])] = [int(vector[2]), str(vector[1])]
+        return scan_vector
+
 
     def validate_smart_batching_during_rebalance(self, rebalance_task):
         while self.rest._rebalance_progress() == 100 and rebalance_task.state != 'CHECKING':
