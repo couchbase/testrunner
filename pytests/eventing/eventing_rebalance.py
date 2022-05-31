@@ -15,25 +15,17 @@ log = logging.getLogger()
 class EventingRebalance(EventingBaseTest):
     def setUp(self):
         super(EventingRebalance, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=1200)
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=2400)
         if self.create_functions_buckets:
-            self.replicas = self.input.param("replicas", 0)
-            self.bucket_size = 200
-            # This is needed as we have increased the context size to 93KB. If this is not increased the metadata
-            # bucket goes into heavy DGM
-            self.metadata_bucket_size = 400
             log.info(self.bucket_size)
-            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                       replicas=self.replicas)
-            bucket_params_meta = self._create_bucket_params(server=self.server, size=self.metadata_bucket_size,
-                                                       replicas=self.replicas)
+            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size)
             self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
             self.src_bucket = RestConnection(self.master).get_buckets()
             self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
             self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params_meta)
+                                                bucket_params=bucket_params)
             self.buckets = RestConnection(self.master).get_buckets()
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.expiry = 3
@@ -710,7 +702,11 @@ class EventingRebalance(EventingBaseTest):
         self.rest.set_recovery_type('ns_1@' + kv_server.ip, recovery_type)
         self.rest.add_back_node('ns_1@' + kv_server.ip)
         rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
-        task.result()
+        if self.dgm_run:
+            for t in task:
+                t.result()
+        else:
+            task.result()
         if rebalance:
             result = self.rest.monitorRebalance()
             msg = "successfully rebalanced cluster {0}"
@@ -781,7 +777,11 @@ class EventingRebalance(EventingBaseTest):
         # do a recovery and rebalance
         self.rest.set_recovery_type('ns_1@' + eventing_server[1].ip, "full")
         self.rest.add_back_node('ns_1@' + eventing_server[1].ip)
-        task.result()
+        if self.dgm_run:
+            for t in task:
+                t.result()
+        else:
+            task.result()
         rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
         if rebalance:
             result = self.rest.monitorRebalance()

@@ -9,12 +9,10 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 class EventingSanity(EventingBaseTest):
     def setUp(self):
         super(EventingSanity, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=2400)
         if self.create_functions_buckets:
-            self.bucket_size = 100
             log.info(self.bucket_size)
-            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                       replicas=0)
+            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size, eviction_policy=self.eviction_policy)
             self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
             self.src_bucket = RestConnection(self.master).get_buckets()
@@ -373,9 +371,9 @@ class EventingSanity(EventingBaseTest):
 
     def test_expired_mutation(self):
         if self.non_default_collection:
-            self.load_data_to_collection(self.docs_per_day*self.num_docs,"src_bucket.src_bucket.src_bucket",expiry=10)
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket", expiry=100, wait_for_loading=False)
         else:
-            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",expiry=10)
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default", expiry=100, wait_for_loading=False)
         # set expiry pager interval
         ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 1, bucket=self.src_bucket_name)
         body = self.create_save_function_body(self.function_name, "handler_code/bucket_op_expired.js")

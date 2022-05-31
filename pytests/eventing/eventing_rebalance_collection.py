@@ -15,23 +15,17 @@ log = logging.getLogger()
 class EventingRebalanceCollection(EventingBaseTest):
     def setUp(self):
         super(EventingRebalanceCollection, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=2400)
         if self.create_functions_buckets:
-            self.replicas = self.input.param("replicas", 0)
-            self.bucket_size = 200
-            self.metadata_bucket_size = 200
             log.info(self.bucket_size)
-            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                       replicas=self.replicas)
-            bucket_params_meta = self._create_bucket_params(server=self.server, size=self.metadata_bucket_size,
-                                                       replicas=self.replicas)
+            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size)
             self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
             self.src_bucket = RestConnection(self.master).get_buckets()
             self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
             self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params_meta)
+                                                bucket_params=bucket_params)
             self.buckets = RestConnection(self.master).get_buckets()
             self.hostname="http://qa.sc.couchbase.com/"
             self.create_n_scope(self.dst_bucket_name,5)
