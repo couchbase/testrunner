@@ -393,6 +393,8 @@ class BuildQuery(object):
                         elif "red hat" in os_version.lower():
                             if "8.0" in os_version.lower():
                                 os_name = "rhel8"
+                            elif "9.0" in os_version.lower():
+                                os_name = "rhel9"
                         else:
                             os_name = "centos6"
                         build.url = "{6}{0}/{1}-{4}-{5}.{2}.{3}"\
@@ -848,6 +850,8 @@ class BuildQuery(object):
                     rpm_version = "centos7"
                 elif "rhel8" in distribution_version:
                     rpm_version = "rhel8"
+                elif "rhel9" in distribution_version:
+                    rpm_version = "rhel9"
                 build.name = edition_type + "-" + build.product_version + \
                    "-" + rpm_version + "." + build.architecture_type + \
                    "." + build.deliverable_type

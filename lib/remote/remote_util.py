@@ -3575,6 +3575,10 @@ class RemoteMachineShellConnection(KeepRefs):
                                 os_distro = "Red Hat"
                                 os_version = "rhel8"
                                 is_linux_distro = True
+                            elif "9.0" in redhat_release.lower():
+                                os_distro = "Red Hat"
+                                os_version = "rhel9"
+                                is_linux_distro = True
                     else:
                         log.error("Could not find OS name."
                                  "It could be unsupport OS")
