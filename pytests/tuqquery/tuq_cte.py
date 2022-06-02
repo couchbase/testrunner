@@ -294,12 +294,15 @@ class QueryCTETests(QueryTests):
         query_6 = 'explain with a as (select raw join_yr from ' + self.query_bucket + ' ) select join_yr from ' + self.query_bucket + '  where join_yr in a'
         index_6 = {'name': 'idx', 'bucket': 'default', 'fields': [("join_yr", 0)], 'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
+        primary = {'name': '#primary', 'bucket': 'default', 'fields': frozenset(), 'state': 'online',
+                   'using': 'gsi', 'where': '', 'is_primary': True}
+
 
         queries["a"] = {"queries": [query_1], "asserts": [self.plan_verifier("DummyScan")]}
         queries["b"] = {"queries": [query_2], "asserts": [self.plan_verifier("DummyScan")]}
         queries["c"] = {"queries": [query_3], "asserts": [self.plan_verifier("DummyScan")]}
         queries["d"] = {"queries": [query_4], "asserts": [self.plan_verifier("ExpressionScan")]}
         queries["e"] = {"queries": [query_5], "asserts": [self.plan_verifier("PrimaryScan3")]}
-        queries["f"] = {"indexes": [index_6], "queries": [query_6], "asserts": [self.plan_verifier("IndexScan3")]}
+        queries["f"] = {"indexes": [index_6, primary], "queries": [query_6], "asserts": [self.plan_verifier("IndexScan3")]}
 
         self.query_runner(queries)
