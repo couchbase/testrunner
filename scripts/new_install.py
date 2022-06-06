@@ -190,7 +190,10 @@ def main():
         # builds.
         do_uninstall(params)
         params['install_tasks'].remove('uninstall')
-    install_utils.download_build()
+    if 'install' in params['install_tasks']:
+        install_utils.download_build()
+    if 'tools' in params['install_tasks']:
+        install_utils.install_tools()
     do_install(params)
 
 
