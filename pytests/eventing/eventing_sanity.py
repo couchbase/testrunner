@@ -332,9 +332,9 @@ class EventingSanity(EventingBaseTest):
         self.resume_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
         if self.non_default_collection:
-            self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs*2)
+            self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs*2, timeout=1200)
         else:
-            self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs*2)
+            self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs*2, timeout=1200)
         self.undeploy_and_delete_function(body)
 
 
