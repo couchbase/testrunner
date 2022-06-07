@@ -50,6 +50,7 @@ class RbacN1QL(QueryTests):
                 temp_name = self.bucket_name.split("`")[1]
             self.rest.create_bucket(bucket=temp_name, ramQuotaMB=100)
             self.query_bucket = self.bucket_name
+            self.sleep(3)
             self.run_cbq_query(query="CREATE PRIMARY INDEX ON {0}".format(self.bucket_name))
         elif self.bucket_name == "default:default.test.test1":
             self.query_bucket = self.bucket_name
