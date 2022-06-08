@@ -16,9 +16,10 @@ def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(host, username=username, key_filename=ssh_key_path)
-    ssh.exec_command("echo 'couchbase' | sudo passwd --stdin root")
+    ssh.exec_command("echo -e 'couchbase\ncouchbase' | sudo passwd root")
     ssh.exec_command("sudo sed -i '/#PermitRootLogin yes/c\PermitRootLogin yes' /etc/ssh/sshd_config")
     ssh.exec_command("sudo sed -i '/PermitRootLogin no/c\PermitRootLogin yes' /etc/ssh/sshd_config")
+    ssh.exec_command("sudo sed -i '/PermitRootLogin prohibit-password/c\PermitRootLogin yes' /etc/ssh/sshd_config")
     ssh.exec_command("sudo sed -i '/PermitRootLogin forced-commands-only/c\#PermitRootLogin forced-commands-only' /etc/ssh/sshd_config")
     ssh.exec_command("sudo sed -i '/PasswordAuthentication no/c\PasswordAuthentication yes' /etc/ssh/sshd_config")
     ssh.exec_command("sudo service sshd restart")
@@ -69,22 +70,30 @@ AWS_AMI_MAP = {
         "amzn2": {
             "aarch64": "ami-0289ff69e0069c2ed",
             "x86_64": "ami-070ac986a212c4d9b"
+        },
+        "ubuntu20": {
+            "arm64": "ami-0d70a59d7191a8079"
         }
     },
     "elastic-fts": "ami-0c48f8b3129e57beb",
     "localstack": "ami-0702052d7d7f58aad"
 }
 
+AWS_OS_USERNAME_MAP = {
+    "amzn2": "ec2-user",
+    "ubuntu20": "ubuntu"
+}
+
 def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
     instance_type = "t3.xlarge"
-    ssh_username = "ec2-user"
-    
+    ssh_username = AWS_OS_USERNAME_MAP[os]
+
     if type != "couchbase":
         image_id = AWS_AMI_MAP[type]
         ssh_username = "centos"
     else:
         image_id = AWS_AMI_MAP["couchbase"][os][architecture]
-        if architecture == "aarch64":
+        if architecture in ["aarch64", "arm64"]:
             instance_type = "t4g.xlarge"
 
     ec2_resource = boto3.resource('ec2', region_name='us-east-1')
