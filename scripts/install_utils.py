@@ -1005,6 +1005,13 @@ def __get_build_binary_name(node):
     elif node.get_os() in install_constants.AMD64:
         if "windows" in node.get_os():
             node.info.deliverable_type = "msi"
+        # TODO: Always use generic linux build if version >= 7.1.1
+        if node.get_os() in install_constants.LINUX_DISTROS and node.info.architecture_type == "aarch64":
+            return "{0}_{1}-{2}_{3}.{4}".format(params["cb_edition"],
+                                                cb_version,
+                                                "linux",
+                                                "arm64",
+                                                node.info.deliverable_type)
         return "{0}_{1}-{2}_{3}.{4}".format(params["cb_edition"],
                                             cb_version,
                                             node.get_os(),
