@@ -108,6 +108,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.fail("Check if cb server install on %s" % self.master.ip)
             else:
                 self.cli_command_location = bin_path.replace('"', '') + "/"
+        if self.input.param("tools_package", False):
+            self.cli_command_location = "/tmp/tools_package/bin/"
 
         self.debug_logs = self.input.param("debug-logs", False)
         self.show_bk_list = self.input.param("show_bk_list", True)
@@ -175,6 +177,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.cli_command_location = self.cli_command_location.replace(win_format,
                                                                               cygwin_format)
             self.backupset.directory = self.input.param("dir", WIN_TMP_PATH_RAW + "entbackup")
+            if self.input.param("tools_package", False):
+                self.cli_command_location = "/cygdrive/c/tmp/tools_package/bin/"
         elif info == 'mac':
             self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         else:
