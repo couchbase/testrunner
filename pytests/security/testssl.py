@@ -183,7 +183,7 @@ class TestSSLTests(BaseTestCase):
                             self.fail("LogJam vulnerability on port {0}".format(node_port))
                     elif "LUCKY13 (CVE-2013-0169)" in line:
                         scan_count = scan_count + 1
-                        if "VULNERABLE (NOT ok)" in line:
+                        if "potentially VULNERABLE" in line:
                             self.fail("Lucky13 vulnerability on port {0}".format(node_port))
                     elif "RC4 (CVE-2013-2566, CVE-2015-2808)" in line:
                         scan_count = scan_count + 1
@@ -261,15 +261,10 @@ class TestSSLTests(BaseTestCase):
                     elif "--------" in line:
                         check_next = 1
 
-    def test_tls_cipher_ordering(self):
+    def test_tls_ciphers_used(self):
         """
         Checks cipher-suites used is a subset of preconfigured list of cipher-suites.
         Checks for TLS 1.2 and TLS 1.3
-        Also checks the order of cipher suites:
-            i. TLSv1.3: The order of the 1.3 cipher-suites is determined based on available
-            hardware.
-            ii. < TLSv1.3: Cipher-suites are used by a service in the order in which the
-            cipher-suites appear in the list established for the service.
         """
         for node in self.servers:
             self.log.info("Testing node {0}".format(node.ip))
@@ -319,14 +314,13 @@ class TestSSLTests(BaseTestCase):
                 cipher_order_list = content[services_ports_map[node_port]]["supportedCipherSuites"]
 
                 # Verifies TLS 1.2 cipher-suites is a subset of preconfigured list of
-                # cipher-suites and follows the order of the same
+                # cipher-suites
                 is_present = False
-                it = iter(cipher_order_list)
-                if all(ciphers in it for ciphers in tls_1_dot_2_obtained_list):
+                if all(ciphers in cipher_order_list for ciphers in tls_1_dot_2_obtained_list):
                     is_present = True
                 self.assertTrue(is_present, msg="Obtained list of TLS 1.2 cipher-suites is not a "
-                                                "subsequence of pre-configured list of "
-                                                "cipher-suites on port: {0} :: service: {1}"
+                                                "subset of pre-configured list of cipher-suites on "
+                                                "port: {0} :: service: {1}"
                                 .format(node_port, services_ports_map[node_port]))
 
                 # Verifies TLS 1.3 cipher-suites is a subset of preconfigured list of
@@ -338,15 +332,3 @@ class TestSSLTests(BaseTestCase):
                                                 "subset of pre-configured list of cipher-suites on "
                                                 "port: {0} :: service: {1}"
                                 .format(node_port, services_ports_map[node_port]))
-
-                # Verifies TLS 1.3 cipher-suites is a subset of preconfigured list of
-                # cipher-suites and follows the order of the same
-                is_present = False
-                it = iter(cipher_order_list)
-                if all(ciphers in it for ciphers in tls_1_dot_3_obtained_list):
-                    is_present = True
-                if not is_present:
-                    self.log.info("Obtained list of TLS 1.3 cipher-suites is not a "
-                                  "subsequence of pre-configured list of cipher-suites. "
-                                  "(TLS 1.3 Cipher-Suite Limitation) on port: {0} :: service: {1}"
-                                  .format(node_port, services_ports_map[node_port]))
