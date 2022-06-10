@@ -50,7 +50,7 @@ def main():
                 server.internal_ip = internal_servers[i]
                 internal_servers_map[server.ip] = server.internal_ip
             server.os = options.os
-            if options.os == 'windows':
+            if 'windows' in options.os:
                 server.ssh_username = DEFAULT_WIN_USER
                 server.ssh_password = DEFAULT_WIN_PWD
             else:
@@ -122,7 +122,7 @@ def main():
                 data[i] = data[i].replace(options.addPoolServerId, addPoolServers[0])
                 addPoolServers.pop(0)
 
-        if options.os == 'windows':
+        if 'windows' in options.os:
             if 'username:root' in data[i]:
                 data[i] = data[i].replace('root', DEFAULT_WIN_USER)
             if 'password:couchbase' in data[i]:
