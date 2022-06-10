@@ -4,3 +4,6 @@
 [submodule "gauntlet"]
 	path = gauntlet
 	url = https://github.com/pavithra-mahamani/gauntlet
+[submodule "lib/capellaAPI"]
+	path = lib/capellaAPI
+	url = https://github.com/couchbaselabs/CapellaRESTAPIs
