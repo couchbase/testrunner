@@ -3180,9 +3180,9 @@ class XDCRNewBaseTest(unittest.TestCase):
             bucket_size = int( float(cluster_quota - 500) * float(quota_percent/100.0 ) /float(num_buckets))
         elif num_buckets > 0:
             bucket_size = int((float(cluster_quota) - 500)/float(num_buckets))
-        # Setting upper limit of 1GB for bucket size
-        if bucket_size > 1024:
-            bucket_size = 1024
+        # Setting upper limit of 3GB for bucket size
+        if bucket_size > 3072:
+            bucket_size = 3072
         return bucket_size
 
     def __create_buckets(self):
