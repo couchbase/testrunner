@@ -46,7 +46,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                 return False, "config did not create the expected number of files"
 
             if f"{self.backupset.directory}/{self.backupset.name}/backup-meta.json" not in keys:
-                return False, "config did not create the backup-meta.json file"
+                return False, "config did not create the backup-meta.json file in: " + f"{self.backupset.directory}/{self.backupset.name}"
         else:
             remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
             info = remote_client.extract_remote_info().type.lower()
@@ -176,7 +176,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
             bk_info = bk_info["repos"]
         else:
             return False, "No output content"
-
+                    
         self.log.info("list is deprecated from 7.0.0.  Use `info` instead")
         if self.backupset.name in bk_name: #bk_info[0]["backups"][0]["date"]:
             backup_name = True
@@ -187,13 +187,13 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         if self.num_items == bk_info[0]["backups"][0]["buckets"][0]["items"]:
             items_count = True
         if not backup_name:
-            return False, "Expected Backup name not found in info command output"
+            return False, "Expected Backup name not found in info command output. Expected: " + self.backupset.name + " Actual: " + bk_name
         if not bucket_name:
-            return False, "Expected Bucket name not found in info command output"
+            return False, "Expected Bucket name not found in info command output. Expected: " + self.buckets[0].name + " Actual: " + bk_info[0]["backups"][0]["buckets"][0]["name"]
         if not backup_folder_timestamp:
-            return False, "Expected folder timestamp not found in info command output"
+            return False, "Expected folder timestamp not found in info command output. Expected: " + self.backups[0] + " Actual: " + bk_info[0]["backups"][0]["date"]
         if not items_count:
-            return False, "Items count mismatch in info command output"
+            return False, "Items count mismatch in info command output. Expected: " + self.num_items + " Actual: " + bk_info[0]["backups"][0]["buckets"][0]["items"]
         if bk_info[0]["backups"][0]["type"] not in bk_type:
             return False, "Backup complete does not have value"
         if not bk_info[0]["backups"][0]["complete"]:

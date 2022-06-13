@@ -36,6 +36,7 @@ from lib.memcached.helper.data_helper import VBucketAwareMemcached, MemcachedCli
 
 from ent_backup_restore.provider.s3 import S3
 from ent_backup_restore.provider.gcp import GCP
+from ent_backup_restore.provider.azure import AZURE
 
 from pytests.security.x509_multiple_CA_util import x509main
 
@@ -333,6 +334,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         # The setup/teardown is provider specific, this is hidden behind the 'Provider' abstract class
         self.objstore_provider = None
         provider = self.input.param("objstore_provider", None)
+        provider_region = self.input.param("objstore_provider_region", None)
+        if provider_region != None:
+            self.backupset.objstore_region = provider_region
         if provider == "s3":
             self.objstore_provider = S3(self.backupset.objstore_access_key_id, self.backupset.objstore_bucket,
                                         self.backupset.objstore_cacert, self.backupset.objstore_endpoint,
@@ -349,13 +353,23 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                          self.backupset.objstore_no_ssl_verify, self.backupset.objstore_region,
                                          self.backupset.objstore_secret_access_key,
                                          self.backupset.objstore_staging_directory, f"archive-{self.master.ip}")
-
+        elif provider == "azure": 
+             self.objstore_provider = AZURE(self.backupset.objstore_access_key_id, self.backupset.objstore_bucket,
+                                        self.backupset.objstore_cacert, self.backupset.objstore_endpoint,
+                                        self.backupset.objstore_no_ssl_verify, self.backupset.objstore_region,
+                                        self.backupset.objstore_secret_access_key,
+                                        self.backupset.objstore_staging_directory, f"archive-{self.master.ip}")
+         
         # We run in a separate branch so when we add more providers the setup will be run by default
         if provider:
             # Override and use the same archive directory across platforms
             self.backupset.directory = f"archive-{self.master.ip}"
             self.objstore_provider.setup()
-
+            if (provider == "azure"):
+                self.backupset.objstore_secret_access_key = self.objstore_provider.access_key_id
+                self.backupset.objstore_access_key_id = self.objstore_provider.storage_name
+                self.backupset.objstore_bucket = self.objstore_provider.container_name
+        
         self.validation_helper = BackupRestoreValidations(self.backupset,
                                                           self.cluster_to_backup,
                                                           self.cluster_to_restore,
@@ -417,6 +431,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         try:
             if self.objstore_provider:
                 self.objstore_provider.teardown(info, remote_client)
+                # Foor Azure we're deleting the remote storage resoruce
+                if self.input.param("objstore_provider", None) == "azure":
+                    self.objstore_provider.__del__()
         except AttributeError:
             pass
 
@@ -2398,7 +2415,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     logs_path, archive_path, self.backupset.name))
             if not any(
                     "backup-meta.json" in file_ for file_ in backup_dir):
-                self.fail("Missing file 'backup-meta.json' in backup dir")
+                self.fail("Missing file 'backup-meta.json' in backup dir: " + backup_dir)
             list_for_time_check.extend(backup_dir[1:])
 
             # Verify log files exist in the logs dir. Collect timestamps
