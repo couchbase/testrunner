@@ -22,6 +22,9 @@ class Provider(metaclass=abc.ABCMeta):
         self.bucket_pattern = r".*\-[0-9a-z]{32}"
         self.rift_pattern = r"index_\d+.sqlite.\d+"
 
+    def __del__(self):
+        pass
+
     @abc.abstractmethod
     def schema_prefix(self):
         """Returns the schema prefix expected by cbbackupmgr for the given cloud provider."""
