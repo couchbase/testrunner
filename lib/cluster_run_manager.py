@@ -215,7 +215,8 @@ class Node:
         self.instance = subprocess.Popen(
             args, cwd=NSDIR,
             stdout=logf,
-            stderr=logf)
+            stderr=logf,
+            env=os.environ)
         self.ready.set()
         return self.instance.poll() is None
 
