@@ -81,7 +81,8 @@ AWS_AMI_MAP = {
 
 AWS_OS_USERNAME_MAP = {
     "amzn2": "ec2-user",
-    "ubuntu20": "ubuntu"
+    "ubuntu20": "ubuntu",
+    "centos": "centos"
 }
 
 def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
@@ -90,7 +91,6 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
 
     if type != "couchbase":
         image_id = AWS_AMI_MAP[type]
-        ssh_username = "centos"
     else:
         image_id = AWS_AMI_MAP["couchbase"][os][architecture]
         if architecture in ["aarch64", "arm64"]:
