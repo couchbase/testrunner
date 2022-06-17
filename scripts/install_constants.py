@@ -94,6 +94,17 @@ PROCESSES_TO_TERMINATE = ["beam.smp", "memcached", "vbucketmigrator", "couchdb",
 
 UNMOUNT_NFS_CMD = "umount -a -t nfs,nfs4 -f -l;"
 
+# Serverless changes (MB-52406)
+RM_CONF_PROFILE_FILE = {
+    "LINUX_DISTROS": "rm -f /etc/couchbase.d/config_profile"
+}
+CREATE_SERVERLESS_PROFILE_FILE = {
+    "LINUX_DISTROS": "mkdir -p /etc/couchbase.d ; "
+                     "echo %s > /etc/couchbase.d/config_profile ; "
+                     "chmod ugo+r /etc/couchbase.d/"
+}
+# End of serverless change
+
 CMDS = {
     "deb": {
         "uninstall":
@@ -153,7 +164,7 @@ CMDS = {
             "yes | yum remove 'couchbase*' > /dev/null; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; " +
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
-        "pre_install": "",
+        "pre_install": None,
         "install": "yes | yum localinstall -y buildpath > /dev/null && echo 1 || echo 0",
         "set_vm_swappiness_and_thp":
             "/sbin/sysctl vm.swappiness=0; " +

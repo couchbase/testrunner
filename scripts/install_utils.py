@@ -40,7 +40,13 @@ params = {
     "bkrs_client": None,
     "ntp": False,
     "install_debug_info": False,
-    "use_hostnames": False
+    "use_hostnames": False,
+
+    # For serverless change
+    # None - Leave it default
+    # default - Explicitly load default profile
+    # serverless - Load serverless profile
+    "cluster_profile": None
 }
 
 
@@ -77,7 +83,6 @@ class NodeHelper:
         self.check_node_reachable()
         self.nonroot = self.shell.nonroot
         self.actions_dict = install_constants.NON_ROOT_CMDS if self.nonroot else install_constants.CMDS
-
 
     def check_node_reachable(self):
         start_time = time.time()
@@ -119,7 +124,7 @@ class NodeHelper:
             if "msi" in cmd:
                 '''WINDOWS UNINSTALL'''
                 self.shell.terminate_processes(self.info, [s for s in testconstants.WIN_PROCESSES_KILLED])
-                self.shell.terminate_processes(self.info, \
+                self.shell.terminate_processes(self.info,
                                                [s + "-*" for s in testconstants.COUCHBASE_FROM_VERSION_3])
                 installed_version, _ = self.shell.execute_command(
                     "cat " + install_constants.DEFAULT_INSTALL_DIR["WINDOWS_SERVER"] + "/VERSION.txt")
@@ -152,7 +157,6 @@ class NodeHelper:
             self.node.ssh_username = "nonroot"
             self.shell = RemoteMachineShellConnection(self.node, exit_on_failure=False)
 
-
     def pre_install_cb(self):
         if self.actions_dict[self.info.deliverable_type]["pre_install"]:
             cmd = self.actions_dict[self.info.deliverable_type]["pre_install"]
@@ -173,6 +177,21 @@ class NodeHelper:
                 else:
                     self.shell.execute_command(cmd, debug=self.params["debug_logs"])
                     self.wait_for_completion(duration, event)
+
+        # Serverless changes (MB-52406)
+        if self.get_os() in install_constants.LINUX_DISTROS:
+            key = "LINUX_DISTROS"
+
+            # Remove the existing serverless_profile file (if any) on the node
+            cmd = install_constants.RM_CONF_PROFILE_FILE[key]
+            self.shell.execute_command(cmd)
+
+            # Explicitly set the profile mode value (if provided by user)
+            if params["cluster_profile"] in ["default", "serverless"]:
+                cmd = install_constants.CREATE_SERVERLESS_PROFILE_FILE[key] \
+                      % params["cluster_profile"]
+                self.shell.execute_command(cmd)
+        # End of Serverless changes
 
     def set_vm_swappiness_and_thp(self):
         # set vm_swapiness to 0, and thp to never by default
@@ -603,6 +622,8 @@ def _parse_user_input():
                                                    "true" else False
         if key == "use_hostnames" or key == "h":
             params["use_hostnames"] = value.lower() == "true"
+        if key == "cluster_profile":
+            params["cluster_profile"] = value
 
     if userinput.bkrs_client and not params["cluster_version"]:
         print_result_and_exit("Need 'cluster_version' in params to proceed")
