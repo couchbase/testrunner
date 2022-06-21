@@ -91,6 +91,10 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
 
     if type != "couchbase":
         image_id = AWS_AMI_MAP[type]
+        # TODO: Change to centos x86 AMI (CBQE-7627)
+        if type == "localstack":
+            instance_type = "t4g.xlarge"
+            ssh_username = "ec2-user"
     else:
         image_id = AWS_AMI_MAP["couchbase"][os][architecture]
         if architecture in ["aarch64", "arm64"]:
