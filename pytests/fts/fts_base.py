@@ -47,6 +47,7 @@ from lib.mc_bin_client import MemcachedClient as MC_MemcachedClient
 from security.SecretsMasterBase import SecretsMasterBase
 from lib.collection.collections_cli_client import CollectionsCLI
 from scripts.java_sdk_setup import JavaSdkSetup
+from lib.couchbase_helper.documentgenerator import SDKDataLoader
 from couchbase_cli import CouchbaseCLI
 from pytests.security.x509_multiple_CA_util import x509main
 from lib.SystemEventLogLib.Events import EventHelper
@@ -3727,6 +3728,9 @@ class FTSBaseTest(unittest.TestCase):
         self.scope = TestInputSingleton.input.param("scope", "scope1")
         self.skip_log_scan = self._input.param("skip_log_scan", False)
         self.collection = str(TestInputSingleton.input.param("collection", "collection1"))
+        self.expiry = self._input.param("expiry", 0)
+        self.value_size = self._input.param("value_size", 0)
+        self.bucket_storage = self._input.param('bucket_storage', 'couchstore')
         self.restart_couchbase = self._input.param("restart_couchbase", False)
         self.enable_dp = self._input.param("enable_dp", False)
         self.use_https = self._input.param("use_https", False)
@@ -4307,7 +4311,7 @@ class FTSBaseTest(unittest.TestCase):
             quota_percent = None
 
         dgm_run = self._input.param("dgm_run", 0)
-        if dgm_run:
+        if dgm_run or self.__bucket_storage == "magma":
             # buckets cannot be created if size<100MB
             bucket_size = 256
         elif quota_percent is not None:
@@ -5366,7 +5370,7 @@ class FTSBaseTest(unittest.TestCase):
                                                          end=self.create_gen[1].end,
                                                          op_type=OPS.DELETE))
 
-    def load_data(self, generator=None, data_loader_output=False):
+    def load_data(self, generator=None, data_loader_output=False, num_items=20000):
         """
          Blocking call to load data to Couchbase and ES
         """
@@ -5374,6 +5378,26 @@ class FTSBaseTest(unittest.TestCase):
             self.create_gen = self._cb_cluster.load_all_buckets_till_dgm(
                 self._active_resident_ratio,
                 self.compare_es)
+            return
+        elif self.__bucket_storage == 'magma':
+            conn = RestConnection(self.master)
+            stat = CollectionsStats(self.master)
+            cluster = Cluster()
+
+            self.buckets = conn.get_buckets()
+            self.query_buckets = self.buckets
+            self.gen_create = SDKDataLoader(num_ops=num_items)
+            active_resident_threshold = int(self._active_resident_ratio)
+            for bucket in self.buckets:
+                cluster.async_load_gen_docs_till_dgm(server=self.master,
+                                                          active_resident_threshold=active_resident_threshold,
+                                                          bucket=bucket,
+                                                          scope=None, collection=None,
+                                                          exp=self.expiry,
+                                                          value_size=self.value_size, timeout_mins=60,
+                                                          java_sdk_client=self.java_sdk_client)
+            for bkt in self.buckets:
+                print(stat.get_collection_stats(bkt))
             return
         load_tasks = self.async_load_data(generator=generator, data_loader_output=data_loader_output)
         for task in load_tasks:
