@@ -547,7 +547,12 @@ class QueryArrayFlatteningTests(QueryTests):
         self.assertTrue("idx1" in str(explain_results),
                         "The query should be using idx1, check explain results {0}".format(explain_results))
 
-        self.compare_against_primary(query, primary_query)
+        query_results = self.run_cbq_query(query=query)
+        expected_results = self.run_cbq_query(query=primary_query)
+        diffs = DeepDiff(query_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.log.info("Query results do not match between primary index and secondary index please check!")
+            self.assertTrue(False)
 
     def test_flatten_cte_conflict(self):
         create_query = "create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.date,r.ratings.Overall) FOR r IN reviews END, email)"
