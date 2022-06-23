@@ -297,7 +297,7 @@ class QueryAdviseTests(QueryTests):
             results_field = self.run_cbq_query(
                 query="advise select sum(a), min(d) from `{0}` where a > 0 and d >0".format(self.bucket_name), server=self.master)
             self.assertTrue(results_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][0]['index_statement'] == 'CREATE INDEX adv_d_a ON `{0}`(`d`,`a`)'.format(self.bucket_name) or results_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][0]['index_statement'] == 'CREATE INDEX adv_a_d ON `{0}`(`a`,`d`)'.format(self.bucket_name))
-            self.assertEqual(results_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][0]['index_property'], 'FULL GROUPBY & AGGREGATES pushdown, GROUPBY & AGGREGATES pushdown')
+            self.assertEqual(results_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][0]['index_property'], 'FULL GROUPBY & AGGREGATES pushdown')
         except Exception as e:
             self.log.info("Advise statement failed: {0}".format(e))
             self.fail()
