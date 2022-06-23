@@ -47,6 +47,7 @@ GCP = "GCP"
 KUBERNETES = "KUBERNETES"
 VM = "VM"
 CAPELLA_LOCAL = "CAPELLA_LOCAL"
+ELIXIR_ONPREM = "ELIXIR_ONPREM"
 
 CLOUD_SERVER_TYPES = [AWS, AZURE, GCP]
 
@@ -136,6 +137,7 @@ def get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version, p
         ssh_key_path = ""
         return cloud_provision.az_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture)
 
+
 def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool=False, os_version="", pool_id=None):
     if options.serverType in CLOUD_SERVER_TYPES:
         return get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version, pool_id)
@@ -221,7 +223,7 @@ def main():
     parser.add_option('-s', '--subcomponent', dest='subcomponent', default=None)
     parser.add_option('--subcomponent_regex', dest='subcomponent_regex', default=None)
     parser.add_option('-e', '--extraParameters', dest='extraParameters', default=None)
-    parser.add_option('-y', '--serverType', dest='serverType', type="choice", default=DEFAULT_SERVER_TYPE, choices=[VM, AWS, DOCKER, GCP, AZURE, CAPELLA_LOCAL])  # or could be Docker
+    parser.add_option('-y', '--serverType', dest='serverType', type="choice", default=DEFAULT_SERVER_TYPE, choices=[VM, AWS, DOCKER, GCP, AZURE, CAPELLA_LOCAL, ELIXIR_ONPREM])  # or could be Docker
     # override server type passed to executor job e.g. CAPELLA_LOCAL
     parser.add_option('--server_type_name', dest='server_type_name', default=None)
     parser.add_option('-u', '--url', dest='url', default=None)
