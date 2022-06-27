@@ -59,7 +59,7 @@ class QueryAdvisorTests(QueryTests):
         super(QueryAdvisorTests, self).suite_tearDown()
 
     def wait_for_index_online(self, bucket, index, scope='default', collection='default'):
-        if scope == 'default' and inventory == 'default':
+        if scope == 'default' and collection == 'default':
             query_index = f"SELECT state FROM system:indexes where keyspace_id = '{bucket}' and name = '{index}'"
         else:
             query_index = f"SELECT state FROM system:indexes where bucket_id = '{bucket}' and scope_id = '{scope}' and keyspace_id = '{collection}' and name = '{index}'"
@@ -67,7 +67,7 @@ class QueryAdvisorTests(QueryTests):
         while True:
             next_time = time.time()
             query_response = self.run_cbq_query(query=query_index)
-            self.log.info(f"{index} state: {query_response['results'][0]['state']}")
+            self.log.info(f"{index} response: {query_response}")
             if query_response['results'][0]['state'] == 'online':
                 break
             if next_time - init_time > 600:
@@ -941,6 +941,7 @@ class QueryAdvisorTests(QueryTests):
     def test_session_collection_join(self):
         advise_index1 = "CREATE INDEX adv_country_city ON `default`:`travel-sample`.`inventory`.`landmark`(`country`,`city`)"
         advise_index2 = "CREATE INDEX adv_city_country ON `default`:`travel-sample`.`inventory`.`landmark`(`city`,`country`)"
+        advise_index3 = "CREATE INDEX adv_airportname_tz ON `default`:`travel-sample`.`inventory`.`landmark`(`airportname` INCLUDE MISSING,`tz`)"
         query1="SELECT DISTINCT MIN(aport.airportname) AS Airport_Name, MIN(lmark.name) AS Landmark_Name, MIN(aport.tz) AS Landmark_Time FROM `travel-sample`.inventory.landmark aport LEFT JOIN `travel-sample`.inventory.landmark lmark ON aport.city = lmark.city AND lmark.country = 'United States' GROUP BY lmark.name ORDER BY lmark.name LIMIT 3"
         self.wait_for_index_online(bucket='travel-sample', scope='inventory', collection='landmark', index='def_inventory_landmark_primary')
         try:
@@ -952,7 +953,7 @@ class QueryAdvisorTests(QueryTests):
             get = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'get', 'session':'{session}'}}) as Get", server=self.master)
             # Check advise
             for index in get['results'][0]['Get'][0][0]['recommended_indexes']:
-                self.assertTrue(index['index'] == advise_index1 or index['index'] == advise_index2)
+                self.assertTrue(index['index'] == advise_index1 or index['index'] == advise_index2 or index['index'] == advise_index3, f"index is {index['index']}")
                 self.assertEqual(index['statements'][0]['statement'], query1)
         except Exception as e:
             self.log.error(f"Advisor session failed: {e}")
@@ -1062,7 +1063,9 @@ class QueryAdvisorTests(QueryTests):
     def test_session_drop_collection(self):
         advise_index1 = "CREATE INDEX adv_country_city ON `default`:`travel-sample`.`inventory`.`landmark`(`country`,`city`)"
         advise_index2 = "CREATE INDEX adv_city_country ON `default`:`travel-sample`.`inventory`.`landmark`(`city`,`country`)"
+        advise_index3 = "CREATE INDEX adv_airportname_tz ON `default`:`travel-sample`.`inventory`.`landmark`(`airportname` INCLUDE MISSING,`tz`)"
         query1="SELECT DISTINCT MIN(aport.airportname) AS Airport_Name, MIN(lmark.name) AS Landmark_Name, MIN(aport.tz) AS Landmark_Time FROM `travel-sample`.inventory.landmark aport LEFT JOIN `travel-sample`.inventory.landmark lmark ON aport.city = lmark.city AND lmark.country = 'United States' GROUP BY lmark.name ORDER BY lmark.name LIMIT 3"
+        self.run_cbq_query("CREATE PRIMARY INDEX `def_inventory_landmark_primary` IF NOT EXISTS ON `travel-sample`.`inventory`.`landmark`")
         self.wait_for_index_online(bucket='travel-sample', scope='inventory', collection='landmark', index='def_inventory_landmark_primary')
         try:
             start = self.run_cbq_query(query="SELECT ADVISOR({'action':'start', 'duration':'40m'})", server=self.master)
@@ -1076,7 +1079,7 @@ class QueryAdvisorTests(QueryTests):
             get = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'get', 'session':'{session}'}}) as Get", server=self.master)
             # Check advise
             for index in get['results'][0]['Get'][0][0]['recommended_indexes']:
-                self.assertTrue(index['index'] == advise_index1 or index['index'] == advise_index2)
+                self.assertTrue(index['index'] == advise_index1 or index['index'] == advise_index2 or index['index'] == advise_index3)
                 self.assertEqual(index['statements'][0]['statement'], query1)
         except Exception as e:
             self.log.error(f"Advisor session failed: {e}")
@@ -1085,7 +1088,9 @@ class QueryAdvisorTests(QueryTests):
     def test_session_drop_scope(self):
         advise_index1 = "CREATE INDEX adv_country_city ON `default`:`travel-sample`.`inventory`.`landmark`(`country`,`city`)"
         advise_index2 = "CREATE INDEX adv_city_country ON `default`:`travel-sample`.`inventory`.`landmark`(`city`,`country`)"
+        advise_index3 = "CREATE INDEX adv_airportname_tz ON `default`:`travel-sample`.`inventory`.`landmark`(`airportname` INCLUDE MISSING,`tz`)"
         query1="SELECT DISTINCT MIN(aport.airportname) AS Airport_Name, MIN(lmark.name) AS Landmark_Name, MIN(aport.tz) AS Landmark_Time FROM `travel-sample`.inventory.landmark aport LEFT JOIN `travel-sample`.inventory.landmark lmark ON aport.city = lmark.city AND lmark.country = 'United States' GROUP BY lmark.name ORDER BY lmark.name LIMIT 3"
+        self.run_cbq_query("CREATE PRIMARY INDEX `def_inventory_landmark_primary` IF NOT EXISTS ON `travel-sample`.`inventory`.`landmark`")
         self.wait_for_index_online(bucket='travel-sample', scope='inventory', collection='landmark', index='def_inventory_landmark_primary')
         try:
             start = self.run_cbq_query(query="SELECT ADVISOR({'action':'start', 'duration':'40m'})", server=self.master)
@@ -1099,7 +1104,7 @@ class QueryAdvisorTests(QueryTests):
             get = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'get', 'session':'{session}'}}) as Get", server=self.master)
             # Check advise
             for index in get['results'][0]['Get'][0][0]['recommended_indexes']:
-                self.assertTrue(index['index'] == advise_index1 or index['index'] == advise_index2)
+                self.assertTrue(index['index'] == advise_index1 or index['index'] == advise_index2 or index['index'] == advise_index3)
                 self.assertEqual(index['statements'][0]['statement'], query1)
         except Exception as e:
             self.log.error(f"Advisor session failed: {e}")
