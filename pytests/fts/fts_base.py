@@ -3235,7 +3235,7 @@ class CouchbaseCluster:
         return tasks
 
     def async_run_fts_query_compare(self, fts_index, es, query_index, es_index_name=None, n1ql_executor=None,
-                                    use_collections=False):
+                                    use_collections=False,dataset=None):
         """
         Asynchronously run query against FTS and ES and compare result
         note: every task runs a single query
@@ -3245,7 +3245,8 @@ class CouchbaseCluster:
                                                             query_index=query_index,
                                                             es_index_name=es_index_name,
                                                             n1ql_executor=n1ql_executor,
-                                                            use_collections=use_collections)
+                                                            use_collections=use_collections,
+                                                            dataset=dataset)
         return task
 
     def run_expiry_pager(self, val=10):
@@ -4308,6 +4309,8 @@ class FTSBaseTest(unittest.TestCase):
         self.analyzer = self._input.param("analyzer", None)
         self.index_replicas = self._input.param("index_replicas", None)
         self.index_kv_store = self._input.param("kvstore", None)
+        self.min_queries_per_shape = self._input.param("min_queries_per_shape",0)
+        self.query_shape = self._input.param("query_shape","") 
         self.partitions_per_pindex = \
             self._input.param("max_partitions_pindex", 171)
         self.upd_del_fields = self._input.param("upd_del_fields", None)
@@ -4613,6 +4616,17 @@ class FTSBaseTest(unittest.TestCase):
                                    start=0,
                                    end=num_keys)
         self._cb_cluster.load_all_buckets_from_generator(gen)
+
+
+    def load_custom(self,filename="geoshape.json",num_keys=None):
+        """
+        Loads custom JSON files
+        """
+        if not num_keys:
+            num_keys = self._num_items
+
+        gen = GeoSpatialDataLoader("custom",start=0,end=num_keys)
+        self._cb_cluster.load_all_buckets_from_generator(gen) 
 
     def perform_update_delete(self, fields_to_update=None):
         """
@@ -5034,6 +5048,51 @@ class FTSBaseTest(unittest.TestCase):
 
         return index.fts_queries
 
+    def generate_random_geoshape_queries(self,index,num_queries=1,sort=False):
+        gen_queries = 0
+        if self.query_shape != "":
+            while gen_queries < num_queries:
+                fts_queries,es_queries = FTSESQueryGenerator.construct_geo_shape_queries(shape=self.query_shape,\
+                    num_queries=num_queries,compare_es = self.compare_es)
+                for fts_query in fts_queries:
+                    index.fts_queries.append(json.loads(json.dumps(fts_query, ensure_ascii=False)))
+                if self.compare_es:
+                    for es_query in es_queries:
+                        self.es.es_queries.append(json.loads(json.dumps(es_query, ensure_ascii=False)))
+                gen_queries = gen_queries + len(fts_queries)
+                num_queries = num_queries - gen_queries
+
+        else:
+            shapes = ['point','linestring','polygon','multipoint','multilinestring','multipolygon','circle',
+                'envelope','geometrycollection']
+            min_queries_per_shape = self.min_queries_per_shape
+            total_queries = (min_queries_per_shape * len(shapes))
+            if self.min_queries_per_shape == 0 or (min_queries_per_shape * len(shapes)) > num_queries:
+                total_queries = num_queries
+                min_queries_per_shape = total_queries//len(shapes)
+            
+            shape_count = 0
+            while gen_queries <= total_queries and shape_count < len(shapes):
+                    shape = shapes[shape_count]
+                    fts_queries,es_queries = FTSESQueryGenerator.construct_geo_shape_queries(shape=shape, \
+                       num_queries=min_queries_per_shape,compare_es = self.compare_es)
+                    for fts_query in fts_queries:
+                        index.fts_queries.append(json.loads(json.dumps(fts_query, ensure_ascii=False)))
+                    if self.compare_es:
+                        for es_query in es_queries:
+                            self.es.es_queries.append(json.loads(json.dumps(es_query, ensure_ascii=False)))
+                    gen_queries = gen_queries + len(fts_queries)
+                    shape_count+=1
+
+            while gen_queries < num_queries:
+                fts_queries,es_queries = FTSESQueryGenerator.construct_geo_shape_queries()
+                for fts_query in fts_queries:
+                        index.fts_queries.append(json.loads(json.dumps(fts_query, ensure_ascii=False)))
+                if self.compare_es:
+                    for es_query in es_queries:
+                        self.es.es_queries.append(json.loads(json.dumps(es_query, ensure_ascii=False)))
+                gen_queries = gen_queries + len(fts_queries)
+                
     def generate_random_geo_queries(self, index, num_queries=1, sort=False):
         """
         Generates a bunch of geo location and bounding box queries for
@@ -5337,6 +5396,67 @@ class FTSBaseTest(unittest.TestCase):
         self.wait_for_indexing_complete()
         return geo_index
 
+    def create_index_custom_shapes(self,num_shapes=10):
+        if self.compare_es:
+            self.log.info("Creating a geo-index on Elasticsearch...")
+            self.es.delete_indices()
+            geoshape_field = "location"
+            es_mapping = {
+                        "properties": {
+                            geoshape_field: {
+                                "type": "geo_shape"
+                            }
+                        }
+            }
+            self.create_es_index_mapping(es_mapping=es_mapping)
+            self.es.add_circle_ingest_pipeline(geoshape_field)
+        
+        from .fts_base import FTSIndex
+        geo_index = FTSIndex(
+            cluster=self._cb_cluster,
+            name="geo-index",
+            source_name="default",
+        )
+        geo_index.index_definition["params"] = {
+            "mapping": {
+                "default_mapping": {
+                    "dynamic": True,
+                    "enabled": False
+                },
+                "types": {
+                    "earthquake": {
+                        "dynamic": True,
+                        "enabled": True,
+                        "properties": {
+                            "location": {
+                                "dynamic": False,
+                                "enabled": True,
+                                "fields": [{
+                                    "name": "location",
+                                    "type": "geoshape",
+                                    "store": False,
+                                    "index": True,
+                                }
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        geo_index.create()
+        self.is_index_partitioned_balanced(geo_index)
+
+        self.container_type = 'bucket' 
+        self.dataset = "geojson"
+        self.log.info("Loading geosjon data ...")  
+
+        self.async_load_data(filename="geoshape2.json",dataset="geojson")
+        self.sleep(10, "Waiting to load data ...")
+        self.wait_for_indexing_complete()
+        
+        return geo_index
+
     def create_index_es(self, index_name="es_index"):
         self.es.create_empty_index_with_bleve_equivalent_std_analyzer(index_name)
         self.log.info("Created empty index %s on Elastic Search node with "
@@ -5344,7 +5464,7 @@ class FTSBaseTest(unittest.TestCase):
                       % index_name)
 
     def get_generator(self, dataset, num_items, start=0, encoding="utf-8",
-                      lang="EN", data_loader_output=False):
+                      lang="EN", data_loader_output=False,filename=None):
         """
            Returns a generator depending on the dataset
         """
@@ -5364,6 +5484,12 @@ class FTSBaseTest(unittest.TestCase):
                 return GeoSpatialDataLoader(name="earthquake",
                                             start=start,
                                             end=start + num_items)
+
+            elif dataset == "geojson":
+                return GeoSpatialDataLoader(name="geojson",
+                                            start=start,
+                                            end=start + num_items,
+                                            filename = filename) 
         else:
             elastic_ip = None
             elastic_port = None
@@ -5386,7 +5512,7 @@ class FTSBaseTest(unittest.TestCase):
                                  upd_del_shift=self._num_items, output=data_loader_output
                                  )
 
-    def populate_create_gen(self,data_loader_output=False):
+    def populate_create_gen(self,data_loader_output=False,filename=None):
         if self.dataset == "all":
             # only emp and wiki
             self.create_gen = []
@@ -5396,7 +5522,7 @@ class FTSBaseTest(unittest.TestCase):
                 "wiki", num_items=self._num_items // 2))
         else:
             self.create_gen = self.get_generator(
-                self.dataset, num_items=self._num_items, data_loader_output=data_loader_output)
+                self.dataset, num_items=self._num_items, data_loader_output=data_loader_output,filename=filename)
 
     def populate_update_gen(self, fields_to_update=None, expiration=0):
         if self.dataset == "emp":
@@ -5512,28 +5638,31 @@ class FTSBaseTest(unittest.TestCase):
             task.result()
         self.log.info("Loading phase complete!")
 
-    def async_load_data(self, generator=None, data_loader_output=False):
+    def async_load_data(self, generator=None, data_loader_output=False,filename=None,dataset=None):
         """
          For use to run with parallel tasks like rebalance, failover etc
         """
         load_tasks = []
-        self.populate_create_gen(data_loader_output=data_loader_output)
+        self.populate_create_gen(data_loader_output=data_loader_output,filename=filename)
         if self.compare_es and self.container_type != 'collection':
             if self.container_type == 'bucket':
                 gen = copy.deepcopy(self.create_gen)
+                gen.reset()
                 if isinstance(gen, list):
                     for g in gen:
                         load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
                                                                      gen=g,
-                                                                     op_type='create'))
+                                                                     op_type='create',
+                                                                     dataset=dataset))
                 else:
                     load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
                                                                  gen=gen,
-                                                                 op_type='create'))
+                                                                 op_type='create',
+                                                                 dataset=dataset))
         load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(self.create_gen)
         return load_tasks
 
-    def run_query_and_compare(self, index=None, es_index_name=None, n1ql_executor=None, use_collections=False):
+    def run_query_and_compare(self, index=None, es_index_name=None, n1ql_executor=None, use_collections=False,dataset=None):
         """
         Runs every fts query and es_query and compares them as a single task
         Runs as many tasks as there are queries
@@ -5548,7 +5677,8 @@ class FTSBaseTest(unittest.TestCase):
                 es_index_name=es_index_name,
                 query_index=count,
                 n1ql_executor=n1ql_executor,
-                use_collections=use_collections))
+                use_collections=use_collections,
+                dataset=dataset))
 
         num_queries = len(tasks)
 
