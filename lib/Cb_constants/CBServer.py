@@ -71,6 +71,5 @@ class CbServer(object):
     rest_username = "cbadminbucket"
     rest_password = "password"
 
-    pod = None
-    tenant = None
-    cluster_id = None
+    capella_credentials = None
+    capella_cluster_id = None

@@ -78,7 +78,8 @@ except Exception as e:
 # import stacktracer
 # stacktracer.trace_start("trace.html",interval=30,auto=True) # Set auto flag to always update file!
 
-from lib.capella.internal_api import capella_utils as CapellaAPI
+from lib.capella.utils import CapellaAPI
+import lib.capella.utils as capella_utils
 
 CONCURRENCY_LOCK = Semaphore(THROUGHPUT_CONCURRENCY)
 PENDING = 'PENDING'
@@ -710,20 +711,16 @@ class CapellaRebalanceTask(Task):
     def __init__(self, to_add, to_remove, services, cluster_config):
         Task.__init__(self, "CapellaRebalanceTask")
 
-        self.rest_username = cluster_config.username
-        self.rest_password = cluster_config.password
-
-        provider, _, compute, disk_type, disk_iops, disk_size = CapellaAPI.spec_options_from_input(TestInputSingleton.input)
+        provider, _, compute, disk_type, disk_iops, disk_size = capella_utils.spec_options_from_input(TestInputSingleton.input)
 
         # get current servers list
         # remove to_remove
         # add to_add
 
-        self.pod = CbServer.pod
-        self.tenant = CbServer.tenant
-        self.cluster_id = CbServer.cluster_id
+        self.cluster_id = CbServer.capella_cluster_id
+        self.capella_api = CapellaAPI(CbServer.capella_credentials)
 
-        servers = CapellaAPI.get_nodes_formatted(self.pod, self.tenant, self.cluster_id)
+        servers = self.capella_api.get_nodes_formatted(self.cluster_id)
 
         final_servers = []
         remove_ips = [server.ip for server in to_remove]
@@ -737,18 +734,14 @@ class CapellaRebalanceTask(Task):
                 server.services = services[i] or ["kv"]
             final_servers.append(server)
 
-        services_count = CapellaAPI.get_service_counts(final_servers)
-        scale_params = CapellaAPI.create_specs(provider, services_count, compute, disk_type, disk_iops, disk_size)
+        services_count = capella_utils.get_service_counts(final_servers)
+        scale_params = capella_utils.create_specs(provider, services_count, compute, disk_type, disk_iops, disk_size)
         self.scale_params = {"specs": scale_params}
         self.cluster_config = cluster_config
 
     def execute(self, task_manager):
         try:
-            response, content = CapellaAPI.scale(
-                self.pod, self.tenant, self.cluster_id, self.scale_params)
-            if response.status != 202:
-                print(content)
-            assert response.status == 202
+            self.capella_api.update_specs(self.cluster_id, self.scale_params)
             self.state = CHECKING
             task_manager.schedule(self)
         except Exception as e:
@@ -756,25 +749,14 @@ class CapellaRebalanceTask(Task):
             self.set_exception(e)
 
     def check(self, task_manager):
-        content = CapellaAPI.jobs(self.pod, self.tenant, self.cluster_id)
-        state = CapellaAPI.get_cluster_state(
-            self.pod, self.tenant, self.cluster_id)
-        if content.get("data") or state != "healthy":
-            for data in content.get("data"):
-                data = data.get("data")
-                if data.get("clusterId") == self.cluster_id:
-                    step, progress = data.get("currentStep"), data.get(
-                        "completionPercentage")
-                    self.log.info("{}: Status=={}, State=={}, Progress=={}%".format(
-                        "Scaling", state, step, progress))
-            task_manager.schedule(self, 10)
-        else:
-            servers = CapellaAPI.get_nodes_formatted(
-                self.pod, self.tenant, self.cluster_id, self.rest_username, self.rest_password)
+        complete = self.capella_api.wait_for_cluster_step(self.cluster_id, "Scaling")
+        if complete:
+            servers = self.capella_api.get_nodes_formatted(self.cluster_id, CbServer.rest_username, CbServer.rest_password)
             self.cluster_config.update_servers(servers)
             self.state = FINISHED
             self.set_result(True)
-
+        else:
+            task_manager.schedule(self, 10)
 
 class RebalanceTask(Task):
     def __init__(self, servers, to_add=[], to_remove=[],

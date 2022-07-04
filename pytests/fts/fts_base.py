@@ -53,8 +53,8 @@ from couchbase_cli import CouchbaseCLI
 from pytests.security.x509_multiple_CA_util import x509main
 from lib.SystemEventLogLib.Events import EventHelper
 from lib import global_vars
-from lib.capella.internal_api import capella_utils as CapellaAPI
-from lib.capella.internal_api import pod, tenant
+from lib.capella.utils import CapellaAPI, CapellaCredentials
+import lib.capella.utils as capella_utils
 
 class RenameNodeException(FTSException):
     """Exception thrown when converting ip to hostname failed
@@ -3839,7 +3839,7 @@ class FTSBaseTest(unittest.TestCase):
             else:
                 services_count[service] = 1
 
-        config = CapellaAPI.create_capella_config(self._input, services_count)
+        config = capella_utils.create_capella_config(self._input, services_count)
 
         return config
 
@@ -3848,28 +3848,22 @@ class FTSBaseTest(unittest.TestCase):
         CbServer.use_https = True
         CbServer.rest_username = self._input.membase_settings.rest_username
         CbServer.rest_password = self._input.membase_settings.rest_password
-        self.pod = pod(self._input.capella["pod"])
-        self.tenant = tenant(
-            self._input.capella["tenant_id"],
-            self._input.capella["capella_user"],
-            self._input.capella["capella_pwd"],
-        )
-        self.tenant.project_id = self._input.capella["project_id"]
-        CbServer.pod = self.pod
-        CbServer.tenant = self.tenant
+
+        capella_credentials = CapellaCredentials(self._input.capella)
+        CbServer.capella_credentials = capella_credentials
+
+        self.capella_api = CapellaAPI(capella_credentials)
 
         cluster_details = self.create_capella_config()
 
-        cluster_id, _, _ = CapellaAPI.create_cluster(self.pod, self.tenant, cluster_details)
+        cluster_id = self.capella_api.create_cluster_and_wait(cluster_details)
 
         self.cluster_id = cluster_id
-        CbServer.cluster_id = cluster_id
+        CbServer.capella_cluster_id = cluster_id
 
-        CapellaAPI.add_allowed_ip(self.pod, self.tenant, self.cluster_id)
-        CapellaAPI.create_db_user(self.pod, self.tenant, self.cluster_id, self._input.membase_settings.rest_username, self._input.membase_settings.rest_password)
+        self.capella_api.create_db_user(cluster_id, self._input.membase_settings.rest_username, self._input.membase_settings.rest_password)
 
-        servers = CapellaAPI.get_nodes_formatted(
-            self.pod, self.tenant, self.cluster_id, self._input.membase_settings.rest_username, self._input.membase_settings.rest_password)
+        servers = self.capella_api.get_nodes_formatted(cluster_id, self._input.membase_settings.rest_username, self._input.membase_settings.rest_password)
         for server in self._input.servers:
             server.dummy = True
         for i, server in enumerate(servers):
@@ -4028,7 +4022,7 @@ class FTSBaseTest(unittest.TestCase):
     def tearDown(self):
         """Clusters cleanup"""
         if self.capella_run:
-            CapellaAPI.destroy_cluster(self.pod, self.tenant, self.cluster_id)
+            self.capella_api.delete_cluster(self.cluster_id)
         sys_event_validation_failure = None
         if self.validate_system_event_logs:
             sys_event_validation_failure = \
