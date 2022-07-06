@@ -212,17 +212,19 @@ class CollectionsIndexesWithMissingKeys(BaseSecondaryIndexingTests):
         index_gen1 = QueryDefinition(index_name='idx1', index_fields=['age'])
         query = index_gen1.generate_index_create_query(namespace=collection_namespace, defer_build=False)
         self.run_cbq_query(query=query)
+        self.sleep(60, "Waiting some time before checking the index status")
         self.wait_until_indexes_online()
         index_status = self.index_rest.get_indexer_metadata()['status']
         node1, node2 = None, None
         for index in index_status:
             index_host = index['hosts'][0].split(':')[0]
             for server in self.servers:
-                if index_host == server.ip:
+                if index_host == server.ip and node1 is None:
                     node1 = f"{server.ip}:{self.node_port}"
-                else:
+                elif node2 is None:
                     node2 = f"{server.ip}:{self.node_port}"
-
+                if node1 and node2:
+                    break
         index_gen2 = QueryDefinition(index_name='idx2', index_fields=['city'])
         query = index_gen2.generate_index_create_query(namespace=collection_namespace, defer_build=False,
                                                        deploy_node_info=node2)
