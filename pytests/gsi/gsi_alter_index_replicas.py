@@ -26,7 +26,8 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         self.decrement_from_server_group = self.input.param('decrement_from_server_group', False)
         self.flush_bucket = self.input.param('flush_bucket', False)
         self.alter_index_error = ''
-        self.shell.execute_cbworkloadgen(self.rest.username, self.rest.password, 400000, 100, "default", 1024, '-j')
+        # No need for this step as data has already been loaded into the bucket
+        # self.shell.execute_cbworkloadgen(self.rest.username, self.rest.password, 400000, 100, "default", 1024, '-j')
 
     def suite_setUp(self):
         pass
