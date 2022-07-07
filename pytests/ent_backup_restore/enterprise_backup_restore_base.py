@@ -166,7 +166,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.short_help_flag = "h"
             self.cygwin_bin_path = WIN_CYGWIN_BIN_PATH
             self.rfc3339_date = "date +%s --date='{0} seconds' | ".format(self.replace_ttl_with) + \
-                                "{0}xargs -I {{}} date --date=\"@'{{}}'\" --rfc-3339=seconds | " \
+                                "{0}xargs -I {{}} date --date=@'{{}}' --rfc-3339=seconds | " \
                                     .format(self.cygwin_bin_path) + \
                                 "sed 's/ /T/'"
             win_format = "C:/Program Files"
@@ -2583,9 +2583,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 restore_buckets_items[bucket.name] = 63
             if len(list(bk_file_data[bucket.name].keys())) != \
                     int(restore_buckets_items[bucket.name]):
-                self.fail("Total keys do not match")
-            items_info = rest.get_items_info(list(bk_file_data[bucket.name].keys()),
-                                             bucket.name)
+                self.fail(f"Total keys do not match. Expected: {len(bk_file_data[bucket.name])}  Found: {restore_buckets_items[bucket.name]}")
+            items_info = rest.get_items_info(list(bk_file_data[bucket.name].keys()), bucket.name)
             ttl_matched = True
             for key in list(bk_file_data[bucket.name].keys()):
                 if items_info[key]['meta']['expiration'] != int(ttl_set):
