@@ -136,6 +136,8 @@ class EventingBaseTest(QueryHelperTests):
         else:
             self.bucket_size = self.couchstore_bucket_quota
         self.metadata_bucket_size = 2 * self.bucket_size
+        self.multi_collection_function = self.input.param(
+            'multi_collection_function', False)
         log.info("==============  EventingBaseTest setup has completed ==============")
 
     def tearDown(self):

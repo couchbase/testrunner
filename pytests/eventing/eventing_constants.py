@@ -65,6 +65,9 @@ class HANDLER_CODE:
     CANCEL_TIMER_RECOVERY='handler_code/cancel_timer_recovery.js'
     BUCKET_OP_EXPIRED_RECOVERY='handler_code/bucket_op_expired_recovery.js'
     N1QL_DELETE_QUERY_TEST='handler_code/n1ql_delete_query_test.js'
+    ADVANCED_BUCKET_OP_MULTI_COLLECTION='handler_code/multi_collection/advanced_bucket_op_multi_collection.js'
+    SBM_MULTI_COLLECTION = 'handler_code/multi_collection/sbm_multi_collection.js'
+    TIMERS_MULTI_COLLECTION = 'handler_code/multi_collection/timers_multi_collection.js'
 
 class HANDLER_CODE_CURL:
     BUCKET_OP_WITH_CURL = 'handler_code/curl/bucket_op_curl.js'
@@ -82,6 +85,7 @@ class HANDLER_CODE_CURL:
     TIMER_OP_WITH_CURL_JENKINS= 'handler_code/curl/timer_op_curl_jenkins.js'
     BUCKET_OP_WITH_CURL_BEARER = 'handler_code/curl/bucket_op_curl_bearer.js'
     BUCKET_OP_WITH_CURL_COOKIE = 'handler_code/curl/bucket_op_curl_get_cookies.js'
+    CURL_MULTI_COLLECTION = 'handler_code/multi_collection/curl_multi_collection.js'
 
 
 class HANDLER_CODE_ERROR:
