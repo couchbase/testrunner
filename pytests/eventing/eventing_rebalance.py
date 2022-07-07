@@ -72,6 +72,14 @@ class EventingRebalance(EventingBaseTest):
             self.handler_code = HANDLER_CODE.CANCEL_TIMER_REBALANCE
         elif handler_code == 'bucket_op_expired':
             self.handler_code = HANDLER_CODE.BUCKET_OP_EXPIRED
+        elif handler_code == 'multi_collection_bucket_op':
+            self.handler_code = HANDLER_CODE.ADVANCED_BUCKET_OP_MULTI_COLLECTION
+        elif handler_code == 'multi_collection_curl':
+            self.handler_code = HANDLER_CODE_CURL.CURL_MULTI_COLLECTION
+        elif handler_code == 'multi_collection_sbm':
+            self.handler_code = HANDLER_CODE.SBM_MULTI_COLLECTION
+        elif handler_code == 'multi_collection_timers':
+            self.handler_code = HANDLER_CODE.TIMERS_MULTI_COLLECTION
         else:
             self.handler_code = "handler_code/ABO/insert_rebalance.js"
         force_disable_new_orchestration = self.input.param('force_disable_new_orchestration', False)
@@ -452,7 +460,16 @@ class EventingRebalance(EventingBaseTest):
     def test_rebalance_in_with_different_topologies(self):
         gen_load_del = copy.deepcopy(self.gens_load)
         self.services_in = self.input.param("services_in")
-        body = self.create_save_function_body(self.function_name, self.handler_code)
+        if self.multi_collection_function:
+            if self.is_sbm:
+                binding = ["src_bucket.src_bucket.*.*.rw"]
+            else:
+                binding = ["dst_bucket.dst_bucket.*.*.rw"]
+            body = self.create_function_with_collection(
+                self.function_name, self.handler_code,
+                src_namespace="src_bucket.*.*", collection_bindings=binding)
+        else:
+            body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
         if not self.is_expired:
@@ -501,7 +518,16 @@ class EventingRebalance(EventingBaseTest):
     def test_rebalance_out_with_different_topologies(self):
         gen_load_del = copy.deepcopy(self.gens_load)
         self.server_out = self.input.param("server_out")
-        body = self.create_save_function_body(self.function_name, self.handler_code)
+        if self.multi_collection_function:
+            if self.is_sbm:
+                binding = ["src_bucket.src_bucket._default.*.rw"]
+            else:
+                binding = ["dst_bucket.dst_bucket._default.*.rw"]
+            body = self.create_function_with_collection(
+                self.function_name, self.handler_code,
+                src_namespace="src_bucket.*.*", collection_bindings=binding)
+        else:
+            body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
         if not self.is_expired:
@@ -551,7 +577,16 @@ class EventingRebalance(EventingBaseTest):
         gen_load_del = copy.deepcopy(self.gens_load)
         self.server_out = self.input.param("server_out")
         self.services_in = self.input.param("services_in")
-        body = self.create_save_function_body(self.function_name, self.handler_code)
+        if self.multi_collection_function:
+            if self.is_sbm:
+                binding = ["src_bucket.src_bucket.*.*.rw"]
+            else:
+                binding = ["dst_bucket.dst_bucket.*.*.rw"]
+            body = self.create_function_with_collection(
+                self.function_name, self.handler_code,
+                src_namespace="src_bucket.*.*", collection_bindings=binding)
+        else:
+            body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
         if not self.is_expired:
