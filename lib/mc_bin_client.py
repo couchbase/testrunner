@@ -718,7 +718,7 @@ class MemcachedClient(KeepRefs):
         for k, v in opaqued.items():
             self._set_vbucket(v, vbucket, scope=scope, collection=collection)
             vbs.add(self.vbucketId)
-            self._sendCmd(memcacheConstants.CMD_GETQ, v, '', k, scope=scope, collection=collection)
+            self._sendCmd(memcacheConstants.CMD_GET, v, '', k, scope=scope, collection=collection)
 
         for vb in vbs:
             self.vbucketId = vb
@@ -758,7 +758,7 @@ class MemcachedClient(KeepRefs):
         for opaque, kv in opaqued.items():
             self._set_vbucket(kv[0], vbucket, scope=scope, collection=collection)
             vbs.add(self.vbucketId)
-            self._sendCmd(memcacheConstants.CMD_SETQ, kv[0], kv[1], opaque, extra, scope=scope, collection=collection)
+            self._sendCmd(memcacheConstants.CMD_SET, kv[0], kv[1], opaque, extra, scope=scope, collection=collection)
 
         for vb in vbs:
             self.vbucketId = vb

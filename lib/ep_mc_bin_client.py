@@ -483,7 +483,7 @@ class MemcachedClient(KeepRefs):
         terminal=len(opaqued)+10
         # Send all of the keys in quiet
         for k, v in opaqued.items():
-            self._sendCmd(memcacheConstants.CMD_GETQ, v, '', k, scope=scope, collection=collection)
+            self._sendCmd(memcacheConstants.CMD_GET, v, '', k, scope=scope, collection=collection)
 
         self._sendCmd(memcacheConstants.CMD_NOOP, '', '', terminal)
 
@@ -513,7 +513,7 @@ class MemcachedClient(KeepRefs):
 
         # Send all of the keys in quiet
         for opaque, kv in opaqued.items():
-            self._sendCmd(memcacheConstants.CMD_SETQ, kv[0], kv[1], opaque, extra, scope=scope, collection=collection)
+            self._sendCmd(memcacheConstants.CMD_SET, kv[0], kv[1], opaque, extra, scope=scope, collection=collection)
 
         self._sendCmd(memcacheConstants.CMD_NOOP, '', '', terminal)
 
