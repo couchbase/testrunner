@@ -1237,7 +1237,7 @@ def main():
         correct_build_format = False
         if "version" in input.test_params:
             build_version = input.test_params["version"]
-            build_pattern = re.compile("\d\d?\.\d\.\d-\d{3,4}$")
+            build_pattern = re.compile("\d\d?\.\d\.\d-\d{3,5}$")
             if input.test_params["version"][:5] in COUCHBASE_VERSIONS and \
                 bool(build_pattern.match(build_version)):
                 correct_build_format = True
