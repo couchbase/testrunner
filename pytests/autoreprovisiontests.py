@@ -3,14 +3,13 @@ import time
 import unittest
 
 import logger
+from TestInput import TestInputSingleton
 from membase.api.exception import RebalanceFailedException
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
-
-from TestInput import TestInputSingleton
 from security.rbac_base import RbacBase
 
 log = logger.Logger.get_logger()
@@ -38,11 +37,11 @@ class AutoReprovisionBaseTest(unittest.TestCase):
         # Add built-in user
         testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', servers[0])
-   
+
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(servers[0]), 'builtin')
-   
+
         log.info("==============  common_setup was finished for test #{0} {1} ==============" \
                  .format(testcase.case_number, testcase._testMethodName))
 
@@ -185,6 +184,9 @@ class AutoReprovisionTests(unittest.TestCase):
         self.assertEqual(settings.enabled, True)
         self.assertEqual(settings.max_nodes, 1)
         self.assertEqual(settings.count, 0)
+
+    def suite_setUp(self):
+        pass
 
     def test_enable(self):
         status = self.rest.update_autoreprovision_settings(True, 2)
@@ -367,18 +369,20 @@ class AutoReprovisionTests(unittest.TestCase):
 
     def test_node_memcached_failure(self):
         timeout = self.timeout // 2
+        failover_timeout = (timeout +
+                            AutoReprovisionBaseTest.MAX_FAIL_DETECT_TIME)
         status = self.rest.update_autoreprovision_settings(True, 1)
         if not status:
             self.fail('failed to change autoreprovision_settings!')
         self.sleep(5)
         self._pause_couchbase(self.server_fail)
         self.sleep(5)
-        AutoReprovisionBaseTest.wait_for_warmup_or_assert(self.master, 1,
-                                                          timeout + AutoReprovisionBaseTest.MAX_FAIL_DETECT_TIME,
-                                                          self)
+        AutoReprovisionBaseTest.wait_for_failover_or_assert(self.master, 1,
+                                                            failover_timeout,
+                                                            self)
         RemoteUtilHelper.common_basic_setup([self.server_fail])
         AutoReprovisionBaseTest.wait_for_failover_or_assert(self.master, 0,
-                                                            timeout + AutoReprovisionBaseTest.MAX_FAIL_DETECT_TIME,
+                                                            failover_timeout,
                                                             self)
         helper = RestHelper(self.rest)
         self.assertTrue(helper.is_cluster_healthy(), "cluster status is not healthy")
