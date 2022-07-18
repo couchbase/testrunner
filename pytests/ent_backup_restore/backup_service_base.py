@@ -1372,7 +1372,7 @@ class HistoryFile:
         """
         chunk_size = 10000
         for i in range(0, len(content), chunk_size):
-            self.remote_shell.execute_command(f"printf {shlex.quote(content[i:i+chunk_size])} >> {self.history_file}")
+            self.remote_shell.execute_command(f"printf {shlex.quote(content[i:i+chunk_size])} >> {self.history_file}", debug=False)
 
     def history_file_delete_last_entry(self):
         """ History file delete last entry

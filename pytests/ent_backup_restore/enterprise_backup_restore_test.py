@@ -1,4 +1,4 @@
-import os, re, copy, json, subprocess
+import os, re, copy, json, subprocess, datetime
 from random import randrange, randint, choice
 from threading import Thread
 
@@ -2387,7 +2387,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.sleep(30)
         output, error = self.backup_cluster()
         if error or not self._check_output("Backup completed successfully", output):
-            self.fail("Taking cluster backup failed.")
+            self.fail(output)
         status, output, message = self.backup_list()
         if not status:
             self.fail(message)
@@ -3680,7 +3680,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.log.info("Replication created successfully")
             gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
             tasks = self._async_load_all_buckets(self.master, gen, "create", 0)
-            self.sleep(10)
+
+            reps = rest_src.get_replications()
+            start_time = datetime.datetime.now()
+            while reps[0]["status"] != "running" or reps[0]["changesLeft"] > 0:
+                if (datetime.datetime.now() - start_time).total_seconds() > 600:
+                    self.fail("Timed out waiting for replications")
+                self.sleep(10, "Waiting for replication...")
+                reps = rest_src.get_replications()
             self.backup_create()
             self.backup_cluster_validate()
             self.backup_restore_validate(compare_uuid=False, seqno_compare_function="<=")

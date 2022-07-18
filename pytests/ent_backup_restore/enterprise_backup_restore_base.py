@@ -1950,7 +1950,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             cert_file_location = WIN_TMP_PATH_RAW + "cert.pem"
         shell = RemoteMachineShellConnection(server_host)
         cmd = "%s/couchbase-cli ssl-manage -c %s:%s -u Administrator -p password " \
-              " --cluster-cert-info > %s" % (self.cli_command_location,
+              " --regenerate-cert %s" % (self.cli_command_location,
                                              server_cert.ip,
                                              server_cert.port,
                                              cert_file_location)

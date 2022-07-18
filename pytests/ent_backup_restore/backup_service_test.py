@@ -1753,20 +1753,23 @@ class BackupServiceTest(BackupServiceBase):
             history.history_file_delete_last_entry()
             history.history_file_append(last_entry)
 
-        # Take history file to tipping over point
-        for i in range(0, no_of_backups):
-            self.take_one_off_backup("active", repo_name, i < 1, 20, 20)
-
-            if i == no_of_backups - 1:
-                size_of_entry = size_of_entry + remainder
-
-            if i < 1:
-                pad_last_entry(size_of_entry - len(history.history_file_get_timestamp() + '\n'))
-            else:
-                pad_last_entry(size_of_entry)
-
         # List of tasks that should exist after task rotation
-        remaining_tasks = []
+        remaining_tasks = [None] * no_of_backups
+
+        # Take history file to tipping over point
+        # We must rotate twice, since this is how many log files we retain
+        for j in range(2):
+            for i in range(0, no_of_backups):
+                remaining_tasks[i] = self.take_one_off_backup("active", repo_name, i < 1, 20, 20)
+
+                if i == no_of_backups - 1:
+                    size_of_entry = size_of_entry + remainder
+
+                if i < 1:
+                    pad_last_entry(size_of_entry - len(history.history_file_get_timestamp() + '\n'))
+                else:
+                    pad_last_entry(size_of_entry)
+            history.history_file = history.history_file[:-1] + "1"
 
         # Advance 2 days and take a backup to trigger history rotation (New contents over threshold get appended to next history file)
         self.time.change_system_time("+2 days")
