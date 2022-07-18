@@ -1237,6 +1237,10 @@ class FTSIndex:
             self.name,
             rest.ip))
         rest.create_fts_index(self.name, self.index_definition)
+        if self.collection_index:
+            self.name = f"{self._source_name}.{self.scope}.{self.name}"
+        else:
+            self.name = f"{self._source_name}._default.{self.name}"
         time.sleep(2)
         self.__cluster.get_indexes().append(self)
         self.uuid = self.get_uuid()
@@ -1251,6 +1255,10 @@ class FTSIndex:
             self.name,
             rest.ip))
         rest.create_fts_index(self.name, self.index_definition)
+        if self.collection_index:
+            self.name = f"{self._source_name}.{self.scope}.{self.name}"
+        else:
+            self.name = f"{self._source_name}._default.{self.name}"
         self.__cluster.get_indexes().append(self)
 
     def update(self, rest=None):
