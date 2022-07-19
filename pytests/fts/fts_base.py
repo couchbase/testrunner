@@ -4311,7 +4311,7 @@ class FTSBaseTest(unittest.TestCase):
             quota_percent = None
 
         dgm_run = self._input.param("dgm_run", 0)
-        if dgm_run or self.__bucket_storage == "magma":
+        if dgm_run or (self.__bucket_storage == "magma" and int(self._active_resident_ratio) < 100):
             # buckets cannot be created if size<100MB
             bucket_size = 256
         elif quota_percent is not None:
