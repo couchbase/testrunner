@@ -557,7 +557,7 @@ class QueryEarlyFilterTests(QueryTests):
         explain_plan = self.run_cbq_query(explain_query, query_context='default:`travel-sample`.inventory')
         # this will not be able to put order at the beginning of the sequence
         self.assertTrue(explain_plan['results'][0]['plan']['~children'][1]['#operator'] == 'Order', f"Order is not being applied after fetch, it should be. please check explain plan {explain_plan}")
-        self.assertTrue(explain_plan['results'][0]['plan']['~children'][2]['#operator'] == 'Offset', f"Order is not being applied after fetch, it should be. please check explain plan {explain_plan}")
+        self.assertTrue(explain_plan['results'][0]['plan']['~children'][2]['#operator'] == 'Limit', f"Limit is not being applied after fetch, it should be. please check explain plan {explain_plan}")
 
 
     def test_early_order_negative_distinct(self):
@@ -569,7 +569,7 @@ class QueryEarlyFilterTests(QueryTests):
             primary_query = "SELECT DISTINCT city, name, address FROM landmark use index(`def_inventory_airline_primary`) WHERE city IS NOT MISSING ORDER BY name, city DESC OFFSET 100 LIMIT 5"
             explain_query = "EXPLAIN " + select_query
             explain_plan = self.run_cbq_query(explain_query, query_context='default:`travel-sample`.inventory')
-            self.assertTrue("ix_landmark_city_name" in str(explain_plan), f"Query is not using the correct index! check explain plan {explain_plan}")
+            self.assertTrue("ix_landmark_city_name" in str(explain_plan) or "def_inventory_landmark_city" in str(explain_plan), f"Query is not using the correct index! check explain plan {explain_plan}")
             self.assertTrue("index_keys" not in str(explain_plan), f"We expect early filter to take place here but it does not, please check plan {explain_plan}")
             self.assertTrue("'_index_key ((`landmark`.`city`))'" not in str(explain_plan), f"The wrong key is being early filtered! please check explain plan {explain_plan}")
             self.assertTrue("'_index_key ((`landmark`.`name`))'" not in str(explain_plan), f"The wrong key is being early filtered! please check explain plan {explain_plan}")
