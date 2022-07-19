@@ -3842,6 +3842,7 @@ class StableTopFTS(FTSBaseTest):
 
         test_query = {"match": "emp", "field": "type"}
         hits, _, _, _ = test_index.execute_query(test_query)
+        self.sleep(120)
         self.assertEqual(hits, 2000, "Test for doc_id special load order is failed.")
 
     def test_partial_rollback_oso(self):
@@ -3960,6 +3961,7 @@ class StableTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete_simple(item_count=900, index=test_index)
         self.wait_for_indexing_complete_simple(item_count=2700, index=test_index_multi)
 
+        self.sleep(120)
         # Run FTS query to fetch count of mutated items post rollback.
         hits2_simple_index, _, _, _ = test_index.execute_query(query)
         self.log.info("Hits for simple index after rollback: %s" % hits2_simple_index)
