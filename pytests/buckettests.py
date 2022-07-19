@@ -72,23 +72,6 @@ class CreateBucketTests(BaseTestCase):
         except BucketCreationException as ex:
             self.log.info(ex)
 
-    def test_win_specific_names(self):
-        version = self._get_cb_version()
-        if self._get_cb_os() != 'windows':
-            self.log.warning('This test is windows specific')
-            return
-        try:
-            self.test_banned_bucket_name()
-        finally:
-            try:
-                self.log.info('Will check if ns_server is running')
-                rest = RestConnection(self.master)
-                self.assertTrue(RestHelper(rest).is_ns_server_running(timeout_in_seconds=60))
-            except:
-                self._reinstall(version)
-                self.fail("ns_server is not running after bucket '%s' creation" %(
-                                           self.bucket_name))
-
     # Bucket creation with names as mentioned in MB-5844(isasl.pw, ns_log)
     def test_valid_bucket_name(self, password='password'):
             tasks = []
