@@ -10,7 +10,7 @@ import threading
 from os.path import basename, splitext
 from multiprocessing import Process
 from pprint import pprint
-sys.path = ["lib", "pytests", "pysystests", "lib/capellaAPI"] + sys.path
+sys.path = ["lib", "pytests", "pysystests"] + sys.path
 
 if sys.hexversion < 0x30706f0:
     sys.exit("Testrunner requires version 3.7.6+ of python (found: " + sys.version + ")")

@@ -1,6 +1,6 @@
 import uuid
 from TestInput import TestInputServer
-from capellaAPI.CapellaAPI import CapellaAPI as CapellaAPIBase
+from capellaAPI.capella.dedicated.CapellaAPI import CapellaAPI as CapellaAPIBase
 import time
 import base64
 import random
