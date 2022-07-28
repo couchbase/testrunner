@@ -2040,15 +2040,6 @@ class StableTopFTS(FTSBaseTest):
             self.log.error(err)
             self.fail("Testcase failed: " + str(err))
 
-    def test_geospatial(self):
-       geo_index = self.create_index_custom_shapes()
-       self.generate_random_geoshape_queries(geo_index, self.num_queries)
-       if self.run_via_n1ql:
-            n1ql_executor = self._cb_cluster
-       else:
-            n1ql_executor = None
-       self.run_query_and_compare(geo_index, n1ql_executor=n1ql_executor,dataset="geojson")
-
     def test_geo_query(self):
         """
         Tests both geo location and bounding box queries

@@ -343,26 +343,6 @@ class ElasticSearchBase(object):
         except Exception as e:
             raise Exception("Could not create ES index : %s" % e)
 
-    def add_circle_ingest_pipeline(self,field = "location"):
-        pipeline_mapping = {
-            "description": "translate circle to polygon",
-            "processors": [
-                {
-                "circle": {
-                    "field": field,
-                    "error_distance": 1.0,
-                    "shape_type": "geo_shape"
-                    }
-                }
-            ]
-        }
-        status, content, _ = self._http_request(
-                self.__connection_url + "_ingest/pipeline/polygonize_es_index",
-                'PUT',
-                json.dumps(pipeline_mapping))
-        if status:
-                self.__log.info("SUCCESS: ES circle ingestion pipeline created")
-
     def populate_es_settings(self, fts_custom_analyzers_def):
         """
         Populates the custom analyzer defintion of the ES Index Definition.
@@ -441,17 +421,16 @@ class ElasticSearchBase(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_bulk_load_ES(self, index_name, gen, op_type='create', batch=5000,dataset=None):
+    def async_bulk_load_ES(self, index_name, gen, op_type='create', batch=5000):
         _task = ESBulkLoadGeneratorTask(es_instance=self,
                                     index_name=index_name,
                                     generator=gen,
                                     op_type=op_type,
-                                    batch=batch,
-                                    dataset=dataset)
+                                    batch=batch)
         self.task_manager.schedule(_task)
         return _task
 
-    def load_bulk_data(self, filename,index_name):
+    def load_bulk_data(self, filename):
         """
         Bulk load to ES from a file
         curl -s -XPOST 172.23.105.25:9200/_bulk --data-binary @req
@@ -463,7 +442,7 @@ class ElasticSearchBase(object):
         """
         try:
             import os
-            url = self.__connection_url + index_name + "/_bulk" 
+            url = self.__connection_url + "/_bulk"
             data = open(filename, "rb").read()
             status, content, _ = self._http_request(url,
                                                     'POST',
@@ -502,10 +481,7 @@ class ElasticSearchBase(object):
         except Exception as e:
             raise e
 
-    def search(self, index_name, query, result_size=1000000,dataset=None): 
-    # the default limit without requiring the scroll API is 10000
-        if dataset == "geojson":
-            result_size=10000
+    def search(self, index_name, query, result_size=1000000):
         """
            This function will be used for search . based on the query
            :param index_name:
