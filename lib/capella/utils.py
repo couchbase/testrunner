@@ -58,6 +58,7 @@ class CapellaAPI:
                 if "ErrClusterInvalidCIDRNotUnique" in resp.text:
                     continue
                 else:
+                    print(f"config: {config}")
                     raise e
         raise Exception("Timeout trying to create cluster")
 
