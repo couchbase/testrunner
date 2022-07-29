@@ -6,7 +6,7 @@ from string import ascii_uppercase
 from string import ascii_lowercase
 from string import digits
 import gzip
-from testconstants import DEWIKI, ENWIKI, ESWIKI, FRWIKI, NAPADATASET
+from testconstants import DEWIKI, ENWIKI, ESWIKI, FRWIKI, NAPADATASET, GEOJSONDATASET
 
 from lib.Cb_constants.CBServer import CbServer
 from .data import FIRST_NAMES, LAST_NAMES, DEPT, LANGUAGES
@@ -608,7 +608,10 @@ class GeoSpatialDataLoader(KVGenerator):
             self.end = int(kwargs['end'])
 
         if op_type == "create":
-            self.read_from_dump()
+            if self.name == "earthquake":
+                self.read_from_dump()
+            elif self.name == "geojson":
+                self.custom_read_from_dump(kwargs['filename'])
         elif op_type == "delete":
             # for deletes, just keep/return empty docs with just type field
             for count in range(self.start, self.end):
@@ -638,6 +641,33 @@ class GeoSpatialDataLoader(KVGenerator):
         except IOError:
             print ("Unable to find file lib/couchbase_helper/"
                        "geospatial/earthquakes.json, data not loaded!")
+
+    def custom_read_from_dump(self,filename="geoshape.json"):
+        count = 0
+        done = False
+        while not done:
+            try:
+                import os
+                filepath = os.path.join("lib","couchbase_helper","geospatial",filename) 
+                f = open(filepath,'r')
+                for doc in json.load(f):
+                    doc['id'] = str(doc['id'])
+                    doc['type'] = 'earthquake' 
+                    self.gen_docs[count] = doc
+                    if count>=self.end:
+                        done = True
+                        f.close()
+                        break
+                    count+=1
+
+            except IOError:
+                print ("Unable to find file " + filepath + ", data not loaded!")
+                geoshape_s3_path = GEOJSONDATASET 
+                print(("Unable to find file " + filepath + "Downloading ..."))
+                import urllib.request, urllib.parse, urllib.error
+                urllib.request.URLopener().retrieve(
+                geoshape_s3_path, filepath)
+                print("Download complete!")
 
     def __next__(self):
         if self.itr >= self.end:
