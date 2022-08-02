@@ -10,6 +10,7 @@ class QueryMeteringTests(QueryTests):
         self.bucket = "default"
         self.doc_count = self.input.param("doc_count", 10)
         self.value_size = self.input.param("value_size", 256)
+        self.with_returning = self.input.param("with_returning", False)
         self.kv_wu, self.kv_ru = 1024, 4096
         self.index_wu, self.index_ru = 1024, 256
         self.doc = {"name": "a"*self.value_size}
@@ -66,11 +67,43 @@ class QueryMeteringTests(QueryTests):
 
     def test_kv_insert(self):
         insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
-        self.run_cbq_query(f'DELETE from {self.bucket}')
+        # MB-53214
+        # self.run_cbq_query(f'DELETE from {self.bucket}')
 
         expected_wu = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_wu)
+        if self.with_returning:
+            insert_query = insert_query + " returning name"
+
+        before_kv_ru, before_kv_wu = self.get_metering_kv(self.bucket)
         result = self.run_cbq_query(insert_query)
+        after_kv_ru, after_kv_wu = self.get_metering_kv(self.bucket)
+
         self.assert_billing_unit(result, expected_wu, unit='wu', service='kv')
+        self.assertTrue("ru" not in result['billingUnits'])
+        self.assertEqual(before_kv_ru, after_kv_ru, f"KV RU before: {before_kv_ru} and after: {after_kv_ru} are different") # expect no KV reads
+
+    def test_kv_upsert(self):
+        upsert_doc_count = math.ceil(self.doc_count/5)
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
+        # MB-53214
+        # self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(insert_query)
+        result = self.run_cbq_query(f'SELECT raw meta().id FROM {self.bucket} LIMIT {upsert_doc_count}')
+        meta_id = result['results']
+        upsert_query = f'UPSERT INTO {self.bucket} (key k, value v) SELECT k , repeat("b", {self.value_size}) as v FROM {meta_id} k'
+
+        expected_wu = upsert_doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_wu)
+        if self.with_returning:
+            upsert_query = upsert_query + " returning name"
+
+        before_kv_ru, before_kv_wu = self.get_metering_kv(self.bucket)
+        result = self.run_cbq_query(upsert_query)
+        after_kv_ru, after_kv_wu = self.get_metering_kv(self.bucket)
+
+        self.assert_billing_unit(result, expected_wu, unit='wu', service='kv')
+        self.assertTrue("ru" not in result['billingUnits'])
+        self.assertEqual(before_kv_ru, after_kv_ru, f"KV RU before: {before_kv_ru} and after: {after_kv_ru} are different") # expect no KV reads
+
 
     def test_kv_delete(self):
         insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
