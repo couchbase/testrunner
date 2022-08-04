@@ -153,6 +153,58 @@ class QueryMeteringTests(QueryTests):
         self.assert_billing_unit(result, expected_ru, unit='ru', service='kv')
         self.assertEqual(result['results'][0]['count'], self.doc_count, f'We expected {self.doc_count} but for diff result: {result}')
 
+    def test_kv_select_meta(self):
+        options = {"expiration": 123456}
+        self.doc["country"] = "France"
+        self.doc_size = len(json.dumps(self.doc))
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v, options o) SELECT uuid() as k , {self.doc} as v, {options} o FROM array_range(0,{self.doc_count}) d'
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(insert_query)
+
+        expected_ru = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru)
+        result = self.run_cbq_query(f'SELECT meta().expiration, country FROM {self.bucket}')
+        self.assert_billing_unit(result, expected_ru, unit='ru', service='kv')
+
+    def test_kv_prepare(self):
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
+        # MB-53214
+        # self.run_cbq_query(f'DELETE from {self.bucket}')
+
+        # Prepare statement should shows no bilingUnits
+        before_kv_ru, before_kv_wu = self.get_metering_kv(self.bucket)
+        result = self.run_cbq_query(f"PREPARE prepared_insert AS {insert_query}")
+        after_kv_ru, after_kv_wu = self.get_metering_kv(self.bucket)
+        self.assertEqual(before_kv_ru, after_kv_ru)
+        self.assertEqual(before_kv_wu, after_kv_wu)
+        self.assertTrue('billingUnits' not in result)
+        
+        expected_wu = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_wu)
+
+        before_kv_ru, before_kv_wu = self.get_metering_kv(self.bucket)
+        result = self.run_cbq_query(f"EXECUTE prepared_insert")
+        after_kv_ru, after_kv_wu = self.get_metering_kv(self.bucket)
+
+        self.assert_billing_unit(result, expected_wu, unit='wu', service='kv')
+        self.assertTrue("ru" not in result['billingUnits'])
+        self.assertEqual(before_kv_ru, after_kv_ru, f"KV RU before: {before_kv_ru} and after: {after_kv_ru} are different") # expect no KV reads
+
+    def test_kv_inline_udf(self):
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(insert_query)
+
+        # Create function should shows no bilingUnits
+        before_kv_ru, before_kv_wu = self.get_metering_kv(self.bucket)
+        result = self.run_cbq_query(f"CREATE or REPLACE FUNCTION select_func() {{(SELECT * FROM {self.bucket})}}")
+        after_kv_ru, after_kv_wu = self.get_metering_kv(self.bucket)
+        self.assertEqual(before_kv_ru, after_kv_ru)
+        self.assertEqual(before_kv_wu, after_kv_wu)
+        self.assertTrue('billingUnits' not in result)
+
+        expected_ru = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru)
+        result = self.run_cbq_query(f'EXECUTE FUNCTION select_func()')
+        self.assert_billing_unit(result, expected_ru, unit='ru', service='kv')
+
     def test_gsi_select(self):
         insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
         self.run_cbq_query(f'DELETE from {self.bucket}')
@@ -187,4 +239,3 @@ class QueryMeteringTests(QueryTests):
         self.assertEqual(expected_index_wu, after_index_wu - before_index_wu)
         self.assertEqual(before_kv_wu, after_kv_wu) # no kv wu
         self.assertEqual(expected_kv_ru, after_kv_ru - before_kv_ru)
-
