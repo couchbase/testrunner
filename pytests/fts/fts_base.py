@@ -5655,7 +5655,6 @@ class FTSBaseTest(unittest.TestCase):
         if self.compare_es and self.container_type != 'collection':
             if self.container_type == 'bucket':
                 gen = copy.deepcopy(self.create_gen)
-                gen.reset()
                 if isinstance(gen, list):
                     for g in gen:
                         load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
@@ -5663,6 +5662,7 @@ class FTSBaseTest(unittest.TestCase):
                                                                      op_type='create',
                                                                      dataset=dataset))
                 else:
+                    gen.reset()
                     load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
                                                                  gen=gen,
                                                                  op_type='create',
