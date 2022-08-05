@@ -5621,7 +5621,7 @@ class FTSBaseTest(unittest.TestCase):
                 self._active_resident_ratio,
                 self.compare_es)
             return
-        elif self.__bucket_storage == 'magma':
+        elif self.__bucket_storage == 'magma' and self._active_resident_ratio != 100:
             conn = RestConnection(self.master)
             stat = CollectionsStats(self.master)
             cluster = Cluster()
