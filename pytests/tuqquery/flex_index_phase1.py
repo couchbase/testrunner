@@ -197,7 +197,7 @@ class FlexIndexTests(QueryTests):
                 failed_to_run_query.append(query_num)
                 continue
             try:
-                self.assertTrue(self.check_if_expected_index_exist(result, ["default_index"]))
+                self.assertTrue(self.check_if_expected_index_exist(result, [self.fts_index.name]))
             except Exception as e:
                 self.log.info("Failed to find fts index name in plan query")
                 self.log.error(e)
@@ -505,7 +505,7 @@ class FlexIndexTests(QueryTests):
 
         self._load_napa_dataset(end=self.num_items)
 
-        fts_index = self.create_fts_index(
+        self.fts_index = self.create_fts_index(
             name="default_index", source_name=self.bucket_name, doc_count=self.num_items)
         if not self.is_index_present("default", "primary_gsi_index", server=self.query_node):
             self.run_cbq_query("create primary index primary_gsi_index on default", server=self.query_node)
@@ -544,7 +544,7 @@ class FlexIndexTests(QueryTests):
                       'ANY c IN children SATISFIES c.gender = "F" AND (c.age > 5 AND c.age <15) '
                       'OR c.first_name LIKE "a%" END ORDER BY address.country,META().id OFFSET 500 LIMIT 100']
 
-        self.wait_for_fts_indexing_complete(fts_index, self.num_items)
+        self.wait_for_fts_indexing_complete(self.fts_index, self.num_items)
 
         failed_to_run_query, not_found_index_in_response, result_mismatch = self.run_query_and_validate(query_list)
         if failed_to_run_query or not_found_index_in_response or result_mismatch:
