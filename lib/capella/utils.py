@@ -1,11 +1,15 @@
 import uuid
 from TestInput import TestInputServer
-from capellaAPI.capella.dedicated.CapellaAPI import CapellaAPI as CapellaAPIBase
+from capellaAPI.capella.dedicated.CapellaAPI import CapellaAPI as CapellaAPIDedicated
+from capellaAPI.capella.serverless.CapellaAPI import CapellaAPI as CapellaAPIServerless
 import time
 import base64
 import random
 import urllib3
 urllib3.disable_warnings()
+import logger
+import requests
+import dns.resolver
 
 class CapellaCredentials:
     def __init__(self, config):
@@ -13,9 +17,32 @@ class CapellaCredentials:
         self.tenant_id = config["tenant_id"]
         self.capella_user = config["capella_user"]
         self.capella_pwd = config["capella_pwd"]
-        self.access_key = config["access_key"]
-        self.secret_key = config["secret_key"]
+        self.access_key = config.get("access_key")
+        self.secret_key = config.get("secret_key")
         self.project_id = config["project_id"]
+        self.token_for_internal_support = config.get("token_for_internal_support")
+
+class ServerlessDatabase:
+    def __init__(self, database_id):
+        self.id = database_id
+
+    def populate(self, info, creds, rest_api_info):
+        self.srv = info["connect"]["srv"]
+        self.data_api = info["connect"]["dataApi"]
+        self.access_key = creds["access"]
+        self.secret_key = creds["secret"]
+        self.rest_srv = rest_api_info['srv']
+        self.admin_username = rest_api_info['couchbaseCreds']['username']
+        self.admin_password = rest_api_info['couchbaseCreds']['password']
+        self.nebula = get_host_from_srv(self.srv)
+        self.rest_host = get_host_from_srv(self.rest_srv)
+
+def get_host_from_srv(srv):
+    srvInfo = {}
+    srv_records = dns.resolver.query('_couchbases._tcp.' + srv, 'SRV')
+    for srv in srv_records:
+        srvInfo['host'] = str(srv.target).rstrip('.')
+    return srvInfo['host']
 
 def base64_encode(string):
     return base64.b64encode(string.encode('utf-8')).decode('utf-8')
@@ -29,12 +56,19 @@ class CapellaAPI:
     def __init__(self, credentials):
         self.tenant_id = credentials.tenant_id
         self.project_id = credentials.project_id
-        self.api = CapellaAPIBase(credentials.pod, credentials.secret_key, credentials.access_key, credentials.capella_user, credentials.capella_pwd)
+        self.api = CapellaAPIDedicated(credentials.pod, credentials.secret_key, credentials.access_key, credentials.capella_user, credentials.capella_pwd)
+        self.serverless_api = CapellaAPIServerless(credentials.pod, credentials.capella_user, credentials.capella_pwd, credentials.token_for_internal_support)
+        self.log = logger.Logger.get_logger()
 
     def get_cluster_info(self, cluster_id):
         resp = self.api.get_cluster_info(cluster_id)
         resp.raise_for_status()
         return resp.json()
+
+    def get_database_info(self, database_id):
+        resp = self.serverless_api.get_serverless_db_info(self.tenant_id, self.project_id, database_id)
+        resp.raise_for_status()
+        return resp.json()["data"]
 
     def get_cluster_srv(self, cluster_id):
         info = self.get_cluster_info(cluster_id)
@@ -43,6 +77,10 @@ class CapellaAPI:
     def get_cluster_state(self, cluster_id):
         info = self.get_cluster_info(cluster_id)
         return info["status"]
+
+    def get_database_state(self, database_id):
+        info = self.get_database_info(database_id)
+        return info["status"]["state"]
 
     def create_cluster(self, config, timeout=1800):
         end_time = time.time() + timeout
@@ -58,7 +96,7 @@ class CapellaAPI:
                 if "ErrClusterInvalidCIDRNotUnique" in resp.text:
                     continue
                 else:
-                    print(f"config: {config}")
+                    self.log.info(f"config: {config}")
                     raise e
         raise Exception("Timeout trying to create cluster")
 
@@ -112,7 +150,7 @@ class CapellaAPI:
             for job in jobs:
                 if job["clusterId"] == cluster_id:
                     step, progress = job["currentStep"], job["completionPercentage"]
-                    print("{}: Status=={}, State=={}, Progress=={}%".format(msg, state, step, progress))
+                    self.log.info("{}: Status=={}, State=={}, Progress=={}%".format(msg, state, step, progress))
             return False
         else:
             return True
@@ -169,6 +207,65 @@ class CapellaAPI:
     def update_specs(self, cluster_id, specs):
         resp = self.api.update_specs(self.tenant_id, self.project_id, cluster_id, specs)
         resp.raise_for_status()
+
+    def create_serverless_database(self, config) -> str:
+        resp = self.serverless_api.create_serverless_database(
+            self.tenant_id, config)
+        resp.raise_for_status()
+        return resp.json()["databaseId"]
+
+    def get_access_to_serverless_dataplane_nodes(self, database_id) -> str:
+        resp = self.serverless_api.get_database_debug_info(database_id=database_id)
+        resp.raise_for_status()
+        dataplane_id = resp.json()['dataplane']['id']
+        resp = self.serverless_api.get_access_to_serverless_dataplane_nodes(dataplane_id)
+        # when you run this API twice against the same public IP, it throws a 500 error. Ignore if the IP has already
+        # been added.
+        if resp.status_code not in [200, 500]:
+            resp.raise_for_status()
+        return resp.json()
+
+    def wait_for_database_deleted(self, database_id, timeout=1800):
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            try:
+                state = self.get_database_state(database_id)
+                msg = {
+                    "database_id": database_id,
+                    "state": state
+                }
+                self.log.info(
+                    "waiting for database to be deleted {}".format(msg))
+            except requests.exceptions.HTTPError as err:
+                if err.response.status_code == 404:
+                    return
+                time.sleep(2)
+        raise Exception("timeout waiting for database to be deleted {}".format(
+            {"database_id": database_id}))
+
+    def wait_for_database_step(self, database_id):
+        state = self.get_database_state(database_id)
+        if state != "healthy":
+            msg = {
+                "database_id": database_id,
+                "state": state
+            }
+            self.log.info("waiting for database to be healthy {}".format(msg))
+            return False
+        else:
+            return True
+
+    def generate_api_keys(self, database_id):
+        resp = self.serverless_api.generate_keys(
+            self.tenant_id, self.project_id, database_id)
+        resp.raise_for_status()
+        return resp.json()
+
+    def delete_serverless_database(self, database_id):
+        resp = self.serverless_api.delete_database(
+            self.tenant_id, self.project_id, database_id)
+        resp.raise_for_status()
+
 
 def format_nodes(nodes, username=None, password=None):
     servers = list()
@@ -295,3 +392,26 @@ def create_capella_config(input, services_count):
                                 "server": server_version}
 
     return config
+
+
+def create_serverless_config(input):
+    provider, region, _, _, _, _ = spec_options_from_input(input)
+
+    config = {
+        "name": str(uuid.uuid4()),
+        "region": region,
+        "provider": provider,
+        "projectId": input.capella["project_id"],
+        "tenantId": input.capella["tenant_id"],
+    }
+
+    return config
+
+
+def set_custom_bucket_width(config, width=None, weight=None):
+    override = {}
+    if width:
+        override["width"] = width
+    if weight:
+        override["weight"] = weight
+    config["overRide"] = override

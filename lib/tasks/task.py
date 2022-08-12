@@ -15,6 +15,7 @@ from multiprocessing import Process, Manager, Semaphore
 from threading import Thread
 from pathlib import Path
 import shutil
+from typing import Dict
 
 import crc32
 import logger
@@ -80,7 +81,7 @@ except Exception as e:
 # import stacktracer
 # stacktracer.trace_start("trace.html",interval=30,auto=True) # Set auto flag to always update file!
 
-from lib.capella.utils import CapellaAPI
+from lib.capella.utils import CapellaAPI, ServerlessDatabase
 import lib.capella.utils as capella_utils
 
 CONCURRENCY_LOCK = Semaphore(THROUGHPUT_CONCURRENCY)
@@ -6680,3 +6681,54 @@ class LogScanTask(Task):
         self.set_result(True)
         self.state = FINISHED
         task_manager.schedule(self)
+
+
+class CreateServerlessDatabaseTask(Task):
+    def __init__(self, api: CapellaAPI, config, databases: Dict[str, ServerlessDatabase]):
+        Task.__init__(self, "CreateServerlessDatabaseTask")
+        self.api = api
+        self.config = config
+        self.databases = databases
+
+    def execute(self, task_manager):
+        try:
+            self.log.info(
+                "creating serverless database {}".format(self.config))
+            self.database_id = self.api.create_serverless_database(self.config)
+            self.databases[self.database_id] = ServerlessDatabase(
+                self.database_id)
+            self.state = CHECKING
+            task_manager.schedule(self)
+        except Exception as e:
+            self.state = FINISHED
+            self.set_exception(e)
+
+    def check(self, task_manager):
+        try:
+            complete = self.api.wait_for_database_step(self.database_id)
+            if complete:
+                self.log.info("serverless database created {}".format(
+                    {"database_id": self.database_id}))
+                self.log.info("allowing ip for serverless database {}".format(
+                    {"database_id": self.database_id}))
+                self.api.allow_my_ip(self.database_id)
+                info = self.api.get_database_info(self.database_id)
+                self.log.info("generating API key for serverless database {}".format(
+                    {"database_id": self.database_id}))
+                creds = self.api.generate_api_keys(self.database_id)
+                # Commented out because if API has already been run against an IP, it throws an error.
+                # Waiting for resolution of https://couchbasecloud.atlassian.net/browse/AV-43066
+                # using hardcoded entries for now. Replace this by manually running the bypass API
+                # self.log.info("Obtaining access to the dataplane nodes")
+                # rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(database_id=self.database_id)
+                rest_api_info = {"couchbaseCreds":{"username": '<Enter Username>',
+                                                "password": '<Enter Password>'},
+                                 "srv": '<Enter srv domain name>'}
+                self.databases[self.database_id].populate(info, creds, rest_api_info)
+                self.state = FINISHED
+                self.set_result(self.database_id)
+            else:
+                task_manager.schedule(self, 5)
+        except Exception as e:
+            self.state = FINISHED
+            self.set_exception(e)
