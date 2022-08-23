@@ -39,12 +39,15 @@ class ServerInfo():
 
 
 class rbacCollectionTest(BaseTestCase):
-    
-    def suite_setUp(self):    
+
+    def suite_setUp(self):
         pass
-    
+
     def suite_tearDown(self):
         pass
+
+    def wait(self):
+        self.sleep(2)
 
     def setUp(self):
         super(rbacCollectionTest, self).setUp()
@@ -69,7 +72,7 @@ class rbacCollectionTest(BaseTestCase):
             test_file.write(temp_cert)
             test_file.close()
             self.certpath = '/tmp/server.crt'
-            
+
 
     def tearDown(self):
         super(rbacCollectionTest, self).tearDown()
@@ -79,7 +82,7 @@ class rbacCollectionTest(BaseTestCase):
     def user_cleanup(self):
         rest_client = RestConnection(self.master)
         self.user_delete(rest_client)
-    
+
     def download_cert(self):
         tmp_path = "/tmp/server.pem"
         for servers in self.servers:
@@ -128,12 +131,12 @@ class rbacCollectionTest(BaseTestCase):
         else:
             self.user_delete_username(RestConnection(self.master),'external',user)
         if collection is None:
-            payload = "name=" + user + "&roles=" + role + "[" + bucket + ":" + scope 
+            payload = "name=" + user + "&roles=" + role + "[" + bucket + ":" + scope
         elif collection is None and scope in None:
-            payload = "name=" + user + "&roles=" + role + "[" + bucket  
+            payload = "name=" + user + "&roles=" + role + "[" + bucket
         else:
-            payload = "name=" + user + "&roles=" + role + "[" + bucket + ":" + scope + ":" + collection 
-        
+            payload = "name=" + user + "&roles=" + role + "[" + bucket + ":" + scope + ":" + collection
+
         if self.auth_type == 'extenalUser':
             payload = payload + "]"
             ExternalUser(user, payload, self.master).user_setup()
@@ -166,9 +169,9 @@ class rbacCollectionTest(BaseTestCase):
         for item in user_list_role:
             if update:
                 user, final_role = self.get_current_roles(item['user'])
-                final_payload = "name=" + item['user'] + "&roles=" + item['role'] + "," + final_role 
+                final_payload = "name=" + item['user'] + "&roles=" + item['role'] + "," + final_role
             else:
-                final_payload = "name=" + item['user'] + "&roles=" + item['role'] 
+                final_payload = "name=" + item['user'] + "&roles=" + item['role']
             self.log.info (final_payload)
             if self.auth_type == 'users':
                 final_payload = final_payload + "&password=password"
@@ -184,7 +187,7 @@ class rbacCollectionTest(BaseTestCase):
             elif self.auth_type == 'externalUser':
                 self.user_delete_username(RestConnection(self.master), 'external', item['user'])
                 ExternalUser(item['user'], final_payload, self.master).user_setup()
-                
+
 
     #Update roles for users
     def update_roles(self,user_details, scope_scope, scope_collection,update=False):
@@ -259,9 +262,8 @@ class rbacCollectionTest(BaseTestCase):
             bucket = details['bucket']
             self.rest_client.delete_bucket(bucket)
             self.rest_client.create_bucket(bucket=bucket, ramQuotaMB=100)
-            self.sleep(10)
+            self.wait()
             self.rest.create_scope_collection(bucket=bucket, scope=scope, collection=collection)
-            self.sleep(10)
         count = 1
         if (access['collection'] is True) and (access['scope'] is True):
             if update:
@@ -324,9 +326,8 @@ class rbacCollectionTest(BaseTestCase):
             bucket = details['bucket']
             self.rest_client.delete_bucket(bucket)
             self.rest_client.create_bucket(bucket=bucket, ramQuotaMB=100)
-            self.sleep(10)
+            self.wait()
             self.rest.create_scope_collection(bucket=bucket, scope=scope, collection=collection)
-            self.sleep(10)
 
         count = 1
         for details in role_details:
@@ -391,9 +392,8 @@ class rbacCollectionTest(BaseTestCase):
                 self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=100)
         self.rest.delete_collection("testbucket", "testscope", "testcollection")
         self.rest.delete_scope("testbucket", "testscope")
-        self.sleep(10)
+        self.wait()
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope", collection="testcollection")
-        self.sleep(10)
         self.create_collection_read_write_user("testuser", "testbucket", "testscope", "testcollection", role='data_writer')
 
         try:
@@ -614,10 +614,9 @@ class rbacCollectionTest(BaseTestCase):
             for i in range(0, number_collections):
                 self.rest.create_scope_collection(bucket=bucket, scope=prefix + "scope" + str(i),
                                                   collection=prefix + "collection" + str(i))
-                self.sleep(10)
                 self.create_collection_read_write_user(prefix + "user" + str(i), bucket, prefix + "scope" + str(i),
                                                        prefix + "collection" + str(i), role="data_writer")
-                self.sleep(10)
+                self.wait()
                 final_list.append(
                     {'bucket': bucket, 'scope': prefix + 'scope' + str(i), 'collection': prefix + 'collection' + str(i),
                      'user': prefix + 'user' + str(i)})
@@ -703,11 +702,9 @@ class rbacCollectionTest(BaseTestCase):
     def test_collection_deletion_while_ops(self):
         self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=100)
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope", collection="testcollection")
-        self.sleep(10)
         self.create_collection_read_write_user("testuser", "testbucket", "testscope", "testcollection", role="data_writer")
-        self.sleep(10)
         client = self.collectionConnection("testscope", "testcollection", "testbucket", "testuser")
-        self.sleep(10)
+        self.wait()
         try:
             create_docs = Thread(name='create_docs', target=self.createBulkDocuments, args=(client, "testscope", "testcollection",))
             create_docs.start()
@@ -725,9 +722,9 @@ class rbacCollectionTest(BaseTestCase):
         try:
             for i in range(0,1000):
                 self.rest.create_scope_collection(bucket="testbucket", scope="testscope" + str(i), collection="testcollection"  + str(i))
-                self.sleep(10)
+
                 self.create_collection_read_write_user("testuser" + str(i), "testbucket" , "testscope" + str(i), "testcollection" + str(i), role="data_writer")
-                self.sleep(10)
+                self.wait()
                 client = self.collectionConnection("testscope" + str(i), "testcollection" + str(i), "testbucket", "testuser" + str(i))
                 result = client.insert("key", "{2:2}",scope="testscope" + str(i),collection="testcollection" + str(i))
         except Exception as e:
@@ -805,12 +802,10 @@ class rbacCollectionTest(BaseTestCase):
     def test_user_deletion_while_ops(self):
         self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=100)
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope", collection="testcollection")
-        self.sleep(10)
         self.create_collection_read_write_user("testuser", "testbucket", "testscope", "testcollection",
                                                role="data_writer")
-        self.sleep(30)
         client = self.collectionConnection("testscope", "testcollection", "testbucket", "testuser")
-        self.sleep(10)
+        self.wait()
         try:
             create_docs = Thread(name='create_docs', target=self.createBulkDocuments,
                                  args=(client, "testscope", "testcollection",))
@@ -826,11 +821,10 @@ class rbacCollectionTest(BaseTestCase):
     def test_user_deletion_recreation(self):
         self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=100)
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope", collection="testcollection")
-        self.sleep(10)
         self.create_collection_read_write_user("testuser", "testbucket", "testscope", "testcollection",
                                                role="data_writer")
         client = self.collectionConnection("testscope", "testcollection", "testbucket", "testuser")
-        self.sleep(30)
+        self.wait()
         result = client.insert("key1", "{2:2}", scope="testscope", collection="testcollection")
         self.rest_client.delete_user_roles("testuser")
         self.rest_client.add_set_builtin_user("testuser","name=testuser&roles=cluster_admin&password=password")
@@ -915,9 +909,8 @@ class rbacCollectionTest(BaseTestCase):
     def add_remove_users_groups(self):
         self.rest_client.delete_bucket("testbucket")
         self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=100)
-        self.sleep(10)
+        self.wait()
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope", collection="testcollection")
-        self.sleep(10)
         ldapGroupBase().add_role_group("testgroup", 'data_writer[testbucket:testscope:testcollection]', None, self.master)
         ldapGroupBase().create_grp_usr_internal(["user1"], self.master, roles=[''], groups="testgroup")
         ldapGroupBase().create_grp_usr_internal(["user2"], self.master, roles=[''], groups="testgroup")
@@ -926,7 +919,7 @@ class rbacCollectionTest(BaseTestCase):
         client = self.collectionConnection("testscope", "testcollection", "testbucket", "user2")
         result = client.insert("user2key", "{2:2}", scope="testscope", collection="testcollection")
         self.rest_client.delete_user_roles("user2")
-        self.sleep(10)
+        self.wait()
         try:
             result = client.insert("user2key_error", "{2:2}", scope="testscope", collection="testcollection")
         except Exception as e:
@@ -937,9 +930,8 @@ class rbacCollectionTest(BaseTestCase):
     def add_remove_groups(self):
         self.rest_client.delete_bucket("testbucket")
         self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=100)
-        self.sleep(10)
+        self.wait()
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope", collection="testcollection")
-        self.sleep(10)
         ldapGroupBase().add_role_group("testgroup", 'data_writer[testbucket:testscope:testcollection]', None, self.master)
         ldapGroupBase().add_role_group("testgroup1", 'data_writer[testbucket:testscope:testcollection]', None,
                                        self.master)
@@ -950,7 +942,7 @@ class rbacCollectionTest(BaseTestCase):
         client = self.collectionConnection("testscope", "testcollection", "testbucket", "user2")
         result = client.insert("user2key", "{2:2}", scope="testscope", collection="testcollection")
         self.rest_client.delete_group('testgroup1')
-        self.sleep(10)
+        self.wait()
         try:
             result = client.insert("user2key_error", "{2:2}", scope="testscope", collection="testcollection")
         except Exception as e:
@@ -969,7 +961,7 @@ class rbacCollectionTest(BaseTestCase):
         header =  {'Content-Type': 'application/x-www-form-urlencoded',
                 'Authorization': 'Basic %s' % authorization,
                 'Accept': '*/*'}
-        self.sleep(10)
+        self.wait()
         status, content, header = rest._http_request(api, 'POST', params=params, headers=header)
         return status, content, header
 
@@ -980,7 +972,7 @@ class rbacCollectionTest(BaseTestCase):
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope", collection="testcollection")
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope1", collection="testcollection")
         self.create_collection_read_write_user('user_scope_admin', 'testbucket', 'testscope', None, role='scope_admin')
-        self.sleep(10)
+        self.wait()
         status, content, header = self.rest_execute('testbucket', 'testscope1', 'collection1','user_scope_admin','password')
         if status == True:
             self.assertTrue(False,'Scope admin can create collection for scope  it does not have access to')
@@ -988,11 +980,11 @@ class rbacCollectionTest(BaseTestCase):
         if status == False:
             self.assertTrue(False,'Scope admin cannot create collection in scope it has access to')
         self.create_collection_read_write_user('user_scope_admin_full', 'testbucket', None, None, role='scope_admin')
-        self.sleep(30)
+        self.wait()
         status, content, header = self.rest_execute('testbucket', 'testscope', 'collection2','user_scope_admin_full','password')
         if status == False:
             self.assertTrue(False,'Scope admin can create collection for scope  it does not have access to')
-        
+
 
 
 
