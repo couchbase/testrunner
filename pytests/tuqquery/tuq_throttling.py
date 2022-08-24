@@ -1,6 +1,7 @@
 from .tuq import QueryTests
 import re
 import requests
+from membase.api.exception import CBQError
 
 class QueryThrottlingTests(QueryTests):
     def setUp(self):
@@ -8,6 +9,7 @@ class QueryThrottlingTests(QueryTests):
         self.bucket = "default"
         self.kv_wu, self.kv_ru = 1024, 4096
         self.index_wu, self.index_ru = 1024, 256
+        self.scope_limit, self.collection_limit = 100, 100
         self.kvThrottleLimit = self.get_throttle_limits(service='kvThrottleLimit')
         self.log.info(f'kvThrottleLimit is {self.kvThrottleLimit}')
 
@@ -115,3 +117,30 @@ class QueryThrottlingTests(QueryTests):
         self.log.info(f'Throttle after, count: {after_throttle_count_total}, seconds: {after_throttle_seconds_total}')
         self.assertEqual(after_throttle_count_total, before_throttle_count_total)
 
+    def test_scope_limit(self):
+        for i in range(self.scope_limit):
+            self.run_cbq_query(f'CREATE SCOPE {self.bucket}.scope{i} IF NOT EXISTS')
+        try:
+            self.run_cbq_query(f'CREATE SCOPE {self.bucket}.scope{self.scope_limit+1}')
+            self.fail(f'We should not be able to create scope beyond limit of {self.scope_limit}')
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 12025)
+            self.assertTrue(f'_:Maximum number of scopes ({self.scope_limit}) for this bucket has been reached' in error['msg'])
+        finally:
+            for i in range(self.scope_limit):
+                self.run_cbq_query(f'DROP SCOPE {self.bucket}.scope{i} IF EXISTS')                
+
+    def test_collection_limit(self):
+        for i in range(self.collection_limit):
+            self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.`_default`.collection{i} IF NOT EXISTS')
+        try:
+            self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.`_default`.collection{self.collection_limit+1}')
+            self.fail(f'We should not be able to create scope beyond limit of {self.collection_limit}')
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 12027)
+            self.assertTrue(f'_:Maximum number of collections ({self.collection_limit}) for this bucket has been reached' in error['msg'])
+        finally:
+            for i in range(self.collection_limit):
+                self.run_cbq_query(f'DROP COLLECTION {self.bucket}.`_default`.collection{i} IF EXISTS')                
