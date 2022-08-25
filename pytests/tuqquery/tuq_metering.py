@@ -11,6 +11,7 @@ class QueryMeteringTests(QueryTests):
         self.doc_count = self.input.param("doc_count", 10)
         self.value_size = self.input.param("value_size", 256)
         self.with_returning = self.input.param("with_returning", False)
+        self.statement = self.input.param("statement", "explain")
         self.kv_wu, self.kv_ru = 1024, 4096
         self.index_wu, self.index_ru = 1024, 256
         self.doc = {"name": "a"*self.value_size}
@@ -239,3 +240,28 @@ class QueryMeteringTests(QueryTests):
         self.assertEqual(expected_index_wu, after_index_wu - before_index_wu)
         self.assertEqual(before_kv_wu, after_kv_wu) # no kv wu
         self.assertEqual(expected_kv_ru, after_kv_ru - before_kv_ru)
+
+    def test_no_rw_unit(self):
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
+        # self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(insert_query)
+        self.run_cbq_query(f'CREATE INDEX idx_name IF NOT EXISTS on {self.bucket}(name)')
+        self.wait_for_all_indexes_online()
+        queries = {
+            'explain': f'EXPLAIN SELECT name, city FROM {self.bucket} WHERE name = repeat("a", {self.value_size})',
+            'advise': f'ADVISE SELECT name, city FROM {self.bucket} WHERE name = repeat("a", {self.value_size})',
+            'catalog': 'SELECT * FROM system:keyspaces',
+            'query1': 'SELECT * FROM array_repeat("a", 10) as t'
+        }
+        before_index_ru, before_index_wu = self.get_metering_index(self.bucket)
+        before_kv_ru, before_kv_wu = self.get_metering_kv(self.bucket)
+        result = self.run_cbq_query(queries[self.statement])
+        after_index_ru, after_index_wu = self.get_metering_index(self.bucket)
+        after_kv_ru, after_kv_wu = self.get_metering_kv(self.bucket)
+
+        # No kv or index RWU
+        self.assertTrue('billingUnits' not in result)
+        self.assertEqual(before_index_ru, after_index_ru)
+        self.assertEqual(before_index_wu, after_index_wu)
+        self.assertEqual(before_kv_wu, after_kv_wu)
+        self.assertEqual(before_kv_ru, after_kv_ru)
