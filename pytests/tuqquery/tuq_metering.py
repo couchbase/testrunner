@@ -129,6 +129,29 @@ class QueryMeteringTests(QueryTests):
         self.assert_billing_unit(result, expected_wu, unit='wu', service='kv')
         self.assert_billing_unit(result, expected_ru, unit='ru', service='kv')
 
+    def test_kv_merge(self):
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d'
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(insert_query)
+
+        doc_read_size = self.doc_key_size + len(json.dumps({"name": "San Francisco"}))
+        doc_write_size = self.doc_key_size + len(json.dumps({"name": "San Francisco","country": "a"*self.value_size}))
+
+        expected_wu = self.doc_count * math.ceil( doc_write_size / self.kv_wu)
+        expected_ru = self.doc_count * math.ceil( doc_read_size / self.kv_ru)
+        
+        merge_query = f'MERGE INTO {self.bucket} t \
+            USING [{{"name": "San Francisco", "country": "{"a"*self.value_size}"}}] source \
+            ON t.name = source.name WHEN MATCHED \
+            THEN UPDATE SET t.country = source.country'
+        result = self.run_cbq_query(merge_query)
+        self.assert_billing_unit(result, expected_wu, unit='wu', service='kv')
+        # Ru will include sequential scan ru which depends on vbucket placement
+        # self.assert_billing_unit(result, expected_ru, unit='ru', service='kv')
+        actual_ru = result['billingUnits']['ru']['kv']
+        self.assertTrue(actual_ru >= expected_ru)
+        self.assertTrue(actual_ru <= expected_ru+self.doc_count*2)
+
     def test_kv_select(self):
         insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
         self.run_cbq_query(f'DELETE from {self.bucket}')
