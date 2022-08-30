@@ -288,3 +288,79 @@ class QueryMeteringTests(QueryTests):
         self.assertEqual(before_index_wu, after_index_wu)
         self.assertEqual(before_kv_wu, after_kv_wu)
         self.assertEqual(before_kv_ru, after_kv_ru)
+
+    def test_no_rw_scope(self):
+        insert_query = f'INSERT INTO {self.bucket}.s1.c1 (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
+        self.run_cbq_query(f'DROP SCOPE {self.bucket}.s1 IF EXISTS')
+
+        # Create scope
+        before_index_ru, before_index_wu = self.get_metering_index(self.bucket)
+        before_kv_ru, before_kv_wu = self.get_metering_kv(self.bucket)
+        result = self.run_cbq_query(f'CREATE SCOPE {self.bucket}.s1')
+        after_index_ru, after_index_wu = self.get_metering_index(self.bucket)
+        after_kv_ru, after_kv_wu = self.get_metering_kv(self.bucket)
+
+        # No kv or index RWU
+        self.assertTrue('billingUnits' not in result)
+        self.assertEqual(before_index_ru, after_index_ru)
+        self.assertEqual(before_index_wu, after_index_wu)
+        self.assertEqual(before_kv_wu, after_kv_wu)
+        self.assertEqual(before_kv_ru, after_kv_ru)
+
+        self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.s1.c1')
+        self.sleep(2)
+        self.run_cbq_query(insert_query)
+        self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}.s1.c1(name)')
+        self.wait_for_all_indexes_online()
+
+        # Drop scope
+        before_index_ru, before_index_wu = self.get_metering_index(self.bucket)
+        before_kv_ru, before_kv_wu = self.get_metering_kv(self.bucket)
+        result = self.run_cbq_query(f'DROP SCOPE {self.bucket}.s1')
+        after_index_ru, after_index_wu = self.get_metering_index(self.bucket)
+        after_kv_ru, after_kv_wu = self.get_metering_kv(self.bucket)
+
+        # No kv or index RWU
+        self.assertTrue('billingUnits' not in result)
+        self.assertEqual(before_index_ru, after_index_ru)
+        self.assertEqual(before_index_wu, after_index_wu)
+        self.assertEqual(before_kv_wu, after_kv_wu)
+        self.assertEqual(before_kv_ru, after_kv_ru)
+
+    def test_no_rw_collection(self):
+        insert_query = f'INSERT INTO {self.bucket}.s1.c1 (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
+        self.run_cbq_query(f'DROP SCOPE {self.bucket}.s1 IF EXISTS')
+        self.run_cbq_query(f'CREATE SCOPE {self.bucket}.s1')
+
+        # Create collection
+        before_index_ru, before_index_wu = self.get_metering_index(self.bucket)
+        before_kv_ru, before_kv_wu = self.get_metering_kv(self.bucket)
+        result = self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.s1.c1')
+        after_index_ru, after_index_wu = self.get_metering_index(self.bucket)
+        after_kv_ru, after_kv_wu = self.get_metering_kv(self.bucket)
+
+        self.sleep(2)
+        self.run_cbq_query(insert_query)
+        self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}.s1.c1(name)')
+        self.wait_for_all_indexes_online()
+
+        # No kv or index RWU
+        self.assertTrue('billingUnits' not in result)
+        self.assertEqual(before_index_ru, after_index_ru)
+        self.assertEqual(before_index_wu, after_index_wu)
+        self.assertEqual(before_kv_wu, after_kv_wu)
+        self.assertEqual(before_kv_ru, after_kv_ru)
+
+        # Drop collection
+        before_index_ru, before_index_wu = self.get_metering_index(self.bucket)
+        before_kv_ru, before_kv_wu = self.get_metering_kv(self.bucket)
+        result = self.run_cbq_query(f'DROP COLLECTION {self.bucket}.s1.c1')
+        after_index_ru, after_index_wu = self.get_metering_index(self.bucket)
+        after_kv_ru, after_kv_wu = self.get_metering_kv(self.bucket)
+
+        # No kv or index RWU
+        self.assertTrue('billingUnits' not in result)
+        self.assertEqual(before_index_ru, after_index_ru)
+        self.assertEqual(before_index_wu, after_index_wu)
+        self.assertEqual(before_kv_wu, after_kv_wu)
+        self.assertEqual(before_kv_ru, after_kv_ru)
