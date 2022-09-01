@@ -53,6 +53,15 @@ class QueryMeteringTests(QueryTests):
             wu = int(kv_wu_pattern.findall(response.text)[0])
         return ru, wu
 
+    def get_metering_query(self, bucket='default', variant='eval', unbilled='true'):
+        cu = 0 
+        api = f"https://{self.server.ip}:18093/_metering"
+        qry_cu_pattern = re.compile(f'meter_cu_total{{bucket="{bucket}",for="n1ql",unbilled="{unbilled}",variant="{variant}"}} (\d+)')
+        response = requests.get(api, auth=requests.auth.HTTPBasicAuth(self.rest.username, self.rest.password), verify=False)
+        if qry_cu_pattern.search(response.text):
+            cu = int(qry_cu_pattern.findall(response.text)[0])
+        return cu 
+
     def assert_billing_unit(self, result, expected, unit="ru", service="kv"):
         if 'billingUnits' in result.keys():
             if unit in result['billingUnits'].keys():
@@ -364,3 +373,56 @@ class QueryMeteringTests(QueryTests):
         self.assertEqual(before_index_wu, after_index_wu)
         self.assertEqual(before_kv_wu, after_kv_wu)
         self.assertEqual(before_kv_ru, after_kv_ru)
+
+    def test_eval_cu(self):
+        self.users = [{"id": "johnDoe", "name": "Jonathan Downing", "password": "password1"}]
+        user_id = self.users[0]['id']
+        user_pwd = self.users[0]['password']
+        self.create_users()
+        self.run_cbq_query(f"GRANT query_select ON {self.bucket} to {user_id}")
+
+        # simple eval, we expect at least 1
+        expected_cu = 1
+        before_cu = self.get_metering_query(self.bucket, variant="eval")
+        result = self.run_cbq_query('SELECT 10+10', username=user_id, password=user_pwd, query_context=self.bucket)
+        after_cu = self.get_metering_query(self.bucket, variant="eval")
+        self.assertEqual(expected_cu, after_cu - before_cu)
+
+        before_cu = self.get_metering_query(self.bucket, variant="eval")
+        result = self.run_cbq_query('SELECT array_repeat(array_repeat(repeat("a",100), 500), 1000)', username=user_id, password=user_pwd, query_context=self.bucket )
+        after_cu = self.get_metering_query(self.bucket, variant="eval")
+        # 1 compute unit is 32MB per second
+        expected_cu = math.ceil(int(result['metrics']['usedMemory']) * float(result['metrics']['executionTime'][:-1]) / (32*1024*1024))
+        self.assertEqual (expected_cu, after_cu - before_cu)
+
+    def test_seqscan_multiple_vb(self):
+        insert_query = f'INSERT INTO {self.bucket}(key k, value v) with dockeys as (\
+            ["k000000156", "k000000082", "k000000056", "k000000012", "k000000013", "k000000057", "k000000083", "k000000157", "k000000081", "k000000155"]\
+            ) SELECT k, {self.doc} as v FROM dockeys as k'
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        # insert 10 docs, based on keys they should end up in (10) different vbucket
+        self.run_cbq_query(insert_query)
+        before_kv_ru, before_kv_wu = self.get_metering_kv(self.bucket)
+        result = self.run_cbq_query(f'SELECT meta().id FROM {self.bucket}')
+        after_kv_ru, after_kv_wu = self.get_metering_kv(self.bucket)
+
+        expected_sc_ru = 2 * 10 # 2 per vbucket
+        self.assertTrue(after_kv_wu, before_kv_wu)
+        self.assert_billing_unit(result, expected_sc_ru, unit='ru', service='kv')
+        self.assertTrue(expected_sc_ru, after_kv_ru - before_kv_ru)
+
+    def test_seqscan_single_vb(self):
+        insert_query = f'INSERT INTO {self.bucket}(key k, value v) with dockeys as (\
+            ["k000000156", "k000000162", "k000000213", "k000000227", "k000000383", "k000000555", "k000000561", "k000000579", "k000000608", "k000000610"]\
+            ) SELECT k, {self.doc} as v FROM dockeys as k'
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        # insert 10 docs, based on keys they should end up in same vbucket
+        self.run_cbq_query(insert_query)
+        before_kv_ru, before_kv_wu = self.get_metering_kv(self.bucket)
+        result = self.run_cbq_query(f'SELECT meta().id FROM {self.bucket}')
+        after_kv_ru, after_kv_wu = self.get_metering_kv(self.bucket)
+
+        expected_sc_ru = 2 * 1 # 2 per vbucket
+        self.assertTrue(after_kv_wu, before_kv_wu)
+        self.assert_billing_unit(result, expected_sc_ru, unit='ru', service='kv')
+        self.assertTrue(expected_sc_ru, after_kv_ru - before_kv_ru)
