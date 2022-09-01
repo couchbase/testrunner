@@ -3463,7 +3463,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             else:
                 cmd += " -use_tls -cacert /opt/couchbase/var/lib/couchbase/config/certs/ca.pem"
         shell = RemoteMachineShellConnection(self.backupset.cluster_host)
-        command = "{0}/{1}".format(self.cli_command_location, cmd)
+        cli_location = self.cli_command_location if not self.input.param("tools_package", False) else self.previous_cli
+        command = "{0}/{1}".format(cli_location, cmd)
         output, error = shell.execute_command(command)
         shell.log_command_output(output, error)
         shell.disconnect()
@@ -3488,7 +3489,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             else:
                 cmd += " -use_tls -cacert /opt/couchbase/var/lib/couchbase/config/certs/ca.pem"
         shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
-        command = "{0}/{1}".format(self.cli_command_location, cmd)
+        command = "{0}/{1}".format(cli_location, cmd)
         output, error = shell.execute_command(command)
         shell.log_command_output(output, error)
         shell.disconnect()
@@ -3543,7 +3544,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
               "num1 -fields=Num1"
         remote_client = RemoteMachineShellConnection(
             self.backupset.cluster_host)
-        command = "{0}/{1}".format(self.cli_command_location, cmd)
+        cli_location = self.cli_command_location if not self.input.param("tools_package", False) else self.previous_cli
+        command = "{0}/{1}".format(cli_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         remote_client.disconnect()
@@ -3554,7 +3556,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
               "num2 -fields=Num2"
         remote_client = RemoteMachineShellConnection(
             self.backupset.cluster_host)
-        command = "{0}/{1}".format(self.cli_command_location, cmd)
+        command = "{0}/{1}".format(cli_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         remote_client.disconnect()
@@ -3580,7 +3582,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         cmd = "cbindex -type list"
         remote_client = RemoteMachineShellConnection(
             self.backupset.restore_cluster_host)
-        command = "{0}/{1}".format(self.cli_command_location, cmd)
+        command = "{0}/{1}".format(cli_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         remote_client.disconnect()

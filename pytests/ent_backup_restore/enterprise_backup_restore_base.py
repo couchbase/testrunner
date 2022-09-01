@@ -109,6 +109,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             else:
                 self.cli_command_location = bin_path.replace('"', '') + "/"
         if self.input.param("tools_package", False):
+            self.previous_cli = self.cli_command_location
             self.cli_command_location = "/tmp/tools_package/bin/"
 
         self.debug_logs = self.input.param("debug-logs", False)
@@ -178,6 +179,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                                               cygwin_format)
             self.backupset.directory = self.input.param("dir", WIN_TMP_PATH_RAW + "entbackup")
             if self.input.param("tools_package", False):
+                self.previous_cli = self.cli_command_location
                 self.cli_command_location = "/cygdrive/c/tmp/tools_package/bin/"
         elif info == 'mac':
             self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
