@@ -22,6 +22,12 @@ class QueryMeteringTests(QueryTests):
 
     def suite_setUp(self):
         super(QueryMeteringTests, self).suite_setUp()
+        self.use_cbo = self.input.param("use_cbo", False)
+        if not self.use_cbo:
+            api = f"http://{self.server.ip}:8091/settings/querySettings"
+            data = {"queryUseCBO": "false"}
+            response = requests.post(api, data=data, auth=(self.rest.username,self.rest.password), verify=False)
+            self.log.info(f"Response: {response}")
 
     def tearDown(self):
         super(QueryMeteringTests, self).tearDown()
@@ -260,10 +266,12 @@ class QueryMeteringTests(QueryTests):
 
         before_index_ru, before_index_wu = self.get_metering_index(self.bucket)
         before_kv_ru, before_kv_wu = self.get_metering_kv(self.bucket)
+        self.log.info(f"before_index_ru:{before_index_ru}, before_index_wu:{before_index_wu}, before_kv_ru:{before_kv_ru}, before_kv_wu:{before_kv_wu}")
         self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name)')
         self.wait_for_all_indexes_online()
         after_index_ru, after_index_wu = self.get_metering_index(self.bucket)
         after_kv_ru, after_kv_wu = self.get_metering_kv(self.bucket)
+        self.log.info(f"after_index_ru:{after_index_ru}, after_index_wu:{after_index_wu}, after_kv_ru:{after_kv_ru}, after_kv_wu:{after_kv_wu}")
 
         expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu)
         expected_kv_ru = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru)
