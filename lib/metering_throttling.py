@@ -57,13 +57,16 @@ class metering(object):
             if unit in result['billingUnits'].keys():
                 if service in result['billingUnits'][unit].keys():
                     actual = result['billingUnits'][unit][service]
-                    self.assertEqual(actual, expected, f'Expected {expected} {service} {unit} unit but got {actual}')
+                    if (actual == expected):
+                        return True, ''
+                    else:
+                        return False, f'Expected {expected} {service} {unit} unit but got {actual}'
                 else:
-                    self.fail(f"result['billingUnits'][{unit}] does not contain {service}, result['billingUnits'][{unit}] is: {result['billingUnits'][unit]}")
+                    return False, f"result['billingUnits'][{unit}] does not contain {service}, result['billingUnits'][{unit}] is: {result['billingUnits'][unit]}"
             else:
-                self.fail(f"result['billingUnits'] does not contain {unit}, result['billingUnits'] is: {result['billingUnits']}")
+                return False, f"result['billingUnits'] does not contain {unit}, result['billingUnits'] is: {result['billingUnits']}"
         else:
-            self.fail(f'result does not contain billingUnits, result is: {result}')
+            return False, f'result does not contain billingUnits, result is: {result}'
 
 # Throttling limit name for each service are:
 # - dataThrottleLimit
