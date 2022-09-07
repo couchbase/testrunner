@@ -135,6 +135,10 @@ class QueryMeteringTests(QueryTests):
         self.run_cbq_query(f'DELETE from {self.bucket}')
         self.run_cbq_query(insert_query)
 
+        # Get sequential scan read unit
+        result = self.run_cbq_query(f'SELECT meta().id FROM {self.bucket}')
+        sc_ru = result['billingUnits']['ru']['kv']
+
         doc_read_size = self.doc_key_size + len(json.dumps({"name": "San Francisco"}))
         doc_write_size = self.doc_key_size + len(json.dumps({"name": "a"*self.value_size}))
 
@@ -142,7 +146,7 @@ class QueryMeteringTests(QueryTests):
         expected_ru = self.doc_count * math.ceil( doc_read_size / self.kv_ru)
         result = self.run_cbq_query(f'UPDATE {self.bucket} SET name = repeat("a", {self.value_size})')
         self.assert_billing_unit(result, expected_wu, unit='wu', service='kv')
-        self.assert_billing_unit(result, expected_ru, unit='ru', service='kv')
+        self.assert_billing_unit(result, expected_ru + sc_ru, unit='ru', service='kv')
 
     def test_kv_merge(self):
         insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d'
@@ -172,9 +176,13 @@ class QueryMeteringTests(QueryTests):
         self.run_cbq_query(f'DELETE from {self.bucket}')
         self.run_cbq_query(insert_query)
 
+        # Get sequential scan read unit
+        result = self.run_cbq_query(f'SELECT meta().id FROM {self.bucket}')
+        sc_ru = result['billingUnits']['ru']['kv']
+
         expected_ru = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru)
         result = self.run_cbq_query(f'SELECT * FROM {self.bucket}')
-        self.assert_billing_unit(result, expected_ru, unit='ru', service='kv')
+        self.assert_billing_unit(result, expected_ru + sc_ru, unit='ru', service='kv')
 
     def test_kv_select_count(self):
         insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
