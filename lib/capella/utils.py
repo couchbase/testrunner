@@ -9,7 +9,6 @@ import urllib3
 urllib3.disable_warnings()
 import logger
 import requests
-import dns.resolver
 
 class CapellaCredentials:
     def __init__(self, config):
@@ -38,6 +37,7 @@ class ServerlessDatabase:
         self.rest_host = get_host_from_srv(self.rest_srv)
 
 def get_host_from_srv(srv):
+    import dns.resolver
     srvInfo = {}
     srv_records = dns.resolver.query('_couchbases._tcp.' + srv, 'SRV')
     for srv in srv_records:
