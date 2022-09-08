@@ -6716,14 +6716,16 @@ class CreateServerlessDatabaseTask(Task):
                 self.log.info("generating API key for serverless database {}".format(
                     {"database_id": self.database_id}))
                 creds = self.api.generate_api_keys(self.database_id)
-                # Commented out because if API has already been run against an IP, it throws an error.
                 # Waiting for resolution of https://couchbasecloud.atlassian.net/browse/AV-43066
                 # using hardcoded entries for now. Replace this by manually running the bypass API
                 # self.log.info("Obtaining access to the dataplane nodes")
-                # rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(database_id=self.database_id)
-                rest_api_info = {"couchbaseCreds":{"username": '<Enter Username>',
-                                                "password": '<Enter Password>'},
-                                 "srv": '<Enter srv domain name>'}
+                try:
+                    rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(database_id=self.database_id)
+                except:
+                    print ("Failed to run the REST API to obtain access to DP nodes. REST APIs will not work")
+                    rest_api_info = {"couchbaseCreds": {"username": 'lgoB3iAJrsyTQhbId9QMerbo1QiJyTlF',
+                                                        "password": 'RBEFKUHUk4n2UgJP3qn3DGTmesFSsswPxI6O7BY7VaDiebkTftUTUuU5mN8ofhaq'},
+                                     "srv": 'cb.fhev-1javqlhnpzh.nonprod-project-avengers.com'}
                 self.databases[self.database_id].populate(info, creds, rest_api_info)
                 self.state = FINISHED
                 self.set_result(self.database_id)

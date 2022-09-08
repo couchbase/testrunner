@@ -1,7 +1,6 @@
 import requests
 
 from pytests.serverless.serverless_basetestcase import ServerlessBaseTestCase
-from couchbase.options import QueryOptions
 
 
 class QueryBaseServerless(ServerlessBaseTestCase):

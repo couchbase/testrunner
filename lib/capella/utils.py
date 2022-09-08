@@ -34,12 +34,15 @@ class ServerlessDatabase:
         self.admin_username = rest_api_info['couchbaseCreds']['username']
         self.admin_password = rest_api_info['couchbaseCreds']['password']
         self.nebula = get_host_from_srv(self.srv)
-        self.rest_host = get_host_from_srv(self.rest_srv)
+        try:
+            self.rest_host = get_host_from_srv(self.rest_srv)
+        except:
+            print("Rest srv domain resolution failure. Cannot run any of the rest APIs")
 
 def get_host_from_srv(srv):
     import dns.resolver
     srvInfo = {}
-    srv_records = dns.resolver.query('_couchbases._tcp.' + srv, 'SRV')
+    srv_records = dns.resolver.resolve('_couchbases._tcp.' + srv, 'SRV')
     for srv in srv_records:
         srvInfo['host'] = str(srv.target).rstrip('.')
     return srvInfo['host']
@@ -221,8 +224,7 @@ class CapellaAPI:
         resp = self.serverless_api.get_access_to_serverless_dataplane_nodes(dataplane_id)
         # when you run this API twice against the same public IP, it throws a 500 error. Ignore if the IP has already
         # been added.
-        if resp.status_code not in [200, 500]:
-            resp.raise_for_status()
+        resp.raise_for_status()
         return resp.json()
 
     def wait_for_database_deleted(self, database_id, timeout=1800):
