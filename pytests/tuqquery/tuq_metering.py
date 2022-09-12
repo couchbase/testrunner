@@ -274,6 +274,259 @@ class QueryMeteringTests(QueryTests):
         self.assertEqual(before_kv_wu, after_kv_wu) # no kv wu
         self.assertEqual(expected_kv_ru, after_kv_ru - before_kv_ru)
 
+    def test_gsi_create_deferred(self):
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(f'DROP INDEX idx_name IF EXISTS on {self.bucket}')
+        self.run_cbq_query(insert_query)
+
+        before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
+        before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.log.info(f"before_index_ru:{before_index_ru}, before_index_wu:{before_index_wu}, before_kv_ru:{before_kv_ru}, before_kv_wu:{before_kv_wu}")
+        self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name) WITH {{"defer_build":true}}')
+        self.sleep(30)
+        after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
+        after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.log.info(f"after_index_ru:{after_index_ru}, after_index_wu:{after_index_wu}, after_kv_ru:{after_kv_ru}, after_kv_wu:{after_kv_wu}")
+
+        expected_index_wu = 0
+        expected_kv_ru = 0
+
+        self.assertEqual(before_index_ru, after_index_ru) # no index ru
+        self.assertEqual(expected_index_wu, after_index_wu - before_index_wu)
+        self.assertEqual(before_kv_wu, after_kv_wu) # no kv wu
+        self.assertEqual(expected_kv_ru, after_kv_ru - before_kv_ru)
+
+        self.run_cbq_query(f'BUILD INDEX ON {self.bucket}(idx_name)')
+        self.wait_for_all_indexes_online()
+        after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
+        after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.log.info(f"after_index_ru:{after_index_ru}, after_index_wu:{after_index_wu}, after_kv_ru:{after_kv_ru}, after_kv_wu:{after_kv_wu}")
+
+        expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu)
+        expected_kv_ru = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru)
+
+        self.assertEqual(before_index_ru, after_index_ru) # no index ru
+        self.assertEqual(expected_index_wu, after_index_wu - before_index_wu)
+        self.assertEqual(before_kv_wu, after_kv_wu) # no kv wu
+        self.assertEqual(expected_kv_ru, after_kv_ru - before_kv_ru)
+
+    def test_gsi_create_partial(self):
+        doc1 = {"name":"hotel"}
+        doc2 = {"name":"airport"}
+        doc3 = {"name":"airline"}
+        self.doc_size = len(json.dumps(doc1))
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc1} as v FROM array_range(0,4) d'
+        insert_query2 = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc2} as v FROM array_range(0,4) d'
+        insert_query3 = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc3} as v FROM array_range(0,4) d'
+
+
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(f'DROP INDEX idx_name IF EXISTS on {self.bucket}')
+        self.run_cbq_query(insert_query)
+        self.run_cbq_query(insert_query2)
+        self.run_cbq_query(insert_query3)
+
+
+        before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
+        before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.log.info(f"before_index_ru:{before_index_ru}, before_index_wu:{before_index_wu}, before_kv_ru:{before_kv_ru}, before_kv_wu:{before_kv_wu}")
+        self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name) where name = "hotel"')
+        self.wait_for_all_indexes_online()
+        after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
+        after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.log.info(f"after_index_ru:{after_index_ru}, after_index_wu:{after_index_wu}, after_kv_ru:{after_kv_ru}, after_kv_wu:{after_kv_wu}")
+
+        expected_index_wu = 4 * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu)
+        expected_kv_ru = 4 * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru)
+
+        self.assertEqual(before_index_ru, after_index_ru) # no index ru
+        self.assertEqual(expected_index_wu, after_index_wu - before_index_wu)
+        self.assertEqual(before_kv_wu, after_kv_wu) # no kv wu
+        self.assertEqual(expected_kv_ru, after_kv_ru - before_kv_ru)
+
+    def test_create_primary(self):
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(f'DROP INDEX idx_name IF EXISTS on {self.bucket}')
+        self.run_cbq_query(insert_query)
+
+        before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
+        before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.log.info(
+            f"before_index_ru:{before_index_ru}, before_index_wu:{before_index_wu}, before_kv_ru:{before_kv_ru}, before_kv_wu:{before_kv_wu}")
+        self.run_cbq_query(f'CREATE PRIMARY INDEX ON default')
+        self.wait_for_all_indexes_online()
+        after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
+        after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.log.info(
+            f"after_index_ru:{after_index_ru}, after_index_wu:{after_index_wu}, after_kv_ru:{after_kv_ru}, after_kv_wu:{after_kv_wu}")
+
+        expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu)
+        expected_kv_ru = self.doc_count * math.ceil((self.doc_size + self.doc_key_size) / self.kv_ru)
+
+        self.assertEqual(before_index_ru, after_index_ru)  # no index ru
+        self.assertEqual(expected_index_wu, after_index_wu - before_index_wu)
+        self.assertEqual(before_kv_wu, after_kv_wu)  # no kv wu
+        self.assertEqual(expected_kv_ru, after_kv_ru - before_kv_ru)
+
+    def test_create_missing(self):
+        doc1 = {"name": "hotel"}
+        doc2 = {"name": "airport"}
+        doc3 = {"type": "airline"}
+        doc_size1 = len(json.dumps(doc1))
+        doc_size2 = len(json.dumps(doc2))
+        doc_size3 = len(json.dumps(doc3))
+
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc1} as v FROM array_range(0,4) d'
+        insert_query2 = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc2} as v FROM array_range(0,4) d'
+        insert_query3 = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc3} as v FROM array_range(0,4) d'
+
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(f'DROP INDEX idx_name IF EXISTS on {self.bucket}')
+        self.run_cbq_query(insert_query)
+        self.run_cbq_query(insert_query2)
+        self.run_cbq_query(insert_query3)
+
+        before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
+        before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.log.info(
+            f"before_index_ru:{before_index_ru}, before_index_wu:{before_index_wu}, before_kv_ru:{before_kv_ru}, before_kv_wu:{before_kv_wu}")
+        self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name INCLUDE MISSING)')
+        self.wait_for_all_indexes_online()
+        after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
+        after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.log.info(
+            f"after_index_ru:{after_index_ru}, after_index_wu:{after_index_wu}, after_kv_ru:{after_kv_ru}, after_kv_wu:{after_kv_wu}")
+
+        expected_index_wu = 4 * math.ceil((doc_size1 + self.index_key_size) / self.index_wu) + 4 * math.ceil((doc_size2 + self.index_key_size) / self.index_wu) + 4 * math.ceil((doc_size3 + self.index_key_size) / self.index_wu)
+        expected_kv_ru = 4 * math.ceil((doc_size1 + self.doc_key_size) / self.kv_ru) + 4 * math.ceil((doc_size2 + self.doc_key_size) / self.kv_ru) + 4 * math.ceil((doc_size3 + self.doc_key_size) / self.kv_ru)
+
+        self.assertEqual(before_index_ru, after_index_ru)  # no index ru
+        self.assertEqual(expected_index_wu, after_index_wu - before_index_wu)
+        self.assertEqual(before_kv_wu, after_kv_wu)  # no kv wu
+        self.assertEqual(expected_kv_ru, after_kv_ru - before_kv_ru)
+
+    def test_create_index_non_covering(self):
+        doc1 = {"name": "hotel"}
+        doc2 = {"name": "airport"}
+        doc3 = {"type": "airline"}
+        doc_size1 = len(json.dumps(doc1))
+        doc_size2 = len(json.dumps(doc2))
+        doc_size3 = len(json.dumps(doc3))
+
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc1} as v FROM array_range(0,4) d'
+        insert_query2 = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc2} as v FROM array_range(0,4) d'
+        insert_query3 = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc3} as v FROM array_range(0,4) d'
+
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(f'DROP INDEX idx_name IF EXISTS on {self.bucket}')
+        self.run_cbq_query(insert_query)
+        self.run_cbq_query(insert_query2)
+        self.run_cbq_query(insert_query3)
+
+        before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
+        before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.log.info(
+            f"before_index_ru:{before_index_ru}, before_index_wu:{before_index_wu}, before_kv_ru:{before_kv_ru}, before_kv_wu:{before_kv_wu}")
+        self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name)')
+        self.wait_for_all_indexes_online()
+        after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
+        after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.log.info(
+            f"after_index_ru:{after_index_ru}, after_index_wu:{after_index_wu}, after_kv_ru:{after_kv_ru}, after_kv_wu:{after_kv_wu}")
+
+        expected_index_wu = 4 * math.ceil((doc_size1 + self.index_key_size) / self.index_wu) + 4 * math.ceil((doc_size2 + self.index_key_size) / self.index_wu)
+        expected_kv_ru = 4 * math.ceil((doc_size1 + self.doc_key_size) / self.kv_ru) + 4 * math.ceil((doc_size2 + self.doc_key_size) / self.kv_ru)
+
+        self.assertEqual(before_index_ru, after_index_ru)  # no index ru
+        self.assertEqual(expected_index_wu, after_index_wu - before_index_wu)
+        self.assertEqual(before_kv_wu, after_kv_wu)  # no kv wu
+        self.assertEqual(expected_kv_ru, after_kv_ru - before_kv_ru)
+
+    def test_create_equivalent(self):
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(f'DROP INDEX idx_name IF EXISTS on {self.bucket}')
+        self.run_cbq_query(insert_query)
+
+        before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
+        before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.log.info(
+            f"before_index_ru:{before_index_ru}, before_index_wu:{before_index_wu}, before_kv_ru:{before_kv_ru}, before_kv_wu:{before_kv_wu}")
+        self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name)')
+        self.run_cbq_query(f'CREATE INDEX idx_name2 on {self.bucket}(name)')
+        self.wait_for_all_indexes_online()
+        after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
+        after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.log.info(
+            f"after_index_ru:{after_index_ru}, after_index_wu:{after_index_wu}, after_kv_ru:{after_kv_ru}, after_kv_wu:{after_kv_wu}")
+
+        expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu) * 2
+        expected_kv_ru = self.doc_count * math.ceil((self.doc_size + self.doc_key_size) / self.kv_ru) * 2
+
+        self.assertEqual(before_index_ru, after_index_ru)  # no index ru
+        self.assertEqual(expected_index_wu, after_index_wu - before_index_wu)
+        self.assertEqual(before_kv_wu, after_kv_wu)  # no kv wu
+        self.assertEqual(expected_kv_ru, after_kv_ru - before_kv_ru)
+
+    def test_create_composite(self):
+        doc1 = {"name": "San Francisco", "type": "city"}
+        doc2 = {"name": "Oakland", "type": "city"}
+        doc3 = {"name": "USA", "type": "country", "extra": "yes"}
+        doc_size1 = len(json.dumps(doc1))
+        doc_size2 = len(json.dumps(doc2))
+        doc_size3 = len(json.dumps({"name": "USA", "type": "country"}))
+
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc1} as v FROM array_range(0,5) d'
+        insert_query2 = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc2} as v FROM array_range(0,5) d'
+        insert_query3 = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc3} as v FROM array_range(0,5) d'
+
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(f'DROP INDEX idx_name IF EXISTS on {self.bucket}')
+        self.run_cbq_query(insert_query)
+        self.run_cbq_query(insert_query2)
+        self.run_cbq_query(insert_query3)
+
+        before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
+        before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.log.info(f"before_index_ru:{before_index_ru}, before_index_wu:{before_index_wu}, before_kv_ru:{before_kv_ru}, before_kv_wu:{before_kv_wu}")
+        self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name,type)')
+        self.wait_for_all_indexes_online()
+        after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
+        after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.log.info(f"after_index_ru:{after_index_ru}, after_index_wu:{after_index_wu}, after_kv_ru:{after_kv_ru}, after_kv_wu:{after_kv_wu}")
+
+        expected_index_wu = 5 * math.ceil((doc_size1 + self.index_key_size) / self.index_wu) + 5 * math.ceil((doc_size2 + self.index_key_size) / self.index_wu) + 5 * math.ceil((doc_size3 + self.index_key_size) / self.index_wu)
+        expected_kv_ru = 5 * math.ceil((doc_size1 + self.doc_key_size) / self.kv_ru) + 5 * math.ceil((doc_size2 + self.doc_key_size) / self.kv_ru) + 5 * math.ceil((doc_size3 + self.doc_key_size) / self.kv_ru)
+        self.assertEqual(before_index_ru, after_index_ru) # no index ru
+        self.assertEqual(expected_index_wu, after_index_wu - before_index_wu)
+        self.assertEqual(before_kv_wu, after_kv_wu) # no kv wu
+        self.assertEqual(expected_kv_ru, after_kv_ru - before_kv_ru)
+
+    def test_select_partial(self):
+        doc1 = {"name":"hotel"}
+        doc2 = {"name":"airport"}
+        doc3 = {"name":"airline"}
+        self.doc_size = len(json.dumps(doc1))
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc1} as v FROM array_range(0,4) d'
+        insert_query2 = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc2} as v FROM array_range(0,4) d'
+        insert_query3 = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc3} as v FROM array_range(0,4) d'
+
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(f'DROP INDEX idx_name IF EXISTS on {self.bucket}')
+        self.run_cbq_query(insert_query)
+        self.run_cbq_query(insert_query2)
+        self.run_cbq_query(insert_query3)
+
+        self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name) where name = "hotel"')
+        self.wait_for_all_indexes_online()
+
+        expected_index_ru = math.ceil(4 * (self.doc_key_size + self.index_key_size) / self.index_ru)
+        result = self.run_cbq_query(f'SELECT name FROM {self.bucket} WHERE name = "hotel"')
+        assert_query, msg = self.meter.assert_query_billing_unit(result, expected_index_ru, unit='ru', service = 'index')
+        self.assertTrue(assert_query, msg)
+
     def test_no_rw_unit(self):
         insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
         # self.run_cbq_query(f'DELETE from {self.bucket}')
