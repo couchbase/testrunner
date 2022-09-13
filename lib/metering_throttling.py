@@ -1,6 +1,7 @@
 import re
 import requests
 from lib.Cb_constants.CBServer import CbServer
+import logger
 
 class metering(object):
     def __init__(self, server, username, password):
@@ -8,6 +9,7 @@ class metering(object):
         url = f"https://{server}:{CbServer.ssl_port}/pools/default"
         response = requests.get(url, auth=self.auth, verify=False)
         self.nodes = response.json()['nodes']
+        self.log = logger.Logger.get_logger()
 
     def get_query_cu(self, bucket='default', variant='eval', unbilled='true'):
         cu = 0
@@ -18,6 +20,7 @@ class metering(object):
                 response = requests.get(url, auth=self.auth, verify=False)
                 if qry_cu_pattern.search(response.text):
                     cu += int(qry_cu_pattern.findall(response.text)[0])
+        self.log.info(f'N1QL UNITS for {bucket}: {cu} CU')
         return cu
 
     def get_index_rwu(self, bucket='default', unbilled = '', variant = ''):
@@ -32,6 +35,7 @@ class metering(object):
                     ru += int(idx_ru_pattern.findall(response.text)[0])
                 if idx_wu_pattern.search(response.text):
                     wu += int(idx_wu_pattern.findall(response.text)[0])
+        self.log.info(f'INDEX UNITS for {bucket}: {ru} RU, {wu} WU')
         return ru, wu
 
     def get_fts_rwu(self, bucket='default', unbilled = '', variant = ''):
@@ -46,6 +50,7 @@ class metering(object):
                     ru += int(fts_ru_pattern.findall(response.text)[0])
                 if fts_wu_pattern.search(response.text):
                     wu += int(fts_wu_pattern.findall(response.text)[0])
+        self.log.info(f'FTS UNITS for {bucket}: {ru} RU, {wu} WU')
         return ru, wu
 
     def get_kv_rwu(self, bucket='default'):
@@ -60,6 +65,7 @@ class metering(object):
                     ru += int(kv_ru_pattern.findall(response.text)[0])
                 if kv_wu_pattern.search(response.text):
                     wu += int(kv_wu_pattern.findall(response.text)[0])
+        self.log.info(f'KV UNITS for {bucket}: {ru} RU, {wu} WU')
         return ru, wu
 
     def assert_query_billing_unit(self, result, expected, unit="ru", service="kv"):
@@ -96,6 +102,7 @@ class throttling(object):
         url = f"https://{server}:{CbServer.ssl_port}/pools/default"
         response = requests.get(url, auth=self.auth, verify=False)
         self.nodes = response.json()['nodes']
+        self.log = logger.Logger.get_logger()
 
     def get_bucket_limit(self, bucket = 'default', service='dataThrottleLimit'):
         response = requests.get(self.url_bucket_throttle + f"/{bucket}", auth = self.auth, verify=False)
@@ -139,4 +146,5 @@ class throttling(object):
                     throttle_seconds_total += int(throttle_seconds_pattern.findall(response.text)[0])
                 if throttle_count_pattern.search(response.text):
                     throttle_count_total += int(throttle_count_pattern.findall(response.text)[0])
+        self.log.info(f'{service.upper()} THROTTLE for {bucket}: {throttle_count_total} count, {throttle_seconds_total} seconds')
         return throttle_count_total, throttle_seconds_total

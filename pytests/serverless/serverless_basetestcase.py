@@ -1,5 +1,6 @@
 from typing import Dict
 import unittest
+import requests
 from TestInput import TestInputSingleton
 from lib.capella.utils import CapellaAPI, CapellaCredentials, ServerlessDatabase
 import lib.capella.utils as capella_utils
@@ -7,12 +8,12 @@ import logger
 from tasks.task import CreateServerlessDatabaseTask
 from tasks.taskmanager import TaskManager
 import logging
-from couchbase.cluster import Cluster, ClusterOptions
-from couchbase_core.cluster import PasswordAuthenticator
+from couchbase.cluster import Cluster
+from couchbase.options import ClusterOptions
+from couchbase.auth import PasswordAuthenticator
 from couchbase.bucket import Bucket
 from couchbase_helper.documentgenerator import SDKDataLoader
 from couchbase_helper.cluster import Cluster as Cluster_helper
-
 
 class ServerlessBaseTestCase(unittest.TestCase):
     def setUp(self):
@@ -42,6 +43,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
             self.api.wait_for_database_deleted(database_id)
             self.log.info("serverless database deleted {}".format(
                 {"database_id": database_id}))
+        self.task_manager.shutdown(force=True)
 
     def create_database(self):
         task = self.create_database_async()
@@ -89,3 +91,29 @@ class ServerlessBaseTestCase(unittest.TestCase):
         tasks.append(self.cluster.async_load_gen_docs(database.srv, database.id, kv_gen, pause_secs=1,
                                                       timeout_secs=300))
         return tasks
+
+    def run_query(self, database, query, query_params=None, use_sdk=False, **kwargs):
+        if use_sdk:
+            cluster = self.get_sdk_cluster(database.id)
+            row_iter = cluster.query(query)
+            return row_iter.rows()
+        else:
+            if not query_params:
+                query_params = {'query_context': f"default:{database.id}"}
+                for key, value in kwargs.items():
+                    if key == "txtimeout":
+                        query_params['txtimeout'] = value
+                    if key == "txnid":
+                        query_params['txid'] = ''"{0}"''.format(value)
+                    if key == "scan_consistency":
+                        query_params['scan_consistency'] = value
+                    if key == "scan_vector":
+                        query_params['scan_vector'] = str(value).replace("'", '"')
+                    if key == "timeout":
+                        query_params['timeout'] = value
+            api = f"https://{database.nebula}:18093/query/service"
+            query_params["statement"] = query
+            self.log.info(f'EXECUTE QUERY against {database.nebula}: {query}')
+            resp = requests.post(api, params=query_params, auth=(database.access_key, database.secret_key))
+            resp.raise_for_status()
+            return resp.json()
