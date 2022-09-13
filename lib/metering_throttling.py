@@ -4,52 +4,62 @@ from lib.Cb_constants.CBServer import CbServer
 
 class metering(object):
     def __init__(self, server, username, password):
-        self.url_query_metering = f"https://{server}:{CbServer.ssl_n1ql_port}/_metering"
-        self.url_index_metering = f"https://{server}:{CbServer.ssl_index_port}/_metering"
-        self.url_fts_metering = f"https://{server}:{CbServer.ssl_fts_port}/_metering"
-        self.url_metrics = f"https://{server}:{CbServer.ssl_port}/metrics"
-
         self.auth = requests.auth.HTTPBasicAuth(username, password)
+        url = f"https://{server}:{CbServer.ssl_port}/pools/default"
+        response = requests.get(url, auth=self.auth, verify=False)
+        self.nodes = response.json()['nodes']
 
     def get_query_cu(self, bucket='default', variant='eval', unbilled='true'):
         cu = 0
         qry_cu_pattern = re.compile(f'meter_cu_total{{bucket="{bucket}",for="n1ql",unbilled="{unbilled}",variant="{variant}"}} (\d+)')
-        response = requests.get(self.url_query_metering, auth=self.auth, verify=False)
-        if qry_cu_pattern.search(response.text):
-            cu = int(qry_cu_pattern.findall(response.text)[0])
+        for node in self.nodes:
+            if 'n1ql' in node['services']:
+                url = f"https://{node['hostname'][:-5]}:{CbServer.ssl_port}/metrics"
+                response = requests.get(url, auth=self.auth, verify=False)
+                if qry_cu_pattern.search(response.text):
+                    cu += int(qry_cu_pattern.findall(response.text)[0])
         return cu
 
     def get_index_rwu(self, bucket='default', unbilled = '', variant = ''):
         ru, wu = 0, 0
         idx_ru_pattern = re.compile(f'meter_ru_total{{bucket="{bucket}",for="index",unbilled="{unbilled}",variant="{variant}"}} (\d+)')
         idx_wu_pattern = re.compile(f'meter_wu_total{{bucket="{bucket}",for="index",unbilled="{unbilled}",variant="{variant}"}} (\d+)')
-        response = requests.get(self.url_index_metering, auth=self.auth, verify=False)
-        if idx_ru_pattern.search(response.text):
-            ru = int(idx_ru_pattern.findall(response.text)[0])
-        if idx_wu_pattern.search(response.text):
-            wu = int(idx_wu_pattern.findall(response.text)[0])
+        for node in self.nodes:
+            if 'index' in node['services']:
+                url = f"https://{node['hostname'][:-5]}:{CbServer.ssl_port}/metrics"
+                response = requests.get(url, auth=self.auth, verify=False)
+                if idx_ru_pattern.search(response.text):
+                    ru += int(idx_ru_pattern.findall(response.text)[0])
+                if idx_wu_pattern.search(response.text):
+                    wu += int(idx_wu_pattern.findall(response.text)[0])
         return ru, wu
 
     def get_fts_rwu(self, bucket='default', unbilled = '', variant = ''):
         ru, wu = 0, 0
         fts_ru_pattern = re.compile(f'meter_ru_total{{bucket="{bucket}",for="fts",unbilled="{unbilled}",variant="{variant}"}} (\d+)')
         fts_wu_pattern = re.compile(f'meter_wu_total{{bucket="{bucket}",for="fts",unbilled="{unbilled}",variant="{variant}"}} (\d+)')
-        response = requests.get(self.url_fts_metering, auth=self.auth, verify=False)
-        if fts_ru_pattern.search(response.text):
-            ru = int(fts_ru_pattern.findall(response.text)[0])
-        if fts_wu_pattern.search(response.text):
-            wu = int(fts_wu_pattern.findall(response.text)[0])
+        for node in self.nodes:
+            if 'fts' in node['services']:
+                url = f"https://{node['hostname'][:-5]}:{CbServer.ssl_port}/metrics"
+                response = requests.get(url, auth=self.auth, verify=False)
+                if fts_ru_pattern.search(response.text):
+                    ru += int(fts_ru_pattern.findall(response.text)[0])
+                if fts_wu_pattern.search(response.text):
+                    wu += int(fts_wu_pattern.findall(response.text)[0])
         return ru, wu
 
     def get_kv_rwu(self, bucket='default'):
         ru, wu = 0, 0
-        response = requests.get(self.url_metrics, auth=self.auth, verify=False)
         kv_ru_pattern = re.compile(f'meter_ru_total{{bucket="{bucket}"}} (\d+)')
         kv_wu_pattern = re.compile(f'meter_wu_total{{bucket="{bucket}"}} (\d+)')
-        if kv_ru_pattern.search(response.text):
-            ru = int(kv_ru_pattern.findall(response.text)[0])
-        if kv_wu_pattern.search(response.text):
-            wu = int(kv_wu_pattern.findall(response.text)[0])
+        for node in self.nodes:
+            if 'kv' in node['services']:
+                url = f"https://{node['hostname'][:-5]}:{CbServer.ssl_port}/metrics"
+                response = requests.get(url, auth=self.auth, verify=False)
+                if kv_ru_pattern.search(response.text):
+                    ru += int(kv_ru_pattern.findall(response.text)[0])
+                if kv_wu_pattern.search(response.text):
+                    wu += int(kv_wu_pattern.findall(response.text)[0])
         return ru, wu
 
     def assert_query_billing_unit(self, result, expected, unit="ru", service="kv"):
@@ -81,9 +91,11 @@ class metering(object):
 class throttling(object):
     def __init__(self, server, username, password):
         self.auth = requests.auth.HTTPBasicAuth(username, password)
-        self.url_metrics = f"https://{server}:{CbServer.ssl_port}/metrics"
         self.url_bucket_throttle = f"https://{server}:{CbServer.ssl_port}/pools/default/buckets"
         self.url_cluster_throttle = f"https://{server}:{CbServer.ssl_port}/internalSettings"
+        url = f"https://{server}:{CbServer.ssl_port}/pools/default"
+        response = requests.get(url, auth=self.auth, verify=False)
+        self.nodes = response.json()['nodes']
 
     def get_bucket_limit(self, bucket = 'default', service='dataThrottleLimit'):
         response = requests.get(self.url_bucket_throttle + f"/{bucket}", auth = self.auth, verify=False)
@@ -117,11 +129,14 @@ class throttling(object):
         throttle_count_total, throttle_seconds_total = 0, 0
         throttle_seconds_pattern = re.compile(f'throttle_seconds_total{{bucket="{bucket}",for="{service}".*}} (\d+)')
         throttle_count_pattern = re.compile(f'throttle_count_total{{bucket="{bucket}",for="{service}".*}} (\d+)')
-        response = requests.get(self.url_metrics, auth = self.auth, verify=False)
-        if response.status_code not in (200,201):
-            self.fail(f'Fail to get throttle metrics: {response.text}')
-        if throttle_seconds_pattern.search(response.text):
-            throttle_seconds_total = int(throttle_seconds_pattern.findall(response.text)[0])
-        if throttle_count_pattern.search(response.text):
-            throttle_count_total = int(throttle_count_pattern.findall(response.text)[0])
+        for node in self.nodes:
+            if service in node['services']:
+                url = f"https://{node['hostname'][:-5]}:{CbServer.ssl_port}/metrics"
+                response = requests.get(url, auth = self.auth, verify=False)
+                if response.status_code not in (200,201):
+                    self.fail(f'Fail to get throttle metrics: {response.text}')
+                if throttle_seconds_pattern.search(response.text):
+                    throttle_seconds_total += int(throttle_seconds_pattern.findall(response.text)[0])
+                if throttle_count_pattern.search(response.text):
+                    throttle_count_total += int(throttle_count_pattern.findall(response.text)[0])
         return throttle_count_total, throttle_seconds_total
