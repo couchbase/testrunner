@@ -109,11 +109,13 @@ class throttling(object):
         if response.status_code not in (200,201):
             self.fail(f'Fail to get bucket throttle limit: {response.text}')
         throttle_limits = response.json()
+        self.log.info(f'RETRIEVED {service} for {bucket}: {throttle_limits[service]}')
         return throttle_limits[service]
 
     def set_bucket_limit(self, bucket= 'default', value=5000, service='dataThrottleLimit'):
         data = {}
         data[service] = value
+        self.log.info(f'SETTING {service} for {bucket} to {value}')
         response = requests.post(self.url_bucket_throttle + f"/{bucket}", data=data, auth = self.auth, verify=False)
         if response.status_code not in (200,201):
             self.fail(f'Fail to set bucket throttle limit: {response.text}')
@@ -123,6 +125,7 @@ class throttling(object):
         if response.status_code not in (200,201):
             self.fail(f'Fail to get cluster throttle limit: {response.text}')
         throttle_limits = response.json()
+        self.log.info(f'RETRIEVED {service} for CLUSTER: {throttle_limits[service]}')
         return throttle_limits[service]
 
     def set_cluster_limit(self, value=5000, service='dataThrottleLimit'):
