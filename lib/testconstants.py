@@ -354,3 +354,8 @@ FILTER_TEST_FIELDS = ['logs_folder', 'conf_file', 'cluster_name',
                       'ini', 'case_number','num_nodes', 'spec',
                       'last_case_fail', 'teardown_run', 'is_container',
                       'total_testcases']
+
+
+# ELIXIR Tenant Management Constants
+INDEX_MAX_CAP_PER_TENANT = 200
+INDEX_SUB_CLUSTER_LENGTH = 2
