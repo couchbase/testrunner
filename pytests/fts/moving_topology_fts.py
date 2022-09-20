@@ -1694,7 +1694,7 @@ class MovingTopFTS(FTSBaseTest):
                                    name="failover",
                                    args=())
         fail_thread.start()
-        index = self._cb_cluster.get_fts_index_by_name('default_index_1')
+        index = self._cb_cluster.get_fts_index_by_name('default._default.default_index_1')
         new_plan_param = {"maxPartitionsPerPIndex": 64}
         index.index_definition['planParams'] = \
             index.build_custom_plan_params(new_plan_param)
@@ -1736,7 +1736,7 @@ class MovingTopFTS(FTSBaseTest):
             target=self._cb_cluster.failover_and_rebalance_nodes,
             name="failover",
             args=())
-        index = self._cb_cluster.get_fts_index_by_name('default_index_1')
+        index = self._cb_cluster.get_fts_index_by_name('default._default.default_index_1')
         new_plan_param = {"maxPartitionsPerPIndex": 128}
         index.index_definition['planParams'] = \
             index.build_custom_plan_params(new_plan_param)
