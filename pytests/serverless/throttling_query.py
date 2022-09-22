@@ -1,5 +1,6 @@
 from serverless.serverless_basetestcase import ServerlessBaseTestCase
 from lib.metering_throttling import throttling
+import time
 
 class QueryThrottleSanity(ServerlessBaseTestCase):
     def setUp(self):
@@ -16,15 +17,6 @@ class QueryThrottleSanity(ServerlessBaseTestCase):
 
     def suite_tearDown(self):
         pass
-
-    def provision_databases(self, count=1):
-        self.log.info(f'PROVISIONING {count} DATABASE/s ...')
-        tasks = []
-        for _ in range(0, count):
-            task = self.create_database_async()
-            tasks.append(task)
-        for task in tasks:
-            task.result()
 
     def test_throttle_kv(self):
         self.provision_databases()
@@ -59,11 +51,13 @@ class QueryThrottleSanity(ServerlessBaseTestCase):
 
             _, _ = throttle.get_metrics(database.id, service='kv')
             throttle.set_bucket_limit(database.id, value=int(kv_limit/5), service='dataThrottleLimit')
+            time.sleep(2)
             result = self.run_query(database, f'SELECT count(city) FROM {self.collection}')
             execution_time_lower_throttle = self.get_execution_time(result['metrics']['executionTime'])
 
             _, _ = throttle.get_metrics(database.id, service='kv')
             throttle.set_bucket_limit(database.id, value=int(kv_limit/2), service='dataThrottleLimit')
+            time.sleep(2)
             result = self.run_query(database, f'SELECT count(city) FROM {self.collection}')
             execution_time_higher_throttle = self.get_execution_time(result['metrics']['executionTime'])
 
@@ -72,6 +66,6 @@ class QueryThrottleSanity(ServerlessBaseTestCase):
 
     def get_execution_time(self, time):
         if time[-2:] == 'ms':
-            return float(time[:-1])*1000
+            return float(time[:-2])*1000
         if time[-1] == 's':
             return float(time[:-1])

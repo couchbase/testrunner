@@ -8,9 +8,7 @@ import logger
 from tasks.task import CreateServerlessDatabaseTask
 from tasks.taskmanager import TaskManager
 import logging
-from couchbase.cluster import Cluster
-from couchbase.options import ClusterOptions
-from couchbase.auth import PasswordAuthenticator
+from couchbase.cluster import Cluster, ClusterOptions, PasswordAuthenticator
 from couchbase.bucket import Bucket
 from couchbase_helper.documentgenerator import SDKDataLoader
 from couchbase_helper.cluster import Cluster as Cluster_helper

@@ -18,15 +18,6 @@ class QueryMeterSanity(ServerlessBaseTestCase):
     def suite_tearDown(self):
         pass
 
-    def provision_databases(self, count=1):
-        self.log.info(f'PROVISIONING {count} DATABASE/s ...')
-        tasks = []
-        for _ in range(0, count):
-            task = self.create_database_async()
-            tasks.append(task)
-        for task in tasks:
-            task.result()
-
     def test_meter_write(self):
         self.provision_databases()
         for database in self.databases.values():
