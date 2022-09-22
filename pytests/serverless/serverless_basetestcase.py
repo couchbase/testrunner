@@ -92,6 +92,15 @@ class ServerlessBaseTestCase(unittest.TestCase):
                                                       timeout_secs=300))
         return tasks
 
+    def provision_databases(self, count=1):
+        self.log.info(f'PROVISIONING {count} DATABASES ...')
+        tasks = []
+        for _ in range(0, count):
+            task = self.create_database_async()
+            tasks.append(task)
+        for task in tasks:
+            task.result()
+
     def run_query(self, database, query, query_params=None, use_sdk=False, **kwargs):
         if use_sdk:
             cluster = self.get_sdk_cluster(database.id)
@@ -116,4 +125,6 @@ class ServerlessBaseTestCase(unittest.TestCase):
             self.log.info(f'EXECUTE QUERY against {database.nebula}: {query}')
             resp = requests.post(api, params=query_params, auth=(database.access_key, database.secret_key))
             resp.raise_for_status()
+            if 'billingUnits' in resp.json().keys():
+                self.log.info(f"BILLING UNITS from query: {resp.json()['billingUnits']}")
             return resp.json()
