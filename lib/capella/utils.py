@@ -212,8 +212,13 @@ class CapellaAPI:
         resp.raise_for_status()
 
     def create_serverless_database(self, config) -> str:
-        resp = self.serverless_api.create_serverless_database(
-            self.tenant_id, config)
+        if 'overRide' in config:
+            self.log.info(f"Dataplane ID parameter has been passed in the ini file."
+                          f"Will use {config['overRide']['dataplaneId']} for DB creation")
+            resp = self.serverless_api.create_serverless_database_overRide(config)
+        else:
+            self.log.info(f"Dataplane ID parameter not passed in the ini file. Will use default DP for DB creation")
+            resp = self.serverless_api.create_serverless_database(self.tenant_id, config)
         resp.raise_for_status()
         return resp.json()["databaseId"]
 
@@ -342,7 +347,7 @@ def spec_options_from_input(input):
         return option or default_value
 
     provider = get_option("provider", "aws")
-
+    dataplane_id = get_option("dataplane_id", None)
     default_region = "us-east-2" if provider == "aws" else "us-east-1"
     region = get_option("region", default_region)
 
@@ -360,10 +365,10 @@ def spec_options_from_input(input):
     default_disk_size = 50
     disk_size = int(get_option("disk_size", default_disk_size))
 
-    return provider, region, compute, disk_type, disk_iops, disk_size
+    return provider, region, compute, disk_type, disk_iops, disk_size, dataplane_id
 
 def create_capella_config(input, services_count):
-    provider, region, compute, disk_type, disk_iops, disk_size = spec_options_from_input(input)
+    provider, region, compute, disk_type, disk_iops, disk_size, dataplane_id = spec_options_from_input(input)
 
     specs = create_specs(provider, services_count, compute, disk_type, disk_iops, disk_size)
 
@@ -397,7 +402,7 @@ def create_capella_config(input, services_count):
 
 
 def create_serverless_config(input):
-    provider, region, _, _, _, _ = spec_options_from_input(input)
+    provider, region, _, _, _, _, dataplane_id = spec_options_from_input(input)
 
     config = {
         "name": str(uuid.uuid4()),
@@ -406,7 +411,10 @@ def create_serverless_config(input):
         "projectId": input.capella["project_id"],
         "tenantId": input.capella["tenant_id"],
     }
-
+    if dataplane_id:
+        if "overRide" not in config:
+            config['overRide'] = {}
+        config['overRide']['dataplaneId'] = dataplane_id
     return config
 
 

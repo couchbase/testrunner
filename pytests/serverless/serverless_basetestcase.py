@@ -140,7 +140,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
             query_params["statement"] = query
             self.log.info(f'EXECUTE QUERY against {database.nebula}: {query}')
             self.log.debug(f"Run Query statement payload {query_params}")
-            resp = requests.post(api, params=query_params, auth=(database.access_key, database.secret_key))
+            resp = requests.post(api, params=query_params, auth=(database.access_key, database.secret_key), timeout=120)
             resp.raise_for_status()
             if 'billingUnits' in resp.json().keys():
                 self.log.info(f"BILLING UNITS from query: {resp.json()['billingUnits']}")

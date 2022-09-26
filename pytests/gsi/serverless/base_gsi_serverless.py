@@ -12,18 +12,11 @@ class BaseGSIServerless(QueryBaseServerless):
 
     def setUp(self):
         super(BaseGSIServerless, self).setUp()
-        query_definition_generator = SQLDefinitionGenerator()
-        self.dataset = self.input.param("dataset", "default")
-        if self.dataset == "default" or self.dataset == "employee":
-            self.query_definitions = query_definition_generator.generate_employee_data_query_definitions()
-        if self.dataset == "simple":
-            self.query_definitions = query_definition_generator.generate_simple_data_query_definitions()
-        if self.dataset == "sabre":
-            self.query_definitions = query_definition_generator.generate_sabre_data_query_definitions()
-        if self.dataset == "bigdata":
-            self.query_definitions = query_definition_generator.generate_big_data_query_definitions()
-        if self.dataset == "array":
-            self.query_definitions = query_definition_generator.generate_airlines_data_query_definitions()
+        self.num_of_docs_per_collection = 10000
+        self.missing_index = self.input.param("missing_index", False)
+        self.array_index = self.input.param("array_index", False)
+        self.partitioned_index = self.input.param("partitioned_index", False)
+        self.defer_build = self.input.param("defer_build", False)
 
     def tearDown(self):
         super(BaseGSIServerless, self).tearDown()
