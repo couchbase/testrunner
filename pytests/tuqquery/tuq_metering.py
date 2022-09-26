@@ -16,9 +16,11 @@ class QueryMeteringTests(QueryTests):
         self.kv_wu, self.kv_ru = 1024, 4096
         self.index_wu, self.index_ru = 1024, 256
         self.doc = {"name": "a"*self.value_size}
+        self.composite_doc = {"fname": "a"*self.value_size, "lname":"b"*self.value_size}
         self.index_key_size = len ("a"*self.value_size) # index is on name
         self.doc_key_size = 36 # use uuid()
         self.doc_size= len(json.dumps(self.doc))
+        self.composite_doc_size = len(json.dumps(self.composite_doc))
         self.log.info(f'Doc count: {self.doc_count} - Doc key size is: {self.doc_key_size} - Doc size is: {self.doc_size}')
         self.meter = metering(self.server.ip, self.rest.username, self.rest.password)
 
@@ -244,8 +246,24 @@ class QueryMeteringTests(QueryTests):
         self.wait_for_all_indexes_online()
 
         expected_kv_ru = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru)
-        expected_index_ru = math.ceil(self.doc_count * (self.doc_key_size + self.index_key_size) / self.index_ru)
+        expected_index_ru = math.ceil(self.doc_count * 1.1 * (self.doc_key_size + self.index_key_size) / self.index_ru)
         result = self.run_cbq_query(f'SELECT name, city FROM {self.bucket} WHERE name = repeat("a", {self.value_size})')
+        assert_query, msg = self.meter.assert_query_billing_unit(result, expected_kv_ru, unit='ru', service = 'kv')
+        self.assertTrue(assert_query, msg)
+        assert_query, msg = self.meter.assert_query_billing_unit(result, expected_index_ru, unit='ru', service = 'index')
+        self.assertTrue(assert_query, msg)
+
+    def test_select_non_covering(self):
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.composite_doc} as v FROM array_range(0,{self.doc_count}) d'
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(insert_query)
+
+        self.run_cbq_query(f'CREATE INDEX idx_name IF NOT EXISTS on {self.bucket}(fname)')
+        self.wait_for_all_indexes_online()
+
+        expected_kv_ru = self.doc_count * math.ceil( (self.composite_doc_size + self.doc_key_size) / self.kv_ru)
+        expected_index_ru = math.ceil(self.doc_count * 1.1 * (self.doc_key_size + self.index_key_size) / self.index_ru)
+        result = self.run_cbq_query(f'SELECT fname, lname FROM {self.bucket} WHERE fname = repeat("a", {self.value_size}) and lname = repeat("b", {self.value_size})')
         assert_query, msg = self.meter.assert_query_billing_unit(result, expected_kv_ru, unit='ru', service = 'kv')
         self.assertTrue(assert_query, msg)
         assert_query, msg = self.meter.assert_query_billing_unit(result, expected_index_ru, unit='ru', service = 'index')
@@ -259,12 +277,10 @@ class QueryMeteringTests(QueryTests):
 
         before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
         before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
-        self.log.info(f"before_index_ru:{before_index_ru}, before_index_wu:{before_index_wu}, before_kv_ru:{before_kv_ru}, before_kv_wu:{before_kv_wu}")
         self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name)')
         self.wait_for_all_indexes_online()
         after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
         after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
-        self.log.info(f"after_index_ru:{after_index_ru}, after_index_wu:{after_index_wu}, after_kv_ru:{after_kv_ru}, after_kv_wu:{after_kv_wu}")
 
         expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu)
         expected_kv_ru = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru)
@@ -282,12 +298,10 @@ class QueryMeteringTests(QueryTests):
 
         before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
         before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
-        self.log.info(f"before_index_ru:{before_index_ru}, before_index_wu:{before_index_wu}, before_kv_ru:{before_kv_ru}, before_kv_wu:{before_kv_wu}")
         self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name) WITH {{"defer_build":true}}')
         self.sleep(30)
         after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
         after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
-        self.log.info(f"after_index_ru:{after_index_ru}, after_index_wu:{after_index_wu}, after_kv_ru:{after_kv_ru}, after_kv_wu:{after_kv_wu}")
 
         expected_index_wu = 0
         expected_kv_ru = 0
@@ -301,7 +315,6 @@ class QueryMeteringTests(QueryTests):
         self.wait_for_all_indexes_online()
         after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
         after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
-        self.log.info(f"after_index_ru:{after_index_ru}, after_index_wu:{after_index_wu}, after_kv_ru:{after_kv_ru}, after_kv_wu:{after_kv_wu}")
 
         expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu)
         expected_kv_ru = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru)
@@ -311,7 +324,64 @@ class QueryMeteringTests(QueryTests):
         self.assertEqual(before_kv_wu, after_kv_wu) # no kv wu
         self.assertEqual(expected_kv_ru, after_kv_ru - before_kv_ru)
 
+    def test_create_composite_diff_values(self):
+        doc1 = {"name": "San Francisco", "type": "city"}
+        doc2 = {"name": "Oakland", "type": "city"}
+        doc3 = {"name": "USA", "type": "country", "extra": "yes"}
+        doc_size1 = len(json.dumps(doc1))
+        doc_size2 = len(json.dumps(doc2))
+        doc_size3 = len(json.dumps({"name": "USA", "type": "country"}))
+
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc1} as v FROM array_range(0,5) d'
+        insert_query2 = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc2} as v FROM array_range(0,5) d'
+        insert_query3 = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc3} as v FROM array_range(0,5) d'
+
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(f'DROP INDEX idx_name IF EXISTS on {self.bucket}')
+        self.run_cbq_query(insert_query)
+        self.run_cbq_query(insert_query2)
+        self.run_cbq_query(insert_query3)
+
+        before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
+        before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name,type)')
+        self.wait_for_all_indexes_online()
+        after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
+        after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
+
+        expected_index_wu = 5 * math.ceil((doc_size1 + self.index_key_size) / self.index_wu) + 5 * math.ceil((doc_size2 + self.index_key_size) / self.index_wu) + 5 * math.ceil((doc_size3 + self.index_key_size) / self.index_wu)
+        expected_kv_ru = 5 * math.ceil((doc_size1 + self.doc_key_size) / self.kv_ru) + 5 * math.ceil((doc_size2 + self.doc_key_size) / self.kv_ru) + 5 * math.ceil((doc_size3 + self.doc_key_size) / self.kv_ru)
+        self.assertEqual(before_index_ru, after_index_ru) # no index ru
+        self.assertEqual(expected_index_wu, after_index_wu - before_index_wu)
+        self.assertEqual(before_kv_wu, after_kv_wu) # no kv wu
+        self.assertEqual(expected_kv_ru, after_kv_ru - before_kv_ru)
+
     def test_gsi_create_partial(self):
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(f'DROP INDEX idx_name IF EXISTS on {self.bucket}')
+        self.run_cbq_query(insert_query)
+        doc1 = {"name":"hotel"}
+        insert_query2 = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc1} as v FROM array_range(0,4) d'
+        self.run_cbq_query(insert_query2)
+
+        name = "a"*self.value_size
+        before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
+        before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name) where name = {name}')
+        self.wait_for_all_indexes_online()
+        after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
+        after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
+
+        expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu)
+        expected_kv_ru = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru)
+
+        self.assertEqual(before_index_ru, after_index_ru) # no index ru
+        self.assertEqual(expected_index_wu, after_index_wu - before_index_wu)
+        self.assertEqual(before_kv_wu, after_kv_wu) # no kv wu
+        self.assertEqual(expected_kv_ru, after_kv_ru - before_kv_ru)
+
+    def test_gsi_create_partial_diff_values(self):
         doc1 = {"name":"hotel"}
         doc2 = {"name":"airport"}
         doc3 = {"name":"airline"}
@@ -330,12 +400,10 @@ class QueryMeteringTests(QueryTests):
 
         before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
         before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
-        self.log.info(f"before_index_ru:{before_index_ru}, before_index_wu:{before_index_wu}, before_kv_ru:{before_kv_ru}, before_kv_wu:{before_kv_wu}")
         self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name) where name = "hotel"')
         self.wait_for_all_indexes_online()
         after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
         after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
-        self.log.info(f"after_index_ru:{after_index_ru}, after_index_wu:{after_index_wu}, after_kv_ru:{after_kv_ru}, after_kv_wu:{after_kv_wu}")
 
         expected_index_wu = 4 * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu)
         expected_kv_ru = 4 * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru)
@@ -353,14 +421,10 @@ class QueryMeteringTests(QueryTests):
 
         before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
         before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
-        self.log.info(
-            f"before_index_ru:{before_index_ru}, before_index_wu:{before_index_wu}, before_kv_ru:{before_kv_ru}, before_kv_wu:{before_kv_wu}")
         self.run_cbq_query(f'CREATE PRIMARY INDEX ON default')
         self.wait_for_all_indexes_online()
         after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
         after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
-        self.log.info(
-            f"after_index_ru:{after_index_ru}, after_index_wu:{after_index_wu}, after_kv_ru:{after_kv_ru}, after_kv_wu:{after_kv_wu}")
 
         expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu)
         expected_kv_ru = self.doc_count * math.ceil((self.doc_size + self.doc_key_size) / self.kv_ru)
@@ -371,6 +435,34 @@ class QueryMeteringTests(QueryTests):
         self.assertEqual(expected_kv_ru, after_kv_ru - before_kv_ru)
 
     def test_create_missing(self):
+        doc2 = {"type": "airline"}
+        doc_size2 = len(json.dumps(doc2))
+
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
+        insert_query2 = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc2} as v FROM array_range(0,4) d'
+
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(f'DROP INDEX idx_name IF EXISTS on {self.bucket}')
+        self.run_cbq_query(insert_query)
+        self.run_cbq_query(insert_query2)
+
+
+        before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
+        before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name INCLUDE MISSING)')
+        self.wait_for_all_indexes_online()
+        after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
+        after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
+
+        expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu) + 4 * math.ceil((doc_size2 + self.index_key_size) / self.index_wu)
+        expected_kv_ru = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru) + 4 * math.ceil((doc_size2 + self.doc_key_size) / self.kv_ru)
+
+        self.assertEqual(before_index_ru, after_index_ru) # no index ru
+        self.assertEqual(expected_index_wu, after_index_wu - before_index_wu)
+        self.assertEqual(before_kv_wu, after_kv_wu) # no kv wu
+        self.assertEqual(expected_kv_ru, after_kv_ru - before_kv_ru)
+
+    def test_create_missing_diff_values(self):
         doc1 = {"name": "hotel"}
         doc2 = {"name": "airport"}
         doc3 = {"type": "airline"}
@@ -390,14 +482,10 @@ class QueryMeteringTests(QueryTests):
 
         before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
         before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
-        self.log.info(
-            f"before_index_ru:{before_index_ru}, before_index_wu:{before_index_wu}, before_kv_ru:{before_kv_ru}, before_kv_wu:{before_kv_wu}")
         self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name INCLUDE MISSING)')
         self.wait_for_all_indexes_online()
         after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
         after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
-        self.log.info(
-            f"after_index_ru:{after_index_ru}, after_index_wu:{after_index_wu}, after_kv_ru:{after_kv_ru}, after_kv_wu:{after_kv_wu}")
 
         expected_index_wu = 4 * math.ceil((doc_size1 + self.index_key_size) / self.index_wu) + 4 * math.ceil((doc_size2 + self.index_key_size) / self.index_wu) + 4 * math.ceil((doc_size3 + self.index_key_size) / self.index_wu)
         expected_kv_ru = 4 * math.ceil((doc_size1 + self.doc_key_size) / self.kv_ru) + 4 * math.ceil((doc_size2 + self.doc_key_size) / self.kv_ru) + 4 * math.ceil((doc_size3 + self.doc_key_size) / self.kv_ru)
@@ -427,14 +515,10 @@ class QueryMeteringTests(QueryTests):
 
         before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
         before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
-        self.log.info(
-            f"before_index_ru:{before_index_ru}, before_index_wu:{before_index_wu}, before_kv_ru:{before_kv_ru}, before_kv_wu:{before_kv_wu}")
         self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name)')
         self.wait_for_all_indexes_online()
         after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
         after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
-        self.log.info(
-            f"after_index_ru:{after_index_ru}, after_index_wu:{after_index_wu}, after_kv_ru:{after_kv_ru}, after_kv_wu:{after_kv_wu}")
 
         expected_index_wu = 4 * math.ceil((doc_size1 + self.index_key_size) / self.index_wu) + 4 * math.ceil((doc_size2 + self.index_key_size) / self.index_wu)
         expected_kv_ru = 4 * math.ceil((doc_size1 + self.doc_key_size) / self.kv_ru) + 4 * math.ceil((doc_size2 + self.doc_key_size) / self.kv_ru)
@@ -452,15 +536,11 @@ class QueryMeteringTests(QueryTests):
 
         before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
         before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
-        self.log.info(
-            f"before_index_ru:{before_index_ru}, before_index_wu:{before_index_wu}, before_kv_ru:{before_kv_ru}, before_kv_wu:{before_kv_wu}")
         self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name)')
         self.run_cbq_query(f'CREATE INDEX idx_name2 on {self.bucket}(name)')
         self.wait_for_all_indexes_online()
         after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
         after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
-        self.log.info(
-            f"after_index_ru:{after_index_ru}, after_index_wu:{after_index_wu}, after_kv_ru:{after_kv_ru}, after_kv_wu:{after_kv_wu}")
 
         expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu) * 2
         expected_kv_ru = self.doc_count * math.ceil((self.doc_size + self.doc_key_size) / self.kv_ru) * 2
@@ -471,6 +551,31 @@ class QueryMeteringTests(QueryTests):
         self.assertEqual(expected_kv_ru, after_kv_ru - before_kv_ru)
 
     def test_create_composite(self):
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.composite_doc} as v FROM array_range(0,{self.doc_count}) d'
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(f'DROP INDEX idx_name IF EXISTS on {self.bucket}')
+        self.run_cbq_query(insert_query)
+
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(f'DROP INDEX idx_name IF EXISTS on {self.bucket}')
+        self.run_cbq_query(insert_query)
+
+        before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
+        before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(fname,lname)')
+        self.wait_for_all_indexes_online()
+        after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
+        after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
+
+        expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu)
+        expected_kv_ru = self.doc_count * math.ceil((self.composite_doc_size + self.doc_key_size) / self.kv_ru)
+
+        self.assertEqual(before_index_ru, after_index_ru) # no index ru
+        self.assertEqual(expected_index_wu, after_index_wu - before_index_wu)
+        self.assertEqual(before_kv_wu, after_kv_wu) # no kv wu
+        self.assertEqual(expected_kv_ru, after_kv_ru - before_kv_ru)
+
+    def test_create_composite_diff_values(self):
         doc1 = {"name": "San Francisco", "type": "city"}
         doc2 = {"name": "Oakland", "type": "city"}
         doc3 = {"name": "USA", "type": "country", "extra": "yes"}
@@ -490,12 +595,10 @@ class QueryMeteringTests(QueryTests):
 
         before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
         before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
-        self.log.info(f"before_index_ru:{before_index_ru}, before_index_wu:{before_index_wu}, before_kv_ru:{before_kv_ru}, before_kv_wu:{before_kv_wu}")
         self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name,type)')
         self.wait_for_all_indexes_online()
         after_index_ru, after_index_wu = self.meter.get_index_rwu(self.bucket)
         after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
-        self.log.info(f"after_index_ru:{after_index_ru}, after_index_wu:{after_index_wu}, after_kv_ru:{after_kv_ru}, after_kv_wu:{after_kv_wu}")
 
         expected_index_wu = 5 * math.ceil((doc_size1 + self.index_key_size) / self.index_wu) + 5 * math.ceil((doc_size2 + self.index_key_size) / self.index_wu) + 5 * math.ceil((doc_size3 + self.index_key_size) / self.index_wu)
         expected_kv_ru = 5 * math.ceil((doc_size1 + self.doc_key_size) / self.kv_ru) + 5 * math.ceil((doc_size2 + self.doc_key_size) / self.kv_ru) + 5 * math.ceil((doc_size3 + self.doc_key_size) / self.kv_ru)
@@ -522,8 +625,51 @@ class QueryMeteringTests(QueryTests):
         self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name) where name = "hotel"')
         self.wait_for_all_indexes_online()
 
-        expected_index_ru = math.ceil(4 * (self.doc_key_size + self.index_key_size) / self.index_ru)
+        expected_index_ru = math.ceil(4 * 1.1 (self.doc_key_size + self.index_key_size) / self.index_ru)
         result = self.run_cbq_query(f'SELECT name FROM {self.bucket} WHERE name = "hotel"')
+        assert_query, msg = self.meter.assert_query_billing_unit(result, expected_index_ru, unit='ru', service = 'index')
+        self.assertTrue(assert_query, msg)
+
+    def test_select_composite(self):
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.composite_doc} as v FROM array_range(0,{self.doc_count}) d'
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(f'DROP INDEX idx_name IF EXISTS on {self.bucket}')
+        self.run_cbq_query(insert_query)
+
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(f'DROP INDEX idx_name IF EXISTS on {self.bucket}')
+        self.run_cbq_query(insert_query)
+
+        self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(fname,lname)')
+        self.wait_for_all_indexes_online()
+
+        expected_index_ru = math.ceil(self.doc_count * 1.1 * (self.doc_key_size + self.index_key_size) / self.index_ru)
+        result = self.run_cbq_query(f'SELECT fname, lname FROM {self.bucket} WHERE fname = repeat("a", {self.value_size}) and lname = repeat("b", {self.value_size})')
+        self.assertTrue("kv" not in str(result['billingUnits']), f"Index is covering, there should be no kv units : {result}")
+        assert_query, msg = self.meter.assert_query_billing_unit(result, expected_index_ru, unit='ru', service = 'index')
+        self.assertTrue(assert_query, msg)
+
+    def test_select_composite_diff_values(self):
+        doc1 = {"name": "San Francisco", "type": "city"}
+        doc2 = {"name": "Oakland", "type": "city"}
+        doc3 = {"name": "USA", "type": "country", "extra": "yes"}
+
+        insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc1} as v FROM array_range(0,5) d'
+        insert_query2 = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc2} as v FROM array_range(0,5) d'
+        insert_query3 = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {doc3} as v FROM array_range(0,5) d'
+
+        self.run_cbq_query(f'DELETE from {self.bucket}')
+        self.run_cbq_query(f'DROP INDEX idx_name IF EXISTS on {self.bucket}')
+        self.run_cbq_query(insert_query)
+        self.run_cbq_query(insert_query2)
+        self.run_cbq_query(insert_query3)
+        self.run_cbq_query(f'CREATE INDEX idx_name on {self.bucket}(name,type)')
+        self.wait_for_all_indexes_online()
+
+        expected_index_ru = math.ceil(5 * 1.1 * (self.doc_key_size + self.index_key_size) / self.index_ru)
+
+        result = self.run_cbq_query(f'SELECT name FROM {self.bucket} WHERE name = "USA" and type = "country"')
+        self.assertTrue("kv" not in str(result['billingUnits']), f"Index is covering, there should be no kv units : {result}")
         assert_query, msg = self.meter.assert_query_billing_unit(result, expected_index_ru, unit='ru', service = 'index')
         self.assertTrue(assert_query, msg)
 
