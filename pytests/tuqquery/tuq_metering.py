@@ -215,6 +215,13 @@ class QueryMeteringTests(QueryTests):
         self.assertTrue("ru" not in result['billingUnits'])
         self.assertEqual(before_kv_ru, after_kv_ru, f"KV RU before: {before_kv_ru} and after: {after_kv_ru} are different") # expect no KV reads
 
+    def test_inline_udf(self):
+        result = self.run_cbq_query(f"CREATE or REPLACE FUNCTION default:{self.bucket}._default.plusone(a) {{ a + 1 }}")
+        self.assertTrue('billingUnits' not in result)
+        result = self.run_cbq_query(f"EXECUTE FUNCTION default:{self.bucket}._default.plusone(10)")
+        self.assertTrue('billingUnits' not in result)
+        self.assertTrue(result['results'], [11])
+
     def test_kv_inline_udf(self):
         insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
         self.run_cbq_query(f'DELETE from {self.bucket}')
@@ -683,7 +690,10 @@ class QueryMeteringTests(QueryTests):
             'explain': f'EXPLAIN SELECT name, city FROM {self.bucket} WHERE name = repeat("a", {self.value_size})',
             'advise': f'ADVISE SELECT name, city FROM {self.bucket} WHERE name = repeat("a", {self.value_size})',
             'catalog': 'SELECT * FROM system:keyspaces',
-            'query1': 'SELECT * FROM array_repeat("a", 10) as t'
+            'query1': 'SELECT * FROM array_repeat("a", 10) as t',
+            'system_scope_query': f'SELECT * FROM {self.bucket}.`_system`.`_query`',
+            'system_scope_mobile': f'SELECT * FROM {self.bucket}.`_system`.`_mobile`',
+            'system_scope_eventing': f'SELECT * FROM {self.bucket}.`_system`.`_eventing`',
         }
         before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
         before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
