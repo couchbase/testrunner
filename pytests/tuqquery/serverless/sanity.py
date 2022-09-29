@@ -1,6 +1,7 @@
 from serverless.serverless_basetestcase import ServerlessBaseTestCase
 import time
 import math
+import random
 
 class QuerySanity(ServerlessBaseTestCase):
     def setUp(self):
@@ -128,3 +129,17 @@ class QuerySanity(ServerlessBaseTestCase):
                 result = self.run_query(database, f'SELECT name FROM {self.scope}.{self.collection} WHERE name is not null')
                 self.assertEqual(result['metrics']['resultCount'], self.doc_count)
                 self.assertEqual(result['billingUnits'], {'ru': {'index': index_ru}})
+            with self.subTest('Array Index'):
+                self.log.info("="*40)
+                self.log.info("===== SUBTEST: Array index scan")
+                fruits = ["apple", "banana", "pear", "peach", "apricot", "date", "grape", "plum", "kiwi", "mango", "avocado", "strawberry", "raspberry", "blueberry", "gooseberry", "currant", "watermelon", "melon", "cherry", "tomato"]
+                for n in range(0,10):
+                    insert = self.run_query(database, f'INSERT INTO {self.scope}.{self.collection} (key, value) values (uuid(), {{ "store": "Store-{n}", "fruits": {random.sample(fruits, 5)} }} )')
+                index = self.run_query(database, f'CREATE INDEX index_arr ON {self.scope}.{self.collection}(ALL ARRAY f FOR f IN fruits END)')
+                self.check_index_online(database, 'index_arr')
+                explain = self.run_query(database, f'EXPLAIN SELECT s.store FROM {self.scope}.{self.collection} s WHERE ANY f IN s.fruits SATISFIES f = "apple" END')
+                self.assertEqual(explain['results'][0]['plan']['~children'][0]['scan']['index'], 'index_arr')
+                result = self.run_query(database, f'SELECT * FROM {self.scope}.{self.collection} s WHERE ANY f IN s.fruits SATISFIES f = "apple" END')
+                doc_count = result['metrics']['resultCount']
+                index_ru = math.ceil(doc_count * (36 + 5) / 256)
+                self.assertEqual(result['billingUnits'], {'ru': {'index': index_ru, 'kv': doc_count}} )
