@@ -30,13 +30,7 @@ class TenantManagement(BaseGSIServerless):
         pass
 
     def test_cluster_affinity(self):
-        tasks = []
-        host1, host1_replica, host2, host2_replica = None, None, None, None
-        for _ in range(0, self.num_of_tenants):
-            task = self.create_database_async()
-            tasks.append(task)
-        for task in tasks:
-            task.result()
+        self.provision_databases(count=self.num_of_tenants)
         for counter, database in enumerate(self.databases.values()):
             for index in range(self.num_of_indexes_per_tenant):
                 index1 = f'idx{index}_db{counter}_{random.randint(0, 1000)}'
@@ -74,12 +68,7 @@ class TenantManagement(BaseGSIServerless):
                     self.fail("Not all indexes (or their replicas) have been created. Test failure")
 
     def test_max_limit_indexes_per_tenant(self):
-        tasks = []
-        for _ in range(0, self.num_of_tenants):
-            task = self.create_database_async()
-            tasks.append(task)
-        for task in tasks:
-            task.result()
+        self.provision_databases(count=self.num_of_tenants)
         for counter, database in enumerate(self.databases.values()):
             self.cleanup_database(database_obj=database)
             for index_num in range(MAX_INDEX_LIMIT_PER_TENANT):
