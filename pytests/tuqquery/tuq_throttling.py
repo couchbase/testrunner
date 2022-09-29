@@ -10,6 +10,7 @@ class QueryThrottlingTests(QueryTests):
         self.kv_wu, self.kv_ru = 1024, 4096
         self.index_wu, self.index_ru = 1024, 256
         self.scope_limit, self.collection_limit = 100, 100
+        self.gsi_limit = 200
         self.kvThrottleLimit = self.get_throttle_limits(service='kvThrottleLimit')
         self.log.info(f'kvThrottleLimit is {self.kvThrottleLimit}')
 
@@ -143,4 +144,20 @@ class QueryThrottlingTests(QueryTests):
             self.assertTrue(f'_:Maximum number of collections ({self.collection_limit}) for this bucket has been reached' in error['msg'])
         finally:
             for i in range(self.collection_limit):
-                self.run_cbq_query(f'DROP COLLECTION {self.bucket}.`_default`.collection{i} IF EXISTS')                
+                self.run_cbq_query(f'DROP COLLECTION {self.bucket}.`_default`.collection{i} IF EXISTS')
+
+    def test_gsi_limit(self):
+        indexes = self.run_cbq_query('SELECT raw count(*) FROM system:indexes WHERE `using` = "gsi"')
+        count = indexes['results'][0]
+        for i in range(self.gsi_limit - count):
+            self.run_cbq_query(f'CREATE INDEX idx{i} IF NOT EXISTS ON {self.bucket}(a)')
+        try:
+            self.run_cbq_query(f'CREATE INDEX idx{self.gsi_limit+1} IF NOT EXISTS ON {self.bucket}(a)')
+            self.fail(f'We should not be able to create index beyond limit of {self.gsi_limit}')
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 4350)
+            self.assertEqual(error['msg'], f'GSI CreateIndex() - cause: Limit for number of indexes that can be created per bucket has been reached. Limit : {self.gsi_limit}')
+        finally:
+            for i in range(self.gsi_limit):
+                self.run_cbq_query(f'DROP INDEX idx{i} IF EXISTS ON {self.bucket}')
