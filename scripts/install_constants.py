@@ -109,7 +109,7 @@ CMDS = {
     "deb": {
         "uninstall":
             UNMOUNT_NFS_CMD +
-            "apt-get remove -y 'couchbase*' > /dev/null; " +
+            "apt-get purge -y 'couchbase*' > /dev/null; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
         "pre_install": None,
         "install": "DEBIAN_FRONTEND='noninteractive' apt-get -y -f install buildpath > /dev/null && echo 1 || echo 0",
