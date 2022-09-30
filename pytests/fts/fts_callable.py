@@ -10,6 +10,7 @@ from lib.couchbase_helper.documentgenerator import JsonDocGenerator
 from lib.couchbase_helper.documentgenerator import SDKDataLoader
 from lib.membase.api.rest_client import RestConnection
 from .random_query_generator.rand_query_gen import FTSESQueryGenerator
+from lib.Cb_constants.CBServer import CbServer
 from lib.collection.collections_cli_client import CollectionsCLI
 from scripts.java_sdk_setup import JavaSdkSetup
 
@@ -205,7 +206,10 @@ class FTSCallable:
             while retry_count > 0:
                 try:
                     index_doc_count = index.get_indexed_doc_count()
-                    bucket_doc_count = index.get_src_bucket_doc_count()
+                    if CbServer.capella_run:
+                        bucket_doc_count=item_count
+                    else:
+                        bucket_doc_count = index.get_src_bucket_doc_count()
                     if not self.es:
                         self.log.info("Docs in bucket = %s, docs in FTS index '%s': %s"
                                       % (bucket_doc_count,

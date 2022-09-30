@@ -2499,6 +2499,17 @@ class RestConnection(object):
                     buckets.append(bucketInfo)
         return buckets
 
+    def get_bucket_by_name_directly(self,bucket_name):
+        api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket_name)
+        status, content, header = self._http_request(api)
+        json_parsed = [json.loads(content)]
+        if status:
+            for item in json_parsed:
+                bucketInfo = RestParser().parse_get_bucket_json(item)
+                if bucketInfo.name == bucket_name:
+                    return bucketInfo
+        return None
+
     def get_buckets_itemCount(self):
         # get all the buckets
         bucket_map = {}
@@ -5141,7 +5152,7 @@ class RestConnection(object):
     def get_authorization(self, username, password):
         credentials = '{}:{}'.format(username, password)
         authorization = base64.encodebytes(credentials.encode('utf-8'))
-        return authorization.decode('utf-8').rstrip('\n')
+        return authorization.decode('utf-8').replace("\n", "")
 
     '''
     Return list of permission with True/False if user has permission or not
@@ -6555,21 +6566,19 @@ class RestParser(object):
         bucket = Bucket()
         bucket.name = parsed['name']
         bucket.uuid = parsed['uuid']
-        bucket.type = parsed['bucketType']
+        if 'bucketType' in parsed:
+            bucket.type = parsed['bucketType']
         if 'proxyPort' in parsed:
             bucket.port = parsed['proxyPort']
         bucket.nodes = list()
         if 'vBucketServerMap' in parsed:
             vBucketServerMap = parsed['vBucketServerMap']
             serverList = vBucketServerMap['serverList']
-
             if "nodes" in parsed and parsed["nodes"] is not None:
                 alt_addr_map = self.get_alt_addr_map(parsed["nodes"])
-
                 for i, server in enumerate(serverList):
                     if server in alt_addr_map:
                         serverList[i] = alt_addr_map[server]
-
             bucket.servers.extend(serverList)
             if "numReplicas" in vBucketServerMap:
                 bucket.numReplicas = vBucketServerMap["numReplicas"]
@@ -6606,34 +6615,44 @@ class RestParser(object):
             # who is master , who is replica
         # get the 'storageTotals'
         log.debug('read {0} vbuckets'.format(len(bucket.vbuckets)))
-        stats = parsed['basicStats']
-        # vBucketServerMap
-        bucketStats = BucketStats()
-        log.debug('stats:{0}'.format(stats))
-        bucketStats.opsPerSec = stats['opsPerSec']
-        bucketStats.itemCount = stats['itemCount']
-        if bucket.type != "memcached":
-            bucketStats.diskUsed = stats['diskUsed']
-        bucketStats.memUsed = stats['memUsed']
-        quota = parsed['quota']
-        bucketStats.ram = quota['ram']
-        bucket.stats = bucketStats
+        if 'basicStats' in parsed:
+            stats = parsed['basicStats']
+            # vBucketServerMap
+            bucketStats = BucketStats()
+            log.debug('stats:{0}'.format(stats))
+            bucketStats.opsPerSec = stats['opsPerSec']
+            bucketStats.itemCount = stats['itemCount']
+            if bucket.type != "memcached":
+                bucketStats.diskUsed = stats['diskUsed']
+            bucketStats.memUsed = stats['memUsed']
+            quota = parsed['quota']
+            bucketStats.ram = quota['ram']
+            bucket.stats = bucketStats
         nodes = parsed['nodes']
         for nodeDictionary in nodes:
             node = Node()
-            node.uptime = nodeDictionary['uptime']
-            node.memoryFree = nodeDictionary['memoryFree']
-            node.memoryTotal = nodeDictionary['memoryTotal']
-            node.mcdMemoryAllocated = nodeDictionary['mcdMemoryAllocated']
-            node.mcdMemoryReserved = nodeDictionary['mcdMemoryReserved']
-            node.status = nodeDictionary['status']
-            node.hostname = nodeDictionary['hostname']
+            if 'uptime' in nodeDictionary:
+                node.uptime = nodeDictionary['uptime']
+            if 'memoryFree' in nodeDictionary:
+                node.memoryFree = nodeDictionary['memoryFree']
+            if 'memoryTotal' in nodeDictionary:
+                node.memoryTotal = nodeDictionary['memoryTotal']
+            if 'mcdMemoryAllocated' in nodeDictionary:
+                node.mcdMemoryAllocated = nodeDictionary['mcdMemoryAllocated']
+            if 'mcdMemoryReserved' in nodeDictionary:
+                node.mcdMemoryReserved = nodeDictionary['mcdMemoryReserved']
+            if 'status' in nodeDictionary:
+                node.status = nodeDictionary['status']
+            if 'hostname' in nodeDictionary:
+                node.hostname = nodeDictionary['hostname']
             if 'clusterCompatibility' in nodeDictionary:
                 node.clusterCompatibility = nodeDictionary['clusterCompatibility']
             if 'clusterMembership' in nodeDictionary:
                 node.clusterCompatibility = nodeDictionary['clusterMembership']
-            node.version = nodeDictionary['version']
-            node.os = nodeDictionary['os']
+            if 'version' in nodeDictionary:
+                node.version = nodeDictionary['version']
+            if 'os' in nodeDictionary:
+                node.os = nodeDictionary['os']
             if "ports" in nodeDictionary:
                 ports = nodeDictionary["ports"]
                 if "direct" in ports:

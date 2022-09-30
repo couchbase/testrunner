@@ -40,7 +40,10 @@ from couchbase_helper.documentgenerator import JsonDocGenerator
 from lib.membase.api.exception import FTSException
 from .es_base import ElasticSearchBase
 from security.rbac_base import RbacBase
-from lib.couchbase_helper.tuq_helper import N1QLHelper
+try:
+    from lib.couchbase_helper.tuq_helper import N1QLHelper
+except Exception as e:
+    print(str(e))
 from .random_query_generator.rand_query_gen import FTSESQueryGenerator
 from security.ntonencryptionBase import ntonencryptionBase
 from lib.ep_mc_bin_client import MemcachedClient
@@ -828,7 +831,10 @@ class FTSIndex:
             self.index_definition['sourceType'] = "nil"
             self.index_definition['sourceName'] = ""
         else:
-            self.source_bucket = self.__cluster.get_bucket_by_name(source_name)
+            if CbServer.capella_run:
+                self.source_bucket = self.__cluster.get_bucket_by_name_directly(source_name)
+            else:
+                self.source_bucket = self.__cluster.get_bucket_by_name(source_name)
             self.index_definition['sourceType'] = self._source_type
             self.index_definition['sourceName'] = self._source_name
 
@@ -2086,7 +2092,10 @@ class CouchbaseCluster:
         self.__fts_nodes = []
         self.__n1ql_nodes = []
         self.__non_fts_nodes = []
-        service_map = RestConnection(self.__master_node).get_nodes_services()
+        if not CbServer.capella_run:
+            service_map = RestConnection(self.__master_node).get_nodes_services()
+        else:
+            service_map = self.get_service_map_from_input()
         for node_ip, services in list(service_map.items()):
             if self.is_cluster_run():
                 # if cluster-run and ip not 127.0.0.1
@@ -2110,6 +2119,14 @@ class CouchbaseCluster:
                 if "kv" in services:
                     if node not in self.__kv_nodes:
                         self.__kv_nodes.append(node)
+
+    def get_service_map_from_input(self):
+        servers = TestInputSingleton.input.servers
+        service_map = {}
+        for server in servers:
+            services = server.services
+            service_map[f'{server.ip}:{server.port}'] = services.split(",")
+        return service_map
 
     def get_fts_nodes(self):
         self.__separate_nodes_on_services()
@@ -2758,6 +2775,16 @@ class CouchbaseCluster:
         raise Exception(
             "Bucket with name: %s not found on the cluster" %
             bucket_name)
+
+    def get_bucket_by_name_directly(self, bucket_name):
+        # get all the buckets
+        bucket = RestConnection(self.__master_node).get_bucket_by_name_directly(bucket_name=bucket_name)
+        if bucket:
+            return bucket
+        else:
+            raise Exception(
+                "Bucket with name: %s not found on the cluster" %
+                bucket_name)
 
     def get_doc_count_in_bucket(self, bucket):
         return RestConnection(self.__master_node).get_active_key_count(bucket)
