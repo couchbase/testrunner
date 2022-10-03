@@ -30,6 +30,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
         self.multitenant_run = True if self.num_of_tenants > 1 else False
         self.use_sdk = self.input.param("use_sdk", False)
         self.num_of_indexes_per_tenant = self.input.param("num_of_indexes_per_tenant", 20)
+        self.create_bypass_user = self.input.param("create_bypass_user", False)
 
     def tearDown(self):
         for database_id in self.databases:
@@ -55,7 +56,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
 
     def create_database_async(self):
         config = capella_utils.create_serverless_config(self.input)
-        task = CreateServerlessDatabaseTask(self.api, config, self.databases)
+        task = CreateServerlessDatabaseTask(self.api, config, self.databases, create_bypass_user=self.create_bypass_user)
         self.task_manager.schedule(task)
         return task
 
