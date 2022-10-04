@@ -81,7 +81,7 @@ except Exception as e:
 # import stacktracer
 # stacktracer.trace_start("trace.html",interval=30,auto=True) # Set auto flag to always update file!
 
-from lib.capella.utils import CapellaAPI, ServerlessDatabase
+from lib.capella.utils import CapellaAPI, ServerlessDatabase, ServerlessDataPlane
 import lib.capella.utils as capella_utils
 
 CONCURRENCY_LOCK = Semaphore(THROUGHPUT_CONCURRENCY)
@@ -6684,20 +6684,21 @@ class LogScanTask(Task):
 
 
 class CreateServerlessDatabaseTask(Task):
-    def __init__(self, api: CapellaAPI, config, databases: Dict[str, ServerlessDatabase], create_bypass_user=False):
+    def __init__(self, api: CapellaAPI, config, databases: Dict[str, ServerlessDatabase], dataplanes: Dict[str, ServerlessDataPlane],
+                 create_bypass_user=False):
         Task.__init__(self, "CreateServerlessDatabaseTask")
         self.api = api
         self.config = config
         self.databases = databases
         self.create_bypass_user = create_bypass_user
+        self.dataplanes = dataplanes
 
     def execute(self, task_manager):
         try:
             self.log.info(
                 "creating serverless database {}".format(self.config))
             self.database_id = self.api.create_serverless_database(self.config)
-            self.databases[self.database_id] = ServerlessDatabase(
-                self.database_id)
+            self.databases[self.database_id] = ServerlessDatabase(self.database_id)
             self.state = CHECKING
             task_manager.schedule(self)
         except Exception as e:
@@ -6720,7 +6721,11 @@ class CreateServerlessDatabaseTask(Task):
                 rest_api_info = {"srv":"", "couchbaseCreds": {"username":"", "password":""}}
                 if self.create_bypass_user:
                     self.log.info("Obtaining access to the dataplane nodes")
-                    rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(database_id=self.database_id)
+                    dataplane_id = self.api.get_resident_dataplane_id(database_id=self.database_id)
+                    if dataplane_id not in self.dataplanes:
+                        self.dataplanes[dataplane_id] = ServerlessDataPlane(dataplane_id)
+                        rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=dataplane_id)
+                        self.dataplanes[dataplane_id].populate(rest_api_info)
                 self.databases[self.database_id].populate(info, creds, rest_api_info)
                 self.state = FINISHED
                 self.set_result(self.database_id)

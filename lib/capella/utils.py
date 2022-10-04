@@ -39,6 +39,19 @@ class ServerlessDatabase:
         except:
             print("Rest srv domain resolution failure. Cannot run any of the rest APIs")
 
+class ServerlessDataPlane:
+    def __init__(self, dataplane_id):
+        self.id = dataplane_id
+
+    def populate(self, rest_api_info):
+        self.rest_srv = rest_api_info['srv']
+        self.admin_username = rest_api_info['couchbaseCreds']['username']
+        self.admin_password = rest_api_info['couchbaseCreds']['password']
+        try:
+            self.rest_host = get_host_from_srv(self.rest_srv)
+        except:
+            print("Rest srv domain resolution failure. Cannot run any of the rest APIs")
+
 def get_host_from_srv(srv):
     import dns.resolver
     srvInfo = {}
@@ -222,15 +235,16 @@ class CapellaAPI:
         resp.raise_for_status()
         return resp.json()["databaseId"]
 
-    def get_access_to_serverless_dataplane_nodes(self, database_id) -> str:
+    def get_access_to_serverless_dataplane_nodes(self, dataplane_id) -> str:
+        resp = self.serverless_api.get_access_to_serverless_dataplane_nodes(dataplane_id)
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_resident_dataplane_id(self, database_id):
         resp = self.serverless_api.get_database_debug_info(database_id=database_id)
         resp.raise_for_status()
         dataplane_id = resp.json()['dataplane']['id']
-        resp = self.serverless_api.get_access_to_serverless_dataplane_nodes(dataplane_id)
-        # when you run this API twice against the same public IP, it throws a 500 error. Ignore if the IP has already
-        # been added.
-        resp.raise_for_status()
-        return resp.json()
+        return dataplane_id
 
     def wait_for_database_deleted(self, database_id, timeout=1800):
         end_time = time.time() + timeout

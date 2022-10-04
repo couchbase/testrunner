@@ -2,7 +2,7 @@ from typing import Dict
 import unittest
 import requests
 from TestInput import TestInputSingleton
-from lib.capella.utils import CapellaAPI, CapellaCredentials, ServerlessDatabase
+from lib.capella.utils import CapellaAPI, CapellaCredentials, ServerlessDatabase, ServerlessDataPlane
 import lib.capella.utils as capella_utils
 import logger
 from tasks.task import CreateServerlessDatabaseTask
@@ -11,6 +11,7 @@ import logging
 from couchbase.cluster import Cluster, ClusterOptions, PasswordAuthenticator, QueryOptions
 from couchbase.bucket import Bucket
 from couchbase_helper.documentgenerator import SDKDataLoader
+from membase.api.serverless_rest_client import ServerlessRestConnection as RestConnection
 from couchbase_helper.cluster import Cluster as Cluster_helper
 from TestInput import TestInputServer
 
@@ -24,15 +25,29 @@ class ServerlessBaseTestCase(unittest.TestCase):
         self.task_manager = TaskManager("task_manager")
         self.task_manager.start()
         self.databases: Dict[str, ServerlessDatabase] = {}
+        self.dataplanes: Dict[str, ServerlessDataPlane] = {}
         self.sdk_clusters: Dict[str, Cluster] = {}
         self.cluster = Cluster_helper()
         self.num_of_tenants = self.input.param("num_of_tenants", 1)
+        self.trigger_log_collect = self.input.param("trigger_log_collect", False)
         self.multitenant_run = True if self.num_of_tenants > 1 else False
         self.use_sdk = self.input.param("use_sdk", False)
         self.num_of_indexes_per_tenant = self.input.param("num_of_indexes_per_tenant", 20)
-        self.create_bypass_user = self.input.param("create_bypass_user", False)
+        self.create_bypass_user = self.trigger_log_collect or self.input.param("create_bypass_user", False)
+        self.log.info(f"Create bypass user {self.create_bypass_user}")
+        self.log.info(f"Trigger log collect {self.trigger_log_collect}")
 
     def tearDown(self):
+        if self._testMethodName not in ['suite_tearDown', 'suite_setUp'] and self.trigger_log_collect:
+            test_failed = self.has_test_failed()
+            if test_failed:
+                self.log.info(f"Test failure: {self._testMethodName}. Will trigger a log collect via REST API")
+                for dataplane in self.dataplanes:
+                    rest_obj = RestConnection(rest_username=self.dataplanes[dataplane].admin_username,
+                                              rest_password=self.dataplanes[dataplane].admin_password,
+                                              rest_srv=self.dataplanes[dataplane].rest_host)
+                    cb_collect_list = rest_obj.collect_logs(test_name=self._testMethodName)
+                    self.log.info(f"Test failure. Cbcollect info list {cb_collect_list}")
         for database_id in self.databases:
             try:
                 self.log.info("deleting serverless database {}".format(
@@ -50,13 +65,32 @@ class ServerlessBaseTestCase(unittest.TestCase):
                 {"database_id": database_id}))
         self.task_manager.shutdown(force=True)
 
+    def has_test_failed(self):
+        if hasattr(self._outcome, 'errors'):
+            # Python 3.4 - 3.10
+            result = self.defaultTestResult()
+            self._feedErrorsToResult(result, self._outcome.errors)
+        else:
+            # Python 3.11+
+            result = self._outcome.result
+        ok = all(test != self for test, text in result.errors + result.failures)
+        if ok:
+            return False
+        else:
+            self.log.info('Errors/failures seen during test execution of {}. Errors {} and Failures {}'.format(
+                self._testMethodName,
+                result.errors,
+                result.failures))
+            return True
+
     def create_database(self):
         task = self.create_database_async()
         return task.result()
 
     def create_database_async(self):
         config = capella_utils.create_serverless_config(self.input)
-        task = CreateServerlessDatabaseTask(self.api, config, self.databases, create_bypass_user=self.create_bypass_user)
+        task = CreateServerlessDatabaseTask(api=self.api, config=config, databases=self.databases,
+                                            dataplanes=self.dataplanes, create_bypass_user=self.create_bypass_user)
         self.task_manager.schedule(task)
         return task
 
@@ -154,7 +188,8 @@ class ServerlessBaseTestCase(unittest.TestCase):
         if use_sdk:
             pass
         else:
-            self.run_query(query="Create scope default:`{}`.{}".format(database_obj.id, scope_name), database=database_obj)
+            self.run_query(query="Create scope default:`{}`.{}".format(database_obj.id, scope_name),
+                           database=database_obj)
 
     def create_collection(self, database_obj, scope_name, collection_name, use_sdk=False):
         if use_sdk:
@@ -163,5 +198,3 @@ class ServerlessBaseTestCase(unittest.TestCase):
             self.run_query(query="Create collection default:`{}`.{}.{}".format(database_obj.id,
                                                                                scope_name,
                                                                                collection_name), database=database_obj)
-
-
