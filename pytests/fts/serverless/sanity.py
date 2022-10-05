@@ -30,7 +30,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         pass
 
     @staticmethod
-    def __define_index_parameters_collection_related(container_type="bucket", scope=None, collection=None):
+    def define_index_parameters_collection_related(container_type="bucket", scope=None, collection=None):
         if container_type == 'bucket':
             _type = "emp"
         else:
@@ -76,7 +76,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
                                        collections=collection_name, collection_index=True)
 
-            _type = self.__define_index_parameters_collection_related(container_type="collection", scope=scope_name,
+            _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                       collection=collection_name)
             plan_params = self.construct_plan_params()
             fts_idx = fts_callable.create_fts_index("idx", source_type='couchbase',
