@@ -1041,8 +1041,8 @@ class QueryArrayFlatteningTests(QueryTests):
                             "WHERE r.author LIKE 'N%' and r.author is not missing and r.ratings.Cleanliness > 1 AND " \
                             "d.free_parking = False AND d.email is not missing GROUP BY r.ratings.Cleanliness LETTING min_cleanliness = 5 HAVING COUNT(r.ratings.Cleanliness) > min_cleanliness"
         else:
-            query = "SELECT MAX(email), MIN(email), AVG( free_parking)  FROM `travel-sample`.inventory.hotel AS d WHERE ANY r IN d.reviews SATISFIES r.author = 'Nella Ratke' and r.ratings.Cleanliness = 3 END AND free_parking = False AND email is not missing GROUP BY email, free_parking LETTING avg_parking = 1 HAVING AVG(free_parking) > avg_parking"
-            primary_query = "SELECT MAX(email), MIN(email), AVG( free_parking)  FROM `travel-sample`.inventory.hotel AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author = 'Nella Ratke' and r.ratings.Cleanliness = 3 END AND free_parking = False AND email is not missing GROUP BY email, free_parking LETTING avg_parking = 1 HAVING AVG(free_parking) > avg_parking"
+            query = "SELECT MAX(email), MIN(email), AVG( free_parking)  FROM `travel-sample`.inventory.hotel AS d WHERE ANY r IN d.reviews SATISFIES r.author = 'Nella Ratke' and r.ratings.Cleanliness = 3 END AND d.free_parking = False AND d.email is not missing GROUP BY d.email, d.free_parking LETTING avg_parking = False HAVING d.free_parking = avg_parking"
+            primary_query = "SELECT MAX(email), MIN(email), AVG( free_parking)  FROM `travel-sample`.inventory.hotel AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author = 'Nella Ratke' and r.ratings.Cleanliness = 3 END AND d.free_parking = False AND d.email is not missing GROUP BY d.email, d.free_parking LETTING avg_parking = False HAVING d.free_parking = avg_parking"
         self.run_cbq_query(query=create_query)
         # Ensure the query is actually using the flatten index instead of primary
         explain_results = self.run_cbq_query(query="EXPLAIN " + query)
@@ -2094,6 +2094,7 @@ class QueryArrayFlatteningTests(QueryTests):
         self.run_cbq_query(query='UPSERT INTO default VALUES("ka07", {"a":1, "reviews":[{"xx":1, "y":2, "z":3}, {"x":1, "y":2, "z":3}]})')
         self.run_cbq_query(query='UPSERT INTO default VALUES("ka08", {"a":1, "reviews":[{"x":1, "yy":2, "z":3}, {"x":1, "y":2, "z":3}]})')
         self.run_cbq_query(query='UPSERT INTO default VALUES("ka09", {"a":1, "reviews":[{"x":1, "y":2, "z":3}, {"x":1, "y":2, "z":3}]})')
+        self.run_cbq_query(query='UPSERT INTO default VALUES("ka09", {"a":1, "reviews":[{"x":NULL, "y":2, "z":3}, {"x":1, "y":2, "z":3}]})')
         try:
             self.run_cbq_query(query='CREATE INDEX ix10 ON default (a, DISTINCT ARRAY FLATTEN_KEYS(v.x, v.y) FOR v IN reviews END)')
             self.run_cbq_query(query='CREATE INDEX ix11 ON default (a, DISTINCT ARRAY FLATTEN_KEYS(v.x, v.y) FOR v IN reviews  WHEN v.z = 5 END)')
