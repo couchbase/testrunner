@@ -191,3 +191,14 @@ class EventingSourceMutation(EventingBaseTest):
             assert "ERR_INTER_BUCKET_RECURSION" in str(e), True
         finally:
             self.delete_function(body)
+
+    # MB-53968
+    def test_mutation_loss_during_deploy_undeploy_cycle_with_source_bucket_mutations(self):
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
+        body = self.create_save_function_body(self.function_name, "handler_code/ABO/insert_sbm.js")
+        self.deploy_function(body)
+        self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs * 2)
+        self.undeploy_function(body)
+        self.deploy_function(body)
+        self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs * 4)
+        self.undeploy_and_delete_function(body)
