@@ -11,7 +11,8 @@ class metering(object):
         self.nodes = response.json()['nodes']
         self.log = logger.Logger.get_logger()
 
-    def meter_pattern(self, unit, bucket, service, unbilled='', variant=''):
+    @staticmethod
+    def __meter_pattern(unit, bucket, service, unbilled='', variant=''):
         meter_service = ''
         meter_unbilled = ''
         meter_variant = ''
@@ -26,7 +27,7 @@ class metering(object):
 
     def get_query_cu(self, bucket='default', unbilled='true', variant='eval'):
         cu = 0
-        qry_cu_pattern = re.compile(self.meter_pattern('cu', bucket, 'n1ql', unbilled, variant))
+        qry_cu_pattern = re.compile(metering.__meter_pattern('cu', bucket, 'n1ql', unbilled, variant))
         for node in self.nodes:
             if 'n1ql' in node['services']:
                 url = f"https://{node['hostname'][:-5]}:{CbServer.ssl_port}/metrics"
@@ -38,8 +39,8 @@ class metering(object):
 
     def get_index_rwu(self, bucket='default', unbilled = '', variant = ''):
         ru, wu = 0, 0
-        idx_ru_pattern = re.compile(self.meter_pattern('ru', bucket, 'index', unbilled, variant))
-        idx_wu_pattern = re.compile(self.meter_pattern('wu', bucket, 'index', unbilled, variant))
+        idx_ru_pattern = re.compile(metering.__meter_pattern('ru', bucket, 'index', unbilled, variant))
+        idx_wu_pattern = re.compile(metering.__meter_pattern('wu', bucket, 'index', unbilled, variant))
         for node in self.nodes:
             if 'index' in node['services']:
                 url = f"https://{node['hostname'][:-5]}:{CbServer.ssl_port}/metrics"
@@ -53,8 +54,8 @@ class metering(object):
 
     def get_fts_rwu(self, bucket='default', unbilled = '', variant = ''):
         ru, wu = 0, 0
-        fts_ru_pattern = re.compile(self.meter_pattern('ru', bucket, 'fts', unbilled, variant))
-        fts_wu_pattern = re.compile(self.meter_pattern('wu', bucket, 'fts', unbilled, variant))
+        fts_ru_pattern = re.compile(metering.__meter_pattern('ru', bucket, 'fts', unbilled, variant))
+        fts_wu_pattern = re.compile(metering.__meter_pattern('wu', bucket, 'fts', unbilled, variant))
         for node in self.nodes:
             if 'fts' in node['services']:
                 url = f"https://{node['hostname'][:-5]}:{CbServer.ssl_port}/metrics"
@@ -68,8 +69,8 @@ class metering(object):
 
     def get_kv_rwu(self, bucket='default', unbilled ='', variant =''):
         ru, wu = 0, 0
-        kv_ru_pattern = re.compile(self.meter_pattern('ru', bucket, '', unbilled, variant))
-        kv_wu_pattern = re.compile(self.meter_pattern('wu', bucket, '', unbilled, variant))
+        kv_ru_pattern = re.compile(metering.__meter_pattern('ru', bucket, 'kv', unbilled, variant))
+        kv_wu_pattern = re.compile(metering.__meter_pattern('wu', bucket, 'kv', unbilled, variant))
         for node in self.nodes:
             if 'kv' in node['services']:
                 url = f"https://{node['hostname'][:-5]}:{CbServer.ssl_port}/metrics"
