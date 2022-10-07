@@ -29,6 +29,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
         self.sdk_clusters: Dict[str, Cluster] = {}
         self.cluster = Cluster_helper()
         self.num_of_tenants = self.input.param("num_of_tenants", 1)
+        self.drop_indexes = self.input.param("drop_indexes", False)
         self.trigger_log_collect = self.input.param("trigger_log_collect", False)
         self.multitenant_run = True if self.num_of_tenants > 1 else False
         self.use_sdk = self.input.param("use_sdk", False)
@@ -50,6 +51,9 @@ class ServerlessBaseTestCase(unittest.TestCase):
                     cb_collect_list = rest_obj.collect_logs(test_name=self._testMethodName)
                     self.log.info(f"Test failure. Cbcollect info list {cb_collect_list}")
         for database_id in self.databases:
+            if self.drop_indexes:
+                self.log.info("DROP all indexes")
+                self.drop_all_indexes(self.databases[database_id])
             try:
                 self.log.info("deleting serverless database {}".format(
                     {"database_id": database_id}))
@@ -199,3 +203,12 @@ class ServerlessBaseTestCase(unittest.TestCase):
             self.run_query(query="Create collection default:`{}`.{}.{}".format(database_obj.id,
                                                                                scope_name,
                                                                                collection_name), database=database_obj)
+
+    def drop_all_indexes(self, database):
+        indexes = self.run_query(database, f'SELECT `namespace`, name,\
+            CASE WHEN bucket_id is missing THEN keyspace_id ELSE bucket_id END as `bucket`,\
+            CASE WHEN scope_id is missing THEN "_default" ELSE scope_id END as `scope`,\
+            CASE WHEN bucket_id is missing THEN "_default" ELSE keyspace_id END as `collection`\
+            FROM system:indexes')
+        for index in indexes['results']:
+            result = self.run_query(database, f"DROP INDEX {index['namespace']}:`{index['bucket']}`.`{index['scope']}`.`{index['collection']}`.`{index['name']}`")
