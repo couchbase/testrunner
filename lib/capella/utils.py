@@ -22,8 +22,9 @@ class CapellaCredentials:
         self.token_for_internal_support = config.get("token_for_internal_support")
 
 class ServerlessDatabase:
-    def __init__(self, database_id):
+    def __init__(self, database_id, doc_count=0):
         self.id = database_id
+        self._doc_count = doc_count
 
     def populate(self, info, creds, rest_api_info):
         self.srv = info["connect"]["srv"]
@@ -38,6 +39,23 @@ class ServerlessDatabase:
             self.rest_host = get_host_from_srv(self.rest_srv)
         except:
             print("Rest srv domain resolution failure. Cannot run any of the rest APIs")
+
+    @property
+    def doc_count(self):
+        """
+        An unreliable way of keeping track of docs in a DB. Does not actually count the number of docs
+        but allows the user to set the count.
+        """
+        return self._doc_count
+
+    @doc_count.setter
+    def doc_count(self, doc_count):
+        """
+        An unreliable way of keeping track of docs in a DB. Does not actually count the number of docs
+        but allows the user to set the count.
+        """
+        self._doc_count = doc_count
+
 
 class ServerlessDataPlane:
     def __init__(self, dataplane_id):

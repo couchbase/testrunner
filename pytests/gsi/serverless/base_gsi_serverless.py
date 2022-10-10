@@ -1,9 +1,13 @@
 import logging
+import math
+import random
 import requests
 import time
 
 from gsi.serverless.base_query_serverless import QueryBaseServerless
 from membase.api.serverless_rest_client import ServerlessRestConnection as RestConnection
+from TestInput import TestInputServer
+from couchbase_helper.documentgenerator import SDKDataLoader
 
 log = logging.getLogger(__name__)
 
@@ -12,7 +16,7 @@ class BaseGSIServerless(QueryBaseServerless):
 
     def setUp(self):
         super(BaseGSIServerless, self).setUp()
-        self.num_of_docs_per_collection = 10000
+        self.total_doc_count = 100000
         self.missing_index = self.input.param("missing_index", False)
         self.array_index = self.input.param("array_index", False)
         self.partitioned_index = self.input.param("partitioned_index", False)
@@ -91,3 +95,65 @@ class BaseGSIServerless(QueryBaseServerless):
         query = f"select * from system:indexes where name={index_name}"
         results = self.run_query(query=query, database=database_obj)['results']
         return len(results) > 0
+
+    def prepare_all_databases(self, doc_template="Person", num_of_tenants=5, total_doc_count=100000, batch_size=10000,
+                              serverless_run=True):
+        self.log.debug("In prepare_all_databases method. Will load all the databases with variable num of documents")
+        heavy_load_tenant_count = math.ceil(num_of_tenants*0.6)
+        light_load_tenant_count = num_of_tenants - heavy_load_tenant_count
+        doc_count_tenant_weights, count_heavy_tenants, count_light_tenants = [], heavy_load_tenant_count, light_load_tenant_count
+        weight_heavy_tenants, weight_light_tenants = 80, 20
+        for _ in range(heavy_load_tenant_count):
+            tenant_weight = math.floor(weight_heavy_tenants/count_heavy_tenants)
+            weight_heavy_tenants = weight_heavy_tenants - tenant_weight
+            count_heavy_tenants = count_heavy_tenants - 1
+            doc_count_tenant_weights.append(math.floor(tenant_weight * total_doc_count / 100))
+        for _ in range(light_load_tenant_count):
+            tenant_weight = math.floor(weight_light_tenants/count_light_tenants)
+            weight_light_tenants = weight_light_tenants - tenant_weight
+            count_light_tenants = count_light_tenants - 1
+            doc_count_tenant_weights.append(math.floor(tenant_weight * total_doc_count / 100))
+        self.log.info(f"No of heavily loaded tenants:{heavy_load_tenant_count} "
+                      f"No. of lightly loaded tenants:{light_load_tenant_count}. "
+                      f"Doc count for each of the databases {doc_count_tenant_weights}")
+        tasks = []
+        for index, database in enumerate(self.databases.values()):
+            database.doc_count = doc_count_tenant_weights[index]
+            scope_coll_dict, collection_count = self.create_scopes_collections(database=database)
+            server = TestInputServer()
+            server.ip = database.srv
+            for scope, collections in scope_coll_dict.items():
+                num_of_docs = int(doc_count_tenant_weights[index] / collection_count)
+                for collection in collections:
+                    for start in range(0, num_of_docs, batch_size):
+                        end = start + batch_size
+                        if end >= num_of_docs:
+                            end = num_of_docs
+                        kv_gen = SDKDataLoader(num_ops=end-start, percent_create=100,
+                                               start_seq_num=start+1,
+                                               scope=scope, collection=collection, json_template=doc_template,
+                                               get_sdk_logs=True, username=database.access_key,
+                                               password=database.secret_key, timeout=1000,
+                                               start=start, end=end,
+                                               output=True, capella=serverless_run)
+                        tasks.append(self.cluster.async_load_gen_docs(server, database.id, kv_gen, pause_secs=1,
+                                                                      timeout_secs=300))
+        for task in tasks:
+            if task:
+                task.result()
+
+    def create_scopes_collections(self, database):
+        scope_coll_dict, coll_count = {}, 0
+        for item in range(self.num_of_scopes_per_db):
+            scope_name = f'scope_num_{item}_{random.randint(0, 1000)}'
+            self.create_scope(database_obj=database, scope_name=scope_name)
+            collection_list = []
+            for counter in range(self.num_of_collections_per_scope):
+                collection_name = f'collection_num_{item}_{random.randint(0, 1000)}'
+                self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
+                coll_count += 1
+                collection_list.append(collection_name)
+            scope_coll_dict[scope_name] = collection_list
+        self.log.info(f"Scope and collection list:{scope_coll_dict}. No. of collections: {coll_count}")
+        return scope_coll_dict, coll_count
+

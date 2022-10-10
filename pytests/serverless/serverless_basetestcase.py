@@ -30,6 +30,8 @@ class ServerlessBaseTestCase(unittest.TestCase):
         self.cluster = Cluster_helper()
         self.num_of_tenants = self.input.param("num_of_tenants", 1)
         self.drop_indexes = self.input.param("drop_indexes", False)
+        self.num_of_scopes_per_db = self.input.param("num_of_scopes_per_db", 2)
+        self.num_of_collections_per_scope = self.input.param("num_of_collections_per_scope", 2)
         self.trigger_log_collect = self.input.param("trigger_log_collect", False)
         self.multitenant_run = True if self.num_of_tenants > 1 else False
         self.use_sdk = self.input.param("use_sdk", False)
