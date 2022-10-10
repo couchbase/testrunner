@@ -36,6 +36,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
         self.create_bypass_user = self.trigger_log_collect or self.input.param("create_bypass_user", False)
         self.log.info(f"Create bypass user {self.create_bypass_user}")
         self.log.info(f"Trigger log collect {self.trigger_log_collect}")
+        self.capella_run = self.input.param("capella_run", False)
 
     def tearDown(self):
         if self._testMethodName not in ['suite_tearDown', 'suite_setUp'] and self.trigger_log_collect:

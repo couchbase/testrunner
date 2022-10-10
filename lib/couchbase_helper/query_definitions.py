@@ -38,7 +38,8 @@ class QueryDefinition(object):
                  index_creation_template=INDEX_CREATION_TEMPLATE,
                  index_drop_template=INDEX_DROP_TEMPLATE,
                  query_template="", query_use_index_template="", groups=None,
-                 index_where_clause=None, gsi_type=None, partition_by_fields=None, keyspace=None):
+                 index_where_clause=None, gsi_type=None, partition_by_fields=None, keyspace=None,
+                 missing_indexes=False, missing_field_desc=False, capella_run=False, is_primary=False):
         if partition_by_fields is None:
             partition_by_fields = []
         if groups is None:
@@ -57,12 +58,19 @@ class QueryDefinition(object):
         self.partition_by_fields = partition_by_fields
         self.gsi_type = gsi_type
         self.keyspace = keyspace
+        self.missing_indexes = missing_indexes
+        self.missing_field_desc = missing_field_desc
+        self.capella_run = capella_run
+        self.is_primary = is_primary
 
     def generate_index_create_query(self, namespace="default", use_gsi_for_secondary=True,
                                     deploy_node_info=None, defer_build=None, index_where_clause=None, gsi_type=None,
                                     num_replica=None, desc=None, partition_by_fields=None, num_partition=8,
                                     missing_indexes=False, missing_field_desc=False):
 
+        if self.is_primary:
+            self.generate_primary_index_create_query(namespace=namespace, deploy_node_info=deploy_node_info,
+                                                     defer_build=defer_build, num_replica=num_replica)
         if partition_by_fields:
             self.partition_by_fields = partition_by_fields
 
@@ -71,12 +79,15 @@ class QueryDefinition(object):
         if self.keyspace:
             namespace = self.keyspace
         deployment_plan = {}
+        if missing_indexes:
+            self.missing_indexes = missing_indexes
+            self.missing_field_desc = missing_field_desc
         if desc is None:
-            if missing_indexes:
+            if self.missing_indexes:
                 field_list = []
                 for idx, field in enumerate(self.index_fields):
                     if idx == 0:
-                        if missing_field_desc:
+                        if self.missing_field_desc:
                             field_list.append(f'{field} INCLUDE MISSING DESC')
                         else:
                             field_list.append(f'{field} INCLUDE MISSING ASC')
@@ -113,7 +124,8 @@ class QueryDefinition(object):
         if num_replica:
             deployment_plan["num_replica"] = num_replica
         if self.partition_by_fields:
-            deployment_plan["num_partition"] = num_partition
+            if not self.capella_run:
+                deployment_plan["num_partition"] = num_partition
         if len(deployment_plan) != 0 and use_gsi_for_secondary:
             query += " WITH " + str(deployment_plan)
         return query

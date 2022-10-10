@@ -9,8 +9,7 @@ import random
 
 from gsi.serverless.base_gsi_serverless import BaseGSIServerless
 from membase.api.serverless_rest_client import ServerlessRestConnection as RestConnection
-
-MAX_INDEX_LIMIT_PER_TENANT = 200
+from testconstants import INDEX_MAX_CAP_PER_TENANT
 
 
 class TenantManagement(BaseGSIServerless):
@@ -71,21 +70,21 @@ class TenantManagement(BaseGSIServerless):
         self.provision_databases(count=self.num_of_tenants)
         for counter, database in enumerate(self.databases.values()):
             self.cleanup_database(database_obj=database)
-            for index_num in range(MAX_INDEX_LIMIT_PER_TENANT):
+            for index_num in range(INDEX_MAX_CAP_PER_TENANT):
                 try:
                     self.create_index(database, query_statement=f"create index idx_db_{counter}_{index_num+1} on _default(b)",
                                       use_sdk=self.use_sdk)
                 except Exception as e:
                     self.fail(
-                        f"Index creation fails despite not reaching the limit of {MAX_INDEX_LIMIT_PER_TENANT}."
+                        f"Index creation fails despite not reaching the limit of {INDEX_MAX_CAP_PER_TENANT}."
                         f" No of indexes created: {index_num}")
             try:
                 num_of_indexes = self.get_count_of_indexes_for_tenant(database_obj=database)
                 self.create_index(database,
-                                  query_statement=f"create index idx{MAX_INDEX_LIMIT_PER_TENANT} on _default(b)", use_sdk=self.use_sdk)
+                                  query_statement=f"create index idx{INDEX_MAX_CAP_PER_TENANT} on _default(b)", use_sdk=self.use_sdk)
                 self.fail(
-                    f"Index creation still works despite reaching limit of {MAX_INDEX_LIMIT_PER_TENANT}."
+                    f"Index creation still works despite reaching limit of {INDEX_MAX_CAP_PER_TENANT}."
                     f" No of indexes already created{num_of_indexes}")
             except Exception as e:
                 self.log.info(
-                    f"Error seen {str(e)} while trying to create index number {MAX_INDEX_LIMIT_PER_TENANT} as expected")
+                    f"Error seen {str(e)} while trying to create index number {INDEX_MAX_CAP_PER_TENANT} as expected")

@@ -1,3 +1,5 @@
+from gsi.collections_concurrent_indexes import powerset
+
 NS_SERVER_TIMEOUT = 120
 STANDARD_BUCKET_PORT = 11217
 COUCHBASE_SINGLE_DEFAULT_INI_PATH = "/opt/couchbase/etc/couchdb/default.ini"
@@ -360,3 +362,8 @@ FILTER_TEST_FIELDS = ['logs_folder', 'conf_file', 'cluster_name',
 # ELIXIR Tenant Management Constants
 INDEX_MAX_CAP_PER_TENANT = 200
 INDEX_SUB_CLUSTER_LENGTH = 2
+PERSON_INDEX_FIELD_SET = powerset(['age', 'city', 'country', 'title', 'firstName', 'lastName', 'streetAddress',
+                                   'suffix', 'filler1'])
+HOTEL_INDEX_FIELD_SET = powerset(['address', 'city', 'country', 'email', 'free_breakfast', 'free_parking', 'name',
+                                  'price', 'avg_rating', 'phone', 'url', 'type'])
+EMPLOYEE_INDEX_FIELD_SET = powerset(['join_day', 'join_yr', 'name', 'test_rate', 'job_title', 'join_mo', 'email'])

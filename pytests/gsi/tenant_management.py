@@ -122,6 +122,7 @@ class TenantManagement(BaseSecondaryIndexingTests):
                 self.wait_until_indexes_online(defer_build=True)
         self.validate_tenant_management(check="failed_over_subcluster")
 
+
     def _check_cluster_affinity(self, idx_host_list_dict):
         # Validating the cluster affinity
         for bucket in idx_host_list_dict:
