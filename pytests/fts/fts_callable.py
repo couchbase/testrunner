@@ -15,7 +15,6 @@ from lib.collection.collections_cli_client import CollectionsCLI
 from scripts.java_sdk_setup import JavaSdkSetup
 
 class FTSCallable:
-
     """
     The FTS class to call when trying to anything with FTS
     outside the purview of FTSBaseTest class
@@ -46,9 +45,9 @@ class FTSCallable:
         self.es = None
         self._num_items = 10000
         self.query_types = ["match", "bool", "match_phrase",
-                      "prefix", "fuzzy", "conjunction", "disjunction",
-                      "wildcard", "regexp", "query_string",
-                      "numeric_range", "date_range"]
+                            "prefix", "fuzzy", "conjunction", "disjunction",
+                            "wildcard", "regexp", "query_string",
+                            "numeric_range", "date_range"]
         self.scope = scope
         self.collections = collections
         self.collection_index = collection_index
@@ -64,6 +63,14 @@ class FTSCallable:
                               "custom standard analyzer(default)")
 
         self.cli_client = None
+        self.num_custom_analyzers = TestInputSingleton.input.param("num_custom_analyzers", 0)
+        self._update = TestInputSingleton.input.param("update", False)
+        self._delete = TestInputSingleton.input.param("delete", False)
+        self.upd_del_fields = TestInputSingleton.input.param("upd_del_fields", None)
+        self._expires = TestInputSingleton.input.param("expires", 0)
+        self.dataset = TestInputSingleton.input.param("dataset", "emp")
+        self.run_via_n1ql = False
+        self.num_queries = TestInputSingleton.input.param("num_queries", 1)
 
     def __create_buckets(self):
         self.log.info("__create_buckets() is not implemented yet.")
@@ -76,15 +83,16 @@ class FTSCallable:
                 if type(self.collections) is list:
                     for c in self.collections:
                         self.cb_cluster._create_collection(bucket=bucket.name, scope=self.scope, collection=c,
-                                                            cli_client=self.cli_client)
+                                                           cli_client=self.cli_client)
                 else:
                     self.cb_cluster._create_collection(bucket=bucket.name, scope=self.scope,
-                                                        collection=self.collections, cli_client=self.cli_client)
+                                                       collection=self.collections, cli_client=self.cli_client)
 
     def create_fts_index(self, name, source_type='couchbase',
                          source_name=None, index_type='fulltext-index',
                          index_params=None, plan_params=None,
-                         source_params=None, source_uuid=None, collection_index=False, _type=None, analyzer="standard", scope=None, collections=None, no_check=False, cluster=None):
+                         source_params=None, source_uuid=None, collection_index=False, _type=None, analyzer="standard",
+                         scope=None, collections=None, no_check=False, cluster=None):
         """Create fts index/alias
         @param node: Node on which index is created
         @param name: name of the index/alias
@@ -146,7 +154,6 @@ class FTSCallable:
         self.cb_cluster.get_indexes().append(index)
         return index
 
-
     def create_default_index(self, index_name, bucket_name, analyzer='standard',
                              cluster=None, collection_index=False, scope=None, collections=None):
 
@@ -157,7 +164,8 @@ class FTSCallable:
         @param type_mapping: UUID of the source, may not be used
         @param analyzer: index analyzer
         """
-        types_mapping = self.__define_index_types_mapping(collection_index=collection_index, scope=scope, collections=collections)
+        types_mapping = self.__define_index_types_mapping(collection_index=collection_index, scope=scope,
+                                                          collections=collections)
         if not cluster:
             cluster = self.cb_cluster
 
@@ -190,8 +198,7 @@ class FTSCallable:
 
         return index
 
-
-    def wait_for_indexing_complete(self, item_count = None):
+    def wait_for_indexing_complete(self, item_count=None):
         """
             Wait for index_count for any index to stabilize or reach the
             index count specified by item_count
@@ -207,7 +214,7 @@ class FTSCallable:
                 try:
                     index_doc_count = index.get_indexed_doc_count()
                     if CbServer.capella_run:
-                        bucket_doc_count=item_count
+                        bucket_doc_count = item_count
                     else:
                         bucket_doc_count = index.get_src_bucket_doc_count()
                     if not self.es:
@@ -227,7 +234,7 @@ class FTSCallable:
                     if bucket_doc_count == 0:
                         if item_count and item_count != 0:
                             self.sleep(5,
-                                "looks like docs haven't been loaded yet...")
+                                       "looks like docs haven't been loaded yet...")
                             retry_count -= 1
                             continue
 
@@ -275,8 +282,8 @@ class FTSCallable:
                 alias_def['targets'][index.name] = {}
 
         return self.cb_cluster.create_fts_index(name=name,
-                                                 index_type='fulltext-alias',
-                                                 index_params=alias_def)
+                                                index_type='fulltext-alias',
+                                                index_params=alias_def)
 
     def delete_fts_index(self, name):
         """ Delete an FTSIndex object with the given name from a given node """
@@ -331,7 +338,7 @@ class FTSCallable:
         tasks = []
         fail_count = 0
         failed_queries = []
-        self.__generate_random_queries(index, num_queries, query_type=self.query_types)
+        self.generate_random_queries(index, num_queries, query_type=self.query_types)
         for count in range(0, len(index.fts_queries)):
             tasks.append(self.cb_cluster.async_run_fts_query_compare(
                 fts_index=index,
@@ -350,8 +357,8 @@ class FTSCallable:
 
         if fail_count:
             raise Exception("%s out of %s queries failed! - %s" % (fail_count,
-                                                             num_queries,
-                                                             failed_queries))
+                                                                   num_queries,
+                                                                   failed_queries))
         else:
             self.log.info("SUCCESS: %s out of %s queries passed"
                           % (num_queries - fail_count, num_queries))
@@ -447,6 +454,7 @@ class FTSCallable:
                 "Waiting for expiration of updated items")
             self.cb_cluster.run_expiry_pager()
 
+
     def __generate_random_queries(self, index, num_queries=1,
                                   query_type=None, seed=0):
         """
@@ -478,9 +486,9 @@ class FTSCallable:
         start = 0
         if not self.collection_index:
             self.create_gen = JsonDocGenerator(name="emp",
-                                    encoding="utf-8",
-                                    start=start,
-                                    end=start + self._num_items)
+                                               encoding="utf-8",
+                                               start=start,
+                                               end=start + self._num_items)
         else:
             elastic_ip = None
             elastic_port = None
@@ -491,15 +499,15 @@ class FTSCallable:
                 elastic_port = self.elastic_node.port
                 elastic_username = self.elastic_node.es_username
                 elastic_password = self.elastic_node.es_password
-            self.create_gen = SDKDataLoader(num_ops = self._num_items, percent_create = 100,
-                                           percent_update=0, percent_delete=0, scope=self.scope,
-                                           collection=self.collections,
-                                           json_template="emp",
-                                           start=start, end=start+self._num_items,
-                                           es_compare=self.compare_es, es_host=elastic_ip, es_port=elastic_port,
-                                           es_login=elastic_username, es_password=elastic_password, key_prefix="emp_",
-                                           upd_del_shift=self._num_items
-                                 )
+            self.create_gen = SDKDataLoader(num_ops=self._num_items, percent_create=100,
+                                            percent_update=0, percent_delete=0, scope=self.scope,
+                                            collection=self.collections,
+                                            json_template="emp",
+                                            start=start, end=start + self._num_items,
+                                            es_compare=self.compare_es, es_host=elastic_ip, es_port=elastic_port,
+                                            es_login=elastic_username, es_password=elastic_password, key_prefix="emp_",
+                                            upd_del_shift=self._num_items
+                                            )
 
     def __populate_update_gen(self):
         self.update_gen = copy.deepcopy(self.create_gen)
@@ -514,7 +522,7 @@ class FTSCallable:
             self.delete_gen.op_type = "delete"
             self.delete_gen.encoding = "utf-8"
             self.delete_gen.start = int((self.create_gen.end)
-                                        * (float) (30 / 100))
+                                        * (float)(30 / 100))
             self.delete_gen.end = self.create_gen.end
             self.delete_gen.delete()
         else:
@@ -529,7 +537,7 @@ class FTSCallable:
     def __define_index_types_mapping(self, collection_index=False, scope=None, collections=None):
         """Defines types mapping for FTS index
         """
-        if not collection_index :
+        if not collection_index:
             _type = None
         else:
             _type = []
@@ -537,3 +545,10 @@ class FTSCallable:
                 _type.append(f"{scope}.{c}")
         return _type
 
+    def create_es_index_mapping(self, es_mapping, fts_mapping=None):
+        if not (self.num_custom_analyzers > 0):
+            self.es.create_index_mapping(index_name="es_index",
+                                         es_mapping=es_mapping, fts_mapping=None)
+        else:
+            self.es.create_index_mapping(index_name="es_index",
+                                         es_mapping=es_mapping, fts_mapping=fts_mapping)

@@ -1350,7 +1350,7 @@ class FTSIndex:
 
         if status:
             self.__cluster.get_indexes().remove(self)
-            if not TestInputSingleton.input.param("capella_run", False):
+            if not TestInputSingleton.input.param("capella_run", False) and not CbServer.capella_run:
                 if not self.__cluster.are_index_files_deleted_from_disk(self.name):
                     self.__log.error("Status: {0} but index file for {1} not yet "
                                      "deleted!".format(status, self.name))
