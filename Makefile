@@ -61,7 +61,7 @@ test-viewmerge-viewci:
 
 # required before merging gsi code
 test-gsi-integrations-tests:
-	git submodule init; git submodule update --init --force --remote
+	git submodule init; git submodule update --init --force
 	echo "Running gsi integration tests with 4 node cluster"
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes-xdcr_n1ql_gsi.ini conf/simple_gsi_n1ql.conf 1 1 $(PARAMS)
 
