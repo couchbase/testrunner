@@ -69,6 +69,22 @@ class QuerySanity(ServerlessBaseTestCase):
                 self.assertEqual(result['metrics']['resultCount'], 1)
                 self.assertEqual(len(result['results'][0]), self.doc_count)
                 self.assertEqual(result['billingUnits'], {'ru': {'kv': self.doc_count+64*2}})
+            with self.subTest('UDF javascript'):
+                self.log.info("="*40)
+                self.log.info("===== SUBTEST: udf javascript")
+                udf = self.run_query(database, f"CREATE or REPLACE FUNCTION {self.scope}.plus(a,b) LANGUAGE JAVASCRIPT as 'function plus(a,b) {{return a+b}}'")
+                result = self.run_query(database, f'EXECUTE FUNCTION {self.scope}.plus(32,68)')
+                self.assertEqual(result['results'], [100])
+            with self.subTest('UDF javascript n1ql'):
+                self.log.info("="*40)
+                self.log.info("===== SUBTEST: udf javascript n1ql")
+                udf = self.run_query(database, f"CREATE or REPLACE FUNCTION {self.scope}.select_js(city, num) LANGUAGE JAVASCRIPT as 'function select_js(city, num) {{\
+                    var query = SELECT name FROM {self.collection} WHERE name = $city LIMIT $num;\
+                    var acc = [];\
+                    for (const row of query) {{ acc.push(row); }}\
+                    return acc;}}'")
+                result = self.run_query(database, f'EXECUTE FUNCTION {self.scope}.select_js("San Francisco", 5)')
+                self.assertEqual(result['results'], [[{'name': 'San Francisco'}, {'name': 'San Francisco'}, {'name': 'San Francisco'}, {'name': 'San Francisco'}, {'name': 'San Francisco'}]])
             with self.subTest('transaction'):
                 self.log.info("="*40)
                 self.log.info("===== SUBTEST: transaction")
@@ -88,7 +104,9 @@ class QuerySanity(ServerlessBaseTestCase):
             with self.subTest('Join'):
                 self.log.info("="*40)
                 self.log.info("===== SUBTEST: join")
-                self.skipTest('TBD: Join')
+                result = self.run_query(database, f'SELECT count(*) as count FROM {self.scope}.{self.collection} a JOIN {self.scope}.{self.collection} b ON a.name = b.name')
+                # self.assertEqual(result['billingUnits'], {'ru': {'kv': (self.doc_count+64*2)*2}})
+                self.assertEqual(result['results'], [{"count": self.doc_count * self.doc_count}])
             with self.subTest('Update Statistics'):
                 self.log.info("="*40)
                 self.log.info("===== SUBTEST: update statistics")
