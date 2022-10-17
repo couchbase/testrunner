@@ -10,17 +10,17 @@ __created_on__ = 04/10/22 11:53 am
 """
 import datetime
 import random
+import string
 import uuid
 from functools import reduce
 from concurrent.futures import ThreadPoolExecutor
 
 from couchbase_helper.query_definitions import QueryDefinition
-from gsi.base_gsi import BaseSecondaryIndexingTests
 
 RANGE_SCAN_TEMPLATE = "SELECT {0} FROM %s WHERE {1}"
 
 
-class GSIUtils(BaseSecondaryIndexingTests):
+class GSIUtils(object):
     def __init__(self, query_obj):
         self.definition_list = []
         self.run_query = query_obj
@@ -31,103 +31,103 @@ class GSIUtils(BaseSecondaryIndexingTests):
         if not index_name_prefix:
             index_name_prefix = "employee" + str(uuid.uuid4()).replace("-", "")
 
-            # Single field GSI Query
-            definitions_list.append(
-                QueryDefinition(index_name=index_name_prefix + 'name', index_fields=['name'],
-                                query_template=RANGE_SCAN_TEMPLATE.format("*", 'name = "employee-1" ')))
+        # Single field GSI Query
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'name', index_fields=['name'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*", 'name = "employee-1" ')))
 
-            # Primary Query
-            definitions_list.append(
-                QueryDefinition(index_name='#primary', index_fields=[],
-                                query_template=RANGE_SCAN_TEMPLATE.format("*", "test_rate > 1"), is_primary=True))
+        # Primary Query
+        definitions_list.append(
+            QueryDefinition(index_name='#primary', index_fields=[],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*", "test_rate > 1"), is_primary=True))
 
-            # GSI index on multiple fields
-            definitions_list.append(
-                QueryDefinition(index_name=index_name_prefix + 'join_day_&_job_tittle',
-                                index_fields=['join_day', 'job_title'],
-                                query_template=RANGE_SCAN_TEMPLATE.format("*",
-                                                                          'join_day > 15 AND '
-                                                                          'job_title = "Sales"')))
+        # GSI index on multiple fields
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'join_day_&_job_tittle',
+                            index_fields=['join_day', 'job_title'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*",
+                                                                      'join_day > 15 AND '
+                                                                      'job_title = "Sales"')))
 
-            # GSI index with missing keys
-            definitions_list.append(
-                QueryDefinition(index_name=index_name_prefix + 'missing_keys', index_fields=['email', 'join_yr',
-                                                                                             'join_mo'],
-                                missing_indexes=True, missing_field_desc=False,
-                                query_template=RANGE_SCAN_TEMPLATE.format("*",
-                                                                          'join_yr > 2010 AMD '
-                                                                          'join_mo > 6')))
+        # GSI index with missing keys
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'missing_keys', index_fields=['email', 'join_yr',
+                                                                                         'join_mo'],
+                            missing_indexes=True, missing_field_desc=False,
+                            query_template=RANGE_SCAN_TEMPLATE.format("*",
+                                                                      'join_yr > 2010 AMD '
+                                                                      'join_mo > 6')))
 
-            # Paritioned Index
-            definitions_list.append(
-                QueryDefinition(index_name=index_name_prefix + 'partitioned_index', index_fields=['job_title'],
-                                query_template=RANGE_SCAN_TEMPLATE.format("*", 'job_title = "Support"'),
-                                partition_by_fields=['job_title'], capella_run=True))
+        # Paritioned Index
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'partitioned_index', index_fields=['job_title'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*", 'job_title = "Support"'),
+                            partition_by_fields=['job_title'], capella_run=True))
 
-            # Array Index
-            definitions_list.append(
-                QueryDefinition(index_name=index_name_prefix + 'array_index',
-                                index_fields=['join_mo, All ARRAY vm.os FOR vm IN VMs END'],
-                                query_template=RANGE_SCAN_TEMPLATE.format("*",
-                                                                          'ANY vm IN VMs SATISFIES vm.os = "ubuntu" '
-                                                                          'END')))
-            self.batch_size = len(definitions_list)
-            return definitions_list
+        # Array Index
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'array_index',
+                            index_fields=['join_mo, All ARRAY vm.os FOR vm IN VMs END'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*",
+                                                                      'ANY vm IN VMs SATISFIES vm.os = "ubuntu" '
+                                                                      'END')))
+        self.batch_size = len(definitions_list)
+        return definitions_list
 
     def generate_hotel_data_index_definition(self, index_name_prefix=None):
         definitions_list = []
         if not index_name_prefix:
             index_name_prefix = "hotel" + str(uuid.uuid4()).replace("-", "")
 
-            # Single field GSI Query
-            definitions_list.append(
-                QueryDefinition(index_name=index_name_prefix + 'price', index_fields=['price'],
-                                query_template=RANGE_SCAN_TEMPLATE.format("*", "age > 0")))
+        # Single field GSI Query
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'price', index_fields=['price'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*", "age > 0")))
 
-            # Primary Query
-            definitions_list.append(
-                QueryDefinition(index_name='#primary', index_fields=[],
-                                query_template=RANGE_SCAN_TEMPLATE.format("*", "suffix is not NULL", is_primary=True)))
+        # Primary Query
+        definitions_list.append(
+            QueryDefinition(index_name='#primary', index_fields=[],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*", "suffix is not NULL", is_primary=True)))
 
-            # GSI index on multiple fields
-            definitions_list.append(
-                QueryDefinition(index_name=index_name_prefix + 'free_breakfast_avg_rating',
-                                index_fields=['free_breakfast', 'avg_rating'],
-                                query_template=RANGE_SCAN_TEMPLATE.format("*",
-                                                                          'avg_rating > 3 AND'
-                                                                          'free_breakfast = true')))
+        # GSI index on multiple fields
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'free_breakfast_avg_rating',
+                            index_fields=['free_breakfast', 'avg_rating'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*",
+                                                                      'avg_rating > 3 AND'
+                                                                      'free_breakfast = true')))
 
-            # GSI index with missing keys
-            definitions_list.append(
-                QueryDefinition(index_name=index_name_prefix + 'missing_keys',
-                                index_fields=['city', 'avg_rating', 'country'],
-                                missing_indexes=True, missing_field_desc=True,
-                                query_template=RANGE_SCAN_TEMPLATE.format("*",
-                                                                          'avg_rating > 3 AND '
-                                                                          'country like "%F%"')))
+        # GSI index with missing keys
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'missing_keys',
+                            index_fields=['city', 'avg_rating', 'country'],
+                            missing_indexes=True, missing_field_desc=True,
+                            query_template=RANGE_SCAN_TEMPLATE.format("*",
+                                                                      'avg_rating > 3 AND '
+                                                                      'country like "%F%"')))
 
-            # Paritioned Index
-            definitions_list.append(
-                QueryDefinition(index_name=index_name_prefix + 'partitioned_index', index_fields=['name'],
-                                query_template=RANGE_SCAN_TEMPLATE.format("*", 'name like "%W%"'),
-                                partition_by_fields=['name'], capella_run=True))
+        # Paritioned Index
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'partitioned_index', index_fields=['name'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*", 'name like "%W%"'),
+                            partition_by_fields=['name'], capella_run=True))
 
-            # Array Index
-            definitions_list.append(
-                QueryDefinition(index_name=index_name_prefix + 'array_index_overall',
-                                index_fields=['price, All ARRAY v.ratings.Overall FOR v IN reviews END'],
-                                query_template=RANGE_SCAN_TEMPLATE.format("*", 'ANY v IN reviews SATISFIES v.ratings.'
-                                                                               '`Overall` > 3  END and price < 1000 ')))
+        # Array Index
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'array_index_overall',
+                            index_fields=['price, All ARRAY v.ratings.Overall FOR v IN reviews END'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*", 'ANY v IN reviews SATISFIES v.ratings.'
+                                                                           '`Overall` > 3  END and price < 1000 ')))
 
-            # Array Index
-            definitions_list.append(
-                QueryDefinition(index_name=index_name_prefix + 'array_index_rooms',
-                                index_fields=['price, All ARRAY v.ratings.Rooms FOR v IN reviews END'],
-                                query_template=RANGE_SCAN_TEMPLATE.format("*",
-                                                                          'ANY v IN reviews SATISFIES v.ratings.'
-                                                                          '`Rooms` > 3  END and price > 1000 ')))
-            self.batch_size = len(definitions_list)
-            return definitions_list
+        # Array Index
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'array_index_rooms',
+                            index_fields=['price, All ARRAY v.ratings.Rooms FOR v IN reviews END'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*",
+                                                                      'ANY v IN reviews SATISFIES v.ratings.'
+                                                                      '`Rooms` > 3  END and price > 1000 ')))
+        self.batch_size = len(definitions_list)
+        return definitions_list
 
     def generate_person_data_index_definition(self, index_name_prefix=None):
         definitions_list = []
@@ -232,8 +232,8 @@ class GSIUtils(BaseSecondaryIndexingTests):
             for item in range(num_of_batches):
                 for namespace in namespaces:
                     counter = batch_offset + item
-                    namespace_prefix = namespace.split(":")[-1].replace('.', '_')
-                    prefix = f'{namespace_prefix}_batch_{counter}_'
+                    prefix = f'idx_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}' \
+                             f'_batch_{counter}_'
                     if dataset == 'Person' or dataset == 'default':
                         self.definition_list = self.generate_person_data_index_definition(index_name_prefix=prefix)
                     elif dataset == 'Employee':

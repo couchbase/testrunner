@@ -23,6 +23,7 @@ class CapellaCredentials:
 
 class ServerlessDatabase:
     def __init__(self, database_id, doc_count=0):
+        self.collections = dict()
         self.id = database_id
         self._doc_count = doc_count
 
@@ -37,7 +38,8 @@ class ServerlessDatabase:
         self.nebula = get_host_from_srv(self.srv)
         try:
             self.rest_host = get_host_from_srv(self.rest_srv)
-        except:
+        except Exception as err:
+            print(err)
             print("Rest srv domain resolution failure. Cannot run any of the rest APIs")
 
     @property

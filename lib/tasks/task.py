@@ -6718,7 +6718,7 @@ class CreateServerlessDatabaseTask(Task):
                 self.log.info("generating API key for serverless database {}".format(
                     {"database_id": self.database_id}))
                 creds = self.api.generate_api_keys(self.database_id)
-                rest_api_info = {"srv":"", "couchbaseCreds": {"username":"", "password":""}}
+                rest_api_info = {"srv": "", "couchbaseCreds": {"username": "", "password": ""}}
                 if self.create_bypass_user:
                     self.log.info("Obtaining access to the dataplane nodes")
                     dataplane_id = self.api.get_resident_dataplane_id(database_id=self.database_id)
