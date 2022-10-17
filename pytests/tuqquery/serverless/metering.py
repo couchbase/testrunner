@@ -28,8 +28,7 @@ class QueryMeterSanity(ServerlessBaseTestCase):
             self.assertEqual(result['billingUnits']['wu']['kv'], self.doc_count)
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
             self.assertEqual(after_kv_wu - before_kv_wu, self.doc_count)
-            # To-do: Might be impacted by DCP stream right now
-            # self.assertEqual(after_kv_ru, before_kv_ru) # no read units
+            self.assertEqual(after_kv_ru, before_kv_ru) # no read units
 
     def test_meter_read(self):
         self.provision_databases()
