@@ -15,14 +15,16 @@ from functools import reduce
 from concurrent.futures import ThreadPoolExecutor
 
 from couchbase_helper.query_definitions import QueryDefinition
-from gsi.newtuq import QueryTests
+from gsi.base_gsi import BaseSecondaryIndexingTests
 
 RANGE_SCAN_TEMPLATE = "SELECT {0} FROM %s WHERE {1}"
 
 
-class GSIUtils(QueryTests):
-    def __init__(self):
+class GSIUtils(BaseSecondaryIndexingTests):
+    def __init__(self, query_obj):
         self.definition_list = []
+        self.run_query = query_obj
+        self.batch_size = 0
 
     def generate_employee_data_index_definition(self, index_name_prefix=None):
         definitions_list = []
@@ -60,7 +62,7 @@ class GSIUtils(QueryTests):
             definitions_list.append(
                 QueryDefinition(index_name=index_name_prefix + 'partitioned_index', index_fields=['job_title'],
                                 query_template=RANGE_SCAN_TEMPLATE.format("*", 'job_title = "Support"'),
-                                partition_by_fields=['job_title'], capella_run=False))
+                                partition_by_fields=['job_title'], capella_run=True))
 
             # Array Index
             definitions_list.append(
@@ -69,7 +71,7 @@ class GSIUtils(QueryTests):
                                 query_template=RANGE_SCAN_TEMPLATE.format("*",
                                                                           'ANY vm IN VMs SATISFIES vm.os = "ubuntu" '
                                                                           'END')))
-
+            self.batch_size = len(definitions_list)
             return definitions_list
 
     def generate_hotel_data_index_definition(self, index_name_prefix=None):
@@ -108,7 +110,7 @@ class GSIUtils(QueryTests):
             definitions_list.append(
                 QueryDefinition(index_name=index_name_prefix + 'partitioned_index', index_fields=['name'],
                                 query_template=RANGE_SCAN_TEMPLATE.format("*", 'name like "%W%"'),
-                                partition_by_fields=['name'], capella_run=False))
+                                partition_by_fields=['name'], capella_run=True))
 
             # Array Index
             definitions_list.append(
@@ -124,6 +126,7 @@ class GSIUtils(QueryTests):
                                 query_template=RANGE_SCAN_TEMPLATE.format("*",
                                                                           'ANY v IN reviews SATISFIES v.ratings.'
                                                                           '`Rooms` > 3  END and price > 1000 ')))
+            self.batch_size = len(definitions_list)
             return definitions_list
 
     def generate_person_data_index_definition(self, index_name_prefix=None):
@@ -160,12 +163,13 @@ class GSIUtils(QueryTests):
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'partitioned_index', index_fields=['streetAddress'],
                             query_template=RANGE_SCAN_TEMPLATE.format("*", 'streetAddress is not NULL'),
-                            partition_by_fields=['streetAddress'], capella_run=False))
+                            partition_by_fields=['streetAddress'], capella_run=True))
 
         # Array Index
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'array_index', index_fields=['filler1'],
                             query_template=RANGE_SCAN_TEMPLATE.format("*", 'filler1 like "%in%"')))
+        self.batch_size = len(definitions_list)
         return definitions_list
 
     def get_create_index_list(self, definition_list, namespace, defer_build_mix=False):
@@ -175,6 +179,7 @@ class GSIUtils(QueryTests):
                 defer_build = random.choice([True, False])
             else:
                 defer_build = False
+            index_gen = index_gen
             query = index_gen.generate_index_create_query(namespace=namespace, defer_build=defer_build)
             create_index_list.append(query)
         return create_index_list
@@ -191,11 +196,21 @@ class GSIUtils(QueryTests):
             tasks = []
             for query in create_queries:
                 if capella_run:
-                    task = executor.submit(self.run_cbq_query, query=query, server=query_node)
-                else:
                     task = executor.submit(self.run_query, database=database, query=query)
+                else:
+                    task = executor.submit(self.run_query, query=query, server=query_node)
                 tasks.append(task)
         return tasks
+
+    def create_gsi_indexes(self, create_queries, database=None, capella_run=False, query_node=None):
+        try:
+            for query in create_queries:
+                if capella_run:
+                    self.run_query(database=database, query=query)
+                else:
+                    self.run_query(query=query, server=query_node)
+        except Exception as err:
+            print(err)
 
     def range_unequal_distribution(self, number=4, factor=1.2, total=100000):
         """
@@ -213,24 +228,25 @@ class GSIUtils(QueryTests):
                                        phase='before', capella_run=False, database=None, query_node=None,
                                        batch_offset=0, timeout=1500):
         if phase == 'before':
+            self.initial_index_num = 0
             for item in range(num_of_batches):
                 for namespace in namespaces:
                     counter = batch_offset + item
-                    prefix = f'{namespace}_batch_{counter}_'
-                    if dataset == 'Person':
-                        self.definition_list.append(self.generate_person_data_index_definition(index_name_prefix=prefix))
+                    namespace_prefix = namespace.split(":")[-1].replace('.', '_')
+                    prefix = f'{namespace_prefix}_batch_{counter}_'
+                    if dataset == 'Person' or dataset == 'default':
+                        self.definition_list = self.generate_person_data_index_definition(index_name_prefix=prefix)
                     elif dataset == 'Employee':
-                        self.definition_list.append(self.generate_employee_data_index_definition(index_name_prefix=prefix))
+                        self.definition_list = self.generate_employee_data_index_definition(index_name_prefix=prefix)
                     elif dataset == 'Hotel':
-                        self.definition_list.append(self.generate_hotel_data_index_definition(index_name_prefix=prefix))
+                        self.definition_list = self.generate_hotel_data_index_definition(index_name_prefix=prefix)
                     else:
                         raise Exception("Provide correct dataset. Valid values are Person, Employee and Hotel")
                     create_list = self.get_create_index_list(definition_list=self.definition_list, namespace=namespace,
                                                              defer_build_mix=defer_build_mix)
-                    tasks = self.async_create_indexes(create_queries=create_list, database=database,
-                                                      capella_run=capella_run, query_node=query_node)
-                    for task in tasks:
-                        task.result()
+                    self.initial_index_num += len(create_list)
+                    self.create_gsi_indexes(create_queries=create_list, database=database,
+                                            capella_run=capella_run, query_node=query_node)
         elif phase == 'during':
             start_time = datetime.datetime.now()
             select_queries = []
@@ -238,7 +254,6 @@ class GSIUtils(QueryTests):
                 select_queries.extend(
                     self.get_select_queries(definition_list=self.definition_list, namespace=namespace))
             with ThreadPoolExecutor() as executor:
-                counter = 0
                 while True:
                     tasks = []
                     for query in select_queries:

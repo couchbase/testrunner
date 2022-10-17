@@ -15,6 +15,7 @@ from gsi.collections_concurrent_indexes import powerset
 from couchbase_helper.query_definitions import QueryDefinition
 from membase.api.on_prem_rest_client import RestHelper
 from testconstants import INDEX_MAX_CAP_PER_TENANT, INDEX_SUB_CLUSTER_LENGTH
+from serverless.gsi_utils import GSIUtils
 
 
 class TenantManagement(BaseSecondaryIndexingTests):
@@ -25,11 +26,12 @@ class TenantManagement(BaseSecondaryIndexingTests):
         self.use_defer_build = self.input.param("use_defer_build", False)
         self.index_field_set = powerset(['age', 'city', 'country', 'title', 'firstName', 'lastName', 'streetAddress',
                                          'suffix', 'filler1', 'phone', 'zipcode'])
-        self.num_of_tenants = self.input.param("num_of_tenants", 3)
+        self.num_of_tenants = self.input.param("num_of_tenants", 10)
         self.batch_size = self.input.param("batch_size", 1000)
         self.node_to_swap = self.input.param("node_to_swap", 1)
         self.json_template = self.input.param("json_template", "Person")
         self.recover_failed_over_node = self.input.param("recover_failed_over_node", False)
+        self.gsi_util_obj = GSIUtils(self.run_cbq_query)
         self.namespaces = []
 
     def tearDown(self):
@@ -44,30 +46,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
         pass
 
     def test_cluster_affinity(self):
-        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
         self._create_server_groups()
-
         self.prepare_tenants()
-        for collection_namespace in self.namespaces:
-            for item, index_field in zip(range(self.initial_index_num), self.index_field_set):
-                if self.use_defer_build:
-                    defer_build = random.choice([True, False])
-                else:
-                    defer_build = False
-                idx = f'idx_{item}_{collection_namespace.split(":")[1].replace(".", "_")}'
-                index_gen = QueryDefinition(index_name=idx, index_fields=index_field)
-                query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=defer_build,
-                                                              num_replica=self.num_replicas)
-                try:
-                    self.run_cbq_query(query=query, server=query_node)
-                except Exception as err:
-                    error_1 = 'Limit for number of indexes that can be created per bucket has been reached. Limit : 200'
-                    error_2 = 'Build Already In Progress'
-                    if error_1 in str(err):
-                        break
-                    elif error_2 not in str(err):
-                        self.fail(err)
-                self.wait_until_indexes_online(defer_build=True)
         self.validate_tenant_management(check='cluster_affinity')
         self.validate_tenant_management(check='index_count')
         self.validate_tenant_management(check='index_distribution')
@@ -122,19 +102,23 @@ class TenantManagement(BaseSecondaryIndexingTests):
                 self.wait_until_indexes_online(defer_build=True)
         self.validate_tenant_management(check="failed_over_subcluster")
 
-
     def _check_cluster_affinity(self, idx_host_list_dict):
         # Validating the cluster affinity
         for bucket in idx_host_list_dict:
             self.assertEqual(len(idx_host_list_dict[bucket]), 2,
                              "Indexes are hosted on more than 2 node of sub-cluster")
 
-    def _check_index_count(self, num_of_indexes, indexer_metadata):
-        # (No. of indexes created by Tenant + system primary indexes) * num index replicas (1)
-        if num_of_indexes > INDEX_MAX_CAP_PER_TENANT:
-            num_of_indexes = INDEX_MAX_CAP_PER_TENANT
-        expected_num_of_indexes = (num_of_indexes * len(self.buckets) + 1) * 2
-        self.assertEqual(len(indexer_metadata), expected_num_of_indexes,
+    def _check_index_count(self, indexer_metadata, num_indexes=None):
+        if num_indexes:
+            num_of_indexes = num_indexes
+        else:
+            # (No. of indexes created by Tenant + system primary indexes) * num index replicas (1)
+            indexes_per_tenant = self.num_scopes * self.num_collections * self.gsi_util_obj.batch_size
+            if indexes_per_tenant > INDEX_MAX_CAP_PER_TENANT:
+                indexes_per_tenant = INDEX_MAX_CAP_PER_TENANT
+            num_of_indexes = self.num_of_tenants * indexes_per_tenant * 2
+            num_of_indexes += self.num_of_tenants * 2  # primary indexes for _system scope
+        self.assertEqual(len(indexer_metadata), num_of_indexes,
                          "No. of expected indexes with replica not matching")
 
     def _check_index_distribution(self, idx_host_list_dict, sub_cluster_list):
@@ -299,13 +283,11 @@ class TenantManagement(BaseSecondaryIndexingTests):
                 self.assertNotEqual(zone_1, zone_2,
                                     f"Both the index nodes belong to same availability zone. {indexer_metadata}")
 
-    def validate_tenant_management(self, check, num_of_indexes=None):
+    def validate_tenant_management(self, check):
         indexer_metadata = self.index_rest.get_indexer_metadata()['status']
         idx_host_list_dict = {str(bucket): set() for bucket in self.buckets}
         tenant_idx_dict = {str(bucket): [] for bucket in self.buckets}
         sub_cluster_list = list()
-        if num_of_indexes is None:
-            num_of_indexes = self.initial_index_num
 
         for idx in indexer_metadata:
             idx_bucket = idx['bucket']
@@ -323,7 +305,7 @@ class TenantManagement(BaseSecondaryIndexingTests):
             self._check_cluster_affinity(idx_host_list_dict)
 
         elif check == "index_count":
-            self._check_index_count(num_of_indexes=num_of_indexes, indexer_metadata=indexer_metadata)
+            self._check_index_count(indexer_metadata=indexer_metadata)
 
         elif check == 'index_distribution':
             self._check_index_distribution(idx_host_list_dict=idx_host_list_dict, sub_cluster_list=sub_cluster_list)
@@ -336,7 +318,7 @@ class TenantManagement(BaseSecondaryIndexingTests):
             self._check_failed_over_subcluster(sub_cluster_list=sub_cluster_list,
                                                num_of_nodes_to_remove=self.node_to_swap)
 
-    def prepare_tenants(self, data_load=True):
+    def prepare_tenants(self, data_load=True, index_creations=True, query_node=None):
         for i in range(self.num_of_tenants):
             self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                             replicas=self.num_replicas, bucket_type=self.bucket_type,
@@ -351,20 +333,30 @@ class TenantManagement(BaseSecondaryIndexingTests):
                                                                collection_prefix=self.collection_prefix,
                                                                bucket=bucket_name)
         self.buckets = self.rest.get_buckets()
-        scope_names = [f'{self.scope_prefix}_{num + 1}' for num in range(self.num_scopes)]
-        collection_names = [f'{self.collection_prefix}_{num + 1}' for num in range(self.num_collections)]
+        self.scope_names = [f'{self.scope_prefix}_{num + 1}' for num in range(self.num_scopes)]
+        self.collection_names = [f'{self.collection_prefix}_{num + 1}' for num in range(self.num_collections)]
 
         if data_load:
-            data_load_tasks = []
-            for bucket in self.buckets:
-                for s_item in scope_names:
-                    for c_item in collection_names:
-                        gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
-                                                   percent_update=0, percent_delete=0, scope=s_item,
-                                                   collection=c_item, json_template=self.json_template,
-                                                   output=True)
-                        task = self.cluster.async_load_gen_docs(self.master, bucket, gen_create, timeout_secs=300)
-                        data_load_tasks.append(task)
-                        self.namespaces.append(f'default:{bucket}.{s_item}.{c_item}')
-            for task in data_load_tasks:
-                task.result()
+            self.load_data_on_all_tenants()
+
+        if index_creations:
+            if not query_node:
+                query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
+            self.gsi_util_obj.index_operations_during_phases(namespaces=self.namespaces, dataset=self.dataset,
+                                                             query_node=query_node, capella_run=False)
+            self.wait_until_indexes_online(defer_build=False)
+
+    def load_data_on_all_tenants(self):
+        data_load_tasks = []
+        for bucket in self.buckets:
+            for s_item in self.scope_names:
+                for c_item in self.collection_names:
+                    gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                               percent_update=0, percent_delete=0, scope=s_item,
+                                               collection=c_item, json_template=self.json_template,
+                                               output=True)
+                    task = self.cluster.async_load_gen_docs(self.master, bucket, gen_create, timeout_secs=300)
+                    data_load_tasks.append(task)
+                    self.namespaces.append(f'default:{bucket}.{s_item}.{c_item}')
+        for task in data_load_tasks:
+            task.result()

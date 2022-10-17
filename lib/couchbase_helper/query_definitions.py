@@ -69,8 +69,8 @@ class QueryDefinition(object):
                                     missing_indexes=False, missing_field_desc=False):
 
         if self.is_primary:
-            self.generate_primary_index_create_query(namespace=namespace, deploy_node_info=deploy_node_info,
-                                                     defer_build=defer_build, num_replica=num_replica)
+            return self.generate_primary_index_create_query(namespace=namespace, deploy_node_info=deploy_node_info,
+                                                            defer_build=defer_build, num_replica=num_replica)
         if partition_by_fields:
             self.partition_by_fields = partition_by_fields
 
@@ -130,12 +130,13 @@ class QueryDefinition(object):
             query += " WITH " + str(deployment_plan)
         return query
 
-    def generate_primary_index_create_query(self, namespace="default", deploy_node_info=None, defer_build=None, num_replica=None):
+    def generate_primary_index_create_query(self, namespace="default", deploy_node_info=None, defer_build=None,
+                                            num_replica=None):
 
         deployment_plan = {}
         if self.keyspace:
             namespace = self.keyspace
-        query = f"CREATE PRIMARY INDEX {self.index_name} ON {namespace} USING GSI"
+        query = f"CREATE PRIMARY INDEX `{self.index_name}` ON {namespace} USING GSI"
         if deploy_node_info:
             deployment_plan["nodes"] = deploy_node_info
         if defer_build:
@@ -249,7 +250,8 @@ class SQLDefinitionGenerator:
                 index_name=index_name_prefix + "job_title",
                 index_fields=["job_title"],
                 query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " % "job_title = \"Sales\""),
-                query_use_index_template=RANGE_SCAN_USE_INDEX_TEMPLATE.format(emit_fields, " %s " % "job_title = \"Sales\""),
+                query_use_index_template=RANGE_SCAN_USE_INDEX_TEMPLATE.format(emit_fields,
+                                                                              " %s " % "job_title = \"Sales\""),
                 groups=[SIMPLE_INDEX, RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS, "employee", "plasma_test"],
                 index_where_clause=" job_title IS NOT NULL ", keyspace=keyspace))
         definitions_list.append(
@@ -259,7 +261,7 @@ class SQLDefinitionGenerator:
                 query_template=RANGE_SCAN_TEMPLATE.format(emit_fields,
                                                           " %s " % "job_title = \"Sales\" ORDER BY job_title "),
                 query_use_index_template=RANGE_SCAN_USE_INDEX_TEMPLATE.format(emit_fields,
-                                                          " %s " % "job_title = \"Sales\" ORDER BY job_title "),
+                                                                              " %s " % "job_title = \"Sales\" ORDER BY job_title "),
                 groups=[SIMPLE_INDEX, RANGE_SCAN, ORDER_BY, EQUALS, "employee", "plasma_test"],
                 index_where_clause=" job_title IS NOT NULL ", keyspace=keyspace))
         definitions_list.append(
@@ -267,7 +269,8 @@ class SQLDefinitionGenerator:
                 index_name=index_name_prefix + "job_title",
                 index_fields=["job_title"],
                 query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " % "job_title != \"Sales\" ORDER BY _id"),
-                query_use_index_template=RANGE_SCAN_USE_INDEX_TEMPLATE.format(emit_fields, " %s " % "job_title != \"Sales\" ORDER BY _id"),
+                query_use_index_template=RANGE_SCAN_USE_INDEX_TEMPLATE.format(emit_fields,
+                                                                              " %s " % "job_title != \"Sales\" ORDER BY _id"),
                 groups=[SIMPLE_INDEX, RANGE_SCAN, NO_ORDERBY_GROUPBY, NOTEQUALS, "employee", "plasma_test"],
                 index_where_clause=" job_title IS NOT NULL ", keyspace=keyspace))
         definitions_list.append(
@@ -277,7 +280,7 @@ class SQLDefinitionGenerator:
                 query_template=RANGE_SCAN_TEMPLATE.format(emit_fields,
                                                           " %s " % "job_title = \"Sales\" or job_title = \"Engineer\" ORDER BY _id"),
                 query_use_index_template=RANGE_SCAN_USE_INDEX_TEMPLATE.format(emit_fields,
-                                                          " %s " % "job_title = \"Sales\" or job_title = \"Engineer\" ORDER BY _id"),
+                                                                              " %s " % "job_title = \"Sales\" or job_title = \"Engineer\" ORDER BY _id"),
                 groups=[SIMPLE_INDEX, RANGE_SCAN, NO_ORDERBY_GROUPBY, OR, "employee", "plasma_test"],
                 index_where_clause=" job_title IS NOT NULL ", keyspace=keyspace))
         definitions_list.append(
@@ -295,7 +298,8 @@ class SQLDefinitionGenerator:
                 index_name=index_name_prefix + "join_yr",
                 index_fields=["join_yr"],
                 query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " % "join_yr > 1999 ORDER BY _id"),
-                query_use_index_template=RANGE_SCAN_USE_INDEX_TEMPLATE.format(emit_fields, " %s " % "join_yr > 1999 ORDER BY _id"),
+                query_use_index_template=RANGE_SCAN_USE_INDEX_TEMPLATE.format(emit_fields,
+                                                                              " %s " % "join_yr > 1999 ORDER BY _id"),
                 groups=[SIMPLE_INDEX, RANGE_SCAN, NO_ORDERBY_GROUPBY, GREATER_THAN, "employee"],
                 index_where_clause=" join_yr > 2010 and join_yr < 2014 ", keyspace=keyspace))
         definitions_list.append(
@@ -305,8 +309,9 @@ class SQLDefinitionGenerator:
                 query_template=RANGE_SCAN_TEMPLATE.format(emit_fields,
                                                           " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014"),
                 query_use_index_template=RANGE_SCAN_USE_INDEX_TEMPLATE.format(emit_fields,
-                                                          " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014"),
-                groups=[COMPOSITE_INDEX, RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS, AND, "employee", "plasma_test", "unique"],
+                                                                              " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014"),
+                groups=[COMPOSITE_INDEX, RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS, AND, "employee", "plasma_test",
+                        "unique"],
                 index_where_clause=" job_title IS NOT NULL ", keyspace=keyspace))
         definitions_list.append(
             QueryDefinition(
@@ -315,7 +320,7 @@ class SQLDefinitionGenerator:
                 query_template=RANGE_SCAN_TEMPLATE.format(emit_fields,
                                                           " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title, _id"),
                 query_use_index_template=RANGE_SCAN_USE_INDEX_TEMPLATE.format(emit_fields,
-                                                          " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title, _id"),
+                                                                              " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title, _id"),
                 groups=[COMPOSITE_INDEX, RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS, OR, "employee", "plasma_test"],
                 index_where_clause=" job_title IS NOT NULL ", keyspace=keyspace))
         definitions_list.append(
@@ -325,7 +330,7 @@ class SQLDefinitionGenerator:
                 query_template=RANGE_SCAN_TEMPLATE.format("name,join_yr,job_title",
                                                           " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title"),
                 query_use_index_template=RANGE_SCAN_USE_INDEX_TEMPLATE.format("name,join_yr,job_title",
-                                                          " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title"),
+                                                                              " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title"),
                 groups=["employee_partitioned_index", "employee_partitioned_index_name", "plasma_test", "unique"],
                 index_where_clause=" job_title IS NOT NULL ", partition_by_fields=["name"], keyspace=keyspace))
         definitions_list.append(
@@ -335,7 +340,7 @@ class SQLDefinitionGenerator:
                 query_template=RANGE_SCAN_TEMPLATE.format("name,join_yr,job_title",
                                                           " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title"),
                 query_use_index_template=RANGE_SCAN_USE_INDEX_TEMPLATE.format("name,join_yr,job_title",
-                                                          " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title"),
+                                                                              " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title"),
                 groups=["employee_partitioned_index", "employee_partitioned_index_job_title", "plasma_test", "unique"],
                 index_where_clause=" job_title IS NOT NULL ",
                 partition_by_fields=["job_title"], keyspace=keyspace))
@@ -346,7 +351,7 @@ class SQLDefinitionGenerator:
                 query_template=RANGE_SCAN_TEMPLATE.format("name,join_yr,job_title",
                                                           " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title"),
                 query_use_index_template=RANGE_SCAN_USE_INDEX_TEMPLATE.format("name,join_yr,job_title",
-                                                          " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title"),
+                                                                              " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title"),
                 groups=["employee_partitioned_index", "employee_partitioned_index_job_year", "plasma_test", "unique"],
                 index_where_clause=" job_title IS NOT NULL ",
                 partition_by_fields=["job_year"], keyspace=keyspace))
@@ -357,7 +362,7 @@ class SQLDefinitionGenerator:
                 query_template=RANGE_SCAN_TEMPLATE.format("name,join_yr,job_title",
                                                           " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title"),
                 query_use_index_template=RANGE_SCAN_USE_INDEX_TEMPLATE.format("name,join_yr,job_title",
-                                                          " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title"),
+                                                                              " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title"),
                 groups=["employee_partitioned_index", "employee_partitioned_index_meta_id", "plasma_test", "unique"],
                 index_where_clause=" job_title IS NOT NULL ",
                 partition_by_fields=["meta().id"], keyspace=keyspace))
@@ -560,8 +565,8 @@ class SQLDefinitionGenerator:
                             groups=["all", ARRAY, SIMPLE_ARRAY, DUPLICATE_ARRAY, ORDER_BY, EQUALS, "airlines"],
                             index_where_clause=""))
         # array distinct index on strings full table scan
-        #index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
-        #definitions_list.append(
+        # index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
+        # definitions_list.append(
         #    QueryDefinition(index_name=index_name_prefix + "_travel_history_distinct",
         #                    index_fields=["DISTINCT ARRAY t FOR t in `travel_history` END"],
         #                    query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
@@ -588,8 +593,8 @@ class SQLDefinitionGenerator:
                             groups=["all", ARRAY, SIMPLE_ARRAY, DUPLICATE_ARRAY, ORDER_BY, EQUALS, "airlines"],
                             index_where_clause=""))
         # array distinct index on alphanumeric full table scan
-        #index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
-        #definitions_list.append(
+        # index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
+        # definitions_list.append(
         #    QueryDefinition(index_name=index_name_prefix + "_travel_history_code_distinct",
         #                    index_fields=["DISTINCT ARRAY t FOR t in `travel_history_code` END"],
         #                    query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
@@ -617,8 +622,8 @@ class SQLDefinitionGenerator:
                             groups=["all", ARRAY, SIMPLE_ARRAY, DUPLICATE_ARRAY, RANGE_SCAN, ORDER_BY, "airlines"],
                             index_where_clause=""))
         # array distinct index on numbers full table scan
-        #index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
-        #definitions_list.append(
+        # index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
+        # definitions_list.append(
         #    QueryDefinition(index_name=index_name_prefix + "_credit_cards_distinct",
         #                    index_fields=["DISTINCT ARRAY t FOR t in `credit_cards` END"],
         #                    query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
@@ -644,8 +649,8 @@ class SQLDefinitionGenerator:
                             groups=["all", ARRAY, SIMPLE_ARRAY, DUPLICATE_ARRAY, RANGE_SCAN, ORDER_BY, "airlines"],
                             index_where_clause=""))
         # Distinct array on boolean array
-        #index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
-        #definitions_list.append(
+        # index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
+        # definitions_list.append(
         #    QueryDefinition(index_name=index_name_prefix + "_question_values_duplicate",
         #                    index_fields=["DISTINCT ARRAY t FOR t in `question_values` END"],
         #                    query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
@@ -664,8 +669,8 @@ class SQLDefinitionGenerator:
                                     RANGE_SCAN, ORDER_BY, "airlines"],
                             index_where_clause=""))
         # array distinct index on mixed data type
-        #index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
-        #definitions_list.append(
+        # index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
+        # definitions_list.append(
         #    QueryDefinition(index_name=index_name_prefix + "_secret_combination",
         #                    index_fields=["DISTINCT ARRAY t FOR t in `secret_combination` END"],
         #                    query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
