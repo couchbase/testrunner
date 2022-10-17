@@ -1,3 +1,5 @@
+import time
+
 from .tuq import QueryTests
 from lib.collection.collections_n1ql_client import CollectionsN1QL
 import threading
@@ -52,8 +54,10 @@ class IndexerParallel(QueryTests):
         for bucket in buckets:
             for scope in scopes:
                 self.collections_helper.create_scope(bucket_name=bucket, scope_name=scope)
+                time.sleep(3)
                 for collection in collections:
                     self.collections_helper.create_collection(bucket_name=bucket, scope_name=scope, collection_name=collection)
+                    time.sleep(3)
                     self.run_cbq_query(f'INSERT INTO {bucket}.{scope}.{collection} (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
                     thread = threading.Thread(target=self.create_index,args=(self.primary, bucket, scope, collection))
                     threads.append(thread)
