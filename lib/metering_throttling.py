@@ -87,10 +87,17 @@ class metering(object):
             if unit in result['billingUnits'].keys():
                 if service in result['billingUnits'][unit].keys():
                     actual = result['billingUnits'][unit][service]
-                    if (actual == expected):
-                        return True, ''
+                    # With indexer service there is a 10% variation do to collatejson encoding, so we want to account for that
+                    if service == "index":
+                        if (actual/expected) >= .9 and (actual/expected) <= 1.1:
+                            return True, ''
+                        else:
+                            return False, f'Expected {expected} {service} {unit} unit but got {actual}'
                     else:
-                        return False, f'Expected {expected} {service} {unit} unit but got {actual}'
+                        if (actual == expected):
+                            return True, ''
+                        else:
+                            return False, f'Expected {expected} {service} {unit} unit but got {actual}'
                 else:
                     return False, f"result['billingUnits'][{unit}] does not contain {service}, result['billingUnits'][{unit}] is: {result['billingUnits'][unit]}"
             else:
