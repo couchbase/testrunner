@@ -40,6 +40,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
         self.log.info(f"Create bypass user {self.create_bypass_user}")
         self.log.info(f"Trigger log collect {self.trigger_log_collect}")
         self.capella_run = self.input.param("capella_run", False)
+        self.num_of_docs_per_collection = self.input.param("num_of_docs_per_collection", 10000)
 
     def tearDown(self):
         if self._testMethodName not in ['suite_tearDown', 'suite_setUp'] and self.trigger_log_collect:
