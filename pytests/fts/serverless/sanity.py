@@ -12,7 +12,7 @@ import random
 class FTSElixirSanity(ServerlessBaseTestCase):
     def setUp(self):
         self.input = TestInputSingleton.input
-        self.num_of_docs_per_collection = 100000
+        self.num_of_docs_per_collection = self.input.param("num_of_docs_per_collection", 100000)
         CbServer.use_https = True
         CbServer.capella_run = True
         CbServer.capella_credentials = CapellaCredentials(self.input.capella)
@@ -101,6 +101,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
             fts_callable.delete_all()
 
+    # Create custom map and update definition
     def create_custom_map_index_and_update_defn(self):
         self.provision_databases(self.num_databases)
         for counter, database in enumerate(self.databases.values()):
@@ -139,6 +140,46 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             if docs_indexed != container_doc_count:
                 errors.append(f"Bucket doc count = {container_doc_count}, index doc count={docs_indexed}")
 
+            fts_callable.delete_all()
+
+    # Run fts rest based query and expect results
+    def run_fts_rest_based_queries(self):
+        self.provision_databases(self.num_databases)
+        for counter, database in enumerate(self.databases.values()):
+            self.cleanup_database(database_obj=database)
+            scope_name = f'db_{counter}_scope_{random.randint(0, 1000)}'
+            collection_name = f'db_{counter}_collection_{random.randint(0, 1000)}'
+            self.create_scope(database_obj=database, scope_name=scope_name)
+            self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
+            self.load_databases(load_all_databases=False, doc_template="Employee",
+                                num_of_docs=self.num_of_docs_per_collection,
+                                database_obj=database, scope=scope_name, collection=collection_name)
+            self.init_input_servers(database)
+            fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
+                                       collections=collection_name, collection_index=True)
+            _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
+                                                                    collection=collection_name)
+            plan_params = self.construct_plan_params()
+            index = fts_callable.create_fts_index("index", source_type='couchbase',
+                                                  source_name=database.id, index_type='fulltext-index',
+                                                  index_params=None, plan_params=plan_params,
+                                                  source_params=None, source_uuid=None, collection_index=True,
+                                                  _type=_type, analyzer="standard",
+                                                  scope=scope_name, collections=[collection_name], no_check=False)
+            fts_callable.wait_for_indexing_complete(self.num_of_docs_per_collection)
+            if fts_callable.es:
+                fts_callable.create_es_index_mapping(index.es_custom_map,
+                                                     index.index_definition)
+            fts_callable.load_data(self.num_of_docs_per_collection)
+            fts_callable.wait_for_indexing_complete(self.num_of_docs_per_collection)
+            if fts_callable._update or fts_callable._delete:
+                fts_callable.async_perform_update_delete()
+                if fts_callable._update:
+                    fts_callable.sleep(60, "Waiting for updates to get indexed...")
+                fts_callable.wait_for_indexing_complete()
+            fts_callable._FTSCallable__generate_random_queries(index)
+            fts_callable.sleep(30, "additional wait time to be sure, fts index is ready")
+            fts_callable.run_query_and_compare(index)
             fts_callable.delete_all()
 
     # Create a FTS index and delete.And recreate the same index name.

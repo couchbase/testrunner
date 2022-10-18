@@ -338,7 +338,7 @@ class FTSCallable:
         tasks = []
         fail_count = 0
         failed_queries = []
-        self.generate_random_queries(index, num_queries, query_type=self.query_types)
+        self.__generate_random_queries(index, num_queries, query_type=self.query_types)
         for count in range(0, len(index.fts_queries)):
             tasks.append(self.cb_cluster.async_run_fts_query_compare(
                 fts_index=index,
