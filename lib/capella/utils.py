@@ -435,7 +435,7 @@ def create_capella_config(input, services_count):
     return config
 
 
-def create_serverless_config(input):
+def create_serverless_config(input, skip_import_sample=True):
     provider, region, _, _, _, _, dataplane_id = spec_options_from_input(input)
 
     config = {
@@ -444,6 +444,7 @@ def create_serverless_config(input):
         "provider": provider,
         "projectId": input.capella["project_id"],
         "tenantId": input.capella["tenant_id"],
+        "dontImportSampleData": skip_import_sample,
     }
     if dataplane_id:
         if "overRide" not in config:

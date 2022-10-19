@@ -37,6 +37,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
         self.use_sdk = self.input.param("use_sdk", False)
         self.num_of_indexes_per_tenant = self.input.param("num_of_indexes_per_tenant", 20)
         self.create_bypass_user = self.trigger_log_collect or self.input.param("create_bypass_user", False)
+        self.skip_import_sample = self.input.param("skip_import_sample", True)
         self.log.info(f"Create bypass user {self.create_bypass_user}")
         self.log.info(f"Trigger log collect {self.trigger_log_collect}")
         self.capella_run = self.input.param("capella_run", False)
@@ -96,7 +97,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
         return task.result()
 
     def create_database_async(self):
-        config = capella_utils.create_serverless_config(self.input)
+        config = capella_utils.create_serverless_config(self.input, self.skip_import_sample)
         task = CreateServerlessDatabaseTask(api=self.api, config=config, databases=self.databases,
                                             dataplanes=self.dataplanes, create_bypass_user=self.create_bypass_user)
         self.task_manager.schedule(task)
