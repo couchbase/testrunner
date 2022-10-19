@@ -41,9 +41,9 @@ class ServerlessGSISanity(BaseGSIServerless):
                 scope_name = f'db_{counter}_scope_{random.randint(0, 1000)}'
                 collection_name = f'db_{counter}_collection_{random.randint(0, 1000)}'
                 if named_primary_index:
-                    index_name = f'`#named_{random.randint(0, 1000)}_db_{counter}`'
+                    index_name = f'named_{random.randint(0, 1000)}_db_{counter}'
                 else:
-                    index_name = f'`#primary`'
+                    index_name = f'#primary'
                 query_gen = QueryDefinition(index_name=index_name)
                 self.create_scope(database_obj=database, scope_name=scope_name)
                 self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
@@ -54,7 +54,10 @@ class ServerlessGSISanity(BaseGSIServerless):
                 query = query_gen.generate_primary_index_create_query(defer_build=self.defer_build, namespace=namespace)
                 self.run_query(database=database, query=query)
                 if self.defer_build:
-                    build_query = query_gen.generate_build_query(namespace=namespace)
+                    if named_primary_index:
+                        build_query = f"BUILD INDEX ON {namespace}({index_name})"
+                    else:
+                        build_query = f"BUILD INDEX ON {namespace}(`#primary`)"
                     self.run_query(database=database, query=build_query)
                 self.wait_until_indexes_online(database=database, index_name=index_name, keyspace=keyspace)
                 count_query = f'SELECT COUNT(*) from {namespace}'
@@ -63,7 +66,7 @@ class ServerlessGSISanity(BaseGSIServerless):
                 self.assertEqual(count, self.num_of_docs_per_collection, "Docs count mismatch")
                 drop_query = query_gen.generate_index_drop_query(namespace=keyspace)
                 self.run_query(database=database, query=drop_query)
-                if self.check_if_index_exists(database_obj=database, index_name=index_name):
+                if self.check_if_index_exists(database_obj=database, index_name=f"`{index_name}`"):
                     self.fail(f"Index {index_name} not dropped on {database.id}")
 
     def test_create_secondary_index(self):
@@ -349,19 +352,17 @@ class ServerlessGSISanity(BaseGSIServerless):
                                 database_obj=database, scope=scope_name, collection=collection_name,
                                 doc_template="Employee")
             # create primary and array indexes
-            primary_gen = QueryDefinition(index_name='`#primary`')
+            primary_gen = QueryDefinition(index_name='#primary')
             query = primary_gen.generate_primary_index_create_query(namespace=keyspace,
                                                                     defer_build=self.defer_build)
             self.run_query(database=database, query=query)
-            if self.defer_build:
-                query = primary_gen.generate_build_query(keyspace)
-                self.run_query(database=database, query=query)
-            self.wait_until_indexes_online(database=database, index_name='#primary', keyspace=keyspace)
             # array index creation
             query = f"create index {index_name} on {keyspace}(ALL ARRAY v.name for v in VMs END) "
             self.run_query(database=database, query=query)
             if self.defer_build:
-                query = primary_gen.generate_build_query(keyspace)
+                query = f"BUILD INDEX ON {namespace}(`#primary`)"
+                self.run_query(database=database, query=query)
+                query = f"BUILD INDEX ON {namespace}(`{index_name}`)"
                 self.run_query(database=database, query=query)
             self.wait_until_indexes_online(database=database, index_name=index_name, keyspace=keyspace)
             # Run a query that uses array indexes
@@ -378,7 +379,7 @@ class ServerlessGSISanity(BaseGSIServerless):
             query = f"create index {partial_index_name} on {keyspace}(ALL ARRAY v.name for v in VMs END) where join_mo > 8"
             self.run_query(database=database, query=query)
             if self.defer_build:
-                query = primary_gen.generate_build_query(keyspace)
+                query = f"BUILD INDEX ON {namespace}(`{partial_index_name}`)"
                 self.run_query(database=database, query=query)
             self.wait_until_indexes_online(database=database, index_name=partial_index_name, keyspace=keyspace)
             # Run a query that uses partial array index
@@ -396,7 +397,7 @@ class ServerlessGSISanity(BaseGSIServerless):
             query = f"create index {simplified_index_name} on {keyspace}(ALL  VMs)"
             self.run_query(database=database, query=query)
             if self.defer_build:
-                query = primary_gen.generate_build_query(keyspace)
+                query = f"BUILD INDEX ON {namespace}(`{simplified_index_name}`)"
                 self.run_query(database=database, query=query)
             self.wait_until_indexes_online(database=database, index_name=simplified_index_name, keyspace=keyspace)
             # Run a query that uses simplified array index

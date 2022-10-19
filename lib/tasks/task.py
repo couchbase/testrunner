@@ -6726,6 +6726,11 @@ class CreateServerlessDatabaseTask(Task):
                         self.dataplanes[dataplane_id] = ServerlessDataPlane(dataplane_id)
                         rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=dataplane_id)
                         self.dataplanes[dataplane_id].populate(rest_api_info)
+                    else:
+                        self.log.info("Tenant database resides on a DP that already has a bypass user. Reusing it")
+                        rest_api_info = {"couchbaseCreds": {"username": self.dataplanes[dataplane_id].admin_username,
+                                                            "password": self.dataplanes[dataplane_id].admin_password},
+                                         "srv": self.dataplanes[dataplane_id].rest_srv}
                 self.databases[self.database_id].populate(info, creds, rest_api_info)
                 self.state = FINISHED
                 self.set_result(self.database_id)

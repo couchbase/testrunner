@@ -160,7 +160,16 @@ class ServerlessBaseTestCase(unittest.TestCase):
         for task in tasks:
             task.result()
 
-    def run_query(self, database, query, query_params=None, use_sdk=False, **kwargs):
+    def run_query(self, database, query, query_params=None, use_sdk=False, query_node=None, **kwargs):
+        """
+        By default runs against nebula endpoint. In case, you need to use a specific query node,
+        the query node hostname needs to be passed. This also requires create_bypass_user to be True
+        **kwargs:
+        username - if you want to run the queries with a custom username
+        password - if you want to run the queries with a custom password
+        Eg: self.run_query(database_obj, query="select 1", username= 'Administrator', password='password')
+        """
+        username, password = None, None
         if use_sdk:
             cluster = self.get_sdk_cluster(database.id)
             row_iter = cluster.query(query, QueryOptions(query_context=f"default:{database.id}"))
@@ -179,11 +188,24 @@ class ServerlessBaseTestCase(unittest.TestCase):
                         query_params['scan_vector'] = str(value).replace("'", '"')
                     if key == "timeout":
                         query_params['timeout'] = value
-            api = f"https://{database.nebula}:18093/query/service"
+                    if key == "username":
+                        username = value
+                    if key == "password":
+                        password = value
+            if not query_node:
+                api = f"https://{database.nebula}:18093/query/service"
+                verify = True
+            else:
+                api = f"https://{query_node}:18093/query/service"
+                verify = False
+            if username is None and password is None:
+                auth = (database.access_key, database.secret_key)
+            else:
+                auth = (username, password)
             query_params["statement"] = query
-            self.log.info(f'EXECUTE QUERY against {database.nebula}: {query}')
+            self.log.info(f'EXECUTE QUERY against {api}: Query: {query} using creds: {auth}')
             self.log.debug(f"Run Query statement payload {query_params}")
-            resp = requests.post(api, params=query_params, auth=(database.access_key, database.secret_key), timeout=120)
+            resp = requests.post(api, params=query_params, auth=auth, timeout=120, verify=verify)
             resp.raise_for_status()
             if 'billingUnits' in resp.json().keys():
                 self.log.info(f"BILLING UNITS from query: {resp.json()['billingUnits']}")
