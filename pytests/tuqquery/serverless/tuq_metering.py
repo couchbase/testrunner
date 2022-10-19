@@ -161,106 +161,155 @@ class QueryMeteringTests(ServerlessBaseTestCase):
             self.assertEqual(expected_ru + sc_ru, after_kv_ru-before_kv_ru)
 
     def test_kv_select(self):
-        insert_query = f'INSERT INTO {self.collection} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
-        self.run_query(f'DELETE from {self.bucket}')
-        self.run_query(insert_query)
+        self.provision_databases()
+        for database in self.databases.values():
+            meter = metering(database.rest_host, database.admin_username, database.admin_password)
+            insert_query = f'INSERT INTO {self.collection} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
+            self.run_query(database, insert_query)
 
-        # Get sequential scan read unit
-        result = self.run_query(f'SELECT meta().id FROM {self.collection}')
-        sc_ru = result['billingUnits']['ru']['kv']
+            # Get sequential scan read unit
+            result = self.run_query(database, f'SELECT meta().id FROM {self.collection}')
+            sc_ru = result['billingUnits']['ru']['kv']
 
-        expected_ru = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru)
-        result = self.run_query(f'SELECT * FROM {self.collection}')
-        assert_query, msg = meter.assert_query_billing_unit(result, expected_ru + sc_ru, unit='ru', service='kv')
-        self.assertTrue(assert_query, msg)
+            expected_ru = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru)
+
+            before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
+            result = self.run_query(database, f'SELECT * FROM {self.collection}')
+            after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
+
+            assert_query, msg = meter.assert_query_billing_unit(result, expected_ru + sc_ru, unit='ru', service='kv')
+            self.assertTrue(assert_query, msg)
+            self.assertEqual(after_kv_wu, before_kv_wu) # no KV write
+            self.assertEqual(expected_ru + sc_ru, after_kv_ru-before_kv_ru)
 
     def test_kv_select_count(self):
-        insert_query = f'INSERT INTO {self.collection} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
-        self.run_query(f'DELETE from {self.bucket}')
-        self.run_query(insert_query)
+        self.provision_databases()
+        for database in self.databases.values():
+            meter = metering(database.rest_host, database.admin_username, database.admin_password)
+            insert_query = f'INSERT INTO {self.collection} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
+            self.run_query(database, insert_query)
 
-        # for count(*) we should get this from meta and no need to read from KV
-        result = self.run_query(f'SELECT count(*) as count FROM {self.collection}')
-        self.assertTrue('billingUnits' not in result.keys() or 'ru' not in result['billingUnits'].keys(), f'We should not have got billingUnits[ru] from query')
-        self.assertEqual(result['results'][0]['count'], self.doc_count, f'We expected {self.doc_count} but for diff result: {result}')
+            # for count(*) we should get this from meta and no need to read from KV
+            before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
+            result = self.run_query(database, f'SELECT count(*) as count FROM {self.collection}')
+            after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
-        # Get sequential scan read unit
-        result = self.run_query(f'SELECT meta().id FROM {self.collection}')
-        sc_ru = result['billingUnits']['ru']['kv']
+            self.assertTrue('billingUnits' not in result.keys() or 'ru' not in result['billingUnits'].keys(), f'We should not have got billingUnits[ru] from query')
+            self.assertEqual(result['results'][0]['count'], self.doc_count, f'We expected {self.doc_count} but for diff result: {result}')
+            self.assertEqual(after_kv_wu, before_kv_wu) # no KV write
+            self.assertEqual(after_kv_ru, before_kv_ru) # no KV read
 
-        # for count(field) we need to scan all KV doc
-        expected_ru = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru)
-        result = self.run_query(f'SELECT count(name) as count FROM {self.collection}')
-        self.assertEqual(result['results'][0]['count'], self.doc_count, f'We expected {self.doc_count} but for diff result: {result}')
-        assert_query, msg = meter.assert_query_billing_unit(result, expected_ru + sc_ru, unit='ru', service='kv')
-        self.assertTrue(assert_query, msg)
+            # Get sequential scan read unit
+            result = self.run_query(database, f'SELECT meta().id FROM {self.collection}')
+            sc_ru = result['billingUnits']['ru']['kv']
+            expected_ru = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru)
+
+            # for count(field) we need to scan all KV doc
+            before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
+            result = self.run_query(database, f'SELECT count(name) as count FROM {self.collection}')
+            after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
+
+            self.assertEqual(result['results'][0]['count'], self.doc_count, f'We expected {self.doc_count} but for diff result: {result}')
+            assert_query, msg = meter.assert_query_billing_unit(result, expected_ru + sc_ru, unit='ru', service='kv')
+            self.assertTrue(assert_query, msg)
+            self.assertEqual(after_kv_wu, before_kv_wu) # no KV write
+            self.assertEqual(expected_ru + sc_ru, after_kv_ru-before_kv_ru)
 
     def test_kv_select_meta(self):
-        options = {"expiration": 123456}
-        self.doc["country"] = "France"
-        self.doc_size = len(json.dumps(self.doc))
-        insert_query = f'INSERT INTO {self.collection} (key k, value v, options o) SELECT uuid() as k , {self.doc} as v, {options} o FROM array_range(0,{self.doc_count}) d'
-        self.run_query(f'DELETE from {self.bucket}')
-        self.run_query(insert_query)
+        self.provision_databases()
+        for database in self.databases.values():
+            meter = metering(database.rest_host, database.admin_username, database.admin_password)
+            options = {"expiration": 123456}
+            self.doc["country"] = "France"
+            self.doc_size = len(json.dumps(self.doc))
+            insert_query = f'INSERT INTO {self.collection} (key k, value v, options o) SELECT uuid() as k , {self.doc} as v, {options} o FROM array_range(0,{self.doc_count}) d'
+            self.run_query(database, insert_query)
 
-        # Get sequential scan read unit
-        result = self.run_query(f'SELECT meta().id FROM {self.collection}')
-        sc_ru = result['billingUnits']['ru']['kv']
+            # Get sequential scan read unit
+            result = self.run_query(database, f'SELECT meta().id FROM {self.collection}')
+            sc_ru = result['billingUnits']['ru']['kv']
+            expected_ru = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru)
 
-        expected_ru = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru)
-        result = self.run_query(f'SELECT meta().expiration, country FROM {self.collection}')
-        assert_query, msg = meter.assert_query_billing_unit(result, expected_ru + sc_ru, unit='ru', service='kv')
-        self.assertTrue(assert_query, msg)
+            before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
+            result = self.run_query(database, f'SELECT meta().expiration, country FROM {self.collection}')
+            after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
+
+            assert_query, msg = meter.assert_query_billing_unit(result, expected_ru + sc_ru, unit='ru', service='kv')
+            self.assertTrue(assert_query, msg)
+            self.assertEqual(after_kv_wu, before_kv_wu) # no KV write
+            self.assertEqual(expected_ru + sc_ru, after_kv_ru-before_kv_ru)
 
     def test_kv_prepare(self):
-        insert_query = f'INSERT INTO {self.collection} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
-        # MB-53214
-        # self.run_query(f'DELETE from {self.bucket}')
+        self.provision_databases()
+        for database in self.databases.values():
+            meter = metering(database.rest_host, database.admin_username, database.admin_password)
+            insert_query = f'INSERT INTO {self.collection} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
 
-        # Prepare statement should shows no bilingUnits
-        before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
-        result = self.run_query(f"PREPARE prepared_insert AS {insert_query}")
-        after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
-        self.assertEqual(before_kv_ru, after_kv_ru)
-        self.assertEqual(before_kv_wu, after_kv_wu)
-        self.assertTrue('billingUnits' not in result)
+            # Prepare statement should shows no bilingUnits
+            before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
+            result = self.run_query(database, f"PREPARE prepared_insert AS {insert_query}")
+            after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
+            self.assertEqual(before_kv_ru, after_kv_ru)
+            self.assertEqual(before_kv_wu, after_kv_wu)
+            self.assertTrue('billingUnits' not in result)
 
-        # Get sequential scan read unit
-        result = self.run_query(f'SELECT meta().id FROM {self.collection}')
-        sc_ru = result['billingUnits']['ru']['kv']
+            expected_wu = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_wu)
 
-        expected_wu = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_wu)
+            before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
+            result = self.run_query(database, f"EXECUTE prepared_insert")
+            after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
-        before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
-        result = self.run_query(f"EXECUTE prepared_insert")
-        after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
-
-        assert_query, msg = meter.assert_query_billing_unit(result, expected_wu + sc_ru, unit='wu', service='kv')
-        self.assertTrue(assert_query, msg)
-        self.assertTrue("ru" not in result['billingUnits'])
-        self.assertEqual(before_kv_ru, after_kv_ru, f"KV RU before: {before_kv_ru} and after: {after_kv_ru} are different") # expect no KV reads
+            assert_query, msg = meter.assert_query_billing_unit(result, expected_wu, unit='wu', service='kv')
+            self.assertTrue(assert_query, msg)
+            self.assertTrue("ru" not in result['billingUnits'])
+            self.assertEqual(expected_wu, after_kv_wu-before_kv_wu)
+            self.assertEqual(before_kv_ru, after_kv_ru) # no KV reads
 
     def test_inline_udf(self):
-        result = self.run_query(f"CREATE or REPLACE FUNCTION default:{self.bucket}._default.plusone(a) {{ a + 1 }}")
-        self.assertTrue('billingUnits' not in result)
-        result = self.run_query(f"EXECUTE FUNCTION default:{self.bucket}._default.plusone(10)")
-        self.assertTrue('billingUnits' not in result)
-        self.assertTrue(result['results'], [11])
+        self.provision_databases()
+        for database in self.databases.values():
+            meter = metering(database.rest_host, database.admin_username, database.admin_password)
+            before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
+            result = self.run_query(database, f"CREATE or REPLACE FUNCTION {self.scope}.plusone(a) {{ a + 1 }}")
+            after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
+            self.assertTrue('billingUnits' not in result)
+            self.assertEqual(before_kv_ru, after_kv_ru) # no KV read
+            self.assertEqual(before_kv_wu, after_kv_wu) # no KV write
+
+            before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
+            before_cu_unbilled = meter.get_query_cu(database.id, unbilled="true",variant="udf")
+            before_cu_billed = meter.get_query_cu(database.id, unbilled="false",variant="udf")
+            result = self.run_query(database, f"EXECUTE FUNCTION {self.scope}.plusone(10)")
+            after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
+            after_cu_unbilled = meter.get_query_cu(database.id, unbilled="true",variant="udf")
+            after_cu_billed = meter.get_query_cu(database.id, unbilled="false",variant="udf")
+            self.assertTrue('billingUnits' not in result)
+            self.assertTrue(result['results'], [11])
+            self.assertEqual(before_kv_ru, after_kv_ru) # no KV read
+            self.assertEqual(before_kv_wu, after_kv_wu) # no KV write
+            self.assertEqual(before_cu_billed, after_cu_billed) # no billed compute unit
+            self.assertEqual(before_cu_unbilled, after_cu_unbilled) # no billed compute unit
 
     def test_js_udf(self):
-        result = self.run_query(f"CREATE or REPLACE FUNCTION default:{self.bucket}._default.plus(a, b) LANGUAGE JAVASCRIPT as 'function plus(a,b) {{return a+b}}'")
-        self.assertTrue('billingUnits' not in result)
-        expected_cu = 1
-        before_cu = meter.get_query_cu(self.bucket, unbilled="true",variant="eval")
-        before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
-        result = self.run_query(f"EXECUTE FUNCTION default:{self.bucket}._default.plus(10,20)")
-        after_cu = meter.get_query_cu(self.bucket, unbilled="true", variant="eval")
-        after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
-        # self.assertTrue('billingUnits' not in result)
-        self.assertTrue(result['results'], [30])
-        self.assertEqual(before_kv_ru, after_kv_ru) # no kv write
-        self.assertEqual(before_kv_wu, after_kv_wu) # no kv read
-        # self.assertEqual(expected_cu, after_cu - before_cu)
+        self.provision_databases()
+        for database in self.databases.values():
+            meter = metering(database.rest_host, database.admin_username, database.admin_password)
+            result = self.run_query(database, f"CREATE or REPLACE FUNCTION {self.scope}.plus(a, b) LANGUAGE JAVASCRIPT as 'function plus(a,b) {{return a+b}}'")
+            self.assertTrue('billingUnits' not in result)
+            expected_cu = 1
+            before_cu_unbilled = meter.get_query_cu(database.id, unbilled="true",variant="udf")
+            before_cu_billed = meter.get_query_cu(database.id, unbilled="false",variant="udf")
+            before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
+            result = self.run_query(database, f"EXECUTE FUNCTION {self.scope}.plus(10,20)")
+            after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
+            after_cu_unbilled = meter.get_query_cu(database.id, unbilled="true",variant="udf")
+            after_cu_billed = meter.get_query_cu(database.id, unbilled="false",variant="udf")
+            # self.assertTrue('billingUnits' not in result)
+            self.assertTrue(result['results'], [30])
+            self.assertEqual(before_kv_ru, after_kv_ru) # no kv write
+            self.assertEqual(before_kv_wu, after_kv_wu) # no kv read
+            self.assertEqual(expected_cu, after_cu_unbilled - before_cu_unbilled)
+            self.assertEqual(after_cu_billed, before_cu_billed) # no cu billed unit
 
     def test_js_udf_n1ql(self):
         insert_query = f'INSERT INTO {self.collection} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
@@ -302,42 +351,43 @@ class QueryMeteringTests(ServerlessBaseTestCase):
         self.assertTrue(assert_query, msg)
 
     def test_no_rw_unit(self):
-        insert_query = f'INSERT INTO {self.collection} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
-        # self.run_query(f'DELETE from {self.bucket}')
-        self.run_query(insert_query)
-        self.run_query(f'CREATE INDEX idx_name IF NOT EXISTS on {self.bucket}(name)')
-        self.wait_for_all_indexes_online()
-        queries = {
-            'explain': f'EXPLAIN SELECT name, city FROM {self.collection} WHERE name = repeat("a", {self.value_size})',
-            'advise': f'ADVISE SELECT name, city FROM {self.collection} WHERE name = repeat("a", {self.value_size})',
-            'catalog': 'SELECT * FROM system:keyspaces',
-            'query1': 'SELECT * FROM array_repeat("a", 10) as t',
-            'system_scope_query': f'SELECT * FROM {self.collection}.`_system`.`_query`',
-            'system_scope_mobile': f'SELECT * FROM {self.collection}.`_system`.`_mobile`',
-            'system_scope_eventing': f'SELECT * FROM {self.collection}.`_system`.`_eventing`',
-        }
-        before_index_ru, before_index_wu = meter.get_index_rwu(self.bucket)
-        before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
-        result = self.run_query(queries[self.statement])
-        after_index_ru, after_index_wu = meter.get_index_rwu(self.bucket)
-        after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
+        self.provision_databases()
+        for database in self.databases.values():
+            meter = metering(database.rest_host, database.admin_username, database.admin_password)
+            insert_query = f'INSERT INTO {self.collection} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
+            self.run_query(database, insert_query)
+            self.run_query(database, f'CREATE INDEX idx_name IF NOT EXISTS on {self.collection}(name)')
+            queries = {
+                'explain': f'EXPLAIN SELECT name, city FROM {self.collection} WHERE name = repeat("a", {self.value_size})',
+                'advise': f'ADVISE SELECT name, city FROM {self.collection} WHERE name = repeat("a", {self.value_size})',
+                'catalog': 'SELECT * FROM system:keyspaces',
+                'query1': 'SELECT * FROM array_repeat("a", 10) as t',
+                'system_scope_query': f'SELECT * FROM `{database.id}`.`_system`.`_query`',
+                'system_scope_mobile': f'SELECT * FROM `{database.id}`.`_system`.`_mobile`',
+                'system_scope_eventing': f'SELECT * FROM `{database.id}`.`_system`.`_eventing`',
+            }
+            before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
+            before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
+            result = self.run_query(database, queries[self.statement])
+            after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
+            after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
-        # No kv or index RWU
-        self.assertTrue('billingUnits' not in result)
-        self.assertEqual(before_index_ru, after_index_ru)
-        self.assertEqual(before_index_wu, after_index_wu)
-        self.assertEqual(before_kv_wu, after_kv_wu)
-        self.assertEqual(before_kv_ru, after_kv_ru)
+            # No kv or index RWU
+            self.assertTrue('billingUnits' not in result)
+            self.assertEqual(before_index_ru, after_index_ru)
+            self.assertEqual(before_index_wu, after_index_wu)
+            self.assertEqual(before_kv_wu, after_kv_wu)
+            self.assertEqual(before_kv_ru, after_kv_ru)
 
     def test_no_rw_scope(self):
         insert_query = f'INSERT INTO {self.bucket}.s1.c1 (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
         self.run_query(f'DROP SCOPE {self.bucket}.s1 IF EXISTS')
 
         # Create scope
-        before_index_ru, before_index_wu = meter.get_index_rwu(self.bucket)
+        before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
         before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
         result = self.run_query(f'CREATE SCOPE {self.bucket}.s1')
-        after_index_ru, after_index_wu = meter.get_index_rwu(self.bucket)
+        after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
         after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
         # No kv or index RWU
@@ -354,10 +404,10 @@ class QueryMeteringTests(ServerlessBaseTestCase):
         self.wait_for_all_indexes_online()
 
         # Drop scope
-        before_index_ru, before_index_wu = meter.get_index_rwu(self.bucket)
+        before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
         before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
         result = self.run_query(f'DROP SCOPE {self.bucket}.s1')
-        after_index_ru, after_index_wu = meter.get_index_rwu(self.bucket)
+        after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
         after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
         # No kv or index RWU
@@ -373,10 +423,10 @@ class QueryMeteringTests(ServerlessBaseTestCase):
         self.run_query(f'CREATE SCOPE {self.bucket}.s1')
 
         # Create collection
-        before_index_ru, before_index_wu = meter.get_index_rwu(self.bucket)
+        before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
         before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
         result = self.run_query(f'CREATE COLLECTION {self.bucket}.s1.c1')
-        after_index_ru, after_index_wu = meter.get_index_rwu(self.bucket)
+        after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
         after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
         self.sleep(2)
@@ -392,10 +442,10 @@ class QueryMeteringTests(ServerlessBaseTestCase):
         self.assertEqual(before_kv_ru, after_kv_ru)
 
         # Drop collection
-        before_index_ru, before_index_wu = meter.get_index_rwu(self.bucket)
+        before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
         before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
         result = self.run_query(f'DROP COLLECTION {self.bucket}.s1.c1')
-        after_index_ru, after_index_wu = meter.get_index_rwu(self.bucket)
+        after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
         after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
         # No kv or index RWU
@@ -414,14 +464,14 @@ class QueryMeteringTests(ServerlessBaseTestCase):
 
         # simple eval, we expect at least 1
         expected_cu = 1
-        before_cu = meter.get_query_cu(self.bucket, variant="eval")
+        before_cu = meter.get_query_cu(database.id, variant="eval")
         result = self.run_query('SELECT 10+10', username=user_id, password=user_pwd, query_context=self.bucket)
-        after_cu = meter.get_query_cu(self.bucket, variant="eval")
+        after_cu = meter.get_query_cu(database.id, variant="eval")
         self.assertEqual(expected_cu, after_cu - before_cu)
 
-        before_cu = meter.get_query_cu(self.bucket, variant="eval")
+        before_cu = meter.get_query_cu(database.id, variant="eval")
         result = self.run_query('SELECT array_repeat(array_repeat(repeat("a",100), 500), 1000)', username=user_id, password=user_pwd, query_context=self.bucket )
-        after_cu = meter.get_query_cu(self.bucket, variant="eval")
+        after_cu = meter.get_query_cu(database.id, variant="eval")
         # 1 compute unit is 32MB per second
         expected_cu = math.ceil(int(result['metrics']['usedMemory']) * float(result['metrics']['executionTime'][:-1]) / (32*1024*1024))
         self.assertEqual (expected_cu, after_cu - before_cu)
