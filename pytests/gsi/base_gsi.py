@@ -78,6 +78,12 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.transfer_batch_size = self.input.param("transfer_batch_size", 3)
         self.rebalance_timeout = self.input.param("rebalance_timeout", 600)
         self.missing_field_desc = self.input.param("missing_field_desc", False)
+        self.num_of_tenants = self.input.param("num_of_tenants", 10)
+        self.aws_access_key_id = self.input.param("aws_access_key_id", None)
+        self.aws_secret_access_key = self.input.param("aws_secret_access_key", None)
+        self.region = self.input.param("region", "us-west-1")
+        self.s3_bucket = self.input.param("s3_bucket", "gsi-onprem")
+        self.storage_prefix = self.input.param("storage_prefix", "indexing")
         self.server_group_map = {}
         if not self.use_rest:
             query_definition_generator = SQLDefinitionGenerator()
@@ -1591,6 +1597,75 @@ class BaseSecondaryIndexingTests(QueryTests):
         # wait till node is ready after warmup
         ClusterOperationHelper.wait_for_ns_servers_or_assert([node], self,
                                                              wait_if_warmup=True)
+
+    def prepare_tenants(self, data_load=True, index_creations=True, query_node=None):
+        self._create_S3_config()
+        for i in range(self.num_of_tenants):
+            self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                            replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                            enable_replica_index=self.enable_replica_index,
+                                                            eviction_policy=self.eviction_policy, lww=self.lww)
+            bucket_name = f"test_bucket_{i + 1}"
+            self.cluster.create_standard_bucket(name=bucket_name, port=11222, bucket_params=self.bucket_params)
+            self.sleep(10)
+            self.collection_rest.create_scope_collection_count(scope_num=self.num_scopes,
+                                                               collection_num=self.num_collections,
+                                                               scope_prefix=self.scope_prefix,
+                                                               collection_prefix=self.collection_prefix,
+                                                               bucket=bucket_name)
+        self.buckets = self.rest.get_buckets()
+        scopes = [f'{self.scope_prefix}_{num + 1}' for num in range(self.num_scopes)]
+        collections = [f'{self.collection_prefix}_{num + 1}' for num in range(self.num_collections)]
+
+        if data_load:
+            self.load_data_on_all_tenants(scopes=scopes, collections=collections)
+
+        if index_creations:
+            try:
+                if self.gsi_util_obj:
+                    pass
+            except AttributeError as err:
+                from serverless.gsi_utils import GSIUtils
+                self.gsi_util_obj = GSIUtils(self.run_cbq_query)
+            if query_node:
+                self.query_node = query_node
+            self.gsi_util_obj.index_operations_during_phases(namespaces=self.namespaces, dataset=self.dataset,
+                                                             query_node=self.query_node, capella_run=False)
+            self.wait_until_indexes_online(defer_build=False)
+
+    def _create_S3_config(self):
+        aws_cred_file = ('[default]\n'
+                         f'aws_access_key_id={self.aws_access_key_id}\n'
+                         f'aws_secret_access_key={self.aws_secret_access_key}')
+        aws_conf_file = ('[default]\n'
+                         f'region={self.region}\n'
+                         'output=json')
+        for node in self.servers:
+            shell = RemoteMachineShellConnection(node)
+            shell.execute_command("rm -rf /opt/couchbase/.aws/")
+            shell.execute_command("mkdir -p /opt/couchbase/.aws/")
+
+            shell.create_file(remote_path='/opt/couchbase/.aws/credentials', file_data=aws_cred_file)
+            shell.create_file(remote_path='/opt/couchbase/.aws/config', file_data=aws_conf_file)
+
+        fast_rebalance_config = {"indexer.settings.rebalance.blob_storage_bucket": self.s3_bucket,
+                                 "indexer.settings.rebalance.blob_storage_prefix": self.storage_prefix,
+                                 "indexer.settings.rebalance.blob_storage_scheme": "s3"}
+        self.index_rest.set_index_settings(fast_rebalance_config)
+
+    def load_data_on_all_tenants(self, scopes, collections, json_template='Person', batch_size=10000):
+        tasks = []
+        for bucket in self.buckets:
+            for s_item in scopes:
+                for c_item in collections:
+                    gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                               percent_update=0, percent_delete=0, scope=s_item,
+                                               collection=c_item, json_template=json_template,
+                                               output=True)
+                    tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=gen_create, batch_size=batch_size)
+                    self.namespaces.append(f'default:{bucket}.{s_item}.{c_item}')
+        for task in tasks:
+            task.result()
 
     def prepare_collection_for_indexing(self, num_scopes=1, num_collections=1, num_of_docs_per_collection=1000,
                                         indexes_before_load=False, json_template="Person", batch_size=10**4,

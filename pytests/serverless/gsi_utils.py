@@ -8,6 +8,7 @@ __git_user__ = "hrajput89"
 __created_on__ = 04/10/22 11:53 am
 
 """
+import boto3
 import datetime
 import random
 import string
@@ -22,6 +23,7 @@ RANGE_SCAN_TEMPLATE = "SELECT {0} FROM %s WHERE {1}"
 
 class GSIUtils(object):
     def __init__(self, query_obj):
+        self.initial_index_num = 0
         self.definition_list = []
         self.run_query = query_obj
         self.batch_size = 0
@@ -287,7 +289,6 @@ class GSIUtils(object):
                                        defer_build_mix=False, phase='before', capella_run=False, query_node=None,
                                        batch_offset=0, timeout=1500):
         if phase == 'before':
-            self.initial_index_num = 0
             for item in range(num_of_batches):
                 for namespace in namespaces:
                     counter = batch_offset + item
@@ -329,3 +330,11 @@ class GSIUtils(object):
                         break
         elif phase == "after":
             pass
+
+    def check_s3_cleanup(self, aws_access_key_id, aws_secret_access_key, s3_bucket='gsi-onprem', region='us-west-1'):
+        s3 = boto3.client(service_name='s3', region_name=region,
+                          aws_access_key_id=aws_access_key_id,
+                          aws_secret_access_key=aws_secret_access_key)
+        result = s3.list_objects_v2(Bucket=s3_bucket, Delimiter='/*')
+        if len(result['Contents']) > 1:
+            raise Exception("Bucket is not cleaned up after rebalance.")

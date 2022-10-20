@@ -8,14 +8,15 @@ __created_on__ = "08/04/22 12:27 pm"
 
 """
 import random
+import os
 
-from couchbase_helper.documentgenerator import SDKDataLoader
+from couchbase_helper.query_definitions import QueryDefinition
 from gsi.base_gsi import BaseSecondaryIndexingTests
 from gsi.collections_concurrent_indexes import powerset
-from couchbase_helper.query_definitions import QueryDefinition
-from membase.api.on_prem_rest_client import RestHelper
-from testconstants import INDEX_MAX_CAP_PER_TENANT, INDEX_SUB_CLUSTER_LENGTH
+from membase.api.on_prem_rest_client import RestHelper, RestConnection
 from serverless.gsi_utils import GSIUtils
+from testconstants import INDEX_MAX_CAP_PER_TENANT, INDEX_SUB_CLUSTER_LENGTH
+from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 
 
 class TenantManagement(BaseSecondaryIndexingTests):
@@ -26,13 +27,14 @@ class TenantManagement(BaseSecondaryIndexingTests):
         self.use_defer_build = self.input.param("use_defer_build", False)
         self.index_field_set = powerset(['age', 'city', 'country', 'title', 'firstName', 'lastName', 'streetAddress',
                                          'suffix', 'filler1', 'phone', 'zipcode'])
-        self.num_of_tenants = self.input.param("num_of_tenants", 10)
         self.batch_size = self.input.param("batch_size", 1000)
         self.node_to_swap = self.input.param("node_to_swap", 1)
         self.json_template = self.input.param("json_template", "Person")
         self.recover_failed_over_node = self.input.param("recover_failed_over_node", False)
         self.gsi_util_obj = GSIUtils(self.run_cbq_query)
         self.namespaces = []
+        self._create_server_groups()
+        self.query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
 
     def tearDown(self):
         self.log.info("==============  TenantManagement tearDown has started ==============")
@@ -46,17 +48,13 @@ class TenantManagement(BaseSecondaryIndexingTests):
         pass
 
     def test_cluster_affinity(self):
-        self._create_server_groups()
         self.prepare_tenants()
         self.validate_tenant_management(check='cluster_affinity')
         self.validate_tenant_management(check='index_count')
         self.validate_tenant_management(check='index_distribution')
 
-    def test_rebalance_sub_cluster(self):
-        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
-        self._create_server_groups()
-
-        self.prepare_tenants()
+    def test_index_cap_per_tenant(self):
+        self.prepare_tenants(index_creations=False)
         for collection_namespace in self.namespaces:
             for item, index_field in zip(range(self.initial_index_num), self.index_field_set):
                 if self.use_defer_build:
@@ -66,40 +64,26 @@ class TenantManagement(BaseSecondaryIndexingTests):
                 idx = f'idx_{item}_{collection_namespace.split(":")[1].replace(".", "_")}'
                 index_gen = QueryDefinition(index_name=idx, index_fields=index_field)
                 query = index_gen.generate_index_create_query(namespace=collection_namespace,
-                                                              defer_build=defer_build,
-                                                              num_replica=self.num_replicas)
+                                                              defer_build=defer_build)
                 try:
-                    self.run_cbq_query(query=query, server=query_node)
+                    self.run_cbq_query(query=query, server=self.query_node)
                 except Exception as err:
                     error = 'Build Already In Progress'
+                    err_limit = 'Limit for number of indexes that can be created per bucket has been reached.'
                     if error not in str(err):
+                        if err_limit in str(err):
+                            self.log.info(f"Index created: {item}")
+                            break
                         self.fail(err)
+
                 self.wait_until_indexes_online(defer_build=True)
+
+    def test_rebalance_sub_cluster(self):
+        self.prepare_tenants()
         self.validate_tenant_management(check="subcluster_reblance_swap")
 
     def test_failed_over_sub_cluster(self):
-        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
-        self._create_server_groups()
-
         self.prepare_tenants()
-        for collection_namespace in self.namespaces:
-            for item, index_field in zip(range(self.initial_index_num), self.index_field_set):
-                if self.use_defer_build:
-                    defer_build = random.choice([True, False])
-                else:
-                    defer_build = False
-                idx = f'idx_{item}_{collection_namespace.split(":")[1].replace(".", "_")}'
-                index_gen = QueryDefinition(index_name=idx, index_fields=index_field)
-                query = index_gen.generate_index_create_query(namespace=collection_namespace,
-                                                              defer_build=defer_build,
-                                                              num_replica=self.num_replicas)
-                try:
-                    self.run_cbq_query(query=query, server=query_node)
-                except Exception as err:
-                    error = 'Build Already In Progress'
-                    if error not in str(err):
-                        self.fail(err)
-                self.wait_until_indexes_online(defer_build=True)
         self.validate_tenant_management(check="failed_over_subcluster")
 
     def _check_cluster_affinity(self, idx_host_list_dict):
@@ -130,8 +114,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
         # identifying the node for the subcluster for different  availability zone
         remove_nodes = []
         remove_node_ips = [node.split(':')[0] for node in sub_cluster_list[0]]
-        for server in self.servers:
-            for remove_node_ip in remove_node_ips:
+        for remove_node_ip in remove_node_ips:
+            for server in self.servers:
                 if remove_node_ip == server.ip:
                     remove_nodes.append(server)
                     break
@@ -139,22 +123,22 @@ class TenantManagement(BaseSecondaryIndexingTests):
                 break
 
         # Find Server group of removing nodes
-        remove_node_zones_dict = {}
+        nodes_zone_dict = {}
         zone_info = self.rest.get_zone_and_nodes()
-        for zone_name in zone_info:
-            for server in zone_info[zone_name]:
-                if server in remove_node_ips:
-                    remove_node_zones_dict[server] = zone_name
-                    break
-            if len(remove_node_zones_dict) == num_of_nodes_to_remove:
-                break
+        for zone_name, node_list in zone_info.items():
+            for node_ip in node_list:
+                nodes_zone_dict[node_ip] = zone_name
+
+        remove_nodes_zone_dict = {}
+        for node in remove_nodes:
+            remove_nodes_zone_dict[node.ip] = nodes_zone_dict[node.ip]
 
         # Adding new node to the same availability zone from where node is being removed
         # and re-balance out one other node
-        for counter, server in enumerate(remove_node_zones_dict):
+        for counter, server in enumerate(remove_nodes_zone_dict):
             self.rest.add_node(user=self.rest.username, password=self.rest.password,
                                remoteIp=self.servers[self.nodes_init + counter].ip,
-                               zone_name=remove_node_zones_dict[server],
+                               zone_name=remove_nodes_zone_dict[server],
                                services=['index'])
         rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
                                                       to_add=[],
@@ -165,6 +149,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
         self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
 
         # Getting the new configuration of cluster
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        self.index_rest = RestConnection(index_node)
         new_sub_cluster_list = []
         new_idx_host_list_dict = {str(bucket): set() for bucket in self.buckets}
         indexer_metadata = self.index_rest.get_indexer_metadata()['status']
@@ -197,15 +183,18 @@ class TenantManagement(BaseSecondaryIndexingTests):
                         zone_2 = server_group
                     elif zone_1 and zone_2:
                         break
-                self.assertNotEqual(zone_1, zone_2,
-                                    f"Both the index nodes belong to same availability zone. {indexer_metadata}")
+            self.assertNotEqual(zone_1, zone_2,
+                                f"Both the index nodes belong to same availability zone. {indexer_metadata}")
+        self.gsi_util_obj.check_s3_cleanup(aws_access_key_id=self.aws_access_key_id,
+                                           aws_secret_access_key=self.aws_secret_access_key,
+                                           s3_bucket=self.s3_bucket, region=self.region)
 
     def _check_failed_over_subcluster(self, sub_cluster_list, num_of_nodes_to_remove=1, failover_recovery=False):
         # identifying the node for the subcluster for different  availability zone
         failover_nodes = []
         failover_nodes_ips = [node.split(':')[0] for node in sub_cluster_list[0]]
-        for server in self.servers:
-            for failover_nodes_ip in failover_nodes_ips:
+        for failover_nodes_ip in failover_nodes_ips:
+            for server in self.servers:
                 if failover_nodes_ip == server.ip:
                     failover_nodes.append(server)
                     break
@@ -213,15 +202,15 @@ class TenantManagement(BaseSecondaryIndexingTests):
                 break
 
         # Find Server group of removing nodes
-        failover_nodes_zones_dict = {}
+        nodes_zone_dict = {}
         zone_info = self.rest.get_zone_and_nodes()
-        for zone_name in zone_info:
-            for server in zone_info[zone_name]:
-                if server in failover_nodes_ips:
-                    failover_nodes_zones_dict[server] = zone_name
-                    break
-            if len(failover_nodes_zones_dict) == num_of_nodes_to_remove:
-                break
+        for zone_name, node_list in zone_info.items():
+            for node_ip in node_list:
+                nodes_zone_dict[node_ip] = zone_name
+
+        failover_nodes_zones_dict = {}
+        for node in failover_nodes:
+            failover_nodes_zones_dict[node.ip] = nodes_zone_dict[node.ip]
 
         # Adding new node to the same availability zone from where node is being removed
         # and re-balance out one other node
@@ -317,46 +306,3 @@ class TenantManagement(BaseSecondaryIndexingTests):
         elif check == "failed_over_subcluster":
             self._check_failed_over_subcluster(sub_cluster_list=sub_cluster_list,
                                                num_of_nodes_to_remove=self.node_to_swap)
-
-    def prepare_tenants(self, data_load=True, index_creations=True, query_node=None):
-        for i in range(self.num_of_tenants):
-            self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
-                                                            replicas=self.num_replicas, bucket_type=self.bucket_type,
-                                                            enable_replica_index=self.enable_replica_index,
-                                                            eviction_policy=self.eviction_policy, lww=self.lww)
-            bucket_name = f"test_bucket_{i + 1}"
-            self.cluster.create_standard_bucket(name=bucket_name, port=11222, bucket_params=self.bucket_params)
-            self.sleep(10)
-            self.collection_rest.create_scope_collection_count(scope_num=self.num_scopes,
-                                                               collection_num=self.num_collections,
-                                                               scope_prefix=self.scope_prefix,
-                                                               collection_prefix=self.collection_prefix,
-                                                               bucket=bucket_name)
-        self.buckets = self.rest.get_buckets()
-        self.scope_names = [f'{self.scope_prefix}_{num + 1}' for num in range(self.num_scopes)]
-        self.collection_names = [f'{self.collection_prefix}_{num + 1}' for num in range(self.num_collections)]
-
-        if data_load:
-            self.load_data_on_all_tenants()
-
-        if index_creations:
-            if not query_node:
-                query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
-            self.gsi_util_obj.index_operations_during_phases(namespaces=self.namespaces, dataset=self.dataset,
-                                                             query_node=query_node, capella_run=False)
-            self.wait_until_indexes_online(defer_build=False)
-
-    def load_data_on_all_tenants(self):
-        data_load_tasks = []
-        for bucket in self.buckets:
-            for s_item in self.scope_names:
-                for c_item in self.collection_names:
-                    gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
-                                               percent_update=0, percent_delete=0, scope=s_item,
-                                               collection=c_item, json_template=self.json_template,
-                                               output=True)
-                    task = self.cluster.async_load_gen_docs(self.master, bucket, gen_create, timeout_secs=300)
-                    data_load_tasks.append(task)
-                    self.namespaces.append(f'default:{bucket}.{s_item}.{c_item}')
-        for task in data_load_tasks:
-            task.result()
