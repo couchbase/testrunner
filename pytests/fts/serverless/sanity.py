@@ -5,6 +5,7 @@ from lib.SystemEventLogLib.Events import EventHelper
 from lib.capella.utils import CapellaCredentials
 from pytests.fts.fts_callable import FTSCallable
 from pytests.serverless.serverless_basetestcase import ServerlessBaseTestCase
+from deepdiff import DeepDiff
 import time
 import random
 
@@ -503,4 +504,158 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 AssertionError(str(e),
                                "Testcase Passed : support for indexes with 1 active + 1 replica partitions only in serverless mode")
 
+            fts_callable.delete_all()
+
+    def test_n1ql_search(self):
+        self.provision_databases(self.num_databases)
+        for counter, database in enumerate(self.databases.values()):
+            self.cleanup_database(database_obj=database)
+            scope_name = f'db_{counter}_scope_{random.randint(0, 1000)}'
+            collection_name = f'db_{counter}_collection_{random.randint(0, 1000)}'
+            self.create_scope(database_obj=database, scope_name=scope_name)
+            self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
+            self.load_databases(load_all_databases=False, num_of_docs=self.num_of_docs_per_collection,
+                                database_obj=database, scope=scope_name, collection=collection_name)
+            self.init_input_servers(database)
+            fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
+                                       collections=collection_name, collection_index=True)
+
+            _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
+                                                                    collection=collection_name)
+            plan_params = self.construct_plan_params()
+            fts_idx = fts_callable.create_fts_index("idx", source_type='couchbase',
+                                                    source_name=database.id, index_type='fulltext-index',
+                                                    index_params=None, plan_params=plan_params,
+                                                    source_params=None, source_uuid=None, collection_index=True,
+                                                    _type=_type, analyzer="standard",
+                                                    scope=scope_name, collections=[collection_name], no_check=False)
+
+            fts_callable.wait_for_indexing_complete(self.num_of_docs_per_collection)
+
+            docs_indexed = fts_idx.get_indexed_doc_count()
+            container_doc_count = self.num_of_docs_per_collection
+            self.log.info(f"Docs in index {fts_idx.name}={docs_indexed}, kv docs={container_doc_count}")
+            # Test the two string options, then test a full text search
+            with self.subTest('search_string'):
+                self.log.info("="*40)
+                self.log.info("===== SUBTEST: search_string")
+                explain_result = self.run_query(database,
+                                                f'EXPLAIN SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE SEARCH(t1.country, "+Slovakia +(Slovak +Republic)") ORDER BY t1.streetAddress limit 5')
+                self.assertTrue('IndexFtsSearch' in str(explain_result), f"The query is not using an fts search! please check explain {explain_result}")
+                self.assertTrue(f'{database.id}.{scope_name}.idx' in str(explain_result), f"The query is not using the fts index! please check explain {explain_result}")
+
+                n1ql_search_result = self.run_query(database,
+                                                    f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE SEARCH(t1.country, "+Slovakia +(Slovak +Republic)") ORDER BY t1.streetAddress limit 5')
+                expected_result = self.run_query(database,
+                                                 f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE t1.country = "Slovakia (Slovak Republic)" ORDER BY t1.streetAddress limit 5')
+                # Ensure that the n1ql equivalent returns results, then compare the search to the n1ql equivalent
+                self.assertFalse(expected_result['metrics']['resultCount'] == 0, "This query should return results!")
+                diffs = DeepDiff(n1ql_search_result['results'], expected_result['results'], ignore_order=True)
+                if diffs:
+                    self.assertTrue(False, diffs)
+            with self.subTest('search_string_option2'):
+                self.log.info("="*40)
+                self.log.info("===== SUBTEST: search_string_option2")
+                explain_result = self.run_query(database,
+                                                f'EXPLAIN SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE SEARCH(t1, "country:\\"Slovakia (Slovak Republic)\\"") ORDER BY t1.streetAddress limit 5')
+                self.assertTrue('IndexFtsSearch' in str(explain_result), f"The query is not using an fts search! please check explain {explain_result}")
+                self.assertTrue(f'{database.id}.{scope_name}.idx' in str(explain_result), f"The query is not using the fts index! please check explain {explain_result}")
+                n1ql_search_result = self.run_query(database,
+                                                    f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE SEARCH(t1, "country:\\"Slovakia (Slovak Republic)\\"") ORDER BY t1.streetAddress limit 5')
+                expected_result = self.run_query(database,
+                                                 f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE t1.country = "Slovakia (Slovak Republic)" ORDER BY t1.streetAddress limit 5')
+                # Ensure that the n1ql equivalent returns results, then compare the search to the n1ql equivalent
+                self.assertFalse(expected_result['metrics']['resultCount'] == 0, "This query should return results!")
+                diffs = DeepDiff(n1ql_search_result['results'], expected_result['results'], ignore_order=True)
+                if diffs:
+                    self.assertTrue(False, diffs)
+            with self.subTest('full_text_search'):
+                self.log.info("="*40)
+                self.log.info("===== SUBTEST: full_text_search")
+                n1ql_search_query = {"explain": False, "fields": ["*"],"highlight": {},
+                                     "query": {"match": "Algeria",
+                                               "field": "country",
+                                               "analyzer": "standard"},
+                                     "sort": [{"by" : "field",
+                                               "field" : "streetAddress"}]
+                                     }
+                explain_result = self.run_query(database,
+                                        f'EXPLAIN SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE SEARCH(t1, {n1ql_search_query}) and t1.age > 50 ORDER BY t1.streetAddress')
+                self.assertTrue('IndexFtsSearch' in str(explain_result), f"The query is not using an fts search! please check explain {explain_result}")
+                self.assertTrue(f'{database.id}.{scope_name}.idx' in str(explain_result), f"The query is not using the fts index! please check explain {explain_result}")
+
+                n1ql_search_result = self.run_query(database,
+                                        f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE SEARCH(t1, {n1ql_search_query}) and t1.age > 50 ORDER BY t1.streetAddress')
+                expected_result = self.run_query(database,
+                                        f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE t1.country = "Algeria" and t1.age > 50 ORDER BY t1.streetAddress')
+                # Ensure that the n1ql equivalent returns results, then compare the search to the n1ql equivalent
+                self.assertFalse(expected_result['metrics']['resultCount'] == 0, "This query should return results!")
+                diffs = DeepDiff(n1ql_search_result['results'], expected_result['results'])
+                if diffs:
+                    self.assertTrue(False, diffs)
+            fts_callable.delete_all()
+
+    def test_n1ql_flex(self):
+        self.provision_databases(self.num_databases)
+        for counter, database in enumerate(self.databases.values()):
+            self.cleanup_database(database_obj=database)
+            scope_name = f'db_{counter}_scope_{random.randint(0, 1000)}'
+            collection_name = f'db_{counter}_collection_{random.randint(0, 1000)}'
+            self.create_scope(database_obj=database, scope_name=scope_name)
+            self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
+            self.load_databases(load_all_databases=False, num_of_docs=self.num_of_docs_per_collection,
+                                database_obj=database, scope=scope_name, collection=collection_name)
+            self.init_input_servers(database)
+            fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
+                                       collections=collection_name, collection_index=True)
+
+            _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
+                                                                    collection=collection_name)
+            plan_params = self.construct_plan_params()
+            fts_idx = fts_callable.create_fts_index("idx", source_type='couchbase',
+                                                    source_name=database.id, index_type='fulltext-index',
+                                                    index_params=None, plan_params=plan_params,
+                                                    source_params=None, source_uuid=None, collection_index=True,
+                                                    _type=_type, analyzer="keyword",
+                                                    scope=scope_name, collections=[collection_name], no_check=False)
+            docs_indexed = fts_idx.get_indexed_doc_count()
+            container_doc_count = self.num_of_docs_per_collection
+            self.log.info(f"Docs in index {fts_idx.name}={docs_indexed}, kv docs={container_doc_count}")
+            with self.subTest('flex using fts'):
+                self.log.info("="*40)
+                self.log.info("===== SUBTEST: flex using fts")
+                explain_result = self.run_query(database,
+                                        f'EXPLAIN SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 USE INDEX (USING FTS, USING GSI) WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
+                self.assertTrue('IndexFtsSearch' in str(explain_result), f"The query is not using an fts search! please check explain {explain_result}")
+                self.assertTrue(f'{database.id}.{scope_name}.idx' in str(explain_result), f"The query is not using the fts index! please check explain {explain_result}")
+                flex_result = self.run_query(database,
+                                        f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 USE INDEX (USING FTS, USING GSI) WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
+                expected_result = self.run_query(database,
+                                        f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
+                self.assertFalse(expected_result['metrics']['resultCount'] == 0, "This query should return results!")
+                diffs = DeepDiff(flex_result['results'], expected_result['results'])
+                if diffs:
+                    self.assertTrue(False, diffs)
+            with self.subTest('flex using gsi'):
+                self.log.info("="*40)
+                self.log.info("===== SUBTEST: flex using gsi")
+                # Create a gsi index
+                self.run_query(database, f"CREATE INDEX idx1 on {scope_name}.{collection_name}(country,streetAddress)")
+                try:
+                    explain_result = self.run_query(database,
+                                            f'EXPLAIN SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 USE INDEX (USING FTS, USING GSI) WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
+                    # We expect the gsi index and the fts index both to be used
+                    self.assertTrue('IndexFtsSearch' in str(explain_result), f"The query should be using the fts search! please check explain {explain_result}")
+                    self.assertTrue(f'idx1' in str(explain_result), f"The query is not using the gsi index! please check explain {explain_result}")
+                    self.assertTrue(f'{database.id}.{scope_name}.idx' in str(explain_result), f"The query is not using the fts index! please check explain {explain_result}")
+                    flex_result = self.run_query(database,
+                                            f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 USE INDEX (USING FTS, USING GSI) WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
+                    expected_result = self.run_query(database,
+                                            f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
+                    self.assertFalse(expected_result['metrics']['resultCount'] == 0, "This query should return results!")
+                    diffs = DeepDiff(flex_result['results'], expected_result['results'])
+                    if diffs:
+                        self.assertTrue(False, diffs)
+                finally:
+                    self.run_query(database, f'DROP INDEX idx1 on {scope_name}.{collection_name}')
             fts_callable.delete_all()
