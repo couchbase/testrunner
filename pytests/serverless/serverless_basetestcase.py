@@ -54,24 +54,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
                                               rest_srv=self.dataplanes[dataplane].rest_host)
                     cb_collect_list = rest_obj.collect_logs(test_name=self._testMethodName)
                     self.log.info(f"Test failure. Cbcollect info list {cb_collect_list}")
-        for database_id in self.databases:
-            if self.drop_indexes:
-                self.log.info("DROP all indexes")
-                self.drop_all_indexes(self.databases[database_id])
-            try:
-                self.log.info("deleting serverless database {}".format(
-                    {"database_id": database_id}))
-                self.api.delete_serverless_database(database_id)
-            except Exception as e:
-                msg = {
-                    "database_id": database_id,
-                    "error": str(e)
-                }
-                self.log.warn("failed to delete database {}".format(msg))
-        for database_id in self.databases:
-            self.api.wait_for_database_deleted(database_id)
-            self.log.info("serverless database deleted {}".format(
-                {"database_id": database_id}))
+        self.delete_all_database()
         self.task_manager.shutdown(force=True)
 
     def has_test_failed(self):
@@ -161,6 +144,42 @@ class ServerlessBaseTestCase(unittest.TestCase):
         for task in tasks:
             task.result()
 
+    def delete_all_database(self, count=1):
+        for database_id in self.databases:
+            try:
+                self.log.info("deleting serverless database {}".format(
+                    {"database_id": database_id}))
+                self.api.delete_serverless_database(database_id)
+            except Exception as e:
+                msg = {
+                    "database_id": database_id,
+                    "error": str(e)
+                }
+                self.log.warn("failed to delete database {}".format(msg))
+        for database_id in self.databases:
+            self.api.wait_for_database_deleted(database_id)
+            self.log.info("serverless database deleted {}".format(
+                {"database_id": database_id}))
+
+    def delete_database(self, database_id):
+        try:
+            self.log.info("deleting serverless database {}".format(
+                {"database_id": database_id}))
+            self.api.delete_serverless_database(database_id)
+        except Exception as e:
+            msg = {
+                "database_id": database_id,
+                "error": str(e)
+            }
+            self.log.warn("failed to delete database {}".format(msg))
+        self.api.wait_for_database_deleted(database_id)
+        self.log.info("serverless database deleted {}".format(
+            {"database_id": database_id}))
+
+    def override_width_and_weight(self, database_id, width, weight):
+        override = {"width": width, "weight": weight}
+        return self.api.override_width_and_weight(database_id, override)
+
     def run_query(self, database, query, query_params=None, use_sdk=False, query_node=None, **kwargs):
         """
         By default runs against nebula endpoint. In case, you need to use a specific query node,
@@ -226,9 +245,15 @@ class ServerlessBaseTestCase(unittest.TestCase):
         if use_sdk:
             pass
         else:
-            self.run_query(query="Create collection default:`{}`.{}.{}".format(database_obj.id,
-                                                                               scope_name,
-                                                                               collection_name), database=database_obj)
+            resp = self.run_query(query="Create collection default:`{}`.{}.{}".format(database_obj.id, scope_name, collection_name), database=database_obj)
+            self.log.info(f"Response for collection creation : {resp}")
+
+    def delete_collection(self, database_obj, scope_name, collection_name, use_sdk=False):
+        if use_sdk:
+            pass
+        else:
+            resp = self.run_query(query="DROP COLLECTION default:`{}`.{}.{}".format(database_obj.id, scope_name, collection_name), database=database_obj)
+            self.log.info(f"Response for collection deletion : {resp}")
 
     def drop_all_indexes(self, database):
         indexes = self.run_query(database, f'SELECT `namespace`, name,\

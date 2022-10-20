@@ -182,6 +182,202 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             fts_callable.run_query_and_compare(index)
             fts_callable.delete_all()
 
+    # DB with width 'x' and weight 'y', create FTS index, verify replicas are in 2 different nodes and server group
+    def override_database_verify_nodes(self):
+        self.provision_databases(self.num_databases)
+        for counter, database in enumerate(self.databases.values()):
+            self.cleanup_database(database_obj=database)
+            self.override_width_and_weight(database.id, 2, 60)
+            scope_name = f'db_{counter}_scope_{random.randint(0, 1000)}'
+            collection_name = f'db_{counter}_collection_{random.randint(0, 1000)}'
+            self.create_scope(database_obj=database, scope_name=scope_name)
+            self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
+            self.load_databases(load_all_databases=False, num_of_docs=self.num_of_docs_per_collection,
+                                database_obj=database, scope=scope_name, collection=collection_name)
+            self.init_input_servers(database)
+            fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
+                                       collections=collection_name, collection_index=True)
+
+            _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
+                                                                    collection=collection_name)
+            plan_params = self.construct_plan_params()
+            fts_callable.create_fts_index("idx", source_type='couchbase',
+                                          source_name=database.id, index_type='fulltext-index',
+                                          index_params=None, plan_params=plan_params,
+                                          source_params=None, source_uuid=None, collection_index=True,
+                                          _type=_type, analyzer="standard",
+                                          scope=scope_name, collections=[collection_name], no_check=False)
+            fts_callable.wait_for_indexing_complete(self.num_of_docs_per_collection)
+            index_resp = fts_callable.check_if_index_exists(database.id + "." + scope_name + ".idx", node_def=True)
+            self.log.info(f"Total no. of index's node and server group : {len(index_resp)}")
+            self.assertEqual(len(index_resp), 2)
+            fts_callable.delete_all()
+
+    # Create fts index on multiple collections
+    def create_index_multiple_collections(self):
+        self.provision_databases(self.num_databases)
+        for counter, database in enumerate(self.databases.values()):
+            self.cleanup_database(database_obj=database)
+            scope_name = f'db_{counter}_scope_{random.randint(0, 1000)}'
+            self.create_scope(database_obj=database, scope_name=scope_name)
+            collection_arr = []
+            for i in range(5):
+                collection_name = f'db_{counter}_collection_{i}'
+                self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
+                self.load_databases(load_all_databases=False, num_of_docs=self.num_of_docs_per_collection,
+                                    database_obj=database, scope=scope_name, collection=collection_name)
+                collection_arr.append(collection_name)
+
+            _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
+                                                                    collection=collection_arr)
+            self.init_input_servers(database)
+            fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
+                                       collections=collection_arr, collection_index=True)
+            plan_params = self.construct_plan_params()
+            fts_callable.create_fts_index("idx", source_type='couchbase',
+                                          source_name=database.id, index_type='fulltext-index',
+                                          index_params=None, plan_params=plan_params,
+                                          source_params=None, source_uuid=None, collection_index=True,
+                                          _type=_type, analyzer="standard",
+                                          scope=scope_name, collections=[collection_arr], no_check=False)
+            fts_callable.wait_for_indexing_complete(self.num_of_docs_per_collection)
+            fts_callable.delete_all()
+
+    # Delete collections and verify all indexes get deleted
+    def delete_collections_check_index_delete(self):
+        self.provision_databases(self.num_databases)
+        for counter, database in enumerate(self.databases.values()):
+            self.cleanup_database(database_obj=database)
+            scope_name = f'db_{counter}_scope_{random.randint(0, 1000)}'
+            self.create_scope(database_obj=database, scope_name=scope_name)
+            collection_arr = []
+            for i in range(2):
+                collection_name = f'db_{counter}_collection_{i}'
+                self.create_collection(database_obj=database, scope_name=scope_name,
+                                       collection_name=collection_name)
+                self.load_databases(load_all_databases=False, num_of_docs=self.num_of_docs_per_collection,
+                                    database_obj=database, scope=scope_name, collection=collection_name)
+                collection_arr.append(collection_name)
+            _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
+                                                                    collection=collection_arr)
+            self.init_input_servers(database)
+            fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
+                                       collections=collection_arr, collection_index=True)
+            plan_params = self.construct_plan_params()
+            fts_callable.create_fts_index("idx", source_type='couchbase',
+                                          source_name=database.id, index_type='fulltext-index',
+                                          index_params=None, plan_params=plan_params,
+                                          source_params=None, source_uuid=None, collection_index=True,
+                                          _type=_type, analyzer="standard",
+                                          scope=scope_name, collections=[collection_arr], no_check=False)
+            fts_callable.wait_for_indexing_complete(self.num_of_docs_per_collection)
+            resp = fts_callable.check_if_index_exists(database.id + "." + scope_name + ".idx", index_def=True)
+            if resp:
+                self.log.info(f"Index Definition before collection deletion : {resp}")
+            for collection_name in collection_arr:
+                self.delete_collection(database, scope_name, collection_name)
+
+            resp = fts_callable.check_if_index_exists(database.id + "." + scope_name + ".idx", index_def=True)
+            if not resp:
+                self.log.info("Index not found !")
+            else:
+                self.log.error(f"Index Definition still exists after collection deletion : {resp}")
+                self.fail("Index Definition still exists after collection deletion")
+
+            fts_callable.delete_all()
+
+    # Delete some database and check if only those fts indexes are deleted.
+    def delete_some_database_check_index_delete(self):
+        self.provision_databases(self.num_databases)
+        indexes_arr = []
+        database_random_indexes = random.sample(range(0, self.num_databases - 1),
+                                                random.randint(1, self.num_databases))
+        print(database_random_indexes, "Random databases chosen for deletion")
+        for counter, database in enumerate(self.databases.values()):
+            self.cleanup_database(database_obj=database)
+            scope_name = f'db_{counter}_scope_{random.randint(0, 1000)}'
+            collection_name = f'db_{counter}_collection_{random.randint(0, 1000)}'
+            self.create_scope(database_obj=database, scope_name=scope_name)
+            self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
+            self.load_databases(load_all_databases=False, doc_template="Employee",
+                                num_of_docs=self.num_of_docs_per_collection,
+                                database_obj=database, scope=scope_name, collection=collection_name)
+            self.init_input_servers(database)
+            fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
+                                       collections=collection_name, collection_index=True)
+            _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
+                                                                    collection=collection_name)
+            plan_params = self.construct_plan_params()
+            for i in range(random.randint(0, 2)):
+                fts_callable.create_fts_index(f"index_{i}", source_type='couchbase',
+                                              source_name=database.id, index_type='fulltext-index',
+                                              index_params=None, plan_params=plan_params,
+                                              source_params=None, source_uuid=None, collection_index=True,
+                                              _type=_type, analyzer="standard",
+                                              scope=scope_name, collections=[collection_name], no_check=False)
+                fts_callable.wait_for_indexing_complete(self.num_of_docs_per_collection)
+                if counter in database_random_indexes:
+                    indexes_arr.append(
+                        [fts_callable, database.id + "." + scope_name + ".index_" + str(i), database.id])
+
+        index_count = 0
+        for i, index in enumerate(indexes_arr):
+            if index[0].check_if_index_exists(index[1]):
+                self.log.info(f"{i}.Index {index[1]} -> Present before deletion")
+
+        for index in indexes_arr:
+            self.delete_database(index[2])
+
+        for index in indexes_arr:
+            if index[0].check_if_index_exists(index[1]):
+                self.fail(f"Index {index[1]} exists even after DB deletion")
+            else:
+                self.log.info(f" Index {index[1]} -> Not Found after deletion")
+                index_count += 1
+        self.assertEqual(len(indexes_arr), index_count, "Index exists even after DB deletion")
+
+    # Delete all database and check if fts indexes are deleted.
+    def delete_all_database_check_index_delete(self):
+        self.provision_databases(self.num_databases)
+        indexes_arr = []
+        for counter, database in enumerate(self.databases.values()):
+            self.cleanup_database(database_obj=database)
+            scope_name = f'db_{counter}_scope_{random.randint(0, 1000)}'
+            collection_name = f'db_{counter}_collection_{random.randint(0, 1000)}'
+            self.create_scope(database_obj=database, scope_name=scope_name)
+            self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
+            self.load_databases(load_all_databases=False, doc_template="Employee",
+                                num_of_docs=self.num_of_docs_per_collection,
+                                database_obj=database, scope=scope_name, collection=collection_name)
+            self.init_input_servers(database)
+            fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
+                                       collections=collection_name, collection_index=True)
+            _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
+                                                                    collection=collection_name)
+            plan_params = self.construct_plan_params()
+            for i in range(random.randint(1, 3)):
+                fts_callable.create_fts_index(f"index_{i}", source_type='couchbase',
+                                              source_name=database.id, index_type='fulltext-index',
+                                              index_params=None, plan_params=plan_params,
+                                              source_params=None, source_uuid=None, collection_index=True,
+                                              _type=_type, analyzer="standard",
+                                              scope=scope_name, collections=[collection_name], no_check=False)
+                fts_callable.wait_for_indexing_complete(self.num_of_docs_per_collection)
+                indexes_arr.append([fts_callable, database.id + "." + scope_name + ".index_" + str(i)])
+
+        index_count = 0
+        for i, index in enumerate(indexes_arr):
+            if index[0].check_if_index_exists(index[1]):
+                self.log.info(f"{i}. Index {index[1]} -> Present before deletion")
+        self.delete_all_database()
+        for index in indexes_arr:
+            if index[0].check_if_index_exists(index[1]):
+                self.fail(f"Index {index[1]} exists even after DB deletion")
+            else:
+                self.log.info(f" Index {index[1]} -> Not Found after deletion")
+                index_count += 1
+        self.assertEqual(len(indexes_arr), index_count, "Index exists even after DB deletion")
+
     # Create a FTS index and delete.And recreate the same index name.
     def recreate_index_same_name(self):
         self.provision_databases(self.num_databases)

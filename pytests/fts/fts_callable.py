@@ -552,3 +552,18 @@ class FTSCallable:
         else:
             self.es.create_index_mapping(index_name="es_index",
                                          es_mapping=es_mapping, fts_mapping=fts_mapping)
+
+    def check_if_index_exists(self, index_name, index_def=False, node_def=False):
+        """
+            Returns true / false if index exists
+            Returns index's node and server group distribution if required -> node_def = True
+            Returns index definition if required -> index_def = True
+        """
+        rest = RestConnection(self.cb_cluster.get_random_fts_node())
+        resp = rest.get_fts_index_definition(index_name)
+        if resp[0]:
+            if node_def:
+                return resp[1]['planPIndexes'][0]['nodes']
+            if index_def:
+                return resp[1]['indexDef']
+        return resp[0]

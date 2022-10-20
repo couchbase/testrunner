@@ -307,6 +307,9 @@ class CapellaAPI:
             self.tenant_id, self.project_id, database_id)
         resp.raise_for_status()
 
+    def override_width_and_weight(self, database_id, override):
+        resp = self.serverless_api.update_database(database_id, override)
+        resp.raise_for_status()
 
 def format_nodes(nodes, username=None, password=None):
     servers = list()
