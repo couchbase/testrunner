@@ -1,4 +1,5 @@
 import uuid
+
 from TestInput import TestInputServer
 from capellaAPI.capella.dedicated.CapellaAPI import CapellaAPI as CapellaAPIDedicated
 from capellaAPI.capella.serverless.CapellaAPI import CapellaAPI as CapellaAPIServerless
@@ -67,15 +68,22 @@ class ServerlessDataPlane:
         self.rest_srv = rest_api_info['srv']
         self.admin_username = rest_api_info['couchbaseCreds']['username']
         self.admin_password = rest_api_info['couchbaseCreds']['password']
-        try:
-            self.rest_host = get_host_from_srv(self.rest_srv)
-        except:
-            print("Rest srv domain resolution failure. Cannot run any of the rest APIs")
+        self.rest_host = get_host_from_srv(self.rest_srv)
 
-def get_host_from_srv(srv):
+def get_host_from_srv(srv, attempts=12, retry_wait_time=15):
     import dns.resolver
     srvInfo = {}
-    srv_records = dns.resolver.resolve('_couchbases._tcp.' + srv, 'SRV')
+    log = logger.Logger.get_logger()
+    for i in range(1, attempts+1):
+        try:
+            dns.resolver.Cache().flush()
+            srv_records = dns.resolver.resolve('_couchbases._tcp.' + srv, 'SRV')
+            break
+        except Exception as ex:
+            if i == attempts:
+                raise(ex)
+            log.warn(f"Failed ({ex.__class__.__name__}) to resolve {srv}. Retrying in {retry_wait_time} seconds ...")
+            time.sleep(retry_wait_time)
     for srv in srv_records:
         srvInfo['host'] = str(srv.target).rstrip('.')
     return srvInfo['host']
