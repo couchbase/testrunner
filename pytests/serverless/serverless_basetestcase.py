@@ -230,6 +230,9 @@ class ServerlessBaseTestCase(unittest.TestCase):
             resp.raise_for_status()
             if 'billingUnits' in resp.json().keys():
                 self.log.info(f"BILLING UNITS from query: {resp.json()['billingUnits']}")
+            if 'errors' in resp.json().keys():
+                self.log.error(f"Errors seen during query execution.\n Query: {query}. Errors: {resp.json()['errors']}")
+                raise Exception(f"Query execution errors seen. Query: {query} Errors: {resp.json()['errors']}")
             return resp.json()
 
     def cleanup_database(self, database_obj):
@@ -274,3 +277,14 @@ class ServerlessBaseTestCase(unittest.TestCase):
             self.log.info(f'INDEX {name} state: {current_state}')
         if current_state != desired_state:
             self.fail(f'INDEX {name} state: {current_state}, fail to reach state: {desired_state} within timeout: {timeout}')
+
+    def get_nodes_from_services_map(self, database, service):
+        rest_obj = RestConnection(database.admin_username, database.admin_password, database.rest_host)
+        service_nodes = []
+        nodes_obj = rest_obj.get_all_dataplane_nodes()
+        self.log.debug(f"Dataplane nodes object {nodes_obj}")
+        for node in nodes_obj:
+            if service in node['services']:
+                node = node['hostname'].split(":")[0]
+                service_nodes.append(node)
+        return service_nodes

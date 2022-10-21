@@ -6731,6 +6731,9 @@ class CreateServerlessDatabaseTask(Task):
                         rest_api_info = {"couchbaseCreds": {"username": self.dataplanes[dataplane_id].admin_username,
                                                             "password": self.dataplanes[dataplane_id].admin_password},
                                          "srv": self.dataplanes[dataplane_id].rest_srv}
+                    self.log.info(f"Bypass username: {rest_api_info['couchbaseCreds']['username']}. "
+                                  f"Password: {rest_api_info['couchbaseCreds']['password']}. SRV {rest_api_info['srv']} "
+                                  f"for dataplane {dataplane_id}")
                 self.databases[self.database_id].populate(info, creds, rest_api_info)
                 self.state = FINISHED
                 self.set_result(self.database_id)

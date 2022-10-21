@@ -127,7 +127,6 @@ class BaseGSIServerless(QueryBaseServerless):
         for task in tasks:
             if task:
                 task.result()
-
         for database in self.databases.values():
             namespaces = []
             for scope in database.collections:
@@ -136,8 +135,6 @@ class BaseGSIServerless(QueryBaseServerless):
             self.gsi_util_obj.index_operations_during_phases(namespaces=namespaces, dataset=doc_template,
                                                              capella_run=True, database=database)
             self.namespaces.update(namespaces)
-
-
 
     def create_scopes_collections(self, database):
         scope_coll_dict, coll_count = {}, 0
@@ -155,7 +152,6 @@ class BaseGSIServerless(QueryBaseServerless):
                 else:
                     database.collections[scope_name] = [collection_name]
             scope_coll_dict[scope_name] = collection_list
-
         self.log.info(f"Scope and collection list:{scope_coll_dict}. No. of collections: {coll_count}")
         return scope_coll_dict, coll_count
 
@@ -185,17 +181,6 @@ class BaseGSIServerless(QueryBaseServerless):
                                                                       timeout_secs=300))
         return tasks
 
-    def get_nodes_from_services_map(self, database, service='index'):
-        rest_obj = RestConnection(database.admin_username, database.admin_password, database.rest_host)
-        service_nodes = []
-        nodes_obj = rest_obj.get_all_dataplane_nodes()
-        self.log.debug(f"Dataplane nodes object {nodes_obj}")
-        for node in nodes_obj:
-            if service in node['services']:
-                node = node['hostname'].split(":")[0]
-                service_nodes.append(node)
-        return service_nodes
-
     def get_index_settings(self, indexer_node, database_obj):
         endpoint = "https://{}:18091/settings?internal=ok".format(indexer_node)
         resp = requests.get(endpoint, auth=(database_obj.admin_username, database_obj.admin_password), verify=False)
@@ -213,9 +198,16 @@ class BaseGSIServerless(QueryBaseServerless):
         return index_stats
 
     def populate_data_till_threshold(self, database_obj, doc_template='default', threshold=50):
-        index_nodes = self.get_nodes_from_services_map(database=database_obj, service='index')
+        index_nodes = self.get_nodes_from_services_map(database=database_obj, service="index")
         node_stats = {}
         for index_node in index_nodes:
             node_stats[index_node] = self.get_index_stats(indexer_node=index_node, database_obj=database_obj)
         self.populate_data(doc_template=doc_template)
+
+    def get_all_index_node_usage_stats(self, database):
+        index_nodes = self.get_nodes_from_services_map(database=database, service="index")
+        nodes = {}
+        for node in index_nodes:
+            nodes[node] = self.get_index_stats(indexer_node=node, database_obj=database)
+        return nodes
 
