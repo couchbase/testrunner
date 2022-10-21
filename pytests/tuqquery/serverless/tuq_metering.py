@@ -3,6 +3,7 @@ from TestInput import TestInputSingleton
 import json
 import math
 from lib.metering_throttling import metering
+import random, string
 
 class QueryMeteringTests(ServerlessBaseTestCase):
     def setUp(self):
@@ -15,7 +16,7 @@ class QueryMeteringTests(ServerlessBaseTestCase):
         self.statement = self.input.param("statement", "explain")
         self.kv_wu, self.kv_ru = 1024, 4096
         self.index_wu, self.index_ru = 1024, 256
-        self.doc = {"name": "a"*self.value_size}
+        self.doc = {"name": ''.join(random.choices(string.ascii_lowercase, k=self.value_size))}
         self.composite_doc = {"fname": "a"*self.value_size, "lname":"b"*self.value_size}
         self.index_key_size = len ("a"*self.value_size) # index is on name
         self.composite_index_key_size = len ("a"*self.value_size) + len("b"*self.value_size)
@@ -113,12 +114,14 @@ class QueryMeteringTests(ServerlessBaseTestCase):
             sc_ru = result['billingUnits']['ru']['kv']
 
             doc_read_size = self.doc_key_size + len(json.dumps({"name": "San Francisco"}))
-            doc_write_size = self.doc_key_size + len(json.dumps({"name": "a"*self.value_size}))
+            doc_write_value = ''.join(random.choices(string.ascii_lowercase, k=self.value_size))
+            doc_write = {"name": doc_write_value}
+            doc_write_size = self.doc_key_size + len(json.dumps(doc_write))
             expected_wu = self.doc_count * math.ceil( doc_write_size / self.kv_wu)
             expected_ru = self.doc_count * math.ceil( doc_read_size / self.kv_ru)
 
             before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
-            result = self.run_query(database, f'UPDATE {self.collection} SET name = repeat("a", {self.value_size})')
+            result = self.run_query(database, f'UPDATE {self.collection} SET name = "{doc_write_value}"')
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
             
             assert_query, msg = meter.assert_query_billing_unit(result, expected_wu, unit='wu', service='kv')
