@@ -8,10 +8,7 @@ import logger
 from tasks.task import CreateServerlessDatabaseTask
 from tasks.taskmanager import TaskManager
 import logging
-from couchbase.auth import PasswordAuthenticator
-from couchbase.cluster import Cluster
-from couchbase.options import (ClusterOptions, ClusterTimeoutOptions, QueryOptions)
-from couchbase.logic.options import TLSVerifyMode
+from couchbase.cluster import Cluster, ClusterOptions, PasswordAuthenticator, QueryOptions
 from couchbase.bucket import Bucket
 from couchbase_helper.documentgenerator import SDKDataLoader
 from membase.api.serverless_rest_client import ServerlessRestConnection as RestConnection
@@ -99,10 +96,10 @@ class ServerlessBaseTestCase(unittest.TestCase):
             return cluster
         else:
             database = self.databases[database_id]
-            auth = PasswordAuthenticator(database.access_key, database.secret_key)
-            cluster = Cluster("couchbases://{}".format(database.srv),
-                              ClusterOptions(auth),
-                              tls_verify=TLSVerifyMode.NONE)
+            skip_tls_verify = "" if database.srv.endswith(
+                "cloud.couchbase.com") else "?tls_verify=none"
+            cluster = Cluster("couchbases://{}{}".format(database.srv, skip_tls_verify),
+                              ClusterOptions(PasswordAuthenticator(database.access_key, database.secret_key)))
             self.sdk_clusters[database_id] = cluster
             return cluster
 
