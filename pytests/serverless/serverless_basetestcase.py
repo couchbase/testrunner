@@ -14,6 +14,7 @@ from couchbase_helper.documentgenerator import SDKDataLoader
 from membase.api.serverless_rest_client import ServerlessRestConnection as RestConnection
 from couchbase_helper.cluster import Cluster as Cluster_helper
 from TestInput import TestInputServer
+import time
 
 
 class ServerlessBaseTestCase(unittest.TestCase):
@@ -263,3 +264,13 @@ class ServerlessBaseTestCase(unittest.TestCase):
             FROM system:indexes')
         for index in indexes['results']:
             result = self.run_query(database, f"DROP INDEX {index['namespace']}:`{index['bucket']}`.`{index['scope']}`.`{index['collection']}`.`{index['name']}`")
+
+    def check_index_status(self, database, name, timeout = 30, desired_state='online'):
+        current_state = 'offline'
+        stop = time.time() + timeout
+        while (current_state != desired_state and time.time() < stop):
+            result = self.run_query(database, f'SELECT raw state FROM system:indexes WHERE name = "{name}"')
+            current_state = result['results'][0]
+            self.log.info(f'INDEX {name} state: {current_state}')
+        if current_state != desired_state:
+            self.fail(f'INDEX {name} state: {current_state}, fail to reach state: {desired_state} within timeout: {timeout}')
