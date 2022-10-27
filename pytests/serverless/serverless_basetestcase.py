@@ -15,6 +15,8 @@ from membase.api.serverless_rest_client import ServerlessRestConnection as RestC
 from couchbase_helper.cluster import Cluster as Cluster_helper
 from TestInput import TestInputServer
 import time
+from membase.api.exception import CBQError
+import ast, json
 
 
 class ServerlessBaseTestCase(unittest.TestCase):
@@ -230,9 +232,9 @@ class ServerlessBaseTestCase(unittest.TestCase):
             resp.raise_for_status()
             if 'billingUnits' in resp.json().keys():
                 self.log.info(f"BILLING UNITS from query: {resp.json()['billingUnits']}")
-            if 'errors' in resp.json().keys():
-                self.log.error(f"Errors seen during query execution.\n Query: {query}. Errors: {resp.json()['errors']}")
-                raise Exception(f"Query execution errors seen. Query: {query} Errors: {resp.json()['errors']}")
+            if 'errors' in resp.json():
+                self.log.error(f"Error from query execution: {resp.json()['errors']}")
+                raise CBQError(resp.json(), database.nebula)
             return resp.json()
 
     def cleanup_database(self, database_obj):
@@ -288,3 +290,11 @@ class ServerlessBaseTestCase(unittest.TestCase):
                 node = node['hostname'].split(":")[0]
                 service_nodes.append(node)
         return service_nodes
+
+    def process_CBQE(self, s, index=0):
+        '''
+        return json object {'code':12345, 'msg':'error message'}
+        '''
+        content = ast.literal_eval(str(s).split("ERROR:")[1])
+        json_parsed = json.loads(json.dumps(content))
+        return json_parsed['errors'][index]
