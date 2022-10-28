@@ -618,6 +618,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                                     source_params=None, source_uuid=None, collection_index=True,
                                                     _type=_type, analyzer="keyword",
                                                     scope=scope_name, collections=[collection_name], no_check=False)
+            fts_callable.wait_for_indexing_complete(self.num_of_docs_per_collection)
             docs_indexed = fts_idx.get_indexed_doc_count()
             container_doc_count = self.num_of_docs_per_collection
             self.log.info(f"Docs in index {fts_idx.name}={docs_indexed}, kv docs={container_doc_count}")
@@ -625,13 +626,13 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 self.log.info("="*40)
                 self.log.info("===== SUBTEST: flex using fts")
                 explain_result = self.run_query(database,
-                                        f'EXPLAIN SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 USE INDEX (USING FTS, USING GSI) WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
+                                                f'EXPLAIN SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 USE INDEX (USING FTS, USING GSI) WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
                 self.assertTrue('IndexFtsSearch' in str(explain_result), f"The query is not using an fts search! please check explain {explain_result}")
                 self.assertTrue(f'{database.id}.{scope_name}.idx' in str(explain_result), f"The query is not using the fts index! please check explain {explain_result}")
                 flex_result = self.run_query(database,
-                                        f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 USE INDEX (USING FTS, USING GSI) WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
+                                             f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 USE INDEX (USING FTS, USING GSI) WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
                 expected_result = self.run_query(database,
-                                        f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
+                                                 f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
                 self.assertFalse(expected_result['metrics']['resultCount'] == 0, "This query should return results!")
                 diffs = DeepDiff(flex_result['results'], expected_result['results'])
                 if diffs:
