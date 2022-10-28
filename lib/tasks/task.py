@@ -6715,6 +6715,7 @@ class CreateServerlessDatabaseTask(Task):
                     {"database_id": self.database_id}))
                 self.api.allow_my_ip(self.database_id)
                 info = self.api.get_database_info(self.database_id)
+                self.log.info(f"Debug info for the serverless DB: {self.database_id}. Info: {info}")
                 self.log.info("generating API key for serverless database {}".format(
                     {"database_id": self.database_id}))
                 creds = self.api.generate_api_keys(self.database_id)

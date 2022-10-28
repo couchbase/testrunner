@@ -23,10 +23,11 @@ class CapellaCredentials:
         self.token_for_internal_support = config.get("token_for_internal_support")
 
 class ServerlessDatabase:
-    def __init__(self, database_id, doc_count=0):
+    def __init__(self, database_id, doc_count=0, namespaces=None):
         self.collections = dict()
         self.id = database_id
         self._doc_count = doc_count
+        self._namespaces = namespaces if namespaces else []
 
     def populate(self, info, creds, rest_api_info):
         self.srv = info["connect"]["srv"]
@@ -59,6 +60,19 @@ class ServerlessDatabase:
         """
         self._doc_count = doc_count
 
+    @property
+    def namespaces(self):
+        """
+        returns all the scopes/collections in a DB
+        """
+        return self._namespaces
+
+    @namespaces.setter
+    def namespaces(self, namespaces):
+        """
+       sets namespaces variable to scopes/collections in a DB
+        """
+        self._namespaces = namespaces
 
 class ServerlessDataPlane:
     def __init__(self, dataplane_id):

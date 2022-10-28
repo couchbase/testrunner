@@ -43,7 +43,7 @@ class GSIUtils(object):
 
         # GSI index on multiple fields
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'join_day_&_job_tittle',
+            QueryDefinition(index_name=index_name_prefix + 'join_day_job_title',
                             index_fields=['join_day', 'job_title'],
                             query_template=RANGE_SCAN_TEMPLATE.format("*",
                                                                       'join_day > 15 AND '
@@ -55,7 +55,7 @@ class GSIUtils(object):
                                                                                          'join_mo'],
                             missing_indexes=True, missing_field_desc=False,
                             query_template=RANGE_SCAN_TEMPLATE.format("*",
-                                                                      'join_yr > 2010 AMD '
+                                                                      'join_yr > 2010 AND '
                                                                       'join_mo > 6')))
 
         # Paritioned Index
@@ -224,8 +224,8 @@ class GSIUtils(object):
         distribution_list[number - 1] = total - reduce(lambda x, y: x + y, distribution_list[:number - 1])
         return distribution_list
 
-    def index_operations_during_phases(self, namespaces, dataset, num_of_batches=1, defer_build_mix=False,
-                                       phase='before', capella_run=False, database=None, query_node=None,
+    def index_operations_during_phases(self, namespaces, database=None, dataset='Employee', num_of_batches=1,
+                                       defer_build_mix=False, phase='before', capella_run=False, query_node=None,
                                        batch_offset=0, timeout=1500):
         if phase == 'before':
             self.initial_index_num = 0
@@ -241,7 +241,7 @@ class GSIUtils(object):
                     elif dataset == 'Hotel':
                         self.definition_list = self.generate_hotel_data_index_definition(index_name_prefix=prefix)
                     else:
-                        raise Exception("Provide correct dataset. Valid values are Person, Employee and Hotel")
+                        raise Exception("Provide correct dataset. Valid values are Person, Employee, and Hotel")
                     create_list = self.get_create_index_list(definition_list=self.definition_list, namespace=namespace,
                                                              defer_build_mix=defer_build_mix)
                     self.initial_index_num += len(create_list)
@@ -258,7 +258,7 @@ class GSIUtils(object):
                     tasks = []
                     for query in select_queries:
                         if capella_run:
-                            task = executor.submit(self.run_cbq_query, query=query, server=query_node)
+                            task = executor.submit(self.run_query, query=query, server=query_node)
                         else:
                             task = executor.submit(self.run_query, database=database, query=query)
                         tasks.append(task)

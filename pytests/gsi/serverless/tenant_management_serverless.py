@@ -159,3 +159,23 @@ class TenantManagement(BaseGSIServerless):
             if not test_pass:
                 self.fail(
                     f"User {user} with password {password} able to run queries on {database.id} a database the user is unauthorised for")
+
+    def test_load_scale(self):
+        """Work in Progress."""
+        self.provision_databases(count=self.num_of_tenants)
+        self.prepare_all_databases(total_doc_count=self.total_doc_count, num_of_tenants=self.num_of_tenants)
+        query_nodes_before = set()
+        for database in self.databases.values():
+            query_nodes = self.get_all_query_nodes(database=database)
+            for node in query_nodes:
+                query_nodes_before.add(node)
+        for database in self.databases.values():
+            self.gsi_util_obj.index_operations_during_phases(phase="during", timeout=3600,
+                                                             namespaces=database.namespaces,
+                                                             database=database, capella_run=self.capella_run)
+        query_nodes_after = set()
+        for database in self.databases.values():
+            query_nodes = self.get_all_query_nodes(database=database)
+            query_nodes_after.add(query_nodes)
+        if query_nodes_before == query_nodes_after:
+            self.fail("Query node sub-cluster scaling failure")

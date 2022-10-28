@@ -19,13 +19,12 @@ class BaseGSIServerless(QueryBaseServerless):
 
     def setUp(self):
         super(BaseGSIServerless, self).setUp()
-        self.total_doc_count = 100000
+        self.total_doc_count = self.input.param("total_doc_count", 100000)
         self.missing_index = self.input.param("missing_index", False)
         self.array_index = self.input.param("array_index", False)
         self.partitioned_index = self.input.param("partitioned_index", False)
         self.defer_build = self.input.param("defer_build", False)
         self.gsi_util_obj = GSIUtils(self.run_query)
-        self.namespaces = set()
 
     def tearDown(self):
         super(BaseGSIServerless, self).tearDown()
@@ -103,9 +102,11 @@ class BaseGSIServerless(QueryBaseServerless):
         results = self.run_query(query=query, database=database_obj)['results']
         return len(results) > 0
 
-    def prepare_all_databases(self, doc_template="Person", num_of_tenants=5, total_doc_count=10000, batch_size=10000,
-                              serverless_run=True):
+    def prepare_all_databases(self, databases=None, doc_template="Employee", num_of_tenants=5, total_doc_count=100000,
+                              batch_size=10000, serverless_run=True):
         self.log.debug("In prepare_all_databases method. Will load all the databases with variable num of documents")
+        databases = self.databases if not databases else databases
+        self.create_scopes_collections(databases=databases.values())
         heavy_load_tenant_count = math.ceil(num_of_tenants * 0.6)
         light_load_tenant_count = num_of_tenants - heavy_load_tenant_count
         self.doc_count_tenant_weights, count_heavy_tenants, count_light_tenants = [], heavy_load_tenant_count, light_load_tenant_count
@@ -123,10 +124,6 @@ class BaseGSIServerless(QueryBaseServerless):
         self.log.info(f"No of heavily loaded tenants:{heavy_load_tenant_count} "
                       f"No. of lightly loaded tenants:{light_load_tenant_count}. "
                       f"Doc count for each of the databases {self.doc_count_tenant_weights}")
-        tasks = self.populate_data(doc_template=doc_template, serverless_run=serverless_run, batch_size=batch_size)
-        for task in tasks:
-            if task:
-                task.result()
         for database in self.databases.values():
             namespaces = []
             for scope in database.collections:
@@ -134,38 +131,45 @@ class BaseGSIServerless(QueryBaseServerless):
                 namespaces.extend(collection_lists)
             self.gsi_util_obj.index_operations_during_phases(namespaces=namespaces, dataset=doc_template,
                                                              capella_run=True, database=database)
-            self.namespaces.update(namespaces)
+            database.namespaces = namespaces
+        self.populate_data(doc_template=doc_template, serverless_run=serverless_run, batch_size=batch_size,
+                           databases=databases)
 
-    def create_scopes_collections(self, database):
-        scope_coll_dict, coll_count = {}, 0
-        for item in range(self.num_of_scopes_per_db):
-            scope_name = f'scope_num_{item}_{random.randint(0, 1000)}'
-            self.create_scope(database_obj=database, scope_name=scope_name)
-            collection_list = []
-            for counter in range(self.num_of_collections_per_scope):
-                collection_name = f'collection_num_{item}_{random.randint(0, 1000)}'
-                self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
-                coll_count += 1
-                collection_list.append(collection_name)
-                if scope_name in database.collections:
-                    database.collections[scope_name].append(collection_name)
-                else:
-                    database.collections[scope_name] = [collection_name]
-            scope_coll_dict[scope_name] = collection_list
-        self.log.info(f"Scope and collection list:{scope_coll_dict}. No. of collections: {coll_count}")
-        return scope_coll_dict, coll_count
+    def create_scopes_collections(self, databases):
+        for database in databases:
+            scope_coll_dict, coll_count = {}, 0
+            for item in range(self.num_of_scopes_per_db):
+                scope_name = f'scope_num_{item}_{random.randint(0, 1000)}'
+                self.create_scope(database_obj=database, scope_name=scope_name)
+                collection_list = []
+                for counter in range(self.num_of_collections_per_scope):
+                    collection_name = f'collection_num_{item}_{random.randint(0, 1000)}'
+                    self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
+                    coll_count += 1
+                    collection_list.append(collection_name)
+                    if scope_name in database.collections:
+                        database.collections[scope_name].append(collection_name)
+                    else:
+                        database.collections[scope_name] = [collection_name]
+                scope_coll_dict[scope_name] = collection_list
+            self.log.info(f"Scope and collection list:{scope_coll_dict}. No. of collections: {coll_count}")
 
-    def populate_data(self, batch_size=10000, doc_template='default', serverless_run=True, output=False):
+    def populate_data(self, batch_size=10000, databases=None, doc_template='default', serverless_run=True,
+                      output=False):
         tasks = []
-        for index, database in enumerate(self.databases.values()):
+        databases = self.databases if not databases else databases
+        for index, database in enumerate(databases.values()):
             database.doc_count = self.doc_count_tenant_weights[index]
-            scope_coll_dict, collection_count = self.create_scopes_collections(database=database)
             server = TestInputServer()
             server.ip = database.srv
+            collection_count = 0
+            for scope in database.collections:
+                collection_count += len(database.collections[scope])
             key_prefix = f'doc_{"".join(random.choices(string.ascii_uppercase + string.digits, k=7))}_'
-            for scope, collections in scope_coll_dict.items():
+            for scope in database.collections:
                 num_of_docs = int(self.doc_count_tenant_weights[index] / collection_count)
-                for collection in collections:
+                collection_list = database.collections[scope]
+                for collection in collection_list:
                     for start in range(0, num_of_docs, batch_size):
                         end = start + batch_size
                         if end >= num_of_docs:
@@ -179,7 +183,9 @@ class BaseGSIServerless(QueryBaseServerless):
                                                output=output, capella=serverless_run)
                         tasks.append(self.cluster.async_load_gen_docs(server, database.id, kv_gen, pause_secs=1,
                                                                       timeout_secs=300))
-        return tasks
+        for task in tasks:
+            if task:
+                task.result()
 
     def get_index_settings(self, indexer_node, database_obj):
         endpoint = "https://{}:18091/settings?internal=ok".format(indexer_node)
