@@ -31,7 +31,6 @@ class QueryThrottlingTests(ServerlessBaseTestCase):
         self.provision_databases()
         for database in self.databases.values():
             throttle = throttling(database.rest_host, database.admin_username, database.admin_password)
-            breakpoint()
             throttle.set_bucket_limit(database.id, 2500, 'dataThrottleLimit')
             time.sleep(10)
             before_throttle_count_total, before_throttle_seconds_total = throttle.get_metrics(database.id, 'kv')
