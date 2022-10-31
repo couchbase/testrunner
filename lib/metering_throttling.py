@@ -89,7 +89,7 @@ class metering(object):
                     actual = result['billingUnits'][unit][service]
                     # With indexer service there is a 10% variation do to collatejson encoding, so we want to account for that
                     if service == "index":
-                        if (actual/expected) >= .9 and (actual/expected) <= 1.1:
+                        if (actual/expected) >= .85 and (actual/expected) <= 1.15:
                             return True, ''
                         else:
                             return False, f'Expected {expected} {service} {unit} unit but got {actual}'
