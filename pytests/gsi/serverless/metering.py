@@ -424,9 +424,9 @@ class GSIMeterSanity(ServerlessBaseTestCase):
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
             if self.create_distinct:
-                expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.distinct_array_index_key_size) / self.index_wu)
+                expected_index_wu = math.ceil(self.doc_count * (self.doc_key_size + self.distinct_array_index_key_size) / self.index_wu)
             else:
-                expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.array_index_key_size) / self.index_wu)
+                expected_index_wu = math.ceil(self.doc_count * (self.doc_key_size + self.array_index_key_size) / self.index_wu)
 
             self.assertEqual(before_index_ru, after_index_ru) # no index ru
             self.assertEqual(expected_index_wu, after_index_wu - before_index_wu)
@@ -484,7 +484,7 @@ class GSIMeterSanity(ServerlessBaseTestCase):
 
             expected_kv_ru = self.doc_count * math.ceil( (self.composite_doc_size + self.doc_key_size) / self.kv_ru)
             expected_index_ru = math.ceil(self.doc_count * 1.1 * (self.doc_key_size + self.index_key_size) / self.index_ru)
-            result = self.run_query(database,f'SELECT fname, lname FROM {self.collection} WHERE fname = {self.doc_value} and lname = {self.doc_value2}')
+            result = self.run_query(database,f'SELECT fname, lname FROM {self.collection} WHERE fname = "{self.doc_value}" and lname = "{self.doc_value2}"')
             assert_query, msg = meter.assert_query_billing_unit(result, expected_kv_ru, unit='ru', service = 'kv')
             self.assertTrue(assert_query, msg)
             assert_query, msg = meter.assert_query_billing_unit(result, expected_index_ru, unit='ru', service = 'index')
@@ -530,7 +530,7 @@ class GSIMeterSanity(ServerlessBaseTestCase):
             self.check_index_online(database, 'idx_name')
 
             expected_index_ru = math.ceil(self.doc_count * 1.1 * (self.doc_key_size + self.composite_index_key_size) / self.index_ru)
-            result = self.run_query(database,f'SELECT fname, lname FROM {self.collection} WHERE fname = {self.doc_value} and lname = {self.doc_value2}')
+            result = self.run_query(database,f'SELECT fname, lname FROM {self.collection} WHERE fname = "{self.doc_value}" and lname = "{self.doc_value2}"')
             self.assertTrue("kv" not in str(result['billingUnits']), f"Index is covering, there should be no kv units : {result}")
             assert_query, msg = meter.assert_query_billing_unit(result, expected_index_ru, unit='ru', service = 'index')
             self.assertTrue(assert_query, msg)
@@ -582,7 +582,7 @@ class GSIMeterSanity(ServerlessBaseTestCase):
 
             expected_kv_ru = self.doc_count * math.ceil( (self.doc_size + self.doc_key_size) / self.kv_ru)
             expected_index_ru = math.ceil(self.doc_count * 1.1 * (self.doc_key_size + self.array_index_key_size) / self.index_ru)
-            result = self.run_query(database,query=f"select names from {self.collection} where ANY x in names SATISFIES x.fname = {self.doc_value}) END")
+            result = self.run_query(database,query=f"select names from {self.collection} where ANY x in names SATISFIES x.fname = '{self.array_doc_value}' END")
             assert_query, msg = meter.assert_query_billing_unit(result, expected_kv_ru, unit='ru', service = 'kv')
             self.assertTrue(assert_query, msg)
             assert_query, msg = meter.assert_query_billing_unit(result, expected_index_ru, unit='ru', service = 'index')
