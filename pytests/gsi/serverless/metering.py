@@ -9,8 +9,8 @@ import time
 class GSIMeterSanity(ServerlessBaseTestCase):
     def setUp(self):
         self.input = TestInputSingleton.input
-        self.scope = '_{self.collection}'
-        self.collection = '_{self.collection}'
+        self.scope = '_default'
+        self.collection = '_default'
         self.doc_count = self.input.param("doc_count", 10)
         self.value_size = self.input.param("value_size", 256)
         self.create_distinct = self.input.param("create_distinct", False)
