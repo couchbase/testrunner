@@ -1103,15 +1103,16 @@ class EventingBaseTest(QueryHelperTests):
         if is_create:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=100, percent_update=0,
                                             percent_delete=0, scope=collection_list[1], collection=collection_list[2],
-                                            doc_expiry=expiry, json_template=template, doc_size=self.document_size)
+                                            doc_expiry=expiry, json_template=template, doc_size=self.document_size,
+                                            username=self.master.rest_username, password=self.master.rest_password)
         elif is_delete:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=0, percent_delete=100,
                                             scope=collection_list[1], collection=collection_list[2], json_template=template,
-                                            doc_size=self.document_size)
+                                            doc_size=self.document_size, username=self.master.rest_username, password=self.master.rest_password)
         elif is_update:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=100, percent_delete=0,
                                             scope=collection_list[1], collection=collection_list[2], doc_expiry=expiry, json_template=template,
-                                            doc_size=self.document_size)
+                                            doc_size=self.document_size, username=self.master.rest_username, password=self.master.rest_password)
         if self.dgm_run:
             task = self.data_ops_javasdk_loader_in_batches_to_collection(
                 collection_list[0], sdk_data_loader=self.gen_create,
@@ -1138,15 +1139,16 @@ class EventingBaseTest(QueryHelperTests):
         if is_create:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=100, percent_update=0,
                                             percent_delete=0, scope=collection_list[1], collection=collection_list[2],
-                                            doc_expiry=expiry, json_template=template, doc_size=self.document_size)
+                                            doc_expiry=expiry, json_template=template, doc_size=self.document_size,
+                                            username=self.master.rest_username, password=self.master.rest_password)
         elif is_delete:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=0, percent_delete=100,
                                             scope=collection_list[1], collection=collection_list[2], json_template=template,
-                                            doc_size=self.document_size)
+                                            doc_size=self.document_size, username=self.master.rest_username, password=self.master.rest_password)
         elif is_update:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=100, percent_delete=0,
                                             scope=collection_list[1], collection=collection_list[2], doc_expiry=expiry, json_template=template,
-                                            doc_size=self.document_size)
+                                            doc_size=self.document_size, username=self.master.rest_username, password=self.master.rest_password)
         task = self.data_ops_javasdk_loader_in_batches_to_collection(collection_list[0], sdk_data_loader=self.gen_create,
                                                                      batch_size=self.batch_size)
         if wait_for_loading:

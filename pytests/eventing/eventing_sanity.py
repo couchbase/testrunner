@@ -15,12 +15,10 @@ class EventingSanity(EventingBaseTest):
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size, eviction_policy=self.eviction_policy)
             self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
-            self.src_bucket = RestConnection(self.master).get_buckets()
             self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
             self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
-            self.buckets = RestConnection(self.master).get_buckets()
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.expiry = 3
         if self.non_default_collection:
@@ -36,6 +34,12 @@ class EventingSanity(EventingBaseTest):
 
     def tearDown(self):
         super(EventingSanity, self).tearDown()
+
+    def suite_setUp(self):
+        pass
+
+    def suite_tearDown(self):
+        pass
 
     def test_create_mutation_for_dcp_stream_boundary_from_beginning(self):
         if self.non_default_collection:
