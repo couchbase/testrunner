@@ -1,3 +1,5 @@
+import copy
+import os
 from typing import Dict
 import unittest
 import requests
@@ -17,7 +19,7 @@ from TestInput import TestInputServer
 import time
 from membase.api.exception import CBQError
 import ast, json
-
+import subprocess
 
 class ServerlessBaseTestCase(unittest.TestCase):
     def setUp(self):
@@ -45,6 +47,9 @@ class ServerlessBaseTestCase(unittest.TestCase):
         self.log.info(f"Trigger log collect {self.trigger_log_collect}")
         self.capella_run = self.input.param("capella_run", False)
         self.num_of_docs_per_collection = self.input.param("num_of_docs_per_collection", 10000)
+        self.dataplane_id = self.input.capella.get("dataplane_id", None)
+        self.use_new_doc_loader = self.input.param("use_new_doc_loader", False)
+        self.teardown_all_databases = self.input.param("teardown_all_databases", True)
 
     def tearDown(self):
         if self._testMethodName not in ['suite_tearDown', 'suite_setUp'] and self.trigger_log_collect:
@@ -57,7 +62,8 @@ class ServerlessBaseTestCase(unittest.TestCase):
                                               rest_srv=self.dataplanes[dataplane].rest_host)
                     cb_collect_list = rest_obj.collect_logs(test_name=self._testMethodName)
                     self.log.info(f"Test failure. Cbcollect info list {cb_collect_list}")
-        self.delete_all_database()
+        if self.teardown_all_databases:
+            self.delete_all_database()
         self.task_manager.shutdown(force=True)
 
     def has_test_failed(self):
@@ -82,8 +88,9 @@ class ServerlessBaseTestCase(unittest.TestCase):
         task = self.create_database_async()
         return task.result()
 
-    def create_database_async(self):
-        config = capella_utils.create_serverless_config(self.input, self.skip_import_sample)
+    def create_database_async(self, seed=None):
+        config = capella_utils.create_serverless_config(input=self.input, skip_import_sample=self.skip_import_sample,
+                                                        seed=seed)
         task = CreateServerlessDatabaseTask(api=self.api, config=config, databases=self.databases,
                                             dataplanes=self.dataplanes, create_bypass_user=self.create_bypass_user)
         self.task_manager.schedule(task)
@@ -124,7 +131,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
                                    load_pattern="uniform", start_seq_num=1, key_prefix="doc_", key_suffix="_",
                                    scope=scope, collection=collection, json_template=doc_template, doc_expiry=0,
                                    fields_to_update=None,
-                                   doc_size=500, get_sdk_logs=False, username=database.access_key,
+                                   doc_size=1024, get_sdk_logs=False, username=database.access_key,
                                    password=database.secret_key, timeout=1000,
                                    start=0, end=0, op_type="create", all_collections=False, es_compare=False,
                                    es_host=None, es_port=None,
@@ -138,11 +145,14 @@ class ServerlessBaseTestCase(unittest.TestCase):
             if task:
                 task.result()
 
-    def provision_databases(self, count=1):
+    def provision_databases(self, count=1, seed=None):
         self.log.info(f'PROVISIONING {count} DATABASES ...')
         tasks = []
-        for _ in range(0, count):
-            task = self.create_database_async()
+        for i in range(0, count):
+            if seed:
+                task = self.create_database_async(seed=f"{seed}-{i}")
+            else:
+                task = self.create_database_async()
             tasks.append(task)
         for task in tasks:
             task.result()
@@ -280,8 +290,8 @@ class ServerlessBaseTestCase(unittest.TestCase):
         if current_state != desired_state:
             self.fail(f'INDEX {name} state: {current_state}, fail to reach state: {desired_state} within timeout: {timeout}')
 
-    def get_nodes_from_services_map(self, database, service):
-        rest_obj = RestConnection(database.admin_username, database.admin_password, database.rest_host)
+    def get_nodes_from_services_map(self, service, rest_info):
+        rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
         service_nodes = []
         nodes_obj = rest_obj.get_all_dataplane_nodes()
         self.log.debug(f"Dataplane nodes object {nodes_obj}")
@@ -298,3 +308,70 @@ class ServerlessBaseTestCase(unittest.TestCase):
         content = ast.literal_eval(str(s).split("ERROR:")[1])
         json_parsed = json.loads(json.dumps(content))
         return json_parsed['errors'][index]
+
+    def load_data_new_doc_loader(self, databases, doc_start=0, doc_end=100000, create_rate=100, update_rate=0):
+        pom_path = self.input.param("pom_path", None)
+        # will be removed once DocLoader is a testrunner subdmodule
+        if not pom_path:
+            raise Exception("Docloader is not yet a submodule for testrunner. Pass pom_path for DocLoader explicitly.")
+        cur_dir = os.getcwd()
+        os.chdir(pom_path)
+        try:
+            for database in databases:
+                for scope in database.collections:
+                    for collection in database.collections[scope]:
+                        command = f"mvn compile exec:java -Dexec.cleanupDaemonThreads=false " \
+                                  f"-Dexec.mainClass='couchbase.test.sdk.Loader' -Dexec.args='-n {database.srv} " \
+                                  f"-user {database.access_key} -pwd {database.secret_key} -b {database.id} " \
+                                  f"-p 11207 -create_s {doc_start} -create_e {doc_end} " \
+                                  f"-cr {create_rate} -up {update_rate} -rd 0 -workers 1 -docSize 1024 " \
+                                  f"-scope {scope} -collection {collection}'"
+                        self.log.info(f"Will run this command {command} to load data")
+                        process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                        out, err = process.communicate()
+                        if "BUILD SUCCESS" not in str(out):
+                            self.log.error(f"Data load failure for bucket {database.id} scope {scope} collection {collection}")
+        finally:
+            os.chdir(cur_dir)
+
+    def update_specs(self, dataplane_id, new_count=4, service='index', timeout=1200):
+        resp = self.api.get_dataplane_deployment_status(dataplane_id=dataplane_id)
+        old_count, num_nodes_after = 0, 0
+        if "overRide" in resp['couchbaseCluster']:
+            current_specs = resp['couchbaseCluster']['overRide']['specs']
+        else:
+            current_specs = resp['couchbaseCluster']['specs']
+        new_specs = copy.deepcopy(current_specs)
+        for counter, spec in enumerate(current_specs):
+            if spec['services'][0]['type'] == service and spec['count'] != new_count:
+                old_count = spec['count']
+                new_specs[counter]['count'] = new_count
+        self.log.info(f"Will use this config to update specs: {new_specs}")
+        self.api.modify_cluster_specs(dataplane_id=dataplane_id, specs=new_specs)
+        time.sleep(30)
+        time_now = time.time()
+        while time_now < time.time() + timeout:
+            if not self.dataplanes:
+                dataplane = ServerlessDataPlane(dataplane_id=dataplane_id)
+            else:
+                dataplane = self.dataplanes[self.dataplane_id]
+            rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
+                                                  password=dataplane.admin_password,
+                                                  rest_host=dataplane.rest_host)
+            nodes_after_scaling = self.get_nodes_from_services_map(rest_info=rest_info, service=service)
+            num_nodes_after = len(nodes_after_scaling)
+            if num_nodes_after == new_count:
+                break
+            time.sleep(30)
+        if num_nodes_after != new_count:
+            self.log.error(f"Scale operation did not happen despite waiting {timeout} seconds")
+            raise Exception("Scaling operations failure")
+
+    def create_rest_info_obj(self, username, password, rest_host):
+        class Rest_Info:
+            def __init__(self, username, password, rest_host):
+                self.admin_username = username
+                self.admin_password = password
+                self.rest_host = rest_host
+        rest_info = Rest_Info(username=username, password=password, rest_host=rest_host)
+        return rest_info

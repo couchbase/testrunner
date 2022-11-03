@@ -1,8 +1,6 @@
 import logging
-import math
 import random
 import string
-
 import requests
 import time
 
@@ -11,6 +9,8 @@ from membase.api.serverless_rest_client import ServerlessRestConnection as RestC
 from TestInput import TestInputServer
 from couchbase_helper.documentgenerator import SDKDataLoader
 from serverless.gsi_utils import GSIUtils
+from lib.capella.utils import ServerlessDataPlane
+from concurrent.futures import ThreadPoolExecutor
 
 log = logging.getLogger(__name__)
 
@@ -25,6 +25,10 @@ class BaseGSIServerless(QueryBaseServerless):
         self.partitioned_index = self.input.param("partitioned_index", False)
         self.defer_build = self.input.param("defer_build", False)
         self.gsi_util_obj = GSIUtils(self.run_query)
+        self.num_of_load_cycles = self.input.param("num_of_load_cycles", 10000)
+        self.num_of_index_creation_batches = self.input.param("num_of_index_creation_batches", 1)
+        self.dataset = self.input.param("dataset", "Employee")
+        self.definition_list = self.gsi_util_obj.get_index_definition_list(dataset=self.dataset)
 
     def tearDown(self):
         super(BaseGSIServerless, self).tearDown()
@@ -47,16 +51,17 @@ class BaseGSIServerless(QueryBaseServerless):
             raise Exception(f"{resp['errors']}")
         return resp
 
-    def get_indexer_metadata(self, database_obj, indexer_node):
+    def get_indexer_metadata(self, indexer_node, rest_info):
+        admin_username, admin_password = rest_info.admin_username, rest_info.admin_password
         endpoint = "https://{}:18091/indexStatus".format(indexer_node)
-        resp = requests.get(endpoint, auth=(database_obj.admin_username, database_obj.admin_password), verify=False)
+        resp = requests.get(endpoint, auth=(admin_username, admin_password), verify=False)
         resp.raise_for_status()
         indexer_metadata = resp.json()['indexes']
         self.log.debug(f"Indexer metadata {indexer_metadata}")
         return indexer_metadata
 
-    def get_resident_host_for_index(self, index_name, database_obj, indexer_node):
-        index_metadata = self.get_indexer_metadata(database_obj=database_obj, indexer_node=indexer_node)
+    def get_resident_host_for_index(self, index_name, indexer_node, rest_info):
+        index_metadata = self.get_indexer_metadata(indexer_node=indexer_node, rest_info=rest_info)
         for index in index_metadata:
             if index['index'] == index_name:
                 self.log.debug(f"Index metadata for index {index_name} is {index}")
@@ -67,8 +72,8 @@ class BaseGSIServerless(QueryBaseServerless):
         results = self.run_query(query=query, database=database_obj)['results']
         return len(results)
 
-    def wait_until_indexes_online(self, database, index_name, keyspace, timeout=20):
-        rest_obj = RestConnection(database.admin_username, database.admin_password, database.rest_host)
+    def wait_until_indexes_online(self, rest_info, index_name, keyspace, timeout=20):
+        rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
         indexer_node = None
         nodes_obj = rest_obj.get_all_dataplane_nodes()
         self.log.debug(f"Dataplane nodes object {nodes_obj}")
@@ -81,7 +86,7 @@ class BaseGSIServerless(QueryBaseServerless):
         time_now = time.time()
         index_name = f"{index_name}".rstrip("`").lstrip("`")
         while time.time() - time_now < timeout * 60:
-            index_metadata = self.get_indexer_metadata(database_obj=database, indexer_node=indexer_node)
+            index_metadata = self.get_indexer_metadata(rest_info=rest_info, indexer_node=indexer_node)
             for index in index_metadata:
                 if index['index'] == index_name and keyspace in index['definition'] and index['status'] == 'Ready':
                     index_online = True
@@ -92,48 +97,89 @@ class BaseGSIServerless(QueryBaseServerless):
                 break
             time.sleep(30)
         if not index_online:
-            raise Exception(f"Index {index_name} on database {database} not online despite waiting for {timeout} mins")
+            raise Exception(f"Index {index_name}  not online despite waiting for {timeout} mins")
         if not index_replica_online:
             raise Exception(
-                f"Replica of {index_name} not online on database {database} despite waiting for {timeout} mins")
+                f"Replica of {index_name} not online despite waiting for {timeout} mins")
 
     def check_if_index_exists(self, database_obj, index_name):
-        query = f"select * from system:indexes where name={index_name}"
+        query = f"select * from system:indexes"
         results = self.run_query(query=query, database=database_obj)['results']
-        return len(results) > 0
+        for result in results:
+            if result['indexes']['name'] == index_name and result['indexes']['keyspace_id'] == database_obj.id:
+                return True
+        return False
 
-    def prepare_all_databases(self, databases=None, doc_template="Employee", num_of_tenants=5, total_doc_count=100000,
-                              batch_size=10000, serverless_run=True):
+    def prepare_all_databases(self, databases=None):
         self.log.debug("In prepare_all_databases method. Will load all the databases with variable num of documents")
         databases = self.databases if not databases else databases
         self.create_scopes_collections(databases=databases.values())
-        heavy_load_tenant_count = math.ceil(num_of_tenants * 0.6)
-        light_load_tenant_count = num_of_tenants - heavy_load_tenant_count
-        self.doc_count_tenant_weights, count_heavy_tenants, count_light_tenants = [], heavy_load_tenant_count, light_load_tenant_count
-        weight_heavy_tenants, weight_light_tenants = 80, 20
-        for _ in range(heavy_load_tenant_count):
-            tenant_weight = math.floor(weight_heavy_tenants / count_heavy_tenants)
-            weight_heavy_tenants = weight_heavy_tenants - tenant_weight
-            count_heavy_tenants = count_heavy_tenants - 1
-            self.doc_count_tenant_weights.append(math.floor(tenant_weight * total_doc_count / 100))
-        for _ in range(light_load_tenant_count):
-            tenant_weight = math.floor(weight_light_tenants / count_light_tenants)
-            weight_light_tenants = weight_light_tenants - tenant_weight
-            count_light_tenants = count_light_tenants - 1
-            self.doc_count_tenant_weights.append(math.floor(tenant_weight * total_doc_count / 100))
-        self.log.info(f"No of heavily loaded tenants:{heavy_load_tenant_count} "
-                      f"No. of lightly loaded tenants:{light_load_tenant_count}. "
-                      f"Doc count for each of the databases {self.doc_count_tenant_weights}")
         for database in self.databases.values():
             namespaces = []
             for scope in database.collections:
                 collection_lists = [f'`{database.id}`.{scope}.{collection}' for collection in database.collections[scope]]
                 namespaces.extend(collection_lists)
-            self.gsi_util_obj.index_operations_during_phases(namespaces=namespaces, dataset=doc_template,
-                                                             capella_run=True, database=database)
+            self.gsi_util_obj.index_operations_during_phases(namespaces=namespaces, dataset=self.dataset,
+                                                             capella_run=True, database=database,
+                                                             num_of_batches=self.num_of_index_creation_batches,
+                                                             defer_build_mix=True)
             database.namespaces = namespaces
-        self.populate_data(doc_template=doc_template, serverless_run=serverless_run, batch_size=batch_size,
-                           databases=databases)
+
+    def prepare_databases(self):
+        for database in self.databases.values():
+            namespaces = []
+            for scope in database.collections:
+                collection_lists = [f'`{database.id}`.{scope}.{collection}' for collection in database.collections[scope]]
+                namespaces.extend(collection_lists)
+            self.gsi_util_obj.index_operations_during_phases(namespaces=namespaces, dataset=self.dataset,
+                                                             capella_run=True, database=database,
+                                                             num_of_batches=self.num_of_index_creation_batches,
+                                                             defer_build_mix=True)
+            database.namespaces = namespaces
+        doc_end = 0
+        time_before = time.time()
+        self.log.info(f"Timestamp before data load:{time_before}")
+        for i in range(self.num_of_load_cycles):
+            if self.use_new_doc_loader:
+                doc_start = doc_end
+                doc_end = doc_start + self.total_doc_count
+                self.log.info(f"populate_data_until_threshold iteration {i}. doc_start {doc_start} doc_end {doc_end}")
+                self.load_data_new_doc_loader(databases=self.databases.values(), doc_start=doc_start, doc_end=doc_end)
+            else:
+                self.populate_data(doc_template=self.dataset, serverless_run=self.capella_run, batch_size=10000,
+                                   databases=self.databases)
+            self.get_all_index_node_usage_stats()
+        time_after = time.time()
+        self.log.info(f"Timestamp after data load:{time_after}. Time taken {time_after - time_before}")
+
+    def populate_data_until_threshold(self, databases, use_new_doc_loader=False, doc_template=None,
+                                      batch_size=10000, serverless_run=True):
+        if not doc_template:
+            doc_template = self.dataset
+        doc_end = 0
+        for i in range(self.num_of_load_cycles):
+            if use_new_doc_loader:
+                doc_start = doc_end
+                doc_end = doc_start + self.total_doc_count
+                self.log.info(f"populate_data_until_threshold iteration {i}. doc_start {doc_start} doc_end {doc_end}")
+                self.load_data_new_doc_loader(databases=databases, doc_start=doc_start, doc_end=doc_end)
+            else:
+                self.populate_data(doc_template=doc_template, serverless_run=serverless_run, batch_size=batch_size,
+                                   databases=databases)
+            all_node_stats = self.get_all_index_node_usage_stats()
+            self.log.info(f"Index nodes list: {all_node_stats.keys()}")
+            for node in all_node_stats.keys():
+                mem_quota = all_node_stats[node]['memory_quota']
+                memory_used_actual = all_node_stats[node]['memory_used_actual']
+                units_quota = all_node_stats[node]['units_quota']
+                units_used_actual = all_node_stats[node]['units_used_actual']
+                num_tenants = all_node_stats[node]['num_tenants']
+                self.log.info(f"Index stats for {node} are memory_quota: {mem_quota}. "
+                              f"Memory used actual {memory_used_actual}."
+                              f"units_quota {units_quota} "
+                              f"units_used_actual {units_used_actual} num of tenants {num_tenants} ")
+                self.log.info(f"Memory used ratio: {memory_used_actual/mem_quota}. \n "
+                              f"Units used ratio : {units_used_actual/units_quota} \n Num. of tenants:{num_tenants}")
 
     def create_scopes_collections(self, databases):
         for database in databases:
@@ -158,7 +204,7 @@ class BaseGSIServerless(QueryBaseServerless):
                       output=False):
         tasks = []
         databases = self.databases if not databases else databases
-        for index, database in enumerate(databases.values()):
+        for index, database in enumerate(databases):
             database.doc_count = self.doc_count_tenant_weights[index]
             server = TestInputServer()
             server.ip = database.srv
@@ -187,33 +233,111 @@ class BaseGSIServerless(QueryBaseServerless):
             if task:
                 task.result()
 
-    def get_index_settings(self, indexer_node, database_obj):
+    def get_index_settings(self, indexer_node, rest_info):
         endpoint = "https://{}:18091/settings?internal=ok".format(indexer_node)
-        resp = requests.get(endpoint, auth=(database_obj.admin_username, database_obj.admin_password), verify=False)
+        resp = requests.get(endpoint, auth=(rest_info.admin_username, rest_info.admin_password), verify=False)
         resp.raise_for_status()
         result = resp.json()
         self.log.debug(f"settings {result}")
         return result
 
-    def get_index_stats(self, indexer_node, database_obj):
+    def get_index_stats(self, indexer_node, rest_info):
         endpoint = "https://{}:19102/stats".format(indexer_node)
-        resp = requests.get(endpoint, auth=(database_obj.admin_username, database_obj.admin_password), verify=False)
+        resp = requests.get(endpoint, auth=(rest_info.admin_username, rest_info.admin_password), verify=False)
         resp.raise_for_status()
         index_stats = resp.json()
         self.log.debug(f"Indexer metadata {index_stats}")
         return index_stats
 
     def populate_data_till_threshold(self, database_obj, doc_template='default', threshold=50):
-        index_nodes = self.get_nodes_from_services_map(database=database_obj, service="index")
+        rest_info = self.create_rest_info_obj(username=database_obj.admin_username, password=database_obj.admin_password,
+                                              rest_host=database_obj.rest_host)
+        index_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
         node_stats = {}
         for index_node in index_nodes:
-            node_stats[index_node] = self.get_index_stats(indexer_node=index_node, database_obj=database_obj)
+            node_stats[index_node] = self.get_index_stats(indexer_node=index_node, rest_info=rest_info)
         self.populate_data(doc_template=doc_template)
 
-    def get_all_index_node_usage_stats(self, database):
-        index_nodes = self.get_nodes_from_services_map(database=database, service="index")
-        nodes = {}
-        for node in index_nodes:
-            nodes[node] = self.get_index_stats(indexer_node=node, database_obj=database)
-        return nodes
+    def get_all_index_node_usage_stats(self):
+        node_wise_stats = {}
+        for dataplane in self.dataplanes.values():
+            if not dataplane:
+                dataplane = ServerlessDataPlane(self.dataplane_id)
+                rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.dataplane_id)
+                dataplane.populate(rest_api_info)
+            rest_info = self.create_rest_info_obj(dataplane.admin_username, dataplane.admin_password, dataplane.rest_host)
+            index_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+            nodes = {}
+            for node in index_nodes:
+                nodes[node] = self.get_index_stats(indexer_node=node,
+                                                   rest_info=rest_info)
+            self.log.info(f"Index nodes list: {nodes.keys()}")
+            for node in nodes.keys():
+                mem_quota = nodes[node]['memory_quota']
+                memory_used_actual = nodes[node]['memory_used_actual']
+                units_quota = nodes[node]['units_quota']
+                units_used_actual = nodes[node]['units_used_actual']
+                num_tenants = nodes[node]['num_tenants']
+                self.log.info(f"Index stats for {node} are memory_quota: {mem_quota}. "
+                              f"Memory used actual {memory_used_actual}."
+                              f"units_quota {units_quota} "
+                              f"units_used_actual {units_used_actual} num of tenants {num_tenants} ")
+                self.log.info(f"Memory used ratio: {memory_used_actual / mem_quota}. \n "
+                              f"Units used ratio : {units_used_actual / units_quota} \n Num. of tenants:{num_tenants}")
+                node_wise_stats[dataplane][node]['mem_quota'] = mem_quota
+                node_wise_stats[dataplane][node]['memory_used_actual'] = memory_used_actual
+                node_wise_stats[dataplane][node]['units_quota'] = units_quota
+                node_wise_stats[dataplane][node]['units_used_actual'] = units_used_actual
+                node_wise_stats[dataplane][node]['num_tenants'] = num_tenants
+        return node_wise_stats
 
+    def scale_up_index_subcluster(self, dataplane):
+        rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
+                                              password=dataplane.admin_password,
+                                              rest_host=dataplane.rest_host)
+        index_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+        num_nodes = len(index_nodes)
+        self.log.info(f"Number of indexer nodes in the DP: {num_nodes}")
+        self.update_specs(dataplane.id, new_count=num_nodes+2, service='index')
+
+    def scale_down_index_subcluster(self, dataplane):
+        rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
+                                              password=dataplane.admin_password,
+                                              rest_host=dataplane.rest_host)
+        index_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+        num_nodes = len(index_nodes)
+        self.log.info(f"Number of indexer nodes in the DP: {num_nodes}")
+        self.log.info(f"Will remove 2 new indexer nodes")
+        if num_nodes == 2:
+            self.log.error("Cannot scale down the index subcluster further since it only has 2 nodes")
+            return
+        self.update_specs(dataplane.id, new_count=num_nodes-2, service='index')
+
+    def run_parallel_workloads(self, event):
+        i = 0
+        while not event.is_set():
+            with ThreadPoolExecutor() as executor:
+                tasks = []
+                print(f"Iteration number {i}")
+                for counter, database in enumerate(self.databases.values()):
+                    task = executor.submit(self.load_data_new_doc_loader, databases=[database], doc_start=0,
+                                           doc_end=self.total_doc_count, update_rate=100, create_rate=0)
+                    tasks.append(task)
+                    for scope in database.collections:
+                        for collection in database.collections[scope]:
+                            select_query_list = self.gsi_util_obj.get_select_queries(definition_list=self.definition_list,
+                                                                                     namespace=f"`{database.id}`.{scope}.{collection}")
+                            for select_query in select_query_list:
+                                task = executor.submit(self.run_query, database=database, query=select_query)
+                                tasks.append(task)
+                for task in tasks:
+                    task.result()
+                i += 1
+        self.log.info("Workload function complete. Exiting")
+
+    def get_all_index_names(self, database):
+        response = self.run_query(database=database, query="select * from system:indexes")['results']
+        name_list = []
+        for item in response:
+            name_list.append(item['indexes']['name'])
+        return name_list

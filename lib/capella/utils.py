@@ -27,7 +27,7 @@ class ServerlessDatabase:
         self.collections = dict()
         self.id = database_id
         self._doc_count = doc_count
-        self._namespaces = namespaces if namespaces else []
+        self._namespaces = namespaces if namespaces else [f"{database_id}._default._default"]
 
     def populate(self, info, creds, rest_api_info):
         self.srv = info["connect"]["srv"]
@@ -333,6 +333,16 @@ class CapellaAPI:
         resp = self.serverless_api.update_database(database_id, override)
         resp.raise_for_status()
 
+    def get_dataplane_deployment_status(self, dataplane_id):
+        resp = self.serverless_api.get_dataplane_deployment_status(dataplane_id=dataplane_id)
+        resp.raise_for_status()
+        return resp.json()
+
+    def modify_cluster_specs(self, dataplane_id, specs):
+        resp = self.serverless_api.modify_cluster_specs(dataplane_id=dataplane_id,
+                                                        specs=specs)
+        resp.raise_for_status()
+
 def format_nodes(nodes, username=None, password=None):
     servers = list()
     for node in nodes:
@@ -460,11 +470,14 @@ def create_capella_config(input, services_count):
     return config
 
 
-def create_serverless_config(input, skip_import_sample=True):
+def create_serverless_config(input, skip_import_sample=True, seed=None):
     provider, region, _, _, _, _, dataplane_id = spec_options_from_input(input)
-
+    if seed:
+        name = f"{seed}"
+    else:
+        name = str(uuid.uuid4())
     config = {
-        "name": str(uuid.uuid4()),
+        "name": name,
         "region": region,
         "provider": provider,
         "projectId": input.capella["project_id"],

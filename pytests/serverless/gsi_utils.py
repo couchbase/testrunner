@@ -13,6 +13,8 @@ import datetime
 import random
 import string
 import uuid
+import logger
+import re
 from functools import reduce
 from concurrent.futures import ThreadPoolExecutor
 
@@ -24,6 +26,7 @@ RANGE_SCAN_TEMPLATE = "SELECT {0} FROM %s WHERE {1}"
 class GSIUtils(object):
     def __init__(self, query_obj):
         self.initial_index_num = 0
+        self.log = logger.Logger.get_logger()
         self.definition_list = []
         self.run_query = query_obj
         self.batch_size = 0
@@ -36,7 +39,7 @@ class GSIUtils(object):
         # Single field GSI Query
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'name', index_fields=['name'],
-                            query_template=RANGE_SCAN_TEMPLATE.format("*", 'name like "%T" ')))
+                            query_template=RANGE_SCAN_TEMPLATE.format("*", 'name like "%%T" ')))
 
         # Primary Query
         definitions_list.append(
@@ -64,7 +67,7 @@ class GSIUtils(object):
         # Paritioned Index
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'partitioned_index', index_fields=['body'],
-                            query_template=RANGE_SCAN_TEMPLATE.format("*", 'body like "%E%"'),
+                            query_template=RANGE_SCAN_TEMPLATE.format("*", 'body like "%%E%%"'),
                             partition_by_fields=['body'], capella_run=True))
 
         # Array Index
@@ -78,7 +81,7 @@ class GSIUtils(object):
 
         # Array Index
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'array_index',
+            QueryDefinition(index_name=index_name_prefix + 'array_index_2',
                             index_fields=['age, ALL animals'],
                             query_template=RANGE_SCAN_TEMPLATE.format("*",
                                                                       'any a in animals satisfies '
@@ -165,12 +168,12 @@ class GSIUtils(object):
                             missing_indexes=True, missing_field_desc=True,
                             query_template=RANGE_SCAN_TEMPLATE.format("*",
                                                                       'avg_rating > 3 AND '
-                                                                      'country like "%F%"')))
+                                                                      'country like "%%F%%"')))
 
         # Paritioned Index
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'partitioned_index', index_fields=['name'],
-                            query_template=RANGE_SCAN_TEMPLATE.format("*", 'name like "%W%"'),
+                            query_template=RANGE_SCAN_TEMPLATE.format("*", 'name like "%%W%%"'),
                             partition_by_fields=['name'], capella_run=True))
 
         # Array Index
@@ -209,7 +212,7 @@ class GSIUtils(object):
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'firstName_lastName', index_fields=['firstName', 'lastName'],
                             query_template=RANGE_SCAN_TEMPLATE.format("*",
-                                                                      'firstName like "%D% AND '
+                                                                      'firstName like "%%D%% AND '
                                                                       'LastName is not NULL')))
 
         # GSI index with missing keys
@@ -217,7 +220,7 @@ class GSIUtils(object):
             QueryDefinition(index_name=index_name_prefix + 'missing_keys', index_fields=['age', 'city', 'country'],
                             missing_indexes=True, missing_field_desc=False,
                             query_template=RANGE_SCAN_TEMPLATE.format("*",
-                                                                      'firstName like "%D% AND '
+                                                                      'firstName like "%%D%% AND '
                                                                       'LastName is not NULL')))
 
         # Paritioned Index
@@ -229,7 +232,7 @@ class GSIUtils(object):
         # Array Index
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'array_index', index_fields=['filler1'],
-                            query_template=RANGE_SCAN_TEMPLATE.format("*", 'filler1 like "%in%"')))
+                            query_template=RANGE_SCAN_TEMPLATE.format("*", 'filler1 like "%%in%%"')))
         self.batch_size = len(definitions_list)
         return definitions_list
 
@@ -289,27 +292,38 @@ class GSIUtils(object):
                                        defer_build_mix=False, phase='before', capella_run=False, query_node=None,
                                        batch_offset=0, timeout=1500):
         if phase == 'before':
-            for item in range(num_of_batches):
-                for namespace in namespaces:
-                    counter = batch_offset + item
-                    prefix = f'idx_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}' \
-                             f'_batch_{counter}_'
-                    if dataset == 'Person' or dataset == 'default':
-                        self.definition_list = self.generate_person_data_index_definition(index_name_prefix=prefix)
-                    elif dataset == 'Employee':
-                        self.definition_list = self.generate_employee_data_index_definition(index_name_prefix=prefix)
-                    elif dataset == 'Hotel':
-                        self.definition_list = self.generate_hotel_data_index_definition(index_name_prefix=prefix)
-                    else:
-                        raise Exception("Provide correct dataset. Valid values are Person, Employee, and Hotel")
-                    create_list = self.get_create_index_list(definition_list=self.definition_list, namespace=namespace,
-                                                             defer_build_mix=defer_build_mix)
-                    self.initial_index_num += len(create_list)
-                    self.create_gsi_indexes(create_queries=create_list, database=database,
-                                            capella_run=capella_run, query_node=query_node)
+            self.create_indexes_in_batches(namespaces=namespaces, database=database,
+                                           dataset=dataset, num_of_batches=num_of_batches,
+                                           defer_build_mix=defer_build_mix, capella_run=capella_run,
+                                           query_node=query_node, batch_offset=batch_offset)
         elif phase == 'during':
-            start_time = datetime.datetime.now()
-            select_queries = []
+            self.run_query_workload_in_batches(database, namespaces, capella_run, query_node, timeout)
+        elif phase == "after":
+            self.cleanup_operations()
+
+    def create_indexes_in_batches(self, namespaces, database=None, dataset='Employee', num_of_batches=1,
+                                  defer_build_mix=False, capella_run=False, query_node=None,
+                                  batch_offset=0):
+        self.initial_index_num, create_list = 0, []
+        for item in range(num_of_batches):
+            for namespace in namespaces:
+                counter = batch_offset + item
+                prefix = f'idx_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}' \
+                         f'_batch_{counter}_'
+                self.get_index_definition_list(dataset=dataset, prefix=prefix)
+                create_list = self.get_create_index_list(definition_list=self.definition_list, namespace=namespace,
+                                                         defer_build_mix=defer_build_mix)
+                self.log.info(f"Create index list: {create_list}")
+                self.initial_index_num += len(create_list)
+                self.create_gsi_indexes(create_queries=create_list, database=database,
+                                        capella_run=capella_run, query_node=query_node)
+        results = self.run_query(database=database, query="select * from system:indexes")
+        self.log.info(f"system:indexes after create_indexes_in_batches is complete: {results}")
+
+    def run_query_workload_in_batches(self, database, namespaces, capella_run, query_node, timeout):
+        start_time = datetime.datetime.now()
+        select_queries = []
+        while len(select_queries) < 100:
             for namespace in namespaces:
                 select_queries.extend(
                     self.get_select_queries(definition_list=self.definition_list, namespace=namespace))
@@ -328,8 +342,6 @@ class GSIUtils(object):
                     curr_time = datetime.datetime.now()
                     if (curr_time - start_time).total_seconds() > timeout:
                         break
-        elif phase == "after":
-            pass
 
     def check_s3_cleanup(self, aws_access_key_id, aws_secret_access_key, s3_bucket='gsi-onprem', region='us-west-1'):
         s3 = boto3.client(service_name='s3', region_name=region,
@@ -338,3 +350,21 @@ class GSIUtils(object):
         result = s3.list_objects_v2(Bucket=s3_bucket, Delimiter='/*')
         if len(result['Contents']) > 1:
             raise Exception("Bucket is not cleaned up after rebalance.")
+
+    def cleanup_operations(self):
+        pass
+
+    def get_index_definition_list(self, dataset, prefix=None):
+        if not prefix:
+            prefix = f'idx_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
+        if dataset == 'Person' or dataset == 'default':
+            definition_list = self.generate_person_data_index_definition(index_name_prefix=prefix)
+        elif dataset == 'Employee':
+            definition_list = self.generate_employee_data_index_definition(index_name_prefix=prefix)
+        elif dataset == 'Hotel':
+            definition_list = self.generate_hotel_data_index_definition(index_name_prefix=prefix)
+        elif dataset == 'Magma':
+            definition_list = self.generate_magma_doc_loader_index_definition(index_name_prefix=prefix)
+        else:
+            raise Exception("Provide correct dataset. Valid values are Person, Employee, Magma, and Hotel")
+        return definition_list

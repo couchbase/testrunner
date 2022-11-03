@@ -6562,7 +6562,7 @@ class SDKLoadDocumentsTask(Task):
     def execute_for_collection(self, collection, start_seq_num_shift=0):
         import subprocess
         command = f"java -jar java_sdk_client/collections/target/javaclient/javaclient.jar " \
-                  f"-i {self.server.ip} -u {self.sdk_docloader.username} -p '{self.sdk_docloader.password}' -b {self.bucket} " \
+                  f"-i {self.server.ip} -u '{self.sdk_docloader.username}' -p '{self.sdk_docloader.password}' -b {self.bucket} " \
                   f"-s {self.sdk_docloader.scope} -c {collection} " \
                   f"-n {self.sdk_docloader.num_ops} -pc {self.sdk_docloader.percent_create} -pu {self.sdk_docloader.percent_update} " \
                   f"-pd {self.sdk_docloader.percent_delete} -l {self.sdk_docloader.load_pattern} " \

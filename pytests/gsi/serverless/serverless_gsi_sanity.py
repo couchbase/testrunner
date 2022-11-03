@@ -59,7 +59,10 @@ class ServerlessGSISanity(BaseGSIServerless):
                     else:
                         build_query = f"BUILD INDEX ON {namespace}(`#primary`)"
                     self.run_query(database=database, query=build_query)
-                self.wait_until_indexes_online(database=database, index_name=index_name, keyspace=keyspace)
+                rest_info = self.create_rest_info_obj(username=database.admin_username,
+                                                      password=database.admin_password,
+                                                      rest_host=database.rest_host)
+                self.wait_until_indexes_online(rest_info=rest_info, index_name=index_name, keyspace=keyspace)
                 count_query = f'SELECT COUNT(*) from {namespace}'
                 resp = self.run_query(database=database, query=count_query)['results']
                 count = resp[0]['$1']
@@ -94,7 +97,9 @@ class ServerlessGSISanity(BaseGSIServerless):
             if self.defer_build:
                 build_query = query_gen.generate_build_query(namespace=namespace)
                 self.run_query(database=database, query=build_query)
-            self.wait_until_indexes_online(database=database, index_name=index_name, keyspace=keyspace)
+            rest_info = self.create_rest_info_obj(username=database.admin_username, password=database.admin_password,
+                                                  rest_host=database.rest_host)
+            self.wait_until_indexes_online(rest_info=rest_info, index_name=index_name, keyspace=keyspace)
             # insert docs
             select_query = f'SELECT meta().id from {keyspace} where age > 30 and age < 60'
             result = self.run_query(database=database, query=select_query)['results']
@@ -205,7 +210,9 @@ class ServerlessGSISanity(BaseGSIServerless):
             if self.defer_build:
                 build_query = query_gen.generate_build_query(namespace=namespace)
                 self.run_query(database=database, query=build_query)
-            self.wait_until_indexes_online(database=database, index_name=index_name, keyspace=keyspace)
+            rest_info = self.create_rest_info_obj(username=database.admin_username, password=database.admin_password,
+                                                  rest_host=database.rest_host)
+            self.wait_until_indexes_online(rest_info=rest_info, index_name=index_name, keyspace=keyspace)
             # insert docs
             select_query = f'SELECT meta().id from {keyspace} where city like "C%"'
             result = self.run_query(database=database, query=select_query)['results']
@@ -313,22 +320,21 @@ class ServerlessGSISanity(BaseGSIServerless):
             # alter index drop
             alter_drop_index_query = f'ALTER INDEX {index_name} ON {keyspace} with ' \
                                      f'{{"action": "drop_replica", "replicaId":1}}'
-            resp = self.run_query(database=database, query=alter_drop_index_query)
-            if resp['status'] == 200 or "errors" not in resp:
-                self.fail(f"{alter_drop_index_query} works. Test failure")
+            try:
+                self.run_query(database=database, query=alter_drop_index_query)
+                self.fail("Test failure since user was allowed to drop replica")
+            except:
+                self.log.info(f"{alter_drop_index_query} threw an  exception as expected")
             # alter index increase replica count
             replica_count = len(index_node_list)
             alter_replica_count_query = f'ALTER INDEX {index_name} ON {keyspace} with ' \
                                         f'{{"action": "replica_count", "num_replica": {replica_count - 1}}}'
-            resp = self.run_query(database=database, query=alter_replica_count_query)
-            if resp['status'] == 200 or "errors" not in resp:
-                self.fail(f"{alter_replica_count_query} works. Test failure")
-            # alter index move
-            alter_move_query = f'ALTER INDEX {index_name} ON {keyspace} with ' \
-                               f'{{"action": "move", "nodes": {{index_node_list[1]}}'
-            self.run_query(database=database, query=alter_move_query)
-            if resp['status'] == 200 or "errors" not in resp:
-                self.fail(f"{alter_move_query} works. Test failure")
+            try:
+                self.run_query(database=database, query=alter_replica_count_query)
+                self.fail("Test failure since user was allowed to increase replica count")
+            except:
+                self.log.info(f"{alter_replica_count_query} threw an  exception as expected")
+
 
     def test_create_array_index(self):
         """
@@ -364,7 +370,9 @@ class ServerlessGSISanity(BaseGSIServerless):
                 self.run_query(database=database, query=query)
                 query = f"BUILD INDEX ON {namespace}(`{index_name}`)"
                 self.run_query(database=database, query=query)
-            self.wait_until_indexes_online(database=database, index_name=index_name, keyspace=keyspace)
+            rest_info = self.create_rest_info_obj(username=database.admin_username, password=database.admin_password,
+                                                  rest_host=database.rest_host)
+            self.wait_until_indexes_online(rest_info=rest_info, index_name=index_name, keyspace=keyspace)
             # Run a query that uses array indexes
             query = f'explain select count(*) from {keyspace}  where any v in VMs satisfies v.name like "vm_10" END'
             result = self.run_query(database=database, query=query)['results']
@@ -381,7 +389,7 @@ class ServerlessGSISanity(BaseGSIServerless):
             if self.defer_build:
                 query = f"BUILD INDEX ON {namespace}(`{partial_index_name}`)"
                 self.run_query(database=database, query=query)
-            self.wait_until_indexes_online(database=database, index_name=partial_index_name, keyspace=keyspace)
+            self.wait_until_indexes_online(rest_info=rest_info, index_name=partial_index_name, keyspace=keyspace)
             # Run a query that uses partial array index
             query = f'explain select count(*) from {keyspace}  where join_mo > 8 AND ' \
                     f'any v in VMs satisfies v.name like "vm_10" END'
@@ -399,7 +407,7 @@ class ServerlessGSISanity(BaseGSIServerless):
             if self.defer_build:
                 query = f"BUILD INDEX ON {namespace}(`{simplified_index_name}`)"
                 self.run_query(database=database, query=query)
-            self.wait_until_indexes_online(database=database, index_name=simplified_index_name, keyspace=keyspace)
+            self.wait_until_indexes_online(rest_info=rest_info, index_name=simplified_index_name, keyspace=keyspace)
             # Run a query that uses simplified array index
             query = f'Explain select count(*) from {keyspace} where ' \
                     f'any v in VMs satisfies v.name like "vm_10" and v.memory like "%1%" END'
