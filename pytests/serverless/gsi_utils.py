@@ -26,6 +26,65 @@ class GSIUtils(object):
         self.run_query = query_obj
         self.batch_size = 0
 
+    def generate_magma_doc_loader_index_definition(self, index_name_prefix=None):
+        definitions_list = []
+        if not index_name_prefix:
+            index_name_prefix = "docloader" + str(uuid.uuid4()).replace("-", "")
+
+        # Single field GSI Query
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'name', index_fields=['name'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*", 'name like "%T" ')))
+
+        # Primary Query
+        definitions_list.append(
+            QueryDefinition(index_name='#primary', index_fields=[],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*", "attributes.dimensions.height > 40"),
+                            is_primary=True))
+
+        # GSI index on multiple fields
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'age_gender',
+                            index_fields=['age, gender'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*",
+                                                                      'age > 40 AND '
+                                                                      'gender = "M"')))
+
+        # GSI index with missing keys
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'missing_keys', index_fields=['name', 'age',
+                                                                                         'marital'],
+                            missing_indexes=True, missing_field_desc=False,
+                            query_template=RANGE_SCAN_TEMPLATE.format("*",
+                                                                      'age > 30 AND '
+                                                                      'marital = "S"')))
+
+        # Paritioned Index
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'partitioned_index', index_fields=['body'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*", 'body like "%E%"'),
+                            partition_by_fields=['body'], capella_run=True))
+
+        # Array Index
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'array_index',
+                            index_fields=['mutated, ALL h.name FOR h IN attributes.hobbies END'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*",
+                                                                      'mutated >= 0 and '
+                                                                      'ANY h IN attributes.hobbies SATISFIES'
+                                                                      ' h.name = "Books" END')))
+
+        # Array Index
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'array_index',
+                            index_fields=['age, ALL animals'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*",
+                                                                      'any a in animals satisfies '
+                                                                      'a = "Forest green (traditional)" end')))
+
+        self.batch_size = len(definitions_list)
+        return definitions_list
+
     def generate_employee_data_index_definition(self, index_name_prefix=None):
         definitions_list = []
         if not index_name_prefix:
