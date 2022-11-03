@@ -302,8 +302,9 @@ class OrderByNullsTests(QueryTests):
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=self.eviction_policy, lww=self.lww)
         self.cluster.create_standard_bucket(self.test_buckets, 11222, temp_bucket_params)
-
         for bucket in self.buckets:
+            if bucket.name == 'N1QL_SYSTEM_BUCKET':
+                continue
             self.cluster.bucket_flush(self.master, bucket=bucket, timeout=self.wait_timeout * 5)
         # Adding sleep after flushing buckets (see CBQE-5838)
         self.sleep(210)
