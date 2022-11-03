@@ -54,8 +54,9 @@ class QueryAdviseTests(QueryTests):
 
     def get_index_statements(self, advise_results):
         indexes = []
-        for index in advise_results['results'][0]['advice']['adviseinfo']['recommended_indexes']['indexes']:
-            indexes.append(index['index_statement'])
+        for index_type in advise_results['results'][0]['advice']['adviseinfo']['recommended_indexes'].keys():
+            for index in advise_results['results'][0]['advice']['adviseinfo']['recommended_indexes'][index_type]:
+                indexes.append(index['index_statement'])
         return indexes
     # Use advise statement on an update statement
     def test_update_advise(self):
@@ -317,7 +318,7 @@ class QueryAdviseTests(QueryTests):
         try:
             results_fake_field = self.run_cbq_query(
                 query="advise select t1.type from `{0}` t1 INNER JOIN `{0}` t2 ON (t1.type = t2.type) limit 10".format(self.bucket_name), server=self.master)
-            self.assertEqual(results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['indexes'][0]['index_statement'], 'CREATE INDEX adv_type ON `{0}`(`type`)'.format(self.bucket_name))
+            self.assertEqual(results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][0]['index_statement'], 'CREATE INDEX adv_type ON `{0}`(`type`)'.format(self.bucket_name))
         except Exception as e:
             self.log.info("Advise statement failed: {0}".format(e))
             self.fail()
@@ -375,10 +376,10 @@ class QueryAdviseTests(QueryTests):
         try:
             results_fake_field = self.run_cbq_query(
                 query="advise SELECT lang, SUM(purchaseLittle) as totalLittle, SUM(purchaseGreat) AS totalGreat, SUM(purchaseSome) AS totalSome, SUM(purchaseGreat) / SUM(purchaseLittle) AS difference FROM default s UNNEST SPLIT(s.LanguageWorkedWith, ';') lang LET purchaseLittle = CASE WHEN s.PurchaseWhat LIKE 'I have little%' THEN 1 ELSE 0 END, purchaseGreat = CASE WHEN s.PurchaseWhat LIKE 'I have a great%' THEN 1 ELSE 0 END, purchaseSome = CASE WHEN s.PurchaseWhat LIKE 'I have some%' THEN 1 ELSE 0 END WHERE s.PurchaseWhat != 'NA' AND lang != 'NA' group by lang order by SUM(purchaseGreat) / SUM(purchaseLittle) desc", server=self.master)
-            self.assertEqual(results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['indexes'][0]['index_statement'], "CREATE INDEX adv_ALL_split_s_LanguageWorkedWith_PurchaseWhat ON `default`(ALL split((`LanguageWorkedWith`), ';'),`PurchaseWhat`)")
+            self.assertEqual(results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][0]['index_statement'], "CREATE INDEX adv_ALL_split_s_LanguageWorkedWith_PurchaseWhat ON `default`(ALL split((`LanguageWorkedWith`), ';'),`PurchaseWhat`)")
             results_fake_field = self.run_cbq_query(
                 query='advise SELECT RAW email FROM sample_data data UNNEST data.`identity`.`Contact`.`Emails` email WHERE (data.`type`="links") AND (data.`owner`="AA") AND email LIKE $pfx GROUP BY email HAVING COUNT(meta(data).id) > 20', server=self.master)
-            self.assertTrue(results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['indexes'][0]['index_statement'] == "CREATE INDEX adv_ALL_identity_Contact_Emails_type_owner ON `sample_data`(ALL ((`identity`).`Contact`).`Emails`,`type`,`owner`)" or results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['indexes'][0]['index_statement'] == "CREATE INDEX adv_ALL_identity_Contact_Emails_owner_type ON `sample_data`(ALL ((`identity`).`Contact`).`Emails`,`owner`,`type`)")
+            self.assertTrue(results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][0]['index_statement'] == "CREATE INDEX adv_ALL_identity_Contact_Emails_type_owner ON `sample_data`(ALL ((`identity`).`Contact`).`Emails`,`type`,`owner`)" or results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][0]['index_statement'] == "CREATE INDEX adv_ALL_identity_Contact_Emails_owner_type ON `sample_data`(ALL ((`identity`).`Contact`).`Emails`,`owner`,`type`)")
         except Exception as e:
             self.log.info("Advise statement failed: {0}".format(e))
             self.fail()
