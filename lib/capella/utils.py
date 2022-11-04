@@ -106,8 +106,8 @@ def base64_encode(string):
     return base64.b64encode(string.encode('utf-8')).decode('utf-8')
 
 def generate_cidr():
-    first = random.randint(0, 256)
-    second = random.randint(0, 16) * 16
+    first = random.randint(0, 255)
+    second = random.randint(0, 15) * 16
     return f"10.{first}.{second}.0/20"
 
 class CapellaAPI:
