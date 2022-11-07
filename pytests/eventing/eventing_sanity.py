@@ -9,7 +9,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 class EventingSanity(EventingBaseTest):
     def setUp(self):
         super(EventingSanity, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=2400)
+        RestConnection(self.master).set_service_memoryQuota(service='memoryQuota', memoryQuota=2400)
         if self.create_functions_buckets:
             log.info(self.bucket_size)
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size, eviction_policy=self.eviction_policy)
