@@ -68,7 +68,7 @@ class GSIUtils(object):
         # Array Index
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'array_index',
-                            index_fields=['mutated, ALL h.name FOR h IN attributes.hobbies END'],
+                            index_fields=['mutated, ALL ARRAY h.name FOR h IN attributes.hobbies END'],
                             query_template=RANGE_SCAN_TEMPLATE.format("*",
                                                                       'mutated >= 0 and '
                                                                       'ANY h IN attributes.hobbies SATISFIES'
