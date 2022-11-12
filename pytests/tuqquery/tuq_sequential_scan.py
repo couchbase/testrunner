@@ -1,5 +1,6 @@
 from .tuq import QueryTests
 import threading
+from lib.membase.api.rest_client import RestHelper
 from membase.api.exception import CBQError
 
 class QuerySeqScanTests(QueryTests):
@@ -8,6 +9,10 @@ class QuerySeqScanTests(QueryTests):
         self.bucket = "default"
         self.doc_count = self.input.param("doc_count", 1000)
         self.thread_count = self.input.param("thread_count", 5)
+        self.thread_max = self.input.param("thread_max", 10)
+        self.rebalance = self.input.param("rebalance", False)
+        self.sem = threading.Semaphore(self.thread_max)
+        self.thread_errors = 0
         self.run_cbq_query(f'DELETE FROM {self.bucket}')
         self.run_cbq_query(f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
         self.sleep(2)
@@ -170,16 +175,32 @@ class QuerySeqScanTests(QueryTests):
         self.assertEqual(scan_after, scan_before + 1)
 
     def sequential_scan(self):
+        self.sem.acquire()
         self.log.info("Scan started")
         try:
             result = self.run_cbq_query(f'SELECT * FROM {self.bucket}')
             self.assertEqual(result['metrics']['resultCount'], self.doc_count)
-        except:
-            self.warn
+        except Exception as ex:
+            self.thread_errors += 1
+            self.log.warn(f'Thread failed: {ex}')
+        self.sem.release()
         self.log.info("Scan ended")
+
+    def remove_node(self):
+        self.log.info("Wait 30s seconds before doing rebalance out")
+        self.sleep(30)
+        rebalance = self.cluster.async_rebalance(servers=self.servers, to_add=[], to_remove=[self.servers[-1]])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
 
     def test_parallel_scan(self):
         threads = []
+
+        if self.rebalance:
+            thread = threading.Thread(target=self.remove_node, args=())
+            threads.append(thread)
+
         for i in range(self.thread_count):
             thread = threading.Thread(target=self.sequential_scan,args=())
             threads.append(thread)
@@ -191,6 +212,9 @@ class QuerySeqScanTests(QueryTests):
         # Wait for threads to finish
         for i in range(len(threads)):
             threads[i].join()
+
+        if self.thread_errors > 0:
+            self.fail(f'{self.thread_errors} thread/s had an error. See warning in log above.')
 
     def get_index_scan(self, bucket, name, scope='_default', collection='_default'):
         total_scans = self.run_cbq_query(f'SELECT raw metadata.total_scans FROM system:all_indexes WHERE name = "{name}" AND bucket_id = "{bucket}" AND scope_id = "{scope}" AND keyspace_id = "{collection}"')
