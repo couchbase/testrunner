@@ -42,8 +42,9 @@ class GSIUtils(object):
                             query_template=RANGE_SCAN_TEMPLATE.format("*", 'name like "%%T" ')))
 
         # Primary Query
+        prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
         definitions_list.append(
-            QueryDefinition(index_name='#primary', index_fields=[],
+            QueryDefinition(index_name=prim_index_name, index_fields=[],
                             query_template=RANGE_SCAN_TEMPLATE.format("*", "attributes.dimensions.height > 40"),
                             is_primary=True))
 
@@ -101,8 +102,9 @@ class GSIUtils(object):
                             query_template=RANGE_SCAN_TEMPLATE.format("*", 'name = "employee-1" ')))
 
         # Primary Query
+        prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
         definitions_list.append(
-            QueryDefinition(index_name='#primary', index_fields=[],
+            QueryDefinition(index_name=prim_index_name, index_fields=[],
                             query_template=RANGE_SCAN_TEMPLATE.format("*", "test_rate > 1"), is_primary=True))
 
         # GSI index on multiple fields
@@ -149,8 +151,9 @@ class GSIUtils(object):
                             query_template=RANGE_SCAN_TEMPLATE.format("*", "age > 0")))
 
         # Primary Query
+        prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
         definitions_list.append(
-            QueryDefinition(index_name='#primary', index_fields=[],
+            QueryDefinition(index_name=prim_index_name, index_fields=[],
                             query_template=RANGE_SCAN_TEMPLATE.format("*", "suffix is not NULL", is_primary=True)))
 
         # GSI index on multiple fields
@@ -204,15 +207,16 @@ class GSIUtils(object):
                             query_template=RANGE_SCAN_TEMPLATE.format("*", "age > 0")))
 
         # Primary Query
+        prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
         definitions_list.append(
-            QueryDefinition(index_name='#primary', index_fields=[],
+            QueryDefinition(index_name=prim_index_name, index_fields=[],
                             query_template=RANGE_SCAN_TEMPLATE.format("*", "suffix is not NULL"), is_primary=True))
 
         # GSI index on multiple fields
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'firstName_lastName', index_fields=['firstName', 'lastName'],
                             query_template=RANGE_SCAN_TEMPLATE.format("*",
-                                                                      'firstName like "%%D%% AND '
+                                                                      'firstName like "%%D%%" AND '
                                                                       'LastName is not NULL')))
 
         # GSI index with missing keys
@@ -220,7 +224,7 @@ class GSIUtils(object):
             QueryDefinition(index_name=index_name_prefix + 'missing_keys', index_fields=['age', 'city', 'country'],
                             missing_indexes=True, missing_field_desc=False,
                             query_template=RANGE_SCAN_TEMPLATE.format("*",
-                                                                      'firstName like "%%D%% AND '
+                                                                      'firstName like "%%D%%" AND '
                                                                       'LastName is not NULL')))
 
         # Paritioned Index
@@ -267,14 +271,18 @@ class GSIUtils(object):
         return tasks
 
     def create_gsi_indexes(self, create_queries, database=None, capella_run=False, query_node=None):
-        try:
+        tasks = []
+        with ThreadPoolExecutor() as executor:
             for query in create_queries:
                 if capella_run:
-                    self.run_query(database=database, query=query)
+                    tasks.append(executor.submit(self.run_query, database=database, query=query))
                 else:
-                    self.run_query(query=query, server=query_node)
-        except Exception as err:
-            print(err)
+                    tasks.append(executor.submit(self.run_query, query=query, server=query_node))
+            try:
+                for task in tasks:
+                    task.result()
+            except Exception as err:
+                print(err)
 
     def range_unequal_distribution(self, number=4, factor=1.2, total=100000):
         """
@@ -290,14 +298,15 @@ class GSIUtils(object):
 
     def index_operations_during_phases(self, namespaces, database=None, dataset='Employee', num_of_batches=1,
                                        defer_build_mix=False, phase='before', capella_run=False, query_node=None,
-                                       batch_offset=0, timeout=1500):
+                                       batch_offset=0, timeout=1500, query_weight=1):
         if phase == 'before':
             self.create_indexes_in_batches(namespaces=namespaces, database=database,
                                            dataset=dataset, num_of_batches=num_of_batches,
                                            defer_build_mix=defer_build_mix, capella_run=capella_run,
                                            query_node=query_node, batch_offset=batch_offset)
         elif phase == 'during':
-            self.run_query_workload_in_batches(database, namespaces, capella_run, query_node, timeout)
+            self.run_query_workload_in_batches(database=database, namespaces=namespaces, capella_run=capella_run,
+                                               query_node=query_node, timeout=timeout, query_weight=query_weight)
         elif phase == "after":
             self.cleanup_operations()
 
@@ -310,31 +319,33 @@ class GSIUtils(object):
                 counter = batch_offset + item
                 prefix = f'idx_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}' \
                          f'_batch_{counter}_'
-                self.get_index_definition_list(dataset=dataset, prefix=prefix)
+                self.definition_list = self.get_index_definition_list(dataset=dataset, prefix=prefix)
                 create_list = self.get_create_index_list(definition_list=self.definition_list, namespace=namespace,
                                                          defer_build_mix=defer_build_mix)
                 self.log.info(f"Create index list: {create_list}")
                 self.initial_index_num += len(create_list)
                 self.create_gsi_indexes(create_queries=create_list, database=database,
                                         capella_run=capella_run, query_node=query_node)
-        results = self.run_query(database=database, query="select * from system:indexes")
-        self.log.info(f"system:indexes after create_indexes_in_batches is complete: {results}")
 
-    def run_query_workload_in_batches(self, database, namespaces, capella_run, query_node, timeout):
+        # results = self.run_query(database=database, query="select * from system:indexes")
+        # self.log.info(f"system:indexes after create_indexes_in_batches is complete: {results}")
+
+    def run_query_workload_in_batches(self, database, namespaces, capella_run, query_node, timeout, query_weight):
         start_time = datetime.datetime.now()
         select_queries = []
         while len(select_queries) < 100:
             for namespace in namespaces:
                 select_queries.extend(
                     self.get_select_queries(definition_list=self.definition_list, namespace=namespace))
+            select_queries = select_queries * query_weight
             with ThreadPoolExecutor() as executor:
                 while True:
                     tasks = []
                     for query in select_queries:
                         if capella_run:
-                            task = executor.submit(self.run_query, query=query, server=query_node)
-                        else:
                             task = executor.submit(self.run_query, database=database, query=query)
+                        else:
+                            task = executor.submit(self.run_query, query=query, server=query_node)
                         tasks.append(task)
 
                     for task in tasks:
@@ -354,9 +365,23 @@ class GSIUtils(object):
     def cleanup_operations(self):
         pass
 
+    def check_s3_cleanup(self, aws_access_key_id, aws_secret_access_key, s3_bucket='gsi-onprem', region='us-west-1',
+                         storage_prefix='indexing'):
+        s3 = boto3.client(service_name='s3', region_name=region,
+                          aws_access_key_id=aws_access_key_id,
+                          aws_secret_access_key=aws_secret_access_key)
+        result = s3.list_objects_v2(Bucket=s3_bucket, Delimiter='/*')
+        folder_path_expected = f"{storage_prefix}/"
+        self.log.info(f"Expected folder list {folder_path_expected}")
+        folder_list_on_aws = []
+        self.log.info(f"Result from the s3 list_objects_v2 API call:{result}")
+        for item in result['Contents']:
+            if folder_path_expected in item['Key']:
+                folder_list_on_aws.append(item['Key'])
+        if len(folder_list_on_aws) > 1:
+            raise Exception("Bucket is not cleaned up after rebalance.")
+
     def get_index_definition_list(self, dataset, prefix=None):
-        if not prefix:
-            prefix = f'idx_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
         if dataset == 'Person' or dataset == 'default':
             definition_list = self.generate_person_data_index_definition(index_name_prefix=prefix)
         elif dataset == 'Employee':

@@ -685,8 +685,8 @@ class GeoSpatialDataLoader(KVGenerator):
 
 class SDKDataLoader(object):
     # type: (int, int, int, int, str, int, str, str, list, list, str, bool)
-    def __init__(self, num_ops=0, percent_create=0, percent_update=0, percent_delete=0,
-                 load_pattern="uniform", start_seq_num=1, key_prefix="doc_", key_suffix="_",
+    def __init__(self, num_ops=0, percent_create=0, percent_update=0, percent_delete=0, workers=1,
+                 load_pattern="uniform", start_seq_num=1, key_prefix="doc_", key_suffix="_", ops_rate=5000,
                  scope="_default", collection="_default", json_template="Person", doc_expiry=0, fields_to_update=None,
                  doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
                  start=0, end=0, op_type="create", all_collections=False, es_compare=False, es_host=None, es_port=None,
@@ -726,6 +726,8 @@ class SDKDataLoader(object):
         self.shuffle_docs = shuffle_docs
         self.secure = CbServer.use_https
         self.capella = capella
+        self.ops_rate = ops_rate
+        self.workers = workers
 
     def update(self, fields_to_update=None):
         self.start_seq_num = self.start + 1

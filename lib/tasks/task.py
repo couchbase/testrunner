@@ -9,6 +9,7 @@ import string
 import time
 import traceback
 import sys
+import subprocess
 from functools import cmp_to_key
 from http.client import IncompleteRead
 from multiprocessing import Process, Manager, Semaphore
@@ -6547,6 +6548,54 @@ class NodeMonitorsAnalyserTask(Task):
             self.state = EXECUTING
         else:
             raise Exception("Monitors not working correctly")
+
+# Runs Magma docloader on slave
+class MagmaDocLoader(Task):
+    def __init__(self, server, bucket, sdk_docloader):
+        Task.__init__(self, "MagmaDocLoader")
+        self.server = server
+        if isinstance(bucket, Bucket):
+            self.bucket = bucket.name
+        else:
+            self.bucket = bucket
+        self.sdk_docloader = sdk_docloader
+
+    def execute(self, task_manager):
+        curr_dir = os.getcwd()
+        os.chdir(os.path.join(curr_dir, 'magma_loader/DocLoader/'))
+        command = f"mvn compile exec:java -Dexec.cleanupDaemonThreads=false " \
+                  f"-Dexec.mainClass='couchbase.test.sdk.Loader' -Dexec.args='-n {self.server.ip} " \
+                  f"-user {self.sdk_docloader.username} -pwd {self.sdk_docloader.password} -b {self.bucket} " \
+                  f"-p 11207 -create_s {self.sdk_docloader.start_seq_num} -create_e {self.sdk_docloader.end+1} " \
+                  f"-cr {self.sdk_docloader.percent_create} -up {self.sdk_docloader.percent_delete} -rd 0" \
+                  f" -docSize {self.sdk_docloader.doc_size} -keyPrefix {self.sdk_docloader.key_prefix} " \
+                  f"-scope {self.sdk_docloader.scope} -collection {self.sdk_docloader.collection} " \
+                  f"-ops {self.sdk_docloader.ops_rate}  -workers {self.sdk_docloader.workers}'"
+
+        self.log.info(command)
+        try:
+            proc = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
+            out = proc.communicate(timeout=self.sdk_docloader.timeout)
+            if self.sdk_docloader.get_sdk_logs:
+                self.sdk_docloader.set_sdk_results(out)
+                self.log.info(out[0].decode("utf-8"))
+            if proc.returncode != 0:
+                raise Exception("Exception in magma loader to {}:{}\n{}".format(self.server.ip, self.bucket, out))
+        except Exception as e:
+            proc.terminate()
+            self.state = FINISHED
+            self.set_exception(e)
+        proc.terminate()
+        self.state = FINISHED
+        self.set_result(True)
+        self.check(task_manager)
+        os.chdir(curr_dir)
+        time.sleep(30)
+
+    def check(self, task_manager):
+        self.set_result(True)
+        self.state = FINISHED
+        task_manager.schedule(self)
 
 # Runs java sdk client directly on slave
 class SDKLoadDocumentsTask(Task):

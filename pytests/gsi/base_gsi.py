@@ -72,6 +72,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.server_grouping = self.input.param("server_grouping", None)
         self.partition_fields = self.input.param('partition_fields', None)
         self.partitoned_index = self.input.param('partitioned_index', False)
+        self.json_template = self.input.param("json_template", "Person")
+        self.use_magma_loader = self.input.param("use_magma_loader", False)
         if self.partition_fields:
             self.partition_fields = self.partition_fields.split(',')
         self.num_partition = self.input.param('num_partition', 8)
@@ -84,6 +86,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.region = self.input.param("region", "us-west-1")
         self.s3_bucket = self.input.param("s3_bucket", "gsi-onprem")
         self.storage_prefix = self.input.param("storage_prefix", "indexing")
+        self.index_batch_weight = self.input.param("index_batch_weight", 1)
         self.server_group_map = {}
         if not self.use_rest:
             query_definition_generator = SQLDefinitionGenerator()
@@ -105,6 +108,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.memory_drop_list = []
         self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.index_loglevel = self.input.param("index_loglevel", None)
+        self.namespaces = []
         if self.index_loglevel:
             self.set_indexer_logLevel(self.index_loglevel)
         if self.dgm_run and hasattr(self, "gens_load"):
@@ -1598,14 +1602,18 @@ class BaseSecondaryIndexingTests(QueryTests):
         ClusterOperationHelper.wait_for_ns_servers_or_assert([node], self,
                                                              wait_if_warmup=True)
 
-    def prepare_tenants(self, data_load=True, index_creations=True, query_node=None):
-        self._create_S3_config()
-        for i in range(self.num_of_tenants):
+    def prepare_tenants(self, data_load=True, index_creations=True, query_node=None, json_template=None,
+                        bucket_prefix='test_bucket_', bucket_num_offset=0, num_buckets=None):
+        if not json_template:
+            json_template = self.json_template
+        if not num_buckets:
+            num_buckets = self.num_of_tenants
+        for i in range(num_buckets):
             self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                             replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                             enable_replica_index=self.enable_replica_index,
                                                             eviction_policy=self.eviction_policy, lww=self.lww)
-            bucket_name = f"test_bucket_{i + 1}"
+            bucket_name = f"{bucket_prefix}{bucket_num_offset + i}"
             self.cluster.create_standard_bucket(name=bucket_name, port=11222, bucket_params=self.bucket_params)
             self.sleep(10)
             self.collection_rest.create_scope_collection_count(scope_num=self.num_scopes,
@@ -1616,9 +1624,15 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.buckets = self.rest.get_buckets()
         scopes = [f'{self.scope_prefix}_{num + 1}' for num in range(self.num_scopes)]
         collections = [f'{self.collection_prefix}_{num + 1}' for num in range(self.num_collections)]
+        for bucket in self.buckets:
+            for scope in scopes:
+                for collection in collections:
+                    namespace = f'default:{bucket}.{scope}.{collection}'
+                    if namespace not in self.namespaces:
+                        self.namespaces.append(namespace)
 
         if data_load:
-            self.load_data_on_all_tenants(scopes=scopes, collections=collections)
+            self.load_data_on_all_tenants(scopes=scopes, collections=collections, json_template=json_template)
 
         if index_creations:
             try:
@@ -1629,11 +1643,12 @@ class BaseSecondaryIndexingTests(QueryTests):
                 self.gsi_util_obj = GSIUtils(self.run_cbq_query)
             if query_node:
                 self.query_node = query_node
-            self.gsi_util_obj.index_operations_during_phases(namespaces=self.namespaces, dataset=self.dataset,
-                                                             query_node=self.query_node, capella_run=False)
+            self.gsi_util_obj.index_operations_during_phases(namespaces=self.namespaces, dataset=json_template,
+                                                             query_node=self.query_node, capella_run=False,
+                                                             num_of_batches=self.index_batch_weight)
             self.wait_until_indexes_online(defer_build=False)
 
-    def _create_S3_config(self):
+    def create_S3_config(self):
         aws_cred_file = ('[default]\n'
                          f'aws_access_key_id={self.aws_access_key_id}\n'
                          f'aws_secret_access_key={self.aws_secret_access_key}')
@@ -1653,17 +1668,47 @@ class BaseSecondaryIndexingTests(QueryTests):
                                  "indexer.settings.rebalance.blob_storage_scheme": "s3"}
         self.index_rest.set_index_settings(fast_rebalance_config)
 
-    def load_data_on_all_tenants(self, scopes, collections, json_template='Person', batch_size=10000):
+    def load_data_on_all_tenants(self, scopes, collections, json_template=None, batch_size=10000, num_docs=None,
+                                 percent_create=100, percent_update=0, percent_delete=0, key_prefix='doc_',
+                                 output=False, start=0):
+        if not json_template:
+            json_template = self.json_template
+        if not num_docs:
+            num_docs = self.num_of_docs_per_collection
         tasks = []
         for bucket in self.buckets:
             for s_item in scopes:
                 for c_item in collections:
-                    gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
-                                               percent_update=0, percent_delete=0, scope=s_item,
-                                               collection=c_item, json_template=json_template,
-                                               output=True)
-                    tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=gen_create, batch_size=batch_size)
-                    self.namespaces.append(f'default:{bucket}.{s_item}.{c_item}')
+                    if self.use_magma_loader:
+                        gen_create = SDKDataLoader(num_ops=num_docs, percent_create=percent_create,
+                                                   key_prefix=key_prefix, doc_size=1000, workers=2, ops_rate=10000,
+                                                   percent_update=percent_update, percent_delete=percent_delete,
+                                                   scope=s_item, collection=c_item, json_template=json_template,
+                                                   output=output, start_seq_num=start)
+                        tasks.append(self.cluster.async_load_gen_docs(self.master, bucket, gen_create,
+                                                                      pause_secs=1, timeout_secs=300,
+                                                                      dataset=json_template))
+
+                    else:
+                        if self.json_template == 'Magma':
+                            self.fail("Magma dataset doesn't work with java_sdk_client. Use use_magma_loader=true")
+                        tasks = []
+                        for batch_start in range(0, num_docs, batch_size):
+                            batch_end = batch_start + batch_size
+                            if batch_end >= num_docs:
+                                batch_end = num_docs
+                            batch_ops = batch_end - batch_start
+                            gen_create = SDKDataLoader(num_ops=batch_ops, percent_create=percent_create,
+                                                       key_prefix=key_prefix, doc_size=1000,
+                                                       percent_update=percent_update, percent_delete=percent_delete,
+                                                       scope=s_item, collection=c_item, json_template=json_template,
+                                                       output=output, start_seq_num=batch_start)
+                            tasks.append(self.cluster.async_load_gen_docs(self.master, bucket, gen_create,
+                                                                          pause_secs=1, timeout_secs=300,
+                                                                          dataset=json_template))
+                    namespace = f'default:{bucket}.{s_item}.{c_item}'
+                    if namespace not in self.namespaces:
+                        self.namespaces.append(namespace)
         for task in tasks:
             task.result()
 
@@ -1672,7 +1717,6 @@ class BaseSecondaryIndexingTests(QueryTests):
                                         bucket_name=None):
         if not bucket_name:
             bucket_name = self.test_bucket
-        self.namespaces = []
         pre_load_idx_pri = None
         pre_load_idx_gsi = None
         self.collection_rest.create_scope_collection_count(scope_num=num_scopes, collection_num=num_collections,

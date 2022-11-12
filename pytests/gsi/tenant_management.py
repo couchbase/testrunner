@@ -9,6 +9,8 @@ __created_on__ = "08/04/22 12:27 pm"
 """
 import random
 import os
+import string
+from concurrent.futures import ThreadPoolExecutor
 
 from couchbase_helper.query_definitions import QueryDefinition
 from gsi.base_gsi import BaseSecondaryIndexingTests
@@ -16,8 +18,7 @@ from gsi.collections_concurrent_indexes import powerset
 from membase.api.on_prem_rest_client import RestHelper, RestConnection
 from serverless.gsi_utils import GSIUtils
 from testconstants import INDEX_MAX_CAP_PER_TENANT, INDEX_SUB_CLUSTER_LENGTH
-from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
-
+from testconstants import GSI_UNITS_HWM, GSI_UNITS_LWM, GSI_MEMORY_LWM, GSI_MEMORY_HWM
 
 class TenantManagement(BaseSecondaryIndexingTests):
     def setUp(self):
@@ -29,12 +30,13 @@ class TenantManagement(BaseSecondaryIndexingTests):
                                          'suffix', 'filler1', 'phone', 'zipcode'])
         self.batch_size = self.input.param("batch_size", 1000)
         self.node_to_swap = self.input.param("node_to_swap", 1)
-        self.json_template = self.input.param("json_template", "Person")
         self.recover_failed_over_node = self.input.param("recover_failed_over_node", False)
         self.gsi_util_obj = GSIUtils(self.run_cbq_query)
         self.namespaces = []
         self._create_server_groups()
         self.query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
+        self.create_S3_config()
+
 
     def tearDown(self):
         self.log.info("==============  TenantManagement tearDown has started ==============")
@@ -80,11 +82,113 @@ class TenantManagement(BaseSecondaryIndexingTests):
 
     def test_rebalance_sub_cluster(self):
         self.prepare_tenants()
-        self.validate_tenant_management(check="subcluster_reblance_swap")
+        scopes = [f'{self.scope_prefix}_{num + 1}' for num in range(self.num_scopes)]
+        collections = [f'{self.collection_prefix}_{num + 1}' for num in range(self.num_collections)]
+        tasks = []
+        with ThreadPoolExecutor() as executor:
+            task = executor.submit(self.load_data_on_all_tenants, scopes=scopes, collections=collections,
+                                   num_docs=self.num_of_docs_per_collection * 2)
+            tasks.append(task)
+
+            task = executor.submit(self.gsi_util_obj.index_operations_during_phases,
+                                   namespaces=self.namespaces, phase="during", timeout=120, query_node=self.query_node)
+            tasks.append(task)
+            self.validate_tenant_management(check="subcluster_reblance_swap")
+
+            for task in tasks:
+                task.result()
+        for namespace in self.namespaces:
+            doc_count_query = f'Select count(*) from {namespace}'
+            doc_count_result = self.run_cbq_query(query=doc_count_query)['results'][0]['$1']
+            select_count_query = f'Select count(*) from {namespace} where age >= 0'
+            select_count_result = self.run_cbq_query(query=select_count_query)['results'][0]['$1']
+            self.assertEqual(doc_count_result, select_count_result)
+            self.assertEqual(doc_count_result, self.num_of_docs_per_collection * 2)
 
     def test_failed_over_sub_cluster(self):
         self.prepare_tenants()
-        self.validate_tenant_management(check="failed_over_subcluster")
+        scopes = [f'{self.scope_prefix}_{num + 1}' for num in range(self.num_scopes)]
+        collections = [f'{self.collection_prefix}_{num + 1}' for num in range(self.num_collections)]
+        tasks = []
+        with ThreadPoolExecutor() as executor:
+            task = executor.submit(self.load_data_on_all_tenants, scopes=scopes, collections=collections,
+                                   num_docs=self.num_of_docs_per_collection * 2)
+            tasks.append(task)
+
+            task = executor.submit(self.gsi_util_obj.index_operations_during_phases,
+                                   namespaces=self.namespaces, phase="during", timeout=120, query_node=self.query_node)
+            tasks.append(task)
+            self.validate_tenant_management(check="failed_over_subcluster")
+
+            for task in tasks:
+                task.result()
+        for namespace in self.namespaces:
+            doc_count_query = f'Select count(*) from {namespace}'
+            doc_count_result = self.run_cbq_query(query=doc_count_query)['results'][0]['$1']
+            select_count_query = f'Select count(*) from {namespace} where age >= 0'
+            select_count_result = self.run_cbq_query(query=select_count_query)['results'][0]['$1']
+            self.assertEqual(doc_count_result, select_count_result)
+            self.assertEqual(doc_count_result, self.num_of_docs_per_collection * 2)
+
+    def test_hit_thresholds(self):
+        self.prepare_tenants(data_load=False)
+        scopes = [f'{self.scope_prefix}_{num + 1}' for num in range(self.num_scopes)]
+        collections = [f'{self.collection_prefix}_{num + 1}' for num in range(self.num_collections)]
+        while not self.is_lwm_reached():
+            random_prefix = 'doc_' + ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
+            self.load_data_on_all_tenants(scopes=scopes, collections=collections, key_prefix=random_prefix,
+                                          num_docs=self.num_of_docs_per_collection)
+
+        self.log.info("Add validation for LWM")
+
+        try:
+            self.prepare_tenants(bucket_num_offset=len(self.buckets))
+        except Exception as err:
+            self.log.info(err)
+        self.log.info("Adding new sub-cluster")
+        self.rest.add_node(user=self.rest.username, password=self.rest.password,
+                           remoteIp=self.servers[self.nodes_init].ip,
+                           zone_name='ServerGroup_2',
+                           services=['index'])
+        self.rest.add_node(user=self.rest.username, password=self.rest.password,
+                           remoteIp=self.servers[self.nodes_init + 1].ip,
+                           zone_name='ServerGroup_3',
+                           services=['index'])
+        rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
+                                                      to_add=[],
+                                                      to_remove=[],
+                                                      services=[])
+        rebalance_task.result()
+        rebalance_status = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+        self.prepare_tenants(bucket_num_offset=len(self.buckets))
+
+        indexer_metadata = self.index_rest.get_indexer_metadata()['status']
+        pass
+
+        # while not self.is_hwm_reached():
+        #     random_prefix = 'doc_' + ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
+        #     self.load_data_on_all_tenants(scopes=scopes, collections=collections, key_prefix=random_prefix)
+        # self.log.info("Add validation for HWM")
+
+
+    def is_lwm_reached(self):
+        return (self.get_gsi_memory_ratio() > GSI_MEMORY_LWM) or (self.get_gsi_usage_ratio() > GSI_UNITS_LWM)
+
+    def is_hwm_reached(self):
+        return (self.get_gsi_memory_ratio() > GSI_MEMORY_HWM) or (self.get_gsi_usage_ratio() > GSI_UNITS_HWM)
+
+    def get_gsi_memory_ratio(self):
+        stats = self.index_rest.get_all_index_stats()
+        ratio = stats['memory_used_actual']/stats['memory_quota'] * 100
+        self.log.info(f"Current GSI memory ratio is : {ratio}")
+        return ratio
+
+    def get_gsi_usage_ratio(self):
+        stats = self.index_rest.get_all_index_stats()
+        ratio = stats['units_used_actual']/stats['units_quota'] * 100
+        self.log.info(f"Current GSI units ratio is : {ratio}")
+        return ratio
 
     def _check_cluster_affinity(self, idx_host_list_dict):
         # Validating the cluster affinity
@@ -186,10 +290,10 @@ class TenantManagement(BaseSecondaryIndexingTests):
             self.assertNotEqual(zone_1, zone_2,
                                 f"Both the index nodes belong to same availability zone. {indexer_metadata}")
         self.gsi_util_obj.check_s3_cleanup(aws_access_key_id=self.aws_access_key_id,
-                                           aws_secret_access_key=self.aws_secret_access_key,
-                                           s3_bucket=self.s3_bucket, region=self.region)
+                                           aws_secret_access_key=self.aws_secret_access_key, s3_bucket=self.s3_bucket,
+                                           region=self.region)
 
-    def _check_failed_over_subcluster(self, sub_cluster_list, num_of_nodes_to_remove=1, failover_recovery=False):
+    def _check_failed_over_subcluster(self, sub_cluster_list, num_of_nodes_to_remove=1):
         # identifying the node for the subcluster for different  availability zone
         failover_nodes = []
         failover_nodes_ips = [node.split(':')[0] for node in sub_cluster_list[0]]
@@ -248,7 +352,7 @@ class TenantManagement(BaseSecondaryIndexingTests):
             if host_list not in new_sub_cluster_list:
                 new_sub_cluster_list.append(host_list)
 
-        if failover_recovery:
+        if self.recover_failed_over_node:
             self.assertEqual(sorted(sub_cluster_list), sorted(new_sub_cluster_list))
         else:
             # validating if swap-rebalance has adhere to Tenant rules

@@ -360,3 +360,7 @@ FILTER_TEST_FIELDS = ['logs_folder', 'conf_file', 'cluster_name',
 # ELIXIR Tenant Management Constants
 INDEX_MAX_CAP_PER_TENANT = 200
 INDEX_SUB_CLUSTER_LENGTH = 2
+GSI_MEMORY_LWM = 50
+GSI_MEMORY_HWM = 70
+GSI_UNITS_LWM = 40
+GSI_UNITS_HWM = 60

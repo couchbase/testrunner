@@ -154,6 +154,7 @@ class QueryTests(BaseTestCase):
             if self.dataset == "array":
                 return self.generate_docs_array(num_items, start)
             return getattr(self, 'generate_docs_' + self.dataset)(num_items, start)
+
         except Exception as ex:
             self.log.info(str(ex))
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
