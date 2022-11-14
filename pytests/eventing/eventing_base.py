@@ -17,6 +17,7 @@ from lib.remote.remote_util import RemoteMachineShellConnection
 from basetestcase import BaseTestCase
 from testconstants import INDEX_QUOTA, MIN_KV_QUOTA, EVENTING_QUOTA
 from pytests.query_tests_helper import QueryHelperTests
+from lib.Cb_constants.CBServer import CbServer
 
 log = logging.getLogger()
 
@@ -1104,15 +1105,18 @@ class EventingBaseTest(QueryHelperTests):
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=100, percent_update=0,
                                             percent_delete=0, scope=collection_list[1], collection=collection_list[2],
                                             doc_expiry=expiry, json_template=template, doc_size=self.document_size,
-                                            username=self.master.rest_username, password=self.master.rest_password)
+                                            username=self.master.rest_username, password=self.master.rest_password,
+                                            capella=CbServer.capella_run)
         elif is_delete:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=0, percent_delete=100,
                                             scope=collection_list[1], collection=collection_list[2], json_template=template,
-                                            doc_size=self.document_size, username=self.master.rest_username, password=self.master.rest_password)
+                                            doc_size=self.document_size, username=self.master.rest_username, password=self.master.rest_password,
+                                            capella=CbServer.capella_run)
         elif is_update:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=100, percent_delete=0,
                                             scope=collection_list[1], collection=collection_list[2], doc_expiry=expiry, json_template=template,
-                                            doc_size=self.document_size, username=self.master.rest_username, password=self.master.rest_password)
+                                            doc_size=self.document_size, username=self.master.rest_username, password=self.master.rest_password,
+                                            capella=CbServer.capella_run)
         if self.dgm_run:
             task = self.data_ops_javasdk_loader_in_batches_to_collection(
                 collection_list[0], sdk_data_loader=self.gen_create,
@@ -1140,15 +1144,18 @@ class EventingBaseTest(QueryHelperTests):
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=100, percent_update=0,
                                             percent_delete=0, scope=collection_list[1], collection=collection_list[2],
                                             doc_expiry=expiry, json_template=template, doc_size=self.document_size,
-                                            username=self.master.rest_username, password=self.master.rest_password)
+                                            username=self.master.rest_username, password=self.master.rest_password,
+                                            capella=CbServer.capella_run)
         elif is_delete:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=0, percent_delete=100,
                                             scope=collection_list[1], collection=collection_list[2], json_template=template,
-                                            doc_size=self.document_size, username=self.master.rest_username, password=self.master.rest_password)
+                                            doc_size=self.document_size, username=self.master.rest_username, password=self.master.rest_password,
+                                            capella=CbServer.capella_run)
         elif is_update:
             self.gen_create = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=100, percent_delete=0,
                                             scope=collection_list[1], collection=collection_list[2], doc_expiry=expiry, json_template=template,
-                                            doc_size=self.document_size, username=self.master.rest_username, password=self.master.rest_password)
+                                            doc_size=self.document_size, username=self.master.rest_username, password=self.master.rest_password,
+                                            capella=CbServer.capella_run)
         task = self.data_ops_javasdk_loader_in_batches_to_collection(collection_list[0], sdk_data_loader=self.gen_create,
                                                                      batch_size=self.batch_size)
         if wait_for_loading:
