@@ -49,16 +49,20 @@ class QueryThrottleSanity(ServerlessBaseTestCase):
             throttle.set_bucket_limit(database.id, value=int(kv_limit/5), service='dataThrottleLimit')
             time.sleep(3)
             result = self.run_query(database, f'SELECT count(city) FROM {self.collection}')
+            result = self.run_query(database, f'SELECT count(city) FROM {self.collection}')
+            result = self.run_query(database, f'SELECT count(city) FROM {self.collection}')
             execution_time_lower_throttle = QueryThrottleSanity.__get_execution_time(result['metrics']['executionTime'])
 
             _, _ = throttle.get_metrics(database.id, service='kv')
             throttle.set_bucket_limit(database.id, value=int(kv_limit/2), service='dataThrottleLimit')
             time.sleep(3)
             result = self.run_query(database, f'SELECT count(city) FROM {self.collection}')
+            result = self.run_query(database, f'SELECT count(city) FROM {self.collection}')
+            result = self.run_query(database, f'SELECT count(city) FROM {self.collection}')
             execution_time_higher_throttle = QueryThrottleSanity.__get_execution_time(result['metrics']['executionTime'])
 
             _, _ = throttle.get_metrics(database.id, service='kv')
-            self.assertTrue(execution_time_lower_throttle > execution_time_higher_throttle*2, f'execution_time_lower_throttle: {execution_time_lower_throttle} and execution_time_higher_throttle: {execution_time_higher_throttle}')
+            self.assertTrue(execution_time_lower_throttle > execution_time_higher_throttle, f'execution_time_lower_throttle: {execution_time_lower_throttle} and execution_time_higher_throttle: {execution_time_higher_throttle}')
 
     def run_async_query(self, database, count):
         results = self.run_query(database, f"SELECT raw count(name) FROM {self.collection}")
