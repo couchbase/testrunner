@@ -1593,9 +1593,9 @@ class QueryUDFN1QLTests(QueryTests):
             self.run_cbq_query(sleep_query, query_params={'timeout':'10s'})
             self.fail("Query should have CBQ error'd")
         except CBQError as ex:
-            error = self.process_CBQE(ex, 1)
-            self.assertEqual(error['code'], 10109)
-            self.assertTrue('sleep stopped after running beyond 10000 ms' in str(error), f"Error is not what we expected {str(ex)}")
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 1080)
+            self.assertTrue('Timeout 10s exceeded' in str(error), f"Error is not what we expected {str(ex)}")
 
         try:
             self.run_cbq_query(sleep_query, query_params={'timeout':'600s'})
