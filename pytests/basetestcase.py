@@ -193,7 +193,6 @@ class OnPremBaseTestCase(unittest.TestCase):
             membase_ephemeral_params['bucket_type'] = 'ephemeral'
             self.bucket_base_params['membase']['ephemeral'] = membase_ephemeral_params
 
-            self.java_sdk_client = self.input.param("java_sdk_client", False)
             if self.java_sdk_client:
                 self.log.info("Building docker image with java sdk client")
                 JavaSdkSetup()
@@ -569,6 +568,7 @@ class OnPremBaseTestCase(unittest.TestCase):
         self.ipv6_only = self.input.param("ipv6_only", False)
         self.use_https = self.input.param("use_https", False)
         self.enforce_tls = self.input.param("enforce_tls", False)
+        self.java_sdk_client = self.input.param("java_sdk_client", False)
         """ some tests need to bypass checking cb server at set up
             to run installation """
         self.skip_init_check_cbserver = \

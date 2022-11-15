@@ -9,6 +9,7 @@ import lib.capella.utils as capella_utils
 from TestInput import TestInputServer, TestInputSingleton
 from lib.couchbase_helper.cluster import Cluster
 from lib import logger
+from scripts.java_sdk_setup import JavaSdkSetup
 
 class BaseTestCase(OnPremBaseTestCase):
     def setUp(self):
@@ -71,6 +72,9 @@ class BaseTestCase(OnPremBaseTestCase):
                 servers = self.capella_api.get_nodes_formatted(self.cluster_id, self.input.membase_settings.rest_username, self.input.membase_settings.rest_password)
                 self.cluster_config = ClusterConfig(self.input.membase_settings.rest_username, self.input.membase_settings.rest_password, self.create_input_servers())
                 self.cluster_config.update_servers(servers)
+            if self.java_sdk_client:
+                self.log.info("Building docker image with java sdk client")
+                JavaSdkSetup()
         except Exception:
             self.tearDown()
             raise
