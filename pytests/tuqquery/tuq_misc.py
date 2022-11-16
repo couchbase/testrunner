@@ -483,7 +483,7 @@ class QueryMiscTests(QueryTests):
                 node_stats = cluster_stats[str(self.master.ip) + ":8091"]
                 cpu_utilization = node_stats['cpu_utilization']
                 self.log.info("waiting for cpu utilization (" + str(cpu_utilization) + ") < 20.00")
-                if cpu_utilization < 20.00:
+                if cpu_utilization < 25.00:
                     cpu_rdy = True
                     break
             self.assertTrue(cpu_rdy)

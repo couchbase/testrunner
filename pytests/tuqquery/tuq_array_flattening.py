@@ -1048,8 +1048,8 @@ class QueryArrayFlatteningTests(QueryTests):
                             "WHERE r.author LIKE 'N%' and r.author is not missing and r.ratings.Cleanliness > 1 AND " \
                             "d.free_parking = False AND d.email is not missing GROUP BY r.ratings.Cleanliness LETTING min_cleanliness = 5 HAVING COUNT(r.ratings.Cleanliness) > min_cleanliness"
         else:
-            query = "SELECT MAX(email), MIN(email), AVG( free_parking)  FROM `travel-sample`.inventory.hotel AS d WHERE ANY r IN d.reviews SATISFIES r.author = 'Nella Ratke' and r.ratings.Cleanliness = 3 END AND free_parking = False AND email is not missing GROUP BY email, free_parking LETTING avg_parking = 1 HAVING AVG(free_parking) > avg_parking"
-            primary_query = "SELECT MAX(email), MIN(email), AVG( free_parking)  FROM `travel-sample`.inventory.hotel AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author = 'Nella Ratke' and r.ratings.Cleanliness = 3 END AND free_parking = False AND email is not missing GROUP BY email, free_parking LETTING avg_parking = 1 HAVING AVG(free_parking) > avg_parking"
+            query = "SELECT MAX(email), MIN(email), AVG( free_parking)  FROM `travel-sample`.inventory.hotel AS d WHERE ANY r IN d.reviews SATISFIES r.author = 'Nella Ratke' and r.ratings.Cleanliness = 3 END AND d.free_parking = False AND d.email is not missing GROUP BY d.email, d.free_parking LETTING avg_parking = False HAVING d.free_parking = avg_parking"
+            primary_query = "SELECT MAX(email), MIN(email), AVG( free_parking)  FROM `travel-sample`.inventory.hotel AS d USE INDEX (`#primary`) WHERE ANY r IN d.reviews SATISFIES r.author = 'Nella Ratke' and r.ratings.Cleanliness = 3 END AND d.free_parking = False AND d.email is not missing GROUP BY d.email, d.free_parking LETTING avg_parking = False HAVING d.free_parking = avg_parking"
         self.run_cbq_query(query=create_query)
         # Ensure the query is actually using the flatten index instead of primary
         explain_results = self.run_cbq_query(query="EXPLAIN " + query)
