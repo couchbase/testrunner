@@ -7,3 +7,6 @@
 [submodule "lib/capellaAPI"]
 	path = lib/capellaAPI
 	url = https://github.com/couchbaselabs/CapellaRESTAPIs
+[submodule "magma_loader/DocLoader"]
+	path = magma_loader/DocLoader
+	url = https://github.com/couchbaselabs/DocLoader.git

@@ -310,11 +310,9 @@ class ServerlessBaseTestCase(unittest.TestCase):
         return json_parsed['errors'][index]
 
     def load_data_new_doc_loader(self, databases, doc_start=0, doc_end=100000, create_rate=100, update_rate=0):
-        pom_path = self.input.param("pom_path", None)
         # will be removed once DocLoader is a testrunner subdmodule
-        if not pom_path:
-            raise Exception("Docloader is not yet a submodule for testrunner. Pass pom_path for DocLoader explicitly.")
         cur_dir = os.getcwd()
+        pom_path = os.path.join(cur_dir, r"magma_loader/DocLoader")
         os.chdir(pom_path)
         try:
             for database in databases:
