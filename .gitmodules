@@ -10,3 +10,4 @@
 [submodule "magma_loader/DocLoader"]
 	path = magma_loader/DocLoader
 	url = https://github.com/couchbaselabs/DocLoader.git
+	branch = main
