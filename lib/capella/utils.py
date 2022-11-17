@@ -1,5 +1,4 @@
 import uuid
-
 from TestInput import TestInputServer
 from capellaAPI.capella.dedicated.CapellaAPI import CapellaAPI as CapellaAPIDedicated
 from capellaAPI.capella.serverless.CapellaAPI import CapellaAPI as CapellaAPIServerless
@@ -10,6 +9,9 @@ import urllib3
 urllib3.disable_warnings()
 import logger
 import requests
+import json
+import subprocess
+import time
 
 class CapellaCredentials:
     def __init__(self, config):
@@ -21,6 +23,7 @@ class CapellaCredentials:
         self.secret_key = config.get("secret_key")
         self.project_id = config["project_id"]
         self.token_for_internal_support = config.get("token_for_internal_support")
+        self.dataplane_id = config["dataplane_id"]
 
 class ServerlessDatabase:
     def __init__(self, database_id, doc_count=0, namespaces=None):
@@ -114,6 +117,7 @@ class CapellaAPI:
     def __init__(self, credentials):
         self.tenant_id = credentials.tenant_id
         self.project_id = credentials.project_id
+        self.dataplane_id = credentials.dataplane_id
         self.api = CapellaAPIDedicated(credentials.pod, credentials.secret_key, credentials.access_key, credentials.capella_user, credentials.capella_pwd)
         self.serverless_api = CapellaAPIServerless(credentials.pod, credentials.capella_user, credentials.capella_pwd, credentials.token_for_internal_support)
         self.log = logger.Logger.get_logger()
@@ -329,8 +333,85 @@ class CapellaAPI:
             self.tenant_id, self.project_id, database_id)
         resp.raise_for_status()
 
+    def create_dataplane_wait_for_ready(self, overRide=None):
+        if overRide is None:
+            config = {
+                "provider": "aws",
+                "region": "us-east-1"
+            }
+        else:
+            self.log.info("OverRiding Dataplane ...")
+            config = {
+                "provider": "aws",
+                "region": "us-east-1",
+                "overRide": overRide
+            }
+
+        resp = self.serverless_api.create_serverless_dataplane(config)
+        self.log.info(f"Dataplane with ID {resp.json()['dataplaneId']} created")
+        if self.wait_for_dataplane_ready(resp.json()['dataplaneId']):
+            self.log.info(f"Would use DataplaneId : {resp.json()['dataplaneId']} for further execution")
+            self.dataplane_id = resp.json()['dataplaneId']
+            return resp.json()['dataplaneId']
+        else:
+            self.log.info(f"Timed out waiting for dataplane to be ready, Aborting...")
+            return None
+
+    def wait_for_dataplane_ready(self, dataplane_id):
+        t_end = time.time() + 60 * 25
+        while time.time() < t_end:
+            self.log.info(f"Waiting for Dataplane : {dataplane_id} to become ready...")
+            resp = self.get_dataplane_deployment_status(dataplane_id)
+            if resp['status']['state'] == "ready":
+                return True
+            time.sleep(5)
+        return False
+
     def override_width_and_weight(self, database_id, override):
-        resp = self.serverless_api.update_database(database_id, override)
+        override_obj = {"overRide": override}
+        resp = self.serverless_api.update_database(database_id, override_obj)
+        resp.raise_for_status()
+
+    def get_databases_id(self):
+        resp = self.serverless_api.get_all_serverless_databases()
+        all_ids = []
+        if resp and isinstance(resp.json(), list):
+            for database in resp.json():
+                if 'dataplaneId' in database['config'] and database['config']['dataplaneId'] == self.dataplane_id:
+                    all_ids.append(database['id'])
+        return all_ids
+
+    def get_fts_stats(self):
+        fts_nodes = self.get_fts_nodes_of_dataplane(self.dataplane_id)
+        creds = self.get_access_to_serverless_dataplane_nodes(self.dataplane_id)
+        stats = []
+        http_resp = False
+        for count, node in enumerate(fts_nodes):
+            CurlUrl = f"curl -s -XGET https://{fts_nodes[count]}:18094/api/nsstats -u {creds['couchbaseCreds']['username']}:{creds['couchbaseCreds']['password']} --insecure | jq | grep -E 'util|resource|limits'"
+            resp = subprocess.getstatusoutput(CurlUrl)[1]
+            try:
+                resp = resp[2:] + "}" + resp[:2]
+                resp = resp[len(resp) - 2:] + "{" + resp[:len(resp) - 1]
+                x = json.loads(resp)
+                stats.append(x)
+            except Exception as e:
+                self.log.info(f"Error : {e}")
+                print(f"Response : {resp}")
+                curl_http = f"curl -v https://{fts_nodes[count]}:18094/api/nsstats -u {creds['couchbaseCreds']['username']}:{creds['couchbaseCreds']['password']} --insecure"
+                http_resp = subprocess.getstatusoutput(curl_http)
+        return stats, fts_nodes, http_resp
+
+    def get_fts_nodes_of_dataplane(self, dataplane_id):
+        resp = self.serverless_api.get_serverless_dataplane_info(dataplane_id)
+        info_nodes = resp.json()['couchbase']['nodes']
+        fts_hostname=[]
+        for node in info_nodes:
+            if node['services'][0]['type'] == 'fts':
+                fts_hostname.append(node['hostname'])
+        return fts_hostname
+
+    def delete_dataplane(self, dataplane_id):
+        resp = self.serverless_api.delete_dataplane(dataplane_id)
         resp.raise_for_status()
 
     def get_dataplane_deployment_status(self, dataplane_id):
@@ -394,7 +475,7 @@ def create_specs(provider, services_count, compute, disk_type, disk_iops, disk_s
             "count": count,
             "compute": {
                 "type": compute,
-                "cpu": 0, 
+                "cpu": 0,
                 "memoryInGb": 0
             },
             "services": [{ "type": service } for service in service_group.split(",")],
@@ -470,7 +551,7 @@ def create_capella_config(input, services_count):
     return config
 
 
-def create_serverless_config(input, skip_import_sample=True, seed=None):
+def create_serverless_config(input, skip_import_sample=True, seed=None, dp_id=None):
     provider, region, _, _, _, _, dataplane_id = spec_options_from_input(input)
     if seed:
         name = f"{seed}"
@@ -484,12 +565,18 @@ def create_serverless_config(input, skip_import_sample=True, seed=None):
         "tenantId": input.capella["tenant_id"],
         "dontImportSampleData": skip_import_sample,
     }
+
+    if dp_id is not None:
+        if "overRide" not in config:
+            config['overRide'] = {}
+        config['overRide']['dataplaneId'] = dp_id
+        return config
+
     if dataplane_id:
         if "overRide" not in config:
             config['overRide'] = {}
         config['overRide']['dataplaneId'] = dataplane_id
     return config
-
 
 def set_custom_bucket_width(config, width=None, weight=None):
     override = {}

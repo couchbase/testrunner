@@ -50,6 +50,18 @@ class ServerlessBaseTestCase(unittest.TestCase):
         self.dataplane_id = self.input.capella.get("dataplane_id", None)
         self.use_new_doc_loader = self.input.param("use_new_doc_loader", False)
         self.teardown_all_databases = self.input.param("teardown_all_databases", True)
+        self.create_dataplane = self.input.param("create_dataplane", False)
+        self.create_dataplane_override = self.input.param("create_dataplane_override", False)
+        self.new_dataplane_id = None
+        if self._testMethodName not in ['suite_tearDown', 'suite_setUp'] and self.create_dataplane:
+            overRide = None
+            if self.create_dataplane_override:
+                with open('pytests/serverless/config/dataplane_spec_config.json') as f:
+                    overRide = json.load(f)
+                    overRide['couchbase']['image'] = self.input.capella.get("image")
+            self.new_dataplane_id = self.provision_dataplane(overRide)
+            if self.new_dataplane_id is not None:
+                self.dataplanes[self.new_dataplane_id] = ServerlessDataPlane(self.new_dataplane_id)
 
     def tearDown(self):
         if self._testMethodName not in ['suite_tearDown', 'suite_setUp'] and self.trigger_log_collect:
@@ -88,9 +100,9 @@ class ServerlessBaseTestCase(unittest.TestCase):
         task = self.create_database_async()
         return task.result()
 
-    def create_database_async(self, seed=None):
+    def create_database_async(self, seed=None, dataplane_id=None):
         config = capella_utils.create_serverless_config(input=self.input, skip_import_sample=self.skip_import_sample,
-                                                        seed=seed)
+                                                        seed=seed, dp_id=dataplane_id)
         task = CreateServerlessDatabaseTask(api=self.api, config=config, databases=self.databases,
                                             dataplanes=self.dataplanes, create_bypass_user=self.create_bypass_user)
         self.task_manager.schedule(task)
@@ -145,20 +157,32 @@ class ServerlessBaseTestCase(unittest.TestCase):
             if task:
                 task.result()
 
-    def provision_databases(self, count=1, seed=None):
+    def provision_databases(self, count=1, seed=None, dataplane_id=None):
         self.log.info(f'PROVISIONING {count} DATABASES ...')
         tasks = []
         for i in range(0, count):
             if seed:
-                task = self.create_database_async(seed=f"{seed}-{i}")
+                task = self.create_database_async(seed=f"{seed}-{i}", dataplane_id=dataplane_id)
             else:
-                task = self.create_database_async()
+                task = self.create_database_async(dataplane_id=dataplane_id)
             tasks.append(task)
         for task in tasks:
             task.result()
 
-    def delete_all_database(self, count=1):
-        for database_id in self.databases:
+    def provision_dataplane(self, overRide=None):
+        self.log.info('PROVISIONING DATAPLANE ...')
+        return self.api.create_dataplane_wait_for_ready(overRide)
+
+    def delete_all_database(self, all_db=False):
+        databases = None
+        if all_db:
+            databases = self.api.get_databases_id()
+            if len(databases) == 0:
+                return
+        else:
+            databases = self.databases
+
+        for database_id in databases:
             try:
                 self.log.info("deleting serverless database {}".format(
                     {"database_id": database_id}))
@@ -169,7 +193,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
                     "error": str(e)
                 }
                 self.log.warn("failed to delete database {}".format(msg))
-        for database_id in self.databases:
+        for database_id in databases:
             self.api.wait_for_database_deleted(database_id)
             self.log.info("serverless database deleted {}".format(
                 {"database_id": database_id}))
@@ -192,6 +216,9 @@ class ServerlessBaseTestCase(unittest.TestCase):
     def override_width_and_weight(self, database_id, width, weight):
         override = {"width": width, "weight": weight}
         return self.api.override_width_and_weight(database_id, override)
+
+    def delete_dataplane(self, dataplane_id):
+        self.api.delete_dataplane(dataplane_id)
 
     def run_query(self, database, query, query_params=None, use_sdk=False, query_node=None, **kwargs):
         """
@@ -373,3 +400,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
                 self.rest_host = rest_host
         rest_info = Rest_Info(username=username, password=password, rest_host=rest_host)
         return rest_info
+
+    def get_all_fts_stats(self):
+        stats_nodes_resp = self.api.get_fts_stats()
+        return stats_nodes_resp
