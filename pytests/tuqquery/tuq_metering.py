@@ -1,9 +1,10 @@
 from .tuq import QueryTests
-import re
 import requests
 import json
+import ast
 import math
-from lib.metering_throttling import metering
+from lib.metering_throttling import metering, throttling
+from membase.api.exception import CBQError
 
 class QueryMeteringTests(QueryTests):
     def setUp(self):
@@ -28,6 +29,7 @@ class QueryMeteringTests(QueryTests):
         self.composite_doc_size = len(json.dumps(self.composite_doc))
         self.log.info(f'Doc count: {self.doc_count} - Doc key size is: {self.doc_key_size} - Doc size is: {self.doc_size}')
         self.meter = metering(self.server.ip, self.rest.username, self.rest.password)
+        self.throttle = throttling(self.server.ip, self.rest.username, self.rest.password)
 
     def suite_setUp(self):
         super(QueryMeteringTests, self).suite_setUp()
@@ -153,6 +155,26 @@ class QueryMeteringTests(QueryTests):
         result = self.run_cbq_query(f'SELECT * FROM {self.bucket}')
         assert_query, msg = self.meter.assert_query_billing_unit(result, expected_ru + sc_ru, unit='ru', service='kv')
         self.assertTrue(assert_query, msg)
+
+    def test_node_quota(self):
+        insert = f'insert into {self.bucket} (key, value) values("1", {{ "abcd": {{ "def": repeat("abcd", 29990), "arr": array_repeat(repeat("efgh", 1000), 5000)}}}})'
+        self.run_cbq_query(insert)
+        node_quota = self.throttle.get_query_settings('node-quota')
+        before_kv_ru, before_kv_wu = self.meter.get_kv_rwu(self.bucket)
+        before_credit = self.meter.get_credit_unit(self.bucket, 'ru', 'kv')
+        try:
+            self.throttle.set_query_settings('node-quota', 10)
+            result = self.run_cbq_query(f'SELECT * FROM _default', query_context=self.bucket)
+        except CBQError as ex:
+            after_kv_ru, after_kv_wu = self.meter.get_kv_rwu(self.bucket)
+            content = ast.literal_eval(str(ex).split("ERROR:")[1])
+            result = json.loads(json.dumps(content))
+            self.assertEqual(result['refundedUnits'], result['billingUnits'])
+            self.assertEqual(result['errors'], [{'code': 5600, 'msg': 'Query node has run out of memory'}])
+            after_credit = self.meter.get_credit_unit(self.bucket, 'ru', 'kv')
+            self.assertEqual(after_credit - before_credit, after_kv_ru - before_kv_ru)
+        finally:
+            self.throttle.set_query_settings('node-quota', 0)
 
     def test_kv_select_count(self):
         insert_query = f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'

@@ -25,6 +25,33 @@ class metering(object):
 
         return f'meter_{unit}_total{{bucket="{bucket}"{meter_service}{meter_unbilled}{meter_variant}}} (\d+)'
 
+    @staticmethod
+    def __credit_pattern(unit, bucket, service, unbilled='', variant=''):
+        meter_service = ''
+        meter_unbilled = ''
+        meter_variant = ''
+        if unbilled != '':
+            meter_unbilled = f',unbilled="{unbilled}"'
+        if variant != '':
+            meter_variant = f',variant="{variant}"'
+        if service != '':
+            meter_service = f',for="{service}"'
+
+        return f'credit_{unit}_total{{bucket="{bucket}"{meter_service}{meter_unbilled}{meter_variant}}} (\d+)'
+
+    def get_credit_unit(self, bucket='default', unit = 'ru', service='kv', unbilled='', variant=''):
+        total = 0
+        credit_pattern = re.compile(metering.__credit_pattern(unit, bucket, service, unbilled, variant), re.MULTILINE)
+        for node in self.nodes:
+            if service in node['services']:
+                url = f"https://{node['hostname'][:-5]}:{CbServer.ssl_port}/metrics"
+                response = requests.get(url, auth=self.auth, verify=False)
+                if credit_pattern.search(response.text):
+                    for credit in credit_pattern.findall(response.text):
+                        total += int(credit)
+        self.log.info(f'CREDIT {service} UNITS for {bucket}: {total} {unit}')
+        return total
+
     def get_query_cu(self, bucket='default', unbilled='true', variant='eval'):
         cu = 0
         qry_cu_pattern = re.compile(metering.__meter_pattern('cu', bucket, 'n1ql', unbilled, variant))
@@ -120,10 +147,26 @@ class throttling(object):
         self.auth = requests.auth.HTTPBasicAuth(username, password)
         self.url_bucket_throttle = f"https://{server}:{CbServer.ssl_port}/pools/default/buckets"
         self.url_cluster_throttle = f"https://{server}:{CbServer.ssl_port}/internalSettings"
+        self.url_query_settings = f"https://{server}:{CbServer.ssl_n1ql_port}/admin/settings"
         url = f"https://{server}:{CbServer.ssl_port}/pools/default"
         response = requests.get(url, auth=self.auth, verify=False)
         self.nodes = response.json()['nodes']
         self.log = logger.Logger.get_logger()
+
+    def get_query_settings(self, setting='node-quota'):
+        response = requests.get(self.url_query_settings, auth = self.auth, verify=False)
+        if response.status_code not in (200,201):
+            self.fail(f'Fail to get query settings: {response.text}')
+        settings = response.json()
+        self.log.info(f'RETRIEVED {setting}: {settings[setting]}')
+        return settings[setting]
+
+    def set_query_settings(self, setting='node-quota', value=256):
+        data = {}
+        data[setting] = value
+        response = requests.post(self.url_query_settings, data=f'{{"{setting}":{value}}}', auth=self.auth, verify=False)
+        if response.status_code not in (200,201):
+            self.fail(f'Fail to set query settings: {response.text}')
 
     def get_bucket_limit(self, bucket = 'default', service='dataThrottleLimit'):
         response = requests.get(self.url_bucket_throttle + f"/{bucket}", auth = self.auth, verify=False)
