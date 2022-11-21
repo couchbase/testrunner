@@ -714,7 +714,7 @@ class CapellaRebalanceTask(Task):
     def __init__(self, to_add, to_remove, services, cluster_config):
         Task.__init__(self, "CapellaRebalanceTask")
 
-        provider, _, compute, disk_type, disk_iops, disk_size = capella_utils.spec_options_from_input(TestInputSingleton.input)
+        provider, _, compute, disk_type, disk_iops, disk_size, _ = capella_utils.spec_options_from_input(TestInputSingleton.input)
 
         # get current servers list
         # remove to_remove
