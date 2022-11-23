@@ -13,7 +13,7 @@ def main():
     print('in main')
     usage = '%prog -i inifile -o outputfile -s servers'
     parser = OptionParser(usage)
-    parser.add_option('-s', '--servers', dest='servers')
+    parser.add_option('-s', '--servers', dest='servers', default=None)
     parser.add_option('-x', '--internal_servers', dest='internal_servers', default=None)
     parser.add_option('-d', '--addPoolServerId', dest='addPoolServerId', default=None)
     parser.add_option('-a', '--addPoolServers', dest='addPoolServers', default=None)
@@ -34,7 +34,7 @@ def main():
 
     print('the given server info is', options.servers)
 
-    if options.servers:
+    if options.servers and len(servers) > 0:
         if not options.servers.startswith('['):
             options.servers='['+options.servers+']'
         if options.internal_servers and not options.internal_servers.startswith('['):

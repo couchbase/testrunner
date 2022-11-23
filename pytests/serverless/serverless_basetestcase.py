@@ -10,7 +10,10 @@ import logger
 from tasks.task import CreateServerlessDatabaseTask
 from tasks.taskmanager import TaskManager
 import logging
-from couchbase.cluster import Cluster, ClusterOptions, PasswordAuthenticator, QueryOptions
+try:
+    from couchbase.cluster import Cluster, ClusterOptions, PasswordAuthenticator, QueryOptions
+except ImportError:
+    from couchbase.cluster import Cluster, PasswordAuthenticator
 from couchbase.bucket import Bucket
 from couchbase_helper.documentgenerator import SDKDataLoader
 from membase.api.serverless_rest_client import ServerlessRestConnection as RestConnection
