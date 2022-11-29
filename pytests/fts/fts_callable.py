@@ -92,7 +92,7 @@ class FTSCallable:
                          source_name=None, index_type='fulltext-index',
                          index_params=None, plan_params=None,
                          source_params=None, source_uuid=None, collection_index=False, _type=None, analyzer="standard",
-                         scope=None, collections=None, no_check=False, cluster=None):
+                         scope=None, collections=None, no_check=False, cluster=None, specify_fields=False):
         """Create fts index/alias
         @param node: Node on which index is created
         @param name: name of the index/alias
@@ -134,7 +134,7 @@ class FTSCallable:
             collections=collections
         )
         if collection_index:
-            if not index.custom_map:
+            if not index.custom_map and not specify_fields:
                 if type(_type) is list:
                     for typ in _type:
                         index.add_type_mapping_to_index_definition(type=typ, analyzer=analyzer)

@@ -215,3 +215,17 @@ class throttling(object):
                     throttle_count_total += int(throttle_count_pattern.findall(response.text)[0])
         self.log.info(f'{service.upper()} THROTTLE for {bucket}: {throttle_count_total} count, {throttle_seconds_total} seconds')
         return throttle_count_total, throttle_seconds_total
+
+    def get_reject_count(self, bucket='default', service='kv'):
+        reject_count_total = 0
+        reject_count_pattern = re.compile(f'reject_count_total{{bucket="{bucket}",for="{service}".*}} (\d+)')
+        for node in self.nodes:
+            if service in node['services']:
+                url = f"https://{node['hostname'][:-5]}:{CbServer.ssl_port}/metrics"
+                response = requests.get(url, auth = self.auth, verify=False)
+                if response.status_code not in (200,201):
+                    self.fail(f'Fail to get throttle metrics: {response.text}')
+                if reject_count_pattern.search(response.text):
+                    reject_count_total += int(reject_count_pattern.findall(response.text)[0])
+        self.log.info(f'{service.upper()} THROTTLE REJECTION for {bucket}: {reject_count_total} count')
+        return reject_count_total
