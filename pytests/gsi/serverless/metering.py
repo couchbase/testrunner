@@ -6,7 +6,7 @@ from lib.metering_throttling import metering
 import random, string
 import time
 
-class GSIMeterSanity(ServerlessBaseTestCase):
+class GSIMeter(ServerlessBaseTestCase):
     def setUp(self):
         self.input = TestInputSingleton.input
         self.scope = '_default'
