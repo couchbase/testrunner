@@ -4,10 +4,12 @@ import math
 import os
 import random
 import re
+import string
 import subprocess
 import threading
 import time
 import json
+
 
 from couchbase_helper.cluster import Cluster
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
@@ -84,10 +86,15 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.aws_access_key_id = self.input.param("aws_access_key_id", None)
         self.aws_secret_access_key = self.input.param("aws_secret_access_key", None)
         self.region = self.input.param("region", "us-west-1")
-        self.s3_bucket = self.input.param("s3_bucket", "gsi-onprem")
-        self.storage_prefix = self.input.param("storage_prefix", "indexing")
+        self.s3_bucket = self.input.param("s3_bucket", "gsi-onprem-test")
+        self.storage_prefix = self.input.param("storage_prefix", None)
         self.index_batch_weight = self.input.param("index_batch_weight", 1)
         self.server_group_map = {}
+        if self.aws_access_key_id:
+            from serverless.s3_utils import S3Utils
+            self.s3_utils_obj = S3Utils(aws_access_key_id=self.aws_access_key_id,
+                                        aws_secret_access_key=self.aws_secret_access_key,
+                                        s3_bucket=self.s3_bucket, region=self.region)
         if not self.use_rest:
             query_definition_generator = SQLDefinitionGenerator()
             if self.dataset == "default" or self.dataset == "employee":
@@ -1663,6 +1670,15 @@ class BaseSecondaryIndexingTests(QueryTests):
             shell.create_file(remote_path='/opt/couchbase/.aws/credentials', file_data=aws_cred_file)
             shell.create_file(remote_path='/opt/couchbase/.aws/config', file_data=aws_conf_file)
 
+        if self.storage_prefix is None:
+            self.storage_prefix = 'indexing_' + ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
+            # checking if folder exist and deleting it
+            result = self.s3_utils_obj.check_s3_folder_exist(folder=self.storage_prefix)
+            if result:
+                self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
+        # create a folder in S3 bucket
+        self.s3_utils_obj.create_s3_folder(folder=self.storage_prefix)
+
         fast_rebalance_config = {"indexer.settings.rebalance.blob_storage_bucket": self.s3_bucket,
                                  "indexer.settings.rebalance.blob_storage_prefix": self.storage_prefix,
                                  "indexer.settings.rebalance.blob_storage_scheme": "s3"}
@@ -1681,7 +1697,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 for c_item in collections:
                     if self.use_magma_loader:
                         gen_create = SDKDataLoader(num_ops=num_docs, percent_create=percent_create,
-                                                   key_prefix=key_prefix, doc_size=1000, workers=2, ops_rate=10000,
+                                                   key_prefix=key_prefix, doc_size=1000, workers=10, ops_rate=10000,
                                                    percent_update=percent_update, percent_delete=percent_delete,
                                                    scope=s_item, collection=c_item, json_template=json_template,
                                                    output=output, start_seq_num=start)

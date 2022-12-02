@@ -338,48 +338,24 @@ class GSIUtils(object):
                 select_queries.extend(
                     self.get_select_queries(definition_list=self.definition_list, namespace=namespace))
             select_queries = select_queries * query_weight
-            with ThreadPoolExecutor() as executor:
-                while True:
-                    tasks = []
-                    for query in select_queries:
-                        if capella_run:
-                            task = executor.submit(self.run_query, database=database, query=query)
-                        else:
-                            task = executor.submit(self.run_query, query=query, server=query_node)
-                        tasks.append(task)
+        with ThreadPoolExecutor() as executor:
+            while True:
+                tasks = []
+                for query in select_queries:
+                    if capella_run:
+                        task = executor.submit(self.run_query, database=database, query=query)
+                    else:
+                        task = executor.submit(self.run_query, query=query, server=query_node)
+                    tasks.append(task)
 
-                    for task in tasks:
-                        task.result()
-                    curr_time = datetime.datetime.now()
-                    if (curr_time - start_time).total_seconds() > timeout:
-                        break
-
-    def check_s3_cleanup(self, aws_access_key_id, aws_secret_access_key, s3_bucket='gsi-onprem', region='us-west-1'):
-        s3 = boto3.client(service_name='s3', region_name=region,
-                          aws_access_key_id=aws_access_key_id,
-                          aws_secret_access_key=aws_secret_access_key)
-        result = s3.list_objects_v2(Bucket=s3_bucket, Delimiter='/*')
-        if len(result['Contents']) > 1:
-            raise Exception("Bucket is not cleaned up after rebalance.")
+                for task in tasks:
+                    task.result()
+                curr_time = datetime.datetime.now()
+                if (curr_time - start_time).total_seconds() > timeout:
+                    break
 
     def cleanup_operations(self):
         pass
-
-    def check_s3_cleanup(self, aws_access_key_id, aws_secret_access_key, s3_bucket='gsi-onprem', region='us-west-1',
-                         storage_prefix='indexing'):
-        s3 = boto3.client(service_name='s3', region_name=region,
-                          aws_access_key_id=aws_access_key_id,
-                          aws_secret_access_key=aws_secret_access_key)
-        result = s3.list_objects_v2(Bucket=s3_bucket, Delimiter='/*')
-        folder_path_expected = f"{storage_prefix}/"
-        self.log.info(f"Expected folder list {folder_path_expected}")
-        folder_list_on_aws = []
-        self.log.info(f"Result from the s3 list_objects_v2 API call:{result}")
-        for item in result['Contents']:
-            if folder_path_expected in item['Key']:
-                folder_list_on_aws.append(item['Key'])
-        if len(folder_list_on_aws) > 1:
-            raise Exception("Bucket is not cleaned up after rebalance.")
 
     def get_index_definition_list(self, dataset, prefix=None):
         if dataset == 'Person' or dataset == 'default':
