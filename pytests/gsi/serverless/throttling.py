@@ -39,13 +39,13 @@ class GSIThrottle(ServerlessBaseTestCase):
         self.provision_databases()
         for database in self.databases.values():
             throttle = throttling(database.rest_host, database.admin_username, database.admin_password)
-            kv_limit = throttle.get_bucket_limit(database.id,'indexThrottleLimit')
-            result = self.run_query(database, f'INSERT INTO {self.collection} (key k, value v) select uuid() as k , {{"name": "San Francisco"}} as v from array_range(0,{kv_limit*2}) d')
+            index_limit = throttle.get_bucket_limit(database.id,'indexThrottleLimit')
+            result = self.run_query(database, f'INSERT INTO {self.collection} (key k, value v) select uuid() as k , {{"name": "San Francisco"}} as v from array_range(0,{index_limit*4}) d')
 
             self.run_query(database, f"CREATE INDEX idx_name on {self.collection}(name)")
 
             _, _ = throttle.get_metrics(database.id, service='index')
-            throttle.set_bucket_limit(database.id, value=int(kv_limit/5), service='indexThrottleLimit')
+            throttle.set_bucket_limit(database.id, value=int(index_limit/5), service='indexThrottleLimit')
             time.sleep(3)
             result = self.run_query(database, f'SELECT count(name) FROM {self.collection} where name = "San Francisco"')
             result = self.run_query(database, f'SELECT count(name) FROM {self.collection} where name = "San Francisco"')
@@ -53,7 +53,7 @@ class GSIThrottle(ServerlessBaseTestCase):
             execution_time_lower_throttle = self.get_execution_time(result['metrics']['executionTime'])
 
             _, _ = throttle.get_metrics(database.id, service='index')
-            throttle.set_bucket_limit(database.id, value=int(kv_limit/2), service='indexThrottleLimit')
+            throttle.set_bucket_limit(database.id, value=int(index_limit/2), service='indexThrottleLimit')
             time.sleep(3)
             result = self.run_query(database, f'SELECT count(name) FROM {self.collection} where name = "San Francisco"')
             result = self.run_query(database, f'SELECT count(name) FROM {self.collection} where name = "San Francisco"')
@@ -73,7 +73,7 @@ class GSIThrottle(ServerlessBaseTestCase):
         except:
             throttle = throttling(database2.rest_host, database2.admin_username, database2.admin_password)
 
-        index_limit = throttle.get_bucket_limit(database1.id, 'searchThrottleLimit')
+        index_limit = throttle.get_bucket_limit(database1.id, 'indexThrottleLimit')
 
         # We want to insert data such that one index hits throttling but the other does not, on the other database, the one that should not hit index throttling should be unaffected by other db
         result = self.run_query(database1,
@@ -105,7 +105,7 @@ class GSIThrottle(ServerlessBaseTestCase):
 
     def run_async_create(self, database, prefix):
         idx_name = "idx_name" + prefix
-        self.run_query(database, f'CREATE INDEX {idx_name} on {self.collection}(fname,lname)')
+        self.run_query(database, f'CREATE INDEX {idx_name} on {self.collection}(fname)')
 
     def get_execution_time(self,time):
         if time[-2:] == 'ms':
