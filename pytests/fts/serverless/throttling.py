@@ -31,7 +31,8 @@ class FTSThrottle(FTSElixirSanity):
             throttle = throttling(database.rest_host, database.admin_username, database.admin_password)
             index_limit = throttle.get_bucket_limit(database.id,'searchThrottleLimit')
             before_count, before_seconds = throttle.get_metrics(database.id, service='fts')
-            result = self.run_query(database, f'INSERT INTO {self.collection} (key k, value v) select uuid() as k , {self.composite_doc} as v from array_range(0,{index_limit*2}) d')
+            num_docs = index_limit*2
+            result = self.run_query(database, f'INSERT INTO {self.collection} (key k, value v) select uuid() as k , {self.composite_doc} as v from array_range(0,{num_docs}) d')
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
                                        collections=self.collection, collection_index=True)
@@ -45,7 +46,7 @@ class FTSThrottle(FTSElixirSanity):
                                                     source_params=None, source_uuid=None, collection_index=True,
                                                     _type=_type, analyzer="standard",
                                                     scope=self.scope, collections=[self.collection], no_check=False)
-            fts_callable.wait_for_indexing_complete(index_limit*2)
+            fts_callable.wait_for_indexing_complete(num_docs)
             after_count, after_seconds = throttle.get_metrics(database.id, service='fts')
             self.assertTrue(after_count > before_count)
             self.assertTrue(after_seconds > before_seconds)
@@ -55,7 +56,8 @@ class FTSThrottle(FTSElixirSanity):
         for database in self.databases.values():
             throttle = throttling(database.rest_host, database.admin_username, database.admin_password)
             index_limit = throttle.get_bucket_limit(database.id,'searchThrottleLimit')
-            result = self.run_query(database, f'INSERT INTO {self.collection} (key k, value v) select uuid() as k , {self.composite_doc} as v from array_range(0,{index_limit*2}) d')
+            num_docs = index_limit*2
+            result = self.run_query(database, f'INSERT INTO {self.collection} (key k, value v) select uuid() as k , {self.composite_doc} as v from array_range(0,{num_docs}) d')
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
                                        collections=self.collection, collection_index=True)
@@ -70,7 +72,7 @@ class FTSThrottle(FTSElixirSanity):
                                                     _type=_type, analyzer="standard",
                                                     scope=self.scope, collections=[self.collection], no_check=False)
 
-            fts_callable.wait_for_indexing_complete(index_limit*2)
+            fts_callable.wait_for_indexing_complete(num_docs)
             throttle_count, throttle_seconds = throttle.get_metrics(database.id, service='fts')
             self.assertTrue(throttle_count > 0)
             self.assertTrue(throttle_seconds > 0)
@@ -100,8 +102,9 @@ class FTSThrottle(FTSElixirSanity):
             meter = metering(database.rest_host, database.admin_username, database.admin_password)
 
             index_limit = throttle.get_bucket_limit(database.id, 'searchThrottleLimit')
+            num_docs = index_limit*6
             result = self.run_query(database,
-                                    f'INSERT INTO {self.collection} (key k, value v) select uuid() as k , {self.composite_doc} as v from array_range(0,{index_limit*4}) d')
+                                    f'INSERT INTO {self.collection} (key k, value v) select uuid() as k , {self.composite_doc} as v from array_range(0,{num_docs}) d')
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
                                        collections=self.collection, collection_index=True)
@@ -117,25 +120,32 @@ class FTSThrottle(FTSElixirSanity):
                                                     source_params=None, source_uuid=None, collection_index=True,
                                                     _type=_type, analyzer="standard",
                                                     scope=self.scope, collections=[self.collection], no_check=False)
-            fts_callable.wait_for_indexing_complete(index_limit*4)
-            throttle.set_bucket_limit(database.id, value=1, service='searchThrottleLimit')
+            fts_callable.wait_for_indexing_complete(num_docs)
+            throttle.set_bucket_limit(database.id, value=10, service='searchThrottleLimit')
+            time.sleep(10)
+
             before_fts_ru, before_fts_wu = meter.get_fts_rwu(database.id)
             before_reject_count = throttle.get_reject_count(database.id, service='fts')
 
             # create one thread per search
-            t1 = threading.Thread(target=self.run_async_search,args=(fts_callable,index_limit*4))
-            t2 = threading.Thread(target=self.run_async_search,args=(fts_callable,index_limit*4))
-            t3 =threading.Thread(target=self.run_async_search, args=(fts_callable,index_limit*4))
+            t1 = threading.Thread(target=self.run_async_search,args=(fts_callable,num_docs))
+            t2 = threading.Thread(target=self.run_async_search,args=(fts_callable,num_docs))
+            t3 =threading.Thread(target=self.run_async_search, args=(fts_callable,num_docs))
+            t4 =threading.Thread(target=self.run_async_search, args=(fts_callable,num_docs))
+
 
             # start threads
             t1.start()
             t2.start()
             t3.start()
+            t4.start()
+
 
             # wait for thread to finish
             t1.join()
             t2.join()
             t3.join()
+            t4.join()
 
             after_fts_ru, after_fts_wu = meter.get_fts_rwu(database.id)
             # get throttle count after
@@ -268,50 +278,49 @@ class FTSThrottle(FTSElixirSanity):
             self.assertTrue(after_seconds > before_seconds)
 
     def test_throttle_search_and_create(self):
-        def test_throttle_multiple_threads(self):
-            self.provision_databases()
-            for database in self.databases.values():
-                throttle = throttling(database.rest_host, database.admin_username, database.admin_password)
-                meter = metering(database.rest_host, database.admin_username, database.admin_password)
+        self.provision_databases()
+        for database in self.databases.values():
+            throttle = throttling(database.rest_host, database.admin_username, database.admin_password)
+            meter = metering(database.rest_host, database.admin_username, database.admin_password)
 
-                index_limit = throttle.get_bucket_limit(database.id, 'searchThrottleLimit')
-                num_docs = index_limit * 4
-                result = self.run_query(database,
-                                        f'INSERT INTO {self.collection} (key k, value v) select uuid() as k , {self.composite_doc} as v from array_range(0,{num_docs}) d')
-                self.init_input_servers(database)
-                fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                           collections=self.collection, collection_index=True)
-                _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection",
-                                                                                   scope=self.scope,
-                                                                                   collection=self.collection)
-                before_count, before_seconds = throttle.get_metrics(database.id, service='fts')
-                before_reject_count = throttle.get_reject_count(database.id, service='fts')
+            index_limit = throttle.get_bucket_limit(database.id, 'searchThrottleLimit')
+            num_docs = index_limit * 4
+            result = self.run_query(database,
+                                    f'INSERT INTO {self.collection} (key k, value v) select uuid() as k , {self.composite_doc} as v from array_range(0,{num_docs}) d')
+            self.init_input_servers(database)
+            fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
+                                       collections=self.collection, collection_index=True)
+            _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection",
+                                                                               scope=self.scope,
+                                                                               collection=self.collection)
+            before_count, before_seconds = throttle.get_metrics(database.id, service='fts')
+            before_reject_count = throttle.get_reject_count(database.id, service='fts')
 
-                # create one thread per search
-                t1 = threading.Thread(target=self.run_async_create, args=(fts_callable, database, "1"))
-                t2 = threading.Thread(target=self.run_async_create, args=(fts_callable, database, "2"))
-                t3 = threading.Thread(target=self.run_async_create, args=(fts_callable, database, "3"))
-                t4 = threading.Thread(target=self.run_async_search, args=(fts_callable,num_docs))
+            # create one thread per search
+            t1 = threading.Thread(target=self.run_async_create, args=(fts_callable, database, "1"))
+            t2 = threading.Thread(target=self.run_async_create, args=(fts_callable, database, "2"))
+            t3 = threading.Thread(target=self.run_async_create, args=(fts_callable, database, "3"))
+            t4 = threading.Thread(target=self.run_async_search, args=(fts_callable,num_docs))
 
-                # start threads
-                t1.start()
-                t2.start()
-                t3.start()
-                t4.start()
+            # start threads
+            t1.start()
+            t2.start()
+            t3.start()
+            t4.start()
 
-                # wait for thread to finish
-                t1.join()
-                t2.join()
-                t3.join()
-                t4.join()
+            # wait for thread to finish
+            t1.join()
+            t2.join()
+            t3.join()
+            t4.join()
 
-                fts_callable.wait_for_indexing_complete(num_docs)
-                # get throttle count after
-                after_reject_count = throttle.get_reject_count(database.id, service='fts')
-                after_count, after_seconds = throttle.get_metrics(database.id, service='fts')
-                self.assertTrue(after_count > before_count)
-                self.assertTrue(after_seconds > before_seconds)
-                self.assertTrue(after_reject_count > before_reject_count)
+            fts_callable.wait_for_indexing_complete(num_docs)
+            # get throttle count after
+            after_reject_count = throttle.get_reject_count(database.id, service='fts')
+            after_count, after_seconds = throttle.get_metrics(database.id, service='fts')
+            self.assertTrue(after_count > before_count)
+            self.assertTrue(after_seconds > before_seconds)
+            self.assertTrue(after_reject_count > before_reject_count)
 
     def test_throttle_multiple_databases(self):
         self.provision_databases(2)
@@ -461,21 +470,30 @@ class FTSThrottle(FTSElixirSanity):
                                                "field" : "streetAddress"}]
                                      }
 
+                before_n1ql_reject_count = throttle.get_reject_count(database.id, service='query')
+
                 throttle.set_bucket_limit(database.id, value=1, service='searchThrottleLimit')
+                time.sleep(10)
 
                 # create one thread per search
                 t1 = threading.Thread(target=self.run_async_search_query, args=(database,scope_name,collection_name,n1ql_search_query))
                 t2 = threading.Thread(target=self.run_async_search_query, args=(database,scope_name,collection_name,n1ql_search_query))
+                t3 = threading.Thread(target=self.run_async_search_query, args=(database,scope_name,collection_name,n1ql_search_query))
+
 
                 # start threads
                 t1.start()
                 t2.start()
+                t3.start()
 
                 # wait for thread to finish
                 t1.join()
                 t2.join()
+                t3.join()
 
-                after_reject_count = throttle.get_reject_count(database.id, service='fts')
+                after_n1ql_reject_count = throttle.get_reject_count(database.id, service='query')
+                self.assertTrue(after_n1ql_reject_count > before_n1ql_reject_count)
+
             finally:
                 fts_callable.delete_all()
 
@@ -509,21 +527,31 @@ class FTSThrottle(FTSElixirSanity):
                 container_doc_count = self.num_of_docs_per_collection
                 self.log.info(f"Docs in index {fts_idx.name}={docs_indexed}, kv docs={container_doc_count}")
 
+                before_n1ql_reject_count = throttle.get_reject_count(database.id, service='query')
+
                 throttle.set_bucket_limit(database.id, value=1, service='searchThrottleLimit')
+                time.sleep(10)
 
                 # create one thread per search
                 t1 = threading.Thread(target=self.run_async_flex_query, args=(database,scope_name,collection_name))
                 t2 = threading.Thread(target=self.run_async_flex_query, args=(database,scope_name,collection_name))
+                t3 = threading.Thread(target=self.run_async_flex_query, args=(database,scope_name,collection_name))
+
 
                 # start threads
                 t1.start()
                 t2.start()
+                t3.start()
 
                 # wait for thread to finish
                 t1.join()
                 t2.join()
+                t3.join()
 
-                after_reject_count = throttle.get_reject_count(database.id, service='fts')
+                after_n1ql_reject_count = throttle.get_reject_count(database.id, service='query')
+
+                self.assertTrue(after_n1ql_reject_count > before_n1ql_reject_count)
+
             finally:
                 fts_callable.delete_all()
 
@@ -552,7 +580,6 @@ class FTSThrottle(FTSElixirSanity):
                                                     _type=_type, analyzer="standard",
                                                     scope=self.scope, collections=[self.collection], no_check=False)
             fts_callable.wait_for_indexing_complete(num_docs)
-            # before_count, before_seconds = throttle.get_metrics(database.id, service='fts')
             before_reject_count = throttle.get_reject_count(database.id, service='fts')
             throttle.set_bucket_limit(database.id, value=10, service='searchThrottleLimit')
 
@@ -579,13 +606,14 @@ class FTSThrottle(FTSElixirSanity):
             # get throttle count after
             after_count, after_seconds = throttle.get_metrics(database.id, service='fts')
             after_reject_count = throttle.get_reject_count(database.id, service='fts')
-            # self.assertTrue(after_count > before_count)
-            # self.assertTrue(after_seconds > before_seconds)
             self.assertTrue(after_reject_count > before_reject_count)
 
-            time.sleep(30)
             # Raise limit so queries will no longer be autorejected and create a new query, should not be throttled or rejected
             throttle.set_bucket_limit(database.id, value=5000, service='searchThrottleLimit')
+            # Remove most of the data from the bucket so the next index creation does not trigger throttling
+            self.run_query(database,f"DELETE FROM {self.collection} LIMIT {int(index_limit*3.5)}")
+            # Wait to make sure effects of throttling are gone
+            time.sleep(60)
 
             fts_idx = fts_callable.create_fts_index("idx5", source_type='couchbase',
                                                     source_name=database.id, index_type='fulltext-index',
@@ -593,7 +621,7 @@ class FTSThrottle(FTSElixirSanity):
                                                     source_params=None, source_uuid=None, collection_index=True,
                                                     _type=_type, analyzer="standard",
                                                     scope=self.scope, collections=[self.collection], no_check=False)
-            fts_callable.wait_for_indexing_complete(num_docs)
+            fts_callable.wait_for_indexing_complete(index_limit * 4 - int(index_limit*3.5))
             new_count, new_seconds = throttle.get_metrics(database.id, service='fts')
             new_reject_count = throttle.get_reject_count(database.id, service='fts')
             self.assertEqual(new_reject_count, after_reject_count)
