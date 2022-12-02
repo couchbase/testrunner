@@ -8,7 +8,6 @@ __created_on__ = "08/04/22 12:27 pm"
 
 """
 import random
-import os
 import string
 from concurrent.futures import ThreadPoolExecutor
 
@@ -17,8 +16,8 @@ from gsi.base_gsi import BaseSecondaryIndexingTests
 from gsi.collections_concurrent_indexes import powerset
 from membase.api.on_prem_rest_client import RestHelper, RestConnection
 from serverless.gsi_utils import GSIUtils
-from testconstants import INDEX_MAX_CAP_PER_TENANT, INDEX_SUB_CLUSTER_LENGTH
 from testconstants import GSI_UNITS_HWM, GSI_UNITS_LWM, GSI_MEMORY_LWM, GSI_MEMORY_HWM
+from testconstants import INDEX_MAX_CAP_PER_TENANT, INDEX_SUB_CLUSTER_LENGTH
 
 
 class TenantManagement(BaseSecondaryIndexingTests):
@@ -173,7 +172,7 @@ class TenantManagement(BaseSecondaryIndexingTests):
         self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
         self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
 
-    def _check_failed_over_subcluster(self, sub_cluster_list, num_of_nodes_to_remove=1):
+    def _check_failed_over_subcluster(self, num_of_nodes_to_remove=1):
         sub_cluster_list = self.get_sub_cluster_list()
         # identifying the node for the subcluster for different  availability zone
         failover_nodes = []
