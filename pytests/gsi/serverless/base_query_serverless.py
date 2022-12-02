@@ -35,3 +35,24 @@ class QueryBaseServerless(ServerlessBaseTestCase):
             nodes[node] = self.get_query_node_stats(rest_info=rest_info, node=node)
         return nodes
 
+    def scale_up_query_subcluster(self, dataplane):
+        rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
+                                              password=dataplane.admin_password,
+                                              rest_host=dataplane.rest_host)
+        query_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="n1ql")
+        num_nodes = len(query_nodes)
+        self.log.info(f"Number of query nodes in the DP: {num_nodes}")
+        self.update_specs(dataplane.id, new_count=num_nodes+1, service='n1ql')
+
+    def scale_down_query_subcluster(self, dataplane):
+        rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
+                                              password=dataplane.admin_password,
+                                              rest_host=dataplane.rest_host)
+        query_nodes = self.get_all_query_nodes(rest_info=rest_info)
+        num_nodes = len(query_nodes)
+        self.log.info(f"Number of query nodes in the DP: {num_nodes}")
+        self.log.info(f"Will remove a n1ql node")
+        if num_nodes == 2:
+            self.log.error("Cannot scale down the query subcluster further since it only has 2 nodes")
+            return
+        self.update_specs(dataplane.id, new_count=num_nodes-1, service='n1ql')

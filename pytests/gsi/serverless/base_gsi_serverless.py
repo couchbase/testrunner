@@ -28,7 +28,17 @@ class BaseGSIServerless(QueryBaseServerless):
         self.num_of_load_cycles = self.input.param("num_of_load_cycles", 10000)
         self.num_of_index_creation_batches = self.input.param("num_of_index_creation_batches", 1)
         self.dataset = self.input.param("dataset", "Employee")
+        self.aws_access_key_id = self.input.param("aws_access_key_id", None)
+        self.aws_secret_access_key = self.input.param("aws_secret_access_key", None)
+        self.region = self.input.param("region", "us-west-1")
+        self.s3_bucket = self.input.param("s3_bucket", "gsi-onprem-test")
+        self.storage_prefix = self.input.param("storage_prefix", None)
         self.definition_list = self.gsi_util_obj.get_index_definition_list(dataset=self.dataset)
+        if self.aws_access_key_id:
+            from serverless.s3_utils import S3Utils
+            self.s3_utils_obj = S3Utils(aws_access_key_id=self.aws_access_key_id,
+                                        aws_secret_access_key=self.aws_secret_access_key,
+                                        s3_bucket=self.s3_bucket, region=self.region)
 
     def tearDown(self):
         super(BaseGSIServerless, self).tearDown()
@@ -341,3 +351,18 @@ class BaseGSIServerless(QueryBaseServerless):
         for item in response:
             name_list.append(item['indexes']['name'])
         return name_list
+
+    def get_fast_rebalance_config(self, indexer_node, rest_info):
+        """
+        returns a tuple of storage_scheme, bucket_name, storage_prefix
+        """
+        admin_username, admin_password = rest_info.admin_username, rest_info.admin_password
+        endpoint = "https://{}:19102/settings".format(indexer_node)
+        resp = requests.get(endpoint, auth=(admin_username, admin_password), verify=False)
+        resp.raise_for_status()
+        indexer_settings = resp.json()
+        self.log.debug(f"Indexer metadata {indexer_settings}")
+        bucket_name = indexer_settings["indexer.settings.rebalance.blob_storage_bucket"]
+        storage_prefix = "indexer.settings.rebalance.blob_storage_prefix"
+        storage_scheme = "indexer.settings.rebalance.blob_storage_scheme"
+        return storage_scheme, bucket_name, storage_prefix

@@ -51,8 +51,10 @@ class S3Utils(object):
         result_folder = [item['Key'] for item in result['Contents']]
         return folder_to_delete in result_folder
 
-    def check_s3_cleanup(self, folder='indexing'):
-        result = self.s3.list_objects_v2(Bucket=self.s3_bucket, Delimiter='/*')
+    def check_s3_cleanup(self, folder='indexing', bucket=None):
+        if not bucket:
+            bucket = self.s3_bucket
+        result = self.s3.list_objects_v2(Bucket=bucket, Delimiter='/*')
         folder_path_expected = f"{folder}/"
         self.log.info(f"Expected folder list {folder_path_expected}")
         folder_list_on_aws = []
