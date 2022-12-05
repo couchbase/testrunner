@@ -62,6 +62,8 @@ class ServerlessBaseTestCase(unittest.TestCase):
             self.new_dataplane_id = self.provision_dataplane(overRide)
             if self.new_dataplane_id is not None:
                 self.dataplanes[self.new_dataplane_id] = ServerlessDataPlane(self.new_dataplane_id)
+                rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
+                self.dataplanes[self.new_dataplane_id].populate(rest_api_info)
 
     def tearDown(self):
         if self._testMethodName not in ['suite_tearDown', 'suite_setUp'] and self.trigger_log_collect:
@@ -76,6 +78,9 @@ class ServerlessBaseTestCase(unittest.TestCase):
                     self.log.info(f"Test failure. Cbcollect info list {cb_collect_list}")
         if self.teardown_all_databases:
             self.delete_all_database()
+        if self.new_dataplane_id is not None:
+            self.log.info(f"Deleting dataplane : {self.new_dataplane_id}")
+            self.delete_dataplane(self.new_dataplane_id)
         self.task_manager.shutdown(force=True)
 
     def has_test_failed(self):

@@ -70,7 +70,6 @@ class FTSCallable:
         self._expires = TestInputSingleton.input.param("expires", 0)
         self.dataset = TestInputSingleton.input.param("dataset", "emp")
         self.run_via_n1ql = False
-        self.num_queries = TestInputSingleton.input.param("num_queries", 1)
 
     def __create_buckets(self):
         self.log.info("__create_buckets() is not implemented yet.")

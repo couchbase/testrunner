@@ -27,7 +27,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         self.LWM_limit = self.input.param("LWM_limit", 0.5)
         self.UWM_limit = self.input.param("UWM_limit", 0.3)
         self.scaling_time = self.input.param("scaling_time", 30)
-
+        self.num_queries = self.input.param("num_queries", 1)
         global_vars.system_event_logs = EventHelper()
         return super().setUp()
 
@@ -179,16 +179,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             if fts_callable.es:
                 fts_callable.create_es_index_mapping(index.es_custom_map,
                                                      index.index_definition)
-            fts_callable.load_data(self.num_of_docs_per_collection)
-            fts_callable.wait_for_indexing_complete(self.num_of_docs_per_collection)
-            if fts_callable._update or fts_callable._delete:
-                fts_callable.async_perform_update_delete()
-                if fts_callable._update:
-                    fts_callable.sleep(60, "Waiting for updates to get indexed...")
-                fts_callable.wait_for_indexing_complete()
-            fts_callable._FTSCallable__generate_random_queries(index)
-            fts_callable.sleep(30, "additional wait time to be sure, fts index is ready")
-            fts_callable.run_query_and_compare(index)
+            fts_callable.run_query_and_compare(index, self.num_queries)
             fts_callable.delete_all()
 
     # DB with width 'x' and weight 'y', create FTS index, verify replicas are in 2 different nodes and server group

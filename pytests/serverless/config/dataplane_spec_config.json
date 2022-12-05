@@ -80,15 +80,5 @@
         }
       }
     ]
-  },
-  "nebula": {
-    "image": "direct-nebula-0.1-56",
-    "compute": {
-      "type": "c6g.xlarge",
-      "count": {
-        "min": 3,
-        "max": 3
-      }
-    }
   }
 }
