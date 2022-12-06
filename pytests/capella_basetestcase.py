@@ -17,6 +17,7 @@ class BaseTestCase(OnPremBaseTestCase):
             self.input = TestInputSingleton.input
             self.parse_params()
             self.nodes_init = self.input.param("nodes_init", 3)
+            self.force_deploy_cluster = self.input.param("force_deploy_cluster", False)
 
             self.log = logger.Logger.get_logger()
             if self.log_level:
@@ -39,7 +40,7 @@ class BaseTestCase(OnPremBaseTestCase):
             CbServer.capella_credentials = capella_credentials
             self.capella_api = CapellaAPI(capella_credentials)
 
-            if CbServer.capella_cluster_id is None:
+            if CbServer.capella_cluster_id is None or self.force_deploy_cluster:
                 cluster_details = self.create_capella_config()
                 cluster_id = self.capella_api.create_cluster_and_wait(cluster_details)
                 CbServer.capella_cluster_id = cluster_id
