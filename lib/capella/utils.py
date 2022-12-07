@@ -292,7 +292,7 @@ class CapellaAPI:
         dataplane_id = resp.json()['dataplane']['id']
         return dataplane_id
 
-    def wait_for_database_deleted(self, database_id, timeout=1800):
+    def wait_for_database_deleted(self, database_id, timeout=300):
         end_time = time.time() + timeout
         while time.time() < end_time:
             try:
