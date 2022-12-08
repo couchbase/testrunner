@@ -568,7 +568,7 @@ class FlexIndexTests(QueryTests):
         fts_index.update_num_replicas(1)
 
         self.wait_for_fts_indexing_complete(fts_index, self.num_items)
-
+        # Due to MB-39569 LIKE flex queries could be returning different results than gsi queries
         failed_to_run_query, not_found_index_in_response, result_mismatch = self.run_queries_and_validate()
 
         if failed_to_run_query or not_found_index_in_response or result_mismatch:

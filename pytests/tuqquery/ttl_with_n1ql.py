@@ -856,8 +856,8 @@ class QueryExpirationTests(QueryTests):
         # Loading travel-sample bucket
         result_count = 31591
         self.rest.load_sample(self.sample_bucket)
-        self.wait_for_buckets_status({self.sample_bucket: 'healthy'}, 5, 120)
-        self.wait_for_bucket_docs({self.sample_bucket: result_count}, 5, 120)
+        self.wait_for_buckets_status({self.sample_bucket: 'healthy'}, 5, 180)
+        self.wait_for_bucket_docs({self.sample_bucket: result_count}, 5, 180)
         self._wait_for_index_online(self.sample_bucket, self.sample_bucket_index)
         bucket = self.rest.get_bucket(self.sample_bucket)
         self.shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
@@ -874,7 +874,7 @@ class QueryExpirationTests(QueryTests):
         update_expiry_query = "UPDATE {0} as b SET META(b).expiration = {1}".format(query_sample_bucket,
                                                                                     expiration_time)
         self.run_cbq_query(update_expiry_query)
-
+        time.sleep(1)
         # Running a nested SELECT Query
         nested_select_query = 'SELECT count(t1.city) FROM {0} t1 WHERE t1.type = "landmark" AND t1.city IN' \
                               ' (SELECT RAW city FROM {0} WHERE type = "airport" AND' \
@@ -885,7 +885,7 @@ class QueryExpirationTests(QueryTests):
         delete_query_with_limit = 'DELETE FROM {0} as d LIMIT {1}'.format(query_sample_bucket, limit_count)
         self.run_cbq_query(delete_query_with_limit)
         count_query = "SELECT COUNT(*) FROM {}".format(query_sample_bucket)
-        count, max_retry = 0, 15
+        count, max_retry = 0, 25
         while count < max_retry:
             results = self.run_cbq_query(count_query)['results']
             if results[0]['$1'] == result_count - 10:
