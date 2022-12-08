@@ -90,7 +90,6 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.storage_prefix = self.input.param("storage_prefix", None)
         self.index_batch_weight = self.input.param("index_batch_weight", 1)
         self.server_group_map = {}
-        self.password = self.input.membase_settings.rest_password
         if self.aws_access_key_id:
             from serverless.s3_utils import S3Utils
             self.s3_utils_obj = S3Utils(aws_access_key_id=self.aws_access_key_id,
@@ -1326,6 +1325,13 @@ class BaseSecondaryIndexingTests(QueryTests):
         command = "iptables -D INPUT -s {0} -j REJECT".format(node2.ip)
         shell.execute_command(command)
 
+    def block_outgoing_network_from_node(self, node1, node2):
+        shell = RemoteMachineShellConnection(node1)
+        self.log.info("Adding {0} into iptables rules on {1}".format(
+            node1.ip, node2.ip))
+        command = "iptables -A OUTPUT -s {0} -j REJECT".format(node2.ip)
+        shell.execute_command(command)
+
     def set_indexer_logLevel(self, loglevel="info"):
         """
         :param loglevel:
@@ -1611,7 +1617,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                              wait_if_warmup=True)
 
     def prepare_tenants(self, data_load=True, index_creations=True, query_node=None, json_template=None,
-                        bucket_prefix='test_bucket_', bucket_num_offset=0, num_buckets=None):
+                        bucket_prefix='test_bucket_', bucket_num_offset=0, num_buckets=None, defer_build_mix=False):
         if not json_template:
             json_template = self.json_template
         if not num_buckets:
@@ -1653,8 +1659,42 @@ class BaseSecondaryIndexingTests(QueryTests):
                 self.query_node = query_node
             self.gsi_util_obj.index_operations_during_phases(namespaces=self.namespaces, dataset=json_template,
                                                              query_node=self.query_node, capella_run=False,
-                                                             num_of_batches=self.index_batch_weight)
+                                                             num_of_batches=self.index_batch_weight,
+                                                             defer_build_mix=defer_build_mix)
             self.wait_until_indexes_online(defer_build=False)
+
+    def get_persisted_stats(self):
+        persisted_stats_list = ['last_known_scan_time',
+                                'avg_scan_rate',
+                                'num_rows_scanned',
+                                'num_rollbacks',
+                                'num_rollbacks_to_zero']
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        self.index_rest = RestConnection(index_node)
+        stats = self.index_rest.get_all_index_stats()
+        result = {}
+        for stat, value in stats.items():
+            for persisted_stat in persisted_stats_list:
+                if f':{persisted_stat}' in stat:
+                    result[stat] = value
+        return result
+
+    def get_rebalance_related_stats(self):
+        reblance_related_stats = ['items_count',
+                                  'key_size_distribution',
+                                  'num_docs_pending',
+                                  'raw_data_size',
+                                  'backstore_raw_data_size',
+                                  'arrkey_size_distribution']
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        self.index_rest = RestConnection(index_node)
+        stats = self.index_rest.get_all_index_stats()
+        result = {}
+        for stat, value in stats.items():
+            for reb_stat in reblance_related_stats:
+                if f':{reb_stat}' in stat:
+                    result[stat] = value
+        return result
 
     def create_S3_config(self):
         aws_cred_file = ('[default]\n'
@@ -1755,11 +1795,10 @@ class BaseSecondaryIndexingTests(QueryTests):
                         self.run_cbq_query(query=query)
                         query = pre_load_idx_gsi.generate_index_create_query(namespace=self.namespaces[0])
                         self.run_cbq_query(query=query)
-
                     self.gen_create = SDKDataLoader(num_ops=num_of_docs_per_collection, percent_create=100,
                                                     percent_update=0, percent_delete=0, scope=s_item,
                                                     collection=c_item, json_template=json_template,
-                                                    output=True,password=self.password)
+                                                    output=True)
                     tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
                                                                     batch_size=batch_size)
                     for task in tasks:

@@ -240,13 +240,11 @@ class GSIUtils(object):
         self.batch_size = len(definitions_list)
         return definitions_list
 
-    def get_create_index_list(self, definition_list, namespace, defer_build_mix=False):
+    def get_create_index_list(self, definition_list, namespace, defer_build_mix=False, defer_build=False):
         create_index_list = []
         for index_gen in definition_list:
             if defer_build_mix:
                 defer_build = random.choice([True, False])
-            else:
-                defer_build = False
             index_gen = index_gen
             query = index_gen.generate_index_create_query(namespace=namespace, defer_build=defer_build)
             create_index_list.append(query)

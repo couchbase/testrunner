@@ -31,6 +31,7 @@ class TenantManagement(BaseSecondaryIndexingTests):
         self.batch_size = self.input.param("batch_size", 1000)
         self.node_to_swap = self.input.param("node_to_swap", 1)
         self.recover_failed_over_node = self.input.param("recover_failed_over_node", False)
+        self.cancel_rebalance = self.input.param("cancel_rebalance", False)
         self.gsi_util_obj = GSIUtils(self.run_cbq_query)
         self.namespaces = []
         self._create_server_groups()
@@ -48,20 +49,30 @@ class TenantManagement(BaseSecondaryIndexingTests):
     def suite_setUp(self):
         pass
 
-    def is_lwm_reached(self):
-        return (self.get_gsi_memory_ratio() > GSI_MEMORY_LWM) or (self.get_gsi_usage_ratio() > GSI_UNITS_LWM)
+    def is_lwm_reached(self, node):
+        return (self.get_gsi_memory_ratio(node=node) > GSI_MEMORY_LWM) or \
+               (self.get_gsi_usage_ratio(node=node) > GSI_UNITS_LWM)
 
-    def is_hwm_reached(self):
-        return (self.get_gsi_memory_ratio() > GSI_MEMORY_HWM) or (self.get_gsi_usage_ratio() > GSI_UNITS_HWM)
+    def is_hwm_reached(self, node):
+        return (self.get_gsi_memory_ratio(node=node) > GSI_MEMORY_HWM) or \
+               (self.get_gsi_usage_ratio(node=node) > GSI_UNITS_HWM)
 
-    def get_gsi_memory_ratio(self):
-        stats = self.index_rest.get_all_index_stats()
+    def get_gsi_memory_ratio(self, node):
+        if node is None:
+            rest = self.index_rest
+        else:
+            rest = RestConnection(node)
+        stats = rest.get_all_index_stats()
         ratio = stats['memory_used_actual'] / stats['memory_quota'] * 100
         self.log.info(f"Current GSI memory ratio is : {ratio}")
         return ratio
 
-    def get_gsi_usage_ratio(self):
-        stats = self.index_rest.get_all_index_stats()
+    def get_gsi_usage_ratio(self, node):
+        if node is None:
+            rest = self.index_rest
+        else:
+            rest = RestConnection(node)
+        stats = rest.get_all_index_stats()
         ratio = stats['units_used_actual'] / stats['units_quota'] * 100
         self.log.info(f"Current GSI units ratio is : {ratio}")
         return ratio
@@ -220,6 +231,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
         # Getting the new configuration of cluster
         new_sub_cluster_list = []
         new_idx_host_list_dict = {str(bucket): set() for bucket in self.buckets}
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        self.index_rest = RestConnection(index_node)
         indexer_metadata = self.index_rest.get_indexer_metadata()['status']
 
         for idx in indexer_metadata:
@@ -240,7 +253,7 @@ class TenantManagement(BaseSecondaryIndexingTests):
             for new_sub_cluster in new_sub_cluster_list:
                 zone_1, zone_2 = None, None
 
-                self.assertEqual(len(new_sub_cluster_list), INDEX_SUB_CLUSTER_LENGTH,
+                self.assertEqual(len(new_sub_cluster_list), len(sub_cluster_list),
                                  f"Indexes distributed on sub-cluster of more"
                                  f"than 2 index nodes: {new_sub_cluster_list}")
 
@@ -387,6 +400,12 @@ class TenantManagement(BaseSecondaryIndexingTests):
             task = executor.submit(self.gsi_util_obj.index_operations_during_phases,
                                    namespaces=self.namespaces, phase="during", timeout=120, query_node=self.query_node)
             tasks.append(task)
+
+            task = executor.submit(self.gsi_util_obj.index_operations_during_phases,
+                                   namespaces=self.namespaces, phase="before", timeout=120,
+                                   query_node=self.query_node, num_of_batches=2)
+            tasks.append(task)
+
             self.validate_tenant_management(check="failed_over_subcluster")
 
             for task in tasks:
@@ -403,7 +422,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
         self.prepare_tenants(data_load=False)
         scopes = [f'{self.scope_prefix}_{num + 1}' for num in range(self.num_scopes)]
         collections = [f'{self.collection_prefix}_{num + 1}' for num in range(self.num_collections)]
-        while not self.is_lwm_reached():
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        while not self.is_lwm_reached(node=index_node):
             random_prefix = 'doc_' + ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
             self.load_data_on_all_tenants(scopes=scopes, collections=collections, key_prefix=random_prefix,
                                           num_docs=self.num_of_docs_per_collection)
@@ -542,3 +562,635 @@ class TenantManagement(BaseSecondaryIndexingTests):
 
         self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
         self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
+
+    def test_cancel_resume_auto_scale(self):
+        self.prepare_tenants()
+        sub_clusters = self.get_sub_cluster_list()
+        index_node_ips = [node.split(':')[0] for node in sub_clusters[0]]
+        node_zone_dict = {}
+        index_nodes = []
+        for index_node_ip in index_node_ips:
+            for server in self.servers:
+                if index_node_ip == server.ip:
+                    index_nodes.append(server)
+                    break
+
+        for node in index_node_ips:
+            node_zone_dict[node] = self.get_server_group(node)
+        for counter, server in enumerate(node_zone_dict):
+            self.rest.add_node(user=self.rest.username, password=self.rest.password,
+                               remoteIp=self.servers[self.nodes_init + counter].ip,
+                               zone_name=node_zone_dict[server],
+                               services=['index'])
+        # Todo: Add metakv state check b4 reb
+        metadatatokens_b4_reb = self.index_rest.get_metadata_tokens()
+        try:
+            rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
+                                                          to_add=[],
+                                                          to_remove=[],
+                                                          services=['index'] * len(index_nodes))
+            self.sleep(2, "Allowing sometime for rebalance to make progress")
+            if self.cancel_rebalance:
+                self.rest.stop_rebalance()
+            else:
+                self.stop_server(self.servers[self.nodes_init])
+            result = rebalance_task.result()
+            self.log.error(f"Rebalance didn't fail: {result}")
+        except Exception as err:
+            self.log.info('Rebalance failed. See logs for detailed reason' in str(err))
+        finally:
+            if self.cancel_rebalance is False:
+                self.start_server(self.servers[self.nodes_init])
+        # Todo: Add metakv state check aft reb failure
+        metadatatokens_aft_reb = self.index_rest.get_metadata_tokens()
+
+        self.log.info(metadatatokens_b4_reb)
+        self.log.info(metadatatokens_aft_reb)
+
+        rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
+                                                      to_add=[],
+                                                      to_remove=[],
+                                                      services=['index'] * len(index_nodes))
+        rebalance_task.result()
+        # Todo: Add metakv state check during reb
+        metadatatokens_during_reb = self.index_rest.get_metadata_tokens()
+        rebalance_status = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+        # Todo: Add metakv state check aft reb success
+        metadatatokens_aft_succ_reb = self.index_rest.get_metadata_tokens()
+
+        self.log.info(metadatatokens_during_reb)
+        self.log.info(metadatatokens_aft_succ_reb)
+
+    def test_cancel_resume_swap_rebalance(self):
+        self.prepare_tenants()
+        indexder_metadata_b4_swap = self.index_rest.get_indexer_metadata()['status']
+        sub_clusters = self.get_sub_cluster_list()
+        index_node_ips = [node.split(':')[0] for node in sub_clusters[0]]
+        node_zone_dict = {}
+        index_nodes = []
+        for index_node_ip in index_node_ips:
+            for server in self.servers:
+                if index_node_ip == server.ip:
+                    index_nodes.append(server)
+                    break
+
+        for node in index_node_ips:
+            node_zone_dict[node] = self.get_server_group(node)
+        for counter, server in enumerate(node_zone_dict):
+            self.rest.add_node(user=self.rest.username, password=self.rest.password,
+                               remoteIp=self.servers[self.nodes_init + counter].ip,
+                               zone_name=node_zone_dict[server],
+                               services=['index'])
+        try:
+            rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
+                                                          to_add=[],
+                                                          to_remove=index_nodes,
+                                                          services=['index'] * len(index_nodes))
+            self.sleep(5, "Allowing sometime for rebalance to make progress")
+
+            if self.cancel_rebalance:
+                self.rest.stop_rebalance()
+            else:
+                self.stop_server(self.servers[self.nodes_init])
+            result = rebalance_task.result()
+            self.log.error(f"Rebalance didn't fail: {result}")
+        except Exception as err:
+            self.log.info('Rebalance failed. See logs for detailed reason' in str(err))
+        finally:
+            if self.cancel_rebalance is False:
+                self.start_server(self.servers[self.nodes_init])
+
+        self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
+        rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
+                                                      to_add=[],
+                                                      to_remove=index_nodes,
+                                                      services=['index'] * len(index_nodes))
+
+        rebalance_task.result()
+        rebalance_status = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        self.index_rest = RestConnection(index_node)
+        indexder_metadata_aft_swap = self.index_rest.get_indexer_metadata()['status']
+        self.assertEqual(len(indexder_metadata_b4_swap), len(indexder_metadata_aft_swap))
+        prim_index = None
+        sec_index = None
+        for index in indexder_metadata_aft_swap:
+            if 'primary_' in index['indexName']:
+                prim_index = index['indexName']
+            elif 'age_gender' in index['indexName']:
+                sec_index = index['indexName']
+
+            if prim_index and sec_index:
+                break
+
+        for namespace in self.namespaces:
+            primary_scan_query = f'Select count(*) from {namespace} use index (`{prim_index}`) where age >=0'
+            secondary_scan_query = f'Select count(*) from {namespace} use index (`{sec_index}`) where age >=0'
+            prim_result = self.run_cbq_query(query=primary_scan_query, server=self.query_node)
+            sec_result = self.run_cbq_query(query=secondary_scan_query, server=self.query_node)
+            self.assertEqual(prim_result, sec_result, "Doc count differ between Primary and Secondary Index")
+
+    def test_fast_rebalance_conflict_same_tenant(self):
+        same_collection_conflict = self.input.param("same_collection_conflict", False)
+        self.prepare_tenants()
+        index_metadata_b4_swap = self.index_rest.get_indexer_metadata()['status']
+        sub_clusters = self.get_sub_cluster_list()
+        swap_node_ip = sub_clusters[0][0].split(':')[0]
+        swap_node = ''
+
+        for server in self.servers:
+            if swap_node_ip == server.ip:
+                swap_node = server
+
+        swap_node_zone = self.get_server_group(swap_node_ip)
+        self.rest.add_node(user=self.rest.username, password=self.rest.password,
+                           remoteIp=self.servers[self.nodes_init].ip,
+                           zone_name=swap_node_zone,
+                           services=['index'])
+
+        create_queries = []
+        if same_collection_conflict:
+            namespace = self.namespaces[0]
+        else:
+            namespace = self.namespaces[1]
+        for _ in range(10):
+            query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template)
+            queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                              namespace=namespace, defer_build_mix=True)
+            create_queries.extend(queries)
+        tasks = []
+        try:
+            with ThreadPoolExecutor() as executor:
+                for query in create_queries:
+                    task = executor.submit(self.run_cbq_query, query=query, server=self.query_node)
+                    tasks.append(task)
+                rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
+                                                              to_add=[],
+                                                              to_remove=[swap_node],
+                                                              services=['index'])
+                rebalance_task.result()
+                rebalance_status = RestHelper(self.rest).rebalance_reached()
+                self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+        except Exception as err:
+            self.log.info(err)
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        self.index_rest = RestConnection(index_node)
+        indexder_metadata_aft_swap = self.index_rest.get_indexer_metadata()['status']
+        self.log.info(f"{len(indexder_metadata_aft_swap)}, {len(index_metadata_b4_swap)}")
+
+    def test_fast_rebalance_conflict_different_tenant(self):
+        self.prepare_tenants(index_creations=False)
+
+        # creating imbalance tenant indexes workload
+        self.gsi_util_obj.index_operations_during_phases(namespaces=[self.namespaces[0]], dataset=self.json_template,
+                                                         query_node=self.query_node, capella_run=False,
+                                                         num_of_batches=3)
+        self.wait_until_indexes_online(defer_build=False)
+
+        self.gsi_util_obj.index_operations_during_phases(namespaces=[self.namespaces[1]], dataset=self.json_template,
+                                                         query_node=self.query_node, capella_run=False,
+                                                         num_of_batches=1)
+        self.wait_until_indexes_online(defer_build=False)
+
+        index_metadata_b4_swap = self.index_rest.get_indexer_metadata()['status']
+        sub_clusters = self.get_sub_cluster_list()
+        swap_node_ip = sub_clusters[0][0].split(':')[0]
+        swap_node = ''
+
+        for server in self.servers:
+            if swap_node_ip == server.ip:
+                swap_node = server
+
+        swap_node_zone = self.get_server_group(swap_node_ip)
+        self.rest.add_node(user=self.rest.username, password=self.rest.password,
+                           remoteIp=self.servers[self.nodes_init].ip,
+                           zone_name=swap_node_zone,
+                           services=['index'])
+
+        create_queries = []
+
+        namespace = self.namespaces[1]
+        for _ in range(10):
+            query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template)
+            queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                              namespace=namespace, defer_build_mix=True)
+            create_queries.extend(queries)
+        tasks = []
+        try:
+            with ThreadPoolExecutor() as executor:
+                for query in create_queries:
+                    task = executor.submit(self.run_cbq_query, query=query, server=self.query_node)
+                    tasks.append(task)
+                rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
+                                                              to_add=[],
+                                                              to_remove=[swap_node],
+                                                              services=['index'])
+                rebalance_task.result()
+                rebalance_status = RestHelper(self.rest).rebalance_reached()
+                self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+        except Exception as err:
+            self.log.info(err)
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        self.index_rest = RestConnection(index_node)
+        indexder_metadata_aft_swap = self.index_rest.get_indexer_metadata()['status']
+        self.log.info(f"{len(indexder_metadata_aft_swap)}, {len(index_metadata_b4_swap)}")
+
+    def test_ddl_conflict_same_tenant(self):
+        same_collection_conflict = self.input.param("same_collection_conflict", False)
+        self.prepare_tenants()
+        index_metadata_b4_swap = self.index_rest.get_indexer_metadata()['status']
+        sub_clusters = self.get_sub_cluster_list()
+        swap_node_ip = sub_clusters[0][0].split(':')[0]
+        swap_node = ''
+
+        for server in self.servers:
+            if swap_node_ip == server.ip:
+                swap_node = server
+
+        swap_node_zone = self.get_server_group(swap_node_ip)
+        self.rest.add_node(user=self.rest.username, password=self.rest.password,
+                           remoteIp=self.servers[self.nodes_init].ip,
+                           zone_name=swap_node_zone,
+                           services=['index'])
+
+        create_queries = []
+        if same_collection_conflict:
+            namespace = self.namespaces[0]
+        else:
+            namespace = self.namespaces[1]
+        for _ in range(10):
+            query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template)
+            queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                              namespace=namespace, defer_build_mix=True)
+            create_queries.extend(queries)
+        tasks = []
+        try:
+            with ThreadPoolExecutor() as executor:
+                rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
+                                                              to_add=[],
+                                                              to_remove=[swap_node],
+                                                              services=['index'])
+                self.sleep(10)
+                for query in create_queries:
+                    task = executor.submit(self.run_cbq_query, query=query, server=self.query_node)
+                    tasks.append(task)
+
+                rebalance_task.result()
+                rebalance_status = RestHelper(self.rest).rebalance_reached()
+                self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+        except Exception as err:
+            self.log.info(err)
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        self.index_rest = RestConnection(index_node)
+        indexder_metadata_aft_swap = self.index_rest.get_indexer_metadata()['status']
+        self.log.info(f"{len(indexder_metadata_aft_swap)}, {len(index_metadata_b4_swap)}")
+
+    def test_ddl_conflict_different_tenant(self):
+        self.prepare_tenants()
+
+        # creating imbalance tenant indexes workload
+        self.gsi_util_obj.index_operations_during_phases(namespaces=[self.namespaces[0]], dataset=self.json_template,
+                                                         query_node=self.query_node, capella_run=False,
+                                                         num_of_batches=3)
+        self.wait_until_indexes_online(defer_build=False)
+
+        self.gsi_util_obj.index_operations_during_phases(namespaces=[self.namespaces[1]], dataset=self.json_template,
+                                                         query_node=self.query_node, capella_run=False,
+                                                         num_of_batches=1)
+        self.wait_until_indexes_online(defer_build=False)
+
+        index_metadata_b4_swap = self.index_rest.get_indexer_metadata()['status']
+        sub_clusters = self.get_sub_cluster_list()
+        swap_node_ip = sub_clusters[0][0].split(':')[0]
+        swap_node = ''
+
+        for server in self.servers:
+            if swap_node_ip == server.ip:
+                swap_node = server
+
+        swap_node_zone = self.get_server_group(swap_node_ip)
+        self.rest.add_node(user=self.rest.username, password=self.rest.password,
+                           remoteIp=self.servers[self.nodes_init].ip,
+                           zone_name=swap_node_zone,
+                           services=['index'])
+
+        create_queries = []
+
+        namespace = self.namespaces[1]
+        for _ in range(10):
+            query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template)
+            queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                              namespace=namespace, defer_build_mix=True)
+            create_queries.extend(queries)
+        tasks = []
+        try:
+            with ThreadPoolExecutor() as executor:
+                rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
+                                                              to_add=[],
+                                                              to_remove=[swap_node],
+                                                              services=['index'])
+                self.sleep(10)
+                for query in create_queries:
+                    task = executor.submit(self.run_cbq_query, query=query, server=self.query_node)
+                    tasks.append(task)
+
+                rebalance_task.result()
+                rebalance_status = RestHelper(self.rest).rebalance_reached()
+                self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+        except Exception as err:
+            self.log.info(err)
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        self.index_rest = RestConnection(index_node)
+        indexder_metadata_aft_swap = self.index_rest.get_indexer_metadata()['status']
+        self.log.info(f"{len(indexder_metadata_aft_swap)}, {len(index_metadata_b4_swap)}")
+
+    def test_clean_up_on_failure(self):
+        rebalance_failure_sources = self.input.param('rebalance_failure_sources', 'src_sub')
+        self.prepare_tenants()
+        index_metadata_b4_swap = self.index_rest.get_indexer_metadata()['status']
+        sub_clusters = self.get_sub_cluster_list()
+        swap_node_ip = sub_clusters[0][1].split(':')[0]
+        swap_node = ''
+
+        for server in self.servers:
+            if swap_node_ip == server.ip:
+                swap_node = server
+
+        swap_node_zone = self.get_server_group(swap_node_ip)
+        self.rest.add_node(user=self.rest.username, password=self.rest.password,
+                           remoteIp=self.servers[self.nodes_init].ip,
+                           zone_name=swap_node_zone,
+                           services=['index'])
+        try:
+            rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
+                                                          to_add=[],
+                                                          to_remove=[swap_node],
+                                                          services=['index'])
+            self.sleep(10)
+            if rebalance_failure_sources == 'src_sub':
+                self.stop_server(swap_node)
+            else:
+                self.stop_server(self.servers[self.nodes_init])
+            rebalance_task.result()
+            rebalance_status = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+
+        except Exception as err:
+            self.log.info(err)
+        finally:
+            if rebalance_failure_sources == 'src_sub':
+                self.start_server(swap_node)
+            else:
+                self.start_server(self.servers[self.nodes_init])
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        self.index_rest = RestConnection(index_node)
+        indexder_metadata_aft_swap = self.index_rest.get_indexer_metadata()['status']
+        self.log.info(f"{len(indexder_metadata_aft_swap)}, {len(index_metadata_b4_swap)}")
+        self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
+
+    def test_stats_validation(self):
+        mutation_during_rebalance = self.input.param("mutation_during_rebalance", False)
+        self.prepare_tenants()
+        indexer_metadata_b4_reb = self.index_rest.get_indexer_metadata()['status']
+        index_reb_stats_b4_reb = self.get_rebalance_related_stats()
+        index_persisted_stats_b4_reb = self.get_persisted_stats()
+        scopes = [f'{self.scope_prefix}_{num + 1}' for num in range(self.num_scopes)]
+        collections = [f'{self.collection_prefix}_{num + 1}' for num in range(self.num_collections)]
+        with ThreadPoolExecutor() as executor:
+            validation_task = executor.submit(self.validate_tenant_management, check="subcluster_reblance_swap")
+            if mutation_during_rebalance:
+                data_task = executor.submit(self.load_data_on_all_tenants, scopes=scopes, collections=collections,
+                                            num_docs=self.num_of_docs_per_collection * 2)
+
+                scan_task = executor.submit(self.gsi_util_obj.index_operations_during_phases,
+                                            namespaces=self.namespaces, phase="during", timeout=120,
+                                            query_node=self.query_node)
+                data_task.result()
+                scan_task.result()
+            validation_task.result()
+
+        for namespace in self.namespaces:
+            doc_count_query = f'Select count(*) from {namespace}'
+            doc_count_result = self.run_cbq_query(query=doc_count_query)['results'][0]['$1']
+            select_count_query = f'Select count(*) from {namespace} where age >= 0'
+            select_count_result = self.run_cbq_query(query=select_count_query)['results'][0]['$1']
+            self.assertEqual(doc_count_result, select_count_result)
+            # self.assertEqual(doc_count_result, self.num_of_docs_per_collection * 2)
+        index_reb_stats_aft_reb = self.get_rebalance_related_stats()
+        index_persisted_stats_aft_reb = self.get_persisted_stats()
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        self.index_rest = RestConnection(index_node)
+        indexder_metadata_aft_reb = self.index_rest.get_indexer_metadata()['status']
+
+        # Todo: Add validation for stats
+        self.log.info(f'{index_reb_stats_b4_reb}')
+        self.log.info(f'{index_reb_stats_aft_reb}')
+        self.log.info(f'{index_persisted_stats_b4_reb}')
+        self.log.info(f'{index_persisted_stats_aft_reb}')
+        self.log.info(f'{indexer_metadata_b4_reb}')
+        self.log.info(f'{indexder_metadata_aft_reb}')
+
+    def test_schedule_ddl_during_rebalance(self):
+        self.prepare_tenants(defer_build_mix=True)
+        indexer_metadata_b4_reb = self.index_rest.get_indexer_metadata()['status']
+        defered_indexes = {}
+        index_dict = {}
+        for index in indexer_metadata_b4_reb:
+            if index['status'] == 'Created':
+                namespace = f'{index["bucket"]}.{index["scope"]}.{index["collection"]}'
+                if namespace in defered_indexes:
+                    defered_indexes[namespace].append(index)
+                else:
+                    defered_indexes[namespace] = [index]
+            index_dict['indexName'] = f'{index["bucket"]}.{index["scope"]}.{index["collection"]}'
+
+        # Dropping 20% of indexes during rebalance, building deferred and creating new indexes
+        drop_queries = []
+        for index in index_dict:
+            if index not in defered_indexes:
+                drop_query = f'Drop index {defered_indexes[index]}.{index}'
+                drop_queries.append(drop_query)
+            if len(drop_queries) == len(index_dict) / 5:
+                break
+        build_queries = [f'Build index on {namespace}.{", ".join(defered_indexes[namespace])}'
+                         for namespace in defered_indexes]
+        create_queries = []
+        for namespace in self.namespaces:
+            for _ in range(10):
+                query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template)
+                queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                  namespace=namespace, defer_build_mix=True)
+                create_queries.extend(queries)
+        queries = build_queries + drop_queries + create_queries
+
+        sub_clusters = self.get_sub_cluster_list()
+        swap_node_ip = sub_clusters[0][0].split(':')[0]
+        swap_node = ''
+
+        for server in self.servers:
+            if swap_node_ip == server.ip:
+                swap_node = server
+
+        swap_node_zone = self.get_server_group(swap_node_ip)
+        self.rest.add_node(user=self.rest.username, password=self.rest.password,
+                           remoteIp=self.servers[self.nodes_init].ip,
+                           zone_name=swap_node_zone,
+                           services=['index'])
+
+        tasks = []
+        try:
+            with ThreadPoolExecutor() as executor:
+                for query in queries:
+                    task = executor.submit(self.run_cbq_query, query=query, server=self.query_node)
+                    tasks.append(task)
+                rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
+                                                              to_add=[],
+                                                              to_remove=[swap_node],
+                                                              services=['index'])
+                # Todo: Add provision for MetaKv Endpoint check during rebalnce
+
+                rebalance_task.result()
+                rebalance_status = RestHelper(self.rest).rebalance_reached()
+                self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+        except Exception as err:
+            self.log.info(err)
+
+        # Todo: Add provision for MetaKv Endpoint check after reblance finishes
+
+        self.wait_until_indexes_online()
+        indexer_metadata_aft_reb = self.index_rest.get_indexer_metadata()['status']
+        self.log.info(indexer_metadata_b4_reb)
+        self.log.info(indexer_metadata_aft_reb)
+
+    def test_auto_rebalance_defrag(self):
+        self.prepare_tenants()
+
+        # Get skewed sub-cluster
+        indexer_metadata = self.index_rest.get_indexer_metadata()['status']
+        sub_cluster_map = {}
+        for index in indexer_metadata:
+            host = index['host'][0].split(":")
+            tenant_namespace = f'default:{index["bucket"]}.{index["scope"]}.{index["collection"]}'
+            if tenant_namespace in sub_cluster_map:
+                sub_cluster_map[tenant_namespace].add(host)
+            else:
+                sub_cluster_map[tenant_namespace] = {host}
+
+        tenants_on_skewed_sub_cluster = []
+        if sub_cluster_map[self.namespaces[0]] == sub_cluster_map[self.namespaces[1]]:
+            tenants_on_skewed_sub_cluster.append(self.namespaces[0])
+            tenants_on_skewed_sub_cluster.append(self.namespaces[1])
+            skewed_sub_cluster_node = list(sub_cluster_map[self.namespaces[0]])[0]
+        elif sub_cluster_map[self.namespaces[0]] == sub_cluster_map[self.namespaces[2]]:
+            tenants_on_skewed_sub_cluster.append(self.namespaces[0])
+            tenants_on_skewed_sub_cluster.append(self.namespaces[2])
+            skewed_sub_cluster_node = list(sub_cluster_map[self.namespaces[0]])[0]
+        else:
+            tenants_on_skewed_sub_cluster.append(self.namespaces[1])
+            tenants_on_skewed_sub_cluster.append(self.namespaces[2])
+            skewed_sub_cluster_node = list(sub_cluster_map[self.namespaces[1]])[0]
+
+        # Pushing a sub-cluster towards HWM
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        node = ''
+        for index_node in index_nodes:
+            if index_node.ip == skewed_sub_cluster_node:
+                node = index_node
+                break
+
+        # As the tenant usage is below HWM, a reb
+        node_rest = RestConnection(node)
+        defrag_result_b4_hwm = node_rest.get_index_defrag_output()
+        self.log.info(f"Defrag result before HWM:{defrag_result_b4_hwm}")
+
+        while not self.is_hwm_reached(node=node):
+            tasks = []
+            with ThreadPoolExecutor() as executor:
+                for namespace in tenants_on_skewed_sub_cluster:
+                    task = executor.submit(self.gsi_util_obj.index_operations_during_phases, namespaces=[namespace],
+                                           dataset=self.json_template, num_of_batches=5)
+                    tasks.append(task)
+            for task in tasks:
+                task.result()
+
+        defrag_result_aft_hwm = node_rest.get_index_defrag_output()
+        self.log.info(f"Defrag result after HWM:{defrag_result_aft_hwm}")
+        # calling rebalance to run defrag
+        try:
+            rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
+                                                          to_add=[],
+                                                          to_remove=[],
+                                                          services=[])
+            rebalance_task.result()
+            rebalance_status = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+        except Exception as err:
+            self.log.info(err)
+
+        # Todo: Not sure how to validate the scenario
+
+    def test_defrag_replica_repair(self):
+        self.prepare_tenants()
+
+        indexer_metadata_b4_reb = self.index_rest.get_indexer_metadata()['status']
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        node_rest = RestConnection(index_node)
+        defrag_result_b4_reb = node_rest.get_index_defrag_output()
+        self.log.info(f"Defrag result before HWM:{defrag_result_b4_reb}")
+
+        # Making replica repair available in cluster and on reblance replica should be available
+        # Todo: Add call to have index replica available for repair
+
+        # calling rebalance to run replica repair
+        try:
+            rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
+                                                          to_add=[],
+                                                          to_remove=[],
+                                                          services=[])
+            rebalance_task.result()
+            rebalance_status = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+        except Exception as err:
+            self.log.info(err)
+
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        self.index_rest = RestConnection(index_node)
+        indexer_metadata_after_reb = self.index_rest.get_indexer_metadata()['status']
+        defrag_result_aft_reb = self.index_rest.get_index_defrag_output()
+        self.log.info(f"Defrag result before HWM:{defrag_result_aft_reb}")
+        # Todo: Not sure how to validate the scenario
+
+    def test_defrag_scale_down(self):
+        self.prepare_tenants()
+
+        indexer_metadata = self.index_rest.get_indexer_metadata()['status']
+        sub_cluster_b4_reb = self.get_sub_cluster_list()
+        # As the tenant usage is below 20% of LWM, a rebalance should down scale empty sub-cluster
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        index_rest = RestConnection(index_node)
+        defrag_result_b4_hwm = index_rest.get_index_defrag_output()
+        self.log.info(f"Defrag result before HWM:{defrag_result_b4_hwm}")
+
+        # Todo: Add call to have index replica available for repair
+
+        # calling rebalance to run replica repair
+        try:
+            rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
+                                                          to_add=[],
+                                                          to_remove=[],
+                                                          services=[])
+            rebalance_task.result()
+            rebalance_status = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+        except Exception as err:
+            self.log.info(err)
+
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        index_rest = RestConnection(index_node)
+        defrag_result_aft_hwm = index_rest.get_index_defrag_output()
+        self.log.info(f"Defrag result before HWM:{defrag_result_b4_hwm}")
+        sub_cluster_aft_reb = self.get_sub_cluster_list()
+        # Todo: Not sure how to validate the scenario
+        self.assertTrue(len(sub_cluster_aft_reb) < len(sub_cluster_b4_reb))

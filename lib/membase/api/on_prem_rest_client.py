@@ -2114,13 +2114,22 @@ class RestConnection(object):
             raise Exception(content)
         return json.loads(content)
 
+    def get_index_defrag_output(self):
+        api = self.baseUrl + 'pools/default/services/index/defragmented'
+        status, content, header = self._http_request(api)
+        if status:
+            json_parsed = json.loads(content)
+            return json_parsed
+        raise Exception("API defrag didn't return result.")
+
     def get_index_stats(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'stats'
         status, content, header = self._http_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
-            index_map = RestParser().parse_index_stats_response(json_parsed, index_map=index_map)
-        return index_map
+            return json_parsed
+        else:
+            raise Exception("Check API endpoint. Didn't get any result")
 
     def get_index_stats_collections(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'stats'
@@ -2169,6 +2178,17 @@ class RestConnection(object):
                 indexes_count[index] = stats["MainStore"]["count"]
 
         return indexes_count
+
+    def get_metadata_tokens(self):
+        api = self.index_baseUrl + 'listMetadataTokens'
+        status, content, header = self._http_request(api)
+        if status:
+            content = content.decode("utf8")
+            try:
+                json_parsed = json.loads(content)
+                return json_parsed
+            except Exception as err:
+                return content
 
     def get_index_storage_stats(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'stats/storage'
