@@ -34,7 +34,7 @@ def main():
 
     print('the given server info is', options.servers)
 
-    if options.servers and len(servers) > 0:
+    if options.servers and len(options.servers) > 0:
         if not options.servers.startswith('['):
             options.servers='['+options.servers+']'
         if options.internal_servers and not options.internal_servers.startswith('['):
