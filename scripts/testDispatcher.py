@@ -381,7 +381,7 @@ def main():
 
             # check any os specific
             if 'os' not in data or (data['os'] == options.os) or \
-                    (data['os'] == 'linux' and options.os in {'centos', 'ubuntu'}):
+                    (data['os'] == 'linux' and options.os in {'centos', 'ubuntu','debian'}):
 
                 # and also check for which release it is implemented in
                 if 'implementedIn' not in data or releaseVersion >= float(data['implementedIn']):
