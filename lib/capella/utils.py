@@ -355,6 +355,11 @@ class CapellaAPI:
             return resp.json()['dataplaneId']
         else:
             self.log.info(f"Timed out waiting for dataplane to be ready, Aborting...")
+            job_resp = self.serverless_api.get_dataplane_job_info(resp.json()['dataplaneId']).json()
+            if 'errors' in job_resp['clusterJobs'][0]:
+                self.log.info("ABORTING ERROR :-")
+                print(job_resp['clusterJobs'][0]['errors'])
+            self.delete_dataplane(resp.json()['dataplaneId'])
             return None
 
     def wait_for_dataplane_ready(self, dataplane_id):
@@ -372,12 +377,16 @@ class CapellaAPI:
         resp = self.serverless_api.update_database(database_id, override_obj)
         resp.raise_for_status()
 
-    def get_databases_id(self):
+    def get_databases_id(self, dataplane_id=None):
+        if dataplane_id is not None:
+            dp_id = dataplane_id
+        else:
+            dp_id = self.dataplane_id
         resp = self.serverless_api.get_all_serverless_databases()
         all_ids = []
         if resp and isinstance(resp.json(), list):
             for database in resp.json():
-                if 'dataplaneId' in database['config'] and database['config']['dataplaneId'] == self.dataplane_id:
+                if 'dataplaneId' in database['config'] and database['config']['dataplaneId'] == dp_id:
                     all_ids.append(database['id'])
         return all_ids
 
@@ -417,6 +426,7 @@ class CapellaAPI:
         return fts_hostname
 
     def delete_dataplane(self, dataplane_id):
+        self.log.info(f"Deleting serverless dataplane : {dataplane_id}")
         resp = self.serverless_api.delete_dataplane(dataplane_id)
         resp.raise_for_status()
 

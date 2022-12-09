@@ -62,6 +62,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
                 with open('pytests/serverless/config/dataplane_spec_config.json') as f:
                     overRide = json.load(f)
                     overRide['couchbase']['image'] = self.input.capella.get("image")
+                    overRide['couchbase']['version'] = self.input.capella.get("server_version")
             self.new_dataplane_id = self.provision_dataplane(overRide)
             if self.new_dataplane_id is not None:
                 self.dataplanes[self.new_dataplane_id] = ServerlessDataPlane(self.new_dataplane_id)
@@ -83,6 +84,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
             self.delete_all_database()
         if self.new_dataplane_id is not None:
             self.log.info(f"Deleting dataplane : {self.new_dataplane_id}")
+            self.delete_all_database(True, self.new_dataplane_id)
             self.delete_dataplane(self.new_dataplane_id)
         self.task_manager.shutdown(force=True)
 
@@ -181,10 +183,10 @@ class ServerlessBaseTestCase(unittest.TestCase):
         self.log.info('PROVISIONING DATAPLANE ...')
         return self.api.create_dataplane_wait_for_ready(overRide)
 
-    def delete_all_database(self, all_db=False):
+    def delete_all_database(self, all_db=False, dataplane_id=None):
         databases = None
         if all_db:
-            databases = self.api.get_databases_id()
+            databases = self.api.get_databases_id(dataplane_id)
             if len(databases) == 0:
                 return
         else:

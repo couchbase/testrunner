@@ -11,6 +11,7 @@ import random
 import threading
 import pprint
 from datetime import datetime
+from prettytable import PrettyTable
 
 class FTSElixirSanity(ServerlessBaseTestCase):
     def setUp(self):
@@ -27,7 +28,8 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         self.LWM_limit = self.input.param("LWM_limit", 0.5)
         self.UWM_limit = self.input.param("UWM_limit", 0.3)
         self.scaling_time = self.input.param("scaling_time", 30)
-        self.num_queries = self.input.param("num_queries", 1)
+        self.num_queries = self.input.param("num_queries", 20)
+        self.autoscaling_with_queries = self.input.param("autoscaling_with_queries", False)
         global_vars.system_event_logs = EventHelper()
         return super().setUp()
 
@@ -160,7 +162,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             collection_name = f'db_{counter}_collection_{random.randint(0, 1000)}'
             self.create_scope(database_obj=database, scope_name=scope_name)
             self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
-            self.load_databases(load_all_databases=False, doc_template="Employee",
+            self.load_databases(load_all_databases=False, doc_template="emp",
                                 num_of_docs=self.num_of_docs_per_collection,
                                 database_obj=database, scope=scope_name, collection=collection_name)
             self.init_input_servers(database)
@@ -548,11 +550,10 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             pprint.pprint(stat)
         return stats, fts_nodes
 
-    def verify_HWM_index_rejection(self):
+    def verify_HWM_index_rejection(self, stats):
         """
            Returns true if HWM is actually the reason for index rejection
         """
-        stats, fts_nodes = self.get_fts_stats()
         mem_util = int(float(self.HWM_limit) * int(stats[0]['limits:memoryBytes']))
         cpu_util = int(float(self.UWM_limit) * 100)
         count = 0
@@ -579,13 +580,14 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             variables['node_count'] = new_node_count
             return True
 
-    def verify_scale_in(self, variables):
+    def verify_scale_in(self, variables, summary):
         """
             Returns True if Scale In not possible or Scale In was successful
         """
         fts_stats, fts_nodes = self.get_fts_stats()
         self.log.info("Verifying Scale In ...")
         if len(fts_nodes) == 2:
+            self.generate_summary(summary, fts_stats, fts_nodes, variables, "No Scale-In Required")
             self.log.info("CONDITIONAL BUG : ScaleIn verification not possible since scale out didn't happen")
             return True
 
@@ -604,6 +606,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 break
 
         if not scale_in_status:
+            self.generate_summary(summary, fts_stats, fts_nodes, variables, "Scale-In not possible")
             self.log.info("CONDITIONAL BUG : ScaleIn verification not possible since Memory didn't decrease")
             return False
 
@@ -613,20 +616,42 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         fts_stats, fts_nodes = self.get_fts_stats()
         if len(fts_nodes) < variables['node_count']:
             self.log.info(f"Scale In passed : {fts_stats},{fts_nodes}")
-            self.log.info("SUCCESS : Scale In passed !!")
+            self.log.info("PASS : Scale In passed !!")
+            self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale-In")
             return True
+
+        self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : Scale-In")
+        return False
+
+    def generate_summary(self, summary, fts_stats, fts_nodes, variables, name="Default", time_taken=0):
+        mem_arr = []
+        for i in range(len(fts_stats)):
+            node_name = str(fts_nodes[i]).strip(".sandbox.nonprod-project-avengers.com")
+            mem_util = (str(int(fts_stats[i]['utilization:memoryBytes'])/pow(10, 9)) + "GB").strip()
+            mem_arr.append(f"{node_name} - {mem_util}")
+        obj = {
+            "Detail": name,
+            "Time": str(datetime.now().replace(microsecond=0)),
+            "Memory Status": mem_arr,
+            "Scale Out Count ": variables['scale_out_count'],
+            "Scale Out Time": time_taken,
+            "HWM Index Rejection": True if variables['HWM_hit'] == 1 else False
+        }
+        summary.append(obj)
 
     def autoscaling_synchronous(self):
         self.delete_all_database(True)
-        if self.create_dataplane and  self.new_dataplane_id is None:
+        if self.create_dataplane and self.new_dataplane_id is None:
             self.fail("Failed to provision a new dataplane, ABORTING")
-        self.provision_databases(self.num_databases, None, self.new_dataplane_id)
 
+        summary = []
+        self.provision_databases(self.num_databases, None, self.new_dataplane_id)
         self.log.info(f"------------ Initial STATS ------------")
         fts_stats, fts_nodes = self.get_fts_stats()
-
         variables = {'node_count': len(fts_nodes), 'scale_out_time': 0, 'HWM_hit': 0, 'scale_out_status': False,
                      'scale_out_count': 0}
+        self.generate_summary(summary, fts_stats, fts_nodes, variables, "Initial Summary")
+
         failout_encounter = False
         index_fail_check = False
 
@@ -637,7 +662,8 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             self.create_scope(database_obj=database, scope_name=scope_name)
             self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
             self.load_databases(load_all_databases=False, num_of_docs=self.num_of_docs_per_collection,
-                                database_obj=database, scope=scope_name, collection=collection_name)
+                                database_obj=database, scope=scope_name, collection=collection_name,
+                                doc_template="emp")
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
                                        collections=collection_name, collection_index=True)
@@ -647,31 +673,39 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             plan_params = self.construct_plan_params()
             for i in range(self.num_indexes):
                 try:
-                    fts_callable.create_fts_index(f"counter_{counter + 1}_idx_{i + 1}", source_type='couchbase',
+                    index = fts_callable.create_fts_index(f"counter_{counter + 1}_idx_{i + 1}", source_type='couchbase',
                                                   source_name=database.id, index_type='fulltext-index',
                                                   index_params=None, plan_params=plan_params,
                                                   source_params=None, source_uuid=None, collection_index=True,
                                                   _type=_type, analyzer="standard",
                                                   scope=scope_name, collections=[collection_name], no_check=False)
                     fts_callable.wait_for_indexing_complete(self.num_of_docs_per_collection)
+                    if self.autoscaling_with_queries:
+                        fts_callable.run_query_and_compare(index, self.num_queries)
+
                     if variables['scale_out_count'] != 0 and not index_fail_check:
                         with self.subTest("Verifying Index Rejection for HWM"):
-                            if self.verify_HWM_index_rejection():
+                            fts_stats, fts_nodes = self.get_fts_stats()
+                            if self.verify_HWM_index_rejection(fts_stats):
                                 if variables['HWM_hit'] == 0:
                                     variables['HWM_hit'] += 1
+                                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "HWM Exempt HIT")
                                     self.log.info("HWM Hit has taken place, exempting first rejection")
                                 else:
                                     index_fail_check = True
                                     self.log.info("Index created even though HWM had been satisfied")
+                                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : HWM HIT,Index Created")
                                     self.fail("BUG : Index created even though HWM had been satisfied")
                 except Exception as e:
                     print("Here in the except block")
                     with self.subTest("Index Creation Check"):
-                        if self.verify_HWM_index_rejection():
+                        fts_stats, fts_nodes = self.get_fts_stats()
+                        if self.verify_HWM_index_rejection(fts_stats):
                             # self.assertEqual(str(e), f"rest_create_index: error creating index: , err: manager_api: CreateIndex, Prepare failed, err: limitIndexDef: Cannot accommodate index request: {index_name}, resource utilization over limit(s)")
-                            self.log.info(f"SUCCESS : HWM Index Rejection Passed : {e}")
+                            self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : HWM HIT")
+                            self.log.info(f"PASS : HWM Index Rejection Passed : {e}")
                             with self.subTest("Scale In Condition Check"):
-                                if not self.verify_scale_in(variables):
+                                if not self.verify_scale_in(variables, summary):
                                     self.fail("BUG : Scale In Failed")
                             return
                         else:
@@ -683,6 +717,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
                 if not variables['scale_out_status'] and self.check_scale_out_condition(fts_stats):
                     self.log.info("Scale Out Satisfied")
+                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Condition Satisfied")
                     self.log.info(fts_stats)
                     variables['scale_out_time'] = datetime.now()
                     variables['scale_out_status'] = True
@@ -691,8 +726,10 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                     if divmod((datetime.now() - variables['scale_out_time']).total_seconds(), 60)[0] > int(self.scaling_time):
                         with self.subTest("Scale Out Condition Check after scaling time"):
                             if self.verify_scale_out(variables):
-                                self.log.info(f"Scale Out {variables['scale_out_count']}. Passed after {divmod((datetime.now() - variables['scale_out_time']).total_seconds(), 60)[0]} minutes!")
-                                self.log.info(f"SUCCESS : Scale Out Passed")
+                                time_taken = divmod((datetime.now() - variables['scale_out_time']).total_seconds(), 60)[0]
+                                self.log.info(f"Scale Out {variables['scale_out_count']}. Passed after {time_taken} minutes!")
+                                self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Passed", time_taken)
+                                self.log.info(f"PASS : Scale Out Passed")
                                 self.log.info(f"Scale Out Stats: \n {fts_stats}, {fts_nodes}")
                                 variables['scale_out_status'] = False
                                 variables['scale_out_count'] += 1
@@ -701,11 +738,14 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                 if not failout_encounter:
                                     failout_encounter = True
                                     self.log.info(f"Scale Out Failed -> {variables['scale_out_count']}  : {fts_stats}, {fts_nodes}")
+                                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : Scale Out Failed", self.scaling_time)
                                     self.fail(f"BUG : Scale Out failed -> {variables['scale_out_count']} within {self.scaling_time} minutes")
                     else:
                         with self.subTest("Scale Out Condition Check before scaling time"):
                             if self.verify_scale_out(variables):
-                                self.log.info(f"BUG : Scale Out {variables['scale_out_count']}. happened after {divmod((datetime.now() - variables['scale_out_time']).total_seconds(), 60)[0]} minutes!")
+                                time_taken = divmod((datetime.now() - variables['scale_out_time']).total_seconds(), 60)[0]
+                                self.log.info(f"BUG : Scale Out {variables['scale_out_count']}. happened after {time_taken} minutes!")
+                                self.generate_summary(summary, fts_stats, fts_nodes, variables, f"F : Scale Out Passed < {self.scaling_time}", time_taken)
                                 self.log.info(f"Scale Out Stats: \n {fts_stats}, {fts_nodes}")
                                 variables['scale_out_status'] = False
                                 variables['scale_out_count'] += 1
@@ -713,12 +753,25 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                 self.fail(f"Scale Out Happened less than scaling time")
 
             self.log.info(f"------------ FTS Stats @ Database {counter + 1} ------------")
-            self.get_fts_stats()
+            fts_stats, fts_nodes = self.get_fts_stats()
+            self.generate_summary(summary, fts_stats, fts_nodes, variables, f"INFO - DB-{counter+1}")
+
+            myTable = PrettyTable(summary[0].keys())
+            for json_obj in summary:
+                myTable.add_row(json_obj.values())
+            self.log.info("Summary Table")
+            print(myTable)
 
         with self.subTest("Scale In Condition Check"):
-            if not self.verify_scale_in(variables):
+            if not self.verify_scale_in(variables, summary):
                 self.log.info(f"Scale In Failed : {fts_stats}, {fts_nodes}")
                 self.fail("BUG : Scale In Failed")
+
+        myTable = PrettyTable(summary[0].keys())
+        for json_obj in summary:
+            myTable.add_row(json_obj.values())
+        self.log.info("Summary Table")
+        print(myTable)
 
     def test_n1ql_search(self):
         self.provision_databases(self.num_databases)
