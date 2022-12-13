@@ -387,8 +387,14 @@ class CapellaAPI:
         stats = []
         http_resp = False
         for count, node in enumerate(fts_nodes):
-            CurlUrl = f"curl -s -XGET https://{fts_nodes[count]}:18094/api/nsstats -u {creds['couchbaseCreds']['username']}:{creds['couchbaseCreds']['password']} --insecure | jq | grep -E 'util|resource|limits'"
-            resp = subprocess.getstatusoutput(CurlUrl)[1]
+            resp = None
+            attempts = 0
+            while resp is None and attempts < 13:
+                attempts += 1
+                if attempts > 1:
+                    self.log.info(f"Retry {attempts-1}. Unresolved host {fts_nodes[count]}, Trying again.")
+                CurlUrl = f"curl -s -XGET https://{fts_nodes[count]}:18094/api/nsstats -u {creds['couchbaseCreds']['username']}:{creds['couchbaseCreds']['password']} --insecure | jq | grep -E 'util|resource|limits'"
+                resp = subprocess.getstatusoutput(CurlUrl)[1]
             try:
                 resp = resp[2:] + "}" + resp[:2]
                 resp = resp[len(resp) - 2:] + "{" + resp[:len(resp) - 1]
