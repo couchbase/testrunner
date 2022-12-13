@@ -275,8 +275,12 @@ class ServerlessBaseTestCase(unittest.TestCase):
             self.log.debug(f"Run Query statement payload {query_params}")
             resp = requests.post(api, params=query_params, auth=auth, timeout=120, verify=verify)
             resp.raise_for_status()
-            if 'billingUnits' in resp.json().keys():
-                self.log.info(f"BILLING UNITS from query: {resp.json()['billingUnits']}")
+            try:
+                if 'billingUnits' in resp.json().keys():
+                    self.log.info(f"BILLING UNITS from query: {resp.json()['billingUnits']}")
+            except Exception as e:
+                self.log.info(f"Query result: {resp.text}")
+                raise(e)
             if 'errors' in resp.json():
                 self.log.error(f"Error from query execution: {resp.json()['errors']}")
                 raise CBQError(resp.json(), database.nebula)
