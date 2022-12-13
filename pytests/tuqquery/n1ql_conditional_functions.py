@@ -214,14 +214,14 @@ class QueryConditionalFunctionsTests(QueryTests):
         query_2 = "select decode(join_yr, missing, '', 'default_term') from default"
         verify_2 = "select case when join_yr is missing then '' else 'default_term' end from default"
 
-        query_3 = "select decode(field_that_is_missing, not missing, 'first_result_term', 'default_term') from default"
-        verify_3 = "select case when field_that_is_missing is not missing then 'first_result_term' else 'default_term' end from default"
+        query_3 = "select decode(field_that_is_missing, missing, 'field is missing', 'default_term') from default"
+        verify_3 = "select case when field_that_is_missing is not missing then 'default_term' else 'field is missing' end from default"
 
         query_4 = "select decode(join_yr, null, '', 'default_term') from default"
         verify_4 = "select case when join_yr is null then '' else 'default_term' end from default"
 
-        query_5 = "select decode(join_yr, not null, '', 'default_term') from default"
-        verify_5 = "select case when join_yr is not null then '' else 'default_term' end from default"
+        query_5 = "select decode(join_yr, null, 'field is null', 'default_term') from default"
+        verify_5 = "select case when join_yr is not null then 'default_term' else 'field is null' end from default"
 
         query_6 = "select decode(null, null, '', 'default_term') from default"
         verify_6 = "select case when null is null then '' else 'default_term' end from default"
