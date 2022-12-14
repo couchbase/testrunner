@@ -220,7 +220,8 @@ class TokenTests(QueryTests):
             self.query = "explain select * from `beer-sample` where name like '%Cafe%'"
             actual_result = self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
-            self.assertEqual(plan['~children'][0]['scan']['index'], idx1)
+            self.assertTrue(idx1 in str(plan), "{0} not seen in the explain plan, but it should be used! {1}".format(idx1, plan))
+            #self.assertEqual(plan['~children'][0]['scan']['index'], idx1)
             self.query = 'CREATE INDEX {0} ON `beer-sample`( DISTINCT TOKENS( description ) )'.format(idx2)
             self.run_cbq_query()
             self._wait_for_index_online("beer-sample", "beer_primary")
@@ -228,7 +229,8 @@ class TokenTests(QueryTests):
             self.query = "explain select * from `beer-sample` where contains_token(description,'Great')"
             actual_result = self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
-            self.assertEqual(plan['~children'][0]['scan']['index'], idx2)
+            self.assertTrue(idx2 in str(plan), "{0} not seen in the explain plan, but it should be used! {1}".format(idx2,plan))
+            #self.assertEqual(plan['~children'][0]['scan']['index'], idx2)
             self.query = "CREATE INDEX {0} ON `beer-sample`( DISTINCT PAIRS( SELF ) )".format(idx3)
             self.run_cbq_query()
             self._wait_for_index_online("beer-sample", "beer_primary")
@@ -244,11 +246,13 @@ class TokenTests(QueryTests):
             self.query = "explain select min(addr) from `beer-sample` unnest address as addr"
             actual_result = self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
-            self.assertEqual(plan['~children'][0]['scans'][0]['scan']['index'], idx4)
+            self.assertTrue(idx4 in str(plan), "{0} not seen in the explain plan, but it should be used! {1}".format(idx4,plan))
+            #self.assertEqual(plan['~children'][0]['scans'][0]['scan']['index'], idx4)
             self.query = "explain select count(a) from `beer-sample` unnest address as a"
             actual_result = self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
-            self.assertEqual(plan['~children'][0]['scans'][0]['scan']['index'], idx4)
+            self.assertTrue(idx4 in str(plan), "{0} not seen in the explain plan, but it should be used! {1}".format(idx4,plan))
+            #self.assertEqual(plan['~children'][0]['scans'][0]['scan']['index'], idx4)
             self.query = "explain select * from `beer-sample` where any place in address satisfies " \
                          "place LIKE '100 %' end"
             actual_result = self.run_cbq_query()

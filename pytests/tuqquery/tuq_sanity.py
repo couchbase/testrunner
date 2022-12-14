@@ -10,7 +10,6 @@ from membase.api.rest_client import RestConnection
 from tuq import QueryTests
 import random
 
-
 class QuerySanityTests(QueryTests):
 
     def setUp(self):
@@ -3233,35 +3232,42 @@ class QuerySanityTests(QueryTests):
         self.fail_if_no_buckets()
         for bucket in self.buckets:
             for ind in ind_list:
-                index_name = "coveringindex%s" % ind
+                index_name = "coveringindex{0}".format(ind)
                 if ind == "one":
-                    self.query = "CREATE INDEX %s ON %s(name, email, join_mo)  USING %s" % (index_name, bucket.name, self.index_type)
+                    self.query = "CREATE INDEX {0} ON {1}(name, email, join_mo)  USING {2}".format(index_name, bucket.name, self.index_type)
                 elif ind == "two":
-                    self.query = "CREATE INDEX %s ON %s(email, join_mo) USING %s" % (index_name, bucket.name, self.index_type)
+                    self.query = "CREATE INDEX {0} ON {1}(email, join_mo) USING {2}".format(index_name, bucket.name, self.index_type)
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
         for bucket in self.buckets:
-            self.query = "explain select name from %s where name is not null union select email from %s where email is not null and join_mo >2 " % (bucket.name, bucket.name)
+            self.query = "explain select name from {0} where name is not null union select email from {0} where email is not null and join_mo >2 ".format(bucket.name)
             if self.covering_index:
                 self.check_explain_covering_index(index_name[0])
-            self.query = "select name from %s where name is not null union select email from %s where email is not null and join_mo >2" % (bucket.name, bucket.name)
+            self.query = "select name from {0} where name is not null union select email from {0} where email is not null and join_mo >2".format(bucket.name)
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"name": doc["name"]} for doc in self.full_list]
             expected_result.extend([{"email": doc["email"]} for doc in self.full_list if doc["join_mo"] > 2])
             expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
             self._verify_results(actual_result, expected_result)
-            for index_name in created_indexes:
-                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
-                self.run_cbq_query()
-            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            for ind in ind_list:
+                index_name = "coveringindex%s" % ind
+                try:
+                    self.query = "DROP INDEX {0}.{1} USING {2}".format(bucket.name, index_name, self.index_type)
+                    self.run_cbq_query()
+                except Exception as e:
+                    if "not found" in str(e):
+                        pass
+                    else:
+                        raise Exception(e)
+            self.query = "CREATE PRIMARY INDEX ON {0}".format(bucket.name)
             self.run_cbq_query()
             self.sleep(15, 'wait for index')
-            self.query = "select name from %s where name is not null union select email from %s where email is not null and join_mo >2" % (bucket.name, bucket.name)
+            self.query = "select name from {0} where name is not null union select email from {0} where email is not null and join_mo >2".format(bucket.name)
             result = self.run_cbq_query()
             self.assertEqual(actual_result, sorted(result['results']))
-            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+            self.query = "DROP PRIMARY INDEX ON {0}".format(bucket.name)
             self.run_cbq_query()
 
     def test_union_aggr_fns(self):
@@ -3540,8 +3546,14 @@ class QuerySanityTests(QueryTests):
 
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
-                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
-                self.run_cbq_query()
+                try:
+                    self.query = "DROP INDEX {0}.{1} USING {2}".format(bucket.name, index_name, self.index_type)
+                    self.run_cbq_query()
+                except Exception as e:
+                    if "not found" in str(e):
+                        pass
+                    else:
+                        raise Exception(e)
             self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
             self._wait_for_index_online(bucket, '#primary')
