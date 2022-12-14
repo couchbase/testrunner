@@ -530,13 +530,14 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
     def check_HWM_condition(self, stats):
         mem_util = int(float(self.HWM_limit) * int(stats[0]['limits:memoryBytes']))
-        cpu_util = int(float(self.UWM_limit) * 100)
+        cpu_util = int(float(self.HWM_limit) * 100)
         for stat in stats:
             if stat['utilization:memoryBytes'] > mem_util:
                 self.log.info(f"HWM CHECK STATUS MEM: {stat['utilization:memoryBytes']}")
                 return True
             if stat['utilization:cpuPercent'] > cpu_util:
                 self.log.info(f"HWM CHECK STATUS CPU: {stat['utilization:cpuPercent']}")
+                return True
         return False
 
     def get_fts_stats(self):
@@ -555,7 +556,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
            Returns true if HWM is actually the reason for index rejection
         """
         mem_util = int(float(self.HWM_limit) * int(stats[0]['limits:memoryBytes']))
-        cpu_util = int(float(self.UWM_limit) * 100)
+        cpu_util = int(float(self.HWM_limit) * 100)
         count = 0
         for stat in stats:
             if stat['utilization:memoryBytes'] > mem_util or stat['utilization:cpuPercent'] > cpu_util:
@@ -577,6 +578,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         if variables['node_count'] == new_node_count:
             return False
         else:
+            self.log.info(f"Scale out -> New Count : {new_node_count} , Old Count : {variables['node_count']}")
             variables['node_count'] = new_node_count
             return True
 
