@@ -22,6 +22,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         super(CollectionsIndexBasics, self).setUp()
         self.log.info("==============  CollectionsIndexBasics setup has started ==============")
         self.rest.delete_all_buckets()
+        self.password = self.input.membase_settings.rest_password
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
@@ -45,7 +46,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
     def test_create_primary_index_for_collections(self):
         self.prepare_collection_for_indexing()
         collection_namespace = self.namespaces[0]
-        query_gen_1 = QueryDefinition(index_name='`#primary`')
+        query_gen_1 = QueryDefinition(index_name='#primary')
         query_gen_2 = QueryDefinition(index_name='name_primary_idx')
         # preparing index
         try:
@@ -95,7 +96,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
 
         query_gen = QueryDefinition(index_name='idx', index_fields=['age'])
         indx_gen = QueryDefinition(index_name='meta_idx', index_fields=['meta().expiration'])
-        primary_gen = QueryDefinition(index_name='`#primary`')
+        primary_gen = QueryDefinition(index_name='#primary')
         try:
             # Checking for secondary index creation on named collection
             query = query_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build)
@@ -236,7 +237,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
     def test_multiple_indexes_on_same_field(self):
         self.prepare_collection_for_indexing()
         collection_namespace = self.namespaces[0]
-        primary_gen = QueryDefinition(index_name='`#primary`')
+        primary_gen = QueryDefinition(index_name='#primary')
         query_gen = QueryDefinition(index_name='idx', index_fields=['age'])
         query_gen_copy = QueryDefinition(index_name='idx_copy', index_fields=['age'])
         # preparing index
@@ -346,7 +347,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
     def test_gsi_array_indexes(self):
         self.prepare_collection_for_indexing(json_template="Employee")
         collection_namespace = self.namespaces[0]
-        primary_gen = QueryDefinition(index_name='`#primary`')
+        primary_gen = QueryDefinition(index_name='#primary')
         self.sleep(30)
         doc_count = self.run_cbq_query(query=f'select count(*) from {collection_namespace}')['results'][0]['$1']
         arr_index = "arr_index"
@@ -428,7 +429,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         self.prepare_collection_for_indexing(json_template="Employee")
         collection_namespace = self.namespaces[0]
         arr_index = "arr_index"
-        primary_gen = QueryDefinition(index_name='`#primary`')
+        primary_gen = QueryDefinition(index_name='#primary')
         index_gen = QueryDefinition(index_name=arr_index, index_fields=['join_mo', 'join_day'],
                                     partition_by_fields=['meta().id'])
         try:
@@ -519,7 +520,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         self.prepare_collection_for_indexing(json_template="Employee")
         collection_namespace = self.namespaces[0]
         arr_index = "arr_index"
-        primary_gen = QueryDefinition(index_name='`#primary`')
+        primary_gen = QueryDefinition(index_name='#primary')
         index_gen = QueryDefinition(index_name=arr_index, index_fields=['join_mo', 'join_day'])
         try:
             query = primary_gen.generate_primary_index_create_query(namespace=collection_namespace,
@@ -580,7 +581,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             col_namespace = f"default:{self.test_bucket}.{scope}.{collection}"
             collection_namespaces.append(col_namespace)
             self.gen_create = SDKDataLoader(num_ops=1000, percent_create=100,
-                                            percent_update=0, percent_delete=0, scope=scope, collection=collection)
+                                            percent_update=0, percent_delete=0, scope=scope, collection=collection, password=self.password)
             self._load_all_buckets(self.master, self.gen_create)
             query = index_gen.generate_index_create_query(namespace=col_namespace)
             self.run_cbq_query(query=query)
@@ -616,7 +617,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.collection_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
             collection_namespaces.append(f"default:{self.test_bucket}.{scope}.{collection}")
             self.gen_create = SDKDataLoader(num_ops=1000, percent_create=100,
-                                            percent_update=0, percent_delete=0, scope=scope, collection=collection)
+                                            percent_update=0, percent_delete=0, scope=scope, collection=collection, password=self.password)
             self._load_all_buckets(self.master, self.gen_create)
         for col_namespace in collection_namespaces:
             _, keyspace = col_namespace.split(':')
@@ -653,7 +654,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.collection_rest.create_collection(bucket=self.test_bucket, scope=scope, collection=collection)
             collection_namespaces.append(f"default:{self.test_bucket}.{scope}.{collection}")
             self.gen_create = SDKDataLoader(num_ops=1000, percent_create=100,
-                                            percent_update=0, percent_delete=0, scope=scope, collection=collection)
+                                            percent_update=0, percent_delete=0, scope=scope, collection=collection, password=self.password)
             self._load_all_buckets(self.master, self.gen_create)
         for col_namespace in collection_namespaces:
             _, keyspace = col_namespace.split(':')
@@ -686,7 +687,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         collection = 'test_collection'
         arr_index = 'arr_index'
         index_gen = QueryDefinition(index_name=arr_index, index_fields=['age'])
-        primary_gen = QueryDefinition(index_name='`#primary`')
+        primary_gen = QueryDefinition(index_name='#primary')
         self.collection_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
         collection_namespace = f"default:{self.test_bucket}.{scope}.{collection}"
         self.gen_create = SDKDataLoader(num_ops=10000, percent_create=100,
@@ -716,7 +717,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         arr_index_2 = 'arr_index_2'
         index_gen_1 = QueryDefinition(index_name=arr_index_1, index_fields=['age'])
         index_gen_2 = QueryDefinition(index_name=arr_index_2, index_fields=['city'])
-        primary_gen = QueryDefinition(index_name='`#primary`')
+        primary_gen = QueryDefinition(index_name='#primary')
         scope = 'test_scope'
         col_a = 'colA'
         col_b = 'colB'
@@ -1301,7 +1302,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection,
                                         percent_create=0,
                                         percent_update=50, percent_delete=50, scope=scope,
-                                        collection=collection, json_template="Person")
+                                        collection=collection, json_template="Person", password=self.password)
         tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
                                                         batch_size=10 ** 4)
         for task in tasks:
