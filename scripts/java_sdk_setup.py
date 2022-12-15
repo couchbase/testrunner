@@ -1,5 +1,6 @@
 import subprocess
-
+import locale
+locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
 
 class JavaSdkSetup(object):
     def __init__(self):
@@ -13,4 +14,4 @@ class JavaSdkSetup(object):
             print("WARNING: Exception occurred while compiling java_sdk_client..continuing")
 
     def _execute_on_slave(self, command, timeout):
-        return subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).wait(timeout)
+        return subprocess.Popen(command, stdout=subprocess.PIPE, encoding="UTF-8", shell=True).wait(timeout)
