@@ -14,4 +14,4 @@ class JavaSdkSetup(object):
             print("WARNING: Exception occurred while compiling java_sdk_client..continuing")
 
     def _execute_on_slave(self, command, timeout):
-        return subprocess.Popen(command, stdout=subprocess.PIPE, encoding="UTF-8", shell=True).wait(timeout)
+        return subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).wait(timeout)

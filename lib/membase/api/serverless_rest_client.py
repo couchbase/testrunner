@@ -1,16 +1,29 @@
 import time
-
+from membase.api.on_prem_rest_client import RestConnection as OnPremRestConnection
 import requests
-import json
+from lib.Cb_constants.CBServer import CbServer
 import logger
+from TestInput import TestInputSingleton
 
+class ServerlessRestConnection(OnPremRestConnection):
+    def __new__(cls, rest_username, rest_password, rest_srv):
+        server_info = {"ip": rest_srv,
+                       "username": rest_username,
+                       "password": rest_password,
+                       "port": 18091}
+        CbServer.use_https = True
+        return OnPremRestConnection.__new__(cls, server_info)
 
-class ServerlessRestConnection:
     def __init__(self, rest_username, rest_password, rest_srv):
         self.rest_username = rest_username
         self.rest_password = rest_password
         self.rest_srv = rest_srv
         self.log = logger.Logger.get_logger()
+        server_info = {"ip": self.rest_srv,
+                       "username": self.rest_username,
+                       "password": self.rest_password,
+                       "port": 18091}
+        super(ServerlessRestConnection, self).__init__(server_info)
 
     def get_all_dataplane_nodes(self):
         endpoint = "https://{}:18091/pools/default".format(self.rest_srv)

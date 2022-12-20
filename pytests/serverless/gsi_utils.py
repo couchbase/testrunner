@@ -39,7 +39,7 @@ class GSIUtils(object):
         # Single field GSI Query
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'name', index_fields=['name'],
-                            query_template=RANGE_SCAN_TEMPLATE.format("*", 'name like "%%T" ')))
+                            query_template=RANGE_SCAN_TEMPLATE.format("*", 'name is not null')))
 
         # Primary Query
         prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
@@ -258,6 +258,19 @@ class GSIUtils(object):
             query = index_gen.generate_query(bucket=namespace)
             select_query_list.append(query)
         return select_query_list
+
+    def get_count_query(self, dataset, namespace):
+        if dataset == 'Person' or dataset == 'default':
+            query = f"select * from {namespace} where age>0"
+        elif dataset == 'Employee':
+            query = f"select * from {namespace} where name is not null"
+        elif dataset == 'Hotel':
+            query = f"select * from {namespace} where price>0"
+        elif dataset == 'Magma':
+            query = f"select * from {namespace} where name is not null"
+        else:
+            raise Exception("Provide correct dataset. Valid arguments are Person, Employee, Magma, and Hotel")
+        return query
 
     def async_create_indexes(self, create_queries, database=None, capella_run=False, query_node=None):
         with ThreadPoolExecutor() as executor:

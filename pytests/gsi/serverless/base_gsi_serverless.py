@@ -30,7 +30,7 @@ class BaseGSIServerless(QueryBaseServerless):
         self.dataset = self.input.param("dataset", "Employee")
         self.aws_access_key_id = self.input.param("aws_access_key_id", None)
         self.aws_secret_access_key = self.input.param("aws_secret_access_key", None)
-        self.region = self.input.param("region", "us-west-1")
+        self.region = self.input.capella['region']
         self.s3_bucket = self.input.param("s3_bucket", "gsi-onprem-test")
         self.storage_prefix = self.input.param("storage_prefix", None)
         self.definition_list = self.gsi_util_obj.get_index_definition_list(dataset=self.dataset)
@@ -191,24 +191,33 @@ class BaseGSIServerless(QueryBaseServerless):
                 self.log.info(f"Memory used ratio: {memory_used_actual/mem_quota}. \n "
                               f"Units used ratio : {units_used_actual/units_quota} \n Num. of tenants:{num_tenants}")
 
-    def create_scopes_collections(self, databases):
+    def create_scopes_collections(self, databases, scope_collection_map=None):
         for database in databases:
             scope_coll_dict, coll_count = {}, 0
-            for item in range(self.num_of_scopes_per_db):
-                scope_name = f'scope_num_{item}_{random.randint(0, 1000)}'
-                self.create_scope(database_obj=database, scope_name=scope_name)
-                collection_list = []
-                for counter in range(self.num_of_collections_per_scope):
-                    collection_name = f'collection_num_{item}_{random.randint(0, 1000)}'
-                    self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
-                    coll_count += 1
-                    collection_list.append(collection_name)
-                    if scope_name in database.collections:
-                        database.collections[scope_name].append(collection_name)
-                    else:
-                        database.collections[scope_name] = [collection_name]
-                scope_coll_dict[scope_name] = collection_list
-            self.log.info(f"Scope and collection list:{scope_coll_dict}. No. of collections: {coll_count}")
+            if not scope_collection_map:
+                for item in range(self.num_of_scopes_per_db):
+                    scope_name = f'scope_num_{item}_{random.randint(0, 1000)}'
+                    self.create_scope(database_obj=database, scope_name=scope_name)
+                    collection_list = []
+                    for counter in range(self.num_of_collections_per_scope):
+                        collection_name = f'collection_num_{item}_{random.randint(0, 1000)}'
+                        self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
+                        coll_count += 1
+                        collection_list.append(collection_name)
+                        if scope_name in database.collections:
+                            database.collections[scope_name].append(collection_name)
+                        else:
+                            database.collections[scope_name] = [collection_name]
+                    scope_coll_dict[scope_name] = collection_list
+                self.log.info(f"Scope and collection list:{scope_coll_dict}. No. of collections: {coll_count}")
+            else:
+                for scope in scope_collection_map.keys():
+                    self.create_scope(database_obj=database, scope_name=scope)
+                    for collection in scope_collection_map[scope]:
+                        self.create_collection(database_obj=database, scope_name=scope,
+                                               collection_name=collection)
+                database.collections = scope_collection_map
+
 
     def populate_data(self, batch_size=10000, databases=None, doc_template='default', serverless_run=True,
                       output=False):
@@ -323,7 +332,9 @@ class BaseGSIServerless(QueryBaseServerless):
             return
         self.update_specs(dataplane.id, new_count=num_nodes-2, service='index')
 
-    def run_parallel_workloads(self, event):
+    def run_parallel_workloads(self, event, total_doc_count=None):
+        if total_doc_count is None:
+            total_doc_count = self.total_doc_count
         i = 0
         while not event.is_set():
             with ThreadPoolExecutor() as executor:
@@ -331,7 +342,7 @@ class BaseGSIServerless(QueryBaseServerless):
                 print(f"Iteration number {i}")
                 for counter, database in enumerate(self.databases.values()):
                     task = executor.submit(self.load_data_new_doc_loader, databases=[database], doc_start=0,
-                                           doc_end=self.total_doc_count, update_rate=100, create_rate=0)
+                                           doc_end=total_doc_count, update_rate=100, create_rate=0)
                     tasks.append(task)
                     for scope in database.collections:
                         for collection in database.collections[scope]:
@@ -345,11 +356,15 @@ class BaseGSIServerless(QueryBaseServerless):
                 i += 1
         self.log.info("Workload function complete. Exiting")
 
-    def get_all_index_names(self, database):
+    def get_all_index_names(self, database, scope=None, collection=None):
         response = self.run_query(database=database, query="select * from system:indexes")['results']
         name_list = []
         for item in response:
-            name_list.append(item['indexes']['name'])
+            if scope is not None and collection is not None:
+                if item['indexes']['scope_id'] == scope and item['indexes']['keyspace_id'] == collection:
+                    name_list.append(item['indexes']['name'])
+            else:
+                name_list.append(item['indexes']['name'])
         return name_list
 
     def get_fast_rebalance_config(self, indexer_node, rest_info):
@@ -363,6 +378,52 @@ class BaseGSIServerless(QueryBaseServerless):
         indexer_settings = resp.json()
         self.log.debug(f"Indexer metadata {indexer_settings}")
         bucket_name = indexer_settings["indexer.settings.rebalance.blob_storage_bucket"]
-        storage_prefix = "indexer.settings.rebalance.blob_storage_prefix"
-        storage_scheme = "indexer.settings.rebalance.blob_storage_scheme"
+        storage_prefix = indexer_settings["indexer.settings.rebalance.blob_storage_prefix"]
+        storage_scheme = indexer_settings["indexer.settings.rebalance.blob_storage_scheme"]
         return storage_scheme, bucket_name, storage_prefix
+
+    def drop_all_indexes_on_tenant(self, database):
+        indexes = self.run_query(database, f'SELECT `namespace`, name,\
+                    CASE WHEN bucket_id is missing THEN keyspace_id ELSE bucket_id END as `bucket`,\
+                    CASE WHEN scope_id is missing THEN "_default" ELSE scope_id END as `scope`,\
+                    CASE WHEN bucket_id is missing THEN "_default" ELSE keyspace_id END as `collection`\
+                    FROM system:indexes')
+        for index in indexes['results']:
+            if index['bucket'] == database.id:
+                self.run_query(database, f"DROP INDEX {index['namespace']}:`{index['bucket']}`.`{index['scope']}`."
+                                         f"`{index['collection']}`.`{index['name']}`")
+
+    def get_index_status(self, rest_info, index_name, keyspace):
+        rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
+        nodes_obj = rest_obj.get_all_dataplane_nodes()
+        self.log.debug(f"Dataplane nodes object {nodes_obj}")
+        indexer_node = None
+        for node in nodes_obj:
+            if 'index' in node['services']:
+                indexer_node = node['hostname'].split(":")[0]
+                break
+        if indexer_node is not None:
+            index_metadata = self.get_indexer_metadata(rest_info=rest_info, indexer_node=indexer_node)
+            for index in index_metadata:
+                if index['index'] == index_name and keyspace in index['definition']:
+                    return index['status']
+        else:
+            raise Exception("Unable to fetch index node from the dataplane nodes object")
+
+    # TODO refactor all get_indexer_metadata calls to get_index_metadata
+    def get_index_metadata(self, rest_info):
+        admin_username, admin_password = rest_info.admin_username, rest_info.admin_password
+        rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
+        nodes_obj = rest_obj.get_all_dataplane_nodes()
+        self.log.debug(f"Dataplane nodes object {nodes_obj}")
+        indexer_node = None
+        for node in nodes_obj:
+            if 'index' in node['services']:
+                indexer_node = node['hostname'].split(":")[0]
+                break
+        endpoint = "https://{}:18091/indexStatus".format(indexer_node)
+        resp = requests.get(endpoint, auth=(admin_username, admin_password), verify=False)
+        resp.raise_for_status()
+        indexer_metadata = resp.json()['indexes']
+        self.log.debug(f"Indexer metadata {indexer_metadata}")
+        return indexer_metadata
