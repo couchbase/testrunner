@@ -278,7 +278,8 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 self.log.info(f"Index Definition before collection deletion : {resp}")
             for collection_name in collection_arr:
                 self.delete_collection(database, scope_name, collection_name)
-
+            self.log.info(f"Waiting for collection to get permanently deleted")
+            time.sleep(100)
             resp = fts_callable.check_if_index_exists(database.id + "." + scope_name + ".idx", index_def=True)
             if not resp:
                 self.log.info("Index not found !")
