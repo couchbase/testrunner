@@ -150,7 +150,7 @@ CB_VERSION_NAME = {"0.0":"master", "4.0":"sherlock", "4.1":"sherlock",
                    "6.6":"mad-hatter",
                    "7.0":"cheshire-cat",
                    "7.1":"neo",
-                   "7.2":"elixir",
+                   "7.2":"neo",
                    "8.0":"morpheus"}
 
 MACOS_NAME = {"10.10":"Yosemite", "10.11":"El Capitan", "10.12":"Sierra", "10.13":"High Sierra",
