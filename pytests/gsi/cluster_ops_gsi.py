@@ -97,7 +97,8 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
         #Verify the result set is empty
         self.verify_index_absence(query_definitions = self.query_definitions, buckets = self.buckets)
         index_map = self.get_index_stats()
-        self.assertTrue(len(index_map) == 0, "Index Stats still show {0}".format(index_map))
+        # 32 stats are stats for index service. Anything beyond this is index specific
+        self.assertTrue(len(index_map) == 32, "Index Stats still show {0}".format(index_map))
 
     def test_data_loss(self):
         #Initialization operation
