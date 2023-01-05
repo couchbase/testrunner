@@ -1134,15 +1134,33 @@ class TenantManagement(BaseSecondaryIndexingTests):
     def test_defrag_replica_repair(self):
         self.prepare_tenants()
 
+        # Making replica repair available in cluster and on rebalance replica should be available
+        # Todo: Add call to have index replica available for repair
+        sub_clusters = self.get_sub_cluster_list()
+        index_node_ips = [node.split(':')[0] for node in sub_clusters[0]]
+        node_zone_dict = {}
+        index_node = None
+        for index_node_ip in index_node_ips:
+            for server in self.servers:
+                if index_node_ip == server.ip:
+                    index_node = server
+                    break
+
+        for node in index_node_ips:
+            node_zone_dict[node] = self.get_server_group(node)
+        for counter, server in enumerate(node_zone_dict):
+            self.rest.add_node(user=self.rest.username, password=self.rest.password,
+                               remoteIp=self.servers[self.nodes_init + counter].ip,
+                               zone_name=node_zone_dict[server],
+                               services=['index'])
+
+        self.stop_server(index_node)
+
         indexer_metadata_b4_reb = self.index_rest.get_indexer_metadata()['status']
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
         node_rest = RestConnection(index_node)
         defrag_result_b4_reb = node_rest.get_index_defrag_output()
         self.log.info(f"Defrag result before HWM:{defrag_result_b4_reb}")
-
-        # Making replica repair available in cluster and on reblance replica should be available
-        # Todo: Add call to have index replica available for repair
-
         # calling rebalance to run replica repair
         try:
             rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
