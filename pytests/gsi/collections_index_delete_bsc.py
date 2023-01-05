@@ -38,6 +38,8 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                                                         eviction_policy=self.eviction_policy, lww=self.lww)
         self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
                                             bucket_params=self.bucket_params)
+        self.password = self.input.membase_settings.rest_password
+        self.capella_run = self.input.param("capella_run", False)
         self.buckets = self.rest.get_buckets()
         self.log.info("==============  CollectionsIndexBasics setup has completed ==============")
 
@@ -134,10 +136,11 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
             self.assertFalse(index_status)
 
     def test_drop_index_with_delete_bsc(self):
+
         num_of_docs_per_collection = 10 ** 4
         self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs_per_collection)
         collection_namespace = self.namespaces[0]
-        index_gen = QueryDefinition(index_name='`#primary`')
+        index_gen = QueryDefinition(index_name='#primary')
         query = index_gen.generate_primary_index_create_query(namespace=collection_namespace,
                                                               defer_build=self.defer_build)
         self.run_cbq_query(query=query)
@@ -177,6 +180,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
             with ThreadPoolExecutor() as executor:
                 task1 = executor.submit(self.drop_indexes, index_list=index_list,
                                         collection_namespace=collection_namespace)
+
                 task2 = executor.submit(self.delete_bucket_scope_collection, server=self.servers[0],
                                         delete_item=self.item_to_delete, bucket=bucket, scope=scope,
                                         collection=collection)
@@ -208,7 +212,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
         self.assertEqual(result, num_of_docs)
         gen_create = SDKDataLoader(num_ops=num_of_docs * 10, percent_create=80,
                                    percent_update=10, percent_delete=10, scope=scope,
-                                   collection=collection, start_seq_num=num_of_docs + 1)
+                                   collection=collection, start_seq_num=num_of_docs + 1, password=self.password)
         try:
             # deleting BSC while indexes catching up with new mutations
             with ThreadPoolExecutor() as executor:
@@ -253,7 +257,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
             scope, collection = f'{self.scope_prefix}_1', f'{self.collection_prefix}_1'
             gen_create = SDKDataLoader(num_ops=10 ** 3, percent_create=100,
                                        percent_update=0, percent_delete=0, scope=scope,
-                                       collection=collection, json_template='Person')
+                                       collection=collection, json_template='Person', password=self.password)
             task = self.cluster.async_load_gen_docs(server=self.master, generator=gen_create, bucket=self.test_bucket,
                                                     scope=scope, collection=collection)
             task.result()
@@ -351,7 +355,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
         collection_namespace = self.namespaces[0]
         _, keyspace = collection_namespace.split(':')
         bucket, scope, collection = keyspace.split('.')
-        primary_gen = QueryDefinition(index_name='`#primary`')
+        primary_gen = QueryDefinition(index_name='#primary')
         index_gen1 = QueryDefinition(index_name='idx1', index_fields=['age'])
         index_gen2 = QueryDefinition(index_name='idx2', index_fields=['city'])
         index_gen3 = QueryDefinition(index_name='idx3', index_fields=['country'])
@@ -396,8 +400,18 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
         self.sleep(10)
         index_status = self.rest.get_index_status()
 
-        self.assertEqual(sorted(list(index_status['test_bucket'].keys())), sorted(['#primary', 'idx1', 'idx2', 'idx3']),
-                         "Some Indexes are missing from index status")
+        if self.capella_run:
+            self.assertEqual(sorted(list(index_status['test_bucket'].keys())),
+                             sorted(['#primary', 'idx1', 'idx2', 'idx3', '#primary (replica 1)', 'idx1 (replica 1)', 'idx2 (replica 1)', 'idx3 (replica 1)']),
+                             "Some Indexes are missing from index status")
+        else:
+            self.assertEqual(sorted(list(index_status['test_bucket'].keys())),
+                             sorted(['#primary', 'idx1', 'idx2', 'idx3']),
+                             "Some Indexes are missing from index status")
+
+
+
+
 
     def test_delete_multiple_collections_with_indexes(self):
         num_of_docs_per_collection = 10 ** 2

@@ -9,7 +9,8 @@ class RestConnection(OnPremRestConnection):
         self.cluster_id = CbServer.capella_cluster_id
 
     def delete_bucket(self, bucket='default', num_retries=3, poll_interval=5):
-        self.capella_api.delete_bucket(self.cluster_id, bucket)
+        resp = self.capella_api.delete_bucket(self.cluster_id, bucket)
+        return resp
 
     def create_bucket(self, bucket='',
                       ramQuotaMB=1,

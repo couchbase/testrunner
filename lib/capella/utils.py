@@ -182,6 +182,7 @@ class CapellaAPI:
         bucket_id = base64_encode(name)
         resp = self.api.delete_bucket(self.tenant_id, self.project_id, cluster_id, bucket_id)
         resp.raise_for_status()
+        return resp
 
     def get_nodes(self, cluster_id):
         resp = self.api.get_nodes(self.tenant_id, self.project_id, cluster_id)
