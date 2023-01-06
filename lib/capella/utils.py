@@ -308,7 +308,7 @@ class CapellaAPI:
                 if err.response.status_code == 404:
                     return
                 time.sleep(2)
-        raise Exception("timeout waiting for database to be deleted {}".format(
+        self.log.warn("timeout waiting for database to be deleted {}".format(
             {"database_id": database_id}))
 
     def wait_for_database_step(self, database_id):
