@@ -287,6 +287,11 @@ class CapellaAPI:
         resp.raise_for_status()
         return resp.json()
 
+    def get_dataplane_debug_info(self, dataplane_id):
+        resp = self.serverless_api.get_serverless_dataplane_info(dataplane_id=dataplane_id)
+        resp.raise_for_status()
+        return resp.json()
+
     def get_resident_dataplane_id(self, database_id):
         resp = self.serverless_api.get_database_debug_info(database_id=database_id)
         resp.raise_for_status()

@@ -282,10 +282,13 @@ class ServerlessBaseTestCase(unittest.TestCase):
                     self.log.info(f"BILLING UNITS from query: {resp.json()['billingUnits']}")
             except Exception as e:
                 self.log.info(f"Query result: {resp.text}")
-                raise(e)
+                raise e
             if 'errors' in resp.json():
                 self.log.error(f"Error from query execution: {resp.json()['errors']}")
-                raise CBQError(resp.json(), database.nebula)
+                for error in resp.json()['errors']:
+                    # error can be ignored since it's been queued for index creation
+                    if 'will retry building in the background for reason: Build Already In Progress' not in error['msg']:
+                        raise CBQError(resp.json(), database.nebula)
             return resp.json()
 
     def cleanup_database(self, database_obj):
@@ -374,16 +377,11 @@ class ServerlessBaseTestCase(unittest.TestCase):
             os.chdir(cur_dir)
 
     def update_specs(self, dataplane_id, new_count=4, service='index', timeout=1200):
-        resp = self.api.get_dataplane_deployment_status(dataplane_id=dataplane_id)
-        old_count, num_nodes_after = 0, 0
-        if "overRide" in resp['couchbaseCluster']:
-            current_specs = resp['couchbaseCluster']['overRide']['specs']
-        else:
-            current_specs = resp['couchbaseCluster']['specs']
+        resp = self.api.get_dataplane_debug_info(dataplane_id=dataplane_id)
+        current_specs = resp['couchbase']['specs']
         new_specs = copy.deepcopy(current_specs)
         for counter, spec in enumerate(current_specs):
             if spec['services'][0]['type'] == service and spec['count'] != new_count:
-                old_count = spec['count']
                 new_specs[counter]['count'] = new_count
         self.log.info(f"Will use this config to update specs: {new_specs}")
         self.api.modify_cluster_specs(dataplane_id=dataplane_id, specs=new_specs)

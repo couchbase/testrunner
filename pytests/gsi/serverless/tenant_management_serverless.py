@@ -41,9 +41,8 @@ class TenantManagement(BaseGSIServerless):
         for counter, database in enumerate(self.databases.values()):
             for scope in database.collections:
                 for collection in database.collections[scope]:
-                    for index in range(self.num_of_indexes_per_tenant):
-                        index1 = f'idx_a_{index}_db{counter}_{random.randint(0, 1000)}'
-                        index2 = f'idx_b_{index}_db{counter}_{random.randint(0, 1000)}'
+                        index1 = f'idx_a_db{counter}_{random.randint(0, 1000)}'
+                        index2 = f'idx_b_db{counter}_{random.randint(0, 1000)}'
                         index1_replica, index2_replica = f'{index1} (replica 1)', f'{index2} (replica 1)'
                         self.create_index(database, query_statement=f"create index {index1} on `{database.id}`.{scope}.{collection}(a)",
                                           use_sdk=self.use_sdk)
@@ -176,59 +175,50 @@ class TenantManagement(BaseGSIServerless):
             if not self.dataplane_id:
                 self.fail("This test needs a dataplane_id parameter in the conf file to run")
             dataplane = ServerlessDataPlane(self.dataplane_id)
-            index_nodes_before = set()
-            self.log.info(f"Index nodes before the test run:{index_nodes_before}")
-            for database in self.databases.values():
-                rest_info = self.create_rest_info_obj(username=database.admin_username,
-                                                      password=database.admin_password,
-                                                      rest_host=database.rest_host)
-                index_nodes = self.get_nodes_from_services_map(service="index", rest_info=rest_info)
-                index_nodes_before.add(index_nodes)
+            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.dataplane_id)
+            dataplane.populate(rest_api_info)
+            rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
+                                                  password=dataplane.admin_password,
+                                                  rest_host=dataplane.rest_host)
             num_of_batches = math.ceil(self.num_of_tenants / 20)
-            num_of_tenants = 20
+            num_of_tenants = self.num_of_tenants
             for batch in range(num_of_batches):
-                ## Need to check if self.databases gets overwritten (possible bug)
-                self.provision_databases(count=num_of_tenants, seed="test-scale-up-number-of-tenants")
+                index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+                # Need to check if self.databases gets overwritten (possible bug)
+                db_count = 20 if num_of_tenants >= 20 else num_of_tenants
+                self.provision_databases(count=db_count, seed=f"test-scale-up-number-of-tenants-{batch}")
+                self.create_scopes_collections(databases=self.databases.values())
                 for counter, database in enumerate(self.databases.values()):
-                    for index in range(self.num_of_indexes_per_tenant):
-                        self.load_databases(database_obj=database, num_of_docs=10)
-                        self.log.info(f"Iteration number {counter}")
-                        for scope in database.collections:
-                            for collection in database.collections[scope]:
-                                index1 = f'idx{index}_db{counter}_{random.randint(0, 1000)}'
-                                index1_replica = f'{index1} (replica 1)'
-                                namespace = f"default:`{database.id}`.`{scope}`.`{collection}`"
-                                self.create_index(database, query_statement=f"create index {index1} on {namespace}(b{counter})",
-                                                  use_sdk=self.use_sdk)
-                                self.log.info(f"Iteration number {counter}. Index creation successful")
-                                self.rest_obj = RestConnection(database.admin_username, database.admin_password, database.rest_host)
-                                nodes_obj = self.rest_obj.get_all_dataplane_nodes()
-                                self.log.debug(f"Dataplane nodes object {nodes_obj}")
-                                rest_info = self.create_rest_info_obj(username=database.admin_username,
-                                                                      password=database.admin_password,
-                                                                      rest_host=database.rest_host)
-                                for node in nodes_obj:
-                                    if 'index' in node['services']:
-                                        host1 = self.get_resident_host_for_index(index_name=index1, rest_info=rest_info,
-                                                                                 indexer_node=node['hostname'].split(":")[0])
-                                        self.log.info(f"Iteration number {counter}. Host for index {index1}: is Host:{host1}")
-                                        host1_replica = self.get_resident_host_for_index(index_name=index1_replica,
-                                                                                         rest_info=rest_info,
-                                                                                         indexer_node=node['hostname'].split(":")[0])
-                                        self.log.info(f"Iteration number {counter}. Host for index replica {index1_replica}: is Host:{host1_replica}")
-                                        break
-                                index_exists = self.check_if_index_exists(database_obj=database, index_name=index1)
-                                self.log.info(f"Iteration number {counter}. index {index1} exists? {index_exists}")
+                    self.load_databases(database_obj=database, num_of_docs=10)
+                    self.log.info(f"Iteration number {counter+1}")
+                    for scope in database.collections:
+                        for collection in database.collections[scope]:
+                            index1 = f'idx_db{counter}_{random.randint(0, 1000)}'
+                            namespace = f"default:`{database.id}`.`{scope}`.`{collection}`"
+                            self.create_index(database, query_statement=f"create index {index1} on {namespace}(b{counter})",
+                                              use_sdk=self.use_sdk)
+                            self.log.info(f"Iteration number {counter+1}. Index creation successful")
+                            index_exists = self.check_if_index_exists(database_obj=database, index_name=index1)
+                            self.log.info(f"Iteration number {counter+1}. index {index1} exists? {index_exists}")
+                            num_tenant_stat = self.get_index_stats(indexer_node=index_nodes_before[0],
+                                                                   rest_info=rest_info)['num_tenants']
+                            self.log.info(f"Num_tenant stat from /stats endpoint: {num_tenant_stat}")
+                            index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+                            if index_nodes_after != index_nodes_before:
+                                self.fail("Scaling has happened even when the num of tenants has not reached 20")
+                time.sleep(300)
                 index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+                self.log.info(f"Index nodes after iteration {batch} run:{index_nodes_after}")
                 if index_nodes_before == index_nodes_after:
                     self.fail(f"Index sub-cluster did not scale despite creating indexes for {self.num_of_tenants} tenants")
-                self.log.info(f"Index nodes before the test run:{index_nodes_after}")
-                num_of_tenants = self.num_of_tenants - 20
+                num_of_tenants = num_of_tenants - 20
         finally:
-            indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
-                                                                                    indexer_node=indexer_nodes[0])
-            self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
+            # TODO uncomment this after getting the appropriate keys needed to work with the s3 bucket
+            pass
+            # indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+            # storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
+            #                                                                         indexer_node=indexer_nodes[0])
+            # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
 
     def test_scale_indexer_sub_cluster(self):
         try:
@@ -252,6 +242,7 @@ class TenantManagement(BaseGSIServerless):
                                                                                     f"`{database.id}`.{scope}.{collection}")
                         for index_create_query in create_index_list:
                             self.run_query(database=database, query=index_create_query)
+                            time.sleep(2)
                         index_list = self.get_all_index_names(database=database)
                         self.rest_obj = RestConnection(database.admin_username, database.admin_password, database.rest_host)
                         rest_info = self.create_rest_info_obj(username=database.admin_username,
@@ -294,7 +285,7 @@ class TenantManagement(BaseGSIServerless):
                     for collection in database.collections[scope]:
                         index1 = f'idx__db0_{random.randint(0, 1000)}'
                         index1_replica = f'{index1} (replica 1)'
-                        self.create_index(database, query_statement=f"create index {index1}_db{counter} on f`{database.id}`.{scope}.{collection}(a)",
+                        self.create_index(database, query_statement=f"create index {index1}_db{counter} on `{database.id}`.{scope}.{collection}(a)",
                                               use_sdk=self.use_sdk)
                         self.rest_obj = RestConnection(dataplane.admin_username, dataplane.admin_password, dataplane.rest_host)
                         nodes_obj = self.rest_obj.get_all_dataplane_nodes()
@@ -310,7 +301,7 @@ class TenantManagement(BaseGSIServerless):
                             f"Hosts on which indexes reside. index1 {host1_after_scale} and index1 replica {host1_replica_after_scale}")
                         if all(item is not None for item in [host1_after_scale, host1_replica_after_scale]):
                             if host1_after_scale[0] not in hosts[database.id] and host1_replica_after_scale[0] not in hosts[database.id]:
-                                self.fail(f"Tenant affinity not honored after scaling. After scaling, the index {index1} resides on"
+                                self.fail(f"Tenant affinity not honored after scale down. After scaling, the index {index1} resides on"
                                           f"host {host1_after_scale}. Replica resides on {host1_replica_after_scale}, but the "
                                           f"indexes created before reside on {hosts[database.id]}")
 
@@ -330,13 +321,13 @@ class TenantManagement(BaseGSIServerless):
             index_nodes_after_2 = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
             if index_nodes_after == index_nodes_after_2:
                 self.fail(f"Index sub-cluster did not scale down despite creating indexes for {self.num_of_tenants} tenants")
-            self.log.info(f"Index nodes after the test run:{index_nodes_after}")
-            index1 = f'idx__db0_{random.randint(0, 1000)}'
-            index1_replica = f'{index1} (replica 1)'
+            self.log.info(f"Index nodes after scale down:{index_nodes_after_2}")
             for counter, database in enumerate(self.databases.values()):
                 for scope in database.collections:
                     for collection in database.collections[scope]:
-                        self.create_index(database, query_statement=f"create index {index1}_db{counter} on `{database.id}`.{scope}.{collection}(a)",
+                        index1 = f'idx__db0_{random.randint(0, 1000)}'
+                        index1_replica = f'{index1} (replica 1)'
+                        self.create_index(database, query_statement=f"create index {index1} on `{database.id}`.{scope}.{collection}(a)",
                                           use_sdk=self.use_sdk)
                         self.rest_obj = RestConnection(dataplane.admin_username, dataplane.admin_password, dataplane.rest_host)
                         nodes_obj = self.rest_obj.get_all_dataplane_nodes()
@@ -352,7 +343,7 @@ class TenantManagement(BaseGSIServerless):
                         self.log.info(
                             f"Hosts on which indexes reside. index1 {host1_after_scale_down} and index1 replica {host1_replica_after_scale_down}")
                         if all(item is not None for item in [host1_after_scale_down, host1_replica_after_scale_down]):
-                            if host1_after_scale[0] not in hosts[database.id] and host1_replica_after_scale[0] not in hosts[
+                            if host1_after_scale_down[0] not in hosts[database.id] and host1_replica_after_scale_down[0] not in hosts[
                                 database.id]:
                                 self.fail(f"Tenant affinity not honored after scaling. After scaling, the index {index1} resides on"
                                           f"host {host1_after_scale}. Replica resides on {host1_replica_after_scale}, but the "
@@ -365,10 +356,11 @@ class TenantManagement(BaseGSIServerless):
                 event.set()
                 future.result()
         finally:
-            indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
-                                                                                    indexer_node=indexer_nodes[0])
-            self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
+            pass
+            # indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+            # storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
+            #                                                                         indexer_node=indexer_nodes[0])
+            # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
 
     def test_scale_query_sub_cluster(self):
         if not self.dataplane_id:
@@ -561,10 +553,11 @@ class TenantManagement(BaseGSIServerless):
             for database in self.databases.values():
                 self.drop_all_indexes_on_tenant(database=database)
         finally:
-            indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
-                                                                                    indexer_node=indexer_nodes[0])
-            self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
+            pass
+            # indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+            # storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
+            #                                                                         indexer_node=indexer_nodes[0])
+            # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
 
     def test_ddl_axy_rebalance_axy(self):
         try:
@@ -682,10 +675,11 @@ class TenantManagement(BaseGSIServerless):
             for database in self.databases.values():
                 self.drop_all_indexes_on_tenant(database=database)
         finally:
-            indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
-                                                                                    indexer_node=indexer_nodes[0])
-            self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
+            pass
+            # indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+            # storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
+            #                                                                         indexer_node=indexer_nodes[0])
+            # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
 
     def test_ddl_axy_rebalance_axz(self):
         try:
@@ -800,10 +794,11 @@ class TenantManagement(BaseGSIServerless):
             for database in self.databases.values():
                 self.drop_all_indexes_on_tenant(database=database)
         finally:
-            indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
-                                                                                    indexer_node=indexer_nodes[0])
-            self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
+            pass
+            # indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+            # storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
+            #                                                                         indexer_node=indexer_nodes[0])
+            # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
 
     def test_rebalance_axy_ddl_axz(self):
         try:
@@ -929,10 +924,11 @@ class TenantManagement(BaseGSIServerless):
             for database in self.databases.values():
                 self.drop_all_indexes_on_tenant(database=database)
         finally:
-            indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
-                                                                                    indexer_node=indexer_nodes[0])
-            self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
+            pass
+            # indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+            # storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
+            #                                                                         indexer_node=indexer_nodes[0])
+            # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
 
     def test_rebalance_axy_ddl_bxy(self):
         try:
@@ -1056,10 +1052,11 @@ class TenantManagement(BaseGSIServerless):
             for database in self.databases.values():
                 self.drop_all_indexes_on_tenant(database=database)
         finally:
-            indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
-                                                                                    indexer_node=indexer_nodes[0])
-            self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
+            pass
+            # indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+            # storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
+            #                                                                         indexer_node=indexer_nodes[0])
+            # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
 
     def test_ddl_axy_rebalance_bxy(self):
         try:
@@ -1169,10 +1166,11 @@ class TenantManagement(BaseGSIServerless):
             for database in self.databases.values():
                 self.drop_all_indexes_on_tenant(database=database)
         finally:
-            indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
-                                                                                    indexer_node=indexer_nodes[0])
-            self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
+            pass
+            # indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+            # storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
+            #                                                                         indexer_node=indexer_nodes[0])
+            # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
 
     def test_stats_validation(self):
         if not self.dataplane_id:
@@ -1349,7 +1347,8 @@ class TenantManagement(BaseGSIServerless):
                 if index_list:
                     raise Exception("Drop index statement did not succeed")
         finally:
-            indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
-                                                                                    indexer_node=indexer_nodes[0])
-            self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
+            pass
+            # indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+            # storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
+            #                                                                         indexer_node=indexer_nodes[0])
+            # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)

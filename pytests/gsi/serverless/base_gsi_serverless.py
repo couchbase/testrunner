@@ -74,7 +74,8 @@ class BaseGSIServerless(QueryBaseServerless):
         index_metadata = self.get_indexer_metadata(indexer_node=indexer_node, rest_info=rest_info)
         for index in index_metadata:
             if index['index'] == index_name:
-                self.log.debug(f"Index metadata for index {index_name} is {index}")
+                # changing log level to debug temporarily. TODO remove this once stabilised
+                self.log.info(f"Index metadata for index {index_name} is {index}")
                 return index['hosts']
 
     def get_count_of_indexes_for_tenant(self, database_obj):
@@ -116,7 +117,7 @@ class BaseGSIServerless(QueryBaseServerless):
         query = f"select * from system:indexes"
         results = self.run_query(query=query, database=database_obj)['results']
         for result in results:
-            if result['indexes']['name'] == index_name and result['indexes']['keyspace_id'] == database_obj.id:
+            if result['indexes']['name'] == index_name and result['indexes']['bucket_id'] == database_obj.id:
                 return True
         return False
 
