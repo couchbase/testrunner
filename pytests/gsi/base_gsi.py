@@ -1712,6 +1712,14 @@ class BaseSecondaryIndexingTests(QueryTests):
             shell.create_file(remote_path='/opt/couchbase/.aws/credentials', file_data=aws_cred_file)
             shell.create_file(remote_path='/opt/couchbase/.aws/config', file_data=aws_conf_file)
 
+            # adding validation that the file is created and content is available.
+            self.log.info("Printing content of .aws directory")
+            self.log.info(shell.execute_command("ls -l /opt/couchbase/.aws"))
+            self.log.info("Printing content of config file")
+            self.log.info(shell.execute_command("cat /opt/couchbase/.aws/config"))
+            self.log.info("Printing content of credentials file")
+            self.log.info(shell.execute_command("cat /opt/couchbase/.aws/credentials"))
+
         if self.storage_prefix is None:
             self.storage_prefix = 'indexing_' + ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
             # checking if folder exist and deleting it
