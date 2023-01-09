@@ -1698,6 +1698,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         return result
 
     def create_S3_config(self):
+        COUCHBASE_AWS_HOME = '/home/couchbase/.aws'
         aws_cred_file = ('[default]\n'
                          f'aws_access_key_id={self.aws_access_key_id}\n'
                          f'aws_secret_access_key={self.aws_secret_access_key}')
@@ -1706,19 +1707,19 @@ class BaseSecondaryIndexingTests(QueryTests):
                          'output=json')
         for node in self.servers:
             shell = RemoteMachineShellConnection(node)
-            shell.execute_command("rm -rf /opt/couchbase/.aws/")
-            shell.execute_command("mkdir -p /opt/couchbase/.aws/")
+            shell.execute_command(f"rm -rf {COUCHBASE_AWS_HOME}")
+            shell.execute_command(f"mkdir -p {COUCHBASE_AWS_HOME}")
 
-            shell.create_file(remote_path='/opt/couchbase/.aws/credentials', file_data=aws_cred_file)
-            shell.create_file(remote_path='/opt/couchbase/.aws/config', file_data=aws_conf_file)
+            shell.create_file(remote_path=f'{COUCHBASE_AWS_HOME}/credentials', file_data=aws_cred_file)
+            shell.create_file(remote_path=f'{COUCHBASE_AWS_HOME}/config', file_data=aws_conf_file)
 
             # adding validation that the file is created and content is available.
             self.log.info("Printing content of .aws directory")
-            self.log.info(shell.execute_command("ls -l /opt/couchbase/.aws"))
+            self.log.info(shell.execute_command(f"ls -l {COUCHBASE_AWS_HOME}"))
             self.log.info("Printing content of config file")
-            self.log.info(shell.execute_command("cat /opt/couchbase/.aws/config"))
+            self.log.info(shell.execute_command(f"cat {COUCHBASE_AWS_HOME}/config"))
             self.log.info("Printing content of credentials file")
-            self.log.info(shell.execute_command("cat /opt/couchbase/.aws/credentials"))
+            self.log.info(shell.execute_command(f"cat {COUCHBASE_AWS_HOME}/credentials"))
 
         if self.storage_prefix is None:
             self.storage_prefix = 'indexing_' + ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
