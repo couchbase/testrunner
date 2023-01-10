@@ -136,6 +136,7 @@ class ServerlessGSISanity(BaseGSIServerless):
             count_docs_to_delete = len(doc_ids)
             delete_query = f'DELETE FROM {keyspace} WHERE age=35'
             self.run_query(database=database, query=delete_query)
+            time.sleep(10)
             expected_doc_count_after_delete = doc_count_after_insert - count_docs_to_delete
             result = self.run_query(database=database, query=select_query)['results']
             doc_count_after_delete = len(result)
@@ -144,11 +145,13 @@ class ServerlessGSISanity(BaseGSIServerless):
             expected_doc_count_before_update = len(self.run_query(database=database, query=select_query)['results'])
             update_query = f'UPDATE {namespace} SET updated=true WHERE age > 30 and age < 60'
             self.run_query(database=database, query=update_query)
+            time.sleep(10)
             query = f'SELECT meta().id FROM {keyspace} WHERE age > 30 and age < 60'
             queried_docs = self.run_query(database=database, query=query)['results']
             queried_doc_ids = sorted([item['id'] for item in queried_docs])
             create_index_updated_field = f'create index idx_updated on {namespace}(updated)'
             self.run_query(database=database, query=create_index_updated_field)
+            time.sleep(10)
             query = f'SELECT meta().id FROM {namespace} WHERE updated=true'
             updated_docs_ids = self.run_query(database=database, query=query)['results']
             updated_docs_ids = sorted([item['id'] for item in updated_docs_ids])
@@ -168,12 +171,14 @@ class ServerlessGSISanity(BaseGSIServerless):
                            f'("upsert-2", {{"firstName": "George", "age": 95}})' \
                            f' RETURNING VALUE name'
             self.run_query(database=database, query=upsert_query)
+            time.sleep(10)
             upsert_doc_ids = self.run_query(database=database, query=upsert_count_query)['results']
             upsert_doc_ids = sorted([item['id'] for item in upsert_doc_ids])
             self.assertEqual(upsert_doc_ids, upsert_doc_list,
                              f"Actual: {upsert_doc_ids}, Expected: {upsert_doc_list}")
             expected_count_after_upsert = count_before_upsert + len(upsert_doc_list)
             docs_after_upsert = self.run_query(database=database, query=upsert_count_query)['results']
+            time.sleep(10)
             self.assertEqual(len(docs_after_upsert), expected_count_after_upsert,
                              f"Actual: {len(docs_after_upsert)}, Expected: {expected_count_after_upsert}")
 
@@ -249,8 +254,10 @@ class ServerlessGSISanity(BaseGSIServerless):
             count_docs_to_delete = len(doc_ids)
             delete_query = f'DELETE FROM {keyspace} WHERE city like "C%"'
             self.run_query(database=database, query=delete_query)
+            time.sleep(10)
             expected_doc_count_after_delete = doc_count_after_insert - count_docs_to_delete
             result = self.run_query(database=database, query=select_query)['results']
+            time.sleep(10)
             doc_count_after_delete = len(result)
             if doc_count_after_delete != expected_doc_count_after_delete:
                 self.fail(f"Doc count mismatch after delete. Actual count {doc_count_after_delete}. "
@@ -277,6 +284,7 @@ class ServerlessGSISanity(BaseGSIServerless):
                            f' RETURNING VALUE name'
             self.run_query(database=database, query=upsert_query)
             expected_count_after_upsert = count_before_upsert + len(upsert_doc_list)
+            time.sleep(10)
             docs_after_upsert = self.run_query(database=database, query=upsert_count_query)['results']
             self.assertEqual(len(docs_after_upsert), expected_count_after_upsert,
                              f"Actual: {len(docs_after_upsert)}, Expected: {expected_count_after_upsert}")
