@@ -2244,11 +2244,13 @@ class StableTopFTS(FTSBaseTest):
         """
         self.load_data()
         collection_index, type, index_scope, index_collections = self.define_index_parameters_collection_related()
+        plan_params = self.construct_plan_params()
         index = self._cb_cluster.create_fts_index(
             name='default_index',
             source_name='default',
             collection_index=collection_index,
             _type=type,
+            plan_params=plan_params,
             source_params={"includeXAttrs": True},
             scope=index_scope,
             collections=index_collections)
