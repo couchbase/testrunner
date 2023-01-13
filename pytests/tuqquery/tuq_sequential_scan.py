@@ -19,6 +19,8 @@ class QuerySeqScanTests(QueryTests):
 
     def suite_setUp(self):
         super(QuerySeqScanTests, self).suite_setUp()
+        if self.use_server_groups:
+            self._create_server_groups()
 
     def tearDown(self):
         super(QuerySeqScanTests, self).tearDown()

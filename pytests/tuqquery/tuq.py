@@ -121,6 +121,8 @@ class QueryTests(BaseTestCase):
         self.skip_load = self.input.param("skip_load", False)
         self.skip_index = self.input.param("skip_index", False)
         self.plasma_dgm = self.input.param("plasma_dgm", False)
+        self.use_server_groups = self.input.param("use_server_groups", True)
+        self.server_grouping = self.input.param("server_grouping", "0-1:2-3")
         self.DGM = self.input.param("DGM", False)
         self.covering_index = self.input.param("covering_index", False)
         self.cluster_ops = self.input.param("cluster_ops", False)
@@ -1106,6 +1108,44 @@ class QueryTests(BaseTestCase):
     #
     #   COMMON FUNCTIONS
     ##############################################################################################
+    def _create_server_groups(self):
+        if self.server_grouping:
+            server_groups = self.server_grouping.split(":")
+            self.log.info("server groups : %s", server_groups)
+
+            zones = list(self.rest.get_zone_names().keys())
+
+            # Delete Server groups
+            for zone in zones:
+                if zone != "Group 1":
+                    nodes_in_zone = self.rest.get_nodes_in_zone(zone)
+                    if nodes_in_zone:
+                        self.rest.shuffle_nodes_in_zones(list(nodes_in_zone.keys()),
+                                                         zone, "Group 1")
+                    self.rest.delete_zone(zone)
+
+            zones = list(self.rest.get_zone_names().keys())
+            source_zone = zones[0]
+
+            # Create Server groups
+            for i in range(1, len(server_groups) + 1):
+                server_grp_name = "ServerGroup_" + str(i)
+                if not self.rest.is_zone_exist(server_grp_name):
+                    self.rest.add_zone(server_grp_name)
+
+            # Add nodes to Server groups
+            i = 1
+            for server_grp in server_groups:
+                server_list = []
+                server_grp_name = "ServerGroup_" + str(i)
+                i += 1
+                nodes_in_server_group = server_grp.split("-")
+                for node in nodes_in_server_group:
+                    self.rest.shuffle_nodes_in_zones(
+                        [self.servers[int(node)].ip], source_zone,
+                        server_grp_name)
+                    server_list.append(self.servers[int(node)].ip + ":" + self.servers[int(node)].port)
+                self.server_group_map[server_grp_name] = server_list
     def ExplainPlanHelper(self, res, debug=False):
         try:
             rv = res["results"][0]["plan"]

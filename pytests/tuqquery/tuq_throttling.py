@@ -16,6 +16,8 @@ class QueryThrottlingTests(QueryTests):
 
     def suite_setUp(self):
         super(QueryThrottlingTests, self).suite_setUp()
+        if self.use_server_groups:
+            self._create_server_groups()
 
     def tearDown(self):
         super(QueryThrottlingTests, self).tearDown()
