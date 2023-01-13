@@ -368,7 +368,6 @@ class TenantManagement(BaseGSIServerless):
         dataplane = ServerlessDataPlane(self.dataplane_id)
         rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.dataplane_id)
         dataplane.populate(rest_api_info)
-        self.scale_down_query_subcluster(dataplane=dataplane)
         rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
                                               password=dataplane.admin_password,
                                               rest_host=dataplane.rest_host)
@@ -398,8 +397,8 @@ class TenantManagement(BaseGSIServerless):
         for counter, database in enumerate(self.databases.values()):
             for scope in database.collections:
                 for collection in database.collections[scope]:
-                    index1 = f'idx__db0_{random.randint(0, 1000)}'
-                    self.create_index(database, query_statement=f"create index {index1}_db{counter} on f`{database.id}`.{scope}.{collection}(a)",
+                    index1 = f'idx_db0_{random.randint(0, 1000)}'
+                    self.create_index(database, query_statement=f"create index {index1}_db{counter} on `{database.id}`.`{scope}`.`{collection}`(a)",
                                           use_sdk=self.use_sdk)
         with ThreadPoolExecutor() as executor:
             event = Event()

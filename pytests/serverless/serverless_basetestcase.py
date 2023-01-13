@@ -355,7 +355,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
 
     def load_data_new_doc_loader(self, databases, doc_start=0, doc_end=100000, create_rate=100, update_rate=0):
         # will be removed once DocLoader is a testrunner subdmodule
-        cur_dir = os.getcwd()
+        cur_dir = os.path.abspath(os.path.join(os.path.dirname( __file__ ), '..', '..',))
         pom_path = os.path.join(cur_dir, r"magma_loader/DocLoader")
         os.chdir(pom_path)
         try:
