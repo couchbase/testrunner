@@ -334,7 +334,7 @@ class StableTopFTS(FTSBaseTest):
         self.validate_index_count(equal_bucket_doc_count=True)
         hits, _, _, _ = index.execute_query(self.sample_query,
                                      zero_results_ok=False)
-        alias = self.create_alias([index])
+        alias = self.create_alias([index], bucket)
         hits2, _, _, _ = alias.execute_query(self.sample_query,
                                       zero_results_ok=False)
         if hits != hits2:

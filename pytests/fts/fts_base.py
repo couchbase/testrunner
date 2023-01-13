@@ -5252,7 +5252,7 @@ class FTSBaseTest(unittest.TestCase):
         return collection_index, _type, index_scope, index_collections
 
 
-    def create_alias(self, target_indexes, name=None, alias_def=None):
+    def create_alias(self, target_indexes, bucket=None, name=None, alias_def=None):
         """
         Creates an alias spanning one or many target indexes
         """
@@ -5265,6 +5265,7 @@ class FTSBaseTest(unittest.TestCase):
                 alias_def['targets'][index.name] = {}
 
         return self._cb_cluster.create_fts_index(name=name,
+                                                 source_name=bucket.name,
                                                  index_type='fulltext-alias',
                                                  index_params=alias_def)
 
