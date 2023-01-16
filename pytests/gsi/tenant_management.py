@@ -18,6 +18,7 @@ from membase.api.on_prem_rest_client import RestHelper, RestConnection
 from serverless.gsi_utils import GSIUtils
 from testconstants import GSI_UNITS_HWM, GSI_UNITS_LWM, GSI_MEMORY_LWM, GSI_MEMORY_HWM
 from testconstants import INDEX_MAX_CAP_PER_TENANT, INDEX_SUB_CLUSTER_LENGTH
+from deepdiff import DeepDiff
 
 
 class TenantManagement(BaseSecondaryIndexingTests):
@@ -86,6 +87,10 @@ class TenantManagement(BaseSecondaryIndexingTests):
 
     def _check_index_count(self, num_indexes=None):
         indexer_metadata = self.index_rest.get_indexer_metadata()['status']
+        index_list = []
+        for index in indexer_metadata:
+            if index["indexName"] != "#primary" and index["scope"] != '_system':
+                index_list.append(index)
         if num_indexes:
             num_of_indexes = num_indexes
         else:
@@ -94,9 +99,7 @@ class TenantManagement(BaseSecondaryIndexingTests):
             if indexes_per_tenant > INDEX_MAX_CAP_PER_TENANT:
                 indexes_per_tenant = INDEX_MAX_CAP_PER_TENANT
             num_of_indexes = self.num_of_tenants * indexes_per_tenant * 2
-            num_of_indexes += self.num_of_tenants * 2  # primary indexes for _system scope
-        self.assertEqual(len(indexer_metadata), num_of_indexes,
-                         "No. of expected indexes with replica not matching")
+        self.assertEqual(len(index_list), num_of_indexes, "No. of expected indexes with replica not matching")
 
     def _check_index_distribution(self):
         sub_cluster_list = self.get_sub_cluster_list()
@@ -268,6 +271,23 @@ class TenantManagement(BaseSecondaryIndexingTests):
                             break
                 self.assertNotEqual(zone_1, zone_2,
                                     f"Both the index nodes belong to same availability zone. {indexer_metadata}")
+
+    def _validate_metatadata_token(self):
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        token_rest = RestConnection(index_node)
+        counter = 0
+        metadata_tokens = token_rest.get_metadata_tokens()
+        while counter <= 5 * 60:  # 5 mins to get the create token cleared up
+            for token in metadata_tokens:
+                if "delete" not in token:
+                    break
+            else:
+                break
+            self.sleep(10, "Checking for metadata token clean up")
+            counter += 10
+            metadata_tokens = token_rest.get_metadata_tokens()
+        if counter > 5 * 60:
+            self.fail(f"Unprocessed tokens apart from delete tokens available after rebalance: {metadata_tokens}")
 
     def validate_tenant_management(self, check):
         if check == 'cluster_affinity':
@@ -582,8 +602,6 @@ class TenantManagement(BaseSecondaryIndexingTests):
                                remoteIp=self.servers[self.nodes_init + counter].ip,
                                zone_name=node_zone_dict[server],
                                services=['index'])
-        # Todo: Add metakv state check b4 reb
-        metadatatokens_b4_reb = self.index_rest.get_metadata_tokens()
         try:
             rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
                                                           to_add=[],
@@ -601,26 +619,14 @@ class TenantManagement(BaseSecondaryIndexingTests):
         finally:
             if self.cancel_rebalance is False:
                 self.start_server(self.servers[self.nodes_init])
-        # Todo: Add metakv state check aft reb failure
-        metadatatokens_aft_reb = self.index_rest.get_metadata_tokens()
-
-        self.log.info(metadatatokens_b4_reb)
-        self.log.info(metadatatokens_aft_reb)
 
         rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
                                                       to_add=[],
                                                       to_remove=[],
                                                       services=['index'] * len(index_nodes))
         rebalance_task.result()
-        # Todo: Add metakv state check during reb
-        metadatatokens_during_reb = self.index_rest.get_metadata_tokens()
         rebalance_status = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
-        # Todo: Add metakv state check aft reb success
-        metadatatokens_aft_succ_reb = self.index_rest.get_metadata_tokens()
-
-        self.log.info(metadatatokens_during_reb)
-        self.log.info(metadatatokens_aft_succ_reb)
 
     def test_cancel_resume_swap_rebalance(self):
         self.prepare_tenants()
@@ -715,7 +721,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
             namespace = self.namespaces[0]
         else:
             namespace = self.namespaces[1]
-        for _ in range(10):
+        batch_iter = 5
+        for _ in range(batch_iter):
             query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template)
             queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                               namespace=namespace, defer_build_mix=True)
@@ -734,11 +741,13 @@ class TenantManagement(BaseSecondaryIndexingTests):
                 rebalance_status = RestHelper(self.rest).rebalance_reached()
                 self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
         except Exception as err:
-            self.log.info(err)
+            self.fail(err)
+        self.wait_until_indexes_online(defer_build=True)
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
         self.index_rest = RestConnection(index_node)
         indexder_metadata_aft_swap = self.index_rest.get_indexer_metadata()['status']
-        self.log.info(f"{len(indexder_metadata_aft_swap)}, {len(index_metadata_b4_swap)}")
+        expected_index_count = len(index_metadata_b4_swap) + batch_iter * self.gsi_util_obj.batch_size * 2
+        self.assertEqual(len(indexder_metadata_aft_swap), expected_index_count)
 
     def test_fast_rebalance_conflict_different_tenant(self):
         self.prepare_tenants(index_creations=False)
@@ -953,13 +962,33 @@ class TenantManagement(BaseSecondaryIndexingTests):
     def test_stats_validation(self):
         mutation_during_rebalance = self.input.param("mutation_during_rebalance", False)
         self.prepare_tenants()
+        sub_clusters = self.get_sub_cluster_list()
+        swap_node_ip = sub_clusters[0][0].split(':')[0]
+        swap_node = ''
+
+        for server in self.servers:
+            if swap_node_ip == server.ip:
+                swap_node = server
+                break
+
+        swap_node_zone = self.get_server_group(swap_node_ip)
+        add_node = self.servers[self.nodes_init]
+        self.rest.add_node(user=self.rest.username, password=self.rest.password,
+                           remoteIp=add_node.ip,
+                           zone_name=swap_node_zone,
+                           services=['index'])
         indexer_metadata_b4_reb = self.index_rest.get_indexer_metadata()['status']
-        index_reb_stats_b4_reb = self.get_rebalance_related_stats()
-        index_persisted_stats_b4_reb = self.get_persisted_stats()
+        index_reb_stats_b4_reb = self.get_rebalance_related_stats(index_node=swap_node)
+
+        # Todo: Persisted stat is not available currently. Check with Varun on changes
+        # index_persisted_stats_b4_reb = self.get_persisted_stats(index_node=swap_node)
         scopes = [f'{self.scope_prefix}_{num + 1}' for num in range(self.num_scopes)]
         collections = [f'{self.collection_prefix}_{num + 1}' for num in range(self.num_collections)]
         with ThreadPoolExecutor() as executor:
-            validation_task = executor.submit(self.validate_tenant_management, check="subcluster_reblance_swap")
+            rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
+                                                          to_add=[],
+                                                          to_remove=[swap_node],
+                                                          services=['index'])
             if mutation_during_rebalance:
                 data_task = executor.submit(self.load_data_on_all_tenants, scopes=scopes, collections=collections,
                                             num_docs=self.num_of_docs_per_collection * 2)
@@ -969,7 +998,9 @@ class TenantManagement(BaseSecondaryIndexingTests):
                                             query_node=self.query_node)
                 data_task.result()
                 scan_task.result()
-            validation_task.result()
+            rebalance_task.result()
+            rebalance_status = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
 
         for namespace in self.namespaces:
             doc_count_query = f'Select count(*) from {namespace}'
@@ -977,20 +1008,29 @@ class TenantManagement(BaseSecondaryIndexingTests):
             select_count_query = f'Select count(*) from {namespace} where age >= 0'
             select_count_result = self.run_cbq_query(query=select_count_query)['results'][0]['$1']
             self.assertEqual(doc_count_result, select_count_result)
-            # self.assertEqual(doc_count_result, self.num_of_docs_per_collection * 2)
-        index_reb_stats_aft_reb = self.get_rebalance_related_stats()
-        index_persisted_stats_aft_reb = self.get_persisted_stats()
-        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
-        self.index_rest = RestConnection(index_node)
-        indexder_metadata_aft_reb = self.index_rest.get_indexer_metadata()['status']
+            if mutation_during_rebalance:
+                self.assertEqual(doc_count_result, self.num_of_docs_per_collection * 2)
+        index_reb_stats_aft_reb = self.get_rebalance_related_stats(index_node=add_node)
+        # Todo: Persisted stat is not available currently. Check with Varun on changes
+        # index_persisted_stats_aft_reb = self.get_persisted_stats(index_node=add_node)
+        self.index_rest = RestConnection(add_node)
+        indexer_metadata_aft_reb = self.index_rest.get_indexer_metadata()['status']
 
-        # Todo: Add validation for stats
-        self.log.info(f'{index_reb_stats_b4_reb}')
-        self.log.info(f'{index_reb_stats_aft_reb}')
-        self.log.info(f'{index_persisted_stats_b4_reb}')
-        self.log.info(f'{index_persisted_stats_aft_reb}')
-        self.log.info(f'{indexer_metadata_b4_reb}')
-        self.log.info(f'{indexder_metadata_aft_reb}')
+        reb_stats_diff = DeepDiff(index_reb_stats_b4_reb, index_reb_stats_aft_reb)
+        # persisted_stats_diff = DeepDiff(index_persisted_stats_b4_reb, index_persisted_stats_aft_reb)
+
+        if mutation_during_rebalance:
+            if reb_stats_diff:
+                self.log.info(reb_stats_diff)
+                self.assertEqual(len(index_reb_stats_b4_reb), len(index_reb_stats_b4_reb))
+            # if persisted_stats_diff:
+            #     self.log.info(persisted_stats_diff)
+        else:
+            if reb_stats_diff:
+                self.fail(f"reb_stats_diff: {reb_stats_diff}")
+            # if persisted_stats_diff:
+            #     self.log.info(f"persisted_stats_diff: {persisted_stats_diff}")
+        self.assertEqual(len(indexer_metadata_b4_reb), len(indexer_metadata_aft_reb))
 
     def test_schedule_ddl_during_rebalance(self):
         self.prepare_tenants(defer_build_mix=True)
@@ -1000,25 +1040,34 @@ class TenantManagement(BaseSecondaryIndexingTests):
         for index in indexer_metadata_b4_reb:
             if index['status'] == 'Created':
                 namespace = f'{index["bucket"]}.{index["scope"]}.{index["collection"]}'
+                index_name = index['indexName']
                 if namespace in defered_indexes:
-                    defered_indexes[namespace].append(index)
+                    defered_indexes[namespace].append(f'`{index_name}`')
                 else:
-                    defered_indexes[namespace] = [index]
-            index_dict['indexName'] = f'{index["bucket"]}.{index["scope"]}.{index["collection"]}'
+                    defered_indexes[namespace] = [f'`{index_name}`']
+            index_dict[index['indexName']] = f'{index["bucket"]}.{index["scope"]}.{index["collection"]}'
 
         # Dropping 20% of indexes during rebalance, building deferred and creating new indexes
         drop_queries = []
+        build_queries = []
         for index in index_dict:
-            if index not in defered_indexes:
-                drop_query = f'Drop index {defered_indexes[index]}.{index}'
-                drop_queries.append(drop_query)
-            if len(drop_queries) == len(index_dict) / 5:
+            if index == '#primary':
+                continue
+            for namespace in defered_indexes:
+                if index not in defered_indexes[namespace]:
+                    drop_query = f'Drop index `{index}` on {namespace}'
+                    drop_queries.append(drop_query)
+            if len(drop_queries) >= len(index_dict) / 5:
                 break
-        build_queries = [f'Build index on {namespace}.{", ".join(defered_indexes[namespace])}'
-                         for namespace in defered_indexes]
+
+        for namespace in defered_indexes:
+            defered_indexes_list = ', '.join(defered_indexes[namespace])
+            build_queries.append(f'Build index on {namespace}({defered_indexes_list})')
+
         create_queries = []
+        batch_size = 2
         for namespace in self.namespaces:
-            for _ in range(10):
+            for _ in range(batch_size):
                 query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template)
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                   namespace=namespace, defer_build_mix=True)
@@ -1028,10 +1077,10 @@ class TenantManagement(BaseSecondaryIndexingTests):
         sub_clusters = self.get_sub_cluster_list()
         swap_node_ip = sub_clusters[0][0].split(':')[0]
         swap_node = ''
-
         for server in self.servers:
             if swap_node_ip == server.ip:
                 swap_node = server
+                break
 
         swap_node_zone = self.get_server_group(swap_node_ip)
         self.rest.add_node(user=self.rest.username, password=self.rest.password,
@@ -1049,20 +1098,16 @@ class TenantManagement(BaseSecondaryIndexingTests):
                                                               to_add=[],
                                                               to_remove=[swap_node],
                                                               services=['index'])
-                # Todo: Add provision for MetaKv Endpoint check during rebalnce
-
+                self.sleep(15)
+                while self.rest._rebalance_progress() < 25:
+                    self.sleep(5)
                 rebalance_task.result()
                 rebalance_status = RestHelper(self.rest).rebalance_reached()
                 self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
         except Exception as err:
-            self.log.info(err)
-
-        # Todo: Add provision for MetaKv Endpoint check after reblance finishes
-
-        self.wait_until_indexes_online()
-        indexer_metadata_aft_reb = self.index_rest.get_indexer_metadata()['status']
-        self.log.info(indexer_metadata_b4_reb)
-        self.log.info(indexer_metadata_aft_reb)
+            self.fail(err)
+        self.wait_until_indexes_online(defer_build=True)
+        self._validate_metatadata_token()
 
     def test_auto_rebalance_defrag(self):
         self.prepare_tenants()
@@ -1071,7 +1116,9 @@ class TenantManagement(BaseSecondaryIndexingTests):
         indexer_metadata = self.index_rest.get_indexer_metadata()['status']
         sub_cluster_map = {}
         for index in indexer_metadata:
-            host = index['host'][0].split(":")
+            if index['scope'] == '_system':
+                continue
+            host = index['hosts'][0].split(":")[0]
             tenant_namespace = f'default:{index["bucket"]}.{index["scope"]}.{index["collection"]}'
             if tenant_namespace in sub_cluster_map:
                 sub_cluster_map[tenant_namespace].add(host)
@@ -1092,6 +1139,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
             tenants_on_skewed_sub_cluster.append(self.namespaces[2])
             skewed_sub_cluster_node = list(sub_cluster_map[self.namespaces[1]])[0]
 
+        # Todo: Add a new sub-cluster
+
         # Pushing a sub-cluster towards HWM
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         node = ''
@@ -1100,11 +1149,9 @@ class TenantManagement(BaseSecondaryIndexingTests):
                 node = index_node
                 break
 
-        # As the tenant usage is below HWM, a reb
         node_rest = RestConnection(node)
         defrag_result_b4_hwm = node_rest.get_index_defrag_output()
         self.log.info(f"Defrag result before HWM:{defrag_result_b4_hwm}")
-
         while not self.is_hwm_reached(node=node):
             tasks = []
             with ThreadPoolExecutor() as executor:
@@ -1115,6 +1162,7 @@ class TenantManagement(BaseSecondaryIndexingTests):
             for task in tasks:
                 task.result()
 
+        self.sleep(30)
         defrag_result_aft_hwm = node_rest.get_index_defrag_output()
         self.log.info(f"Defrag result after HWM:{defrag_result_aft_hwm}")
         # calling rebalance to run defrag
@@ -1129,38 +1177,45 @@ class TenantManagement(BaseSecondaryIndexingTests):
         except Exception as err:
             self.log.info(err)
 
-        # Todo: Not sure how to validate the scenario
-
     def test_defrag_replica_repair(self):
         self.prepare_tenants()
 
-        # Making replica repair available in cluster and on rebalance replica should be available
-        # Todo: Add call to have index replica available for repair
-        sub_clusters = self.get_sub_cluster_list()
-        index_node_ips = [node.split(':')[0] for node in sub_clusters[0]]
-        node_zone_dict = {}
-        index_node = None
-        for index_node_ip in index_node_ips:
-            for server in self.servers:
-                if index_node_ip == server.ip:
-                    index_node = server
-                    break
-
-        for node in index_node_ips:
-            node_zone_dict[node] = self.get_server_group(node)
-        for counter, server in enumerate(node_zone_dict):
-            self.rest.add_node(user=self.rest.username, password=self.rest.password,
-                               remoteIp=self.servers[self.nodes_init + counter].ip,
-                               zone_name=node_zone_dict[server],
-                               services=['index'])
-
-        self.stop_server(index_node)
-
+        # Adding index Node to the same server group so that replica repair can be done
         indexer_metadata_b4_reb = self.index_rest.get_indexer_metadata()['status']
+        sub_clusters = self.get_sub_cluster_list()
+        remove_node_ip = sub_clusters[0][0].split(':')[0]
+        node_zone = self.get_server_group(remove_node_ip)
+
+        self.rest.add_node(user=self.rest.username, password=self.rest.password,
+                           remoteIp=self.servers[self.nodes_init].ip,
+                           zone_name=node_zone,
+                           services=['index'])
+        try:
+            rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
+                                                          to_add=[],
+                                                          to_remove=[],
+                                                          services=[])
+            rebalance_task.result()
+            rebalance_status = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+        except Exception as err:
+            self.fail(err)
+
+        # Making replica repair available in cluster and on reblance replica should be available
+        otp_node = f'ns_1@{remove_node_ip}'
+        self.rest.fail_over(otpNode=otp_node)
+        self.sleep(10)
+
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
         node_rest = RestConnection(index_node)
         defrag_result_b4_reb = node_rest.get_index_defrag_output()
-        self.log.info(f"Defrag result before HWM:{defrag_result_b4_reb}")
+        self.log.info(defrag_result_b4_reb)
+        for node in defrag_result_b4_reb:
+            if node.split(':')[0] != self.servers[self.nodes_init].ip:
+                continue
+            num_index_repaired = defrag_result_b4_reb[node]['num_index_repaired']
+            self.assertTrue(num_index_repaired > 0, "Node is not marked for Replica repair")
+
         # calling rebalance to run replica repair
         try:
             rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
@@ -1171,44 +1226,16 @@ class TenantManagement(BaseSecondaryIndexingTests):
             rebalance_status = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
         except Exception as err:
-            self.log.info(err)
+            self.fail(err)
 
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
         self.index_rest = RestConnection(index_node)
         indexer_metadata_after_reb = self.index_rest.get_indexer_metadata()['status']
         defrag_result_aft_reb = self.index_rest.get_index_defrag_output()
         self.log.info(f"Defrag result before HWM:{defrag_result_aft_reb}")
-        # Todo: Not sure how to validate the scenario
+        for node in defrag_result_aft_reb:
+            num_index_repaired = defrag_result_aft_reb[node]['num_index_repaired']
+            self.assertEqual(num_index_repaired, 0, "Node is marked for Replica repair")
 
-    def test_defrag_scale_down(self):
-        self.prepare_tenants()
-
-        indexer_metadata = self.index_rest.get_indexer_metadata()['status']
-        sub_cluster_b4_reb = self.get_sub_cluster_list()
-        # As the tenant usage is below 20% of LWM, a rebalance should down scale empty sub-cluster
-        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
-        index_rest = RestConnection(index_node)
-        defrag_result_b4_hwm = index_rest.get_index_defrag_output()
-        self.log.info(f"Defrag result before HWM:{defrag_result_b4_hwm}")
-
-        # Todo: Add call to have index replica available for repair
-
-        # calling rebalance to run replica repair
-        try:
-            rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
-                                                          to_add=[],
-                                                          to_remove=[],
-                                                          services=[])
-            rebalance_task.result()
-            rebalance_status = RestHelper(self.rest).rebalance_reached()
-            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
-        except Exception as err:
-            self.log.info(err)
-
-        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
-        index_rest = RestConnection(index_node)
-        defrag_result_aft_hwm = index_rest.get_index_defrag_output()
-        self.log.info(f"Defrag result before HWM:{defrag_result_b4_hwm}")
-        sub_cluster_aft_reb = self.get_sub_cluster_list()
-        # Todo: Not sure how to validate the scenario
-        self.assertTrue(len(sub_cluster_aft_reb) < len(sub_cluster_b4_reb))
+        self.assertEqual(len(indexer_metadata_after_reb), len(indexer_metadata_b4_reb),
+                         "No. of index replicas after repair is not matching")

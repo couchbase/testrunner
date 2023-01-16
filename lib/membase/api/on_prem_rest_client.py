@@ -402,6 +402,7 @@ class RestConnection(object):
                         time.sleep(0.2)
                         http_res, success = self.init_http_request(self.baseUrl + 'pools/default')
                         http_res = self.extract_nodes_self_from_pools_default(http_res)
+                        return
                     else:
                         if CbServer.use_https:
                             self.capiBaseUrl = http_res["couchApiBaseHTTPS"]
@@ -2184,11 +2185,16 @@ class RestConnection(object):
         status, content, header = self._http_request(api)
         if status:
             content = content.decode("utf8")
+            content = content.strip()
             try:
-                json_parsed = json.loads(content)
-                return json_parsed
+                metadata_list = content.split('\n')
+                metadata_dict = {}
+                for item in metadata_list:
+                    key, value = item.split('-')
+                    metadata_dict[key.strip()] = value.strip()
+                return metadata_dict
             except Exception as err:
-                return content
+                raise err
 
     def get_index_storage_stats(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'stats/storage'

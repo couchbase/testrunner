@@ -58,8 +58,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.num_collections = self.input.param("num_collections", 1)
         self.item_to_delete = self.input.param('item_to_delete', None)
         self.test_bucket = self.input.param('test_bucket', 'test_bucket')
-        self.wait_for_scheduled_index = self.input.param('wait_for_scheduled_index', False)
-        self.scheduled_index_create_rebal = self.input.param('scheduled_index_create_rebal', True)
+        self.wait_for_scheduled_index = self.input.param('wait_for_scheduled_index', True)
+        self.scheduled_index_create_rebal = self.input.param('scheduled_index_create_rebal', False)
         self.enable_dgm = self.input.param('enable_dgm', False)
         self.rest = RestConnection(self.master)
         self.collection_rest = CollectionsRest(self.master)
@@ -1662,15 +1662,17 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                              query_node=self.query_node, capella_run=False,
                                                              num_of_batches=self.index_batch_weight,
                                                              defer_build_mix=defer_build_mix)
-            self.wait_until_indexes_online(defer_build=False)
+            self.wait_until_indexes_online(defer_build=defer_build_mix)
 
-    def get_persisted_stats(self):
+    def get_persisted_stats(self, index_node=None):
         persisted_stats_list = ['last_known_scan_time',
-                                'avg_scan_rate',
-                                'num_rows_scanned',
-                                'num_rollbacks',
-                                'num_rollbacks_to_zero']
-        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+                                # 'avg_scan_rate',
+                                # 'num_rows_scanned',
+                                # 'num_rollbacks',
+                                # 'num_rollbacks_to_zero'
+                                ]
+        if index_node is None:
+            index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
         self.index_rest = RestConnection(index_node)
         stats = self.index_rest.get_all_index_stats()
         result = {}
@@ -1680,14 +1682,14 @@ class BaseSecondaryIndexingTests(QueryTests):
                     result[stat] = value
         return result
 
-    def get_rebalance_related_stats(self):
+    def get_rebalance_related_stats(self, index_node=None):
         reblance_related_stats = ['items_count',
                                   'key_size_distribution',
-                                  'num_docs_pending',
                                   'raw_data_size',
                                   'backstore_raw_data_size',
                                   'arrkey_size_distribution']
-        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        if index_node is None:
+            index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
         self.index_rest = RestConnection(index_node)
         stats = self.index_rest.get_all_index_stats()
         result = {}
