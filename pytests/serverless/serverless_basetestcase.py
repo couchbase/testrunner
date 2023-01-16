@@ -61,8 +61,15 @@ class ServerlessBaseTestCase(unittest.TestCase):
             if self.create_dataplane_override:
                 with open('pytests/serverless/config/dataplane_spec_config.json') as f:
                     overRide = json.load(f)
-                    overRide['couchbase']['image'] = self.input.capella.get("image")
-                    overRide['couchbase']['version'] = self.input.capella.get("server_version")
+            else:
+                overRide = {
+                    "couchbase": {
+                        "image": "",
+                        "version": ""
+                    }
+                }
+            overRide['couchbase']['image'] = self.input.capella.get("image")
+            overRide['couchbase']['version'] = self.input.capella.get("server_version")
             self.new_dataplane_id = self.provision_dataplane(overRide)
             if self.new_dataplane_id is not None:
                 self.dataplanes[self.new_dataplane_id] = ServerlessDataPlane(self.new_dataplane_id)
