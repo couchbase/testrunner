@@ -98,9 +98,9 @@ class ServerlessBaseTestCase(unittest.TestCase):
         if self.teardown_all_databases:
             self.delete_all_database()
         if self.new_dataplane_id is not None:
-            self.log.info(f"Deleting dataplane : {self.new_dataplane_id}")
+            # self.log.info(f"Deleting dataplane : {self.new_dataplane_id}")
             self.delete_all_database(True, self.new_dataplane_id)
-            self.delete_dataplane(self.new_dataplane_id)
+            # self.delete_dataplane(self.new_dataplane_id)
         self.task_manager.shutdown(force=True)
 
     def has_test_failed(self):
@@ -183,7 +183,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
                 task.result()
 
     def provision_databases(self, count=1, seed=None, dataplane_id=None):
-        self.log.info(f'PROVISIONING {count} DATABASES ...')
+        self.log.info(f'PROVISIONING {count} DATABASES ... on dataplane {dataplane_id}')
         tasks = []
         for i in range(0, count):
             if seed:
@@ -391,33 +391,38 @@ class ServerlessBaseTestCase(unittest.TestCase):
         finally:
             os.chdir(cur_dir)
 
-    def update_specs(self, dataplane_id, new_count=4, service='index', timeout=1200):
+    def update_specs(self, dataplane_id, new_count=4, service='index', timeout=1200,
+                     wait_for_rebalance_completion=True):
         resp = self.api.get_dataplane_debug_info(dataplane_id=dataplane_id)
         current_specs = resp['couchbase']['specs']
         new_specs = copy.deepcopy(current_specs)
         for counter, spec in enumerate(current_specs):
             if spec['services'][0]['type'] == service and spec['count'] != new_count:
                 new_specs[counter]['count'] = new_count
+        self.log.info(f"Update_specs will be run on {dataplane_id}")
         self.log.info(f"Will use this config to update specs: {new_specs}")
         self.api.modify_cluster_specs(dataplane_id=dataplane_id, specs=new_specs)
         time.sleep(30)
-        time_now = time.time()
-        while time_now < time.time() + timeout:
-            if not self.dataplanes:
-                dataplane = ServerlessDataPlane(dataplane_id=dataplane_id)
-            else:
-                dataplane = self.dataplanes[self.dataplane_id]
-            rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
-                                                  password=dataplane.admin_password,
-                                                  rest_host=dataplane.rest_host)
-            nodes_after_scaling = self.get_nodes_from_services_map(rest_info=rest_info, service=service)
-            num_nodes_after = len(nodes_after_scaling)
-            if num_nodes_after == new_count:
-                break
-            time.sleep(30)
-        if num_nodes_after != new_count:
-            self.log.error(f"Scale operation did not happen despite waiting {timeout} seconds")
-            raise Exception("Scaling operations failure")
+        dataplane = ServerlessDataPlane(dataplane_id=dataplane_id)
+        rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=dataplane_id)
+        dataplane.populate(rest_api_info)
+        rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
+                                              password=dataplane.admin_password,
+                                              rest_host=dataplane.rest_host)
+        if wait_for_rebalance_completion:
+            time_now = time.time()
+            while time.time() - time_now < timeout:
+                self.log.info(f"Waiting in a loop until update_specs is complete. Current timestamp {time.time()}. Time_now {time_now}."
+                              f"timeout {timeout}")
+                nodes_after_scaling = self.get_nodes_from_services_map(rest_info=rest_info, service=service)
+                self.log.info(f"Index nodes on the DP {nodes_after_scaling}")
+                num_nodes_after = len(nodes_after_scaling)
+                if num_nodes_after == new_count:
+                    break
+                time.sleep(30)
+            if num_nodes_after != new_count:
+                self.log.error(f"Scale operation did not happen despite waiting {timeout} seconds")
+                raise Exception("Scaling operations failure")
 
     def create_rest_info_obj(self, username, password, rest_host):
         class Rest_Info:

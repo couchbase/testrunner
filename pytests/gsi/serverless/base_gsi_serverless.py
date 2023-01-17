@@ -193,15 +193,18 @@ class BaseGSIServerless(QueryBaseServerless):
                               f"Units used ratio : {units_used_actual/units_quota} \n Num. of tenants:{num_tenants}")
 
     def create_scopes_collections(self, databases, scope_collection_map=None):
+        self.log.info("Creating scopes and collections")
         for database in databases:
             scope_coll_dict, coll_count = {}, 0
             if not scope_collection_map:
                 for item in range(self.num_of_scopes_per_db):
                     scope_name = f'scope_num_{item}_{random.randint(0, 1000)}'
+                    self.log.info(f"Will create scope with name {scope_name}")
                     self.create_scope(database_obj=database, scope_name=scope_name)
                     collection_list = []
                     for counter in range(self.num_of_collections_per_scope):
                         collection_name = f'collection_num_{item}_{random.randint(0, 1000)}'
+                        self.log.info(f"Will create collection with name {scope_name}")
                         self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
                         coll_count += 1
                         collection_list.append(collection_name)
@@ -311,16 +314,17 @@ class BaseGSIServerless(QueryBaseServerless):
                 node_wise_stats[dataplane][node]['num_tenants'] = num_tenants
         return node_wise_stats
 
-    def scale_up_index_subcluster(self, dataplane):
+    def scale_up_index_subcluster(self, dataplane, wait_for_rebalance_completion=True):
         rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
                                               password=dataplane.admin_password,
                                               rest_host=dataplane.rest_host)
         index_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
         num_nodes = len(index_nodes)
-        self.log.info(f"Number of indexer nodes in the DP: {num_nodes}")
-        self.update_specs(dataplane.id, new_count=num_nodes+2, service='index')
+        self.log.info(f"Number of indexer nodes in the DP: {num_nodes} on dataplane with ID {dataplane.id}")
+        self.update_specs(dataplane_id=dataplane.id, new_count=num_nodes+2, service='index',
+                          wait_for_rebalance_completion=wait_for_rebalance_completion)
 
-    def scale_down_index_subcluster(self, dataplane):
+    def scale_down_index_subcluster(self, dataplane, wait_for_rebalance_completion=True):
         rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
                                               password=dataplane.admin_password,
                                               rest_host=dataplane.rest_host)
@@ -330,8 +334,9 @@ class BaseGSIServerless(QueryBaseServerless):
         self.log.info(f"Will remove 2 new indexer nodes")
         if num_nodes == 2:
             self.log.error("Cannot scale down the index subcluster further since it only has 2 nodes")
-            return
-        self.update_specs(dataplane.id, new_count=num_nodes-2, service='index')
+            raise Exception("Cannot scale down since there are only 2 nodes")
+        self.update_specs(dataplane_id=dataplane.id, new_count=num_nodes-2, service='index',
+                          wait_for_rebalance_completion=wait_for_rebalance_completion)
 
     def run_parallel_workloads(self, event, total_doc_count=None):
         if total_doc_count is None:

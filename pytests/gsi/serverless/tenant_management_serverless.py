@@ -172,10 +172,10 @@ class TenantManagement(BaseGSIServerless):
 
     def test_scale_up_number_of_tenants(self):
         try:
-            if not self.dataplane_id:
+            if not self.new_dataplane_id:
                 self.fail("This test needs a dataplane_id parameter in the conf file to run")
-            dataplane = ServerlessDataPlane(self.dataplane_id)
-            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.dataplane_id)
+            dataplane = ServerlessDataPlane(self.new_dataplane_id)
+            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
             dataplane.populate(rest_api_info)
             rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
                                                   password=dataplane.admin_password,
@@ -186,7 +186,7 @@ class TenantManagement(BaseGSIServerless):
                 index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
                 # Need to check if self.databases gets overwritten (possible bug)
                 db_count = 20 if num_of_tenants >= 20 else num_of_tenants
-                self.provision_databases(count=db_count, seed=f"test-scale-up-number-of-tenants-{batch}")
+                self.provision_databases(count=db_count, seed=f"test-scale-up-number-of-tenants-{batch}", dataplane_id=self.new_dataplane_id)
                 self.create_scopes_collections(databases=self.databases.values())
                 for counter, database in enumerate(self.databases.values()):
                     self.load_databases(database_obj=database, num_of_docs=10)
@@ -200,10 +200,11 @@ class TenantManagement(BaseGSIServerless):
                             self.log.info(f"Iteration number {counter+1}. Index creation successful")
                             index_exists = self.check_if_index_exists(database_obj=database, index_name=index1)
                             self.log.info(f"Iteration number {counter+1}. index {index1} exists? {index_exists}")
-                            num_tenant_stat = self.get_index_stats(indexer_node=index_nodes_before[0],
-                                                                   rest_info=rest_info)['num_tenants']
-                            self.log.info(f"Num_tenant stat from /stats endpoint: {num_tenant_stat}")
                             index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+                            for node in index_nodes_after:
+                                num_tenant_stat = self.get_index_stats(indexer_node=index_nodes_before[0],
+                                                                       rest_info=rest_info)['num_tenants']
+                                self.log.info(f"Num_tenant stat from /stats endpoint: {num_tenant_stat} on index node {node}")
                             if index_nodes_after != index_nodes_before:
                                 self.fail("Scaling has happened even when the num of tenants has not reached 20")
                 time.sleep(300)
@@ -222,17 +223,22 @@ class TenantManagement(BaseGSIServerless):
 
     def test_scale_indexer_sub_cluster(self):
         try:
-            if not self.dataplane_id:
-                self.fail("This test needs a dataplane_id parameter in the conf file to run")
-            dataplane = ServerlessDataPlane(self.dataplane_id)
-            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.dataplane_id)
+            if not self.new_dataplane_id:
+                self.fail("This test needs a new_dataplane_id parameter")
+            dataplane = ServerlessDataPlane(self.new_dataplane_id)
+            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
             dataplane.populate(rest_api_info)
             rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
                                                   password=dataplane.admin_password,
                                                   rest_host=dataplane.rest_host)
+            self.log.info(
+                f"New dataplane credentials: User: {dataplane.admin_username} Password: {dataplane.admin_password}"
+                f" Rest host: {dataplane.rest_host}")
             index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
             self.log.info(f"Index nodes before the test run:{index_nodes_before}")
-            self.provision_databases(count=self.num_of_tenants, seed="test-scale-up")
+            time.sleep(60)
+            self.log.info("Waiting 60 seconds after the dataplane is ready")
+            self.provision_databases(count=self.num_of_tenants, seed="test-scale-up", dataplane_id=self.new_dataplane_id)
             self.create_scopes_collections(databases=self.databases.values())
             hosts = {}
             for counter, database in enumerate(self.databases.values()):
@@ -240,10 +246,12 @@ class TenantManagement(BaseGSIServerless):
                     for collection in database.collections[scope]:
                         create_index_list = self.gsi_util_obj.get_create_index_list(self.definition_list,
                                                                                     f"`{database.id}`.{scope}.{collection}")
+                        self.log.info(f"Create index list {create_index_list}")
                         for index_create_query in create_index_list:
                             self.run_query(database=database, query=index_create_query)
                             time.sleep(2)
                         index_list = self.get_all_index_names(database=database)
+                        self.log.info(f"Index list from system:indexes query {index_list}")
                         self.rest_obj = RestConnection(database.admin_username, database.admin_password, database.rest_host)
                         rest_info = self.create_rest_info_obj(username=database.admin_username,
                                                               password=database.admin_password,
@@ -279,7 +287,7 @@ class TenantManagement(BaseGSIServerless):
             index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
             if index_nodes_before == index_nodes_after:
                 self.fail(f"Index sub-cluster did not scale despite creating indexes for {self.num_of_tenants} tenants")
-            self.log.info(f"Index nodes after the test run:{index_nodes_after}")
+            self.log.info(f"Index nodes after scale up:{index_nodes_after}")
             for counter, database in enumerate(self.databases.values()):
                 for scope in database.collections:
                     for collection in database.collections[scope]:
@@ -287,6 +295,7 @@ class TenantManagement(BaseGSIServerless):
                         index1_replica = f'{index1} (replica 1)'
                         self.create_index(database, query_statement=f"create index {index1}_db{counter} on `{database.id}`.{scope}.{collection}(a)",
                                               use_sdk=self.use_sdk)
+                        time.sleep(10)
                         self.rest_obj = RestConnection(dataplane.admin_username, dataplane.admin_password, dataplane.rest_host)
                         nodes_obj = self.rest_obj.get_all_dataplane_nodes()
                         for node in nodes_obj:
@@ -312,12 +321,6 @@ class TenantManagement(BaseGSIServerless):
                 event.set()
                 future.result()
             # run queries and mutations after scale-up
-            with ThreadPoolExecutor() as executor:
-                event = Event()
-                future = executor.submit(self.run_parallel_workloads, event)
-                time.sleep(120)
-                event.set()
-                future.result()
             index_nodes_after_2 = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
             if index_nodes_after == index_nodes_after_2:
                 self.fail(f"Index sub-cluster did not scale down despite creating indexes for {self.num_of_tenants} tenants")
@@ -329,6 +332,7 @@ class TenantManagement(BaseGSIServerless):
                         index1_replica = f'{index1} (replica 1)'
                         self.create_index(database, query_statement=f"create index {index1} on `{database.id}`.{scope}.{collection}(a)",
                                           use_sdk=self.use_sdk)
+                        time.sleep(10)
                         self.rest_obj = RestConnection(dataplane.admin_username, dataplane.admin_password, dataplane.rest_host)
                         nodes_obj = self.rest_obj.get_all_dataplane_nodes()
                         for node in nodes_obj:
@@ -363,17 +367,17 @@ class TenantManagement(BaseGSIServerless):
             # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
 
     def test_scale_query_sub_cluster(self):
-        if not self.dataplane_id:
-            self.fail("This test needs a dataplane_id parameter in the conf file to run")
-        dataplane = ServerlessDataPlane(self.dataplane_id)
-        rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.dataplane_id)
+        if not self.new_dataplane_id:
+            self.fail("This test needs a new_dataplane_id parameter")
+        dataplane = ServerlessDataPlane(self.new_dataplane_id)
+        rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
         dataplane.populate(rest_api_info)
         rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
                                               password=dataplane.admin_password,
                                               rest_host=dataplane.rest_host)
         query_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="n1ql")
         self.log.info(f"Query nodes before the test run:{query_nodes_before}")
-        self.provision_databases(count=self.num_of_tenants, seed="test-scale-query")
+        self.provision_databases(count=self.num_of_tenants, seed="test-scale-query", dataplane_id=self.new_dataplane_id)
         self.create_scopes_collections(databases=self.databases.values())
         hosts = {}
         for counter, database in enumerate(self.databases.values()):
@@ -427,17 +431,18 @@ class TenantManagement(BaseGSIServerless):
 
     def test_rebalance_axy_ddl_axy(self):
         try:
-            if not self.dataplane_id:
-                self.fail("This test needs a dataplane_id parameter in the conf file to run")
-            dataplane = ServerlessDataPlane(self.dataplane_id)
-            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.dataplane_id)
+            self.new_dataplane_id = '45f0bce9-4a4b-4526-8da0-b2875a860a07'
+            if not self.new_dataplane_id:
+                self.fail("This test needs a new_dataplane_id parameter")
+            dataplane = ServerlessDataPlane(self.new_dataplane_id)
+            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
             dataplane.populate(rest_api_info)
             rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
                                                   password=dataplane.admin_password,
                                                   rest_host=dataplane.rest_host)
             index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
             self.log.info(f"Index nodes before the test run:{index_nodes_before}")
-            self.provision_databases(count=1, seed="test-ddl-during-ongoing-rebalance")
+            self.provision_databases(count=2, seed="test-rebalance-axy-ddl-axy", dataplane_id=self.new_dataplane_id)
             scope_collection_map = {"scope1": ["collection1", "collection2"]}
             self.create_scopes_collections(databases=self.databases.values(), scope_collection_map=scope_collection_map)
             self.load_data_new_doc_loader(databases=self.databases.values(), doc_start=0, doc_end=self.total_doc_count)
@@ -445,8 +450,8 @@ class TenantManagement(BaseGSIServerless):
             for counter, database in enumerate(self.databases.values()):
                 create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
                                                                       namespace=f"`{database.id}`.scope1.collection1")
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database,
-                                                     capella_run=True)
+                for index_create_query in create_list:
+                    self.run_query(database=database, query=index_create_query)
             database_index_map_1 = {}
             time.sleep(60)
             for counter, database in enumerate(self.databases.values()):
@@ -456,25 +461,23 @@ class TenantManagement(BaseGSIServerless):
                 for index in database_index_map_1[database]:
                     self.wait_until_indexes_online(rest_info=rest_info, index_name=index,
                                                    keyspace=f"`{database.id}`.`scope1`.`collection1`")
-            self.scale_up_index_subcluster(dataplane)
-            time.sleep(20)
+            self.scale_up_index_subcluster(dataplane=dataplane, wait_for_rebalance_completion=False)
             time_now, rebalance_started = time.time(), False
             while not rebalance_started:
                 status, _ = rest_obj._rebalance_status_and_progress()
                 if status == 'running':
                     rebalance_started = True
-                time.sleep(20)
+                time.sleep(5)
             # create indexes across all databases on a.x.y while the rebalance is going on
             definition_list = self.gsi_util_obj.get_index_definition_list(dataset=self.dataset, prefix="new")
             for counter, database in enumerate(self.databases.values()):
                 create_list = self.gsi_util_obj.get_create_index_list(definition_list=definition_list,
                                                                       namespace=f"`{database.id}`.scope1.collection1")
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database,
-                                                     capella_run=True)
+                for index_create_query in create_list:
+                    self.run_query(database=database, query=index_create_query)
                 database_index_map = {}
-                for counter, database in enumerate(self.databases.values()):
-                    index_list = self.get_all_index_names(database=database)
-                    database_index_map[database] = index_list
+                index_list = self.get_all_index_names(database=database)
+                database_index_map[database] = index_list
             time_now, rebalance_done = time.time(), False
             while time.time() - time_now < 1200:
                 status, progress = rest_obj._rebalance_status_and_progress()
@@ -501,8 +504,8 @@ class TenantManagement(BaseGSIServerless):
             for counter, database in enumerate(self.databases.values()):
                 create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
                                                                       namespace=f"`{database.id}`.scope1.collection1")
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database,
-                                                     capella_run=True)
+                for index_create_query in create_list:
+                    self.run_query(database=database, query=index_create_query)
             database_index_map_1 = {}
             time.sleep(60)
             for counter, database in enumerate(self.databases.values()):
@@ -512,25 +515,24 @@ class TenantManagement(BaseGSIServerless):
                 for index in database_index_map_1[database]:
                     self.wait_until_indexes_online(rest_info=rest_info, index_name=index,
                                                    keyspace=f"`{database.id}`.`scope1`.`collection1`")
-            self.scale_down_index_subcluster(dataplane)
-            time.sleep(20)
+            self.scale_down_index_subcluster(dataplane=dataplane,
+                                             wait_for_rebalance_completion=False)
             time_now, rebalance_started = time.time(), False
             while not rebalance_started:
                 status, _ = rest_obj._rebalance_status_and_progress()
                 if status == 'running':
                     rebalance_started = True
-                time.sleep(20)
+                time.sleep(5)
             # create indexes across all databases on a.x.z while the rebalance is going on
             definition_list = self.gsi_util_obj.get_index_definition_list(dataset=self.dataset, prefix="new2")
             for counter, database in enumerate(self.databases.values()):
                 create_list = self.gsi_util_obj.get_create_index_list(definition_list=definition_list,
                                                                       namespace=f"`{database.id}`.scope1.collection1")
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database,
-                                                     capella_run=True)
+                for index_create_query in create_list:
+                    self.run_query(database=database, query=index_create_query)
                 database_index_map = {}
-                for counter, database in enumerate(self.databases.values()):
-                    index_list = self.get_all_index_names(database=database, scope='scope1', collection='collection1')
-                    database_index_map[database] = index_list
+                index_list = self.get_all_index_names(database=database, scope='scope1', collection='collection1')
+                database_index_map[database] = index_list
             time_now, rebalance_done = time.time(), False
             while time.time() - time_now < 1200:
                 status, progress = rest_obj._rebalance_status_and_progress()
@@ -560,17 +562,17 @@ class TenantManagement(BaseGSIServerless):
 
     def test_ddl_axy_rebalance_axy(self):
         try:
-            if not self.dataplane_id:
-                self.fail("This test needs a dataplane_id parameter in the conf file to run")
-            dataplane = ServerlessDataPlane(self.dataplane_id)
-            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.dataplane_id)
+            if not self.new_dataplane_id:
+                self.fail("This test needs a new_dataplane_id parameter")
+            dataplane = ServerlessDataPlane(self.new_dataplane_id)
+            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
             dataplane.populate(rest_api_info)
             rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
                                                   password=dataplane.admin_password,
                                                   rest_host=dataplane.rest_host)
             index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
             self.log.info(f"Index nodes before the test run:{index_nodes_before}")
-            self.provision_databases(count=1, seed="test-ddl-during-ongoing-rebalance")
+            self.provision_databases(count=1, seed="test-ddl-during-ongoing-rebalance", dataplane_id=self.new_dataplane_id)
             scope_collection_map = {"scope1": ["collection1", "collection2"]}
             self.create_scopes_collections(databases=self.databases.values(), scope_collection_map=scope_collection_map)
             self.load_data_new_doc_loader(databases=self.databases.values(), doc_start=0, doc_end=self.total_doc_count)
@@ -682,17 +684,17 @@ class TenantManagement(BaseGSIServerless):
 
     def test_ddl_axy_rebalance_axz(self):
         try:
-            if not self.dataplane_id:
-                self.fail("This test needs a dataplane_id parameter in the conf file to run")
-            dataplane = ServerlessDataPlane(self.dataplane_id)
-            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.dataplane_id)
+            if not self.new_dataplane_id:
+                self.fail("This test needs a new_dataplane_id parameter")
+            dataplane = ServerlessDataPlane(self.new_dataplane_id)
+            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
             dataplane.populate(rest_api_info)
             rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
                                                   password=dataplane.admin_password,
                                                   rest_host=dataplane.rest_host)
             index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
             self.log.info(f"Index nodes before the test run:{index_nodes_before}")
-            self.provision_databases(count=1, seed="test-ddl-axy-rebalance-axz")
+            self.provision_databases(count=1, seed="test-ddl-axy-rebalance-axz", dataplane_id=self.new_dataplane_id)
             scope_collection_map = {"scope1": ["collection1", "collection2"]}
             self.create_scopes_collections(databases=self.databases.values(), scope_collection_map=scope_collection_map)
             self.load_data_new_doc_loader(databases=self.databases.values(), doc_start=0, doc_end=self.total_doc_count)
@@ -801,17 +803,17 @@ class TenantManagement(BaseGSIServerless):
 
     def test_rebalance_axy_ddl_axz(self):
         try:
-            if not self.dataplane_id:
-                self.fail("This test needs a dataplane_id parameter in the conf file to run")
-            dataplane = ServerlessDataPlane(self.dataplane_id)
-            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.dataplane_id)
+            if not self.new_dataplane_id:
+                self.fail("This test needs a new_dataplane_id parameter")
+            dataplane = ServerlessDataPlane(self.new_dataplane_id)
+            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
             dataplane.populate(rest_api_info)
             rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
                                                   password=dataplane.admin_password,
                                                   rest_host=dataplane.rest_host)
             index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
             self.log.info(f"Index nodes before the test run:{index_nodes_before}")
-            self.provision_databases(count=1, seed="test-rebalance-axy-ddl-axz")
+            self.provision_databases(count=1, seed="test-rebalance-axy-ddl-axz",dataplane_id=self.new_dataplane_id)
             scope_collection_map = {"scope1": ["collection1", "collection2"]}
             self.create_scopes_collections(databases=self.databases.values(), scope_collection_map=scope_collection_map)
             self.load_data_new_doc_loader(databases=self.databases.values(), doc_start=0, doc_end=self.total_doc_count)
@@ -931,17 +933,17 @@ class TenantManagement(BaseGSIServerless):
 
     def test_rebalance_axy_ddl_bxy(self):
         try:
-            if not self.dataplane_id:
-                self.fail("This test needs a dataplane_id parameter in the conf file to run")
-            dataplane = ServerlessDataPlane(self.dataplane_id)
-            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.dataplane_id)
+            if not self.new_dataplane_id:
+                self.fail("This test needs a new_dataplane_id parameter")
+            dataplane = ServerlessDataPlane(self.new_dataplane_id)
+            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
             dataplane.populate(rest_api_info)
             rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
                                                   password=dataplane.admin_password,
                                                   rest_host=dataplane.rest_host)
             index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
             self.log.info(f"Index nodes before the test run:{index_nodes_before}")
-            self.provision_databases(count=2, seed="test-rebalance-bxy-during-ongoing-ddl-axy")
+            self.provision_databases(count=2, seed="test-rebalance-bxy-during-ongoing-ddl-axy", dataplane_id=self.new_dataplane_id)
             for _, database in enumerate(self.databases.values()):
                 if "test-rebalance-bxy-during-ongoing-ddl-axy-0" in database:
                     database0 = database
@@ -1059,17 +1061,17 @@ class TenantManagement(BaseGSIServerless):
 
     def test_ddl_axy_rebalance_bxy(self):
         try:
-            if not self.dataplane_id:
-                self.fail("This test needs a dataplane_id parameter in the conf file to run")
-            dataplane = ServerlessDataPlane(self.dataplane_id)
-            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.dataplane_id)
+            if not self.new_dataplane_id:
+                self.fail("This test needs a new_dataplane_id parameter")
+            dataplane = ServerlessDataPlane(self.new_dataplane_id)
+            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
             dataplane.populate(rest_api_info)
             rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
                                                   password=dataplane.admin_password,
                                                   rest_host=dataplane.rest_host)
             index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
             self.log.info(f"Index nodes before the test run:{index_nodes_before}")
-            self.provision_databases(count=2, seed="test-ddl-axy-rebalance-bxy")
+            self.provision_databases(count=2, seed="test-ddl-axy-rebalance-bxy", dataplane_id=self.new_dataplane_id)
             for _, database in enumerate(self.databases.values()):
                 if "test-ddl-axy-rebalance-bxy-0" in database:
                     database0 = database
@@ -1172,17 +1174,17 @@ class TenantManagement(BaseGSIServerless):
             # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
 
     def test_stats_validation(self):
-        if not self.dataplane_id:
-            self.fail("This test needs a dataplane_id parameter in the conf file to run")
-        dataplane = ServerlessDataPlane(self.dataplane_id)
-        rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.dataplane_id)
+        if not self.new_dataplane_id:
+            self.fail("This test needs a new_dataplane_id parameter")
+        dataplane = ServerlessDataPlane(self.new_dataplane_id)
+        rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
         dataplane.populate(rest_api_info)
         rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
                                               password=dataplane.admin_password,
                                               rest_host=dataplane.rest_host)
         index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
         self.log.info(f"Index nodes before the test run:{index_nodes_before}")
-        self.provision_databases(count=self.num_of_tenants, seed="test-stats-validation")
+        self.provision_databases(count=self.num_of_tenants, seed="test-stats-validation", dataplane_id=self.new_dataplane_id)
         self.create_scopes_collections(databases=self.databases.values())
         for counter, database in enumerate(self.databases.values()):
             for scope in database.collections:
@@ -1263,10 +1265,10 @@ class TenantManagement(BaseGSIServerless):
 
     def test_ddl_drop_during_rebalance(self):
         try:
-            if not self.dataplane_id:
-                self.fail("This test needs a dataplane_id parameter in the conf file to run")
-            dataplane = ServerlessDataPlane(self.dataplane_id)
-            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.dataplane_id)
+            if not self.new_dataplane_id:
+                self.fail("This test needs a new_dataplane_id parameter")
+            dataplane = ServerlessDataPlane(self.new_dataplane_id)
+            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
             dataplane.populate(rest_api_info)
             rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
                                                   password=dataplane.admin_password,
@@ -1274,7 +1276,7 @@ class TenantManagement(BaseGSIServerless):
             rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
             index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
             self.log.info(f"Index nodes before the test run:{index_nodes_before}")
-            self.provision_databases(count=self.num_of_tenants, seed="test-ddl-drop-during-rebalance")
+            self.provision_databases(count=self.num_of_tenants, seed="test-ddl-drop-during-rebalance", dataplane_id=self.new_dataplane_id)
             self.create_scopes_collections(databases=self.databases.values())
             self.load_data_new_doc_loader(databases=self.databases.values(), doc_start=0, doc_end=self.total_doc_count)
             for counter, database in enumerate(self.databases.values()):
