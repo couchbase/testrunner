@@ -142,7 +142,7 @@ class GSIThrottle(ServerlessBaseTestCase):
 
             limits = {
                 'indexStorageLimit': {
-                    'statement': f'CREATE INDEX index_name ON {self.collection}(a)',
+                    'statement': f'CREATE INDEX index_name ON {self.collection}(city)',
                     'code': 4350,
                     'msg': 'GSI CreateIndex() - cause: Bucket\'s disk size limit has been reached.'},
                 'dataStorageLimit': { # Error code/message might need to be changed based on MB-54113
