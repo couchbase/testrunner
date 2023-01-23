@@ -7,6 +7,7 @@ import time
 from gsi.serverless.base_query_serverless import QueryBaseServerless
 from membase.api.serverless_rest_client import ServerlessRestConnection as RestConnection
 from TestInput import TestInputServer
+from lib.Cb_constants.CBServer import CbServer
 from couchbase_helper.documentgenerator import SDKDataLoader
 from serverless.gsi_utils import GSIUtils
 from lib.capella.utils import ServerlessDataPlane
@@ -39,6 +40,7 @@ class BaseGSIServerless(QueryBaseServerless):
             self.s3_utils_obj = S3Utils(aws_access_key_id=self.aws_access_key_id,
                                         aws_secret_access_key=self.aws_secret_access_key,
                                         s3_bucket=self.s3_bucket, region=self.region)
+        CbServer.capella_run = True
 
     def tearDown(self):
         super(BaseGSIServerless, self).tearDown()
