@@ -396,7 +396,7 @@ class RestConnection(object):
             else:
                 for iteration in range(5):
                     if "couchApiBase" not in http_res.keys():
-                        if self.is_cluster_mixed():
+                        if self.is_cluster_mixed() or CbServer.capella_run:
                             self.capiBaseUrl = self.baseUrl + "/couchBase"
                             return
                         time.sleep(0.2)
