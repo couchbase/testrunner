@@ -5,6 +5,8 @@ import random, string
 import threading
 from membase.api.exception import CBQError
 import time
+from lib.Cb_constants.CBServer import CbServer
+
 
 class GSIThrottle(ServerlessBaseTestCase):
     def setUp(self):
@@ -17,6 +19,7 @@ class GSIThrottle(ServerlessBaseTestCase):
         self.doc_value2 = ''.join(random.choices(string.ascii_lowercase, k=5048))
         self.test_limit=self.input.param("test_limit", 'indexStorageLimit')
         self.composite_doc = {"fname": f'{self.doc_value}', "lname": f'{self.doc_value2}'}
+        CbServer.capella_run = True
         return super().setUp()
 
     def tearDown(self):

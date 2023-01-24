@@ -5,6 +5,7 @@ import math
 from lib.metering_throttling import metering
 import random, string
 import time
+from lib.Cb_constants.CBServer import CbServer
 
 class GSIMeter(ServerlessBaseTestCase):
     def setUp(self):
@@ -35,6 +36,7 @@ class GSIMeter(ServerlessBaseTestCase):
         self.doc_key_size = 36  # use uuid()
         self.doc_size = len(json.dumps(self.doc))
         self.composite_doc_size = len(json.dumps(self.composite_doc))
+        CbServer.capella_run = True
         return super().setUp()
 
     def tearDown(self):
