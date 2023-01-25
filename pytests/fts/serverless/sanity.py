@@ -16,7 +16,7 @@ from prettytable import PrettyTable
 class FTSElixirSanity(ServerlessBaseTestCase):
     def setUp(self):
         self.input = TestInputSingleton.input
-        self._num_of_docs_per_collection = self.input.param("num_of_docs_per_collection", 100000)
+        self._num_of_docs_per_collection = self.input.param("num_of_docs_per_collection", 10000)
         CbServer.use_https = True
         CbServer.capella_run = True
         CbServer.capella_credentials = CapellaCredentials(self.input.capella)

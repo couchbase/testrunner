@@ -8,7 +8,7 @@ import random
 import urllib3
 urllib3.disable_warnings()
 import logger
-import requests
+import requests, base64
 import json
 import subprocess
 import time
@@ -408,7 +408,9 @@ class CapellaAPI:
                 attempts += 1
                 if attempts > 1:
                     self.log.info(f"Retry {attempts-1}. Unresolved host {fts_nodes[count]}, Trying again.")
-                CurlUrl = f"curl -s -XGET https://{fts_nodes[count]}:18094/api/nsstats -u {creds['couchbaseCreds']['username']}:{creds['couchbaseCreds']['password']} --insecure | jq | grep -E 'util|resource|limits'"
+                userpass = f"{creds['couchbaseCreds']['username']}:{creds['couchbaseCreds']['password']}"
+                encoded_u = base64.b64encode(userpass.encode()).decode()
+                CurlUrl = f"curl -s -XGET https://{fts_nodes[count]}:18094/api/nsstats --header 'Authorization: Basic {encoded_u}' --insecure | jq | grep -E 'util|resource|limits'"
                 resp = subprocess.getstatusoutput(CurlUrl)[1]
             try:
                 resp = resp[2:] + "}" + resp[:2]
@@ -418,7 +420,9 @@ class CapellaAPI:
             except Exception as e:
                 self.log.info(f"Error : {e}")
                 print(f"Response : {resp}")
-                curl_http = f"curl -v https://{fts_nodes[count]}:18094/api/nsstats -u {creds['couchbaseCreds']['username']}:{creds['couchbaseCreds']['password']} --insecure"
+                userpass = f"{creds['couchbaseCreds']['username']}:{creds['couchbaseCreds']['password']}"
+                encoded_u = base64.b64encode(userpass.encode()).decode()
+                curl_http = f"curl -v https://{fts_nodes[count]}:18094/api/nsstats --header 'Authorization: Basic {encoded_u}' --insecure"
                 http_resp = subprocess.getstatusoutput(curl_http)
         return stats, fts_nodes, http_resp
 
