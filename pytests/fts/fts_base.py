@@ -3757,6 +3757,8 @@ class FTSBaseTest(unittest.TestCase):
         self._input = TestInputSingleton.input
         self.capella_run = self._input.param("capella_run", CbServer.capella_run)
         CbServer.capella_run = self.capella_run
+        self.cluster_profile = self._input.param("cluster_profile", CbServer.cluster_profile)
+        CbServer.cluster_profile = self.cluster_profile
         self.set_impossible_params()
         self.elastic_node = self._input.elastic
         self.log = logger.Logger.get_logger()

@@ -68,6 +68,7 @@ class CbServer(object):
     sys_event_log_uuid_uniqueness_time = 60
 
     capella_run = False
+    cluster_profile = "provisioned"
     rest_username = "cbadminbucket"
     rest_password = "password"
 

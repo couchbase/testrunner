@@ -391,7 +391,7 @@ class RestConnection(object):
         # couchApiBase appeared in version 2.*
         if isinstance(http_res, dict):
             http_res = self.extract_nodes_self_from_pools_default(http_res)
-            if not http_res or http_res["version"][0:2] == "1.":
+            if not http_res or http_res["version"][0:2] == "1." or CbServer.cluster_profile == "serverless":
                 self.capiBaseUrl = self.baseUrl + "/couchBase"
             else:
                 for iteration in range(5):

@@ -576,6 +576,8 @@ class OnPremBaseTestCase(unittest.TestCase):
             self.input.param("skip_init_check_cbserver", False)
         self.capella_run = self.input.param("capella_run", False)
         CbServer.capella_run = self.capella_run
+        self.cluster_profile = self.input.param("cluster_profile", "provisioned")
+        CbServer.cluster_profile = self.cluster_profile
 
     def set_alternate_address_all_nodes(self):
         for node in self.servers:
