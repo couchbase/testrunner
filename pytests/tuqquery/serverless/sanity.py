@@ -2,6 +2,7 @@ from serverless.serverless_basetestcase import ServerlessBaseTestCase
 import time
 import math
 import random
+from lib.Cb_constants.CBServer import CbServer
 
 class QuerySanity(ServerlessBaseTestCase):
     def setUp(self):
@@ -9,6 +10,7 @@ class QuerySanity(ServerlessBaseTestCase):
         self.scope = 'scope1'
         self.collection = 'collection1'
         self.index_ru = 256
+        CbServer.capella_run = True
         return super().setUp()
 
     def tearDown(self):

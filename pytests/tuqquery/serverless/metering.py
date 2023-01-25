@@ -1,12 +1,14 @@
 from serverless.serverless_basetestcase import ServerlessBaseTestCase
 from lib.metering_throttling import metering
 import math
+from lib.Cb_constants.CBServer import CbServer
 
 class QueryMeterSanity(ServerlessBaseTestCase):
     def setUp(self):
         self.doc_count = 10
         self.scope = '_default'
         self.collection = '_default'
+        CbServer.capella_run = True
         return super().setUp()
 
     def tearDown(self):

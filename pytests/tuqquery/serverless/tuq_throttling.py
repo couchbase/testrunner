@@ -3,6 +3,7 @@ from TestInput import TestInputSingleton
 from lib.metering_throttling import throttling
 from membase.api.exception import CBQError
 import time, random, time, string
+from lib.Cb_constants.CBServer import CbServer
 
 class QueryThrottlingTests(ServerlessBaseTestCase):
     def setUp(self):
@@ -16,6 +17,7 @@ class QueryThrottlingTests(ServerlessBaseTestCase):
         self.gsi_limit = 200
         self.test_limit=self.input.param("test_limit", 'dataStorageLimit')
         self.kvThrottleLimit = 5000
+        CbServer.capella_run = True
         return super().setUp()
 
     def tearDown(self):

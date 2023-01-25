@@ -2,12 +2,14 @@ from serverless.serverless_basetestcase import ServerlessBaseTestCase
 from lib.metering_throttling import throttling
 import time
 import threading
+from lib.Cb_constants.CBServer import CbServer
 
 class QueryThrottleSanity(ServerlessBaseTestCase):
     def setUp(self):
         self.doc_count = 10
         self.scope = '_default'
         self.collection = '_default'
+        CbServer.capella_run = True
         return super().setUp()
 
     def tearDown(self):
