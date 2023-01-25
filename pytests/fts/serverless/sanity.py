@@ -11,6 +11,7 @@ import random
 import threading
 from datetime import datetime
 from prettytable import PrettyTable
+from collections import deque
 
 class FTSElixirSanity(ServerlessBaseTestCase):
     def setUp(self):
@@ -62,6 +63,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         plan_params['numReplicas'] = 0
         if self.index_replicas:
             plan_params['numReplicas'] = self.index_replicas
+        plan_params['indexPartitions'] = self.num_index_partitions
         plan_params['indexPartitions'] = self.num_index_partitions
         return plan_params
 
@@ -508,6 +510,9 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             fts_callable.delete_all()
 
     def check_scale_out_condition(self, stats):
+        """
+            Returns True if scale out condition is satisfied.
+        """
         mem_util = int(float(self.LWM_limit) * int(stats[0]['limits:memoryBytes']))
         cpu_util = int(float(self.LWM_limit) * 100)
         lim_util, lim_cpu = True, True
@@ -521,6 +526,9 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         return lim_cpu | lim_util
 
     def check_scale_in_condition(self, stats):
+        """
+            Returns True if scale in condition is satisfied.
+        """
         mem_util = int(float(self.UWM_limit) * int(stats[0]['limits:memoryBytes']))
         cpu_util = int(float(self.UWM_limit) * 100)
         for stat in stats:
@@ -528,7 +536,10 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 return False
         return True
 
-    def check_HWM_condition(self, stats):
+    def check_auto_rebalance_condition(self, stats):
+        """
+            Returns True if auto rebalance condition is satisfied.
+        """
         mem_util = int(float(self.HWM_limit) * int(stats[0]['limits:memoryBytes']))
         cpu_util = int(float(self.HWM_limit) * 100)
         for stat in stats:
@@ -545,17 +556,24 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             Print FTS Stats and returns stats along with Current FTS Nodes
         """
         stats, fts_nodes, http_resp = self.get_all_fts_stats()
+        self.prettyPrintStats(stats, fts_nodes, http_resp)
+        return stats, fts_nodes
+
+    def prettyPrintStats(self, stats, fts_nodes, http_resp):
         myTable = PrettyTable(["S.No", "FTS Nodes", "lim_memoryBytes", "util_memoryBytes", "util_cpuPercent", "util_diskByte"])
         for count, stat in enumerate(stats):
             if http_resp:
                 print(f"Request Response : {http_resp}")
-            myTable.add_row([count+1, fts_nodes[count], stat['limits:memoryBytes'], stat['utilization:memoryBytes'], stat['utilization:cpuPercent'], stat['utilization:diskBytes']])
+            try:
+                myTable.add_row([count+1, fts_nodes[count], stat['limits:memoryBytes'], stat['utilization:memoryBytes'], stat['utilization:cpuPercent'], stat['utilization:diskBytes']])
+            except:
+                self.log.info("Stats not returned")
+                myTable.add_row([count+1, "Stats not returned", "Stats not returned", "Stats not returned", "Stats not returned", "Stats not returned"])
         print(myTable)
-        return stats, fts_nodes
 
     def verify_HWM_index_rejection(self, stats):
         """
-           Returns true if HWM is actually the reason for index rejection
+           Returns True if HWM is responsible for index rejection
         """
         mem_util = int(float(self.HWM_limit) * int(stats[0]['limits:memoryBytes']))
         cpu_util = int(float(self.HWM_limit) * 100)
@@ -573,7 +591,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
     def verify_scale_out(self, variables):
         """
-            Returns True if FTS has scaled out
+            Returns True if FTS Nodes have scaled out
         """
         fts_stats, fts_nodes = self.get_fts_stats()
         new_node_count = len(fts_nodes)
@@ -586,7 +604,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
     def verify_scale_in(self, variables, summary):
         """
-            Returns True if Scale In not possible or Scale In was successful
+            Returns True iff Scale-In is not possible or Scale-In was successful
         """
         fts_stats, fts_nodes = self.get_fts_stats()
         self.log.info("Verifying Scale In ...")
@@ -628,6 +646,9 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         return False
 
     def generate_summary(self, summary, fts_stats, fts_nodes, variables, name="Default", time_taken=0):
+        """
+             Generates tabulated report for autoscaling test
+         """
         mem_arr = []
         for i in range(len(fts_stats)):
             node_name = str(fts_nodes[i]).strip(".sandbox.nonprod-project-avengers.com")
@@ -637,11 +658,33 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             "Detail": name,
             "Time": str(datetime.now().replace(microsecond=0)),
             "Memory Status": mem_arr,
+            "Moving Average": variables['moving_average'],
             "Scale Out Count ": variables['scale_out_count'],
             "Scale Out Time": time_taken,
             "HWM Index Rejection": True if variables['HWM_hit'] == 1 else False
         }
         summary.append(obj)
+
+    def calculate_running_average_LWM(self, stats, queue, variables):
+        try:
+            avg = 0
+            for stat in stats:
+                avg += int(stat['utilization:memoryBytes'])
+            avg /= len(stats)
+            variables['moving_avg_sum'] += avg
+            queue.append([avg, datetime.now()])
+            variables['moving_average'] = variables['moving_avg_sum'] / len(queue)
+            if len(queue) <= 1:
+                return
+
+            first = queue[0]
+            last = queue[-1]
+            if ((last[1]-first[1]).total_seconds()/60) > 30:
+                first_avg = queue.popleft()
+                variables['moving_avg_sum'] -= first_avg[0]
+                variables['moving_average'] = variables['moving_avg_sum'] / len(queue)
+        except:
+            print("stats not returned")
 
     def autoscaling_synchronous(self):
         self.delete_all_database(True)
@@ -653,12 +696,13 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         self.log.info(f"------------ Initial STATS ------------")
         fts_stats, fts_nodes = self.get_fts_stats()
         variables = {'node_count': len(fts_nodes), 'scale_out_time': 0, 'HWM_hit': 0, 'scale_out_status': False,
-                     'scale_out_count': 0}
+                     'scale_out_count': 0, 'moving_avg_sum': 0,  'moving_average': 0}
         self.generate_summary(summary, fts_stats, fts_nodes, variables, "Initial Summary")
 
         failout_encounter = False
         index_fail_check = False
-
+        queue = deque()
+        flag = True
         for counter, database in enumerate(self.databases.values()):
             self.cleanup_database(database_obj=database)
             scope_name = f'db_{counter}_scope_{random.randint(0, 1000)}'
@@ -678,11 +722,11 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             for i in range(self.num_indexes):
                 try:
                     index = fts_callable.create_fts_index(f"counter_{counter + 1}_idx_{i + 1}", source_type='couchbase',
-                                                  source_name=database.id, index_type='fulltext-index',
-                                                  index_params=None, plan_params=plan_params,
-                                                  source_params=None, source_uuid=None, collection_index=True,
-                                                  _type=_type, analyzer="standard",
-                                                  scope=scope_name, collections=[collection_name], no_check=False)
+                                                          source_name=database.id, index_type='fulltext-index',
+                                                          index_params=None, plan_params=plan_params,
+                                                          source_params=None, source_uuid=None, collection_index=True,
+                                                          _type=_type, analyzer="standard",
+                                                          scope=scope_name, collections=[collection_name], no_check=False)
                     fts_callable.wait_for_indexing_complete(self._num_of_docs_per_collection)
                     if self.autoscaling_with_queries:
                         fts_callable.run_query_and_compare(index, self.num_queries)
@@ -693,12 +737,12 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                             if self.verify_HWM_index_rejection(fts_stats):
                                 if variables['HWM_hit'] == 0:
                                     variables['HWM_hit'] += 1
-                                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "HWM Exempt HIT")
+                                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "HWM HIT-Exempted")
                                     self.log.info("HWM Hit has taken place, exempting first rejection")
                                 else:
                                     index_fail_check = True
                                     self.log.info("Index created even though HWM had been satisfied")
-                                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : HWM HIT,Index Created")
+                                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : HWM HIT-Index Created")
                                     self.fail("BUG : Index created even though HWM had been satisfied")
                 except Exception as e:
                     print("Here in the except block")
@@ -706,31 +750,55 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                         fts_stats, fts_nodes = self.get_fts_stats()
                         if self.verify_HWM_index_rejection(fts_stats):
                             # self.assertEqual(str(e), f"rest_create_index: error creating index: , err: manager_api: CreateIndex, Prepare failed, err: limitIndexDef: Cannot accommodate index request: {index_name}, resource utilization over limit(s)")
-                            self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : HWM HIT")
+                            self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : HWM HIT-Index rejected")
                             self.log.info(f"PASS : HWM Index Rejection Passed : {e}")
                             with self.subTest("Scale In Condition Check"):
                                 if not self.verify_scale_in(variables, summary):
                                     self.fail("BUG : Scale In Failed")
                             return
                         else:
+                            self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : Index Creation Failed")
                             self.log.info(f"Index Creation Failed : {e}")
                             self.fail("BUG : Index Creation Failed")
 
                 self.log.info(f"------------ FTS Stats @ DB {counter + 1} Index {i+1} ------------")
                 fts_stats, fts_nodes = self.get_fts_stats()
 
-                if not variables['scale_out_status'] and self.check_scale_out_condition(fts_stats):
-                    self.log.info("Scale Out Satisfied")
-                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Condition Satisfied")
-                    self.log.info(fts_stats)
+                with self.subTest("Verify AutoRebalance"):
+                    if self.check_auto_rebalance_condition(fts_stats):
+                        rebalance_status = fts_callable.get_fts_rebalance_status(fts_nodes[0])
+                        if rebalance_status is None:
+                            self.log.info("PASS : AutoRebalance Failed")
+                            self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : AutoRebalance Failed")
+                            self.fail(f"BUG : AutoRebalance Failed..")
+                        else:
+                            self.log.info("PASS : AutoRebalance Passed")
+                            self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : AutoRebalance Passed")
+
+                self.calculate_running_average_LWM(fts_stats, queue, variables)
+
+                if variables['moving_average'] > int(fts_stats[0]['limits:memoryBytes']):
+                    # Scale out satisfied using moving average
+                    self.log.info("Scale Out Satisfied using Moving Average")
+                    self.log.info(f"Moving Average: {variables['moving_average']}")
+                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Satisfied using Moving Average")
                     variables['scale_out_time'] = datetime.now()
                     variables['scale_out_status'] = True
+
+                if not variables['scale_out_status'] and self.check_scale_out_condition(fts_stats) and flag:
+                    self.log.info("Scale Out Satisfied")
+                    flag = False
+                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Satisfied b4 Moving Average")
+                    self.prettyPrintStats(fts_stats, fts_nodes, False)
+                    # variables['scale_out_time'] = datetime.now()
+                    # variables['scale_out_status'] = True
 
                 if variables['scale_out_status']:
                     if divmod((datetime.now() - variables['scale_out_time']).total_seconds(), 60)[0] > int(self.scaling_time):
                         with self.subTest("Scale Out Condition Check after scaling time"):
                             if self.verify_scale_out(variables):
                                 time_taken = divmod((datetime.now() - variables['scale_out_time']).total_seconds(), 60)[0]
+                                self.log.info(f"PASS : Scale Out Passed")
                                 self.log.info(f"Scale Out {variables['scale_out_count']}. Passed after {time_taken} minutes!")
                                 self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Passed", time_taken)
                                 self.log.info(f"PASS : Scale Out Passed")
@@ -741,20 +809,22 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                             else:
                                 if not failout_encounter:
                                     failout_encounter = True
-                                    self.log.info(f"Scale Out Failed -> {variables['scale_out_count']}  : {fts_stats}, {fts_nodes}")
+                                    self.log.info(f"FAIL : Scale Out Failed")
+                                    self.log.info(f"Scale Out {variables['scale_out_count']} Failed : {fts_stats}, {fts_nodes}")
                                     self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : Scale Out Failed", self.scaling_time)
-                                    self.fail(f"BUG : Scale Out failed -> {variables['scale_out_count']} within {self.scaling_time} minutes")
+                                    self.fail(f"BUG : Scale Out {variables['scale_out_count']}. failed after {self.scaling_time} minutes")
                     else:
                         with self.subTest("Scale Out Condition Check before scaling time"):
                             if self.verify_scale_out(variables):
                                 time_taken = divmod((datetime.now() - variables['scale_out_time']).total_seconds(), 60)[0]
+                                self.log.info(f"BUG : Scale Out happened before scaling time")
                                 self.log.info(f"BUG : Scale Out {variables['scale_out_count']}. happened after {time_taken} minutes!")
                                 self.generate_summary(summary, fts_stats, fts_nodes, variables, f"F : Scale Out Passed < {self.scaling_time}", time_taken)
                                 self.log.info(f"Scale Out Stats: \n {fts_stats}, {fts_nodes}")
                                 variables['scale_out_status'] = False
                                 variables['scale_out_count'] += 1
                                 failout_encounter = False
-                                self.fail(f"Scale Out Happened less than scaling time")
+                                self.fail(f"Scale Out happened less than scaling time")
 
             self.log.info(f"------------ FTS Stats @ Database {counter + 1} ------------")
             fts_stats, fts_nodes = self.get_fts_stats()
@@ -779,6 +849,204 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
         if not variables['scale_out_status']:
             self.fail("Autoscaling Failed since Scaling didn't happen")
+
+
+    def create_index_and_validate_autoscaling(self, all_info, index_no, db_no, index_arr, variables, summary, queue):
+        plan_params = self.construct_plan_params()
+        try:
+            index = all_info[db_no]['fts_callable'].create_fts_index(f"counter_{db_no + 1}_idx_{index_no + 1}", source_type='couchbase',
+                                                  source_name=all_info[db_no]['database'].id, index_type='fulltext-index',
+                                                  index_params=None, plan_params=plan_params,
+                                                  source_params=None, source_uuid=None, collection_index=True,
+                                                  _type=all_info[db_no]['type'], analyzer="standard",
+                                                  scope=all_info[db_no]['scope_name'], collections=[all_info[db_no]['collection_name']], no_check=False)
+            all_info[db_no]['fts_callable'].wait_for_indexing_complete(self._num_of_docs_per_collection, complete_wait=False)
+            index_arr.append([all_info[db_no]['fts_callable'], index])
+
+            if variables['scale_out_count'] != 0 and not variables['index_fail_check']:
+                with self.subTest("Verifying Index Rejection for HWM"):
+                    fts_stats, fts_nodes = self.get_fts_stats()
+                    if self.verify_HWM_index_rejection(fts_stats):
+                        if variables['HWM_hit'] == 0:
+                            variables['HWM_hit'] += 1
+                            self.generate_summary(summary, fts_stats, fts_nodes, variables, "HWM HIT-Exempted")
+                            self.log.info("HWM Hit has taken place, exempting first rejection")
+                        else:
+                            variables['index_fail_check'] = True
+                            self.log.info("Index created even though HWM had been satisfied")
+                            self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : HWM HIT-Index Created")
+                            self.fail("BUG : Index created even though HWM had been satisfied")
+        except Exception as e:
+            print("Here in the except block")
+            with self.subTest("Index Creation Check"):
+                fts_stats, fts_nodes = self.get_fts_stats()
+                if self.verify_HWM_index_rejection(fts_stats):
+                    # self.assertEqual(str(e), f"rest_create_index: error creating index: , err: manager_api: CreateIndex, Prepare failed, err: limitIndexDef: Cannot accommodate index request: {index_name}, resource utilization over limit(s)")
+                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : HWM HIT-Index rejected")
+                    self.log.info(f"PASS : HWM Index Rejection Passed : {e}")
+                    with self.subTest("Scale In Condition Check"):
+                        if not self.verify_scale_in(variables, summary):
+                            self.fail("BUG : Scale In Failed")
+                    return
+                else:
+                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : Index Creation Failed")
+                    self.log.info(f"Index Creation Failed : {e}")
+                    self.fail("BUG : Index Creation Failed")
+
+        self.log.info(f"------------ FTS Stats @ DB {db_no + 1} Index {index_no+1} ------------")
+        fts_stats, fts_nodes = self.get_fts_stats()
+
+        with self.subTest("Verify AutoRebalance"):
+            if self.check_auto_rebalance_condition(fts_stats):
+                rebalance_status = all_info[db_no]['fts_callable'].get_fts_rebalance_status(fts_nodes[0])
+                if rebalance_status is None:
+                    self.log.info("PASS : AutoRebalance Failed")
+                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : AutoRebalance Failed")
+                    self.fail(f"BUG : AutoRebalance Failed..")
+                else:
+                    self.log.info("PASS : AutoRebalance Passed")
+                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : AutoRebalance Passed")
+
+
+        self.calculate_running_average_LWM(fts_stats, queue, variables)
+
+        if variables['moving_average'] > int(fts_stats[0]['limits:memoryBytes']):
+            # Scale out satisfied using moving average
+            self.log.info("Scale Out Satisfied using Moving Average")
+            self.log.info(f"Moving Average: {variables['moving_average']}")
+            self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Satisfied using Moving Average")
+            variables['scale_out_time'] = datetime.now()
+            variables['scale_out_status'] = True
+
+        if not variables['scale_out_status'] and self.check_scale_out_condition(fts_stats) and variables['flag']:
+            self.log.info("Scale Out Satisfied")
+            variables['flag'] = False
+            self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Satisfied b4 Moving Average")
+            self.prettyPrintStats(fts_stats, fts_nodes, False)
+            # variables['scale_out_time'] = datetime.now()
+            # variables['scale_out_status'] = True
+
+        if variables['scale_out_status']:
+            if divmod((datetime.now() - variables['scale_out_time']).total_seconds(), 60)[0] > int(self.scaling_time):
+                with self.subTest("Scale Out Condition Check after scaling time"):
+                    if self.verify_scale_out(variables):
+                        time_taken = divmod((datetime.now() - variables['scale_out_time']).total_seconds(), 60)[0]
+                        self.log.info(f"PASS : Scale Out Passed")
+                        self.log.info(f"Scale Out {variables['scale_out_count']}. Passed after {time_taken} minutes!")
+                        self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Passed", time_taken)
+                        self.log.info(f"PASS : Scale Out Passed")
+                        self.log.info(f"Scale Out Stats: \n {fts_stats}, {fts_nodes}")
+                        variables['scale_out_status'] = False
+                        variables['scale_out_count'] += 1
+                        variables['failout_encounter'] = False
+                    else:
+                        if not variables['failout_encounter']:
+                            variables['failout_encounter'] = True
+                            self.log.info(f"FAIL : Scale Out Failed")
+                            self.log.info(f"Scale Out {variables['scale_out_count']} Failed : {fts_stats}, {fts_nodes}")
+                            self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : Scale Out Failed", self.scaling_time)
+                            self.fail(f"BUG : Scale Out {variables['scale_out_count']}. failed after {self.scaling_time} minutes")
+            else:
+                with self.subTest("Scale Out Condition Check before scaling time"):
+                    if self.verify_scale_out(variables):
+                        time_taken = divmod((datetime.now() - variables['scale_out_time']).total_seconds(), 60)[0]
+                        self.log.info(f"BUG : Scale Out happened before scaling time")
+                        self.log.info(f"BUG : Scale Out {variables['scale_out_count']}. happened after {time_taken} minutes!")
+                        self.generate_summary(summary, fts_stats, fts_nodes, variables, f"F : Scale Out Passed < {self.scaling_time}", time_taken)
+                        self.log.info(f"Scale Out Stats: \n {fts_stats}, {fts_nodes}")
+                        variables['scale_out_status'] = False
+                        variables['scale_out_count'] += 1
+                        variables['failout_encounter'] = False
+                        self.fail(f"Scale Out happened less than scaling time")
+
+    def autoscaling_concurrent(self):
+        self.delete_all_database(True)
+
+        summary = []
+        self.provision_databases(self.num_databases, None, self.new_dataplane_id)
+        self.log.info(f"------------ Initial STATS ------------")
+        fts_stats, fts_nodes = self.get_fts_stats()
+        variables = {'node_count': len(fts_nodes), 'scale_out_time': 0, 'HWM_hit': 0, 'scale_out_status': False,
+                     'scale_out_count': 0, 'moving_avg_sum': 0,  'moving_average': 0, 'index_fail_check': False,
+                     'failout_encounter': False, 'flag': True}
+        self.generate_summary(summary, fts_stats, fts_nodes, variables, "Initial Summary")
+
+        queue = deque()
+        all_info = []
+        index_arr = []
+        # Create 20 databases with scopes and collections
+        for counter, database in enumerate(self.databases.values()):
+            self.cleanup_database(database_obj=database)
+            scope_name = f'db_{counter}_scope_{random.randint(0, 1000)}'
+            collection_name = f'db_{counter}_collection_{random.randint(0, 1000)}'
+            self.create_scope(database_obj=database, scope_name=scope_name)
+            self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
+            self.load_databases(load_all_databases=False, num_of_docs=self._num_of_docs_per_collection,
+                                database_obj=database, scope=scope_name, collection=collection_name,
+                                doc_template="emp")
+            self.init_input_servers(database)
+            fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
+                                       collections=collection_name, collection_index=True)
+
+            _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
+                                                                    collection=collection_name)
+            all_info.append({'database': database, 'type': _type, 'scope_name': scope_name, 'collection_name': collection_name, 'fts_callable': fts_callable})
+
+        # Launch a thread in each database to create an index
+
+
+        for i in range(self.num_indexes):
+            thread_arr = []
+            for j in range(self.num_databases):
+                thread = threading.Thread(target=self.create_index_and_validate_autoscaling, kwargs={'all_info': all_info, 'index_no': i, 'db_no' : j,
+                                                                    'index_arr': index_arr, 'variables': variables, 'summary': summary,
+                                                                    'queue': queue})
+                thread.start()
+                time.sleep(2)
+                thread_arr.append(thread)
+
+            for thread in thread_arr:
+                thread.join()
+
+        self.log.info(f"------------ FTS DB FINISH STATS  ------------")
+        fts_stats, fts_nodes = self.get_fts_stats()
+        self.generate_summary(summary, fts_stats, fts_nodes, variables, f"FTS DB FINISH STATS")
+
+        myTable = PrettyTable(summary[0].keys())
+        for json_obj in summary:
+            myTable.add_row(json_obj.values())
+        self.log.info("Summary Table")
+        print(myTable)
+
+        thread_2_array = []
+        for index in index_arr:
+            thread2 = threading.Thread(target=index[0].run_query_and_compare, kwargs={'index': index[1], 'num_queries': self.num_queries })
+            thread2.start()
+            thread_2_array.append(thread2)
+
+        for thread2 in thread_2_array:
+            thread2.join()
+
+        self.log.info(f"------------ FTS DB QUERY FINISH STATS  ------------")
+        fts_stats, fts_nodes = self.get_fts_stats()
+        self.generate_summary(summary, fts_stats, fts_nodes, variables, f"FTS DB QUERY FINISH STATS")
+
+        myTable = PrettyTable(summary[0].keys())
+        for json_obj in summary:
+            myTable.add_row(json_obj.values())
+        self.log.info("Summary Table")
+        print(myTable)
+
+        with self.subTest("Scale In Condition Check"):
+            if not self.verify_scale_in(variables, summary):
+                self.log.info(f"Scale In Failed : {fts_stats}, {fts_nodes}")
+                self.fail("BUG : Scale In Failed")
+
+            myTable = PrettyTable(summary[0].keys())
+            for json_obj in summary:
+                myTable.add_row(json_obj.values())
+            self.log.info("Summary Table")
+            print(myTable)
 
     def test_n1ql_search(self):
         self.provision_databases(self.num_databases)
@@ -854,14 +1122,14 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                                "field" : "streetAddress"}]
                                      }
                 explain_result = self.run_query(database,
-                                        f'EXPLAIN SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE SEARCH(t1, {n1ql_search_query}) and t1.age > 50 ORDER BY t1.streetAddress')
+                                                f'EXPLAIN SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE SEARCH(t1, {n1ql_search_query}) and t1.age > 50 ORDER BY t1.streetAddress')
                 self.assertTrue('IndexFtsSearch' in str(explain_result), f"The query is not using an fts search! please check explain {explain_result}")
                 self.assertTrue('idx' in str(explain_result), f"The query is not using the fts index! please check explain {explain_result}")
 
                 n1ql_search_result = self.run_query(database,
-                                        f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE SEARCH(t1, {n1ql_search_query}) and t1.age > 50 ORDER BY t1.streetAddress')
+                                                    f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE SEARCH(t1, {n1ql_search_query}) and t1.age > 50 ORDER BY t1.streetAddress')
                 expected_result = self.run_query(database,
-                                        f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE t1.country = "Algeria" and t1.age > 50 ORDER BY t1.streetAddress')
+                                                 f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE t1.country = "Algeria" and t1.age > 50 ORDER BY t1.streetAddress')
                 # Ensure that the n1ql equivalent returns results, then compare the search to the n1ql equivalent
                 self.assertFalse(expected_result['metrics']['resultCount'] == 0, "This query should return results!")
                 diffs = DeepDiff(n1ql_search_result['results'], expected_result['results'])
@@ -918,15 +1186,15 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 self.run_query(database, f"CREATE INDEX idx1 on {scope_name}.{collection_name}(country,streetAddress)")
                 try:
                     explain_result = self.run_query(database,
-                                            f'EXPLAIN SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 USE INDEX (USING FTS, USING GSI) WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
+                                                    f'EXPLAIN SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 USE INDEX (USING FTS, USING GSI) WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
                     # We expect the gsi index and the fts index both to be used
                     self.assertTrue('IndexFtsSearch' in str(explain_result), f"The query should be using the fts search! please check explain {explain_result}")
                     self.assertTrue(f'idx1' in str(explain_result), f"The query is not using the gsi index! please check explain {explain_result}")
                     self.assertTrue('idx' in str(explain_result), f"The query is not using the fts index! please check explain {explain_result}")
                     flex_result = self.run_query(database,
-                                            f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 USE INDEX (USING FTS, USING GSI) WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
+                                                 f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 USE INDEX (USING FTS, USING GSI) WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
                     expected_result = self.run_query(database,
-                                            f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
+                                                     f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
                     self.assertFalse(expected_result['metrics']['resultCount'] == 0, "This query should return results!")
                     diffs = DeepDiff(flex_result['results'], expected_result['results'])
                     if diffs:
@@ -934,3 +1202,6 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 finally:
                     self.run_query(database, f'DROP INDEX idx1 on {scope_name}.{collection_name}')
             fts_callable.delete_all()
+
+    def testing(self):
+        self.delete_all_database(True)

@@ -409,16 +409,18 @@ class CapellaAPI:
                 attempts += 1
                 if attempts > 1:
                     self.log.info(f"Retry {attempts-1}. Unresolved host {fts_nodes[count]}, Trying again.")
+                    self.log.info("Stats not returned")
                 userpass = f"{creds['couchbaseCreds']['username']}:{creds['couchbaseCreds']['password']}"
                 encoded_u = base64.b64encode(userpass.encode()).decode()
                 CurlUrl = f"curl -s -XGET https://{fts_nodes[count]}:18094/api/nsstats --header 'Authorization: Basic {encoded_u}' --insecure | jq | grep -E 'util|resource|limits'"
                 resp = subprocess.getstatusoutput(CurlUrl)[1]
             try:
-                resp = resp[2:] + "}" + resp[:2]
-                resp = resp[len(resp) - 2:] + "{" + resp[:len(resp) - 1]
+                resp = resp[:1] + '{' + resp[2:]
+                resp = resp[:len(resp)] + '}' + resp[len(resp):]
                 x = json.loads(resp)
                 stats.append(x)
             except Exception as e:
+                self.log.info("Stats not returned")
                 self.log.info(f"Error : {e}")
                 print(f"Response : {resp}")
                 userpass = f"{creds['couchbaseCreds']['username']}:{creds['couchbaseCreds']['password']}"
@@ -429,8 +431,15 @@ class CapellaAPI:
 
     def get_fts_nodes_of_dataplane(self, dataplane_id):
         resp = self.serverless_api.get_serverless_dataplane_info(dataplane_id)
-        info_nodes = resp.json()['couchbase']['nodes']
-        fts_hostname=[]
+        try:
+            info_nodes = resp.json()['couchbase']['nodes']
+        except:
+            self.log.info("Stats not returned --nodes here")
+            print(resp.json(), "get_fts_nodes_of_dataplane")
+            resp = self.serverless_api.get_serverless_dataplane_info(dataplane_id)
+            info_nodes = resp.json()['couchbase']['nodes']
+
+        fts_hostname = []
         for node in info_nodes:
             if node['services'][0]['type'] == 'fts':
                 fts_hostname.append(node['hostname'])

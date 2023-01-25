@@ -197,7 +197,7 @@ class FTSCallable:
 
         return index
 
-    def wait_for_indexing_complete(self, item_count=None):
+    def wait_for_indexing_complete(self, item_count=None, complete_wait=True):
         """
             Wait for index_count for any index to stabilize or reach the
             index count specified by item_count
@@ -221,6 +221,8 @@ class FTSCallable:
                                       % (bucket_doc_count,
                                          index.name,
                                          index_doc_count))
+                        if not complete_wait and bucket_doc_count > 0 and index_doc_count > 0:
+                            break
                     else:
                         self.es.update_index('es_index')
                         es_index_count = self.es.get_index_count('es_index')
@@ -566,3 +568,9 @@ class FTSCallable:
             if index_def:
                 return resp[1]['indexDef']
         return resp[0]
+
+    def get_fts_rebalance_status(self, fts_node=None):
+        rest = RestConnection(self.cb_cluster.get_random_fts_node())
+        resp = rest._rebalance_progress_status(fts_node)
+        print("Rebalance Status : ", resp)
+        return resp
