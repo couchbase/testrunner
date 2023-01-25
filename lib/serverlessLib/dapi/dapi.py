@@ -24,7 +24,7 @@ class RestfulDAPI:
                 'Authorization': 'Basic %s' % authorization,
                 'Connection': connection,
                 'Accept': '*/*'}
-    
+
     def _urllib_request(self, api, method='GET', headers=None,
                         params={}, timeout=300, verify=False):
         session = requests.Session()
@@ -54,7 +54,97 @@ class RestfulDAPI:
             self._log.error("Something else: {0}".format(err))
         except Exception as err:
             self._log.error("Something else: {0}".format(err))
-    
+
     def check_dapi_health(self):
         url = self.endpoint + "/health"
         return self._urllib_request(url)
+
+    def insert_doc(self, doc_id, doc_content, scope, collection):
+        params = doc_content
+        url = self.endpoint_v1 + "/scopes/" + scope + "/collections/" \
+            + collection + "/docs/" + doc_id
+        return self._urllib_request(url, method="POST", params=params)
+
+    def get_doc(self, doc_id, scope, collection):
+        url = self.endpoint_v1 + "/scopes/" + scope + "/collections/" \
+              + collection + "/docs/" + doc_id
+        return self._urllib_request(url)
+
+    def upsert_doc(self, existing_doc_id, doc_content, scope, collection):
+        params = doc_content
+        url = self.endpoint_v1 + "/scopes/" + scope + "/collections/" \
+            + collection + "/docs/" + existing_doc_id + "?upsert=true"
+        return self._urllib_request(url, method="PUT", params=params)
+
+    def delete_doc(self, existing_doc_id, scope, collection):
+        url = self.endpoint_v1 + "/scopes/" + scope + "/collections/" \
+            + collection + "/docs/" + existing_doc_id
+        return self._urllib_request(url, method="DELETE")
+
+    def get_scope_list(self):
+        url = self.endpoint_v1 + "/scopes"
+        return self._urllib_request(url)
+
+    def get_collection_list(self, scope="_default"):
+        url = self.endpoint_v1 + "/scopes/" + scope + "/collections"
+        return self._urllib_request(url)
+
+    def get_document_list(self, scope="_default", collection="_default"):
+        authorization = base64.b64encode('{}:{}'.format(self.username, self.password).encode()).decode()
+        header = {'Authorization': 'Basic %s' % authorization,
+                  'Accept': '*/*'}
+        url = self.endpoint_v1 + "/scopes/" + scope + "/collections/" + collection + "/docs"
+        return self._urllib_request(url, headers=header)
+
+    def get_subdoc(self, doc_id, doc_content, scope, collection):
+        params = doc_content
+        url = self.endpoint_v1 + "/scopes/" + scope + "/collections/" + collection + "/subdocs/" + doc_id
+        return self._urllib_request(url, method="POST", params=params)
+
+    def insert_subdoc(self, doc_id, doc_content, scope, collection):
+        params = doc_content
+        url = self.endpoint_v1 + "/scopes/" + scope + "/collections/" + collection + "/subdocs/" + doc_id
+        return self._urllib_request(url, method="POST", params=params)
+
+    def execute_query(self, query, scope):
+        params = query
+        url = self.endpoint_v1 + "/scopes/" + scope + "/query?"
+        return self._urllib_request(url, method="POST", params=params)
+
+    def create_scope(self, scope_name):
+        params = scope_name
+        url = self.endpoint_v1 + "/scopes"
+        return self._urllib_request(url, method="POST", params=params)
+
+    def create_collection(self, scope, collection_name):
+        params = collection_name
+        url = self.endpoint_v1 + "/scopes/" + scope + "/collections"
+        return self._urllib_request(url, method="POST", params=params)
+
+    def delete_collection(self, scope, collection):
+        url = self.endpoint_v1 + "/scopes/" + scope + "/collections/" + collection
+        return self._urllib_request(url, method="DELETE")
+
+    def delete_scope(self, scope):
+        url = self.endpoint_v1 + "/scopes/" + scope
+        return self._urllib_request(url, method="DELETE")
+
+    def get_bulk_document(self, scope, collection, document_ids=()):
+        url = self.endpoint_v1 + "/scopes/" + scope + "/collections/" + collection + "/docs?ids="
+        url = url + ','.join(document_ids)
+        return self._urllib_request(url)
+
+    def insert_bulk_document(self, scope, collection, key_documents):
+        param = key_documents
+        url = self.endpoint_v1 + "/scopes/" + scope + "/collections/" + collection + "/docs"
+        return self._urllib_request(url, method="POST", params=param)
+
+    def delete_bulk_document(self, scope, collection, document_ids=[]):
+        param = document_ids
+        url = self.endpoint_v1 + "/scopes/" + scope + "/collections/" + collection + "/docs"
+        return self._urllib_request(url, method="DELETE", params=param)
+
+    def update_bulk_document(self, scope, collection, key_documents):
+        param = key_documents
+        url = self.endpoint_v1 + "/scopes/" + scope + "/collections/" + collection + "/docs"
+        return self._urllib_request(url, method="PUT", params=param)
