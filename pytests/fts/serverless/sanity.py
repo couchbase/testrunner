@@ -546,10 +546,12 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             Print FTS Stats and returns stats along with Current FTS Nodes
         """
         stats, fts_nodes, http_resp = self.get_all_fts_stats()
+        myTable = PrettyTable(["S.No", "FTS Nodes", "lim_memoryBytes", "util_memoryBytes", "util_cpuPercent", "util_diskByte"])
         for count, stat in enumerate(stats):
-            print(f"Request Response : {http_resp}")
-            print(f"STATS for FTS Node{count + 1}. {fts_nodes[count]} ---")
-            pprint.pprint(stat)
+            if http_resp:
+                print(f"Request Response : {http_resp}")
+            myTable.add_row([count+1, fts_nodes[count], stat['limits:memoryBytes'], stat['utilization:memoryBytes'], stat['utilization:cpuPercent'], stat['utilization:diskBytes']])
+        print(myTable)
         return stats, fts_nodes
 
     def verify_HWM_index_rejection(self, stats):
