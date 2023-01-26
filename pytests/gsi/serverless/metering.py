@@ -425,7 +425,7 @@ class GSIMeter(ServerlessBaseTestCase):
             after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
-            expected_index_wu = math.ceil(self.doc_count * (self.doc_key_size + self.distinct_array_index_key_size) / self.index_wu)
+            expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.distinct_array_index_key_size) / self.index_wu)
 
             self.assertEqual(before_index_ru, after_index_ru) # no index ru
             self.assertEqual(expected_index_wu, after_index_wu - before_index_wu)
