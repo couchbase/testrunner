@@ -98,9 +98,9 @@ class ServerlessBaseTestCase(unittest.TestCase):
         if self.teardown_all_databases:
             self.delete_all_database()
         if self.new_dataplane_id is not None:
-            # self.log.info(f"Deleting dataplane : {self.new_dataplane_id}")
+            self.log.info(f"Deleting dataplane : {self.new_dataplane_id}")
             self.delete_all_database(True, self.new_dataplane_id)
-            # self.delete_dataplane(self.new_dataplane_id)
+            self.delete_dataplane(self.new_dataplane_id)
         self.task_manager.shutdown(force=True)
 
     def has_test_failed(self):
