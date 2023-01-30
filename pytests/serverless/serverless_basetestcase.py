@@ -81,20 +81,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
             test_failed = self.has_test_failed()
             if test_failed:
                 self.log.info(f"Test failure: {self._testMethodName}. Will trigger a log collect via REST API")
-                for dataplane in self.dataplanes:
-                    rest_obj = RestConnection(rest_username=self.dataplanes[dataplane].admin_username,
-                                              rest_password=self.dataplanes[dataplane].admin_password,
-                                              rest_srv=self.dataplanes[dataplane].rest_host)
-                    cb_collect_list = rest_obj.collect_logs(test_name=self._testMethodName)
-                    nodes = rest_obj.get_all_dataplane_nodes()
-                    node_obj = {}
-                    for node in nodes:
-                        if node['services'][0] in node_obj:
-                            node_obj[node['services'][0]].append(node['hostname'])
-                        else:
-                            node_obj[node['services'][0]] = [node['hostname']]
-                    self.log.info(f"Test failure. Cbcollect info list {cb_collect_list}")
-                    self.log.info(f"Dataplane nodes: {node_obj}")
+                self.collect_log_on_dataplane_nodes()
         if self.teardown_all_databases:
             self.delete_all_database()
         if self.new_dataplane_id is not None:
@@ -102,6 +89,22 @@ class ServerlessBaseTestCase(unittest.TestCase):
             self.delete_all_database(True, self.new_dataplane_id)
             self.delete_dataplane(self.new_dataplane_id)
         self.task_manager.shutdown(force=True)
+
+    def collect_log_on_dataplane_nodes(self):
+        for dataplane in self.dataplanes:
+            rest_obj = RestConnection(rest_username=self.dataplanes[dataplane].admin_username,
+                                      rest_password=self.dataplanes[dataplane].admin_password,
+                                      rest_srv=self.dataplanes[dataplane].rest_host)
+            cb_collect_list = rest_obj.collect_logs(test_name=self._testMethodName)
+            nodes = rest_obj.get_all_dataplane_nodes()
+            node_obj = {}
+            for node in nodes:
+                if node['services'][0] in node_obj:
+                    node_obj[node['services'][0]].append(node['hostname'])
+                else:
+                    node_obj[node['services'][0]] = [node['hostname']]
+            self.log.info(f"Cbcollect bundle list {cb_collect_list}")
+            self.log.info(f"Dataplane nodes: {node_obj}")
 
     def has_test_failed(self):
         if hasattr(self._outcome, 'errors'):
@@ -415,7 +418,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
                 self.log.info(f"Waiting in a loop until update_specs is complete. Current timestamp {time.time()}. Time_now {time_now}."
                               f"timeout {timeout}")
                 nodes_after_scaling = self.get_nodes_from_services_map(rest_info=rest_info, service=service)
-                self.log.info(f"Index nodes on the DP {nodes_after_scaling}")
+                self.log.info(f"{service} nodes on the DP {nodes_after_scaling}")
                 num_nodes_after = len(nodes_after_scaling)
                 if num_nodes_after == new_count:
                     break

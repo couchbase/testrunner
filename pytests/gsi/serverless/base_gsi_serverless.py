@@ -3,6 +3,7 @@ import random
 import string
 import requests
 import time
+import copy
 
 from gsi.serverless.base_query_serverless import QueryBaseServerless
 from membase.api.serverless_rest_client import ServerlessRestConnection as RestConnection
@@ -340,6 +341,21 @@ class BaseGSIServerless(QueryBaseServerless):
         self.update_specs(dataplane_id=dataplane.id, new_count=num_nodes-2, service='index',
                           wait_for_rebalance_completion=wait_for_rebalance_completion)
 
+    def reset_dataplane(self, dataplane_id):
+        resp = self.api.get_dataplane_debug_info(dataplane_id=dataplane_id)
+        current_specs = resp['couchbase']['specs']
+        new_specs = copy.deepcopy(current_specs)
+        for counter, spec in enumerate(current_specs):
+            if spec['services'][0]['type'] == "index" and spec['count'] != 2:
+                new_specs[counter]['count'] = 2
+            if spec['services'][0]['type'] == "n1ql" and spec['count'] != 2:
+                new_specs[counter]['count'] = 2
+            if spec['services'][0]['type'] == "kv" and spec['count'] != 3:
+                new_specs[counter]['count'] = 3
+        self.log.info(f"Update_specs will be run on {dataplane_id}")
+        self.log.info(f"Will use this config to update specs: {new_specs}")
+        self.api.modify_cluster_specs(dataplane_id=dataplane_id, specs=new_specs)
+
     def run_parallel_workloads(self, event, total_doc_count=None):
         if total_doc_count is None:
             total_doc_count = self.total_doc_count
@@ -347,11 +363,11 @@ class BaseGSIServerless(QueryBaseServerless):
         while not event.is_set():
             with ThreadPoolExecutor() as executor:
                 tasks = []
+                task = executor.submit(self.load_data_new_doc_loader, databases=self.databases.values(), doc_start=0,
+                                       doc_end=total_doc_count, update_rate=100, create_rate=0)
+                tasks.append(task)
                 print(f"Iteration number {i}")
                 for counter, database in enumerate(self.databases.values()):
-                    task = executor.submit(self.load_data_new_doc_loader, databases=[database], doc_start=0,
-                                           doc_end=total_doc_count, update_rate=100, create_rate=0)
-                    tasks.append(task)
                     for scope in database.collections:
                         for collection in database.collections[scope]:
                             select_query_list = self.gsi_util_obj.get_select_queries(definition_list=self.definition_list,
