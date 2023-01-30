@@ -566,6 +566,9 @@ def create_capella_config(input, services_count):
         "server": None
     }
 
+    if input.capella.get("server_version"):
+        config["server"] = input.capella["server_version"]
+
     if input.capella.get("image"):
         image = input.capella["image"]
         token = input.capella["override_token"]
@@ -573,6 +576,7 @@ def create_capella_config(input, services_count):
         config["overRide"] = {"token": token,
                                 "image": image,
                                 "server": server_version}
+
 
     return config
 
