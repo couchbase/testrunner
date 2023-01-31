@@ -31,6 +31,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                                             bucket_params=self.bucket_params)
         self.buckets = self.rest.get_buckets()
         self._create_server_groups()
+        self.cb_version = float(self.cb_version.split('-')[0][0:3])
         self.log.info("==============  CollectionsIndexBasics setup has completed ==============")
 
     def tearDown(self):
@@ -1000,7 +1001,10 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.assertNotEqual(len(result), 0, "Drop Index didn't work as expected")
             self.sleep(10)
             status = self.rest.get_index_status()
-            self.assertEqual(len(status[self.test_bucket]), 1, f"Fail to drop replica of idx index: {status}")
+            if self.cb_version >= 7.5:
+                self.assertEqual(len(status[self.test_bucket]), 3, f"Fail to drop replica of idx index: {status}")
+            else:
+                self.assertEqual(len(status[self.test_bucket]), 1, f"Fail to drop replica of idx index: {status}")
         except Exception as err:
             self.fail(f'Failed to Drop Index on empty collection: {str(err)}')
 
