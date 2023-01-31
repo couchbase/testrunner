@@ -382,7 +382,8 @@ class QueryMeteringTests(ServerlessBaseTestCase):
             self.run_query(database, insert_query)
             self.run_query(database, f'CREATE INDEX idx_name IF NOT EXISTS on {self.collection}(name)')
             self.check_index_status(database, 'idx_name', desired_state='online')
-            time.sleep(2)
+            # Wait another 10s to make sure RU for index are recorded
+            time.sleep(10)
             queries = {
                 'explain': f'EXPLAIN SELECT name, city FROM {self.collection} WHERE name = repeat("a", {self.value_size})',
                 'advise': f'ADVISE SELECT name, city FROM {self.collection} WHERE name = repeat("a", {self.value_size})',

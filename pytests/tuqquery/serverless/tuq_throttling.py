@@ -86,12 +86,12 @@ class QueryThrottlingTests(ServerlessBaseTestCase):
             throttle.set_bucket_limit(database.id, int(kvLimit*30/100), 'dataThrottleLimit')
             time.sleep(15)
             result = self.run_query(database, f'SELECT count(city) FROM {self.collection}')
-            execution_time_at_30pct = float(result['metrics']['executionTime'][:-1])
+            execution_time_at_30pct = float(result['metrics']['executionTime'][:-2])
 
             throttle.set_bucket_limit(database.id, kvLimit, 'dataThrottleLimit')
             time.sleep(15)
             result = self.run_query(database, f'SELECT count(city) FROM {self.collection}')
-            execution_time_at_100pct = float(result['metrics']['executionTime'][:-1])
+            execution_time_at_100pct = float(result['metrics']['executionTime'][:-2])
 
             # We expect the execution with higher throttle level (100pct) to be faster than the run at lower
             # throttle level (30pct) by some factor, in this case 1.75, to be within margin as we cannot 
