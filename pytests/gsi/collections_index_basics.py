@@ -31,7 +31,9 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                                             bucket_params=self.bucket_params)
         self.buckets = self.rest.get_buckets()
         self._create_server_groups()
-        self.cb_version = float(self.cb_version.split('-')[0][0:3])
+        self.capella_run = self.input.param("capella_run", False)
+        if not self.capella_run:
+            self.cb_version = float(self.cb_version.split('-')[0][0:3])
         self.log.info("==============  CollectionsIndexBasics setup has completed ==============")
 
     def tearDown(self):
