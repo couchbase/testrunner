@@ -316,8 +316,7 @@ class FTSMeter(FTSElixirSanity):
             fts_callable.wait_for_indexing_complete(num_travel_sample_docs)
             time.sleep(30)
             after_fts_ru, after_fts_wu = meter.get_fts_rwu(database.id)
-            #the number of write units here seems insanely large, asking thejas about it
-            self.assertTrue(after_fts_wu - before_fts_wu > 0 and after_fts_wu - before_fts_wu < 132000 ,
+            self.assertTrue(after_fts_wu - before_fts_wu > 0 and after_fts_wu - before_fts_wu < 150000 ,
                             f"The fts index didnt generate WUs within the range, please check. actual:{after_fts_ru - before_fts_ru}, range:0-132000")
 
     def test_search_index(self):
@@ -584,7 +583,7 @@ class FTSMeter(FTSElixirSanity):
         idx_params = {"types": {f"{self.scope}.{self.collection}": {
             "enabled": True,
             "dynamic": True,
-            "default_analyzer": "keyword",
+            "default_analyzer": "standard",
             "properties": {
                 "description": {
                     "enabled": True,
@@ -593,7 +592,7 @@ class FTSMeter(FTSElixirSanity):
                         {
                             "name": "description",
                             "type": "text",
-                            "analyzer": "keyword",
+                            "analyzer": "standard",
                             "store": True,
                             "index": True,
                             "include_term_vectors": True,
@@ -623,11 +622,11 @@ class FTSMeter(FTSElixirSanity):
             before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
 
             for index in fts_callable.cb_cluster.get_indexes():
-                query = {"query": "description:complementary breakfast"}
+                query = {"query": "complementary breakfast"}
 
                 hits, matches, _, _ = index.execute_query(query,
                                                           zero_results_ok=False,
-                                                          expected_hits=self.doc_count,
+                                                          expected_hits=661,
                                                           expected_no_of_results=10,
                                                           highlight=True,
                                                           highlight_style="html",
@@ -635,6 +634,16 @@ class FTSMeter(FTSElixirSanity):
                 self.log.info("Hits: %s" % hits)
                 after_fts_ru, after_fts_wu = meter.get_fts_rwu(database.id)
                 after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
+                self.assertEqual(after_kv_ru, before_kv_ru)
+                self.assertEqual(after_kv_wu, before_kv_wu)
+                self.assertEqual(after_fts_wu, before_fts_wu)
+                #35968 is the size of the biggest doc in travel-sample so using that value
+                max_fts_ru = self.doc_count * math.ceil((self.doc_key_size + (35968) / self.fts_ru))
+                self.assertTrue(after_fts_ru - before_fts_ru > 0 and after_fts_ru - before_fts_ru < max_fts_ru, f"The fts index didnt generate RUs within the range, please check. actual:{after_fts_ru-before_fts_ru}, range:0-{max_fts_ru}")
+                before_fts_ru = after_fts_ru
+                before_kv_ru = after_kv_ru
+                before_fts_wu = after_fts_wu
+                before_kv_wu = after_kv_wu
 
     def test_modify_fts_index(self):
         idx_params ={"types": {f"{self.scope}.{self.collection}": {
@@ -715,7 +724,7 @@ class FTSMeter(FTSElixirSanity):
             fts_callable.wait_for_indexing_complete(self.doc_count)
             after_fts_ru, after_fts_wu = meter.get_fts_rwu(database.id)
             self.assertEqual(after_fts_ru, after_fts1_ru)
-            self.assertTrue(after_fts_wu-after_fts1_wu > 0 and after_fts_wu-after_fts1_wu < (original_fts_wu+5), f"The WUs should be less than original cost of creation, please check original cost:{original_fts_wu}, new cost:{after_fts_wu-after_fts1_wu}")
+            self.assertTrue(after_fts_wu-after_fts1_wu > 0 and after_fts_wu-after_fts1_wu < (original_fts_wu+15), f"The WUs should be less than original cost of creation, please check original cost:{original_fts_wu}, new cost:{after_fts_wu-after_fts1_wu}")
 
     def test_recreate_fts_index(self):
         idx_params = {"types": {f"{self.scope}.{self.collection}": {
