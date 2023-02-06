@@ -164,14 +164,14 @@ class QueriesIndexTests(QueryTests):
                                                                                                  self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 idx = "idx2"
                 self.query = "CREATE INDEX {0} ON {1} ( _id )  USING {2}".format(idx, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.query = "Explain SELECT meta().id FROM {0} WHERE join_day = 5 LIMIT 10".format(query_bucket)
                 actual_result = self.run_cbq_query()
@@ -272,7 +272,7 @@ class QueriesIndexTests(QueryTests):
                              " join_yr > 2010  USING {2}".format(idx2, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.query = "explain select * from {0} where VMs[0].RAM > 5 and join_yr > 2010 order by VMs[0].RAM " \
                              "limit 2 offset 1".format(query_bucket)
@@ -362,7 +362,7 @@ class QueriesIndexTests(QueryTests):
                 self.query = "CREATE INDEX {0} ON {1} ( VMs ) USING {2}".format(idx, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
 
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
@@ -378,7 +378,7 @@ class QueriesIndexTests(QueryTests):
                              " USING {2}".format(idx2, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.query = "Explain select * from {0} where VMs[0].RAM = 11 and join_yr = 2010 ".format(query_bucket)
                 actual_result = self.run_cbq_query()
@@ -401,7 +401,7 @@ class QueriesIndexTests(QueryTests):
                              " USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
 
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
@@ -416,7 +416,7 @@ class QueriesIndexTests(QueryTests):
                              " USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.query = "Explain  select * from {0} b1 nest {0} b2 on keys b1._id where b1._id like" \
                              " 'query-testemployee%' limit 5 ".format(query_bucket)
@@ -461,7 +461,7 @@ class QueriesIndexTests(QueryTests):
                              ' join_day,name ) using {2}'.format(idx, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.query = 'INSERT into {0} (key , value) VALUES ("{1}", {2})'.format(query_bucket, "k01",
                                                                                         {"x": 10, "b": True,
@@ -499,7 +499,7 @@ class QueriesIndexTests(QueryTests):
                              ' using {2}'.format(idx2, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.query = 'SELECT meta().id, IFNULL(IsSpecial,b,2,3) from {0} limit 5'.format(query_bucket)
                 actual_result = self.run_cbq_query()
@@ -515,7 +515,7 @@ class QueriesIndexTests(QueryTests):
                              ' using {2}'.format(idx3, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx3)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx3 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx3)
                 self.query = 'SELECT meta().id, MISSINGIF(IsSpecial,b) from {0} limit 5'.format(query_bucket)
                 actual_result = self.run_cbq_query()
@@ -531,7 +531,7 @@ class QueriesIndexTests(QueryTests):
                              ' using {2}'.format(idx4, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx4 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx4)
                 self.query = 'SELECT meta().id, NULLIF(IsSpecial,b) from {0} limit 5'.format(query_bucket)
                 actual_result = self.run_cbq_query()
@@ -547,7 +547,7 @@ class QueriesIndexTests(QueryTests):
                              ' join_day,name )'.format(idx5, query_bucket)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx5)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx5 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx5)
                 self.query = 'SELECT meta().id, IFMISSINGORNULL(IsSpecial,b,name,2,3) from {0}' \
                              ' limit 5'.format(query_bucket)
@@ -588,7 +588,7 @@ class QueriesIndexTests(QueryTests):
                                                                                             self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.query = 'select tasks_points.task1 from {0} where tasks_points.task1 = 1'.format(query_bucket)
                 actual_result = self.run_cbq_query()
@@ -623,7 +623,7 @@ class QueriesIndexTests(QueryTests):
                              " USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.query = 'explain select join_day from {0} where join_day in ["5", $1] '.format(query_bucket)
                 actual_result = self.run_cbq_query()
@@ -692,14 +692,14 @@ class QueriesIndexTests(QueryTests):
                              "USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 idx = "idx2"
                 self.query = "CREATE INDEX {0} ON {1} ( meta().id )".format(idx, query_bucket) + \
                              "USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.query = 'select join_day from {0} where join_day in [4,7,5,10] ' \
                              'order by meta().id'.format(query_bucket)
@@ -781,14 +781,14 @@ class QueriesIndexTests(QueryTests):
                              " USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 idx = "idx2"
                 self.query = "CREATE INDEX {0} ON {1} ( meta().expiration )".format(idx, query_bucket) + \
                              " USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 idx = "idx3"
                 self.query = "CREATE INDEX {0} ON {1} ( meta().id, meta().cas," \
@@ -796,21 +796,21 @@ class QueriesIndexTests(QueryTests):
                              " USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 idx = "idx4"
                 self.query = "CREATE INDEX {0} ON {1} ( meta().id )".format(idx, query_bucket) + \
                              " USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 idx = "idx5"
                 self.query = "CREATE INDEX {0} ON {1} ( meta().cas, meta().expiration )".format(idx, query_bucket) + \
                              " USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 idx = "idx6"
                 self.query = "CREATE INDEX {0} ON {1} ( meta().cas ) where" \
@@ -818,7 +818,7 @@ class QueriesIndexTests(QueryTests):
                              " USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.query = 'explain SELECT  meta().id , meta().cas, meta().expiration FROM {0}' \
                              ' where meta().id > ""'.format(query_bucket)
@@ -890,7 +890,8 @@ class QueriesIndexTests(QueryTests):
                          " USING {0}".format(self.index_type)
             actual_result = self.run_cbq_query()
             self._wait_for_index_online(bucket, idx)
-            self._verify_results(actual_result['results'], [])
+            self.assertTrue(idx in str(actual_result['results']),
+                            f"The index is returning the wrong index, please check {actual_result}"
             created_indexes.append(idx)
             self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
             self.query = "EXPLAIN select name from {0} WHERE ANY s IN SUFFIXES( LOWER( _id ) ) ".format(query_bucket) + \
@@ -925,7 +926,7 @@ class QueriesIndexTests(QueryTests):
                              "FOR v in {2} END) USING {3}".format(idx, query_bucket, "join_yr", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 idx2 = "idxVM"
@@ -934,7 +935,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.query = "EXPLAIN select name from {0} " \
                              "where any v in {0}.join_yr satisfies v = 2016 END ".format(query_bucket) + \
@@ -1011,7 +1012,7 @@ class QueriesIndexTests(QueryTests):
                     idx8, query_bucket, "join_yr", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx8)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx8 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx8)
                 self.assertTrue(self._is_index_in_list(bucket, idx8), "Index is not in list")
                 self.query = "EXPLAIN select meta().id from {0} where any v in {0}.join_yr " \
@@ -1161,7 +1162,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx, query_bucket, "join_yr", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 idx2 = "idxVM"
@@ -1169,7 +1170,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx2, query_bucket, "VMs", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.query = "select name from {0} where any v in {0}.join_yr " \
                              "satisfies v = 2016 END ".format(query_bucket) + \
@@ -1218,7 +1219,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_update_arrays(self):
@@ -1236,7 +1236,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "select name from {0}  WHERE ANY i IN tasks SATISFIES  (ANY j within i " \
@@ -1266,7 +1266,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_covering_like_array_index(self):
@@ -1281,7 +1280,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx, query_bucket, "tasks", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "explain select meta().id from {0} WHERE ANY i IN {0}.tasks SATISFIES  (ANY j IN " \
@@ -1300,7 +1299,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_panic_in_null(self):
@@ -1348,7 +1346,6 @@ class QueriesIndexTests(QueryTests):
             for idx in created_indexes:
                 self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                 actual_result = self.run_cbq_query()
-                self._verify_results(actual_result['results'], [])
 
     def test_OR_UnionScan(self):
         created_indexes = []
@@ -1379,7 +1376,6 @@ class QueriesIndexTests(QueryTests):
             for idx in created_indexes:
                 self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                 actual_result = self.run_cbq_query()
-                self._verify_results(actual_result['results'], [])
 
     def test_index_join(self):
         created_indexes = []
@@ -1447,7 +1443,6 @@ class QueriesIndexTests(QueryTests):
             for idx in created_indexes:
                 self.query = "DROP INDEX {1} ON {0} USING {2}".format("default", idx, self.index_type)
                 actual_result = self.run_cbq_query()
-                self._verify_results(actual_result['results'], [])
 
     def test_covering_index_collections(self):
         created_indexes = []
@@ -1460,7 +1455,7 @@ class QueriesIndexTests(QueryTests):
                 self.query = "create index {1} on {0}(x)".format(query_bucket, idx)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = 'INSERT into {0} (key , value) VALUES ("{1}", {2})'.format(query_bucket, "k01", '{"x":10}')
@@ -1476,7 +1471,7 @@ class QueriesIndexTests(QueryTests):
                              'LIKE "account-customerXYZ%" '.format(query_bucket, idx2)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.query = 'INSERT into {0} (key,value) values("{1}",{{ "accountNumber": 123456789, ' \
                              '"docId": "account-customerXYZ-123456789", "code": "001" , ' \
@@ -1508,7 +1503,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_pushdown_complex_filter(self):
@@ -1521,7 +1515,7 @@ class QueriesIndexTests(QueryTests):
                 self.query = "create index {1} on {0}(join_yr,join_day)".format(query_bucket, idx)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = 'explain select meta().id from {0} where join_day between 0 and 5 and ' \
@@ -1607,7 +1601,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_simple_array_index_all(self):
@@ -1621,7 +1614,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx, query_bucket, "join_yr", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 idx2 = "idxVM"
@@ -1629,7 +1622,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx2, query_bucket, "VMs", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.query = "EXPLAIN select name from {0} where any v in {0}.join_yr " \
                              "satisfies v = 2016 END ".format(query_bucket) + \
@@ -1728,7 +1721,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_simple_array_index_all_covering(self):
@@ -1742,7 +1734,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx, query_bucket, "join_yr", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 idx2 = "idxVM"
@@ -1750,7 +1742,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx2, query_bucket, "VMs", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.query = "EXPLAIN select name from {0} where any v in {0}.join_yr " \
                              "satisfies v = 2016 END ".format(query_bucket) + \
@@ -1830,7 +1822,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_simple_nested_index_covering(self):
@@ -1846,7 +1837,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -1857,7 +1848,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.assertTrue(self._is_index_in_list(bucket, idx2), "Index is not in list")
 
@@ -1867,7 +1858,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx3)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx3 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx3)
                 self.assertTrue(self._is_index_in_list(bucket, idx3), "Index is not in list")
 
@@ -1877,7 +1868,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx4 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx4)
                 self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
 
@@ -1892,7 +1883,7 @@ class QueriesIndexTests(QueryTests):
                              'WHERE (_id = "query-testemployee10153.187782713003-0")'
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx5)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx5 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx5)
 
                 self.query = 'explain SELECT VMs FROM {0}  WHERE ANY i IN VMs SATISFIES i.RAM = 10 END AND' \
@@ -1946,7 +1937,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_simple_nested_index(self):
@@ -1962,7 +1952,7 @@ class QueriesIndexTests(QueryTests):
                              "FOR i in {2} END) USING {3}".format(idx, query_bucket, "tasks", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 idx2 = "idxtasks"
@@ -1970,7 +1960,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx2, query_bucket, "tasks", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.assertTrue(self._is_index_in_list(bucket, idx2), "Index is not in list")
                 self.query = "EXPLAIN select name from {0} WHERE ANY i IN {0}.tasks SATISFIES  (ANY j IN i " \
@@ -2011,7 +2001,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_shortest_covering_index(self):
@@ -2090,7 +2079,7 @@ class QueriesIndexTests(QueryTests):
                              "FOR i in {2} END) USING {3}".format(idx, query_bucket, "tasks", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 idx2 = "idxtasks"
@@ -2098,7 +2087,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx2, query_bucket, "tasks", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.assertTrue(self._is_index_in_list(bucket, idx2), "Index is not in list")
                 idx3 = "idxtasks0"
@@ -2106,7 +2095,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {2}".format(idx3, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx3)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx3 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx3)
                 self.assertTrue(self._is_index_in_list(bucket, idx3), "Index is not in list")
                 idx4 = "idxMarketing"
@@ -2114,7 +2103,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {2}".format(idx4, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx4 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx4)
                 self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
                 self.query = "EXPLAIN select name from {0} WHERE ANY i IN {0}.tasks SATISFIES  (ANY j IN i " \
@@ -2184,7 +2173,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     # Test for MB-25590-Unnest Scan considers wrong array index
@@ -2215,7 +2203,6 @@ class QueriesIndexTests(QueryTests):
             for idx in created_indexes:
                 self.query = "DROP INDEX {1} ON {0} USING {2}".format("default", idx, self.index_type)
                 actual_result = self.run_cbq_query()
-                self._verify_results(actual_result['results'], [])
 
     def test_simple_unnest_index_covering(self):
         self.fail_if_no_buckets()
@@ -2230,7 +2217,7 @@ class QueriesIndexTests(QueryTests):
                              "department,tasks,name) USING {3}".format(idx, query_bucket, "tasks", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -2261,7 +2248,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_simple_unnest_index(self):
@@ -2275,7 +2261,7 @@ class QueriesIndexTests(QueryTests):
                              " END) USING {3}".format(idx, query_bucket, "tasks", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -2305,7 +2291,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_join_unnest_alias(self):
@@ -2341,7 +2326,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_join_unnest_alias_covering(self):
@@ -2382,7 +2366,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_unnest_multilevel_attribute(self):
@@ -2398,7 +2381,7 @@ class QueriesIndexTests(QueryTests):
                              " FOR i in {2} END) USING {3}".format(idx, query_bucket, "tasks", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -2431,7 +2414,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_unnest_multilevel_attribute_covering(self):
@@ -2446,7 +2428,7 @@ class QueriesIndexTests(QueryTests):
                                                                               "tasks", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -2469,7 +2451,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_nested_attr_index(self):
@@ -2484,7 +2465,7 @@ class QueriesIndexTests(QueryTests):
                                                                                             "tasks", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -2493,7 +2474,7 @@ class QueriesIndexTests(QueryTests):
                              "FOR i in {2} END) USING {3}".format(idx2, query_bucket, "tasks", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.assertTrue(self._is_index_in_list(bucket, idx2), "Index is not in list")
 
@@ -2502,7 +2483,7 @@ class QueriesIndexTests(QueryTests):
                              " FOR i in {2} END) USING {3}".format(idx3, query_bucket, "tasks", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx3)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx3 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx3)
                 self.assertTrue(self._is_index_in_list(bucket, idx3), "Index is not in list")
                 idx4 = "nested_idx_attr4"
@@ -2511,7 +2492,7 @@ class QueriesIndexTests(QueryTests):
                                                                                   "tasks", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx4 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx4)
                 self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
                 self.query = "EXPLAIN select name from {0} WHERE ANY i IN {0}.tasks SATISFIES " \
@@ -2589,7 +2570,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_nested_attr_index_within(self):
@@ -2603,7 +2583,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx, query_bucket, "hobbies", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -2612,7 +2592,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx2, query_bucket, "hobbies", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.assertTrue(self._is_index_in_list(bucket, idx2), "Index is not in list")
 
@@ -2658,7 +2638,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_nested_attr_array_index_in_distinct(self):
@@ -2672,7 +2651,7 @@ class QueriesIndexTests(QueryTests):
                              "FOR i in {2} END) USING {3}".format(idx, query_bucket, "hobbies.hobby", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -2702,7 +2681,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_nested_attr_array_index_in_all(self):
@@ -2716,7 +2694,7 @@ class QueriesIndexTests(QueryTests):
                              "FOR i in {2} END) USING {3}".format(idx, query_bucket, "hobbies.hobby", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -2746,7 +2724,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_nested_attr_array_index_in_covering(self):
@@ -2763,7 +2740,7 @@ class QueriesIndexTests(QueryTests):
                                                                                    "hobbies.hobby", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -2790,7 +2767,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_partial_index_distinct(self):
@@ -2805,7 +2781,7 @@ class QueriesIndexTests(QueryTests):
                                                                                 "hobbies.hobby", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select * from {0} WHERE department = 'Support' and (ANY i IN {0}.hobbies.hobby" \
@@ -2830,7 +2806,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_partial_index_distinct_covering(self):
@@ -2845,7 +2820,7 @@ class QueriesIndexTests(QueryTests):
                                                                           "hobbies.hobby", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select name from {0} WHERE department = 'Support' and (ANY i IN " \
@@ -2868,7 +2843,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_indexcountscan(self):
@@ -2882,7 +2856,7 @@ class QueriesIndexTests(QueryTests):
                              " USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
 
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
@@ -2971,7 +2945,7 @@ class QueriesIndexTests(QueryTests):
                              " USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -3155,7 +3129,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -3237,7 +3211,7 @@ class QueriesIndexTests(QueryTests):
                              " USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
 
                 idx = "idx3"
@@ -3246,7 +3220,7 @@ class QueriesIndexTests(QueryTests):
                              " USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
 
                 self.query = "explain select count(distinct VMs[1].os) from {0} where VMs[1].os='windows' and " \
@@ -3436,7 +3410,7 @@ class QueriesIndexTests(QueryTests):
                 self.query = 'create index {0} on {1}( join_yr,join_day )'.format(idx, query_bucket)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "explain select * from {0} where join_yr in [2011,2012]".format(query_bucket)
@@ -3498,7 +3472,7 @@ class QueriesIndexTests(QueryTests):
                              " where _id like '{0}' ".format('query-test%') + " USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "explain SELECT DISTINCT _id, meta().id from {0} WHERE _id " \
@@ -3517,7 +3491,7 @@ class QueriesIndexTests(QueryTests):
                              " USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = 'explain SELECT DISTINCT _id, meta().id from {0} WHERE _id > ' \
@@ -3564,7 +3538,7 @@ class QueriesIndexTests(QueryTests):
                 self.query = "CREATE INDEX {0} ON {1}({2} DESC) ".format(idx, query_bucket, '_id')
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
             finally:
@@ -3585,7 +3559,7 @@ class QueriesIndexTests(QueryTests):
                              " where _id like '{0}' ".format('query-test%') + " USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
 
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
@@ -3808,7 +3782,7 @@ class QueriesIndexTests(QueryTests):
                              " USING {0}".format(self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
 
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
@@ -3848,7 +3822,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx, query_bucket, "hobbies.hobby", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select * from {0} WHERE department = 'Support' and (ANY i IN {0}.hobbies.hobby " \
@@ -3873,7 +3847,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_index_with_inner_joins(self):
@@ -3889,7 +3862,7 @@ class QueriesIndexTests(QueryTests):
                              "FOR i in {2} END) USING {3}".format(idx, query_bucket, "address", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN SELECT new_project_full.department new_project " + \
@@ -3905,7 +3878,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_index_left_outer_join(self):
@@ -3919,7 +3891,7 @@ class QueriesIndexTests(QueryTests):
                              "FOR i in {2} END) USING {3}".format(idx, query_bucket, "address", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 idx2 = "outer_join_all"
@@ -3927,7 +3899,7 @@ class QueriesIndexTests(QueryTests):
                              "FOR i in {2} END) USING {3}".format(idx2, query_bucket, "address", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.assertTrue(self._is_index_in_list(bucket, idx2), "Index is not in list")
                 self.query = "EXPLAIN SELECT new_project_full.department new_project " + \
@@ -3974,7 +3946,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_index_with_inner_joins_covering(self):
@@ -3989,7 +3960,7 @@ class QueriesIndexTests(QueryTests):
                                                                                      "address", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN SELECT employee.department new_project " + \
@@ -4019,7 +3990,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_index_regexp(self):
@@ -4033,7 +4003,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx, query_bucket, "'ub%'", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select * from {0}  WHERE ANY v IN VMs SATISFIES " \
@@ -4057,7 +4027,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_index_regexp_covering(self):
@@ -4073,7 +4042,7 @@ class QueriesIndexTests(QueryTests):
                              " USING {3}".format(idx, query_bucket, "'ub%'", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select VMs from {0}  WHERE ANY v IN VMs SATISFIES " \
@@ -4094,7 +4063,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_index_greatest(self):
@@ -4108,7 +4076,7 @@ class QueriesIndexTests(QueryTests):
                              "FOR v IN VMs END )  USING {2}".format(idx, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select name from {0} WHERE department = 'Support' and ANY v IN VMs SATISFIES " \
@@ -4133,7 +4101,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_index_greatest_covering(self):
@@ -4147,7 +4114,7 @@ class QueriesIndexTests(QueryTests):
                              "FOR v IN VMs END ,VMs,name)  USING {2}".format(idx, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select name from {0} WHERE department = 'Support' and ANY v IN VMs " \
@@ -4168,7 +4135,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_index_nest_keys_where(self):
@@ -4182,7 +4148,7 @@ class QueriesIndexTests(QueryTests):
                     idx, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select emp.name " + "FROM {0} emp NEST {0} items ".format(query_bucket) + \
@@ -4208,7 +4174,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_nest_keys_where_not_equal(self):
@@ -4222,7 +4187,7 @@ class QueriesIndexTests(QueryTests):
                     idx, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select emp.name " + "FROM {0} emp NEST {0} VMs ".format(query_bucket) + \
@@ -4248,7 +4213,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_nest_keys_where_between(self):
@@ -4262,7 +4226,7 @@ class QueriesIndexTests(QueryTests):
                              "name,join_yr ) USING {2}".format(idx, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 idx2 = "idxbetween"
@@ -4270,7 +4234,7 @@ class QueriesIndexTests(QueryTests):
                     idx2, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.assertTrue(self._is_index_in_list(bucket, idx2), "Index is not in list")
                 self.query = "explain select name from {0} where join_yr between 2010 and 2012 and " \
@@ -4320,7 +4284,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_nest_keys_where_between_covering(self):
@@ -4334,7 +4297,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {2}".format(idx, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select emp.name " + "FROM {0} emp NEST {0} items ".format(query_bucket) + \
@@ -4363,7 +4326,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_nest_keys_where_less_more_equal(self):
@@ -4377,7 +4339,7 @@ class QueriesIndexTests(QueryTests):
                     idx, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select emp.name, ARRAY item.department FOR item in items end departments " + \
@@ -4408,7 +4370,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_index_sum(self):
@@ -4502,7 +4463,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {2}".format(idx, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select name, SUBSTR(name.FirstName, 8) as firstname from {0}  where ANY j IN " \
@@ -4518,7 +4479,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_index_update(self):
@@ -4532,7 +4492,7 @@ class QueriesIndexTests(QueryTests):
                              "FOR i in {2} END) USING {3}".format(idx, query_bucket, "address", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 updated_value = 'new_dept' * 30
@@ -4555,7 +4515,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_index_delete(self):
@@ -4594,7 +4553,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_simple_create_delete_index(self):
@@ -4611,14 +4569,14 @@ class QueriesIndexTests(QueryTests):
                         view_name, query_bucket, ','.join(self.FIELDS_TO_INDEX[ind - 1]))
                     actual_result = self.run_cbq_query()
                     self._wait_for_index_online(bucket, view_name)
-                    self._verify_results(actual_result['results'], [])
+                    self.assertTrue(view_name in str(actual_result['results']),
+                                    f"The index is returning the wrong index, please check {actual_result}")
                     created_indexes.append(view_name)
                     self.assertTrue(self._is_index_in_list(bucket, view_name), "Index is not in list")
             finally:
                 for view_name in created_indexes:
                     self.query = "DROP INDEX {1} ON {0}".format(query_bucket, view_name)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, view_name), "Index is in list")
 
     def test_create_delete_index_with_query(self):
@@ -4636,7 +4594,8 @@ class QueriesIndexTests(QueryTests):
                         view_name, query_bucket, ','.join(self.FIELDS_TO_INDEX[ind - 1]))
                     actual_result = self.run_cbq_query()
                     self._wait_for_index_online(bucket, view_name)
-                    self._verify_results(actual_result['results'], [])
+                    self.assertTrue(view_name in str(actual_result['results']),
+                                    f"The index is returning the wrong index, please check {actual_result}")
                     created_indexes.append(view_name)
                     self.query = "select {0} from {1} where {2} is not null and {3} is not null".format(
                         ','.join(self.FIELDS_TO_INDEX[ind - 1]), query_bucket,
@@ -4652,7 +4611,6 @@ class QueriesIndexTests(QueryTests):
                 for view_name in created_indexes:
                     self.query = "DROP INDEX {1} ON {0}".format(query_bucket, view_name)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                 self.query = "select {0} from {1} where {2} is not null and {3} is not null".format(
                     ','.join(self.FIELDS_TO_INDEX[ind - 1]), query_bucket,
                     self.FIELDS_TO_INDEX[ind - 1][0], self.FIELDS_TO_INDEX[ind - 1][1])
@@ -4670,30 +4628,35 @@ class QueriesIndexTests(QueryTests):
                     self.query = "CREATE INDEX {0} ON {1}(a)  USING GSI".format(idx_name, query_bucket)
                     actual_result = self.run_cbq_query()
                     self._wait_for_index_online(bucket, idx_name)
-                    self._verify_results(actual_result['results'], [])
+                    self.assertTrue(idx_name in str(actual_result['results']),
+                                    f"The index is returning the wrong index, please check {actual_result}")
                     created_indexes.append(idx_name)
                     idx_name = f"tuq_index2{ind}"
                     self.query = "CREATE INDEX {0} ON {1}(b)  USING GSI".format(idx_name, query_bucket)
                     actual_result = self.run_cbq_query()
                     self._wait_for_index_online(bucket, idx_name)
-                    self._verify_results(actual_result['results'], [])
+                    self.assertTrue(idx_name in str(actual_result['results']),
+                                    f"The index is returning the wrong index, please check {actual_result}")
                     created_indexes.append(idx_name)
                     self.query = "CREATE INDEX `a1s_idx_search_legacy` ON {0}(`_class`,`typeRef`," \
                                  "(`fields`.`accountNumber`),`createdDate`) USING GSI".format(query_bucket)
                     actual_result = self.run_cbq_query()
                     self._wait_for_index_online(bucket, "a1s_idx_search_legacy")
-                    self._verify_results(actual_result['results'], [])
+                    self.assertTrue(idx_name in str(actual_result['results']),
+                                    f"The index is returning the wrong index, please check {actual_result}")
                     created_indexes.append('a1s_idx_search_legacy')
                     self.query = "create index `idx_class_name` on {0}(`_class`,`name`) USING GSI ".format(query_bucket)
                     actual_result = self.run_cbq_query()
                     self._wait_for_index_online(bucket, "idx_class_name")
-                    self._verify_results(actual_result['results'], [])
+                    self.assertTrue("idx_class_name" in str(actual_result['results']),
+                                    f"The index is returning the wrong index, please check {actual_result}")
                     created_indexes.append("idx_class_name")
 
                     self.query = "create index `idx_class` on {0}(`_class`) USING GSI".format(query_bucket)
                     actual_result = self.run_cbq_query()
                     self._wait_for_index_online(bucket, "idx_class")
-                    self._verify_results(actual_result['results'], [])
+                    self.assertTrue("idx_class" in str(actual_result['results']),
+                                    f"The index is returning the wrong index, please check {actual_result}")
                     created_indexes.append("idx_class")
 
                     for i in range(0, 100):
@@ -4811,7 +4774,6 @@ class QueriesIndexTests(QueryTests):
                 for view_name in created_indexes:
                     self.query = "DROP INDEX {1} ON {0}".format(query_bucket, view_name)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                 self.query = "select {0} from {1} where {2} is not null and {3} is not null".format(
                     ','.join(self.FIELDS_TO_INDEX[ind - 1]), query_bucket,
                     self.FIELDS_TO_INDEX[ind - 1][0], self.FIELDS_TO_INDEX[ind - 1][1])
@@ -6685,7 +6647,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
 
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
@@ -6737,7 +6699,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_join_unnest_tokens_covering(self):
@@ -6776,7 +6737,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_tokens_substring(self):
@@ -6791,7 +6751,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select name, SUBSTR(name.FirstName, 8) as firstname from {0}  where ANY j " \
@@ -6807,7 +6767,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_tokens_update(self):
@@ -6823,7 +6782,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 updated_value = 'new_dept' * 30
@@ -6846,7 +6805,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_tokens_delete(self):
@@ -6886,7 +6844,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_nesttokens_keys_where_between(self):
@@ -6900,7 +6857,7 @@ class QueriesIndexTests(QueryTests):
                     idx, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select emp.name FROM {0} emp NEST {0} items ".format(query_bucket) + \
@@ -6927,7 +6884,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_nesttokens_keys_where_less_more_equal(self):
@@ -6942,7 +6898,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select emp.name, ARRAY item.department FOR item in items end departments " + \
@@ -6973,7 +6929,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_tokens_sum(self):
@@ -7033,7 +6988,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {2}".format(idx, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select emp.name " + \
@@ -7063,7 +7018,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_tokens_nest_keys_where(self):
@@ -7077,7 +7031,7 @@ class QueriesIndexTests(QueryTests):
                     idx, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select emp.name " + \
@@ -7108,7 +7062,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_tokens_regexp(self):
@@ -7122,7 +7075,7 @@ class QueriesIndexTests(QueryTests):
                              "  USING {3}".format(idx, query_bucket, "'ub%'", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select * from {0}  WHERE ANY v IN tokens(VMs) SATISFIES " \
@@ -7150,7 +7103,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_tokens_left_outer_join(self):
@@ -7164,7 +7116,7 @@ class QueriesIndexTests(QueryTests):
                              "FOR i in tokens({2}) END) USING {3}".format(idx, query_bucket, "address", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 idx2 = "outer_join_all"
@@ -7172,7 +7124,7 @@ class QueriesIndexTests(QueryTests):
                              "tokens({2}) END) USING {3}".format(idx2, query_bucket, "address", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.assertTrue(self._is_index_in_list(bucket, idx2), "Index is not in list")
                 self.query = "EXPLAIN SELECT new_project_full.department new_project " + \
@@ -7226,7 +7178,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_tokens_with_inner_joins(self):
@@ -7242,7 +7193,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN SELECT new_project_full.department new_project " + \
@@ -7260,7 +7211,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_partial_tokens_all(self):
@@ -7276,7 +7226,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select * from {0} WHERE department = 'Support' and (ANY i IN " \
@@ -7304,7 +7254,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_tokens_greatest(self):
@@ -7319,7 +7268,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select name from {0} WHERE department = 'Support' and ANY v IN " \
@@ -7345,7 +7294,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_array_partial_tokens_distinct(self):
@@ -7361,7 +7309,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select * from {0} WHERE department = 'Support' and (ANY i IN tokens({0}." \
@@ -7389,7 +7337,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_nested_attr_array_tokens_in_all(self):
@@ -7405,7 +7352,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -7438,7 +7385,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_nested_attr_token_within(self):
@@ -7453,7 +7399,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -7463,7 +7409,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.assertTrue(self._is_index_in_list(bucket, idx2), "Index is not in list")
 
@@ -7508,7 +7454,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_nested_attr_array_tokens_in_distinct(self):
@@ -7524,7 +7469,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -7557,7 +7502,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_nested_attr_token(self):
@@ -7573,7 +7517,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -7584,7 +7528,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.assertTrue(self._is_index_in_list(bucket, idx2), "Index is not in list")
 
@@ -7595,7 +7539,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx3)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx3 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx3)
                 self.assertTrue(self._is_index_in_list(bucket, idx3), "Index is not in list")
 
@@ -7606,7 +7550,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx4 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx4)
                 self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
 
@@ -7702,7 +7646,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_unnest_multilevel_attribute_tokens(self):
@@ -7718,7 +7661,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -7749,7 +7692,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_tokens_join_unnest_alias_covering(self):
@@ -7786,7 +7728,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_simple_tokens_all(self):
@@ -7800,7 +7741,7 @@ class QueriesIndexTests(QueryTests):
                              ' USING {3}'.format(idx, query_bucket, "join_yr", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -7809,7 +7750,7 @@ class QueriesIndexTests(QueryTests):
                              'USING {3}'.format(idx2, query_bucket, "VMs", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
 
                 self.query = 'EXPLAIN select name from {0} where any v in tokens({0}.join_yr,{{"case":"lower"}}) ' \
@@ -7959,7 +7900,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_nested_attr_tokens(self):
@@ -7975,7 +7915,7 @@ class QueriesIndexTests(QueryTests):
                                                                                                self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -8004,7 +7944,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_tokens_partial_index_distinct_covering(self):
@@ -8019,7 +7958,7 @@ class QueriesIndexTests(QueryTests):
                     idx, query_bucket, "hobbies.hobby", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = 'EXPLAIN select name from {0} WHERE department = "Support" and (ANY i IN tokens({0}.' \
@@ -8046,7 +7985,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_tokens_distinct_covering(self):
@@ -8061,7 +7999,7 @@ class QueriesIndexTests(QueryTests):
                     idx, query_bucket, "hobbies.hobby", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select name from {0} WHERE department = 'Support' and (ANY i IN " \
@@ -8087,7 +8025,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_tokens_with_inner_joins_covering(self):
@@ -8102,7 +8039,7 @@ class QueriesIndexTests(QueryTests):
                     idx, query_bucket, "address", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN SELECT employee.department new_project " + \
@@ -8130,7 +8067,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_tokens_regexp_covering(self):
@@ -8144,7 +8080,7 @@ class QueriesIndexTests(QueryTests):
                              "END,VMs )  USING {3}".format(idx, query_bucket, "'ub%'", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select VMs from {0}  WHERE ANY v IN tokens(VMs) SATISFIES " \
@@ -8171,7 +8107,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_tokens_greatest_covering(self):
@@ -8186,7 +8121,7 @@ class QueriesIndexTests(QueryTests):
                     idx, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = " EXPLAIN select name from {0} WHERE department = 'Support' and ANY v IN " \
@@ -8211,7 +8146,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_unnest_tokens_covering(self):
@@ -8226,7 +8160,7 @@ class QueriesIndexTests(QueryTests):
                     idx, query_bucket, "tasks", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -8264,7 +8198,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_nested_token_covering(self):
@@ -8280,7 +8213,7 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select name from {0} WHERE ANY i IN tokens(tasks) SATISFIES  " \
@@ -8310,7 +8243,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_simple_token_nonarrayindex(self):
@@ -8324,7 +8256,7 @@ class QueriesIndexTests(QueryTests):
                     idx, query_bucket, "join_yr", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -8333,7 +8265,7 @@ class QueriesIndexTests(QueryTests):
                     idx2, query_bucket, "VMs", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.query = "select name from {0} where any v in tokens({0}.join_yr) " \
                              "satisfies v = 2016 END ".format(query_bucket) + \
@@ -8386,7 +8318,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_simple_unnest_token(self):
@@ -8400,7 +8331,7 @@ class QueriesIndexTests(QueryTests):
                              " FOR i in tokens({2}) END) USING {3}".format(idx, query_bucket, "tasks", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -8433,7 +8364,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_join_unnest_alias_tokens(self):
@@ -8474,7 +8404,6 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_simple_token(self):
@@ -8544,5 +8473,4 @@ class QueriesIndexTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
