@@ -891,7 +891,7 @@ class QueriesIndexTests(QueryTests):
             actual_result = self.run_cbq_query()
             self._wait_for_index_online(bucket, idx)
             self.assertTrue(idx in str(actual_result['results']),
-                            f"The index is returning the wrong index, please check {actual_result}"
+                            f"The index is returning the wrong index, please check {actual_result}")
             created_indexes.append(idx)
             self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
             self.query = "EXPLAIN select name from {0} WHERE ANY s IN SUFFIXES( LOWER( _id ) ) ".format(query_bucket) + \
