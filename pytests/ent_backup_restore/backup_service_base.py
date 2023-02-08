@@ -289,11 +289,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         self.cluster = Cluster()
 
     def get_os_info(self, server):
-        """ Returns the operating system type and the distribution version """
-        shell = RemoteMachineShellConnection(server)
-        os_type = shell.info.type.lower()
-        os_dist = shell.info.distribution_version.replace(" ", "").lower()
-        shell.disconnect()
+        os_type, os_dist = get_info(server)
         return os_type, os_dist
 
     def create_shared_folder(self, server, clients):
@@ -303,14 +299,14 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             server (TestInputServer): The server that holds the shared folder.
             clients (list(TestInputServer)): The servers that mount the shared folder.
         """
-        if self.os_type == "linux" and self.os_dist == "centos7":
+        if self.os_type == "linux" and (self.os_dist == "centos7" or "debian" in self.os_dist):
             share_factory = NfsShareFactory() if self.input.param("share_type", "nfs") == "nfs" else SambaShareFactory()
             self.nfs_connection = NfsConnection(server, clients, share_factory, self.directory_to_share, self.backupset.directory)
             self.nfs_connection.share()
 
     def delete_shared_folder(self):
         """ Unmounts the shared folder """
-        if self.os_type == "linux" and self.os_dist == "centos7":
+        if self.os_type == "linux" and (self.os_dist == "centos7" or "debian" in self.os_dist):
             self.nfs_connection.clean()
 
     def load_custom_certificates(self):
@@ -1465,6 +1461,7 @@ class NfsServer(Server):
 
     def __init__(self, server):
         self.remote_shell = RemoteMachineShellConnection(server)
+        self.server = server
         self.provision()
 
     def fetch_id(self, username, id_type='u'):
@@ -1482,7 +1479,11 @@ class NfsServer(Server):
         return int(output[0])
 
     def provision(self):
-        self.remote_shell.execute_command("yum -y install nfs-utils")
+        os_type, os_dist = get_info(self.server)
+        if os_type == "linux" and os_dist == "centos7":
+           self.remote_shell.execute_command("yum -y install nfs-utils")
+        if os_type == "linux" and "debian" in os_dist:
+           self.remote_shell.execute_command("apt update -y apt install -y nfs-common nfs-kernel-server")
         self.remote_shell.execute_command("systemctl start nfs-server.service")
 
     def share(self, directory_to_share, privileges={}):
@@ -1516,10 +1517,16 @@ class NfsServer(Server):
 class NfsClient(Client):
 
     def __init__(self, server, client):
+        self.server = server
         super().__init__(server, client)
 
+
     def provision(self):
-        self.remote_shell.execute_command("yum -y install nfs-utils")
+        os_type, os_dist = get_info(self.server)
+        if os_type == "linux" and os_dist == "centos7":
+           self.remote_shell.execute_command("yum -y install nfs-utils")
+        if os_type == "linux" and "debian" in os_dist:
+           self.remote_shell.execute_command("apt update -y && apt install -y nfs-common nfs-kernel-server")
         self.remote_shell.execute_command("systemctl start nfs-server.service")
 
     def mount(self, directory_to_share, directory_to_mount):
@@ -1534,10 +1541,15 @@ class NfsClient(Client):
 class SambaClient(Client):
 
     def __init__(self, server, client):
+        self.server = server
         super().__init__(server, client)
 
     def provision(self):
-        self.remote_shell.execute_command(f"yum -y install samba-client cifs-utils")
+        os_type, os_dist = get_info(self.server)
+        if os_type == "linux" and os_dist == "centos7":
+           self.remote_shell.execute_command(f"yum -y install samba-client cifs-utils")
+        if os_type == "linux" and "debian" in os_dist:
+           self.remote_shell.execute_command(f"apt update -y && apt install -y samba-client cifs-utils")
 
     def mount(self, directory_to_share, directory_to_mount):
         self.remote_shell.execute_command(f"umount -f -l {directory_to_mount}")
@@ -1552,11 +1564,15 @@ class SambaServer(Server):
     samba_config_directory = "/etc/samba/smb.conf"
 
     def __init__(self, server):
+        self.server = server
         super().__init__(server)
 
     def provision(self):
-        self.remote_shell.execute_command("yum -y install samba")
-
+        os_type, os_dist = get_info(self.server)
+        if os_type == "linux" and os_dist == "centos7":
+            self.remote_shell.execute_command("yum -y install samba")
+        if os_type == "linux" and "debian" in os_dist:
+            self.remote_shell.execute_command("apt update -y && apt -y install samba")
     def share(self, directory_to_share, privileges={}):
         """ Shares `directory_to_share`
 
@@ -1671,12 +1687,16 @@ class Collector:
 
     def __init__(self, server, log_redaction=False):
         self.server, self.remote_connection = server, RemoteMachineShellConnection(server)
+        os_type, os_dist = get_info(server)
         self.log_redaction = log_redaction
         self.out_path = f"/tmp/output-{server.ip}"
         self.zip_path = f"{self.out_path}.zip"
         self.red_path = f"{self.out_path}-redacted.zip"
         self.col_path = f"{self.out_path}/cbcollect_info_ns*"
-        self.remote_connection.execute_command("yum install -y unzip")
+        if os_type == "linux" and os_dist == "centos7":
+            self.remote_connection.execute_command("yum install -y unzip")
+        if os_type == "linux" and "debian" in os_dist:
+            self.remote_connection.execute_command("apt update -y && apt install -y unzip")
         self.clean_up()
 
     def __enter__(self):
@@ -2200,3 +2220,12 @@ class HttpsConfigurationFactory(AbstractConfigurationFactory):
             configuration.key_file = None
 
         return configuration
+
+
+def get_info(server):
+    """ Returns the operating system type and the distribution version """
+    shell = RemoteMachineShellConnection(server)
+    os_type = shell.info.type.lower()
+    os_dist = shell.info.distribution_version.replace(" ", "").lower()
+    shell.disconnect()
+    return os_type, os_dist
