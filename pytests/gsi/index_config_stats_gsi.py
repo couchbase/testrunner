@@ -650,27 +650,52 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         """
         Tests index stats when indexes are created and dropped
         """
+
         #Create Index
         self.run_multi_operations(buckets = self.buckets,
             query_definitions = self.query_definitions,
             create_index = True, drop_index = False)
         #Check Index Stats
         self.sleep(30)
-        index_map = self.get_index_stats()
+        index_map = self.get_index_stats(perNode=True)
         self.log.info(index_map)
+        parsed_index_stats = []
+        required_index_map = {}
+        for element in index_map:
+            parsed_index_stats.append(index_map[element])
+        check_keys = ['items_count', 'total_scan_duration', 'num_docs_queued',
+                      'num_requests', 'num_rows_returned', 'num_docs_indexed',
+                      'num_docs_pending', 'delete_bytes','disk_size','scan_wait_duration','insert_bytes','scan_bytes_read','get_bytes']
+        index_list = []
         for query_definition in self.query_definitions:
-            index_name = query_definition.index_name
+            index_list.append(query_definition.index_name)
+        for index_name in index_list:
             for bucket in self.buckets:
                 bucket_name = bucket.name
-                check_keys = ['items_count', 'total_scan_duration', 'num_docs_queued',
-                 'num_requests', 'num_rows_returned', 'num_docs_queued',
-                 'num_docs_pending', 'delete_bytes' ]
+                for key in check_keys:
+                    for header in parsed_index_stats:
+                        stats = bucket_name + ':' + index_name + ':' + key
+                        if stats in header:
+                            required_index_map[stats] = header[stats]
+
+        for index_name in index_list:
+            for bucket in self.buckets:
+                bucket_name = bucket.name
                 if 'join_yr' in index_name:
                     items_count = 1008
                 else:
                     items_count = 2016
-                map = self._create_stats_map(items_count=items_count)
-                self._verify_index_stats(index_map, index_name, bucket_name, map, check_keys)
+                expected_map = self._create_stats_map(items_count=items_count)
+                for key in expected_map:
+                    stats = bucket_name + ':' + index_name + ':' + key
+                    if key == 'items_count':
+                        self.assertEqual(str(expected_map[key]), str(required_index_map[stats]),
+                                         " for key {0} : {1} != {2}".format(key, required_index_map[stats], expected_map[key]))
+
+                    else:
+                        self.assertIn(stats, list(required_index_map.keys()),
+                                      "key name {0} not present in stats".format(key))
+
 
     def test_index_storage_stats(self):
         indexer_nodes = self.get_nodes_from_services_map(service_type="index",
@@ -729,27 +754,6 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
             val = map[node]
             for key in list(map1.keys()):
                 self.assertTrue(key in list(val.keys()), "{0} not in {1} ".format(key, val))
-
-    def _verify_index_stats(self, index_map, index_name, bucket_name, index_stat_values, check_keys=None):
-        self.assertIn(bucket_name, list(index_map.keys()), "bucket name {0} not present in stats".format(bucket_name))
-        self.assertIn(index_name, list(index_map[bucket_name].keys()),
-                        "index name {0} not present in set of indexes {1}".format(index_name,
-                                                                                  list(index_map[bucket_name].keys())))
-        for key in list(index_stat_values.keys()):
-            self.assertIn(key, list(index_map[bucket_name][index_name].keys()),
-                            "stats {0} not present in Index stats {1}".format(key,
-                                                                                  index_map[bucket_name][index_name]))
-            if check_keys:
-                if key in check_keys:
-                    self.assertEqual(str(index_map[bucket_name][index_name][key]), str(index_stat_values[key]),
-                                    " for key {0} : {1} != {2}".format(key,
-                                                                       index_map[bucket_name][index_name][key],
-                                                                       index_stat_values[key]))
-            else:
-                self.assertEqual(str(index_stat_values[key]), str(index_map[bucket_name][index_name][key]),
-                                " for key {0} : {1} != {2}".format(key,
-                                                                   index_map[bucket_name][index_name][key],
-                                                                   index_stat_values[key]))
 
     def set_index_settings(self, settings):
         servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
