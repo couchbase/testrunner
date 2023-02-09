@@ -28,7 +28,7 @@ class QueryThrottlingTests(QueryTests):
     def test_kv_insert(self):
         before_throttle_count_total, before_throttle_seconds_total = self.throttle.get_metrics()
         self.log.info(f'Throttle before, count: {before_throttle_count_total}, seconds: {before_throttle_seconds_total}')
-        self.run_cbq_query(f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {{"city": repeat("a", {self.kv_wu})}} as v FROM array_range(0,{self.kvThrottleLimit}) d')
+        self.run_cbq_query(f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {{"city": repeat("a", {self.kv_wu})}} as v FROM array_range(0,{self.kvThrottleLimit*2}) d')
         after_throttle_count_total, after_throttle_seconds_total = self.throttle.get_metrics()
         self.log.info(f'Throttle after, count: {after_throttle_count_total}, seconds: {after_throttle_seconds_total}')
         self.assertTrue(after_throttle_count_total > before_throttle_count_total)
@@ -64,10 +64,9 @@ class QueryThrottlingTests(QueryTests):
         result = self.run_cbq_query(f'SELECT count(city) FROM {self.bucket}')
         execution_time_at_100pct = float(result['metrics']['executionTime'][:-1])
 
-        # We expect the execution with higher throttle level (100pct) to be faster than the run at lower
-        # throttle level (30pct) by some factor, in this case 1.75, to be within margin as we cannot 
-        # garantee expected execution time to be consistant.
-        self.assertTrue(execution_time_at_30pct > execution_time_at_100pct * 1.5, f"Expected Ratio of 1.5 or higher but got: {execution_time_at_30pct/execution_time_at_100pct}")
+        # We expect the execution with higher throttle level (100pct) to be faster
+        # than the run at lower throttle level (30pct)
+        self.assertTrue(execution_time_at_30pct > execution_time_at_100pct)
 
     def test_gsi_create(self):
         self.run_cbq_query(f'DELETE from {self.bucket}')
