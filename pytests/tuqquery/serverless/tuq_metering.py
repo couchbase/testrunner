@@ -430,7 +430,7 @@ class QueryMeteringTests(ServerlessBaseTestCase):
             time.sleep(2)
             self.run_query(database, insert_query)
             self.run_query(database, f'CREATE INDEX idx_name on `{database.id}`.s1.c1(name)')
-            time.sleep(2)
+            time.sleep(10)
 
             # Drop scope
             before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
@@ -470,7 +470,7 @@ class QueryMeteringTests(ServerlessBaseTestCase):
             time.sleep(2)
             self.run_query(database, insert_query)
             self.run_query(database, f'CREATE INDEX idx_name on `{database.id}`.s1.c1(name)')
-            time.sleep(2)
+            time.sleep(10)
 
             # Drop collection
             before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
