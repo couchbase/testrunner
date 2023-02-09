@@ -847,6 +847,8 @@ class QueryMeteringTests(QueryTests):
         self.run_cbq_query(insert_query)
         self.run_cbq_query(f'CREATE INDEX idx_name IF NOT EXISTS on {self.bucket}(name)')
         self.wait_for_all_indexes_online()
+        # Wait another 10s to make sure RU for index are recorded
+        self.sleep(10)
         queries = {
             'explain': f'EXPLAIN SELECT name, city FROM {self.bucket} WHERE name = repeat("a", {self.value_size})',
             'advise': f'ADVISE SELECT name, city FROM {self.bucket} WHERE name = repeat("a", {self.value_size})',
@@ -872,6 +874,9 @@ class QueryMeteringTests(QueryTests):
     def test_no_rw_scope(self):
         insert_query = f'INSERT INTO {self.bucket}.s1.c1 (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
         self.run_cbq_query(f'DROP SCOPE {self.bucket}.s1 IF EXISTS')
+
+        # Wait another 10s to make sure RWU counter are settled
+        self.sleep(10)
 
         # Create scope
         before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
@@ -911,6 +916,9 @@ class QueryMeteringTests(QueryTests):
         insert_query = f'INSERT INTO {self.bucket}.s1.c1 (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
         self.run_cbq_query(f'DROP SCOPE {self.bucket}.s1 IF EXISTS')
         self.run_cbq_query(f'CREATE SCOPE {self.bucket}.s1')
+
+        # Wait another 10s to make sure RWU counter are settled
+        self.sleep(10)
 
         # Create collection
         before_index_ru, before_index_wu = self.meter.get_index_rwu(self.bucket)
