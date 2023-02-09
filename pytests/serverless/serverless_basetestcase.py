@@ -75,6 +75,8 @@ class ServerlessBaseTestCase(unittest.TestCase):
                 self.dataplanes[self.new_dataplane_id] = ServerlessDataPlane(self.new_dataplane_id)
                 rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
                 self.dataplanes[self.new_dataplane_id].populate(rest_api_info)
+            else:
+                self.fail(f"Timed out waiting for dataplane to be ready, Aborting...")
 
     def tearDown(self):
         if self._testMethodName not in ['suite_tearDown', 'suite_setUp'] and self.trigger_log_collect:
