@@ -356,6 +356,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
         self.validate_tenant_management(check='cluster_affinity')
         self.validate_tenant_management(check='index_count')
         self.validate_tenant_management(check='index_distribution')
+        self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
+        self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
 
     def test_index_cap_per_tenant(self):
         self.prepare_tenants(index_creations=False)
@@ -381,6 +383,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
                         self.fail(err)
 
                 self.wait_until_indexes_online(defer_build=True)
+        self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
+        self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
 
     def test_rebalance_sub_cluster(self):
         self.prepare_tenants()
@@ -406,6 +410,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
             select_count_result = self.run_cbq_query(query=select_count_query)['results'][0]['$1']
             self.assertEqual(doc_count_result, select_count_result)
             self.assertEqual(doc_count_result, self.num_of_docs_per_collection * 2)
+        self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
+        self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
 
     def test_failed_over_sub_cluster(self):
         self.prepare_tenants()
@@ -437,6 +443,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
             select_count_result = self.run_cbq_query(query=select_count_query)['results'][0]['$1']
             self.assertEqual(doc_count_result, select_count_result)
             self.assertEqual(doc_count_result, self.num_of_docs_per_collection * 2)
+        self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
+        self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
 
     def test_hit_thresholds(self):
         self.prepare_tenants(data_load=False)
@@ -471,6 +479,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
         rebalance_status = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
         self.prepare_tenants(bucket_num_offset=len(self.buckets))
+        self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
+        self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
 
     def test_rebalance_swap_in_multi_sub_cluster(self):
         self.prepare_tenants(data_load=False)
@@ -627,6 +637,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
         rebalance_task.result()
         rebalance_status = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+        self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
+        self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
 
     def test_cancel_resume_swap_rebalance(self):
         self.prepare_tenants()
@@ -697,6 +709,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
             prim_result = self.run_cbq_query(query=primary_scan_query, server=self.query_node)
             sec_result = self.run_cbq_query(query=secondary_scan_query, server=self.query_node)
             self.assertEqual(prim_result, sec_result, "Doc count differ between Primary and Secondary Index")
+        self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
+        self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
 
     def test_fast_rebalance_conflict_same_tenant(self):
         same_collection_conflict = self.input.param("same_collection_conflict", False)
@@ -748,6 +762,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
         indexder_metadata_aft_swap = self.index_rest.get_indexer_metadata()['status']
         expected_index_count = len(index_metadata_b4_swap) + batch_iter * self.gsi_util_obj.batch_size * 2
         self.assertEqual(len(indexder_metadata_aft_swap), expected_index_count)
+        self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
+        self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
 
     def test_fast_rebalance_conflict_different_tenant(self):
         self.prepare_tenants(index_creations=False)
@@ -805,6 +821,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
         self.index_rest = RestConnection(index_node)
         indexder_metadata_aft_swap = self.index_rest.get_indexer_metadata()['status']
         self.log.info(f"{len(indexder_metadata_aft_swap)}, {len(index_metadata_b4_swap)}")
+        self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
+        self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
 
     def test_ddl_conflict_same_tenant(self):
         same_collection_conflict = self.input.param("same_collection_conflict", False)
@@ -855,6 +873,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
         self.index_rest = RestConnection(index_node)
         indexder_metadata_aft_swap = self.index_rest.get_indexer_metadata()['status']
         self.log.info(f"{len(indexder_metadata_aft_swap)}, {len(index_metadata_b4_swap)}")
+        self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
+        self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
 
     def test_ddl_conflict_different_tenant(self):
         self.prepare_tenants()
@@ -914,6 +934,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
         self.index_rest = RestConnection(index_node)
         indexder_metadata_aft_swap = self.index_rest.get_indexer_metadata()['status']
         self.log.info(f"{len(indexder_metadata_aft_swap)}, {len(index_metadata_b4_swap)}")
+        self.s3_utils_obj.check_s3_cleanup(folder=self.s3_utils_obj)
+        self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
 
     def test_clean_up_on_failure(self):
         rebalance_failure_sources = self.input.param('rebalance_failure_sources', 'src_sub')
@@ -1031,6 +1053,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
             # if persisted_stats_diff:
             #     self.log.info(f"persisted_stats_diff: {persisted_stats_diff}")
         self.assertEqual(len(indexer_metadata_b4_reb), len(indexer_metadata_aft_reb))
+        self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
+        self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
 
     def test_schedule_ddl_during_rebalance(self):
         self.prepare_tenants(defer_build_mix=True)
@@ -1108,6 +1132,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
             self.fail(err)
         self.wait_until_indexes_online(defer_build=True)
         self._validate_metatadata_token()
+        self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
+        self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
 
     def test_auto_rebalance_defrag(self):
         self.prepare_tenants()
@@ -1176,6 +1202,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
         except Exception as err:
             self.log.info(err)
+        self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
+        self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
 
     def test_defrag_replica_repair(self):
         self.prepare_tenants()
@@ -1239,3 +1267,5 @@ class TenantManagement(BaseSecondaryIndexingTests):
 
         self.assertEqual(len(indexer_metadata_after_reb), len(indexer_metadata_b4_reb),
                          "No. of index replicas after repair is not matching")
+        self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
+        self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
