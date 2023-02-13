@@ -1483,7 +1483,7 @@ class NfsServer(Server):
         if os_type == "linux" and os_dist == "centos7":
            self.remote_shell.execute_command("yum -y install nfs-utils")
         if os_type == "linux" and "debian" in os_dist:
-           self.remote_shell.execute_command("apt update -y apt install -y nfs-common nfs-kernel-server")
+           self.remote_shell.execute_command("apt update -y && apt install -y nfs-common nfs-kernel-server")
         self.remote_shell.execute_command("systemctl start nfs-server.service")
 
     def share(self, directory_to_share, privileges={}):
