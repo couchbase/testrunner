@@ -593,8 +593,8 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         self.log.info("Verifying Scale In ...")
         if len(fts_nodes) == 2:
             self.generate_summary(summary, fts_stats, fts_nodes, variables, "No Scale-In Required")
-            self.log.info("CONDITIONAL BUG : ScaleIn verification not possible since scale out didn't happen")
-            return True
+            self.log.info("BUG : ScaleIn verification not possible since scale out didn't happen")
+            self.fail("Autoscaling Failed since Scaling didn't happen")
 
         self.delete_all_database(True)
 
@@ -777,6 +777,9 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             myTable.add_row(json_obj.values())
         self.log.info("Summary Table")
         print(myTable)
+
+        if not variables['scale_out_status']:
+            self.fail("Autoscaling Failed since Scaling didn't happen")
 
     def test_n1ql_search(self):
         self.provision_databases(self.num_databases)
