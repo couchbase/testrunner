@@ -203,14 +203,14 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                     collection=collection_name)
             plan_params = self.construct_plan_params()
-            fts_callable.create_fts_index("idx", source_type='couchbase',
-                                          source_name=database.id, index_type='fulltext-index',
-                                          index_params=None, plan_params=plan_params,
-                                          source_params=None, source_uuid=None, collection_index=True,
-                                          _type=_type, analyzer="standard",
-                                          scope=scope_name, collections=[collection_name], no_check=False)
+            idx = fts_callable.create_fts_index("idx", source_type='couchbase',
+                                                source_name=database.id, index_type='fulltext-index',
+                                                index_params=None, plan_params=plan_params,
+                                                source_params=None, source_uuid=None, collection_index=True,
+                                                _type=_type, analyzer="standard",
+                                                scope=scope_name, collections=[collection_name], no_check=False)
             fts_callable.wait_for_indexing_complete(self._num_of_docs_per_collection)
-            index_resp = fts_callable.check_if_index_exists(database.id + "." + scope_name + ".idx", node_def=True)
+            index_resp = fts_callable.check_if_index_exists(idx.name, node_def=True)
             self.log.info(f"Total no. of index's node and server group : {len(index_resp)}")
             self.assertEqual(len(index_resp), 2)
             fts_callable.delete_all()
@@ -266,21 +266,21 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
                                        collections=collection_arr, collection_index=True)
             plan_params = self.construct_plan_params()
-            fts_callable.create_fts_index("idx", source_type='couchbase',
-                                          source_name=database.id, index_type='fulltext-index',
-                                          index_params=None, plan_params=plan_params,
-                                          source_params=None, source_uuid=None, collection_index=True,
-                                          _type=_type, analyzer="standard",
-                                          scope=scope_name, collections=[collection_arr], no_check=False)
+            idx = fts_callable.create_fts_index("idx", source_type='couchbase',
+                                                source_name=database.id, index_type='fulltext-index',
+                                                index_params=None, plan_params=plan_params,
+                                                source_params=None, source_uuid=None, collection_index=True,
+                                                _type=_type, analyzer="standard",
+                                                scope=scope_name, collections=[collection_arr], no_check=False)
             fts_callable.wait_for_indexing_complete(self._num_of_docs_per_collection)
-            resp = fts_callable.check_if_index_exists(database.id + "." + scope_name + ".idx", index_def=True)
+            resp = fts_callable.check_if_index_exists(idx.name, index_def=True)
             if resp:
                 self.log.info(f"Index Definition before collection deletion : {resp}")
             for collection_name in collection_arr:
                 self.delete_collection(database, scope_name, collection_name)
             self.log.info(f"Waiting for collection to get permanently deleted")
             time.sleep(100)
-            resp = fts_callable.check_if_index_exists(database.id + "." + scope_name + ".idx", index_def=True)
+            resp = fts_callable.check_if_index_exists(idx.name, index_def=True)
             if not resp:
                 self.log.info("Index not found !")
             else:
@@ -312,16 +312,16 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                                                     collection=collection_name)
             plan_params = self.construct_plan_params()
             for i in range(random.randint(0, 2)):
-                fts_callable.create_fts_index(f"index_{i}", source_type='couchbase',
-                                              source_name=database.id, index_type='fulltext-index',
-                                              index_params=None, plan_params=plan_params,
-                                              source_params=None, source_uuid=None, collection_index=True,
-                                              _type=_type, analyzer="standard",
-                                              scope=scope_name, collections=[collection_name], no_check=False)
+                idx = fts_callable.create_fts_index(f"index_{i}", source_type='couchbase',
+                                                    source_name=database.id, index_type='fulltext-index',
+                                                    index_params=None, plan_params=plan_params,
+                                                    source_params=None, source_uuid=None, collection_index=True,
+                                                    _type=_type, analyzer="standard",
+                                                    scope=scope_name, collections=[collection_name], no_check=False)
                 fts_callable.wait_for_indexing_complete(self._num_of_docs_per_collection)
                 if counter in database_random_indexes:
                     indexes_arr.append(
-                        [fts_callable, database.id + "." + scope_name + ".index_" + str(i), database.id])
+                        [fts_callable, idx.name, database.id])
 
         index_count = 0
         for i, index in enumerate(indexes_arr):
@@ -359,14 +359,14 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                                                     collection=collection_name)
             plan_params = self.construct_plan_params()
             for i in range(random.randint(1, 3)):
-                fts_callable.create_fts_index(f"index_{i}", source_type='couchbase',
-                                              source_name=database.id, index_type='fulltext-index',
-                                              index_params=None, plan_params=plan_params,
-                                              source_params=None, source_uuid=None, collection_index=True,
-                                              _type=_type, analyzer="standard",
-                                              scope=scope_name, collections=[collection_name], no_check=False)
+                idx = fts_callable.create_fts_index(f"index_{i}", source_type='couchbase',
+                                                    source_name=database.id, index_type='fulltext-index',
+                                                    index_params=None, plan_params=plan_params,
+                                                    source_params=None, source_uuid=None, collection_index=True,
+                                                    _type=_type, analyzer="standard",
+                                                    scope=scope_name, collections=[collection_name], no_check=False)
                 fts_callable.wait_for_indexing_complete(self._num_of_docs_per_collection)
-                indexes_arr.append([fts_callable, database.id + "." + scope_name + ".index_" + str(i)])
+                indexes_arr.append([fts_callable, idx.name])
 
         index_count = 0
         for i, index in enumerate(indexes_arr):
@@ -401,14 +401,14 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                                                     collection=collection_name)
             plan_params = self.construct_plan_params()
 
-            fts_callable.create_fts_index("index", source_type='couchbase',
-                                          source_name=database.id, index_type='fulltext-index',
-                                          index_params=None, plan_params=plan_params,
-                                          source_params=None, source_uuid=None, collection_index=True,
-                                          _type=_type, analyzer="standard",
-                                          scope=scope_name, collections=[collection_name], no_check=False)
+            idx = fts_callable.create_fts_index("index", source_type='couchbase',
+                                                source_name=database.id, index_type='fulltext-index',
+                                                index_params=None, plan_params=plan_params,
+                                                source_params=None, source_uuid=None, collection_index=True,
+                                                _type=_type, analyzer="standard",
+                                                scope=scope_name, collections=[collection_name], no_check=False)
             fts_callable.wait_for_indexing_complete(self._num_of_docs_per_collection)
-            fts_callable.delete_fts_index(database.id + "." + scope_name + ".index")
+            fts_callable.delete_fts_index(idx.name)
             try:
                 fts_callable.create_fts_index("index", source_type='couchbase',
                                               source_name=database.id, index_type='fulltext-index',
