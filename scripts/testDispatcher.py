@@ -48,9 +48,10 @@ KUBERNETES = "KUBERNETES"
 VM = "VM"
 CAPELLA_LOCAL = "CAPELLA_LOCAL"
 SERVERLESS_ONCLOUD = "SERVERLESS_ONCLOUD"
+PROVISIONED_ONCLOUD = "PROVISIONED_ONCLOUD"
 ELIXIR_ONPREM = "ELIXIR_ONPREM"
 
-CLOUD_SERVER_TYPES = [AWS, AZURE, GCP, SERVERLESS_ONCLOUD]
+CLOUD_SERVER_TYPES = [AWS, AZURE, GCP, SERVERLESS_ONCLOUD, PROVISIONED_ONCLOUD]
 
 DEFAULT_ARCHITECTURE = "x86_64"
 DEFAULT_SERVER_TYPE = VM
@@ -139,6 +140,8 @@ def get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version, p
         return cloud_provision.az_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture)
     elif options.serverType == SERVERLESS_ONCLOUD:
         return [], []
+    elif options.serverType == PROVISIONED_ONCLOUD:
+        return [], []
 
 
 def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool=False, os_version="", pool_id=None):
@@ -226,7 +229,7 @@ def main():
     parser.add_option('-s', '--subcomponent', dest='subcomponent', default=None)
     parser.add_option('--subcomponent_regex', dest='subcomponent_regex', default=None)
     parser.add_option('-e', '--extraParameters', dest='extraParameters', default=None)
-    parser.add_option('-y', '--serverType', dest='serverType', type="choice", default=DEFAULT_SERVER_TYPE, choices=[VM, AWS, DOCKER, GCP, AZURE, CAPELLA_LOCAL, ELIXIR_ONPREM, SERVERLESS_ONCLOUD])  # or could be Docker
+    parser.add_option('-y', '--serverType', dest='serverType', type="choice", default=DEFAULT_SERVER_TYPE, choices=[VM, AWS, DOCKER, GCP, AZURE, CAPELLA_LOCAL, ELIXIR_ONPREM, SERVERLESS_ONCLOUD, PROVISIONED_ONCLOUD])  # or could be Docker
     # override server type passed to executor job e.g. CAPELLA_LOCAL
     parser.add_option('--server_type_name', dest='server_type_name', default=None)
     parser.add_option('-u', '--url', dest='url', default=None)
@@ -486,9 +489,13 @@ def main():
             print((traceback.format_exc()))
             print(data)
 
+
     total_req_servercount = 0
     total_req_addservercount = 0
     for i in testsToLaunch:
+        # Reset server count request to 0 for provisioned
+        if options.serverType == "PROVISIONED_ONCLOUD":
+            i['serverCount'] = 0
         total_req_servercount = total_req_servercount + i['serverCount']
         total_req_addservercount = total_req_addservercount + i['addPoolServerCount']
     print('\n-->Test jobs to launch: {} and required serverCount={}, addPoolServerCount={}'.format(
@@ -948,6 +955,8 @@ def release_servers_cloud(options, descriptor):
         cloud_provision.az_terminate(descriptor)
     elif options.serverType == SERVERLESS_ONCLOUD:
         print("SERVERLESS: nothing to release")
+    elif options.serverType == PROVISIONED_ONCLOUD:
+        print("PROVISIONED: nothing to release")
 
 def release_servers(options, descriptor):
     if options.serverType in CLOUD_SERVER_TYPES:
