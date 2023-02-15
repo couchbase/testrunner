@@ -1130,6 +1130,35 @@ class RemoteMachineShellConnection(KeepRefs):
                     self.execute_command("rm -rf /etc/localtime", debug=False)
                     self.execute_command("ln -s /usr/share/zoneinfo/America/Los_Angeles "
                                          "/etc/localtime", debug=False)
+            elif "debian 10" in self.info.distribution_version.lower():
+                os_version = "debian 10"
+                output, e = self.execute_command("systemctl status ntp")
+                if not output:
+                    log.info("ntp was not installed on {0} server yet.  "\
+                             "Let install ntp on this server ".format(self.ip))
+                    self.execute_command("apt-get install -y ntp", debug=False)
+                    self.execute_command("systemctl start ntp", debug=False)
+                    #self.execute_command("ntpdate pool.ntp.org", debug=False)
+                    self.execute_command("/etc/init.d/ntpd start", debug=False)
+                    do_install = True
+                elif output and "Active: inactive (dead)" in output[2]:
+                    log.info("ntp is not running.  Let remove it and install again in {0}"\
+                                                            .format(self.ip))
+                    self.execute_command("apt-get remove -y ntp", debug=False)
+                    self.execute_command("apt-get install -y ntp", debug=False)
+                    self.execute_command("systemctl start ntp", debug=False)
+                    #self.execute_command("ntpdate pool.ntp.org", debug=False)
+                    self.execute_command("/etc/init.d/ntpd start", debug=False)
+                    do_install = True
+                elif output and "active (running)" in output[2]:
+                    ntp_installed = True
+                timezone, _ = self.execute_command("date")
+                if "PST" not in timezone[0]:
+                    self.execute_command("cp /etc/localtime /root/old.timezone",
+                                                                    debug=False)
+                    self.execute_command("rm -rf /etc/localtime", debug=False)
+                    self.execute_command("ln -s /usr/share/zoneinfo/America/Los_Angeles "
+                                         "/etc/localtime", debug=False)
             else:
                 log.info("will add install in other os later, no set do install")
 
@@ -1144,6 +1173,11 @@ class RemoteMachineShellConnection(KeepRefs):
             if os_version == "centos 6":
                 output, e = self.execute_command("/etc/init.d/ntpd status")
                 if output and " is running..." in output[0]:
+                    log.info("ntp is installed and running on this server %s" % self.ip)
+                    ntp_installed = True
+            if os_version == "debian 10":
+                output, e = self.execute_command("systemctl status ntpd")
+                if output and "active (running)" in output[2]:
                     log.info("ntp is installed and running on this server %s" % self.ip)
                     ntp_installed = True
 
