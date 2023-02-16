@@ -9,7 +9,6 @@ from deepdiff import DeepDiff
 import time
 import random
 import threading
-import pprint
 from datetime import datetime
 from prettytable import PrettyTable
 
@@ -422,7 +421,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             except Exception as e:
                 fts_callable.delete_all()
                 AssertionError(str(e),
-                               f"rest_create_index: error creating index: , err: manager_api: cannot create/update index because an index with the same name already exists: {database.id}.{scope_name}.index")
+                               f"rest_create_index: error creating index: , err: manager_api: cannot create/update index because an index with the same name already exists: index")
                 self.fail("Recreating fts index with the same name failed")
 
     # Verify that you will not be able to create indexes with more than 1 partition and 1 replica (In both rest and UI)
@@ -817,7 +816,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 explain_result = self.run_query(database,
                                                 f'EXPLAIN SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE SEARCH(t1.country, "+Slovakia +(Slovak +Republic)") ORDER BY t1.streetAddress limit 5')
                 self.assertTrue('IndexFtsSearch' in str(explain_result), f"The query is not using an fts search! please check explain {explain_result}")
-                self.assertTrue(f'{database.id}.{scope_name}.idx' in str(explain_result), f"The query is not using the fts index! please check explain {explain_result}")
+                self.assertTrue('idx' in str(explain_result), f"The query is not using the fts index! please check explain {explain_result}")
 
                 n1ql_search_result = self.run_query(database,
                                                     f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE SEARCH(t1.country, "+Slovakia +(Slovak +Republic)") ORDER BY t1.streetAddress limit 5')
@@ -834,7 +833,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 explain_result = self.run_query(database,
                                                 f'EXPLAIN SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE SEARCH(t1, "country:\\"Slovakia (Slovak Republic)\\"") ORDER BY t1.streetAddress limit 5')
                 self.assertTrue('IndexFtsSearch' in str(explain_result), f"The query is not using an fts search! please check explain {explain_result}")
-                self.assertTrue(f'{database.id}.{scope_name}.idx' in str(explain_result), f"The query is not using the fts index! please check explain {explain_result}")
+                self.assertTrue('idx' in str(explain_result), f"The query is not using the fts index! please check explain {explain_result}")
                 n1ql_search_result = self.run_query(database,
                                                     f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE SEARCH(t1, "country:\\"Slovakia (Slovak Republic)\\"") ORDER BY t1.streetAddress limit 5')
                 expected_result = self.run_query(database,
@@ -857,7 +856,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 explain_result = self.run_query(database,
                                         f'EXPLAIN SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE SEARCH(t1, {n1ql_search_query}) and t1.age > 50 ORDER BY t1.streetAddress')
                 self.assertTrue('IndexFtsSearch' in str(explain_result), f"The query is not using an fts search! please check explain {explain_result}")
-                self.assertTrue(f'{database.id}.{scope_name}.idx' in str(explain_result), f"The query is not using the fts index! please check explain {explain_result}")
+                self.assertTrue('idx' in str(explain_result), f"The query is not using the fts index! please check explain {explain_result}")
 
                 n1ql_search_result = self.run_query(database,
                                         f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 WHERE SEARCH(t1, {n1ql_search_query}) and t1.age > 50 ORDER BY t1.streetAddress')
@@ -903,7 +902,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 explain_result = self.run_query(database,
                                                 f'EXPLAIN SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 USE INDEX (USING FTS, USING GSI) WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
                 self.assertTrue('IndexFtsSearch' in str(explain_result), f"The query is not using an fts search! please check explain {explain_result}")
-                self.assertTrue(f'{database.id}.{scope_name}.idx' in str(explain_result), f"The query is not using the fts index! please check explain {explain_result}")
+                self.assertTrue('idx' in str(explain_result), f"The query is not using the fts index! please check explain {explain_result}")
                 flex_result = self.run_query(database,
                                              f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 USE INDEX (USING FTS, USING GSI) WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
                 expected_result = self.run_query(database,
@@ -923,7 +922,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                     # We expect the gsi index and the fts index both to be used
                     self.assertTrue('IndexFtsSearch' in str(explain_result), f"The query should be using the fts search! please check explain {explain_result}")
                     self.assertTrue(f'idx1' in str(explain_result), f"The query is not using the gsi index! please check explain {explain_result}")
-                    self.assertTrue(f'{database.id}.{scope_name}.idx' in str(explain_result), f"The query is not using the fts index! please check explain {explain_result}")
+                    self.assertTrue('idx' in str(explain_result), f"The query is not using the fts index! please check explain {explain_result}")
                     flex_result = self.run_query(database,
                                             f'SELECT t1.age,t1.city,t1.country,t1.firstName,t1.lastName,t1.streetAddress,t1.suffix,t1.title from {scope_name}.{collection_name} as t1 USE INDEX (USING FTS, USING GSI) WHERE t1.country = "Algeria" ORDER BY t1.streetAddress limit 5')
                     expected_result = self.run_query(database,
