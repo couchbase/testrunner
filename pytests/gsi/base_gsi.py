@@ -1677,6 +1677,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         stats = self.index_rest.get_all_index_stats()
         result = {}
         for stat, value in stats.items():
+            # Todo: Will uncomment it once I get a confirmation from GSI DEV
+            # if '_system:_query' in stat:
+            #     continue
             for persisted_stat in persisted_stats_list:
                 if f':{persisted_stat}' in stat:
                     result[stat] = value
@@ -1694,13 +1697,16 @@ class BaseSecondaryIndexingTests(QueryTests):
         stats = self.index_rest.get_all_index_stats()
         result = {}
         for stat, value in stats.items():
+            # Todo: Will uncomment it once I get a confirmation from GSI DEV
+            # if '_system:_query' in stat:
+            #     continue
             for reb_stat in reblance_related_stats:
                 if f':{reb_stat}' in stat:
                     result[stat] = value
         return result
 
     def create_S3_config(self):
-        COUCHBASE_AWS_HOME = '/home/couchbase/.aws'
+        COUCHBASE_AWS_HOME = '/opt/couchbase/.aws'
         aws_cred_file = ('[default]\n'
                          f'aws_access_key_id={self.aws_access_key_id}\n'
                          f'aws_secret_access_key={self.aws_secret_access_key}')

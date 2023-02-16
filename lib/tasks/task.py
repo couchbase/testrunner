@@ -6570,7 +6570,7 @@ class MagmaDocLoader(Task):
                   f"-cr {self.sdk_docloader.percent_create} -up {self.sdk_docloader.percent_delete} -rd 0" \
                   f" -docSize {self.sdk_docloader.doc_size} -keyPrefix {self.sdk_docloader.key_prefix} " \
                   f"-scope {self.sdk_docloader.scope} -collection {self.sdk_docloader.collection} " \
-                  f"-ops {self.sdk_docloader.ops_rate}  -workers {self.sdk_docloader.workers}'"
+                  f"-ops {self.sdk_docloader.ops_rate}  -workers {self.sdk_docloader.workers} -maxTTL 1800'"
 
         self.log.info(command)
         try:

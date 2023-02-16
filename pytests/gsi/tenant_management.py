@@ -217,9 +217,11 @@ class TenantManagement(BaseSecondaryIndexingTests):
             recovery_type = random.choice(['full', 'delta'])
             self.rest.fail_over(otpNode=otp_node)
             if self.recover_failed_over_node:
-                self.sleep(60, "Waiting for a min after failing the node and ")
+                self.sleep(60, "Waiting for a min after failing the node")
                 self.rest.set_recovery_type(otpNode=otp_node, recoveryType=recovery_type)
             else:
+                self.log.info(f"Adding new node {self.servers[self.nodes_init + counter].ip}")
+                self.log.info(f"Adding new in zone {failover_nodes_zones_dict[server]}")
                 self.rest.add_node(user=self.rest.username, password=self.rest.password,
                                    remoteIp=self.servers[self.nodes_init + counter].ip,
                                    zone_name=failover_nodes_zones_dict[server],
@@ -706,8 +708,8 @@ class TenantManagement(BaseSecondaryIndexingTests):
         for namespace in self.namespaces:
             primary_scan_query = f'Select count(*) from {namespace} use index (`{prim_index}`) where age >=0'
             secondary_scan_query = f'Select count(*) from {namespace} use index (`{sec_index}`) where age >=0'
-            prim_result = self.run_cbq_query(query=primary_scan_query, server=self.query_node)
-            sec_result = self.run_cbq_query(query=secondary_scan_query, server=self.query_node)
+            prim_result = self.run_cbq_query(query=primary_scan_query, server=self.query_node)['results'][0]['$1']
+            sec_result = self.run_cbq_query(query=secondary_scan_query, server=self.query_node)['results'][0]['$1']
             self.assertEqual(prim_result, sec_result, "Doc count differ between Primary and Secondary Index")
         self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
         self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
@@ -1165,8 +1167,6 @@ class TenantManagement(BaseSecondaryIndexingTests):
             tenants_on_skewed_sub_cluster.append(self.namespaces[2])
             skewed_sub_cluster_node = list(sub_cluster_map[self.namespaces[1]])[0]
 
-        # Todo: Add a new sub-cluster
-
         # Pushing a sub-cluster towards HWM
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         node = ''
@@ -1176,21 +1176,22 @@ class TenantManagement(BaseSecondaryIndexingTests):
                 break
 
         node_rest = RestConnection(node)
-        defrag_result_b4_hwm = node_rest.get_index_defrag_output()
-        self.log.info(f"Defrag result before HWM:{defrag_result_b4_hwm}")
+        loaded_tenant_namespace = tenants_on_skewed_sub_cluster[0]
+
+        # Increase the work load on one of the tenant of skewed sub-cluster, so that on rebalance, less loaded tenant
+        # would move to other sub-cluster triggering auto-rebalance and implementing defrag api suggestion.
+        while not self.is_lwm_reached(node=node):
+            self.gsi_util_obj.index_operations_during_phases(namespaces=[loaded_tenant_namespace],
+                                                             dataset=self.json_template)
+
+        # Now increasing the combined load so that we cross HWM
         while not self.is_hwm_reached(node=node):
-            tasks = []
-            with ThreadPoolExecutor() as executor:
-                for namespace in tenants_on_skewed_sub_cluster:
-                    task = executor.submit(self.gsi_util_obj.index_operations_during_phases, namespaces=[namespace],
-                                           dataset=self.json_template, num_of_batches=5)
-                    tasks.append(task)
-            for task in tasks:
-                task.result()
+            self.gsi_util_obj.index_operations_during_phases(namespaces=tenants_on_skewed_sub_cluster,
+                                                             dataset=self.json_template)
 
         self.sleep(30)
-        defrag_result_aft_hwm = node_rest.get_index_defrag_output()
-        self.log.info(f"Defrag result after HWM:{defrag_result_aft_hwm}")
+        defrag_result_b4_reb = node_rest.get_index_defrag_output()
+        self.log.info(f"Defrag result before Rebalance:{defrag_result_b4_reb}")
         # calling rebalance to run defrag
         try:
             rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
@@ -1201,7 +1202,11 @@ class TenantManagement(BaseSecondaryIndexingTests):
             rebalance_status = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
         except Exception as err:
-            self.log.info(err)
+            self.fail(err)
+        defrag_result_aft_reb = node_rest.get_index_defrag_output()
+        self.log.info(f"Defrag result after Rebalance:{defrag_result_aft_reb}")
+        self.assertTrue(defrag_result_b4_reb != defrag_result_aft_reb)
+
         self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
         self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
 

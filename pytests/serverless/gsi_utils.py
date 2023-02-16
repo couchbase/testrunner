@@ -50,8 +50,8 @@ class GSIUtils(object):
 
         # GSI index on multiple fields
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'age_gender',
-                            index_fields=['age, gender'],
+            QueryDefinition(index_name=index_name_prefix + 'age_gender_name',
+                            index_fields=['age', 'gender', 'name'],
                             query_template=RANGE_SCAN_TEMPLATE.format("*",
                                                                       'age > 40 AND '
                                                                       'gender = "M"')))
@@ -67,14 +67,15 @@ class GSIUtils(object):
 
         # Paritioned Index
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'partitioned_index', index_fields=['body'],
+            QueryDefinition(index_name=index_name_prefix + 'partitioned_index', index_fields=['name', 'body'],
                             query_template=RANGE_SCAN_TEMPLATE.format("*", 'body like "%%E%%"'),
                             partition_by_fields=['body'], capella_run=True))
 
         # Array Index
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'array_index',
-                            index_fields=['mutated, ALL ARRAY h.name FOR h IN attributes.hobbies END'],
+                            index_fields=['mutated', 'name', 'body',
+                                          'ALL ARRAY h.name FOR h IN attributes.hobbies END'],
                             query_template=RANGE_SCAN_TEMPLATE.format("*",
                                                                       'mutated >= 0 and '
                                                                       'ANY h IN attributes.hobbies SATISFIES'
@@ -83,7 +84,7 @@ class GSIUtils(object):
         # Array Index
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'array_index_2',
-                            index_fields=['age, ALL animals'],
+                            index_fields=['age', 'name', 'ALL animals'],
                             query_template=RANGE_SCAN_TEMPLATE.format("*",
                                                                       'any a in animals satisfies '
                                                                       'a = "Forest green (traditional)" end')))
