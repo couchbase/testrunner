@@ -202,7 +202,7 @@ class QueryANSIJOINSTests(QueryTests):
         queries_to_run.append((query_1, 0))
 
         query_2 = "select * from {0} d INNER JOIN (select * from {0} d1 inner join {0} d3 on " \
-                  "d1.name == d3.name LIMIT 100) d2 ON (d.name = d3.name) LIMIT 100".format(self.default_query_bucket)
+                  "d1.name == d3.name LIMIT 100) d2 ON (d.name = d2.name) LIMIT 100".format(self.default_query_bucket)
 
         queries_to_run.append((query_2, 100))
 
@@ -354,7 +354,7 @@ class QueryANSIJOINSTests(QueryTests):
         queries_to_run.append((query_1, 0))
 
         query_2 = "select * from {0} d INNER JOIN (select * from {0} d1 inner join {0} d3 on " \
-                  "d1.name == d3.name LIMIT 100) d2 USE HASH(build) ON (d.name = d3.name) " \
+                  "d1.name == d3.name LIMIT 100) d2 USE HASH(build) ON (d.name = d2.name) " \
                   "LIMIT 100".format(self.default_query_bucket)
 
         queries_to_run.append((query_2, 100))
