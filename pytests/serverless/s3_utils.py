@@ -10,6 +10,7 @@ __created_on__ = 30/11/22 4:52 pm
 """
 import boto3
 import logger
+from time import sleep
 
 
 class S3Utils(object):
@@ -51,7 +52,7 @@ class S3Utils(object):
         result_folder = [item['Key'] for item in result['Contents']]
         return folder_to_delete in result_folder
 
-    def check_s3_cleanup(self, folder='indexing', bucket=None):
+    def check_s3_cleanup(self, folder='indexing', bucket=None, recheck=False):
         if not bucket:
             bucket = self.s3_bucket
         result = self.s3.list_objects_v2(Bucket=bucket, Delimiter='/*')
@@ -63,4 +64,8 @@ class S3Utils(object):
             if folder_path_expected in item['Key']:
                 folder_list_on_aws.append(item['Key'])
         if len(folder_list_on_aws) > 1:
+            if not recheck:
+                self.log.info("Waiting for janitor to kick clean up")
+                sleep(60)
+                self.check_s3_cleanup(folder=folder, bucket=bucket, recheck=True)
             raise Exception("Bucket is not cleaned up after rebalance.")
