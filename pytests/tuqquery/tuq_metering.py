@@ -971,7 +971,7 @@ class QueryMeteringTests(QueryTests):
         result = self.run_cbq_query('SELECT array_repeat(array_repeat(repeat("a",100), 500), 1000)', username=user_id, password=user_pwd, query_context=self.bucket )
         after_cu = self.meter.get_query_cu(self.bucket, variant="eval")
         # 1 compute unit is 32MB per second
-        expected_cu = math.ceil(int(result['metrics']['usedMemory']) * float(result['metrics']['executionTime'][:-1]) / (32*1024*1024))
+        expected_cu = math.ceil(int(result['metrics']['usedMemory']) * float(result['metrics']['executionTime'][:-2]) / (32*1024*1024))
         self.assertEqual (expected_cu, after_cu - before_cu)
 
     def test_seqscan_multiple_vb(self):
