@@ -132,7 +132,7 @@ class QueryThrottlingTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 4350)
-            self.assertEqual(error['msg'], f'GSI CreateIndex() - cause: Limit for number of indexes that can be created per bucket has been reached. Limit : {self.gsi_limit}')
+            self.assertEqual(error['msg'], f'GSI CreateIndex() - cause: Limit for number of indexes that can be created per bucket has been reached. Limit : {self.gsi_limit+1}')
         finally:
             for i in range(self.gsi_limit):
                 self.run_cbq_query(f'DROP INDEX idx{i} IF EXISTS ON {self.bucket}')
