@@ -37,15 +37,16 @@ class ServerlessDatabase:
         self.data_api = info["connect"]["dataApi"]
         self.access_key = creds["access"]
         self.secret_key = creds["secret"]
-        self.rest_srv = rest_api_info['srv']
-        self.admin_username = rest_api_info['couchbaseCreds']['username']
-        self.admin_password = rest_api_info['couchbaseCreds']['password']
         self.nebula = get_host_from_srv(self.srv)
-        try:
-            self.rest_host = get_host_from_srv(self.rest_srv)
-        except Exception as err:
-            print(err)
-            print("Rest srv domain resolution failure. Cannot run any of the rest APIs")
+        if rest_api_info:
+            self.rest_srv = rest_api_info['srv']
+            self.admin_username = rest_api_info['couchbaseCreds']['username']
+            self.admin_password = rest_api_info['couchbaseCreds']['password']
+            try:
+                self.rest_host = get_host_from_srv(self.rest_srv)
+            except Exception as err:
+                print(err)
+                print("Rest srv domain resolution failure. Cannot run any of the rest APIs")
 
     @property
     def doc_count(self):

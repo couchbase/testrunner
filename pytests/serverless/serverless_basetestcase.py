@@ -388,7 +388,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
                                   f"-p 11207 -create_s {doc_start} -create_e {doc_end} " \
                                   f"-cr {create_rate} -up {update_rate} -rd 0 -workers 1 -docSize 1024 " \
                                   f"-scope {scope} -collection {collection}'"
-                        self.log.info(f"Will run this command {command} to load data")
+                        self.log.info(f"Will run this command {command} to load data for db {database.id} scope {scope} collection {collection}")
                         process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
                         out, err = process.communicate()
                         if "BUILD SUCCESS" not in str(out):

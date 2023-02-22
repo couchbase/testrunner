@@ -6756,39 +6756,43 @@ class CreateServerlessDatabaseTask(Task):
 
     def check(self, task_manager):
         try:
-            complete = self.api.wait_for_database_step(self.database_id)
-            if complete:
-                self.log.info("serverless database created {}".format(
-                    {"database_id": self.database_id}))
-                self.log.info("allowing ip for serverless database {}".format(
-                    {"database_id": self.database_id}))
-                self.api.allow_my_ip(self.database_id)
-                info = self.api.get_database_info(self.database_id)
-                self.log.info(f"Debug info for the serverless DB: {self.database_id}. Info: {info}")
-                self.log.info("generating API key for serverless database {}".format(
-                    {"database_id": self.database_id}))
-                creds = self.api.generate_api_keys(self.database_id)
-                rest_api_info = {"srv": "", "couchbaseCreds": {"username": "", "password": ""}}
-                if self.create_bypass_user:
-                    self.log.info("Obtaining access to the dataplane nodes")
-                    dataplane_id = self.api.get_resident_dataplane_id(database_id=self.database_id)
-                    if dataplane_id not in self.dataplanes:
-                        self.dataplanes[dataplane_id] = ServerlessDataPlane(dataplane_id)
-                        rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=dataplane_id)
-                        self.dataplanes[dataplane_id].populate(rest_api_info)
-                    else:
-                        self.log.info("Tenant database resides on a DP that already has a bypass user. Reusing it")
-                        rest_api_info = {"couchbaseCreds": {"username": self.dataplanes[dataplane_id].admin_username,
-                                                            "password": self.dataplanes[dataplane_id].admin_password},
-                                         "srv": self.dataplanes[dataplane_id].rest_srv}
-                    self.log.info(f"Bypass username: {rest_api_info['couchbaseCreds']['username']}. "
-                                  f"Password: {rest_api_info['couchbaseCreds']['password']}. SRV {rest_api_info['srv']} "
-                                  f"for dataplane {dataplane_id}")
-                self.databases[self.database_id].populate(info, creds, rest_api_info)
-                self.state = FINISHED
-                self.set_result(self.database_id)
-            else:
-                task_manager.schedule(self, 5)
+            end_time = time.time() + 300
+            database_healthy = False
+            while time.time() < end_time and not database_healthy:
+                complete = self.api.wait_for_database_step(self.database_id)
+                if complete:
+                    database_healthy = True
+                    self.log.info("serverless database created {}".format(
+                        {"database_id": self.database_id}))
+                    self.log.info("allowing ip for serverless database {}".format(
+                        {"database_id": self.database_id}))
+                    self.api.allow_my_ip(self.database_id)
+                    info = self.api.get_database_info(self.database_id)
+                    self.log.info(f"Debug info for the serverless DB: {self.database_id}. Info: {info}")
+                    self.log.info("generating API key for serverless database {}".format(
+                        {"database_id": self.database_id}))
+                    creds = self.api.generate_api_keys(self.database_id)
+                    rest_api_info = None
+                    if self.create_bypass_user:
+                        self.log.info("Obtaining access to the dataplane nodes")
+                        dataplane_id = self.api.get_resident_dataplane_id(database_id=self.database_id)
+                        if dataplane_id not in self.dataplanes:
+                            self.dataplanes[dataplane_id] = ServerlessDataPlane(dataplane_id)
+                            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=dataplane_id)
+                            self.dataplanes[dataplane_id].populate(rest_api_info)
+                        else:
+                            self.log.info("Tenant database resides on a DP that already has a bypass user. Reusing it")
+                            rest_api_info = {"couchbaseCreds": {"username": self.dataplanes[dataplane_id].admin_username,
+                                                                "password": self.dataplanes[dataplane_id].admin_password},
+                                             "srv": self.dataplanes[dataplane_id].rest_srv}
+                        self.log.info(f"Bypass username: {rest_api_info['couchbaseCreds']['username']}. "
+                                      f"Password: {rest_api_info['couchbaseCreds']['password']}. SRV {rest_api_info['srv']} "
+                                      f"for dataplane {dataplane_id}")
+                    self.databases[self.database_id].populate(info, creds, rest_api_info)
+                    self.state = FINISHED
+                    self.set_result(self.database_id)
+            if not database_healthy:
+                raise Exception("Database not healthy despite waiting 5 mins")
         except Exception as e:
             self.state = FINISHED
             self.set_exception(e)
