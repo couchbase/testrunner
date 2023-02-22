@@ -83,7 +83,7 @@ class QueryTests(BaseTestCase):
         self.sample_bucket = self.input.param('sample_bucket', None)
         self.sample_bucket_index = self.input.param('sample_bucket_index', None)
         self.users = self.input.param("users", {})
-
+        self.server_group_map = {}
         self.use_rest = self.input.param("use_rest", True)
         self.hint_index = self.input.param("hint", None)
         self.max_verify = self.input.param("max_verify", None)
@@ -1146,6 +1146,7 @@ class QueryTests(BaseTestCase):
                         server_grp_name)
                     server_list.append(self.servers[int(node)].ip + ":" + self.servers[int(node)].port)
                 self.server_group_map[server_grp_name] = server_list
+
     def ExplainPlanHelper(self, res, debug=False):
         try:
             rv = res["results"][0]["plan"]

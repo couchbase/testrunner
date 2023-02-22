@@ -16,6 +16,7 @@ class JoinTests(QuerySanityTests):
             self.gens_tasks = self.gen_docs(type='tasks')
             self.type_join = self.input.param("type_join", JOIN_INNER)
             self.query_buckets = self.get_query_buckets(check_all_buckets=True)
+            self._create_server_groups()
         except Exception as ex:
             self.log.error("ERROR SETUP FAILED: %s" % str(ex))
             raise ex

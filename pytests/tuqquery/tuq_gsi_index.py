@@ -26,6 +26,7 @@ class QueriesIndexTests(QueryTests):
         self.rest = RestConnection(self.master)
         self.shell = RemoteMachineShellConnection(self.master)
         self.delete_sample = self.input.param("delete_sample", False)
+        self._create_server_groups()
         self.log.info("==============  QueriesIndexTests setup has completed ==============")
         self.log_config_info()
         self.query_buckets = self.get_query_buckets(check_all_buckets=True)
