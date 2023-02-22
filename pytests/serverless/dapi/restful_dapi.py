@@ -886,3 +886,34 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                 thread.join()
 
             self.assertTrue(self.result, "Check the test logs...")
+
+
+    def test_get_bucket_list(self):
+        for dapi_info in self.dapi_info_list:
+            self.rest_dapi = RestfulDAPI({"dapi_endpoint": dapi_info["dapi_endpoint"],
+                                          "access_token": dapi_info["access_token"],
+                                          "access_secret": dapi_info["access_secret"]})
+            self.log.info("GET bucket info for database: {}".format(dapi_info["database_id"]))
+
+            response = self.rest_dapi.get_bucket_info(dapi_info["database_id"])
+            self.assertTrue(response.status_code == 200,
+                            "GET bucket info failed for database: {}".format(dapi_info["database_id"]))
+
+            bucket = json.loads(response.content)['bucket']
+
+            bucket_list = list()
+            bucket_list.append(bucket)
+
+            self.assertTrue(bucket['Name'] == dapi_info["database_id"],
+                            "wrong database received for database: {}".format(dapi_info["database_id"]))
+
+            self.assertTrue(response.status_code == 200,
+                            "get bucket info failed for database: {}".format(dapi_info["database_id"]))
+
+            response = self.rest_dapi.get_bucket_list()
+            self.assertTrue(response.status_code == 200,
+                            "Get list of buckets failed for database: {}".format(dapi_info["database_id"]))
+            bucket_list_retrieved = json.loads(response.content)['buckets']
+
+            self.assertTrue(bucket_list_retrieved == bucket_list,
+                            "Wrong bucket list retrieved for database: {}".format(dapi_info["database_id"]))

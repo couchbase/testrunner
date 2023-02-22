@@ -148,3 +148,11 @@ class RestfulDAPI:
         param = key_documents
         url = self.endpoint_v1 + "/scopes/" + scope + "/collections/" + collection + "/docs"
         return self._urllib_request(url, method="PUT", params=param)
+
+    def get_bucket_info(self, bucket_name):
+        url = self.endpoint_v1 + "/buckets/" + bucket_name
+        return self._urllib_request(url)
+
+    def get_bucket_list(self):
+        url = self.endpoint_v1 + "/buckets"
+        return self._urllib_request(url)
