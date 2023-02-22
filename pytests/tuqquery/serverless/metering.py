@@ -63,5 +63,5 @@ class QueryMeterSanity(ServerlessBaseTestCase):
             result = self.run_query(database, f'SELECT SUM( {"SQRT("*repeat} t {")"*repeat} ) FROM array_concat(array_repeat(pi(), 30000), array_repeat(pi(), 30000), array_repeat(pi(), 30000), array_repeat(pi(), 19000) ) t')
             after_cu = meter.get_query_cu(database.id, unbilled='true')
             # 1 compute unit (CU) is 32MB per second
-            expected_cu = math.ceil(int(result['metrics']['usedMemory']) * float(result['metrics']['executionTime'][:-1]) / (32*1024*1024))
+            expected_cu = math.ceil(int(result['metrics']['usedMemory']) * float(result['profile']['cpuTime'][:-1]) / (32*1024*1024))
             self.assertEqual (expected_cu, after_cu - before_cu)
