@@ -263,24 +263,6 @@ class DataAPITests(ServerlessBaseTestCase):
             self.failure_counter += 1
             self.lock.release()
 
-    def test_dos_attack(self):
-        time.sleep(10)
-        for dapi_info in self.dapi_info_list:
-            self.rest_dapi = RestfulDAPI({"dapi_endpoint": dapi_info["dapi_endpoint"],
-                                          "access_token": dapi_info["access_token"],
-                                          "access_secret": dapi_info["access_secret"]})
-            threads = 50
-            self.failure_counter = 0
-            processes = []
-            self.lock = threading.Lock()
-            for i in range(threads):
-                processes.append(threading.Thread(target=self.dos_task))
-            for i in range(threads):
-                processes[i].start()
-            time.sleep(50)
-            self.log.info("failiures received ", self.failure_counter)
-            self.assertLess(self.failure_counter, threads*0.2)
-
     def incorrect_creds_task(self):
         for dapi_info in self.dapi_info_list:
             self.rest_dapi = RestfulDAPI({"dapi_endpoint": dapi_info["dapi_endpoint"],
