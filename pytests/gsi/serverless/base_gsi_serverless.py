@@ -4,6 +4,8 @@ import string
 import requests
 import time
 import copy
+import os
+import subprocess
 
 from gsi.serverless.base_query_serverless import QueryBaseServerless
 from membase.api.serverless_rest_client import ServerlessRestConnection as RestConnection
@@ -310,11 +312,11 @@ class BaseGSIServerless(QueryBaseServerless):
                               f"units_used_actual {units_used_actual} num of tenants {num_tenants} ")
                 self.log.info(f"Memory used ratio: {memory_used_actual / mem_quota}. \n "
                               f"Units used ratio : {units_used_actual / units_quota} \n Num. of tenants:{num_tenants}")
-                node_wise_stats[dataplane][node]['mem_quota'] = mem_quota
-                node_wise_stats[dataplane][node]['memory_used_actual'] = memory_used_actual
-                node_wise_stats[dataplane][node]['units_quota'] = units_quota
-                node_wise_stats[dataplane][node]['units_used_actual'] = units_used_actual
-                node_wise_stats[dataplane][node]['num_tenants'] = num_tenants
+                node_wise_stats.update({node: {"memory_quota": mem_quota,
+                                               "memory_used_actual": memory_used_actual,
+                                               "units_quota": units_quota,
+                                               "units_used_actual": units_used_actual,
+                                               "num_tenants": num_tenants}})
         return node_wise_stats
 
     def scale_up_index_subcluster(self, dataplane, wait_for_rebalance_completion=True):
@@ -355,6 +357,32 @@ class BaseGSIServerless(QueryBaseServerless):
         self.log.info(f"Update_specs will be run on {dataplane_id}")
         self.log.info(f"Will use this config to update specs: {new_specs}")
         self.api.modify_cluster_specs(dataplane_id=dataplane_id, specs=new_specs)
+
+    def load_data_across_all_tenants(self, databases, doc_start, doc_end):
+        cur_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', ))
+        pom_path = os.path.join(cur_dir, r"magma_loader/DocLoader")
+        os.chdir(pom_path)
+        cmd_list = []
+        for database in databases:
+            for scope in database.collections:
+                for collection in database.collections[scope]:
+                    command = f"mvn compile exec:java -Dexec.cleanupDaemonThreads=false " \
+                              f"-Dexec.mainClass='couchbase.test.sdk.Loader' -Dexec.args='-n {database.srv} " \
+                              f"-user {database.access_key} -pwd {database.secret_key} -b {database.id} " \
+                              f"-p 11207 -create_s {doc_start} -create_e {doc_end} " \
+                              f"-cr 100 -up 0 -rd 0 -workers 1 -docSize 1024 " \
+                              f"-scope {scope} -collection {collection}'"
+                    self.log.info(
+                        f"Will run this command {command} to load data for db {database.id} scope {scope} collection {collection}")
+                    cmd_list.append(command)
+        tasks = []
+        with ThreadPoolExecutor() as executor:
+            for command in cmd_list:
+                task = executor.submit(subprocess.Popen, args=command, shell=True,
+                                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                tasks.append(task)
+            for task in tasks:
+                task.result()
 
     def run_parallel_workloads(self, event, total_doc_count=None):
         if total_doc_count is None:
@@ -451,3 +479,42 @@ class BaseGSIServerless(QueryBaseServerless):
         indexer_metadata = resp.json()['indexes']
         self.log.debug(f"Indexer metadata {indexer_metadata}")
         return indexer_metadata
+
+    def build_all_indexes(self, databases):
+        build_index_query_template = "build index on keyspacename (( select raw name from system:all_indexes where " \
+                                     "`using`='gsi' and '`' || `bucket_id` || '`.`' || `scope_id` || '`.`' || " \
+                                     "`keyspace_id` || '`' = 'keyspacename' and state = 'deferred'))"
+        with ThreadPoolExecutor() as executor:
+            tasks = []
+            for database in databases:
+                for scope in database.collections:
+                    for collection in database.collections[scope]:
+                        keyspace = f"`{database.id}`.`{scope}`.`{collection}`"
+                        query = build_index_query_template.replace("keyspacename", keyspace)
+                        self.log.info(f"Build index query for db {database.id} scope {scope} collection {collection} is {query}")
+                        task = executor.submit(self.run_query, database=database, query=query)
+                        tasks.append(task)
+            for task in tasks:
+                try:
+                    task.result()
+                except:
+                    pass
+
+    def are_all_indexes_online(self, rest_info):
+        rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
+        nodes_obj = rest_obj.get_all_dataplane_nodes()
+        self.log.debug(f"Dataplane nodes object {nodes_obj}")
+        indexer_node_list = []
+        for node in nodes_obj:
+            if 'index' in node['services']:
+                indexer_node = node['hostname'].split(":")[0]
+                self.log.info(f"Will use this indexer node to obtain metadata {indexer_node}")
+                indexer_node_list.append(indexer_node)
+        for indexer_node in indexer_node_list:
+            index_metadata = self.get_indexer_metadata(rest_info=rest_info, indexer_node=indexer_node)
+            for index in index_metadata:
+                if index['status'] == 'Ready':
+                    continue
+                self.log.info(f"Index {index['index']} is not yet ready. Index state is {index['status']}")
+                return False
+            return True

@@ -56,3 +56,10 @@ class QueryBaseServerless(ServerlessBaseTestCase):
             self.log.error("Cannot scale down the query subcluster further since it only has 2 nodes")
             return
         self.update_specs(dataplane.id, new_count=num_nodes-1, service='n1ql')
+
+    def set_log_level_query_service(self, rest_info, level='info'):
+        query_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="n1ql")
+        node = query_nodes[0]
+        endpoint = f"https://{node}:18091/settings/querySettings"
+        resp = requests.post(endpoint, data={"queryLogLevel":f"{level}"}, auth=(rest_info.admin_username, rest_info.admin_password), verify=False)
+        resp.raise_for_status()

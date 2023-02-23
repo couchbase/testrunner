@@ -235,6 +235,7 @@ class TenantManagement(BaseGSIServerless):
             self.log.info(
                 f"New dataplane credentials: User: {dataplane.admin_username} Password: {dataplane.admin_password}"
                 f" Rest host: {dataplane.rest_host}")
+            self.set_log_level_query_service(rest_info=rest_info, level='debug')
             index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
             self.log.info(f"Index nodes before the test run:{index_nodes_before}")
             time.sleep(60)
@@ -285,6 +286,7 @@ class TenantManagement(BaseGSIServerless):
                 self.scale_up_index_subcluster(dataplane=dataplane)
                 event.set()
                 future.result()
+            self.log.info("============== cbcollect after scale up ==========================")
             self.collect_log_on_dataplane_nodes()
             index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
             if index_nodes_before == index_nodes_after:
@@ -362,6 +364,7 @@ class TenantManagement(BaseGSIServerless):
                                           f"indexes created before reside on {hosts[database.id]}")
             # run queries and mutations after scale down
             self.collect_log_on_dataplane_nodes()
+            self.log.info("============== cbcollect after scale down ==========================")
             with ThreadPoolExecutor() as executor:
                 event = Event()
                 future = executor.submit(self.run_parallel_workloads, event)
@@ -369,171 +372,169 @@ class TenantManagement(BaseGSIServerless):
                 event.set()
                 future.result()
         finally:
-            pass
+            self.set_log_level_query_service(rest_info=rest_info, level='info')
             # indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
             # storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
             #                                                                         indexer_node=indexer_nodes[0])
             # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
 
     def test_scale_query_sub_cluster(self):
-        if not self.new_dataplane_id:
-            self.fail("This test needs a new_dataplane_id parameter")
-
-        dataplane = ServerlessDataPlane(self.new_dataplane_id)
-        rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
-        dataplane.populate(rest_api_info)
-        rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
-                                              password=dataplane.admin_password,
-                                              rest_host=dataplane.rest_host)
-        query_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="n1ql")
-        self.log.info(f"Query nodes before the test run:{query_nodes_before}")
-        self.provision_databases(count=self.num_of_tenants, seed="test-scale-query", dataplane_id=self.new_dataplane_id)
-        self.create_scopes_collections(databases=self.databases.values())
-        hosts = {}
-        for counter, database in enumerate(self.databases.values()):
-            for scope in database.collections:
-                for collection in database.collections[scope]:
-                    create_index_list = self.gsi_util_obj.get_create_index_list(self.definition_list,
-                                                                                f"`{database.id}`.{scope}.{collection}")
-                    for index_create_query in create_index_list:
-                        self.run_query(database=database, query=index_create_query)
-        self.load_data_new_doc_loader(databases=self.databases.values(), doc_start=0, doc_end=self.total_doc_count)
-        with ThreadPoolExecutor() as executor:
-            event = Event()
-            future = executor.submit(self.run_parallel_workloads, event)
-            self.scale_up_query_subcluster(dataplane=dataplane)
-            event.set()
-            future.result()
-        query_nodes_after = self.get_all_query_nodes(rest_info=rest_info)
-        if query_nodes_before == query_nodes_after:
-            self.fail(f"Query sub-cluster did not scale despite loadfactor being over the limit")
-        self.collect_log_on_dataplane_nodes()
-        self.log.info(f"Query nodes after the scale up:{query_nodes_after}")
-        # run queries and mutations after scale-up
-        with ThreadPoolExecutor() as executor:
-            event = Event()
-            future = executor.submit(self.run_parallel_workloads, event)
-            time.sleep(120)
-            event.set()
-            future.result()
-        for counter, database in enumerate(self.databases.values()):
-            for scope in database.collections:
-                for collection in database.collections[scope]:
-                    index1 = f'idx_db0_{random.randint(0, 1000)}'
-                    self.create_index(database, query_statement=f"create index {index1}_db{counter} on `{database.id}`.`{scope}`.`{collection}`(a)",
-                                          use_sdk=self.use_sdk)
-        dataplane = ServerlessDataPlane(self.new_dataplane_id)
-        rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
-        dataplane.populate(rest_api_info)
-        rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
-                                              password=dataplane.admin_password,
-                                              rest_host=dataplane.rest_host)
-        with ThreadPoolExecutor() as executor:
-            event = Event()
-            future = executor.submit(self.run_parallel_workloads, event)
-            self.scale_down_query_subcluster(dataplane=dataplane)
-            event.set()
-            future.result()
-        self.collect_log_on_dataplane_nodes()
-        # run queries and mutations after scale-down
-        query_nodes_after_2 = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-        if query_nodes_after == query_nodes_after_2:
-            self.fail(f"Query sub-cluster did not scale down despite loadfactor being below the threshold limit")
-        self.log.info(f"Query nodes after the test run:{query_nodes_after}")
-        # run queries and mutations after scale down
-        with ThreadPoolExecutor() as executor:
-            event = Event()
-            future = executor.submit(self.run_parallel_workloads, event)
-            time.sleep(120)
-            event.set()
-            future.result()
-        for counter, database in enumerate(self.databases.values()):
-            for scope in database.collections:
-                for collection in database.collections[scope]:
-                    index1 = f'idx_db0_{random.randint(0, 1000)}'
-                    self.create_index(database, query_statement=f"create index {index1}_db{counter} on `{database.id}`.`{scope}`.`{collection}`(a)",
-                                          use_sdk=self.use_sdk)
-        self.collect_log_on_dataplane_nodes()
-
-    def test_rebalance_axy_ddl_axy(self):
         try:
             if not self.new_dataplane_id:
                 self.fail("This test needs a new_dataplane_id parameter")
             dataplane = ServerlessDataPlane(self.new_dataplane_id)
             rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
             dataplane.populate(rest_api_info)
-            rest_obj = RestConnection(dataplane.admin_username, dataplane.admin_password, dataplane.rest_host)
             rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
                                                   password=dataplane.admin_password,
                                                   rest_host=dataplane.rest_host)
-            self.scale_up_index_subcluster(dataplane=dataplane)
-            index_hosts = set()
-            for i in range(10):
-                self.provision_databases(count=1, seed=f"test-rebalance-ddl-conflict-{i}", dataplane_id=self.new_dataplane_id)
-                scope_collection_map = {"scope1": ["collection1"]}
-                for database in self.databases.values():
-                    if f"test-rebalance-ddl-conflict-{i}" in database.id:
-                        new_db = database
-                        break
-                self.create_scopes_collections(databases=[new_db],
-                                               scope_collection_map=scope_collection_map)
-                self.load_data_new_doc_loader(databases=[new_db], doc_start=0,
-                                              doc_end=self.total_doc_count)
-                create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                      namespace=f"`{new_db.id}`.scope1.collection1")
-                for index_create_query in create_list:
-                    self.run_query(database=new_db, query=index_create_query)
-                nodes_obj = rest_obj.get_all_dataplane_nodes()
-                self.log.debug(f"Dataplane nodes object {nodes_obj}")
-                index_list = self.get_all_index_names(database=new_db)
-                for node in nodes_obj:
-                    if 'index' in node['services']:
-                        index_host = node['hostname'].split(":")[0]
-                        break
-                for index in index_list:
-                    index1 = index
-                    index1_replica = f'{index1} (replica 1)'
-                    host1 = self.get_resident_host_for_index(index_name=index1, rest_info=rest_info,
-                                                             indexer_node=index_host)
-                    host1_replica = self.get_resident_host_for_index(index_name=index1_replica,
-                                                                     rest_info=rest_info,
-                                                                     indexer_node=index_host)
-                    index_hosts.add(host1[0])
-                    index_hosts.add(host1_replica[0])
-                    if len(index_hosts) != 2:
-                        database_to_use = new_db
-                        break
-            self.scale_down_index_subcluster(dataplane=dataplane, wait_for_rebalance_completion=False)
-            time_now, rebalance_started = time.time(), False
-            while not rebalance_started:
-                status, _ = rest_obj._rebalance_status_and_progress()
-                if status == 'running':
-                    rebalance_started = True
-                time.sleep(5)
-            # create indexes across all databases on a.x.y while the rebalance is going on
-            definition_list = self.gsi_util_obj.get_index_definition_list(dataset=self.dataset, prefix="new")
-            create_list = self.gsi_util_obj.get_create_index_list(definition_list=definition_list,
-                                                                  namespace=f"`{database_to_use.id}`.scope1.collection1")
-            for index_create_query in create_list:
-                self.run_query(database=database_to_use, query=index_create_query)
-            index_list = self.get_all_index_names(database=database_to_use)
-            time_now, rebalance_done = time.time(), False
-            while time.time() - time_now < 1200:
-                status, progress = rest_obj._rebalance_status_and_progress()
-                if (status, progress) == ('none', 100):
-                    rebalance_done = True
-                    break
-                time.sleep(30)
-            if not rebalance_done:
-                self.fail("Rebalance not complete despite waiting 1200 seconds")
-            for index in index_list:
-                index_status = self.get_index_status(rest_info=rest_info, index_name=index,
-                                                     keyspace=f"`{database_to_use.id}`.`scope1`.`collection1`")
-                if index_status != "Ready":
-                    self.fail(f"Index {index} not ready despite waiting 1200 seconds")
-            for database in self.databases.values():
-                self.drop_all_indexes_on_tenant(database=database)
+            self.set_log_level_query_service(rest_info=rest_info, level='debug')
+            query_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="n1ql")
+            self.log.info(f"Query nodes before the test run:{query_nodes_before}")
+            self.provision_databases(count=self.num_of_tenants, seed="test-scale-query", dataplane_id=self.new_dataplane_id)
+            self.create_scopes_collections(databases=self.databases.values())
+            hosts = {}
+            for counter, database in enumerate(self.databases.values()):
+                for scope in database.collections:
+                    for collection in database.collections[scope]:
+                        create_index_list = self.gsi_util_obj.get_create_index_list(self.definition_list,
+                                                                                    f"`{database.id}`.{scope}.{collection}")
+                        for index_create_query in create_index_list:
+                            self.run_query(database=database, query=index_create_query)
+            self.load_data_new_doc_loader(databases=self.databases.values(), doc_start=0, doc_end=self.total_doc_count)
+            with ThreadPoolExecutor() as executor:
+                event = Event()
+                future = executor.submit(self.run_parallel_workloads, event)
+                self.scale_up_query_subcluster(dataplane=dataplane)
+                event.set()
+                future.result()
+            query_nodes_after = self.get_all_query_nodes(rest_info=rest_info)
+            if query_nodes_before == query_nodes_after:
+                self.fail(f"Query sub-cluster did not scale despite loadfactor being over the limit")
+            self.log.info("============== cbcollect after scale up ==========================")
+            self.collect_log_on_dataplane_nodes()
+            self.log.info(f"Query nodes after the scale up:{query_nodes_after}")
+            # run queries and mutations after scale-up
+            with ThreadPoolExecutor() as executor:
+                event = Event()
+                future = executor.submit(self.run_parallel_workloads, event)
+                time.sleep(120)
+                event.set()
+                future.result()
+            for counter, database in enumerate(self.databases.values()):
+                for scope in database.collections:
+                    for collection in database.collections[scope]:
+                        index1 = f'idx_db0_{random.randint(0, 1000)}'
+                        self.create_index(database, query_statement=f"create index {index1}_db{counter} on `{database.id}`.`{scope}`.`{collection}`(a)",
+                                              use_sdk=self.use_sdk)
+            dataplane = ServerlessDataPlane(self.new_dataplane_id)
+            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
+            dataplane.populate(rest_api_info)
+            rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
+                                                  password=dataplane.admin_password,
+                                                  rest_host=dataplane.rest_host)
+            with ThreadPoolExecutor() as executor:
+                event = Event()
+                future = executor.submit(self.run_parallel_workloads, event)
+                self.scale_down_query_subcluster(dataplane=dataplane)
+                event.set()
+                future.result()
+            self.log.info("============== cbcollect after scale down ==========================")
+            self.collect_log_on_dataplane_nodes()
+            # run queries and mutations after scale-down
+            query_nodes_after_2 = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+            if query_nodes_after == query_nodes_after_2:
+                self.fail(f"Query sub-cluster did not scale down despite loadfactor being below the threshold limit")
+            self.log.info(f"Query nodes after the test run:{query_nodes_after}")
+            # run queries and mutations after scale down
+            with ThreadPoolExecutor() as executor:
+                event = Event()
+                future = executor.submit(self.run_parallel_workloads, event)
+                time.sleep(120)
+                event.set()
+                future.result()
+            for counter, database in enumerate(self.databases.values()):
+                for scope in database.collections:
+                    for collection in database.collections[scope]:
+                        index1 = f'idx_db0_{random.randint(0, 1000)}'
+                        self.create_index(database, query_statement=f"create index {index1}_db{counter} on `{database.id}`.`{scope}`.`{collection}`(a)",
+                                              use_sdk=self.use_sdk)
+            self.collect_log_on_dataplane_nodes()
         finally:
+            self.set_log_level_query_service(rest_info=rest_info, level='info')
+
+    def test_rebalance_axy_ddl_axy(self):
+        try:
+            if not self.new_dataplane_id:
+                self.fail("This test needs a dataplane_id parameter in the conf file to run")
+            dataplane = ServerlessDataPlane(self.new_dataplane_id)
+            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
+            dataplane.populate(rest_api_info)
+            rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
+                                                  password=dataplane.admin_password,
+                                                  rest_host=dataplane.rest_host)
+            index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+            self.provision_databases(count=20, seed=f"test-defrag-cluster",
+                                     dataplane_id=self.new_dataplane_id)
+            self.create_scopes_collections(databases=self.databases.values())
+            for counter, database in enumerate(self.databases.values()):
+                self.load_databases(database_obj=database, num_of_docs=10)
+                self.log.info(f"Iteration number {counter+1}")
+                for scope in database.collections:
+                    for collection in database.collections[scope]:
+                        index1 = f'idx_db{counter}_{random.randint(0, 1000)}'
+                        namespace = f"default:`{database.id}`.`{scope}`.`{collection}`"
+                        self.create_index(database, query_statement=f"create index {index1} on {namespace}(b{counter})",
+                                          use_sdk=self.use_sdk)
+                        self.log.info(f"Iteration number {counter+1}. Index creation successful")
+                        index_exists = self.check_if_index_exists(database_obj=database, index_name=index1)
+                        self.log.info(f"Iteration number {counter+1}. index {index1} exists? {index_exists}")
+                        index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+                        for node in index_nodes_after:
+                            num_tenant_stat = self.get_index_stats(indexer_node=node,
+                                                                   rest_info=rest_info)['num_tenants']
+                            self.log.info(f"Num_tenant stat from /stats endpoint: {num_tenant_stat} on index node {node}")
+                        if index_nodes_after != index_nodes_before:
+                            self.fail("Scaling has happened even when the num of tenants has not reached 20")
+            time.sleep(300)
+            index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+            self.log.info(f"Index nodes after scale up :{index_nodes_after}")
+            if index_nodes_before == index_nodes_after:
+                self.fail(f"Index sub-cluster did not scale despite creating indexes for {self.num_of_tenants} tenants")
+            self.provision_databases(count=1, seed=f"test-new-defrag-cluster",
+                                     dataplane_id=self.new_dataplane_id)
+            for database in self.databases.values():
+                if "new" in database.id:
+                    new_db = database
+                    break
+            self.create_scopes_collections(databases=[new_db])
+            self.load_databases(database_obj=new_db, num_of_docs=10)
+            index1 = f'idx_db_{random.randint(0, 1000)}'
+            for scope in new_db.collections:
+                for collection in new_db.collections[scope]:
+                    namespace = f"default:`{new_db.id}`.`{scope}`.`{collection}`"
+                    self.create_index(new_db, query_statement=f"create index {index1} on {namespace}(b)",
+                                      use_sdk=self.use_sdk)
+                    self.log.info(f"New Index creation successful")
+                    index_exists = self.check_if_index_exists(database_obj=new_db, index_name=index1)
+                    self.log.info(f"New DB index {index1} exists? {index_exists}")
+            for node in index_nodes_after:
+                num_tenant_stat = self.get_index_stats(indexer_node=node,
+                                                       rest_info=rest_info)['num_tenants']
+                self.log.info(f"Num_tenant stat from /stats endpoint: {num_tenant_stat} on index node {node}")
+            delete_count, num_dbs_deleted = 5, 0
+            for database in self.databases.values():
+                if num_dbs_deleted < delete_count and "new" not in database.id:
+                    self.delete_database(database_id=database.id)
+                    num_dbs_deleted += 1
+            time.sleep(300)
+            index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+            for node in index_nodes_after:
+                num_tenant_stat = self.get_index_stats(indexer_node=node,
+                                                       rest_info=rest_info)['num_tenants']
+                self.log.info(f"Num_tenant stat from /stats endpoint: {num_tenant_stat} on index node {node}")
+        finally:
+            # TODO uncomment this after getting the appropriate keys needed to work with the s3 bucket
             pass
             # indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
             # storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
