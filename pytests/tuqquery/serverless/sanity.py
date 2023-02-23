@@ -157,9 +157,11 @@ class QuerySanity(ServerlessBaseTestCase):
                     insert = self.run_query(database, f'INSERT INTO {self.scope}.{self.collection} (key, value) values (uuid(), {{ "store": "Store-{n}", "fruits": {random.sample(fruits, 5)} }} )')
                 index = self.run_query(database, f'CREATE INDEX index_arr ON {self.scope}.{self.collection}(ALL ARRAY f FOR f IN fruits END)')
                 self.check_index_online(database, 'index_arr')
-                explain = self.run_query(database, f'EXPLAIN SELECT s.store FROM {self.scope}.{self.collection} s WHERE ANY f IN s.fruits SATISFIES f = "apple" END')
+                result = self.run_query(database, f'SELECT raw fruits[0] FROM {self.scope}.{self.collection} WHERE fruits is not missing LIMIT 1')
+                fruit = result['results'][0]
+                explain = self.run_query(database, f'EXPLAIN SELECT s.store FROM {self.scope}.{self.collection} s WHERE ANY f IN s.fruits SATISFIES f = "{fruit}" END')
                 self.assertEqual(explain['results'][0]['plan']['~children'][0]['scan']['index'], 'index_arr')
-                result = self.run_query(database, f'SELECT * FROM {self.scope}.{self.collection} s WHERE ANY f IN s.fruits SATISFIES f = "apple" END')
+                result = self.run_query(database, f'SELECT * FROM {self.scope}.{self.collection} s WHERE ANY f IN s.fruits SATISFIES f = "{fruit}" END')
                 doc_count = result['metrics']['resultCount']
                 index_ru = math.ceil(doc_count * (36 + 5) / 256)
                 self.assertEqual(result['billingUnits'], {'ru': {'index': index_ru, 'kv': doc_count}} )
