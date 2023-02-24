@@ -596,7 +596,7 @@ def create_serverless_config(input, skip_import_sample=True, seed=None, dp_id=No
     if seed:
         name = f"{seed}"
     else:
-        name = str(uuid.uuid4())
+        name = "testrunner_"+str(uuid.uuid4())
     config = {
         "name": name,
         "region": region,
