@@ -56,7 +56,7 @@ class S3Utils(object):
         if not bucket:
             bucket = self.s3_bucket
         result = self.s3.list_objects_v2(Bucket=bucket, Delimiter='/*')
-        folder_path_expected = f"{folder}/"
+        folder_path_expected = f"{folder}/plasma_storage_v1/"
         self.log.info(f"Expected folder list {folder_path_expected}")
         folder_list_on_aws = []
         self.log.info(f"Result from the s3 list_objects_v2 API call:{result}")

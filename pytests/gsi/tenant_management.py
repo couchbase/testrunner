@@ -758,7 +758,10 @@ class TenantManagement(BaseSecondaryIndexingTests):
                 self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
         except Exception as err:
             self.fail(err)
-        self.wait_until_indexes_online(defer_build=True)
+        result = self.wait_until_indexes_online(defer_build=True)
+        if not result:
+            self.log.info("Timed out. Hence re-checking the index status")
+            self.wait_until_indexes_online(defer_build=True)
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
         self.index_rest = RestConnection(index_node)
         indexder_metadata_aft_swap = self.index_rest.get_indexer_metadata()['status']
@@ -982,6 +985,7 @@ class TenantManagement(BaseSecondaryIndexingTests):
         indexder_metadata_aft_swap = self.index_rest.get_indexer_metadata()['status']
         self.log.info(f"{len(indexder_metadata_aft_swap)}, {len(index_metadata_b4_swap)}")
         self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
+        self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
 
     def test_stats_validation(self):
         mutation_during_rebalance = self.input.param("mutation_during_rebalance", False)
