@@ -1966,7 +1966,7 @@ class RestConnection(object):
             time.sleep(sleep)
             return True
 
-    def _rebalance_progress_status(self, node_url):
+    def _rebalance_progress_status(self, node_url=None):
         api = self.baseUrl + "pools/default/rebalanceProgress"
         if node_url:
             api = "https://" + node_url + ":18091/pools/default/rebalanceProgress"
