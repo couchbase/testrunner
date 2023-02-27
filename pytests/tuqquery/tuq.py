@@ -1380,7 +1380,7 @@ class QueryTests(BaseTestCase):
             json_output_str += s
         return json.loads(json_output_str)
 
-    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None, username=None, password=None, use_fts_query_param=None, debug_query=True, query_context=None, txnid=None, txtimeout=None,atr_collection=None):
+    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None, username=None, password=None, use_fts_query_param=None, debug_query=True, query_context=None, txnid=None, txtimeout=None,atr_collection=None, is_analytics=False):
         if query is None:
             query = self.query
         if server is None:
@@ -1465,7 +1465,7 @@ class QueryTests(BaseTestCase):
             if not is_prepared and debug_query:
                 self.log.info('RUN QUERY %s' % query)
 
-            if self.analytics:
+            if self.analytics or is_analytics:
                 if ';' not in query:
                     query = query + ";"
                 if not self.udfs:
