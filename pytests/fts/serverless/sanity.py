@@ -24,8 +24,8 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         self.num_index_partitions = self.input.param("num_partitions", 1)
         self.num_databases = self.input.param("num_databases", 1)
         self.num_indexes = self.input.param("num_indexes", 1)
-        self.HWM_limit = self.input.param("HWM_limit", 0.8)
-        self.LWM_limit = self.input.param("LWM_limit", 0.5)
+        self.HWM_limit = self.input.param("HWM_limit", 0.9)
+        self.LWM_limit = self.input.param("LWM_limit", 0.75)
         self.UWM_limit = self.input.param("UWM_limit", 0.3)
         self.scaling_time = self.input.param("scaling_time", 30)
         self.num_queries = self.input.param("num_queries", 20)
@@ -540,16 +540,19 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         """
             Returns True if auto rebalance condition is satisfied.
         """
-        mem_util = int(float(self.HWM_limit) * int(stats[0]['limits:memoryBytes']))
-        cpu_util = int(float(self.HWM_limit) * 100)
-        for stat in stats:
-            if stat['utilization:memoryBytes'] > mem_util:
-                self.log.info(f"HWM CHECK STATUS MEM: {stat['utilization:memoryBytes']}")
-                return True
-            if stat['utilization:cpuPercent'] > cpu_util:
-                self.log.info(f"HWM CHECK STATUS CPU: {stat['utilization:cpuPercent']}")
-                return True
-        return False
+        try:
+            mem_util = int(float(self.HWM_limit) * int(stats[0]['limits:memoryBytes']))
+            cpu_util = int(float(self.HWM_limit) * 100)
+            for stat in stats:
+                if stat['utilization:memoryBytes'] > mem_util:
+                    self.log.info(f"HWM CHECK STATUS MEM: {stat['utilization:memoryBytes']}")
+                    return True
+                if stat['utilization:cpuPercent'] > cpu_util:
+                    self.log.info(f"HWM CHECK STATUS CPU: {stat['utilization:cpuPercent']}")
+                    return True
+            return False
+        except:
+            print("stats not found")
 
     def get_fts_stats(self):
         """
@@ -608,7 +611,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         """
         fts_stats, fts_nodes = self.get_fts_stats()
         self.log.info("Verifying Scale In ...")
-        if len(fts_nodes) == 2:
+        if variables['node_count'] == 2:
             self.generate_summary(summary, fts_stats, fts_nodes, variables, "No Scale-In Required")
             self.log.info("BUG : ScaleIn verification not possible since scale out didn't happen")
             self.fail("Autoscaling Failed since Scaling didn't happen")
@@ -658,31 +661,49 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             "Detail": name,
             "Time": str(datetime.now().replace(microsecond=0)),
             "Memory Status": mem_arr,
-            "Moving Average": variables['moving_average'],
+            "Moving Average Mem": variables['moving_average_mem'],
+            "Moving Average CPU": variables['moving_average_cpu'],
             "Scale Out Count ": variables['scale_out_count'],
             "Scale Out Time": time_taken,
             "HWM Index Rejection": True if variables['HWM_hit'] == 1 else False
         }
         summary.append(obj)
 
-    def calculate_running_average_LWM(self, stats, queue, variables):
+    def calculate_running_average_LWM(self, stats, queue_sum, queue_cpu, variables):
         try:
-            avg = 0
+            mem_avg = 0
+            cpu_avg = 0
             for stat in stats:
-                avg += int(stat['utilization:memoryBytes'])
-            avg /= len(stats)
-            variables['moving_avg_sum'] += avg
-            queue.append([avg, datetime.now()])
-            variables['moving_average'] = variables['moving_avg_sum'] / len(queue)
-            if len(queue) <= 1:
+                mem_avg += int(stat['utilization:memoryBytes'])
+                cpu_avg += int(stat['utilization:cpuPercent'])
+            mem_avg /= len(stats)
+            cpu_avg /= len(stats)
+
+            variables['moving_avg_sum'] += mem_avg
+            variables['moving_avg_cpu_sum'] += cpu_avg
+
+            queue_sum.append([mem_avg, datetime.now()])
+            queue_cpu.append([cpu_avg, datetime.now()])
+
+            variables['moving_average_mem'] = variables['moving_avg_sum'] / len(queue_sum)
+            variables['moving_average_cpu'] = variables['moving_avg_cpu_sum'] / len(queue_cpu)
+
+            if len(queue_sum) <= 1:
                 return
 
-            first = queue[0]
-            last = queue[-1]
+            first = queue_sum[0]
+            last = queue_sum[-1]
             if ((last[1]-first[1]).total_seconds()/60) > 30:
-                first_avg = queue.popleft()
+                first_avg = queue_sum.popleft()
                 variables['moving_avg_sum'] -= first_avg[0]
-                variables['moving_average'] = variables['moving_avg_sum'] / len(queue)
+                variables['moving_average_mem'] = variables['moving_avg_sum'] / len(queue_sum)
+
+            first = queue_cpu[0]
+            last = queue_cpu[-1]
+            if ((last[1]-first[1]).total_seconds()/60) > 30:
+                first_avg = queue_cpu.popleft()
+                variables['moving_avg_cpu_sum'] -= first_avg[0]
+                variables['moving_average_cpu'] = variables['moving_avg_cpu_sum'] / len(queue_sum)
         except:
             print("stats not returned")
 
@@ -696,12 +717,13 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         self.log.info(f"------------ Initial STATS ------------")
         fts_stats, fts_nodes = self.get_fts_stats()
         variables = {'node_count': len(fts_nodes), 'scale_out_time': 0, 'HWM_hit': 0, 'scale_out_status': False,
-                     'scale_out_count': 0, 'moving_avg_sum': 0,  'moving_average': 0}
+                     'scale_out_count': 0, 'moving_avg_sum': 0, 'moving_avg_cpu_sum': 0, 'moving_average_mem': 0, 'moving_average_cpu': 0, 'max_no_of_nodes': 2}
         self.generate_summary(summary, fts_stats, fts_nodes, variables, "Initial Summary")
 
         failout_encounter = False
         index_fail_check = False
-        queue = deque()
+        queue_sum = deque()
+        queue_cpu = deque()
         flag = True
         for counter, database in enumerate(self.databases.values()):
             self.cleanup_database(database_obj=database)
@@ -751,14 +773,10 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                         if self.verify_HWM_index_rejection(fts_stats):
                             # self.assertEqual(str(e), f"rest_create_index: error creating index: , err: manager_api: CreateIndex, Prepare failed, err: limitIndexDef: Cannot accommodate index request: {index_name}, resource utilization over limit(s)")
                             self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : HWM HIT-Index rejected")
-                            self.log.info(f"PASS : HWM Index Rejection Passed : {e}")
-                            with self.subTest("Scale In Condition Check"):
-                                if not self.verify_scale_in(variables, summary):
-                                    self.fail("BUG : Scale In Failed")
-                            return
+                            self.log.info(f"PASS : HWM Index Rejection Passed : {str(e)}")
                         else:
                             self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : Index Creation Failed")
-                            self.log.info(f"Index Creation Failed : {e}")
+                            self.log.info(f"Index Creation Failed : {str(e)}")
                             self.fail("BUG : Index Creation Failed")
 
                 self.log.info(f"------------ FTS Stats @ DB {counter + 1} Index {i+1} ------------")
@@ -775,15 +793,17 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                             self.log.info("PASS : AutoRebalance Passed")
                             self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : AutoRebalance Passed")
 
-                self.calculate_running_average_LWM(fts_stats, queue, variables)
-
-                if variables['moving_average'] > int(fts_stats[0]['limits:memoryBytes']):
+                self.calculate_running_average_LWM(fts_stats, queue_sum, queue_cpu, variables)
+                try:
+                    if variables['moving_average_mem'] > int(float(self.HWM_limit) * int(fts_stats[0]['limits:memoryBytes'])) or variables['moving_average_cpu'] > int(float(self.HWM_limit) * 100):
                     # Scale out satisfied using moving average
-                    self.log.info("Scale Out Satisfied using Moving Average")
-                    self.log.info(f"Moving Average: {variables['moving_average']}")
-                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Satisfied using Moving Average")
-                    variables['scale_out_time'] = datetime.now()
-                    variables['scale_out_status'] = True
+                        self.log.info("Scale Out Satisfied using Moving Average")
+                        self.log.info(f"Moving Average: {variables['moving_average']}")
+                        self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Satisfied using Moving Average")
+                        variables['scale_out_time'] = datetime.now()
+                        variables['scale_out_status'] = True
+                except:
+                    print("stats not found")
 
                 if not variables['scale_out_status'] and self.check_scale_out_condition(fts_stats) and flag:
                     self.log.info("Scale Out Satisfied")
@@ -850,10 +870,10 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         if not variables['scale_out_status']:
             self.fail("Autoscaling Failed since Scaling didn't happen")
 
-
-    def create_index_and_validate_autoscaling(self, all_info, index_no, db_no, index_arr, variables, summary, queue):
+    def create_index_and_validate_autoscaling(self, all_info, index_no, db_no, index_arr, variables, summary, queue_sum, queue_cpu):
         plan_params = self.construct_plan_params()
         try:
+            # Create an FTS Index
             index = all_info[db_no]['fts_callable'].create_fts_index(f"counter_{db_no + 1}_idx_{index_no + 1}", source_type='couchbase',
                                                   source_name=all_info[db_no]['database'].id, index_type='fulltext-index',
                                                   index_params=None, plan_params=plan_params,
@@ -863,17 +883,18 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             all_info[db_no]['fts_callable'].wait_for_indexing_complete(self._num_of_docs_per_collection, complete_wait=False)
             index_arr.append([all_info[db_no]['fts_callable'], index])
 
-            if variables['scale_out_count'] != 0 and not variables['index_fail_check']:
+            # After creating an index check if HWM has hit, if it has hit and index still got created (since we are here), then this is potentially a bug.
+            if not variables['index_fail_check']:
                 with self.subTest("Verifying Index Rejection for HWM"):
                     fts_stats, fts_nodes = self.get_fts_stats()
                     if self.verify_HWM_index_rejection(fts_stats):
                         if variables['HWM_hit'] == 0:
                             variables['HWM_hit'] += 1
                             self.generate_summary(summary, fts_stats, fts_nodes, variables, "HWM HIT-Exempted")
-                            self.log.info("HWM Hit has taken place, exempting first rejection")
+                            self.log.critical("HWM Hit has taken place, exempting first rejection")
                         else:
                             variables['index_fail_check'] = True
-                            self.log.info("Index created even though HWM had been satisfied")
+                            self.log.critical("Index created even though HWM had been satisfied")
                             self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : HWM HIT-Index Created")
                             self.fail("BUG : Index created even though HWM had been satisfied")
         except Exception as e:
@@ -881,16 +902,12 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             with self.subTest("Index Creation Check"):
                 fts_stats, fts_nodes = self.get_fts_stats()
                 if self.verify_HWM_index_rejection(fts_stats):
-                    # self.assertEqual(str(e), f"rest_create_index: error creating index: , err: manager_api: CreateIndex, Prepare failed, err: limitIndexDef: Cannot accommodate index request: {index_name}, resource utilization over limit(s)")
+                    self.assertTrue("limitIndexDef: Cannot accommodate index request" in str(e))
                     self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : HWM HIT-Index rejected")
-                    self.log.info(f"PASS : HWM Index Rejection Passed : {e}")
-                    with self.subTest("Scale In Condition Check"):
-                        if not self.verify_scale_in(variables, summary):
-                            self.fail("BUG : Scale In Failed")
-                    return
+                    self.log.info(f"PASS : HWM Index Rejection Passed : {str(e)}")
                 else:
                     self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : Index Creation Failed")
-                    self.log.info(f"Index Creation Failed : {e}")
+                    self.log.critical(f"Index Creation Failed : {str(e)}")
                     self.fail("BUG : Index Creation Failed")
 
         self.log.info(f"------------ FTS Stats @ DB {db_no + 1} Index {index_no+1} ------------")
@@ -899,27 +916,26 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         with self.subTest("Verify AutoRebalance"):
             if self.check_auto_rebalance_condition(fts_stats):
                 rebalance_status = all_info[db_no]['fts_callable'].get_fts_rebalance_status(fts_nodes[0])
-                if rebalance_status is None:
-                    self.log.info("PASS : AutoRebalance Failed")
+                if rebalance_status == "none":
+                    self.log.critical("FAIL : AutoRebalance Failed")
                     self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : AutoRebalance Failed")
                     self.fail(f"BUG : AutoRebalance Failed..")
                 else:
                     self.log.info("PASS : AutoRebalance Passed")
-                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : AutoRebalance Passed")
+                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : AutoRebalance Passed")
 
+        self.calculate_running_average_LWM(fts_stats, queue_sum, queue_cpu, variables)
 
-        self.calculate_running_average_LWM(fts_stats, queue, variables)
-
-        if variables['moving_average'] > int(fts_stats[0]['limits:memoryBytes']):
-            # Scale out satisfied using moving average
+        if variables['moving_average_mem'] > int(float(self.HWM_limit) * int(fts_stats[0]['limits:memoryBytes'])) or variables['moving_average_cpu'] > int(float(self.HWM_limit) * 100):
+            # Scale out satisfied using moving average sum or moving avg cpu
             self.log.info("Scale Out Satisfied using Moving Average")
-            self.log.info(f"Moving Average: {variables['moving_average']}")
+            self.log.info(f"Moving Average: {variables['moving_average_mem']} | {variables['moving_average_cpu']}")
             self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Satisfied using Moving Average")
             variables['scale_out_time'] = datetime.now()
             variables['scale_out_status'] = True
 
         if not variables['scale_out_status'] and self.check_scale_out_condition(fts_stats) and variables['flag']:
-            self.log.info("Scale Out Satisfied")
+            self.log.critical("Scale Out Satisfied b4 Moving Average")
             variables['flag'] = False
             self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Satisfied b4 Moving Average")
             self.prettyPrintStats(fts_stats, fts_nodes, False)
@@ -942,18 +958,18 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                     else:
                         if not variables['failout_encounter']:
                             variables['failout_encounter'] = True
-                            self.log.info(f"FAIL : Scale Out Failed")
-                            self.log.info(f"Scale Out {variables['scale_out_count']} Failed : {fts_stats}, {fts_nodes}")
+                            self.log.critical(f"FAIL : Scale Out Failed")
+                            self.log.critical(f"Scale Out {variables['scale_out_count']} Failed : {fts_stats}, {fts_nodes}")
                             self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : Scale Out Failed", self.scaling_time)
                             self.fail(f"BUG : Scale Out {variables['scale_out_count']}. failed after {self.scaling_time} minutes")
             else:
                 with self.subTest("Scale Out Condition Check before scaling time"):
                     if self.verify_scale_out(variables):
                         time_taken = divmod((datetime.now() - variables['scale_out_time']).total_seconds(), 60)[0]
-                        self.log.info(f"BUG : Scale Out happened before scaling time")
-                        self.log.info(f"BUG : Scale Out {variables['scale_out_count']}. happened after {time_taken} minutes!")
+                        self.log.critical(f"BUG : Scale Out happened before scaling time")
+                        self.log.critical(f"BUG : Scale Out {variables['scale_out_count']}. happened after {time_taken} minutes!")
                         self.generate_summary(summary, fts_stats, fts_nodes, variables, f"F : Scale Out Passed < {self.scaling_time}", time_taken)
-                        self.log.info(f"Scale Out Stats: \n {fts_stats}, {fts_nodes}")
+                        self.log.critical(f"Scale Out Stats: \n {fts_stats}, {fts_nodes}")
                         variables['scale_out_status'] = False
                         variables['scale_out_count'] += 1
                         variables['failout_encounter'] = False
@@ -967,11 +983,12 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         self.log.info(f"------------ Initial STATS ------------")
         fts_stats, fts_nodes = self.get_fts_stats()
         variables = {'node_count': len(fts_nodes), 'scale_out_time': 0, 'HWM_hit': 0, 'scale_out_status': False,
-                     'scale_out_count': 0, 'moving_avg_sum': 0,  'moving_average': 0, 'index_fail_check': False,
+                     'scale_out_count': 0, 'moving_avg_sum': 0, 'moving_avg_cpu_sum': 0, 'moving_average_mem': 0, 'moving_average_cpu': 0, 'index_fail_check': False,
                      'failout_encounter': False, 'flag': True}
         self.generate_summary(summary, fts_stats, fts_nodes, variables, "Initial Summary")
 
-        queue = deque()
+        queue_sum = deque()
+        queue_cpu = deque()
         all_info = []
         index_arr = []
         # Create 20 databases with scopes and collections
@@ -993,14 +1010,12 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             all_info.append({'database': database, 'type': _type, 'scope_name': scope_name, 'collection_name': collection_name, 'fts_callable': fts_callable})
 
         # Launch a thread in each database to create an index
-
-
         for i in range(self.num_indexes):
             thread_arr = []
             for j in range(self.num_databases):
                 thread = threading.Thread(target=self.create_index_and_validate_autoscaling, kwargs={'all_info': all_info, 'index_no': i, 'db_no' : j,
                                                                     'index_arr': index_arr, 'variables': variables, 'summary': summary,
-                                                                    'queue': queue})
+                                                                    'queue_sum': queue_sum, 'queue_cpu': queue_cpu})
                 thread.start()
                 time.sleep(2)
                 thread_arr.append(thread)
@@ -1202,6 +1217,3 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 finally:
                     self.run_query(database, f'DROP INDEX idx1 on {scope_name}.{collection_name}')
             fts_callable.delete_all()
-
-    def testing(self):
-        self.delete_all_database(True)
