@@ -267,7 +267,8 @@ class OnPremBaseTestCase(unittest.TestCase):
                 CbServer.use_https = True
                 if self.enforce_tls:
                     self.log.info("#####Enforcing TLS########")
-                    ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
+                    ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict",
+                                                            cluster_profile=self.cluster_profile)
                     for i in range(2):
                         status = ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master])
                         if status:
@@ -429,7 +430,8 @@ class OnPremBaseTestCase(unittest.TestCase):
                 role_list = [{'id': 'clientuser', 'name': 'clientuser', 'roles': 'admin'}]
                 RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
                 CbServer.x509.upload_client_cert_settings(server=self.master)
-                ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
+                ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict",
+                                                        cluster_profile=self.cluster_profile)
 
             self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="
                           .format(self.case_number, self._testMethodName))
@@ -3142,10 +3144,11 @@ class OnPremBaseTestCase(unittest.TestCase):
                 self.log.info("Retry rebalanced fixed the rebalance failure")
                 break
 
-    def setup_nton_encryption(self):
+    def setup_nton_encryption(self, cluster_profile="provisioned"):
         self.log.info('Setting up node to node encryption at level {0}'.
                       format(self.ntonencrypt_level))
-        ntonencryptionBase().setup_nton_cluster(self.servers, clusterEncryptionLevel=self.ntonencrypt_level)
+        ntonencryptionBase().setup_nton_cluster(servers=self.servers, clusterEncryptionLevel=self.ntonencrypt_level,
+                                                cluster_profile=cluster_profile)
 
     def upload_x509_certs(self, servers):
         """

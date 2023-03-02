@@ -3164,7 +3164,8 @@ class RestConnection(object):
             params_dict['failoverOnDataDiskIssues[timePeriod]'] = disk_timeout
         else:
             params_dict['failoverOnDataDiskIssues[enabled]'] = 'false'
-        params_dict['maxCount'] = maxCount
+        if maxCount:
+            params_dict['maxCount'] = maxCount
         params = urllib.parse.urlencode(params_dict)
         api = self.baseUrl + 'settings/autoFailover'
         log.info('settings/autoFailover params : {0}'.format(params))

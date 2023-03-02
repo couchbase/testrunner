@@ -128,12 +128,14 @@ class ntonencryptionBase:
         return output
 
 
-    def setup_nton_cluster(self,servers,ntonStatus='enable',clusterEncryptionLevel='control'):
+    def setup_nton_cluster(self,servers,ntonStatus='enable',clusterEncryptionLevel='control',
+                           cluster_profile="provisioned"):
         """
         Main function to setup node to node encryption and also ClusterEncyprtionLevel
         """
         log.info ('Setting up node to node encryption - status = {0} and clusterEncryptionLevel = {1}'.format(ntonStatus,clusterEncryptionLevel))
-        self.disable_autofailover(servers)
+        self.disable_autofailover(servers=servers,
+                                  cluster_profile=cluster_profile)
         result = self.ntonencryption_cli(servers,ntonStatus)
         self.change_cluster_encryption_cli(servers,clusterEncryptionLevel)
         return result
@@ -192,10 +194,15 @@ class ntonencryptionBase:
             rest = RestConnection(server)
             rest.update_autofailover_settings(True, 120)
 
-    def disable_autofailover(self, servers):
+    def disable_autofailover(self, servers, cluster_profile='provisioned'):
         for server in servers:
             rest = RestConnection(server)
-            rest.update_autofailover_settings(False, 120)
+            if cluster_profile == "provisioned":
+                rest.update_autofailover_settings(False, 120)
+            elif cluster_profile == 'serverless':
+                rest.update_autofailover_settings(enabled=False, timeout=120,
+                                     enable_disk_failure=False,
+                                     disk_timeout=120, maxCount=None)
 
     def check_autofailover_enabled(self, servers):
         return RestConnection(servers[0]).get_autofailover_settings().enabled
