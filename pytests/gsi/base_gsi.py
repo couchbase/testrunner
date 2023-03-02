@@ -1706,7 +1706,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         return result
 
     def create_S3_config(self):
-        COUCHBASE_AWS_HOME = '/opt/couchbase/.aws'
+        COUCHBASE_AWS_HOME = '/home/couchbase/.aws'
         aws_cred_file = ('[default]\n'
                          f'aws_access_key_id={self.aws_access_key_id}\n'
                          f'aws_secret_access_key={self.aws_secret_access_key}')
