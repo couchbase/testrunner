@@ -34,7 +34,7 @@ class FTSCallable:
         fts_obj.delete_all()
     """
 
-    def __init__(self, nodes, es_validate=False, es_reset=True, scope=None, collections=None, collection_index=False):
+    def __init__(self, nodes, es_validate=False, es_reset=True, scope=None, collections=None, collection_index=False, is_elixir=False):
         self.log = logger.Logger.get_logger()
         self.cb_cluster = CouchbaseCluster(name="C1", nodes= nodes, log=self.log)
         self.cb_cluster.get_buckets()
@@ -43,6 +43,7 @@ class FTSCallable:
         self.elastic_node = TestInputSingleton.input.elastic
         self.compare_es = es_validate
         self.es = None
+        self.is_elixir = is_elixir
         self._num_items = 10000
         self.query_types = ["match", "bool", "match_phrase",
                             "prefix", "fuzzy", "conjunction", "disjunction",
@@ -130,7 +131,8 @@ class FTSCallable:
             type_mapping=_type,
             collection_index=collection_index,
             scope=scope,
-            collections=collections
+            collections=collections,
+            is_elixir=self.is_elixir
         )
         if collection_index:
             if not index.custom_map and not specify_fields:
@@ -347,7 +349,6 @@ class FTSCallable:
                 es_index_name=es_index_name,
                 query_index=count,
                 use_collections=self.collection_index))
-
         num_queries = len(tasks)
 
         for task in tasks:
@@ -554,14 +555,14 @@ class FTSCallable:
             self.es.create_index_mapping(index_name="es_index",
                                          es_mapping=es_mapping, fts_mapping=fts_mapping)
 
-    def check_if_index_exists(self, index_name, index_def=False, node_def=False):
+    def check_if_index_exists(self, index_name, bucket_name=None, scope_name=None, index_def=False, node_def=False):
         """
             Returns true / false if index exists
             Returns index's node and server group distribution if required -> node_def = True
             Returns index definition if required -> index_def = True
         """
         rest = RestConnection(self.cb_cluster.get_random_fts_node())
-        resp = rest.get_fts_index_definition(index_name)
+        resp = rest.get_fts_index_definition(index_name, bucket_name, scope_name)
         if resp[0]:
             if node_def:
                 return resp[1]['planPIndexes'][0]['nodes']

@@ -775,7 +775,8 @@ class FTSIndex:
     def __init__(self, cluster, name, source_type='couchbase',
                  source_name=None, index_type='fulltext-index', index_params=None,
                  plan_params=None, source_params=None, source_uuid=None, dataset=None, index_storage_type=None,
-                 type_mapping=None, collection_index=False, scope=None, collections=None, multiple_ca=False):
+                 type_mapping=None, collection_index=False, scope=None, collections=None, multiple_ca=False,
+                 is_elixir=False):
 
         """
          @param name : name of index/alias
@@ -807,6 +808,7 @@ class FTSIndex:
         self.scope = scope
         self.collections = collections
         self.multiple_ca=multiple_ca
+        self.is_elixir = is_elixir
         if not index_storage_type:
             self.index_storage_type = TestInputSingleton.input.param("index_type", None)
         else:
@@ -1235,15 +1237,14 @@ class FTSIndex:
         self.__log.info("Checking if index already exists ...")
         if not rest:
             rest = RestConnection(self.__cluster.get_random_fts_node())
-        status, _ = rest.get_fts_index_definition(self.name)
+        status, _ = rest.get_fts_index_definition(self.name, self._source_name, self.scope)
         if status != 400:
-            rest.delete_fts_index(self.name)
+            rest.delete_fts_index(self.name, self._source_name, self.scope)
         self.__log.info("Creating {0} {1} on {2}".format(
             self.index_type,
             self.name,
             rest.ip))
-        rest.create_fts_index(self.name, self.index_definition)
-        time.sleep(2)
+        rest.create_fts_index(self.name, self.index_definition, self._source_name, self.scope)
         self.__cluster.get_indexes().append(self)
         self.uuid = self.get_uuid()
         global_vars.system_event_logs.add_event(SearchServiceEvents.index_created(rest.ip, self.uuid,
@@ -1256,7 +1257,7 @@ class FTSIndex:
             self.index_type,
             self.name,
             rest.ip))
-        rest.create_fts_index(self.name, self.index_definition)
+        rest.create_fts_index(self.name, self.index_definition, self._source_name, self.scope)
         self.__cluster.get_indexes().append(self)
 
     def update(self, rest=None):
@@ -1266,7 +1267,7 @@ class FTSIndex:
             self.index_type,
             self.name,
             rest.ip))
-        rest.update_fts_index(self.name, self.index_definition)
+        rest.update_fts_index(self.name, self.index_definition, self._source_name, self.scope)
         self.uuid = self.get_uuid()
         global_vars.system_event_logs.add_event(SearchServiceEvents.index_updated(rest.ip, self.uuid,
                                                                                   self.name, self._source_name))
@@ -1336,10 +1337,9 @@ class FTSIndex:
             self.index_type,
             self.name,
             rest.ip))
-        status, content, header = rest.delete_fts_index_extended_output(self.name)
+        status, content, header = rest.delete_fts_index_extended_output(self.name, self._source_name, self.scope)
         content1 = content.decode()
         content_json = json.loads(str(content1))
-
         if status:
             self.__cluster.get_indexes().remove(self)
             if not TestInputSingleton.input.param("capella_run", False) and not CbServer.capella_run:
@@ -1371,12 +1371,17 @@ class FTSIndex:
     def get_indexed_doc_count(self, rest=None):
         if not rest:
             rest = RestConnection(self.__cluster.get_random_fts_node())
+        if self.is_elixir:
+            return rest.get_fts_index_doc_count(self._source_name + "." + self.scope+"." + self.name)
         return rest.get_fts_index_doc_count(self.name)
 
     def get_num_mutations_to_index(self, rest=None):
         if not rest:
             rest = RestConnection(self.__cluster.get_random_fts_node())
-        status, stat_value = rest.get_fts_stats(index_name=self.name,
+        name = self.name
+        if self.is_elixir:
+            name = self._source_name+self.scope+self.name
+        status, stat_value = rest.get_fts_stats(index_name=name,
                                                 bucket_name=self._source_name,
                                                 stat_name='num_mutations_to_index')
         return stat_value
@@ -1389,7 +1394,7 @@ class FTSIndex:
 
     def get_uuid(self):
         rest = RestConnection(self.__cluster.get_random_fts_node())
-        return rest.get_fts_index_uuid(self.name)
+        return rest.get_fts_index_uuid(self.name, self._source_name, self.scope)
 
     def construct_cbft_query_json(self, query, fields=None, timeout=60000,
                                   facets=False,
@@ -1530,7 +1535,7 @@ class FTSIndex:
             else:
                 rest_timeout = timeout // 1000 + 10
             hits, matches, time_taken, status = \
-                self.__cluster.run_fts_query(self.name, query_dict, node=node, timeout=rest_timeout, rest=rest)
+                self.__cluster.run_fts_query(self.name, query_dict, scope_name=self.scope, bucket_name=self._source_name, node=node, timeout=rest_timeout, rest=rest)
         except ServerUnavailableException:
             if zero_results_ok and (expected_hits is None or expected_hits <= 0):
                 return hits, doc_ids, time_taken, status
@@ -2690,7 +2695,7 @@ class CouchbaseCluster:
         """ Delete all FTSIndex objects from self.__indexes """
         self.__indexes.clear()
 
-    def run_fts_query(self, index_name, query_dict, node=None, timeout=100, rest=None):
+    def run_fts_query(self, index_name, query_dict, bucket_name=None, scope_name=None, node=None, timeout=100, rest=None):
         """ Runs a query defined in query_json against an index/alias and
         a specific node
 
@@ -2705,8 +2710,9 @@ class CouchbaseCluster:
         self.__log.info("Running query %s on node as %s : %s:%s"
                         % (json.dumps(query_dict, ensure_ascii=False),
                            node.ip, rest.username, node.fts_port))
+
         total_hits, hit_list, time_taken, status = \
-            rest.run_fts_query(index_name, query_dict, timeout=timeout)
+            rest.run_fts_query(index_name, query_dict, timeout=timeout, bucket=bucket_name, scope=scope_name)
         return total_hits, hit_list, time_taken, status
 
     def run_fts_query_generalized(self, index_name, query_dict, node=None, timeout=70):

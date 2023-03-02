@@ -328,6 +328,7 @@ class RestConnection(object):
                 new_services=fts-kv-index-n1ql """
             self.services_node_init = self.input.param("new_services", None)
             self.debug_logs = self.input.param("debug-logs", False)
+            self.is_elixir = self.input.param("is_elixir", False)
 
         # Adding CDC params
         self.enable_cdc = self.input.param("enable_cdc", False)
@@ -3573,9 +3574,11 @@ class RestConnection(object):
             log.info("SUCCESS: FTS maxDCPAgents set to {0}".format(value))
         return status
 
-    def create_fts_index(self, index_name, params):
+    def create_fts_index(self, index_name, params, bucket=None, scope=None):
         """create or edit fts index , returns {"status":"ok"} on success"""
         api = self.fts_baseUrl + "api/index/{0}".format(index_name)
+        if self.is_elixir:
+            api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}".format(bucket, scope, index_name)
         log.info(json.dumps(params))
         status, content, header = self.urllib_request(api, verb='PUT', params=json.dumps(params, ensure_ascii=False))
         if status:
@@ -3584,8 +3587,10 @@ class RestConnection(object):
             raise Exception("Error creating index: {0}".format(content))
         return status
 
-    def update_fts_index(self, index_name, index_def):
+    def update_fts_index(self, index_name, index_def, bucket=None, scope=None):
         api = self.fts_baseUrl + "api/index/{0}".format(index_name)
+        if self.is_elixir:
+            api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}".format(bucket, scope, index_name)
         log.info(json.dumps(index_def, indent=3))
         status, content, header = self.urllib_request(api, verb='PUT', params=json.dumps(index_def, ensure_ascii=False))
         if status:
@@ -3594,10 +3599,24 @@ class RestConnection(object):
             raise Exception("Error updating index: {0}".format(content))
         return status
 
-    def get_fts_index_definition(self, name):
+    def get_fts_index_definition(self, name, bucket=None, scope=None):
         """ get fts index/alias definition """
         json_parsed = {}
         api = self.fts_baseUrl + "api/index/{0}".format(name)
+        if self.is_elixir:
+            api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}".format(bucket, scope, name)
+        status, content, header = self.urllib_request(
+            api)
+        if status:
+            json_parsed = json.loads(content)
+        return status, json_parsed
+
+    def get_all_fts_index_definition(self, bucket=None, scope=None):
+        """ get fts index/alias definition for elixir"""
+        json_parsed = {}
+        api = self.fts_baseUrl + "api/index"
+        if self.is_elixir:
+            api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index".format(bucket, scope)
         status, content, header = self.urllib_request(
             api)
         if status:
@@ -3613,10 +3632,12 @@ class RestConnection(object):
             json_parsed = json.loads(content)
         return json_parsed['count']
 
-    def get_fts_index_uuid(self, name, timeout=30):
+    def get_fts_index_uuid(self, name, bucket=None, scope=None):
         """ Returns uuid of index/alias """
         json_parsed = {}
         api = self.fts_baseUrl + "api/index/{0}".format(name)
+        if self.is_elixir:
+            api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}".format(bucket, scope, name)
         status, content, header = self.urllib_request(api)
         if status:
             json_parsed = json.loads(content)
@@ -3631,17 +3652,21 @@ class RestConnection(object):
             json_parsed = json.loads(content)
         return json_parsed['pindexes']
 
-    def delete_fts_index(self, name):
+    def delete_fts_index(self, name, bucket=None, scope=None):
         """ delete fts index/alias """
         api = self.fts_baseUrl + "api/index/{0}".format(name)
+        if self.is_elixir:
+            api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}".format(bucket, scope, name)
         status, content, header = self.urllib_request(
             api,
             verb='DELETE')
         return status
 
-    def delete_fts_index_extended_output(self, name):
+    def delete_fts_index_extended_output(self, name, bucket=None, scope=None):
         """ delete fts index/alias """
         api = self.fts_baseUrl + "api/index/{0}".format(name)
+        if self.is_elixir:
+            api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}".format(bucket, scope, name)
         status, content, header = self.urllib_request(
             api,
             verb='DELETE')
@@ -3729,9 +3754,11 @@ class RestConnection(object):
             verb='POST')
         return status
 
-    def run_fts_query(self, index_name, query_json, timeout=100):
+    def run_fts_query(self, index_name, query_json, timeout=100, bucket=None, scope=None):
         """Method run an FTS query through rest api"""
         api = self.fts_baseUrl + "api/index/{0}/query".format(index_name)
+        if self.is_elixir:
+            api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}/query".format(bucket, scope, index_name)
         headers = self._create_capi_headers()
         status, content, header = self.urllib_request(
             api,

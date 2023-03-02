@@ -92,7 +92,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                 database_obj=database, scope=scope_name, collection=collection_name)
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                       collections=collection_name, collection_index=True)
+                                       collections=collection_name, collection_index=True, is_elixir=True)
 
             _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                     collection=collection_name)
@@ -105,7 +105,6 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                                     scope=scope_name, collections=[collection_name], no_check=False)
 
             fts_callable.wait_for_indexing_complete(self._num_of_docs_per_collection)
-
             docs_indexed = fts_idx.get_indexed_doc_count()
             container_doc_count = self._num_of_docs_per_collection
             self.log.info(f"Docs in index {fts_idx.name}={docs_indexed}, kv docs={container_doc_count}")
@@ -131,7 +130,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                 database_obj=database, scope=scope_name, collection=collection_name)
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                       collections=collection_name, collection_index=True)
+                                       collections=collection_name, collection_index=True, is_elixir=True)
 
             _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                     collection=collection_name)
@@ -155,7 +154,6 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 errors.append(f"No docs were indexed for index {fts_idx.name}")
             if docs_indexed != container_doc_count:
                 errors.append(f"Bucket doc count = {container_doc_count}, index doc count={docs_indexed}")
-
             fts_callable.delete_all()
 
     # Run fts rest based query and expect results
@@ -172,7 +170,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                 database_obj=database, scope=scope_name, collection=collection_name)
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                       collections=collection_name, collection_index=True)
+                                       collections=collection_name, collection_index=True, is_elixir=True)
             _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                     collection=collection_name)
             plan_params = self.construct_plan_params()
@@ -203,7 +201,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                 database_obj=database, scope=scope_name, collection=collection_name)
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                       collections=collection_name, collection_index=True)
+                                       collections=collection_name, collection_index=True, is_elixir=True)
 
             _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                     collection=collection_name)
@@ -215,7 +213,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                                 _type=_type, analyzer="standard",
                                                 scope=scope_name, collections=[collection_name], no_check=False)
             fts_callable.wait_for_indexing_complete(self._num_of_docs_per_collection)
-            index_resp = fts_callable.check_if_index_exists(idx.name, node_def=True)
+            index_resp = fts_callable.check_if_index_exists(idx.name, bucket_name=database.id, scope_name=scope_name, node_def=True)
             self.log.info(f"Total no. of index's node and server group : {len(index_resp)}")
             self.assertEqual(len(index_resp), 2)
             fts_callable.delete_all()
@@ -239,7 +237,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                                                     collection=collection_arr)
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                       collections=collection_arr, collection_index=True)
+                                       collections=collection_arr, collection_index=True, is_elixir=True)
             plan_params = self.construct_plan_params()
             fts_callable.create_fts_index("idx", source_type='couchbase',
                                           source_name=database.id, index_type='fulltext-index',
@@ -269,7 +267,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                                                     collection=collection_arr)
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                       collections=collection_arr, collection_index=True)
+                                       collections=collection_arr, collection_index=True, is_elixir=True)
             plan_params = self.construct_plan_params()
             idx = fts_callable.create_fts_index("idx", source_type='couchbase',
                                                 source_name=database.id, index_type='fulltext-index',
@@ -278,14 +276,14 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                                 _type=_type, analyzer="standard",
                                                 scope=scope_name, collections=[collection_arr], no_check=False)
             fts_callable.wait_for_indexing_complete(self._num_of_docs_per_collection)
-            resp = fts_callable.check_if_index_exists(idx.name, index_def=True)
+            resp = fts_callable.check_if_index_exists(idx.name, bucket_name=database.id, scope_name=scope_name, node_def=True)
             if resp:
                 self.log.info(f"Index Definition before collection deletion : {resp}")
             for collection_name in collection_arr:
                 self.delete_collection(database, scope_name, collection_name)
             self.log.info(f"Waiting for collection to get permanently deleted")
             time.sleep(100)
-            resp = fts_callable.check_if_index_exists(idx.name, index_def=True)
+            resp = fts_callable.check_if_index_exists(idx.name, bucket_name=database.id, scope_name=scope_name, node_def=True)
             if not resp:
                 self.log.info("Index not found !")
             else:
@@ -312,7 +310,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                 database_obj=database, scope=scope_name, collection=collection_name)
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                       collections=collection_name, collection_index=True)
+                                       collections=collection_name, collection_index=True,  is_elixir=True)
             _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                     collection=collection_name)
             plan_params = self.construct_plan_params()
@@ -326,18 +324,18 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 fts_callable.wait_for_indexing_complete(self._num_of_docs_per_collection)
                 if counter in database_random_indexes:
                     indexes_arr.append(
-                        [fts_callable, idx.name, database.id])
+                        [fts_callable, idx.name, database.id, scope_name])
 
         index_count = 0
         for i, index in enumerate(indexes_arr):
-            if index[0].check_if_index_exists(index[1]):
+            if index[0].check_if_index_exists(index[1], bucket_name=index[2], scope_name=index[3], node_def=True):
                 self.log.info(f"{i}.Index {index[1]} -> Present before deletion")
 
         for index in indexes_arr:
             self.delete_database(index[2])
 
         for index in indexes_arr:
-            if index[0].check_if_index_exists(index[1]):
+            if index[0].check_if_index_exists(index[1], bucket_name=index[2], scope_name=index[3], node_def=True):
                 self.fail(f"Index {index[1]} exists even after DB deletion")
             else:
                 self.log.info(f" Index {index[1]} -> Not Found after deletion")
@@ -359,7 +357,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                 database_obj=database, scope=scope_name, collection=collection_name)
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                       collections=collection_name, collection_index=True)
+                                       collections=collection_name, collection_index=True,  is_elixir=True)
             _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                     collection=collection_name)
             plan_params = self.construct_plan_params()
@@ -371,15 +369,15 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                                     _type=_type, analyzer="standard",
                                                     scope=scope_name, collections=[collection_name], no_check=False)
                 fts_callable.wait_for_indexing_complete(self._num_of_docs_per_collection)
-                indexes_arr.append([fts_callable, idx.name])
+                indexes_arr.append([fts_callable, idx.name, database.id, scope_name])
 
         index_count = 0
         for i, index in enumerate(indexes_arr):
-            if index[0].check_if_index_exists(index[1]):
+            if index[0].check_if_index_exists(index[1], bucket_name=index[2], scope_name=index[3], node_def=True):
                 self.log.info(f"{i}. Index {index[1]} -> Present before deletion")
         self.delete_all_database()
         for index in indexes_arr:
-            if index[0].check_if_index_exists(index[1]):
+            if index[0].check_if_index_exists(index[1], bucket_name=index[2], scope_name=index[3], node_def=True):
                 self.fail(f"Index {index[1]} exists even after DB deletion")
             else:
                 self.log.info(f" Index {index[1]} -> Not Found after deletion")
@@ -400,7 +398,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                 database_obj=database, scope=scope_name, collection=collection_name)
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                       collections=collection_name, collection_index=True)
+                                       collections=collection_name, collection_index=True, is_elixir=True)
 
             _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                     collection=collection_name)
@@ -444,7 +442,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                 database_obj=database, scope=scope_name, collection=collection_name)
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                       collections=collection_name, collection_index=True)
+                                       collections=collection_name, collection_index=True, is_elixir=True)
 
             _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                     collection=collection_name)
@@ -480,7 +478,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                 database_obj=database, scope=scope_name, collection=collection_name)
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                       collections=collection_name, collection_index=True)
+                                       collections=collection_name, collection_index=True, is_elixir=True)
 
             _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                     collection=collection_name)
@@ -548,10 +546,10 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             mem_util = int(float(self.HWM_limit) * int(stats[0]['limits:memoryBytes']))
             cpu_util = int(float(self.HWM_limit) * 100)
             for stat in stats:
-                if stat['utilization:memoryBytes'] > mem_util:
+                if stat['utilization:memoryBytes'] >= mem_util:
                     self.log.info(f"HWM CHECK STATUS MEM: {stat['utilization:memoryBytes']}")
                     return True
-                if stat['utilization:cpuPercent'] > cpu_util:
+                if stat['utilization:cpuPercent'] >= cpu_util:
                     self.log.info(f"HWM CHECK STATUS CPU: {stat['utilization:cpuPercent']}")
                     return True
             return False
@@ -604,7 +602,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         cpu_util = int(float(self.HWM_limit) * 100)
         count = 0
         for stat in stats:
-            if stat['utilization:memoryBytes'] > mem_util or stat['utilization:cpuPercent'] > cpu_util:
+            if stat['utilization:memoryBytes'] >= mem_util or stat['utilization:cpuPercent'] >= cpu_util:
                 count += 1
 
         if len(stats) - count < 2:
@@ -758,7 +756,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                 doc_template="emp")
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                       collections=collection_name, collection_index=True)
+                                       collections=collection_name, collection_index=True, is_elixir=True)
 
             _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                     collection=collection_name)
@@ -773,7 +771,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                                           scope=scope_name, collections=[collection_name], no_check=False)
                     fts_callable.wait_for_indexing_complete(self._num_of_docs_per_collection)
                     if self.autoscaling_with_queries:
-                        fts_callable.run_query_and_compare(index, self.num_queries)
+                        fts_callable.run_query_and_compare(index, self.num_queries, )
 
                     if variables['scale_out_count'] != 0 and not index_fail_check:
                         with self.subTest("Verifying Index Rejection for HWM"):
@@ -894,7 +892,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
     def start_query_workload(self, fts_callable, index, num_queries):
         while not self.stop_queries:
-            fts_callable.run_query_and_compare(index, num_queries)
+            fts_callable.run_query_and_compare(index, num_queries, )
         time.sleep(100)
 
     def create_index_and_validate_autoscaling(self, all_info, index_no, db_no, index_arr, variables, summary, queue_sum, queue_cpu):
@@ -907,7 +905,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                                   source_params=None, source_uuid=None, collection_index=True,
                                                   _type=all_info[db_no]['type'], analyzer="standard",
                                                   scope=all_info[db_no]['scope_name'], collections=[all_info[db_no]['collection_name']], no_check=False)
-            all_info[db_no]['fts_callable'].wait_for_indexing_complete(self._num_of_docs_per_collection, complete_wait=False)
+            all_info[db_no]['fts_callable'].wait_for_indexing_complete(self._num_of_docs_per_collection, complete_wait=False, )
             index_arr.append([all_info[db_no]['fts_callable'], index])
             if self.query_workload_parallel_creation:
                 query_thread = threading.Thread(target=self.start_query_workload, kwargs={'fts_callable': all_info[db_no]['fts_callable'], 'index': index, 'num_queries': self.num_queries })
@@ -1039,7 +1037,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                 doc_template="emp")
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                       collections=collection_name, collection_index=True)
+                                       collections=collection_name, collection_index=True,  is_elixir=True)
 
             _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                     collection=collection_name)
@@ -1113,7 +1111,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                 database_obj=database, scope=scope_name, collection=collection_name)
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                       collections=collection_name, collection_index=True)
+                                       collections=collection_name, collection_index=True, is_elixir=True)
 
             _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                     collection=collection_name)
@@ -1202,7 +1200,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                 database_obj=database, scope=scope_name, collection=collection_name)
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                       collections=collection_name, collection_index=True)
+                                       collections=collection_name, collection_index=True, is_elixir=True)
 
             _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                     collection=collection_name)
@@ -1255,5 +1253,3 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 finally:
                     self.run_query(database, f'DROP INDEX idx1 on {scope_name}.{collection_name}')
             fts_callable.delete_all()
-
-
