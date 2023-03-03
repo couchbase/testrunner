@@ -1685,7 +1685,10 @@ class MovingTopFTS(FTSBaseTest):
         self.create_fts_indexes_all_buckets(plan_params=plan_params)
         self.sleep(10)
         self.log.info("Index building has begun...")
+        idx_name = None
         for index in self._cb_cluster.get_indexes():
+            if not idx_name:
+                idx_name = index.name
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
         # wait till indexing is midway...
@@ -1694,7 +1697,7 @@ class MovingTopFTS(FTSBaseTest):
                                    name="failover",
                                    args=())
         fail_thread.start()
-        index = self._cb_cluster.get_fts_index_by_name('default._default.default_index_1')
+        index = self._cb_cluster.get_fts_index_by_name(idx_name)
         new_plan_param = {"maxPartitionsPerPIndex": 64}
         index.index_definition['planParams'] = \
             index.build_custom_plan_params(new_plan_param)
@@ -1727,7 +1730,10 @@ class MovingTopFTS(FTSBaseTest):
         self.create_fts_indexes_all_buckets()
         self.sleep(10)
         self.log.info("Index building has begun...")
+        idx_name = None
         for index in self._cb_cluster.get_indexes():
+            if not idx_name:
+                idx_name = index.name
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
         # wait till indexing is midway...
@@ -1736,7 +1742,8 @@ class MovingTopFTS(FTSBaseTest):
             target=self._cb_cluster.failover_and_rebalance_nodes,
             name="failover",
             args=())
-        index = self._cb_cluster.get_fts_index_by_name('default._default.default_index_1')
+
+        index = self._cb_cluster.get_fts_index_by_name(idx_name)
         new_plan_param = {"maxPartitionsPerPIndex": 128}
         index.index_definition['planParams'] = \
             index.build_custom_plan_params(new_plan_param)
