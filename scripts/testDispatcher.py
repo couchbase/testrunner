@@ -13,7 +13,6 @@ import os as OS
 import paramiko
 import ipaddress
 import subprocess
-import boto3
 import configparser
 
 from couchbase.cluster import Cluster
@@ -24,6 +23,7 @@ import get_jenkins_params
 import find_rerun_job
 
 import cloud_provision
+import capella
 
 # takes an ini template as input, standard out is populated with the server pool
 # need a descriptor as a parameter
@@ -256,6 +256,11 @@ def main():
     parser.add_option('--ssh_num_retries', dest='SSH_NUM_RETRIES', default="3")
     parser.add_option('--job_params', dest='job_params', default=None)
     parser.add_option('--architecture', dest='architecture', default=DEFAULT_ARCHITECTURE)
+    parser.add_option('--capella_url', dest='capella_url', default=None)
+    parser.add_option('--capella_user', dest='capella_user', default=None)
+    parser.add_option('--capella_password', dest='capella_password', default=None)
+    parser.add_option('--capella_tenant', dest='capella_tenant', default=None)
+    parser.add_option('--capella_token', dest='capella_token', default=None)
 
     # set of parameters for testing purposes.
     #TODO: delete them after successful testing
@@ -827,6 +832,17 @@ def main():
                 elif options.jenkins is not None:
                     launchStringBaseF = launchStringBaseF + '-' + options.jenkins
                 url = launchStringBaseF + url
+
+                # For capella, invite new user for each test job to launch
+                if options.serverType in [SERVERLESS_ONCLOUD, PROVISIONED_ONCLOUD]:
+                    print(f'CAPELLA: Inviting new user to capella tenant {options.capella_tenant} on {options.capella_url}')
+                    invited_user, invited_password = capella.invite_user(options.capella_token, options.capella_url, options.capella_user, options.capella_password, options.capella_tenant)
+                    if invited_user is None or invited_password is None:
+                        print("CAPELLA: We could not invite user to capella cluster. Skipping job.")
+                        job_index += 1
+                        testsToLaunch.pop(i)
+                        continue
+                    url = update_url_with_job_params(url, f"capella_user={invited_user}&capella_password={invited_password}")
 
                 if options.job_params:
                     url = update_url_with_job_params(url, options.job_params)
