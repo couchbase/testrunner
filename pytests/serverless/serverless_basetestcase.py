@@ -441,3 +441,6 @@ class ServerlessBaseTestCase(unittest.TestCase):
     def get_all_fts_stats(self):
         stats_nodes_resp = self.api.get_fts_stats()
         return stats_nodes_resp
+
+    def get_bypass_credentials(self):
+        return {'username': self.dataplanes[self.new_dataplane_id].admin_username, 'password': self.dataplanes[self.new_dataplane_id].admin_password}

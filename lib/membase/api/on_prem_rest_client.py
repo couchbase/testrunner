@@ -2280,6 +2280,12 @@ class RestConnection(object):
             except ValueError:
                 pass
 
+    def get_fts_cfg_stats(self, node, creds):
+        endpoint = f"https://{node}:18094/api/cfg"
+        resp = requests.get(endpoint, auth=(creds['username'], creds['password']), verify=False)
+        result = resp.json()
+        return result
+
     def get_index_status(self, timeout=120, index_map=None):
         api = self.baseUrl + 'indexStatus'
         index_map = {}

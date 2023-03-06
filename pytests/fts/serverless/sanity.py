@@ -577,11 +577,22 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                     self.log.info(f"Stats not returned for node {fts_nodes[count]}")
                     print(stats, fts_nodes, http_resp)
                     myTable.add_row([count+1, fts_nodes[count], "Stats not returned", "Stats not returned", "Stats not returned", "Stats not returned"])
+                    self.print_fts_cfg_stats(fts_nodes[-1])
                 else:
                     self.log.info("TESTWARE BUG HERE 2")
                     print(stats, fts_nodes, http_resp)
+                    self.print_fts_cfg_stats(fts_nodes[-1])
         if print_str:
             self.log.info(print_str)
+        print(myTable)
+
+    def print_fts_cfg_stats(self, fts_node):
+        creds = self.get_bypass_credentials()
+        definitions = FTSCallable(self.input.servers).get_fts_cfg_stats(fts_node, creds)['nodeDefsWanted']['nodeDefs']
+        myTable = PrettyTable(["S.No", "FTS Node", "nodeDefID"])
+        for count, nodeDef in enumerate(definitions):
+            myTable.add_row([count+1, definitions[nodeDef]['hostPort'], nodeDef])
+        self.log.info("FTS CFG STATS")
         print(myTable)
 
     def verify_HWM_index_rejection(self, stats):
@@ -1232,3 +1243,4 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 finally:
                     self.run_query(database, f'DROP INDEX idx1 on {scope_name}.{collection_name}')
             fts_callable.delete_all()
+

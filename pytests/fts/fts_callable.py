@@ -574,3 +574,8 @@ class FTSCallable:
         resp = rest._rebalance_progress_status(fts_node)
         print("Rebalance Status : ", resp)
         return resp
+
+    def get_fts_cfg_stats(self, fts_node, creds):
+        rest = RestConnection(self.cb_cluster.get_random_fts_node())
+        resp = rest.get_fts_cfg_stats(fts_node, creds)
+        return resp
