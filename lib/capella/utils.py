@@ -409,7 +409,7 @@ class CapellaAPI:
                 attempts += 1
                 if attempts > 1:
                     self.log.info(f"Retry {attempts-1}. Unresolved host {fts_nodes[count]}, Trying again.")
-                    self.log.info("Stats not returned")
+                    self.log.info("Stats not returned here in utils")
                 userpass = f"{creds['couchbaseCreds']['username']}:{creds['couchbaseCreds']['password']}"
                 encoded_u = base64.b64encode(userpass.encode()).decode()
                 CurlUrl = f"curl -s -XGET https://{fts_nodes[count]}:18094/api/nsstats --header 'Authorization: Basic {encoded_u}' --insecure | jq | grep -E 'util|resource|limits'"
@@ -420,7 +420,7 @@ class CapellaAPI:
                 x = json.loads(resp)
                 stats.append(x)
             except Exception as e:
-                self.log.info("Stats not returned")
+                self.log.info("Stats not returned here in utils")
                 self.log.info(f"Error : {e}")
                 print(f"Response : {resp}")
                 userpass = f"{creds['couchbaseCreds']['username']}:{creds['couchbaseCreds']['password']}"

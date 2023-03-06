@@ -29,7 +29,10 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         self.UWM_limit = self.input.param("UWM_limit", 0.3)
         self.scaling_time = self.input.param("scaling_time", 30)
         self.num_queries = self.input.param("num_queries", 20)
+        self.query_workload_after_creation = self.input.param("query_workload_after_creation",False)
+        self.query_workload_parallel_creation = self.input.param("query_workload_parallel_creation",True)
         self.autoscaling_with_queries = self.input.param("autoscaling_with_queries", False)
+        self.stop_queries = False
         global_vars.system_event_logs = EventHelper()
         return super().setUp()
 
@@ -552,17 +555,17 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                     return True
             return False
         except:
-            print("stats not found")
+            print(f"stats not returned in check autoreblance condition : {stats}")
 
-    def get_fts_stats(self):
+    def get_fts_stats(self, print_str=None):
         """
             Print FTS Stats and returns stats along with Current FTS Nodes
         """
         stats, fts_nodes, http_resp = self.get_all_fts_stats()
-        self.prettyPrintStats(stats, fts_nodes, http_resp)
+        self.prettyPrintStats(stats, fts_nodes, http_resp, print_str)
         return stats, fts_nodes
 
-    def prettyPrintStats(self, stats, fts_nodes, http_resp):
+    def prettyPrintStats(self, stats, fts_nodes, http_resp, print_str=None):
         myTable = PrettyTable(["S.No", "FTS Nodes", "lim_memoryBytes", "util_memoryBytes", "util_cpuPercent", "util_diskByte"])
         for count, stat in enumerate(stats):
             if http_resp:
@@ -570,8 +573,15 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             try:
                 myTable.add_row([count+1, fts_nodes[count], stat['limits:memoryBytes'], stat['utilization:memoryBytes'], stat['utilization:cpuPercent'], stat['utilization:diskBytes']])
             except:
-                self.log.info("Stats not returned")
-                myTable.add_row([count+1, "Stats not returned", "Stats not returned", "Stats not returned", "Stats not returned", "Stats not returned"])
+                if fts_nodes[count]:
+                    self.log.info(f"Stats not returned for node {fts_nodes[count]}")
+                    print(stats, fts_nodes, http_resp)
+                    myTable.add_row([count+1, fts_nodes[count], "Stats not returned", "Stats not returned", "Stats not returned", "Stats not returned"])
+                else:
+                    self.log.info("TESTWARE BUG HERE 2")
+                    print(stats, fts_nodes, http_resp)
+        if print_str:
+            self.log.info(print_str)
         print(myTable)
 
     def verify_HWM_index_rejection(self, stats):
@@ -705,7 +715,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 variables['moving_avg_cpu_sum'] -= first_avg[0]
                 variables['moving_average_cpu'] = variables['moving_avg_cpu_sum'] / len(queue_sum)
         except:
-            print("stats not returned")
+            print(f"stats not returned while calculating moving average {stats}")
 
     def autoscaling_synchronous(self):
         self.delete_all_database(True)
@@ -795,7 +805,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
                 self.calculate_running_average_LWM(fts_stats, queue_sum, queue_cpu, variables)
                 try:
-                    if variables['moving_average_mem'] > int(float(self.HWM_limit) * int(fts_stats[0]['limits:memoryBytes'])) or variables['moving_average_cpu'] > int(float(self.HWM_limit) * 100):
+                    if not variables['scale_out_status'] and variables['moving_average_mem'] > int(float(self.HWM_limit) * int(fts_stats[0]['limits:memoryBytes'])) or variables['moving_average_cpu'] > int(float(self.HWM_limit) * 100):
                     # Scale out satisfied using moving average
                         self.log.info("Scale Out Satisfied using Moving Average")
                         self.log.info(f"Moving Average: {variables['moving_average']}")
@@ -803,7 +813,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                         variables['scale_out_time'] = datetime.now()
                         variables['scale_out_status'] = True
                 except:
-                    print("stats not found")
+                    print(f"stats not while validating line 816 {fts_stats, fts_nodes}")
 
                 if not variables['scale_out_status'] and self.check_scale_out_condition(fts_stats) and flag:
                     self.log.info("Scale Out Satisfied")
@@ -870,6 +880,11 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         if not variables['scale_out_status']:
             self.fail("Autoscaling Failed since Scaling didn't happen")
 
+    def start_query_workload(self, fts_callable, index, num_queries):
+        while not self.stop_queries:
+            fts_callable.run_query_and_compare(index, num_queries)
+        time.sleep(100)
+
     def create_index_and_validate_autoscaling(self, all_info, index_no, db_no, index_arr, variables, summary, queue_sum, queue_cpu):
         plan_params = self.construct_plan_params()
         try:
@@ -882,6 +897,9 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                                   scope=all_info[db_no]['scope_name'], collections=[all_info[db_no]['collection_name']], no_check=False)
             all_info[db_no]['fts_callable'].wait_for_indexing_complete(self._num_of_docs_per_collection, complete_wait=False)
             index_arr.append([all_info[db_no]['fts_callable'], index])
+            if self.query_workload_parallel_creation:
+                query_thread = threading.Thread(target=self.start_query_workload, kwargs={'fts_callable': all_info[db_no]['fts_callable'], 'index': index, 'num_queries': self.num_queries })
+                query_thread.start()
 
             # After creating an index check if HWM has hit, if it has hit and index still got created (since we are here), then this is potentially a bug.
             if not variables['index_fail_check']:
@@ -910,8 +928,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                     self.log.critical(f"Index Creation Failed : {str(e)}")
                     self.fail("BUG : Index Creation Failed")
 
-        self.log.info(f"------------ FTS Stats @ DB {db_no + 1} Index {index_no+1} ------------")
-        fts_stats, fts_nodes = self.get_fts_stats()
+        fts_stats, fts_nodes = self.get_fts_stats(f"------------ FTS Stats @ DB {db_no + 1} Index {index_no+1} ------------")
 
         with self.subTest("Verify AutoRebalance"):
             if self.check_auto_rebalance_condition(fts_stats):
@@ -926,7 +943,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
         self.calculate_running_average_LWM(fts_stats, queue_sum, queue_cpu, variables)
 
-        if variables['moving_average_mem'] > int(float(self.HWM_limit) * int(fts_stats[0]['limits:memoryBytes'])) or variables['moving_average_cpu'] > int(float(self.HWM_limit) * 100):
+        if variables['moving_average_mem'] > int(float(self.LWM_limit) * int(fts_stats[0]['limits:memoryBytes'])) or variables['moving_average_cpu'] > int(float(self.LWM_limit) * 100):
             # Scale out satisfied using moving average sum or moving avg cpu
             self.log.info("Scale Out Satisfied using Moving Average")
             self.log.info(f"Moving Average: {variables['moving_average_mem']} | {variables['moving_average_cpu']}")
@@ -980,8 +997,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
         summary = []
         self.provision_databases(self.num_databases, None, self.new_dataplane_id)
-        self.log.info(f"------------ Initial STATS ------------")
-        fts_stats, fts_nodes = self.get_fts_stats()
+        fts_stats, fts_nodes = self.get_fts_stats("------------ Initial STATS ------------")
         variables = {'node_count': len(fts_nodes), 'scale_out_time': 0, 'HWM_hit': 0, 'scale_out_status': False,
                      'scale_out_count': 0, 'moving_avg_sum': 0, 'moving_avg_cpu_sum': 0, 'moving_average_mem': 0, 'moving_average_cpu': 0, 'index_fail_check': False,
                      'failout_encounter': False, 'flag': True}
@@ -1023,8 +1039,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             for thread in thread_arr:
                 thread.join()
 
-        self.log.info(f"------------ FTS DB FINISH STATS  ------------")
-        fts_stats, fts_nodes = self.get_fts_stats()
+        fts_stats, fts_nodes = self.get_fts_stats("------------ FTS DB FINISH STATS  ------------")
         self.generate_summary(summary, fts_stats, fts_nodes, variables, f"FTS DB FINISH STATS")
 
         myTable = PrettyTable(summary[0].keys())
@@ -1033,19 +1048,19 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         self.log.info("Summary Table")
         print(myTable)
 
-        thread_2_array = []
-        for index in index_arr:
-            thread2 = threading.Thread(target=index[0].run_query_and_compare, kwargs={'index': index[1], 'num_queries': self.num_queries })
-            thread2.start()
-            thread_2_array.append(thread2)
+        if self.query_workload_after_creation:
+            thread_2_array = []
+            for index in index_arr:
+                thread2 = threading.Thread(target=index[0].run_query_and_compare, kwargs={'index': index[1], 'num_queries': self.num_queries })
+                thread2.start()
+                thread_2_array.append(thread2)
 
-        for thread2 in thread_2_array:
-            thread2.join()
+            for thread2 in thread_2_array:
+                thread2.join()
 
-        self.log.info(f"------------ FTS DB QUERY FINISH STATS  ------------")
-        fts_stats, fts_nodes = self.get_fts_stats()
-        self.generate_summary(summary, fts_stats, fts_nodes, variables, f"FTS DB QUERY FINISH STATS")
-
+            fts_stats, fts_nodes = self.get_fts_stats("------------ FTS DB QUERY FINISH STATS  ------------")
+            self.generate_summary(summary, fts_stats, fts_nodes, variables, f"FTS DB QUERY FINISH STATS")
+        self.stop_queries = True
         myTable = PrettyTable(summary[0].keys())
         for json_obj in summary:
             myTable.add_row(json_obj.values())
