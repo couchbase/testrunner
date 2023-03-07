@@ -4,6 +4,7 @@ from lib.serverlessLib.dapi.dapi import RestfulDAPI
 from pytests.serverless.dapi.dapi_helper import doc_generator
 import json
 import threading
+import time
 
 class RestfulDAPITest(ServerlessBaseTestCase):
     def setUp(self):
@@ -40,6 +41,7 @@ class RestfulDAPITest(ServerlessBaseTestCase):
             dapi_info["access_secret"] = database.secret_key
             dapi_info["database_id"] = database.id
             dapi_list.append(dapi_info)
+        time.sleep(60)
         self.dapi_info_list = dapi_list
 
 
@@ -122,7 +124,7 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                         self.log.critical("Get doc for deleted doc"
                                         "failed: {} response: {}".format(bucket_name, response.status_code))
                         return
-                    return
+                    continue
 
                 if response is None or response.status_code != 200:
                     self.result = False
