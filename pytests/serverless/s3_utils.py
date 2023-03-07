@@ -68,4 +68,5 @@ class S3Utils(object):
                 self.log.info("Waiting for janitor to kick clean up")
                 sleep(60)
                 self.check_s3_cleanup(folder=folder, bucket=bucket, recheck=True)
+            self.log.info(folder_list_on_aws)
             raise Exception("Bucket is not cleaned up after rebalance.")

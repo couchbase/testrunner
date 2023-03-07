@@ -1136,7 +1136,11 @@ class TenantManagement(BaseSecondaryIndexingTests):
                 self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
         except Exception as err:
             self.fail(err)
-        self.wait_until_indexes_online(defer_build=True)
+        result = self.wait_until_indexes_online(defer_build=True)
+        if not result:
+            self.log.info("Re-attempting to check index status")
+            result = self.wait_until_indexes_online(defer_build=True)
+            self.log.info(f"Index status check:{result}")
         self._validate_metatadata_token()
         self.s3_utils_obj.check_s3_cleanup(folder=self.storage_prefix)
         self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
