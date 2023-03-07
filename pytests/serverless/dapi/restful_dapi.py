@@ -68,6 +68,7 @@ class RestfulDAPITest(ServerlessBaseTestCase):
 
             while(doc_gen.has_next()):
                 key, doc = doc_gen.__next__()
+                doc = json.loads(doc)
                 # insert doc
                 response = self.rest_dapi.insert_doc(key, doc, "_default", "_default")
                 if self.error_message is not None:
