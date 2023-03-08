@@ -174,7 +174,7 @@ def uninstall_all(ips):
 def clean_failedinstsall_vms(pool_id):
     log.debug("*** Cleaning failedInstall VMs ***")
     query = 'SELECT * FROM `QE-server-pool` WHERE ("{0}" IN poolId OR poolId = "{1}") AND ' \
-            'state LIKE "failedInstallVipul";'.format(str(pool_id), str(pool_id))
+            'state LIKE "failedInstall%%";'.format(str(pool_id), str(pool_id))
     log.info('Running: {0}'.format(query))
     row_iter = cluster.query(query)
     fixed_ips = []
@@ -229,7 +229,7 @@ def clean_failedinstsall_vms(pool_id):
         log.info("*** Fixed IPs list: ***")
         log.info(fixed_ips)
         for ip in fixed_ips:
-            setpoolstate(pool_id, ip, "failedInstallVipul", "available")
+            setpoolstate(pool_id, ip, "failedInstall", "available")
     else:
         log.info("*** Fixed IPs: None ***")
     if len(hosts_down) > 0:
