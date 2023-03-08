@@ -33,6 +33,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         self.query_workload_parallel_creation = self.input.param("query_workload_parallel_creation",True)
         self.autoscaling_with_queries = self.input.param("autoscaling_with_queries", False)
         self.stop_queries = False
+        self.stop_monitoring_stats = False
         global_vars.system_event_logs = EventHelper()
         return super().setUp()
 
@@ -784,9 +785,9 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                     self.log.info("HWM Hit has taken place, exempting first rejection")
                                 else:
                                     index_fail_check = True
-                                    self.log.info("Index created even though HWM had been satisfied")
+                                    self.log.info(f"Index {index.name} created  even though HWM had been satisfied")
                                     self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : HWM HIT-Index Created")
-                                    self.fail("BUG : Index created even though HWM had been satisfied")
+                                    self.fail(f"BUG : Index {index.name} created even though HWM had been satisfied")
                 except Exception as e:
                     print("Here in the except block")
                     with self.subTest("Index Creation Check"):
@@ -923,9 +924,9 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                             self.log.critical("HWM Hit has taken place, exempting first rejection")
                         else:
                             variables['index_fail_check'] = True
-                            self.log.critical("Index created even though HWM had been satisfied")
+                            self.log.critical(f"Index {index.name} created even though HWM had been satisfied")
                             self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : HWM HIT-Index Created")
-                            self.fail("BUG : Index created even though HWM had been satisfied")
+                            self.fail(f"BUG : Index {index.name} created even though HWM had been satisfied")
         except Exception as e:
             print("Here in the except block")
             with self.subTest("Index Creation Check"):
@@ -1003,8 +1004,16 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                         variables['failout_encounter'] = False
                         self.fail(f"Scale Out happened less than scaling time")
 
+    def monitor_fts_stats(self):
+        while not self.stop_monitoring_stats:
+            self.get_fts_stats()
+            time.sleep(30)
+
     def autoscaling_concurrent(self):
         self.delete_all_database(True)
+
+        monitor_thread = threading.Thread(target=self.monitor_fts_stats)
+        monitor_thread.start()
 
         summary = []
         self.provision_databases(self.num_databases, None, self.new_dataplane_id)
@@ -1083,11 +1092,14 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 self.log.info(f"Scale In Failed : {fts_stats}, {fts_nodes}")
                 self.fail("BUG : Scale In Failed")
 
-            myTable = PrettyTable(summary[0].keys())
-            for json_obj in summary:
-                myTable.add_row(json_obj.values())
-            self.log.info("Summary Table")
-            print(myTable)
+        self.stop_monitoring_stats = True
+        time.sleep(100)
+
+        myTable = PrettyTable(summary[0].keys())
+        for json_obj in summary:
+            myTable.add_row(json_obj.values())
+        self.log.info("Summary Table")
+        print(myTable)
 
     def test_n1ql_search(self):
         self.provision_databases(self.num_databases)
@@ -1243,4 +1255,5 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 finally:
                     self.run_query(database, f'DROP INDEX idx1 on {scope_name}.{collection_name}')
             fts_callable.delete_all()
+
 
