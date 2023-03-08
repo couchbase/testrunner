@@ -1350,7 +1350,7 @@ class RestConnection(object):
 
     def execute_statement_on_cbas(self, statement, mode, pretty=True,
                                   timeout=70, client_context_id=None,
-                                  username=None, password=None):
+                                  username=None, password=None, warnings=1):
         if not username:
             username = self.username
         if not password:
@@ -1358,7 +1358,7 @@ class RestConnection(object):
         api = self.cbas_base_url + "/analytics/service"
         headers = self._create_capi_headers_with_auth(username, password)
 
-        params = {'statement': statement, 'pretty': pretty, 'client_context_id': client_context_id}
+        params = {'statement': statement, 'pretty': pretty, 'client_context_id': client_context_id, 'max-warnings': warnings}
 
         if mode is not None:
             params['mode'] = mode
