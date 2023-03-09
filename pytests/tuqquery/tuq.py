@@ -83,7 +83,6 @@ class QueryTests(BaseTestCase):
         self.sample_bucket = self.input.param('sample_bucket', None)
         self.sample_bucket_index = self.input.param('sample_bucket_index', None)
         self.users = self.input.param("users", {})
-        self.server_group_map = {}
         self.use_rest = self.input.param("use_rest", True)
         self.hint_index = self.input.param("hint", None)
         self.max_verify = self.input.param("max_verify", None)
@@ -123,6 +122,7 @@ class QueryTests(BaseTestCase):
         self.plasma_dgm = self.input.param("plasma_dgm", False)
         self.use_server_groups = self.input.param("use_server_groups", True)
         self.server_grouping = self.input.param("server_grouping", "0-1:2-3")
+        self.server_group_map = {}
         self.DGM = self.input.param("DGM", False)
         self.covering_index = self.input.param("covering_index", False)
         self.cluster_ops = self.input.param("cluster_ops", False)
