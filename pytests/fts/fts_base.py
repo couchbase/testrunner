@@ -2697,14 +2697,14 @@ class CouchbaseCluster:
         content = RestConnection(node).run_fts_query_generalized(index_name, query_dict, timeout=timeout)
         return content
 
-    def run_n1ql_query(self, query="", node=None, timeout=70):
+    def run_n1ql_query(self, query="", node=None, timeout=70, verbose=True):
         """ Runs a query defined in query_json against an index/alias and
         a specific node
 
         """
         if not node:
             node = self.get_random_n1ql_node()
-        res = RestConnection(node).query_tool(query, timeout=timeout)
+        res = RestConnection(node).query_tool(query, timeout=timeout, verbose=verbose)
         return res
 
     def run_fts_query_with_facets(self, index_name, query_dict, node=None):
@@ -3838,7 +3838,7 @@ class FTSBaseTest(unittest.TestCase):
 
     def __is_cluster_run(self):
         return len(set([server.ip for server in self._input.servers])) == 1
-    
+
     def _setup_node_secret(self, secret_password):
         for server in self._input.servers:
             SecretsMasterBase(server).setup_pass_node(server, secret_password)
@@ -4096,7 +4096,7 @@ class FTSBaseTest(unittest.TestCase):
                     else:
                         self._cb_cluster._create_collection(bucket=bucket.name, scope=self.scope, collection=self.collection, cli_client=self.cli_client)
         self._master = self._cb_cluster.get_master_node()
-            
+
         if self.ntonencrypt == 'enable':
             self.setup_nton_encryption()
         if self.enable_dp:
@@ -4135,7 +4135,7 @@ class FTSBaseTest(unittest.TestCase):
                         master.ip))
         else:
             self.log.info("Running in compatibility mode, not enabled diag/eval for non-local hosts")
-    
+
     def setup_nton_encryption(self):
         self.log.info('Setting up node to node encyrption from ')
         ntonencryptionBase().setup_nton_cluster(self._input.servers,clusterEncryptionLevel=self.ntonencrypt_level)
@@ -4204,7 +4204,7 @@ class FTSBaseTest(unittest.TestCase):
         self.index_replicas = self._input.param("index_replicas", None)
         self.index_kv_store = self._input.param("kvstore", None)
         self.min_queries_per_shape = self._input.param("min_queries_per_shape",0)
-        self.query_shape = self._input.param("query_shape","") 
+        self.query_shape = self._input.param("query_shape","")
         self.partitions_per_pindex = \
             self._input.param("max_partitions_pindex", 171)
         self.upd_del_fields = self._input.param("upd_del_fields", None)
@@ -4520,7 +4520,7 @@ class FTSBaseTest(unittest.TestCase):
             num_keys = self._num_items
 
         gen = GeoSpatialDataLoader("custom",start=0,end=num_keys)
-        self._cb_cluster.load_all_buckets_from_generator(gen) 
+        self._cb_cluster.load_all_buckets_from_generator(gen)
 
     def perform_update_delete(self, fields_to_update=None):
         """
@@ -4964,7 +4964,7 @@ class FTSBaseTest(unittest.TestCase):
             if self.min_queries_per_shape == 0 or (min_queries_per_shape * len(shapes)) > num_queries:
                 total_queries = num_queries
                 min_queries_per_shape = total_queries//len(shapes)
-            
+
             shape_count = 0
             while gen_queries <= total_queries and shape_count < len(shapes):
                     shape = shapes[shape_count]
@@ -4986,7 +4986,7 @@ class FTSBaseTest(unittest.TestCase):
                     for es_query in es_queries:
                         self.es.es_queries.append(json.loads(json.dumps(es_query, ensure_ascii=False)))
                 gen_queries = gen_queries + len(fts_queries)
-                
+
     def generate_random_geo_queries(self, index, num_queries=1, sort=False):
         """
         Generates a bunch of geo location and bounding box queries for
@@ -5304,7 +5304,7 @@ class FTSBaseTest(unittest.TestCase):
             }
             self.create_es_index_mapping(es_mapping=es_mapping)
             self.es.add_circle_ingest_pipeline(geoshape_field)
-        
+
         from .fts_base import FTSIndex
         geo_index = FTSIndex(
             cluster=self._cb_cluster,
@@ -5341,14 +5341,14 @@ class FTSBaseTest(unittest.TestCase):
         geo_index.create()
         self.is_index_partitioned_balanced(geo_index)
 
-        self.container_type = 'bucket' 
+        self.container_type = 'bucket'
         self.dataset = "geojson"
-        self.log.info("Loading geosjon data ...")  
+        self.log.info("Loading geosjon data ...")
 
         self.async_load_data(filename="geoshape2.json",dataset="geojson")
         self.sleep(10, "Waiting to load data ...")
         self.wait_for_indexing_complete()
-        
+
         return geo_index
 
     def create_index_es(self, index_name="es_index"):
@@ -5383,7 +5383,7 @@ class FTSBaseTest(unittest.TestCase):
                 return GeoSpatialDataLoader(name="geojson",
                                             start=start,
                                             end=start + num_items,
-                                            filename = filename) 
+                                            filename = filename)
         else:
             elastic_ip = None
             elastic_port = None
@@ -5750,3 +5750,17 @@ class FTSBaseTest(unittest.TestCase):
                         self.log.info("Exiting load sleep loop after 21s")
                         return
 
+    def load_data_using_n1ql_fixed_key(self, bucket, scope, collection, keyname, template_values):
+        """
+            Helps to load documents using N1QL queries
+            keyname is the name of fixed key
+            template_values is a list containing values of key
+        """
+        self.log.info("Loading Phase Started")
+        for counter, value in enumerate(template_values):
+            id = f'{keyname}_{counter}'
+            n1ql_query = f"INSERT INTO `{bucket}`.{scope}.{collection} (KEY, VALUE) VALUES (\"{id}\", {{\"{keyname}\":\"{value}\"}});"
+            if isinstance(value,list):
+                n1ql_query = f"INSERT INTO `{bucket}`.{scope}.{collection} (KEY, VALUE) VALUES (\"{id}\", {{\"{keyname}\":{value}}});"
+            self._cb_cluster.run_n1ql_query(n1ql_query, verbose=False)
+        self.log.info("Loading Phase Complete!")
