@@ -27,10 +27,7 @@ from security.rbac_base import RbacBase
 from couchbase_helper.tuq_generators import TuqGenerators
 # from xdcr.upgradeXDCR import UpgradeTests
 from couchbase_helper.documentgenerator import JSONNonDocGenerator
-from couchbase.cluster import Cluster
-from couchbase.cluster import PasswordAuthenticator
 import couchbase.subdocument as SD
-from couchbase.n1ql import N1QLQuery, STATEMENT_PLUS, CONSISTENCY_REQUEST, MutationState
 import ast
 from deepdiff import DeepDiff
 from fts.random_query_generator.rand_query_gen import FTSFlexQueryGenerator
@@ -121,8 +118,15 @@ class QueryTests(BaseTestCase):
         self.skip_index = self.input.param("skip_index", False)
         self.plasma_dgm = self.input.param("plasma_dgm", False)
         self.use_server_groups = self.input.param("use_server_groups", True)
-        self.server_grouping = self.input.param("server_grouping", "0-1:2-3")
         self.server_group_map = {}
+        if self.nodes_init == 1:
+            self.server_grouping = "0"
+        elif self.nodes_init == 2:
+            self.server_grouping = "0:1"
+        elif self.nodes_init == 3:
+            self.server_grouping = "0:1:2"
+        else:
+            self.server_grouping = self.input.param("server_grouping", "0-1:2-3")
         self.DGM = self.input.param("DGM", False)
         self.covering_index = self.input.param("covering_index", False)
         self.cluster_ops = self.input.param("cluster_ops", False)
@@ -151,6 +155,8 @@ class QueryTests(BaseTestCase):
         if self.primary_indx_type.lower() == "gsi":
             self.gsi_type = self.input.param("gsi_type", 'plasma')
         self.reload_data = self.input.param("reload_data", False)
+        if self.use_server_groups:
+            self._create_server_groups()
         if self.reload_data:
             self.log.info(f"--> reload_data: {self.reload_data}")
             if self.analytics:
@@ -1461,6 +1467,12 @@ class QueryTests(BaseTestCase):
             query_params.pop('atrcollection', None)
 
         if self.testrunner_client == 'python_sdk' and not is_prepared:
+            try:
+                from couchbase.cluster import Cluster
+                from couchbase.cluster import PasswordAuthenticator
+                from couchbase.n1ql import N1QLQuery, STATEMENT_PLUS, CONSISTENCY_REQUEST, MutationState
+            except ImportError:
+                print("Warning: failed to import couchbase lib")
             sdk_cluster = Cluster('couchbase://' + str(server.ip))
             authenticator = PasswordAuthenticator(username, password)
             sdk_cluster.authenticate(authenticator)

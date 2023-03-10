@@ -39,8 +39,6 @@ class QueryMeteringTests(QueryTests):
             data = {"queryUseCBO": "false"}
             response = requests.post(api, data=data, auth=(self.rest.username,self.rest.password), verify=False)
             self.log.info(f"Response: {response}")
-        if self.use_server_groups:
-            self._create_server_groups()
 
     def tearDown(self):
         super(QueryMeteringTests, self).tearDown()

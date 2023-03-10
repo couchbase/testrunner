@@ -33,8 +33,6 @@ class QueriesIndexTests(QueryTests):
     def suite_setUp(self):
         super(QueriesIndexTests, self).suite_setUp()
         self.log.info("==============  QueriesIndexTests suite_setup has started ==============")
-        if self.use_server_groups:
-            self._create_server_groups()
         self.log.info("==============  QueriesIndexTests suite_setup has completed ==============")
 
     def tearDown(self):

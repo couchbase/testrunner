@@ -23,8 +23,6 @@ class JoinTests(QuerySanityTests):
     def suite_setUp(self):
         super(JoinTests, self).suite_setUp()
         self.load(self.gens_tasks, start_items=self.num_items)
-        if self.use_server_groups:
-            self._create_server_groups()
 
     def tearDown(self):
         super(JoinTests, self).tearDown()
