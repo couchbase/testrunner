@@ -23,6 +23,7 @@ import time
 from membase.api.exception import CBQError
 import ast, json
 import subprocess
+from lib.metering_throttling import throttling
 
 class ServerlessBaseTestCase(unittest.TestCase):
     def setUp(self):
@@ -38,6 +39,7 @@ class ServerlessBaseTestCase(unittest.TestCase):
         self.cluster = Cluster_helper()
         self.num_of_tenants = self.input.param("num_of_tenants", 1)
         self.drop_indexes = self.input.param("drop_indexes", False)
+        self.throttling_off = self.input.param("throttling_off", False)
         self.num_of_scopes_per_db = self.input.param("num_of_scopes_per_db", 2)
         self.num_of_collections_per_scope = self.input.param("num_of_collections_per_scope", 2)
         self.trigger_log_collect = self.input.param("trigger_log_collect", False)
@@ -75,8 +77,22 @@ class ServerlessBaseTestCase(unittest.TestCase):
                 self.dataplanes[self.new_dataplane_id] = ServerlessDataPlane(self.new_dataplane_id)
                 rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
                 self.dataplanes[self.new_dataplane_id].populate(rest_api_info)
+                if self.throttling_off:
+                    throttle = throttling(self.dataplanes[self.new_dataplane_id].rest_host, self.dataplanes[self.new_dataplane_id].admin_username, self.dataplanes[self.new_dataplane_id].admin_password)
+                    throttle.set_cluster_limit(-1, service='dataThrottleLimit')
+                    throttle.set_cluster_limit(-1, service='indexThrottleLimit')
+                    throttle.set_cluster_limit(-1, service='searchThrottleLimit')
             else:
                 self.fail(f"Timed out waiting for dataplane to be ready, Aborting...")
+
+        if self.throttling_off and self.dataplane_id:
+            dp_obj = ServerlessDataPlane(self.dataplane_id)
+            dp_rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.dataplane_id)
+            dp_obj.populate(dp_rest_api_info)
+            throttle = throttling(dp_obj.rest_host, dp_obj.admin_username, dp_obj.admin_password)
+            throttle.set_cluster_limit(-1, service='dataThrottleLimit')
+            throttle.set_cluster_limit(-1, service='indexThrottleLimit')
+            throttle.set_cluster_limit(-1, service='searchThrottleLimit')
 
     def tearDown(self):
         if self._testMethodName not in ['suite_tearDown', 'suite_setUp'] and self.trigger_log_collect:

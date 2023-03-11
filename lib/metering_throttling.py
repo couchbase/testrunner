@@ -195,6 +195,7 @@ class throttling(object):
     def set_cluster_limit(self, value=5000, service='dataThrottleLimit'):
         data = {}
         data[service] = value
+        self.log.info(f'setting {value} as throttling limit for CLUSTER for service: {service}')
         response = requests.post(self.url_cluster_throttle, data=data, auth = self.auth, verify=False)
         if response.status_code not in (200,201):
             self.fail(f'Fail to set cluster throttle limit: {response.text}')
