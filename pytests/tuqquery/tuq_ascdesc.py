@@ -127,7 +127,7 @@ class AscDescTests(QueryTests):
                                                                         self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
 
                 self.query = "EXPLAIN select * from %s as %s WHERE department[0] = 'Support' and ( ANY i " \
@@ -194,7 +194,7 @@ class AscDescTests(QueryTests):
                 self.query = "create index %s on %s(VMs[0].memory desc)" % (idx, query_bucket)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.query = "Explain select meta().id from %s where VMs[0].memory > 0 order by" \
                              " VMs[0].memory" % query_bucket
@@ -232,13 +232,13 @@ class AscDescTests(QueryTests):
                 self.query = "create index %s on %s(email,_id)" % (idx2, query_bucket)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 idx3 = "idx3"
                 self.query = "create index %s on %s(email,_id desc)" % (idx3, query_bucket)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx3)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx3 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx3)
                 self.query = 'select _id from %s where email like "%s" order by _id limit 2' % (query_bucket,
                                                                                                 '24-mail%')
@@ -319,13 +319,13 @@ class AscDescTests(QueryTests):
                 self.query = "CREATE INDEX %s ON %s(meta().id asc,_id,tasks,age,hobbies.hobby)" % (idx, query_bucket)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 idx2 = "idx2"
                 self.query = "CREATE INDEX %s ON %s(meta().id desc,_id,tasks,age,hobbies.hobby)" % (idx2, query_bucket)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.query = 'explain select * from %s where meta().id ="query-testemployee10317.9004497-0" and _id' \
                              ' is not null and hobbies.hobby is not missing order by meta().id asc' % query_bucket
@@ -360,7 +360,7 @@ class AscDescTests(QueryTests):
                     idx, query_bucket)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 self.query = "drop index idx2 on {0}".format(query_bucket)
                 self.run_cbq_query()
                 created_indexes.remove(idx2)
@@ -384,7 +384,7 @@ class AscDescTests(QueryTests):
                 self.query = "CREATE INDEX %s ON %s(_id desc,join_yr[0] desc)" % (idx2, query_bucket)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.query = 'select max(join_yr[0]) from {0} where _id is not missing and join_yr[0] is' \
                              ' not null'.format(query_bucket)
@@ -397,7 +397,7 @@ class AscDescTests(QueryTests):
                 self.query = "CREATE INDEX %s ON %s(_id asc,join_yr[0] asc)" % (idx, query_bucket)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.query = 'select min(_id) from {0} where _id is not missing'.format(query_bucket)
                 res = self.run_cbq_query()
@@ -429,7 +429,7 @@ class AscDescTests(QueryTests):
                     idx, query_bucket)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
                 self.query = "explain select meta().id from %s where datetime is not missing order by" \
                              " datetime" % query_bucket
@@ -445,7 +445,7 @@ class AscDescTests(QueryTests):
                     idx2, query_bucket)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx2 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.query = 'explain select meta().id from %s where isPresent is not missing order by' \
                              ' isPresent' % query_bucket
@@ -467,7 +467,7 @@ class AscDescTests(QueryTests):
                     idx3, query_bucket)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx3)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx3 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx3)
                 self.query = 'explain select meta().id from %s where id > 1 order by id' % query_bucket
                 res = self.run_cbq_query()
@@ -482,28 +482,28 @@ class AscDescTests(QueryTests):
                     idx4, query_bucket)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx4 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx4)
                 idx5 = "idx5"
                 self.query = "CREATE INDEX %s ON %s(id asc)" % (
                     idx5, query_bucket)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx5)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx5 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx5)
                 idx6 = "idx6"
                 self.query = "CREATE INDEX %s ON %s(indexMap desc)" % (
                     idx6, query_bucket)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx6)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx6 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx6)
                 idx7 = "idx7"
                 self.query = "CREATE INDEX %s ON %s(isPresent asc)" % (
                     idx7, query_bucket)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx7)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx7 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx7)
                 created_indexes.remove(idx2)
                 self.query = 'drop index idx2 on {0}'.format(query_bucket)
@@ -522,7 +522,7 @@ class AscDescTests(QueryTests):
                     idx8, query_bucket)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx8)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx8 in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx8)
                 created_indexes.remove(idx)
                 self.query = 'drop index idx on {0}'.format(query_bucket)
