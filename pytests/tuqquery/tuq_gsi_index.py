@@ -1085,7 +1085,8 @@ class QueriesIndexTests(QueryTests):
                              " USING {3}".format(idx3, query_bucket, "join_yr", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx3)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx3 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
+
                 created_indexes.append(idx3)
                 self.assertTrue(self._is_index_in_list(bucket, idx3), "Index is not in list")
                 idx4 = "idxVM2"
@@ -1093,7 +1094,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx4, query_bucket, "VMs", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx4 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx4)
 
                 self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
@@ -1193,7 +1194,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx3, query_bucket, "join_yr", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx3)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx3 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx3)
                 self.assertTrue(self._is_index_in_list(bucket, idx3), "Index is not in list")
                 idx4 = "idxVM2"
@@ -1201,7 +1202,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx4, query_bucket, "VMs", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx4 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx4)
 
                 self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
@@ -1661,7 +1662,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx3, query_bucket, "join_yr", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx3)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx3 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx3)
                 self.assertTrue(self._is_index_in_list(bucket, idx3), "Index is not in list")
                 idx4 = "idxVM2"
@@ -1669,7 +1670,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx4, query_bucket, "VMs", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx4 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx4)
                 self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
                 self.query = "EXPLAIN select name from {0} where any v in {0}.join_yr " \
@@ -2304,7 +2305,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx4, query_bucket, "VMs", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx4 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx4)
                 self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
                 self.query = "explain SELECT x FROM {1} emp1 USE INDEX({0})  UNNEST emp1.VMs as x  JOIN {1} task " \
@@ -2341,7 +2342,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx4, query_bucket, "VMs", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx4 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx4)
 
                 self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
@@ -4528,7 +4529,7 @@ class QueriesIndexTests(QueryTests):
                     idx, query_bucket, "join_yr", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -6713,7 +6714,7 @@ class QueriesIndexTests(QueryTests):
 
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx4 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx4)
 
                 self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
@@ -6819,7 +6820,7 @@ class QueriesIndexTests(QueryTests):
 
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
@@ -7705,7 +7706,7 @@ class QueriesIndexTests(QueryTests):
                              "USING {3}".format(idx4, query_bucket, "VMs", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx4 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx4)
 
                 self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
@@ -7802,7 +7803,7 @@ class QueriesIndexTests(QueryTests):
                              '"case":"lower"}}) END) USING {3}'.format(idx3, query_bucket, "join_yr", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx3)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx3 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx3)
                 self.assertTrue(self._is_index_in_list(bucket, idx3), "Index is not in list")
                 idx4 = "idxVM2"
@@ -7810,7 +7811,7 @@ class QueriesIndexTests(QueryTests):
                              '"case":"lower"}}) END) USING {3}'.format(idx4, query_bucket, "VMs", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx4 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx4)
 
                 self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
@@ -7839,7 +7840,7 @@ class QueriesIndexTests(QueryTests):
                     idx5, query_bucket, "join_yr", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx5)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx5 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx5)
                 self.assertTrue(self._is_index_in_list(bucket, idx5), "Index is not in list")
 
@@ -7849,7 +7850,7 @@ class QueriesIndexTests(QueryTests):
                                                                                   "join_yr", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx8)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx8 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx8)
                 self.assertTrue(self._is_index_in_list(bucket, idx8), "Index is not in list")
 
@@ -7858,7 +7859,7 @@ class QueriesIndexTests(QueryTests):
                              '{{"specials":false}}) END) USING {3}'.format(idx6, query_bucket, "VMs", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx6)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx6 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx6)
 
                 self.assertTrue(self._is_index_in_list(bucket, idx6), "Index is not in list")
@@ -7868,7 +7869,7 @@ class QueriesIndexTests(QueryTests):
                              '"case":"lower"}}) END) USING {3}'.format(idx7, query_bucket, "VMs", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx7)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx7 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx7)
 
                 self.assertTrue(self._is_index_in_list(bucket, idx7), "Index is not in list")
@@ -8289,7 +8290,7 @@ class QueriesIndexTests(QueryTests):
                     idx3, query_bucket, "join_yr", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx3)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx3 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx3)
                 self.assertTrue(self._is_index_in_list(bucket, idx3), "Index is not in list")
                 idx4 = "idxVM2"
@@ -8297,7 +8298,7 @@ class QueriesIndexTests(QueryTests):
                     idx4, query_bucket, "VMs", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx4 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx4)
 
                 self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
@@ -8377,7 +8378,7 @@ class QueriesIndexTests(QueryTests):
                              " USING {3}".format(idx4, query_bucket, "VMs", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
-                self._verify_results(create_result['results'], [])
+                self.assertTrue(idx4 in str(create_result['results']), f"The index is returning the wrong index, please check {create_result}")
                 created_indexes.append(idx4)
 
                 self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
