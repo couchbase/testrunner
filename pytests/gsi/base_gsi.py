@@ -1677,9 +1677,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         stats = self.index_rest.get_all_index_stats()
         result = {}
         for stat, value in stats.items():
-            # Todo: Will uncomment it once I get a confirmation from GSI DEV
-            # if '_system:_query' in stat:
-            #     continue
+            if '_system:_query' in stat:
+                continue
             for persisted_stat in persisted_stats_list:
                 if f':{persisted_stat}' in stat:
                     result[stat] = value
@@ -1697,9 +1696,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         stats = self.index_rest.get_all_index_stats()
         result = {}
         for stat, value in stats.items():
-            # Todo: Will uncomment it once I get a confirmation from GSI DEV
-            # if '_system:_query' in stat:
-            #     continue
+            if '_system:_query' in stat:
+                continue
             for reb_stat in reblance_related_stats:
                 if f':{reb_stat}' in stat:
                     result[stat] = value
