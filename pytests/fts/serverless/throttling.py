@@ -35,7 +35,7 @@ class FTSThrottle(FTSElixirSanity):
             result = self.run_query(database, f'INSERT INTO {self.collection} (key k, value v) select uuid() as k , {self.composite_doc} as v from array_range(0,{num_docs}) d')
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection", scope=self.scope,
                                                                       collection=self.collection)
             plan_params = self.construct_plan_params()
@@ -60,7 +60,7 @@ class FTSThrottle(FTSElixirSanity):
             result = self.run_query(database, f'INSERT INTO {self.collection} (key k, value v) select uuid() as k , {self.composite_doc} as v from array_range(0,{num_docs}) d')
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection", scope=self.scope,
                                                                       collection=self.collection)
             plan_params = self.construct_plan_params()
@@ -107,7 +107,7 @@ class FTSThrottle(FTSElixirSanity):
                                     f'INSERT INTO {self.collection} (key k, value v) select uuid() as k , {self.composite_doc} as v from array_range(0,{num_docs}) d')
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection",
                                                                                scope=self.scope,
                                                                                collection=self.collection)
@@ -183,7 +183,7 @@ class FTSThrottle(FTSElixirSanity):
 
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
 
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection", scope=self.scope,
                                                                       collection=self.collection)
@@ -247,7 +247,7 @@ class FTSThrottle(FTSElixirSanity):
                                     f'INSERT INTO {self.collection} (key k, value v) select uuid() as k , {self.composite_doc} as v from array_range(0,{num_docs}) d')
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection",
                                                                                scope=self.scope,
                                                                                collection=self.collection)
@@ -289,7 +289,7 @@ class FTSThrottle(FTSElixirSanity):
                                     f'INSERT INTO {self.collection} (key k, value v) select uuid() as k , {self.composite_doc} as v from array_range(0,{num_docs}) d')
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection",
                                                                                scope=self.scope,
                                                                                collection=self.collection)
@@ -342,11 +342,11 @@ class FTSThrottle(FTSElixirSanity):
 
         self.init_input_servers(database1)
         fts_callable1 = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                   collections=self.collection, collection_index=True)
+                                   collections=self.collection, collection_index=True, is_elixir=True)
 
         self.init_input_servers(database2)
         fts_callable2 = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                   collections=self.collection, collection_index=True)
+                                   collections=self.collection, collection_index=True, is_elixir=True)
         # get throttle count before
         before_count_database1, _ = throttle.get_metrics(database1.id, service='fts')
         before_count_database2, _ = throttle.get_metrics(database2.id, service='fts')
@@ -384,7 +384,7 @@ class FTSThrottle(FTSElixirSanity):
                                     f'INSERT INTO {self.collection} (key k, value v) select uuid() as k , {self.composite_doc} as v from array_range(0,{num_docs}) d')
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection",
                                                                                scope=self.scope,
                                                                                collection=self.collection)
@@ -444,7 +444,7 @@ class FTSThrottle(FTSElixirSanity):
                                     database_obj=database, scope=scope_name, collection=collection_name)
                 self.init_input_servers(database)
                 fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                           collections=collection_name, collection_index=True)
+                                           collections=collection_name, collection_index=True, is_elixir=True)
 
                 _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                         collection=collection_name)
@@ -511,7 +511,7 @@ class FTSThrottle(FTSElixirSanity):
                                     database_obj=database, scope=scope_name, collection=collection_name)
                 self.init_input_servers(database)
                 fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                           collections=collection_name, collection_index=True)
+                                           collections=collection_name, collection_index=True, is_elixir=True)
 
                 _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                         collection=collection_name)
@@ -567,7 +567,7 @@ class FTSThrottle(FTSElixirSanity):
                                     f'INSERT INTO {self.collection} (key k, value v) select uuid() as k , {self.composite_doc} as v from array_range(0,{num_docs}) d')
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection",
                                                                                scope=self.scope,
                                                                                collection=self.collection)

@@ -46,7 +46,7 @@ class FTSMeter(FTSElixirSanity):
 
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
 
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection", scope=self.scope,
                                                                       collection=self.collection)
@@ -112,7 +112,7 @@ class FTSMeter(FTSElixirSanity):
 
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
 
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection", scope=self.scope,
                                                                       collection=self.collection)
@@ -227,7 +227,7 @@ class FTSMeter(FTSElixirSanity):
 
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
 
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection", scope=self.scope,
                                                                       collection=self.collection)
@@ -299,7 +299,7 @@ class FTSMeter(FTSElixirSanity):
 
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
 
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection",
                                                                                scope=self.scope,
@@ -326,7 +326,7 @@ class FTSMeter(FTSElixirSanity):
             meter = metering(database.rest_host, database.admin_username, database.admin_password)
             result = self.run_query(database, f'INSERT INTO {self.scope}.{self.collection} (key k, value v) select uuid() as k , {self.composite_doc} as v from array_range(0,{self.doc_count}) d')
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
 
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection", scope=self.scope,
                                                                       collection=self.collection)
@@ -392,7 +392,7 @@ class FTSMeter(FTSElixirSanity):
             meter = metering(database.rest_host, database.admin_username, database.admin_password)
             result = self.run_query(database, f'INSERT INTO {self.scope}.{self.collection} (key k, value v) select uuid() as k , {self.composite_doc} as v from array_range(0,{self.doc_count}) d')
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
 
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection", scope=self.scope,
                                                                       collection=self.collection)
@@ -470,7 +470,7 @@ class FTSMeter(FTSElixirSanity):
             meter = metering(database.rest_host, database.admin_username, database.admin_password)
             result = self.run_query(database, f'INSERT INTO {self.scope}.{self.collection} (key k, value v) select uuid() as k , {self.composite_doc} as v from array_range(0,{self.doc_count}) d')
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
 
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection", scope=self.scope,
                                                                       collection=self.collection)
@@ -539,7 +539,7 @@ class FTSMeter(FTSElixirSanity):
 
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
 
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection",
                                                                                scope=self.scope,
@@ -603,7 +603,7 @@ class FTSMeter(FTSElixirSanity):
             self.init_input_servers(database)
             meter = metering(database.rest_host, database.admin_username, database.admin_password)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
 
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection",
                                                                                scope=self.scope,
@@ -672,7 +672,7 @@ class FTSMeter(FTSElixirSanity):
 
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
 
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection", scope=self.scope,
                                                                       collection=self.collection)
@@ -754,7 +754,7 @@ class FTSMeter(FTSElixirSanity):
 
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
 
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection",
                                                                                scope=self.scope,
@@ -809,7 +809,7 @@ class FTSMeter(FTSElixirSanity):
 
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
 
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection", scope=self.scope,
                                                                       collection=self.collection)
@@ -861,7 +861,7 @@ class FTSMeter(FTSElixirSanity):
 
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
 
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection", scope=self.scope,
                                                                       collection=self.collection)
@@ -895,7 +895,7 @@ class FTSMeter(FTSElixirSanity):
 
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
 
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection", scope=self.scope,
                                                                       collection=self.collection)
@@ -947,7 +947,7 @@ class FTSMeter(FTSElixirSanity):
 
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
 
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection", scope=self.scope,
                                                                       collection=self.collection)
@@ -981,7 +981,7 @@ class FTSMeter(FTSElixirSanity):
 
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=self.scope,
-                                       collections=self.collection, collection_index=True)
+                                       collections=self.collection, collection_index=True, is_elixir=True)
 
             _type = FTSElixirSanity.define_index_parameters_collection_related(container_type="collection", scope=self.scope,
                                                                       collection=self.collection)
@@ -1029,7 +1029,7 @@ class FTSMeter(FTSElixirSanity):
                                     database_obj=database, scope=scope_name, collection=collection_name)
                 self.init_input_servers(database)
                 fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                           collections=collection_name, collection_index=True)
+                                           collections=collection_name, collection_index=True, is_elixir=True)
 
                 _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                         collection=collection_name)
@@ -1076,7 +1076,7 @@ class FTSMeter(FTSElixirSanity):
                                     database_obj=database, scope=scope_name, collection=collection_name)
                 self.init_input_servers(database)
                 fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                           collections=collection_name, collection_index=True)
+                                           collections=collection_name, collection_index=True, is_elixir=True)
 
                 _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                         collection=collection_name)
