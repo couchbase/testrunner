@@ -324,6 +324,14 @@ class RestConnection(object):
             self.services_node_init = self.input.param("new_services", None)
             self.debug_logs = self.input.param("debug-logs", False)
 
+        # Adding CDC params
+        self.enable_cdc = self.input.param("enable_cdc", False)
+        self.history_retention_collection_default = self.input.param("history_retention_collection_default", 'true')
+        self.history_retention_bytes = self.input.param("history_retention_bytes", 4294967296)  # 4 GB
+        self.history_retention_secs = self.input.param("history_retention_secs", 86400)  # 1 day
+        self.magma_key_tree_data_block_size = self.input.param("magma_key_tree_data_block_size", 10096)
+        self.magma_seq_tree_data_block_size = self.input.param("magma_seq_tree_data_block_size", 131072)
+
         if CbServer.use_https:
             self.port = CbServer.ssl_port_map.get(str(self.port),
                                                   str(self.port))
@@ -2984,6 +2992,13 @@ class RestConnection(object):
                 if ramQuotaMB in range(256, 1024) and ramQuotaMB < self.get_internalSettings("magmaMinMemoryQuota"):
                     log.info("Setting magmaMinMemoryQuota to {0} MB".format(ramQuotaMB))
                     self.set_internalSetting("magmaMinMemoryQuota", ramQuotaMB)
+                if self.enable_cdc:
+                log.info("Enabling history retentions settings for CDC changes")
+                init_params['historyRetentionCollectionDefault'] = self.history_retention_collection_default
+                init_params['historyRetentionBytes'] = self.history_retention_bytes
+                init_params['historyRetentionSeconds'] = self.history_retention_secs
+                init_params['magmaKeyTreeDataBlockSize'] = self.magma_seq_tree_data_block_size
+                init_params['magmaSeqTreeDataBlockSize'] = self.magma_key_tree
             init_params['storageBackend'] = storageBackend
 
         params = urllib.parse.urlencode(init_params)
@@ -6209,7 +6224,10 @@ class NodeDiskStorage(object):
 
 class Bucket(object):
     def __init__(self, bucket_size='', name="", num_replicas=0, port=11211, master_id=None,
-                 type='', eviction_policy="valueOnly", bucket_priority=None, uuid="", lww=False, maxttl=None, bucket_storage=None):
+                 type='', eviction_policy="valueOnly", bucket_priority=None, uuid="", lww=False, maxttl=None,
+                 bucket_storage=None, history_retention_bytes=4294967296, history_retention_secs=86400,
+                 magma_key_tree_data_block_size=10096, magma_seq_tree_data_block_size=13107,
+                 history_retention_collection_default=True):
         self.name = name
         self.port = port
         self.type = type
