@@ -31,7 +31,7 @@ class BaseGSIServerless(QueryBaseServerless):
         self.gsi_util_obj = GSIUtils(self.run_query)
         self.num_of_load_cycles = self.input.param("num_of_load_cycles", 10000)
         self.num_of_index_creation_batches = self.input.param("num_of_index_creation_batches", 1)
-        self.dataset = self.input.param("dataset", "Employee")
+        self.dataset = self.input.param("dataset", "Hotel")
         self.aws_access_key_id = self.input.param("aws_access_key_id", None)
         self.aws_secret_access_key = self.input.param("aws_secret_access_key", None)
         self.region = self.input.capella['region']
@@ -82,6 +82,31 @@ class BaseGSIServerless(QueryBaseServerless):
                 # changing log level to debug temporarily. TODO remove this once stabilised
                 self.log.info(f"Index metadata for index {index_name} is {index}")
                 return index['hosts']
+
+    def get_resident_host_for_tenant(self, tenant, indexer_node, rest_info):
+        rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
+        nodes_obj = rest_obj.get_all_dataplane_nodes()
+        self.log.debug(f"Dataplane nodes object {nodes_obj}")
+        for node in nodes_obj:
+            if 'index' in node['services']:
+                indexer_node = node['hostname'].split(":")[0]
+                self.log.info(f"Will use this indexer node to obtain metadata {indexer_node}")
+                break
+        index_metadata = self.get_indexer_metadata(indexer_node=indexer_node, rest_info=rest_info)
+        index_hosts = set()
+        for index in index_metadata:
+            if index['bucket'] == tenant:
+                index_hosts.add(index['hosts'][0])
+                if len(list(index_hosts)) == 2:
+                    return list(index_hosts)
+
+    def get_all_tenants_on_host(self, host, rest_info):
+        index_metadata = self.get_indexer_metadata(indexer_node=host, rest_info=rest_info)
+        tenants = set()
+        for index in index_metadata:
+            if index['hosts'][0].split(":")[0] == host:
+                tenants.add(index['bucket'])
+        return list(tenants)
 
     def get_count_of_indexes_for_tenant(self, database_obj):
         query = "select * from system:indexes"
@@ -518,3 +543,23 @@ class BaseGSIServerless(QueryBaseServerless):
                 self.log.info(f"Index {index['index']} is not yet ready. Index state is {index['status']}")
                 return False
             return True
+
+    def get_index_metadata_stats(self, rest_info, return_only_persisted=False):
+        if return_only_persisted:
+            stats_required = ["last_known_scan_time"]
+        else:
+            stats_required = ['items_count',
+                              'key_size_distribution',
+                              'raw_data_size',
+                              'backstore_raw_data_size',
+                              'arrkey_size_distribution',
+                              "last_known_scan_time"]
+        indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+        result = {}
+        for node in indexer_nodes:
+            stat_data = self.get_index_stats(node, rest_info=rest_info)
+            for stat, value in stat_data.items():
+                for req_stat in stats_required:
+                    if f':{req_stat}' in stat:
+                        result[stat] = value
+        return result

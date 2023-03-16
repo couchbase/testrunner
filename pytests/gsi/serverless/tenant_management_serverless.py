@@ -463,10 +463,10 @@ class TenantManagement(BaseGSIServerless):
         finally:
             self.set_log_level_query_service(rest_info=rest_info, level='info')
 
-    def test_rebalance_axy_ddl_axy(self):
+    def test_rebalance_first_ddl_queued(self):
         try:
             if not self.new_dataplane_id:
-                self.fail("This test needs a dataplane_id parameter in the conf file to run")
+                self.fail("This test needs a new_dataplane_id parameter to run")
             dataplane = ServerlessDataPlane(self.new_dataplane_id)
             rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
             dataplane.populate(rest_api_info)
@@ -474,65 +474,186 @@ class TenantManagement(BaseGSIServerless):
                                                   password=dataplane.admin_password,
                                                   rest_host=dataplane.rest_host)
             index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            self.provision_databases(count=20, seed=f"test-defrag-cluster",
+            self.provision_databases(count=20, seed=f"test-rebalance-first-ddl-queued",
                                      dataplane_id=self.new_dataplane_id)
-            self.create_scopes_collections(databases=self.databases.values())
+            scope_collection_map = {"scope1": ["coll1", "coll2"]}
+            self.create_scopes_collections(databases=self.databases.values(), scope_collection_map=scope_collection_map)
             for counter, database in enumerate(self.databases.values()):
-                self.load_databases(database_obj=database, num_of_docs=10)
                 self.log.info(f"Iteration number {counter+1}")
                 for scope in database.collections:
                     for collection in database.collections[scope]:
-                        index1 = f'idx_db{counter}_{random.randint(0, 1000)}'
-                        namespace = f"default:`{database.id}`.`{scope}`.`{collection}`"
-                        self.create_index(database, query_statement=f"create index {index1} on {namespace}(b{counter})",
-                                          use_sdk=self.use_sdk)
-                        self.log.info(f"Iteration number {counter+1}. Index creation successful")
-                        index_exists = self.check_if_index_exists(database_obj=database, index_name=index1)
-                        self.log.info(f"Iteration number {counter+1}. index {index1} exists? {index_exists}")
-                        index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-                        for node in index_nodes_after:
-                            num_tenant_stat = self.get_index_stats(indexer_node=node,
-                                                                   rest_info=rest_info)['num_tenants']
-                            self.log.info(f"Num_tenant stat from /stats endpoint: {num_tenant_stat} on index node {node}")
-                        if index_nodes_after != index_nodes_before:
-                            self.fail("Scaling has happened even when the num of tenants has not reached 20")
-            time.sleep(300)
-            index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            self.log.info(f"Index nodes after scale up :{index_nodes_after}")
-            if index_nodes_before == index_nodes_after:
-                self.fail(f"Index sub-cluster did not scale despite creating indexes for {self.num_of_tenants} tenants")
-            self.provision_databases(count=1, seed=f"test-new-defrag-cluster",
-                                     dataplane_id=self.new_dataplane_id)
-            for database in self.databases.values():
-                if "new" in database.id:
-                    new_db = database
+                        self.load_databases(database_obj=database, num_of_docs=self.total_doc_count, scope=scope,
+                                            collection=collection, doc_template=self.dataset)
+                        if collection == "coll1":
+                            create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
+                                                                                  namespace=f"`{database.id}`.`{scope}`.`{collection}`")
+                            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database,
+                                                                 capella_run=True)
+                        self.log.info(f"Iteration for {database.id} complete. Dataload and index creation done")
+            time_now, scale_complete = time.time(), False
+            while time.time() - time_now < 300:
+                index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+                self.log.info(f"Index nodes after scale up :{index_nodes_after}")
+                if len(index_nodes_after) == len(index_nodes_before) + 2:
+                    scale_complete = True
                     break
-            self.create_scopes_collections(databases=[new_db])
-            self.load_databases(database_obj=new_db, num_of_docs=10)
-            index1 = f'idx_db_{random.randint(0, 1000)}'
-            for scope in new_db.collections:
-                for collection in new_db.collections[scope]:
-                    namespace = f"default:`{new_db.id}`.`{scope}`.`{collection}`"
-                    self.create_index(new_db, query_statement=f"create index {index1} on {namespace}(b)",
-                                      use_sdk=self.use_sdk)
-                    self.log.info(f"New Index creation successful")
-                    index_exists = self.check_if_index_exists(database_obj=new_db, index_name=index1)
-                    self.log.info(f"New DB index {index1} exists? {index_exists}")
-            for node in index_nodes_after:
-                num_tenant_stat = self.get_index_stats(indexer_node=node,
-                                                       rest_info=rest_info)['num_tenants']
-                self.log.info(f"Num_tenant stat from /stats endpoint: {num_tenant_stat} on index node {node}")
-            delete_count, num_dbs_deleted = 5, 0
+                time.sleep(30)
+            if not scale_complete:
+                self.fail(f"Index sub-cluster did not scale despite creating indexes for {self.num_of_tenants} tenants")
+            sub_cluster_2_ready, batch = False, 0
+            while not sub_cluster_2_ready:
+                self.provision_databases(count=2, seed=f"new-test-{batch}-rebalance-first-ddl-queued",
+                                         dataplane_id=self.new_dataplane_id)
+                new_db_list = []
+                for database in self.databases.values():
+                    if f"new-test-{batch}" in database.id:
+                        new_db_list.append(database)
+                self.create_scopes_collections(databases=new_db_list,
+                                               scope_collection_map=scope_collection_map)
+                for counter, database in enumerate(new_db_list):
+                    self.log.info(f"Iteration number {counter + 1}")
+                    for scope in database.collections:
+                        for collection in database.collections[scope]:
+                            self.load_databases(database_obj=database, num_of_docs=self.total_doc_count, scope=scope,
+                                                collection=collection, doc_template=self.dataset)
+                            if collection == "coll1":
+                                create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
+                                                                                      namespace=f"`{database.id}`.`{scope}`.`{collection}`")
+                                self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database,
+                                                                     capella_run=True)
+                index_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+                num_tenants_dict = {}
+                for node in index_nodes:
+                    num_tenant_stat = self.get_index_stats(indexer_node=node,
+                                                           rest_info=rest_info)['num_tenants']
+                    num_tenants_dict[node] = num_tenant_stat
+                if all(i >= 2 for i in num_tenants_dict.values()):
+                    sub_cluster_2_ready = True
+                batch += 1
+            rev_dict = {}
+            for key in num_tenants_dict:
+                if num_tenants_dict[key] not in rev_dict:
+                    rev_dict[num_tenants_dict[key]] = [key]
+                else:
+                    rev_dict[num_tenants_dict[key]].append(key)
+            ddl_list, id_ddl_list = [], []
+            for item in rev_dict.values():
+                node = item[0]
+                tenant_list = self.get_all_tenants_on_host(node, rest_info=rest_info)
+                for tenant in tenant_list[:2]:
+                    ddl_list.append(self.databases[tenant])
+                    id_ddl_list.append(self.databases[tenant].id)
+            # create a few deferred indexes
+            for counter, database in enumerate(ddl_list):
+                for scope in database.collections:
+                    for collection in database.collections[scope]:
+                        defer_defn_list = self.gsi_util_obj.get_index_definition_list(dataset=self.dataset, prefix="defer")
+                        if collection == "coll1":
+                            create_list = self.gsi_util_obj.get_create_index_list(definition_list=defer_defn_list,
+                                                                                  namespace=f"`{database.id}`.`{scope}`.`{collection}`",
+                                                                                  defer_build_mix=True)
+                            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database,
+                                                                 capella_run=True)
+            indexer_stats_before = self.get_index_metadata_stats(rest_info=rest_info)
+            self.log.info(f"No. of stats for indexes available {len(indexer_stats_before)}")
+            if len(indexer_stats_before) == 0:
+                self.fail("Stats for indexes before rebalance/ddl conflict not available")
+            delete_count, num_dbs_deleted = max(rev_dict.keys()) + min(rev_dict.keys()) - 15, 0
             for database in self.databases.values():
-                if num_dbs_deleted < delete_count and "new" not in database.id:
+                if num_dbs_deleted < delete_count and database.id not in id_ddl_list:
                     self.delete_database(database_id=database.id)
                     num_dbs_deleted += 1
-            time.sleep(300)
+            time_now, rebalance_started = time.time(), False
+            rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
+            while time.time() - time_now < 1200:
+                status, progress = rest_obj._rebalance_status_and_progress()
+                if status == 'running':
+                    rebalance_started = True
+                    break
+                time.sleep(10)
+            if not rebalance_started:
+                self.fail("Rebalance not triggered by defrag API despite waiting 1200 seconds")
+            drop_dict = {}
+            with ThreadPoolExecutor() as executor:
+                tasks = []
+                for counter, database in enumerate(ddl_list):
+                    for scope in database.collections:
+                        for collection in database.collections[scope]:
+                            new_defn_list = self.gsi_util_obj.get_index_definition_list(dataset=self.dataset, prefix="new2")
+                            create_list = self.gsi_util_obj.get_create_index_list(definition_list=new_defn_list,
+                                                                                  namespace=f"`{database.id}`.`{scope}`.`{collection}`",
+                                                                                  defer_build_mix=True)
+                            task = executor.submit(self.gsi_util_obj.create_gsi_indexes,
+                                                   create_queries=create_list,
+                                                   database=database, capella_run=True)
+                            tasks.append(task)
+                            list_all_indexes = self.get_all_index_names(database=database, scope=scope, collection=collection)
+                            drop_list = [index for index in list_all_indexes if "new2" not in index and "defer" not in index]
+                            random.shuffle(drop_list)
+                            drop_index = math.ceil((len(drop_list)/10))
+                            drop_list = drop_list[:drop_index]
+                            drop_dict[database] = drop_list
+                            for item in drop_list:
+                                query = f"drop index `{item}` on `{database.id}`.`{scope}`.`{collection}`"
+                                drop_task = executor.submit(self.run_query, database=database, query=query)
+                                tasks.append(drop_task)
+                for task in tasks:
+                    task.result()
+            # build all the deferred indexes
+            with ThreadPoolExecutor() as executor:
+                tasks = []
+                for counter, database in enumerate(ddl_list):
+                    build_task = executor.submit(self.build_all_indexes, databases=[database])
+                    tasks.append(build_task)
+                for task in tasks:
+                    task.result()
             index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
             for node in index_nodes_after:
                 num_tenant_stat = self.get_index_stats(indexer_node=node,
                                                        rest_info=rest_info)['num_tenants']
                 self.log.info(f"Num_tenant stat from /stats endpoint: {num_tenant_stat} on index node {node}")
+            self.get_all_index_node_usage_stats()
+            rebalance_complete = False
+            while time.time() - time_now < 1200:
+                status, progress = rest_obj._rebalance_status_and_progress()
+                if (status, progress) == ('none', 100):
+                    rebalance_complete = True
+                    break
+                time.sleep(30)
+            if not rebalance_complete:
+                self.fail("Rebalance not triggered by defrag API despite waiting 1200 seconds")
+            # TODO replace with smarter way to wait until all indexes are online
+            time.sleep(120)
+            indexer_stats_after = self.get_index_metadata_stats(rest_info=rest_info)
+            self.log.info(f"Indexer stats after: {indexer_stats_after}")
+            for new_db in ddl_list:
+                index_list = self.get_all_index_names(database=new_db)
+                for index in index_list:
+                    if "new2" in index:
+                        keyspace = f"`{new_db.id}`"
+                        status = self.get_index_status(rest_info=rest_info, index_name=index, keyspace=keyspace)
+                        self.log.info(f"Index {index} on keyspace {keyspace} status {status}")
+                        if status != 'Ready':
+                            self.fail(f"Index did not get built. Index {index} on keyspace {keyspace} status {status}")
+            for db, index_list in drop_dict.items():
+                for index in index_list:
+                    if self.check_if_index_exists(database_obj=db, index_name=index):
+                        self.log.info(f"Index {index} was dropped during the DDL/Rebalance conflict phase as expected.")
+                    else:
+                        self.log.error(f"Index {index} was not dropped during the DDL/Rebalance conflict phase as expected.")
+            indexer_stats_after = self.get_index_metadata_stats(rest_info=rest_info)
+            total_defer, total_new = 0, 0
+            for key in indexer_stats_after.keys():
+                if "defer" in key:
+                    total_defer += 1
+                if "new2" in key:
+                    total_new += 1
+            self.log.info(
+                f"Stat count for newly created indexes is {total_new}. Stat count for deferred indexes {total_defer}")
+            if total_defer == 0:
+                self.fail("Stats for built deferred indexes built after rebalance not available")
+            if total_new == 0:
+                self.fail("Stats for newly indexes created during rebalance not available")
         finally:
             # TODO uncomment this after getting the appropriate keys needed to work with the s3 bucket
             pass
@@ -541,10 +662,10 @@ class TenantManagement(BaseGSIServerless):
             #                                                                         indexer_node=indexer_nodes[0])
             # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
 
-    def test_ddl_axy_rebalance_axy(self):
+    def test_ddl_first_rebalance_queued(self):
         try:
             if not self.new_dataplane_id:
-                self.fail("This test needs a new_dataplane_id parameter")
+                self.fail("This test needs a new_dataplane_id parameter to run")
             dataplane = ServerlessDataPlane(self.new_dataplane_id)
             rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
             dataplane.populate(rest_api_info)
@@ -552,785 +673,164 @@ class TenantManagement(BaseGSIServerless):
                                                   password=dataplane.admin_password,
                                                   rest_host=dataplane.rest_host)
             index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            self.log.info(f"Index nodes before the test run:{index_nodes_before}")
-            self.provision_databases(count=1, seed="test-ddl-during-ongoing-rebalance", dataplane_id=self.new_dataplane_id)
-            scope_collection_map = {"scope1": ["collection1", "collection2"]}
+            self.provision_databases(count=20, seed=f"test-rebalance-first-ddl-queued",
+                                     dataplane_id=self.new_dataplane_id)
+            scope_collection_map = {"scope1": ["coll1", "coll2"]}
             self.create_scopes_collections(databases=self.databases.values(), scope_collection_map=scope_collection_map)
-            self.load_data_new_doc_loader(databases=self.databases.values(), doc_start=0, doc_end=self.total_doc_count)
-            rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
-
             for counter, database in enumerate(self.databases.values()):
-                create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                      namespace=f"`{database.id}`.scope1.collection1")
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database,
-                                                     capella_run=True)
-            database_index_map_1 = {}
-            time.sleep(60)
-            for counter, database in enumerate(self.databases.values()):
-                index_list = self.get_all_index_names(database=database, scope="scope1", collection="collection1")
-                database_index_map_1[database] = index_list
-            for database in database_index_map_1:
-                for index in database_index_map_1[database]:
-                    self.wait_until_indexes_online(rest_info=rest_info, index_name=index,
-                                                   keyspace=f"`{database.id}`.`scope1`.`collection1`")
-            # create indexes across all databases on a.x.z while the rebalance is going on
-            with ThreadPoolExecutor() as executor:
-                for counter, database in enumerate(self.databases.values()):
-                    create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                          namespace=f"`{database.id}`.scope1.collection1")
-                    future = executor.submit(self.gsi_util_obj.create_gsi_indexes, create_list, database, True, None)
-                    self.scale_up_index_subcluster(dataplane)
-                    future.result()
-            database_index_map = {}
-            for counter, database in enumerate(self.databases.values()):
-                index_list = self.get_all_index_names(database=database, scope="scope1", collection="collection1")
-                database_index_map[database] = index_list
-            time_now, rebalance_done = time.time(), False
-            while time.time() - time_now < 1200:
-                status, progress = rest_obj._rebalance_status_and_progress()
-                if (status, progress) == ('none', 100):
-                    rebalance_done = True
-                    break
-                time.sleep(30)
-            if not rebalance_done:
-                self.fail("Rebalance not complete despite waiting 1200 seconds")
-            index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            if sorted(index_nodes_before) == sorted(index_nodes_after):
-                self.fail("Scale up failure")
-            for database in database_index_map:
-                for index in database_index_map[database]:
-                    index_status = self.get_index_status(rest_info=rest_info, index_name=index,
-                                                         keyspace=f"`{database.id}`.`scope1`.`collection1`")
-                    if index_status != "Ready":
-                        self.fail(f"Index {index} not ready despite waiting 1200 seconds")
-            for database in self.databases.values():
-                self.drop_all_indexes_on_tenant(database=database)
-
-            # Scale down
-            index_nodes_before_scale_down = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            self.log.info(f"Index nodes before the test run:{index_nodes_before}")
-
-            for counter, database in enumerate(self.databases.values()):
-                create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                      namespace=f"`{database.id}`.scope1.collection1")
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database,
-                                                     capella_run=True)
-            database_index_map_1 = {}
-            time.sleep(60)
-            for counter, database in enumerate(self.databases.values()):
-                index_list = self.get_all_index_names(database=database, scope="scope1", collection="collection1")
-                database_index_map_1[database] = index_list
-            for database in database_index_map_1:
-                for index in database_index_map_1[database]:
-                    self.wait_until_indexes_online(rest_info=rest_info, index_name=index,
-                                                   keyspace=f"`{database.id}`.`scope1`.`collection1`")
-            # create indexes across all databases on a.x.z while the rebalance is going on
-            with ThreadPoolExecutor() as executor:
-                for counter, database in enumerate(self.databases.values()):
-                    create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                          namespace=f"`{database.id}`.scope1.collection1")
-                    future = executor.submit(self.gsi_util_obj.create_gsi_indexes, create_list, database, True, None)
-                    self.scale_down_index_subcluster(dataplane)
-                    future.result()
-            database_index_map = {}
-            for counter, database in enumerate(self.databases.values()):
-                index_list = self.get_all_index_names(database=database, scope="scope1", collection="collection1")
-                database_index_map[database] = index_list
-            time_now, rebalance_done = time.time(), False
-            while time.time() - time_now < 1200:
-                status, progress = rest_obj._rebalance_status_and_progress()
-                if (status, progress) == ('none', 100):
-                    rebalance_done = True
-                    break
-                time.sleep(30)
-            if not rebalance_done:
-                self.fail("Rebalance not complete despite waiting 1200 seconds")
-            index_nodes_after_scale_down = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            if sorted(index_nodes_before_scale_down) == sorted(index_nodes_after_scale_down):
-                self.fail("Scale down failure")
-            for database in database_index_map:
-                for index in database_index_map[database]:
-                    index_status = self.get_index_status(rest_info=rest_info, index_name=index,
-                                                         keyspace=f"`{database.id}`.`scope1`.`collection1`")
-                    if index_status != "Ready":
-                        self.fail(f"Index {index} not ready despite waiting 1200 seconds")
-            for database in self.databases.values():
-                self.drop_all_indexes_on_tenant(database=database)
-        finally:
-            pass
-            # indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            # storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
-            #                                                                         indexer_node=indexer_nodes[0])
-            # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
-
-    def test_ddl_axy_rebalance_axz(self):
-        try:
-            if not self.new_dataplane_id:
-                self.fail("This test needs a new_dataplane_id parameter")
-            dataplane = ServerlessDataPlane(self.new_dataplane_id)
-            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
-            dataplane.populate(rest_api_info)
-            rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
-                                                  password=dataplane.admin_password,
-                                                  rest_host=dataplane.rest_host)
-            index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            self.log.info(f"Index nodes before the test run:{index_nodes_before}")
-            self.provision_databases(count=1, seed="test-ddl-axy-rebalance-axz", dataplane_id=self.new_dataplane_id)
-            scope_collection_map = {"scope1": ["collection1", "collection2"]}
-            self.create_scopes_collections(databases=self.databases.values(), scope_collection_map=scope_collection_map)
-            self.load_data_new_doc_loader(databases=self.databases.values(), doc_start=0, doc_end=self.total_doc_count)
-            rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
-            for counter, database in enumerate(self.databases.values()):
-                create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                      namespace=f"`{database.id}`.scope1.collection1")
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database,
-                                                     capella_run=True)
-            database_index_map_1 = {}
-            time.sleep(60)
-            for counter, database in enumerate(self.databases.values()):
-                index_list = self.get_all_index_names(database=database, scope="scope1", collection="collection1")
-                database_index_map_1[database] = index_list
-            for database in database_index_map_1:
-                for index in database_index_map_1[database]:
-                    self.wait_until_indexes_online(rest_info=rest_info, index_name=index,
-                                                   keyspace=f"`{database.id}`.`scope1`.`collection1`")
-            # create indexes across all databases on a.x.z while the rebalance is going on
-            with ThreadPoolExecutor() as executor:
-                for counter, database in enumerate(self.databases.values()):
-                    create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                          namespace=f"`{database.id}`.scope1.collection2")
-                    future = executor.submit(self.gsi_util_obj.create_gsi_indexes, create_list, database, True, None)
-                    self.scale_up_index_subcluster(dataplane)
-                    future.result()
-            database_index_map = {}
-            for counter, database in enumerate(self.databases.values()):
-                index_list = self.get_all_index_names(database=database, scope="scope1", collection="collection2")
-                database_index_map[database] = index_list
-            time_now, rebalance_done = time.time(), False
-            while time.time() - time_now < 1200:
-                status, progress = rest_obj._rebalance_status_and_progress()
-                if (status, progress) == ('none', 100):
-                    rebalance_done = True
-                    break
-                time.sleep(30)
-            if not rebalance_done:
-                self.fail("Rebalance not complete despite waiting 1200 seconds")
-            index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            if sorted(index_nodes_before) == sorted(index_nodes_after):
-                self.fail("Scale up failure")
-            for database in database_index_map:
-                for index in database_index_map[database]:
-                    index_status = self.get_index_status(rest_info=rest_info, index_name=index,
-                                                         keyspace=f"`{database.id}`.`scope1`.`collection2`")
-                    if index_status != "Ready":
-                        self.fail(f"Index {index} not ready despite waiting 1200 seconds")
-            for database in self.databases.values():
-                self.drop_all_indexes_on_tenant(database=database)
-
-            # Scale down
-            index_nodes_before_scale_down = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            for counter, database in enumerate(self.databases.values()):
-                create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                      namespace=f"`{database.id}`.scope1.collection1")
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database,
-                                                     capella_run=True)
-            database_index_map_1 = {}
-            time.sleep(60)
-            for counter, database in enumerate(self.databases.values()):
-                index_list = self.get_all_index_names(database=database, scope="scope1", collection="collection1")
-                database_index_map_1[database] = index_list
-            for database in database_index_map_1:
-                for index in database_index_map_1[database]:
-                    self.wait_until_indexes_online(rest_info=rest_info, index_name=index,
-                                                   keyspace=f"`{database.id}`.`scope1`.`collection1`")
-            # create indexes across all databases on a.x.z while the rebalance is going on
-            with ThreadPoolExecutor() as executor:
-                for counter, database in enumerate(self.databases.values()):
-                    create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                          namespace=f"`{database.id}`.scope1.collection2")
-                    future = executor.submit(self.gsi_util_obj.create_gsi_indexes, create_list, database, True, None)
-                    self.scale_down_index_subcluster(dataplane)
-                    future.result()
-            database_index_map = {}
-            for counter, database in enumerate(self.databases.values()):
-                index_list = self.get_all_index_names(database=database, scope="scope1", collection="collection2")
-                database_index_map[database] = index_list
-            time_now, rebalance_done = time.time(), False
-            while time.time() - time_now < 1200:
-                status, progress = rest_obj._rebalance_status_and_progress()
-                if (status, progress) == ('none', 100):
-                    rebalance_done = True
-                    break
-                time.sleep(30)
-            if not rebalance_done:
-                self.fail("Rebalance not complete despite waiting 1200 seconds")
-            index_nodes_after_scale_down = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            if sorted(index_nodes_before_scale_down) == sorted(index_nodes_after_scale_down):
-                self.fail("Scale down failure")
-            for database in database_index_map:
-                for index in database_index_map[database]:
-                    index_status = self.get_index_status(rest_info=rest_info, index_name=index,
-                                                         keyspace=f"`{database.id}`.`scope1`.`collection2`")
-                    if index_status != "Ready":
-                        self.fail(f"Index {index} not ready despite waiting 1200 seconds")
-            for database in self.databases.values():
-                self.drop_all_indexes_on_tenant(database=database)
-        finally:
-            pass
-            # indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            # storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
-            #                                                                         indexer_node=indexer_nodes[0])
-            # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
-
-    def test_rebalance_axy_ddl_axz(self):
-        try:
-            if not self.new_dataplane_id:
-                self.fail("This test needs a new_dataplane_id parameter")
-            dataplane = ServerlessDataPlane(self.new_dataplane_id)
-            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
-            dataplane.populate(rest_api_info)
-            rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
-                                                  password=dataplane.admin_password,
-                                                  rest_host=dataplane.rest_host)
-            index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            self.log.info(f"Index nodes before the test run:{index_nodes_before}")
-            self.provision_databases(count=1, seed="test-rebalance-axy-ddl-axz",dataplane_id=self.new_dataplane_id)
-            scope_collection_map = {"scope1": ["collection1", "collection2"]}
-            self.create_scopes_collections(databases=self.databases.values(), scope_collection_map=scope_collection_map)
-            self.load_data_new_doc_loader(databases=self.databases.values(), doc_start=0, doc_end=self.total_doc_count)
-            rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
-            for counter, database in enumerate(self.databases.values()):
-                create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                      namespace=f"`{database.id}`.scope1.collection1")
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database,
-                                                     capella_run=True)
-            database_index_map_1 = {}
-            time.sleep(60)
-            for counter, database in enumerate(self.databases.values()):
-                index_list = self.get_all_index_names(database=database)
-                database_index_map_1[database] = index_list
-            for database in database_index_map_1:
-                for index in database_index_map_1[database]:
-                    self.wait_until_indexes_online(rest_info=rest_info, index_name=index,
-                                                   keyspace=f"`{database.id}`.`scope1`.`collection1`")
-            self.scale_up_index_subcluster(dataplane)
-            time.sleep(20)
-            time_now, rebalance_started = time.time(), False
-            while not rebalance_started:
-                status, _ = rest_obj._rebalance_status_and_progress()
-                if status == 'running':
-                    rebalance_started = True
-                time.sleep(20)
-            # create indexes across all databases on a.x.z while the rebalance is going on
-            for counter, database in enumerate(self.databases.values()):
-                create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                      namespace=f"`{database.id}`.scope1.collection2")
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database,
-                                                     capella_run=True)
-                database_index_map = {}
-                for counter, database in enumerate(self.databases.values()):
-                    index_list = self.get_all_index_names(database=database)
-                    database_index_map[database] = index_list
-            time_now, rebalance_done = time.time(), False
-            while time.time() - time_now < 1200:
-                status, progress = rest_obj._rebalance_status_and_progress()
-                if (status, progress) == ('none', 100):
-                    rebalance_done = True
-                    break
-                time.sleep(30)
-            if not rebalance_done:
-                self.fail("Rebalance not complete despite waiting 1200 seconds")
-            index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            if sorted(index_nodes_before) == sorted(index_nodes_after):
-                self.fail("Scale up failure")
-            for database in database_index_map:
-                for index in database_index_map[database]:
-                    index_status = self.get_index_status(rest_info=rest_info, index_name=index,
-                                                         keyspace=f"`{database.id}`.`scope1`.`collection2`")
-                    if index_status != "Ready":
-                        self.fail(f"Index {index} not ready despite waiting 1200 seconds")
-            for database in self.databases.values():
-                self.drop_all_indexes_on_tenant(database=database)
-            # Scale down
-            index_nodes_before_scale_down = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            for counter, database in enumerate(self.databases.values()):
-                create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                      namespace=f"`{database.id}`.scope1.collection1")
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database,
-                                                     capella_run=True)
-            database_index_map_1 = {}
-            time.sleep(60)
-            for counter, database in enumerate(self.databases.values()):
-                index_list = self.get_all_index_names(database=database)
-                database_index_map_1[database] = index_list
-            for database in database_index_map_1:
-                for index in database_index_map_1[database]:
-                    self.wait_until_indexes_online(rest_info=rest_info, index_name=index,
-                                                   keyspace=f"`{database.id}`.`scope1`.`collection1`")
-            self.scale_down_index_subcluster(dataplane)
-            time.sleep(20)
-            time_now, rebalance_started = time.time(), False
-            while not rebalance_started:
-                status, _ = rest_obj._rebalance_status_and_progress()
-                if status == 'running':
-                    rebalance_started = True
-                time.sleep(20)
-            # create indexes across all databases on a.x.z while the rebalance is going on
-            for counter, database in enumerate(self.databases.values()):
-                create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                      namespace=f"`{database.id}`.scope1.collection2")
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database,
-                                                     capella_run=True)
-                database_index_map = {}
-            for counter, database in enumerate(self.databases.values()):
-                index_list = self.get_all_index_names(database=database, scope='scope1', collection='collection2')
-                database_index_map[database] = index_list
-            time_now, rebalance_done = time.time(), False
-            while time.time() - time_now < 1200:
-                status, progress = rest_obj._rebalance_status_and_progress()
-                if (status, progress) == ('none', 100):
-                    rebalance_done = True
-                    break
-                time.sleep(30)
-            if not rebalance_done:
-                self.fail("Rebalance not complete despite waiting 1200 seconds")
-            index_nodes_after_scale_down = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            if sorted(index_nodes_after_scale_down) == sorted(index_nodes_before_scale_down):
-                self.fail("Scale down failure")
-            for database in database_index_map:
-                for index in database_index_map[database]:
-                    index_status = self.get_index_status(rest_info=rest_info, index_name=index,
-                                                         keyspace=f"`{database.id}`.`scope1`.`collection2`")
-                    if index_status != "Ready":
-                        self.fail(f"Index {index} not ready despite waiting 1200 seconds")
-            for database in self.databases.values():
-                self.drop_all_indexes_on_tenant(database=database)
-        finally:
-            pass
-            # indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            # storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
-            #                                                                         indexer_node=indexer_nodes[0])
-            # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
-
-    def test_rebalance_axy_ddl_bxy(self):
-        try:
-            if not self.new_dataplane_id:
-                self.fail("This test needs a new_dataplane_id parameter")
-            dataplane = ServerlessDataPlane(self.new_dataplane_id)
-            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
-            dataplane.populate(rest_api_info)
-            rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
-                                                  password=dataplane.admin_password,
-                                                  rest_host=dataplane.rest_host)
-            index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            self.log.info(f"Index nodes before the test run:{index_nodes_before}")
-            self.provision_databases(count=2, seed="test-rebalance-bxy-during-ongoing-ddl-axy", dataplane_id=self.new_dataplane_id)
-            for _, database in enumerate(self.databases.values()):
-                if "test-rebalance-bxy-during-ongoing-ddl-axy-0" in database:
-                    database0 = database
-                else:
-                    database1 = database
-            scope_collection_map = {"scope1": ["collection1", "collection2"]}
-            self.create_scopes_collections(databases=self.databases.values(), scope_collection_map=scope_collection_map)
-            self.load_data_new_doc_loader(databases=self.databases.values(), doc_start=0, doc_end=self.total_doc_count)
-            rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
-            create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                  namespace=f"`{database0.id}`.scope1.collection1")
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database0,
-                                                 capella_run=True)
-            database_index_map_1 = {}
-            time.sleep(60)
-            index_list = self.get_all_index_names(database=database0, scope="scope1", collection="collection1")
-            database_index_map_1[database0] = index_list
-            for database in database_index_map_1:
-                for index in database_index_map_1[database]:
-                    self.wait_until_indexes_online(rest_info=rest_info, index_name=index,
-                                                   keyspace=f"`{database.id}`.`scope1`.`collection1`")
-            self.scale_up_index_subcluster(dataplane)
-            time.sleep(20)
-            time_now, rebalance_started = time.time(), False
-            while not rebalance_started:
-                status, _ = rest_obj._rebalance_status_and_progress()
-                if status == 'running':
-                    rebalance_started = True
-                time.sleep(20)
-            # create indexes across b.x.y while the rebalance is going on
-            create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                  namespace=f"`{database1.id}`.scope1.collection1")
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database1,
-                                                 capella_run=True)
-            database_index_map = {}
-            index_list = self.get_all_index_names(database=database1, scope='scope1', collection='collection1')
-            database_index_map[database1] = index_list
-            time_now, rebalance_done = time.time(), False
-            while time.time() - time_now < 1200:
-                status, progress = rest_obj._rebalance_status_and_progress()
-                if (status, progress) == ('none', 100):
-                    rebalance_done = True
-                    break
-                time.sleep(30)
-            if not rebalance_done:
-                self.fail("Rebalance not complete despite waiting 1200 seconds")
-            index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            if sorted(index_nodes_before) == sorted(index_nodes_after):
-                self.fail("Scale up failure")
-            for database in database_index_map:
-                for index in database_index_map[database]:
-                    index_status = self.get_index_status(rest_info=rest_info, index_name=index,
-                                                         keyspace=f"`{database.id}`.`scope1`.`collection2`")
-                    if index_status != "Ready":
-                        self.fail(f"Index {index} not ready despite waiting 1200 seconds")
-            for database in self.databases.values():
-                self.drop_all_indexes_on_tenant(database=database)
-
-            # Scale down
-            index_nodes_before_scale_down = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                  namespace=f"`{database0.id}`.scope1.collection1")
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database0,
-                                                 capella_run=True)
-            database_index_map_1 = {}
-            time.sleep(60)
-            index_list = self.get_all_index_names(database=database0, scope='scope1', collection='collection1')
-            database_index_map_1[database0] = index_list
-            for database in database_index_map_1:
-                for index in database_index_map_1[database]:
-                    self.wait_until_indexes_online(rest_info=rest_info, index_name=index,
-                                                   keyspace=f"`{database.id}`.`scope1`.`collection1`")
-            self.scale_down_index_subcluster(dataplane)
-            time.sleep(20)
-            time_now, rebalance_started = time.time(), False
-            while not rebalance_started:
-                status, _ = rest_obj._rebalance_status_and_progress()
-                if status == 'running':
-                    rebalance_started = True
-                time.sleep(20)
-            # create indexes across all databases on b.x.y while the rebalance is going on
-            create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                  namespace=f"`{database1.id}`.scope1.collection1")
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database1,
-                                                 capella_run=True)
-            database_index_map = {}
-            index_list = self.get_all_index_names(database=database1, scope='scope1', collection='collection1')
-            database_index_map[database1] = index_list
-            time_now, rebalance_done = time.time(), False
-            while time.time() - time_now < 1200:
-                status, progress = rest_obj._rebalance_status_and_progress()
-                if (status, progress) == ('none', 100):
-                    rebalance_done = True
-                    break
-                time.sleep(30)
-            if not rebalance_done:
-                self.fail("Rebalance not complete despite waiting 1200 seconds")
-            index_nodes_after_scale_down = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            if sorted(index_nodes_after_scale_down) == sorted(index_nodes_before_scale_down):
-                self.fail("Scale down failure")
-            for database in database_index_map:
-                for index in database_index_map[database]:
-                    index_status = self.get_index_status(rest_info=rest_info, index_name=index,
-                                                         keyspace=f"`{database.id}`.`scope1`.`collection2`")
-                    if index_status != "Ready":
-                        self.fail(f"Index {index} not ready despite waiting 1200 seconds")
-            for database in self.databases.values():
-                self.drop_all_indexes_on_tenant(database=database)
-        finally:
-            pass
-            # indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            # storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
-            #                                                                         indexer_node=indexer_nodes[0])
-            # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
-
-    def test_ddl_axy_rebalance_bxy(self):
-        try:
-            if not self.new_dataplane_id:
-                self.fail("This test needs a new_dataplane_id parameter")
-            dataplane = ServerlessDataPlane(self.new_dataplane_id)
-            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
-            dataplane.populate(rest_api_info)
-            rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
-                                                  password=dataplane.admin_password,
-                                                  rest_host=dataplane.rest_host)
-            index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            self.log.info(f"Index nodes before the test run:{index_nodes_before}")
-            self.provision_databases(count=2, seed="test-ddl-axy-rebalance-bxy", dataplane_id=self.new_dataplane_id)
-            for _, database in enumerate(self.databases.values()):
-                if "test-ddl-axy-rebalance-bxy-0" in database:
-                    database0 = database
-                else:
-                    database1 = database
-            scope_collection_map = {"scope1": ["collection1", "collection2"]}
-            self.create_scopes_collections(databases=self.databases.values(), scope_collection_map=scope_collection_map)
-            self.load_data_new_doc_loader(databases=self.databases.values(), doc_start=0, doc_end=self.total_doc_count)
-            rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
-            create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                  namespace=f"`{database0.id}`.scope1.collection1")
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database0,
-                                                 capella_run=True)
-            database_index_map_1 = {}
-            time.sleep(60)
-            index_list = self.get_all_index_names(database=database0, scope="scope1", collection="collection1")
-            database_index_map_1[database0] = index_list
-            for database in database_index_map_1:
-                for index in database_index_map_1[database]:
-                    self.wait_until_indexes_online(rest_info=rest_info, index_name=index,
-                                                   keyspace=f"`{database.id}`.`scope1`.`collection1`")
-            with ThreadPoolExecutor() as executor:
-                create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                      namespace=f"`{database1.id}`.scope1.collection1")
-                future = executor.submit(self.gsi_util_obj.create_gsi_indexes, create_list, database1, True, None)
-                self.scale_up_index_subcluster(dataplane)
-                future.result()
-            database_index_map = {}
-            index_list = self.get_all_index_names(database=database1, scope='scope1', collection='collection1')
-            database_index_map[database1] = index_list
-            time_now, rebalance_done = time.time(), False
-            while time.time() - time_now < 1200:
-                status, progress = rest_obj._rebalance_status_and_progress()
-                if (status, progress) == ('none', 100):
-                    rebalance_done = True
-                    break
-                time.sleep(30)
-            if not rebalance_done:
-                self.fail("Rebalance not complete despite waiting 1200 seconds")
-            index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            if sorted(index_nodes_before) == sorted(index_nodes_after):
-                self.fail("Scale up failure")
-            for database in database_index_map:
-                for index in database_index_map[database]:
-                    index_status = self.get_index_status(rest_info=rest_info, index_name=index,
-                                                         keyspace=f"`{database.id}`.`scope1`.`collection1`")
-                    if index_status != "Ready":
-                        self.fail(f"Index {index} not ready despite waiting 1200 seconds")
-            for database in self.databases.values():
-                self.drop_all_indexes_on_tenant(database=database)
-
-            # Scale down
-            index_nodes_before_scale_down = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                  namespace=f"`{database0.id}`.scope1.collection1")
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database0,
-                                                 capella_run=True)
-            database_index_map_1 = {}
-            time.sleep(60)
-            index_list = self.get_all_index_names(database=database0, scope='scope1', collection='collection1')
-            database_index_map_1[database0] = index_list
-            for database in database_index_map_1:
-                for index in database_index_map_1[database]:
-                    self.wait_until_indexes_online(rest_info=rest_info, index_name=index,
-                                                   keyspace=f"`{database.id}`.`scope1`.`collection1`")
-            with ThreadPoolExecutor() as executor:
-                create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
-                                                                      namespace=f"`{database1.id}`.scope1.collection1")
-                future = executor.submit(self.gsi_util_obj.create_gsi_indexes, create_list, database1, True, None)
-                self.scale_down_index_subcluster(dataplane)
-                future.result()
-            database_index_map = {}
-            index_list = self.get_all_index_names(database=database1, scope='scope1', collection='collection1')
-            database_index_map[database1] = index_list
-            time_now, rebalance_done = time.time(), False
-            while time.time() - time_now < 1200:
-                status, progress = rest_obj._rebalance_status_and_progress()
-                if (status, progress) == ('none', 100):
-                    rebalance_done = True
-                    break
-                time.sleep(30)
-            if not rebalance_done:
-                self.fail("Rebalance not complete despite waiting 1200 seconds")
-            index_nodes_after_scale_down = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            if sorted(index_nodes_after_scale_down) == sorted(index_nodes_before_scale_down):
-                self.fail("Scale down failure")
-            for database in database_index_map:
-                for index in database_index_map[database]:
-                    index_status = self.get_index_status(rest_info=rest_info, index_name=index,
-                                                         keyspace=f"`{database.id}`.`scope1`.`collection2`")
-                    if index_status != "Ready":
-                        self.fail(f"Index {index} not ready despite waiting 1200 seconds")
-            for database in self.databases.values():
-                self.drop_all_indexes_on_tenant(database=database)
-        finally:
-            pass
-            # indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            # storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
-            #                                                                         indexer_node=indexer_nodes[0])
-            # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
-
-    def test_stats_validation(self):
-        if not self.new_dataplane_id:
-            self.fail("This test needs a new_dataplane_id parameter")
-        dataplane = ServerlessDataPlane(self.new_dataplane_id)
-        rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
-        dataplane.populate(rest_api_info)
-        rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
-                                              password=dataplane.admin_password,
-                                              rest_host=dataplane.rest_host)
-        index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-        self.log.info(f"Index nodes before the test run:{index_nodes_before}")
-        self.provision_databases(count=self.num_of_tenants, seed="test-stats-validation", dataplane_id=self.new_dataplane_id)
-        self.create_scopes_collections(databases=self.databases.values())
-        for counter, database in enumerate(self.databases.values()):
-            for scope in database.collections:
-                for collection in database.collections[scope]:
-                    create_index_list = self.gsi_util_obj.get_create_index_list(self.definition_list,
-                                                                                f"`{database.id}`.{scope}.{collection}")
-                    for index_create_query in create_index_list:
-                        self.run_query(database=database, query=index_create_query)
-        self.load_data_new_doc_loader(databases=self.databases.values(), doc_start=0, doc_end=self.total_doc_count)
-        indexer_metadata_b4_reb = self.get_index_metadata(rest_info=rest_api_info)
-        index_reb_stats_b4_reb = self.get_rebalance_related_stats()
-        index_persisted_stats_b4_reb = self.get_persisted_stats()
-        with ThreadPoolExecutor() as executor:
-            event = Event()
-            data_task = executor.submit(self.run_parallel_workloads, event=event,
-                                        total_doc_count=self.total_doc_count*2)
-            self.scale_up_index_subcluster(dataplane=dataplane)
-            event.set()
-            data_task.result()
-        for database in self.databases.values():
-            for scope in database.collections:
-                for collection in database.collections[scope]:
-                    doc_count_query = f'Select count(*) from `{database.id}`.`{scope}`.`{collection}`'
-                    doc_count_result = self.run_query(database=database,query=doc_count_query)['results'][0]['$1']
-                    select_count_query = f'Select count(*) from `{database.id}`.`{scope}`.`{collection}` where age >= 0'
-                    select_count_result = self.run_query(database=database, query=select_count_query)['results'][0]['$1']
-                    self.assertEqual(doc_count_result, select_count_result)
-        index_reb_stats_aft_reb = self.get_rebalance_related_stats()
-        index_persisted_stats_aft_reb = self.get_persisted_stats()
-        indexer_metadata_aft_reb = self.rest_obj.get_indexer_metadata()['status']
-
-        # Todo: Add validation for stats
-        self.log.info(f'{index_reb_stats_b4_reb}')
-        self.log.info(f'{index_reb_stats_aft_reb}')
-        self.log.info(f'{index_persisted_stats_b4_reb}')
-        self.log.info(f'{index_persisted_stats_aft_reb}')
-        self.log.info(f'{indexer_metadata_b4_reb}')
-        self.log.info(f'{indexer_metadata_aft_reb}')
-        for database in self.databases.values():
-            self.drop_all_indexes_on_tenant(database=database)
-        # scale down
-        for counter, database in enumerate(self.databases.values()):
-            for scope in database.collections:
-                for collection in database.collections[scope]:
-                    create_index_list = self.gsi_util_obj.get_create_index_list(self.definition_list,
-                                                                                f"`{database.id}`.{scope}.{collection}")
-                    for index_create_query in create_index_list:
-                        self.run_query(database=database, query=index_create_query)
-        self.load_data_new_doc_loader(databases=self.databases.values(), doc_start=0, doc_end=self.total_doc_count)
-        indexer_metadata_b4_reb = self.get_index_metadata(rest_info=rest_api_info)
-        index_reb_stats_b4_reb = self.get_rebalance_related_stats()
-        index_persisted_stats_b4_reb = self.get_persisted_stats()
-        with ThreadPoolExecutor() as executor:
-            event = Event()
-            data_task = executor.submit(self.run_parallel_workloads, event=event,
-                                        total_doc_count=self.total_doc_count*2)
-            self.scale_down_index_subcluster(dataplane=dataplane)
-            event.set()
-            data_task.result()
-        for database in self.databases.values():
-            for scope in database.collections:
-                for collection in database.collections[scope]:
-                    doc_count_query = f'Select count(*) from `{database.id}`.`{scope}`.`{collection}`'
-                    doc_count_result = self.run_query(database=database,query=doc_count_query)['results'][0]['$1']
-                    select_count_query = f'Select count(*) from `{database.id}`.`{scope}`.`{collection}` where age >= 0'
-                    select_count_result = self.run_query(database=database, query=select_count_query)['results'][0]['$1']
-                    self.assertEqual(doc_count_result, select_count_result)
-        index_reb_stats_aft_reb = self.get_rebalance_related_stats()
-        index_persisted_stats_aft_reb = self.get_persisted_stats()
-        indexer_metadata_aft_reb = self.rest_obj.get_indexer_metadata()['status']
-        # Todo: Add validation for stats
-        self.log.info(f'{index_reb_stats_b4_reb}')
-        self.log.info(f'{index_reb_stats_aft_reb}')
-        self.log.info(f'{index_persisted_stats_b4_reb}')
-        self.log.info(f'{index_persisted_stats_aft_reb}')
-        self.log.info(f'{indexer_metadata_b4_reb}')
-        self.log.info(f'{indexer_metadata_aft_reb}')
-
-    def test_ddl_drop_during_rebalance(self):
-        try:
-            if not self.new_dataplane_id:
-                self.fail("This test needs a new_dataplane_id parameter")
-            dataplane = ServerlessDataPlane(self.new_dataplane_id)
-            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.new_dataplane_id)
-            dataplane.populate(rest_api_info)
-            rest_info = self.create_rest_info_obj(username=dataplane.admin_username,
-                                                  password=dataplane.admin_password,
-                                                  rest_host=dataplane.rest_host)
-            rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
-            index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            self.log.info(f"Index nodes before the test run:{index_nodes_before}")
-            self.provision_databases(count=self.num_of_tenants, seed="test-ddl-drop-during-rebalance", dataplane_id=self.new_dataplane_id)
-            self.create_scopes_collections(databases=self.databases.values())
-            self.load_data_new_doc_loader(databases=self.databases.values(), doc_start=0, doc_end=self.total_doc_count)
-            for counter, database in enumerate(self.databases.values()):
+                self.log.info(f"Iteration number {counter+1}")
                 for scope in database.collections:
                     for collection in database.collections[scope]:
-                        create_index_list = self.gsi_util_obj.get_create_index_list(self.definition_list,
-                                                                                    f"`{database.id}`.{scope}.{collection}")
-                        for index_create_query in create_index_list:
-                            self.run_query(database=database, query=index_create_query)
-            for counter, database in enumerate(self.databases.values()):
-                with ThreadPoolExecutor() as executor:
-                    drop_task = executor.submit(self.drop_all_indexes_on_tenant, database=database)
-                    self.scale_up_index_subcluster(dataplane=dataplane)
-                    time_now, rebalance_started = time.time(), False
-                    while not rebalance_started:
-                        status, _ = rest_obj._rebalance_status_and_progress()
-                        if status == 'running':
-                            rebalance_started = True
-                        time.sleep(20)
-                    drop_task.result()
-            time.sleep(20)
-            time_now, rebalance_done = time.time(), False
-            while not rebalance_done:
+                        self.load_databases(database_obj=database, num_of_docs=self.total_doc_count, scope=scope,
+                                            collection=collection, doc_template=self.dataset)
+                        if collection == "coll1":
+                            create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
+                                                                                  namespace=f"`{database.id}`.`{scope}`.`{collection}`")
+                            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database,
+                                                                 capella_run=True)
+                        self.log.info(f"Iteration for {database.id} complete. Dataload and index creation done")
+            time_now, scale_complete = time.time(), False
+            while time.time() - time_now < 300:
+                index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+                self.log.info(f"Index nodes after scale up :{index_nodes_after}")
+                if len(index_nodes_after) == len(index_nodes_before) + 2:
+                    scale_complete = True
+                    break
+                time.sleep(30)
+            if not scale_complete:
+                self.fail(f"Index sub-cluster did not scale despite creating indexes for {self.num_of_tenants} tenants")
+            sub_cluster_2_ready, batch = False, 0
+            while not sub_cluster_2_ready:
+                self.provision_databases(count=2, seed=f"new-test-{batch}-rebalance-first-ddl-queued",
+                                         dataplane_id=self.new_dataplane_id)
+                new_db_list = []
+                for database in self.databases.values():
+                    if f"new-test-{batch}" in database.id:
+                        new_db_list.append(database)
+                self.create_scopes_collections(databases=new_db_list,
+                                               scope_collection_map=scope_collection_map)
+                for counter, database in enumerate(new_db_list):
+                    self.log.info(f"Iteration number {counter + 1}")
+                    for scope in database.collections:
+                        for collection in database.collections[scope]:
+                            self.load_databases(database_obj=database, num_of_docs=self.total_doc_count, scope=scope,
+                                                collection=collection, doc_template=self.dataset)
+                            if collection == "coll1":
+                                create_list = self.gsi_util_obj.get_create_index_list(definition_list=self.definition_list,
+                                                                                      namespace=f"`{database.id}`.`{scope}`.`{collection}`")
+                                self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, database=database,
+                                                                     capella_run=True)
+                index_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+                num_tenants_dict = {}
+                for node in index_nodes:
+                    num_tenant_stat = self.get_index_stats(indexer_node=node,
+                                                           rest_info=rest_info)['num_tenants']
+                    num_tenants_dict[node] = num_tenant_stat
+                if all(i >= 2 for i in num_tenants_dict.values()):
+                    sub_cluster_2_ready = True
+                batch += 1
+            rev_dict = {}
+            for key in num_tenants_dict:
+                if num_tenants_dict[key] not in rev_dict:
+                    rev_dict[num_tenants_dict[key]] = [key]
+                else:
+                    rev_dict[num_tenants_dict[key]].append(key)
+            ddl_list, id_ddl_list = [], []
+            for item in rev_dict.values():
+                node = item[0]
+                tenant_list = self.get_all_tenants_on_host(node, rest_info=rest_info)
+                for tenant in tenant_list[:2]:
+                    ddl_list.append(self.databases[tenant])
+                    id_ddl_list.append(self.databases[tenant].id)
+            indexer_stats_before = self.get_index_metadata_stats(rest_info=rest_info)
+            self.log.info(f"No. of stats for indexes available {len(indexer_stats_before)}")
+            if len(indexer_stats_before) == 0:
+                self.fail("Stats for indexes before rebalance/ddl conflict not available")
+            drop_dict = {}
+            with ThreadPoolExecutor() as executor:
+                tasks = []
+                for counter, database in enumerate(ddl_list):
+                    for scope in database.collections:
+                        for collection in database.collections[scope]:
+                            new_defn_list = self.gsi_util_obj.get_index_definition_list(dataset=self.dataset, prefix="new2")
+                            create_list = self.gsi_util_obj.get_create_index_list(definition_list=new_defn_list,
+                                                                                  namespace=f"`{database.id}`.`{scope}`.`{collection}`",
+                                                                                  defer_build=True)
+                            # add a few drop index statements during the DDL phase
+                            list_all_indexes = self.get_all_index_names(database=database, scope=scope,
+                                                                        collection=collection)
+                            drop_list = list_all_indexes
+                            random.shuffle(drop_list)
+                            drop_index = math.ceil((len(drop_list) / 10))
+                            drop_list = drop_list[:drop_index]
+                            drop_dict[database] = drop_list
+                            for item in drop_list:
+                                query = f"drop index `{item}` on `{database.id}`.`{scope}`.`{collection}`"
+                                drop_task = executor.submit(self.run_query, database=database, query=query)
+                                tasks.append(drop_task)
+                            task = executor.submit(self.gsi_util_obj.create_gsi_indexes,
+                                                   create_queries=create_list,
+                                                   database=database, capella_run=True)
+                            tasks.append(task)
+                for task in tasks:
+                    task.result()
+            self.build_all_indexes(ddl_list)
+            delete_count, num_dbs_deleted = max(rev_dict.keys()) + min(rev_dict.keys()) - 15, 0
+            for database in self.databases.values():
+                if num_dbs_deleted < delete_count and database.id not in id_ddl_list:
+                    self.delete_database(database_id=database.id)
+                    num_dbs_deleted += 1
+            time_now, rebalance_started = time.time(), False
+            rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
+            while time.time() - time_now < 1200:
+                status, progress = rest_obj._rebalance_status_and_progress()
+                if status == 'running':
+                    break
+                time.sleep(10)
+            index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
+            for node in index_nodes_after:
+                num_tenant_stat = self.get_index_stats(indexer_node=node,
+                                                       rest_info=rest_info)['num_tenants']
+                self.log.info(f"Num_tenant stat from /stats endpoint: {num_tenant_stat} on index node {node}")
+            while time.time() - time_now < 1200:
                 status, progress = rest_obj._rebalance_status_and_progress()
                 if (status, progress) == ('none', 100):
-                    rebalance_done = True
-            index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            if index_nodes_before == index_nodes_after:
-                self.fail(f"Index sub-cluster did not scale up")
-            self.log.info(f"Index nodes after the test run:{index_nodes_after}")
-            time.sleep(60)
-            for counter, database in enumerate(self.databases.values()):
-                index_list = self.get_all_index_names(database=database)
-                if index_list:
-                    raise Exception("Drop index statements did not succeed")
-            # scale down
-            index_nodes_before = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            for counter, database in enumerate(self.databases.values()):
-                for scope in database.collections:
-                    for collection in database.collections[scope]:
-                        create_index_list = self.gsi_util_obj.get_create_index_list(self.definition_list,
-                                                                                    f"`{database.id}`.{scope}.{collection}")
-                        for index_create_query in create_index_list:
-                            self.run_query(database=database, query=index_create_query)
-            for counter, database in enumerate(self.databases.values()):
-                with ThreadPoolExecutor() as executor:
-                    drop_task = executor.submit(self.drop_all_indexes_on_tenant, database=database)
-                    self.scale_down_index_subcluster(dataplane=dataplane)
-                    time_now, rebalance_started = time.time(), False
-                    while not rebalance_started:
-                        status, _ = rest_obj._rebalance_status_and_progress()
-                        if status == 'running':
-                            rebalance_started = True
-                        time.sleep(20)
-                    drop_task.result()
-            time.sleep(20)
-            time_now, rebalance_done = time.time(), False
-            while not rebalance_done:
-                status, progress = rest_obj._rebalance_status_and_progress()
-                if (status, progress) == ('none', 100):
-                    rebalance_done = True
-            index_nodes_after = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
-            if index_nodes_before == index_nodes_after:
-                self.fail(f"Index sub-cluster did not scale up")
-            self.log.info(f"Index nodes after the test run:{index_nodes_after}")
-            time.sleep(60)
-            for counter, database in enumerate(self.databases.values()):
-                index_list = self.get_all_index_names(database=database)
-                if index_list:
-                    raise Exception("Drop index statement did not succeed")
+                    break
+                time.sleep(30)
+            for new_db in ddl_list:
+                index_list = self.get_all_index_names(database=new_db)
+                for index in index_list:
+                    if "new2" in index:
+                        keyspace = f"`{new_db.id}`"
+                        status = self.get_index_status(rest_info=rest_info, index_name=index, keyspace=keyspace)
+                        self.log.info(f"Index {index} on keyspace {keyspace} status {status}")
+                        if status != 'Ready':
+                            self.fail(f"Index did not get built. Index {index} on keyspace {keyspace} status {status}")
+            # check that drop index statements have worked
+            for db, index_list in drop_dict.items():
+                for index in index_list:
+                    if self.check_if_index_exists(database_obj=db, index_name=index):
+                        self.log.info(
+                            f"Index {index} was dropped during the DDL/Rebalance conflict phase as expected.")
+                    else:
+                        self.log.error(
+                            f"Index {index} was not dropped during the DDL/Rebalance conflict phase as expected.")
+            status, progress = rest_obj._rebalance_status_and_progress()
+            if (status, progress) != ('none', 100):
+                self.fail(f"Rebalance failure after rebalance induced by defragmentation was run")
+            indexer_stats_after = self.get_index_metadata_stats(rest_info=rest_info)
+            total_new = 0
+            for key in indexer_stats_after.keys():
+                if "new2" in key:
+                    total_new += 1
+            self.log.info(f"No of stats for indexes created during the rebalance/DDL conflict {total_new}")
+            if total_new == 0:
+                self.fail("Stats for indexes created during DDL/rebalance conflict not available")
         finally:
+            # TODO uncomment this after getting the appropriate keys needed to work with the s3 bucket
             pass
             # indexer_nodes = self.get_nodes_from_services_map(rest_info=rest_info, service="index")
             # storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
             #                                                                         indexer_node=indexer_nodes[0])
             # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
+
