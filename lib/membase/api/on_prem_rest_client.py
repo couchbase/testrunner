@@ -329,14 +329,13 @@ class RestConnection(object):
             self.services_node_init = self.input.param("new_services", None)
             self.debug_logs = self.input.param("debug-logs", False)
             self.is_elixir = self.input.param("is_elixir", False)
-
-        # Adding CDC params
-        self.enable_cdc = self.input.param("enable_cdc", False)
-        self.history_retention_collection_default = self.input.param("history_retention_collection_default", 'true')
-        self.history_retention_bytes = self.input.param("history_retention_bytes", 4294967296)  # 4 GB
-        self.history_retention_secs = self.input.param("history_retention_secs", 86400)  # 1 day
-        self.magma_key_tree_data_block_size = self.input.param("magma_key_tree_data_block_size", 10096)
-        self.magma_seq_tree_data_block_size = self.input.param("magma_seq_tree_data_block_size", 131072)
+            # Adding CDC params
+            self.enable_cdc = self.input.param("enable_cdc", False)
+            self.history_retention_collection_default = self.input.param("history_retention_collection_default", 'true')
+            self.history_retention_bytes = self.input.param("history_retention_bytes", 4294967296)  # 4 GB
+            self.history_retention_secs = self.input.param("history_retention_secs", 86400)  # 1 day
+            self.magma_key_tree_data_block_size = self.input.param("magma_key_tree_data_block_size", 10096)
+            self.magma_seq_tree_data_block_size = self.input.param("magma_seq_tree_data_block_size", 131072)
 
         if CbServer.use_https:
             self.port = CbServer.ssl_port_map.get(str(self.port),
