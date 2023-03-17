@@ -394,7 +394,8 @@ class NodeHelper:
             try:
                 RestConnection(self.node)
                 return
-            except Exception:
+            except Exception as e:
+                log.error(e)
                 self.wait_for_completion(duration, event)
         raise Exception("Couchbase was not reachable after {}s".format(timeout))
 
