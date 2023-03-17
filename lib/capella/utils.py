@@ -603,7 +603,7 @@ def create_serverless_config(input, skip_import_sample=True, seed=None, dp_id=No
         "provider": provider,
         "projectId": input.capella["project_id"],
         "tenantId": input.capella["tenant_id"],
-        "dontImportSampleData": skip_import_sample,
+        "importSampleData": not(skip_import_sample)
     }
 
     if dp_id is not None:

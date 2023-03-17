@@ -147,6 +147,9 @@ class FTSCallable:
             doc_config['type_field'] = "type"
             index.index_definition['params']['doc_config'] = {}
             index.index_definition['params']['doc_config'] = doc_config
+        if specify_fields:
+            index.index_definition['params']['mapping']['default_type'] = scope
+            index.index_definition['params']['mapping']['default_mapping']['enabled'] = False
 
         if no_check:
             index.create_no_check()

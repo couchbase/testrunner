@@ -274,7 +274,9 @@ class FTSMeter(FTSElixirSanity):
                 self.assertTrue(after_fts_wu-before_fts_wu <= default_fts_wu, f"This index should not be generating more WUs than default index, index:{after_fts_wu-before_fts_wu} default:{default_fts_wu}")
 
     def test_geospatial_create(self):
-        num_travel_sample_docs = 31591
+        num_travel_sample_docs = 1968
+        self.scope = "samples"
+        self.collection = "airport"
         idx_params = {"types": {f"{self.scope}.{self.collection}": {
             "enabled": True,
             "dynamic": True,
@@ -316,8 +318,8 @@ class FTSMeter(FTSElixirSanity):
             fts_callable.wait_for_indexing_complete(num_travel_sample_docs)
             time.sleep(30)
             after_fts_ru, after_fts_wu = meter.get_fts_rwu(database.id)
-            self.assertTrue(after_fts_wu - before_fts_wu > 0 and after_fts_wu - before_fts_wu < 150000 ,
-                            f"The fts index didnt generate WUs within the range, please check. actual:{after_fts_ru - before_fts_ru}, range:0-132000")
+            self.assertTrue(after_fts_wu - before_fts_wu > 0 and after_fts_wu - before_fts_wu < 5000 ,
+                            f"The fts index didnt generate WUs within the range, please check. actual:{after_fts_wu - before_fts_wu}, range:0-5000")
 
     def test_search_index(self):
         self.provision_databases()
@@ -514,7 +516,9 @@ class FTSMeter(FTSElixirSanity):
                 before_kv_wu = after_kv_wu
 
     def test_search_geospatial(self):
-        num_travel_sample_docs = 31591
+        num_travel_sample_docs = 1968
+        self.scope = "samples"
+        self.collection = "airport"
         idx_params = {"types": {f"{self.scope}.{self.collection}": {
             "enabled": True,
             "dynamic": True,
@@ -564,7 +568,7 @@ class FTSMeter(FTSElixirSanity):
                          "field": "geo"}
                 hits, matches, _, _ = index.execute_query(query,
                                                           zero_results_ok=False,
-                                                          expected_hits=2024,
+                                                          expected_hits=287,
                                                           expected_no_of_results=10)
                 self.log.info("Hits: %s" % hits)
                 self.log.info("Matches: %s" % matches)
@@ -579,7 +583,9 @@ class FTSMeter(FTSElixirSanity):
                 before_kv_wu = after_kv_wu
 
     def test_search_highlight(self):
-        num_travel_sample_docs = 31591
+        num_travel_sample_docs = 917
+        self.scope = "samples"
+        self.collection = "hotel"
         idx_params = {"types": {f"{self.scope}.{self.collection}": {
             "enabled": True,
             "dynamic": True,
@@ -626,7 +632,7 @@ class FTSMeter(FTSElixirSanity):
 
                 hits, matches, _, _ = index.execute_query(query,
                                                           zero_results_ok=False,
-                                                          expected_hits=661,
+                                                          expected_hits=573,
                                                           expected_no_of_results=10,
                                                           highlight=True,
                                                           highlight_style="html",
@@ -884,7 +890,7 @@ class FTSMeter(FTSElixirSanity):
             after_fts_ru, after_fts_wu = meter.get_fts_rwu(database.id)
 
             self.assertEqual(after_fts_ru, before_fts_ru)
-            self.assertTrue(after_fts_wu-before_fts_wu > 0 and after_fts_wu-before_fts_wu < 70)
+            self.assertTrue(after_fts_wu-before_fts_wu > 0 and after_fts_wu-before_fts_wu < 70, f"The WUs are not in the expected range of 0-70, please check {after_fts_wu - before_fts_wu}")
 
     def test_fts_update(self):
         self.provision_databases()
