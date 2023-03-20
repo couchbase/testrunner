@@ -60,8 +60,8 @@ class CbasHintsTests(QueryTests):
         result = self.run_cbq_query(f"SELECT * FROM Metadata.`Index` WHERE IndexStructure = 'SAMPLE' AND DatasetName = '{dataset}'", is_analytics=True)
         return result['results'][0]['Index']
 
-    def run_analyze(self):
-        self.run_cbq_query(f"ANALYZE ANALYTICS COLLECTION airline", is_analytics=True)
+    def run_analyze(self, dataset='airline'):
+        self.run_cbq_query(f"ANALYZE ANALYTICS COLLECTION {dataset}", is_analytics=True)
 
     def test_hints_warnings(self):
         hints_warning = {
@@ -77,12 +77,15 @@ class CbasHintsTests(QueryTests):
             'hashjoin probe()': 'Invalid specification for hint hashjoin. ASX1001: Syntax error: In line 1 >>probe()<< Encountered ")" at column 7.  (in line 1, at column 102)',
             'productivity': 'Invalid specification for hint productivity. Expected productivity collection name and value (in line 1, at column 102)',
             'productivity 100.0': 'Invalid specification for hint productivity. Invalid format for productivity values (in line 1, at column 102)',
-            'productivity z 600.0': '', #MB-55923
+            'productivity z 600.0': 'Could not apply productivity hint: Invalid collection name/alias: z (in line 1, at column 128)',
             'productivity a': 'Invalid specification for hint productivity. Invalid format for productivity values (in line 1, at column 102)',
             'productivity a r': 'Invalid specification for hint productivity. Invalid format for productivity values (in line 1, at column 102)',
             'productivity r 100': 'Invalid specification for hint productivity. Invalid format for productivity values (in line 1, at column 102)',
             'productivity a -10.0': 'Invalid specification for hint productivity. Invalid format for productivity values (in line 1, at column 102)',
+            'productivity a 0.0': 'Could not apply productivity hint: Productivity specified: 0.0, has to be a decimal value greater than 0 (in line 1, at column 126)',
         }
+        for collection in ["route", "airport"]:
+            analyze = self.run_cbq_query(f"ANALYZE ANALYTICS COLLECTION {collection}", is_analytics=True)
         hash_join = f"SELECT COUNT(DISTINCT r.destinationairport) FROM airport a JOIN route r ON r.sourceairport /*+ {self.hash_hint} */ = a.faa WHERE a.city = 'San Francisco' AND a.country = 'United States'"
         explain = self.run_cbq_query(f"EXPLAIN {hash_join};", is_analytics=True)
         self.assertEqual(explain["warnings"][0]["msg"], hints_warning[self.hash_hint])
@@ -117,7 +120,7 @@ class CbasHintsTests(QueryTests):
 
     def test_hints_productivity(self):
         for collection in ["route", "airport"]:
-            analyze = self.run_cbq_query(f"ANALYZE ANALYTICS COLLECTION {collection}", is_analytics=True)
+            analyze = self.run_cbq_query(f'ANALYZE ANALYTICS COLLECTION {collection} WITH {{"sample-seed":2000}}', is_analytics=True)
         hash_join = f"SELECT COUNT(DISTINCT r.destinationairport) FROM airport a JOIN route r ON r.sourceairport /*+ productivity a {self.productivity} */ = a.faa WHERE a.city = 'San Francisco' AND a.country = 'United States'"
         explain = self.run_cbq_query(f"EXPLAIN {hash_join};", is_analytics=True)
         join = self._find_join_operator(explain['results'][0])
