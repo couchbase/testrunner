@@ -19,6 +19,7 @@ class RestfulDAPITest(ServerlessBaseTestCase):
         self.number_of_collections = self.input.param("number_of_collections", 10)
         self.number_of_scopes = self.input.param("number_of_scopes", 10)
         self.number_of_threads = self.input.param("number_of_threads", 1)
+        self.batch_size = self.input.param("batch_size",10)
         self.error_message = self.input.param("error_msg", None)
         self.mutate_type = self.input.param("mutate_type", "insert")
 
@@ -616,7 +617,7 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                                     document_per_thread, self.randomize_value,
                                     self.mixed_key)
 
-            batched_gen_obj = BatchedDocumentGenerator(doc_gen, 10)
+            batched_gen_obj = BatchedDocumentGenerator(doc_gen, self.batch_size)
             # insertion of documents
             while(batched_gen_obj.has_next()):
                 kv_dapi = []
@@ -711,7 +712,7 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                                     document_per_thread, self.randomize_value,
                                     self.mixed_key)
 
-            batched_gen_obj = BatchedDocumentGenerator(doc_gen, 10)
+            batched_gen_obj = BatchedDocumentGenerator(doc_gen, self.batch_size)
             # insertion of documents
             while(batched_gen_obj.has_next()):
                 kv_dapi = []
@@ -804,7 +805,7 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                                     document_per_thread, self.randomize_value,
                                     self.mixed_key)
 
-            batched_gen_obj = BatchedDocumentGenerator(doc_gen, 10)
+            batched_gen_obj = BatchedDocumentGenerator(doc_gen, self.batch_size)
             # insertion of documents
             while(batched_gen_obj.has_next()):
                 kv_dapi = []
