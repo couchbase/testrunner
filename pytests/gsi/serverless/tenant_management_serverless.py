@@ -501,6 +501,7 @@ class TenantManagement(BaseGSIServerless):
             if not scale_complete:
                 self.fail(f"Index sub-cluster did not scale despite creating indexes for {self.num_of_tenants} tenants")
             sub_cluster_2_ready, batch = False, 0
+            time.sleep(60)
             while not sub_cluster_2_ready:
                 self.provision_databases(count=2, seed=f"new-test-{batch}-rebalance-first-ddl-queued",
                                          dataplane_id=self.new_dataplane_id)
@@ -700,6 +701,7 @@ class TenantManagement(BaseGSIServerless):
             if not scale_complete:
                 self.fail(f"Index sub-cluster did not scale despite creating indexes for {self.num_of_tenants} tenants")
             sub_cluster_2_ready, batch = False, 0
+            time.sleep(60)
             while not sub_cluster_2_ready:
                 self.provision_databases(count=2, seed=f"new-test-{batch}-rebalance-first-ddl-queued",
                                          dataplane_id=self.new_dataplane_id)

@@ -6792,7 +6792,7 @@ class CreateServerlessDatabaseTask(Task):
                     self.state = FINISHED
                     self.set_result(self.database_id)
             if not database_healthy:
-                raise Exception("Database not healthy despite waiting 5 mins")
+                raise Exception(f"Database {self.database_id} not healthy despite waiting 5 mins")
         except Exception as e:
             self.state = FINISHED
             self.set_exception(e)

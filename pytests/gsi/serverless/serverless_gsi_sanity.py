@@ -63,6 +63,7 @@ class ServerlessGSISanity(BaseGSIServerless):
                                                       password=database.admin_password,
                                                       rest_host=database.rest_host)
                 self.wait_until_indexes_online(rest_info=rest_info, index_name=index_name, keyspace=keyspace)
+                time.sleep(30)
                 count_query = f'SELECT COUNT(*) from {namespace}'
                 resp = self.run_query(database=database, query=count_query)['results']
                 count = resp[0]['$1']
@@ -101,6 +102,7 @@ class ServerlessGSISanity(BaseGSIServerless):
                                                   rest_host=database.rest_host)
             self.wait_until_indexes_online(rest_info=rest_info, index_name=index_name, keyspace=keyspace)
             # insert docs
+            time.sleep(30)
             select_query = f'SELECT meta().id from {keyspace} where age > 30 and age < 60'
             result = self.run_query(database=database, query=select_query)['results']
             doc_count_start = len(result)
@@ -151,13 +153,14 @@ class ServerlessGSISanity(BaseGSIServerless):
             queried_doc_ids = sorted([item['id'] for item in queried_docs])
             create_index_updated_field = f'create index idx_updated on {namespace}(updated)'
             self.run_query(database=database, query=create_index_updated_field)
-            time.sleep(10)
+            time.sleep(30)
             query = f'SELECT meta().id FROM {namespace} WHERE updated=true'
             updated_docs_ids = self.run_query(database=database, query=query)['results']
             updated_docs_ids = sorted([item['id'] for item in updated_docs_ids])
             self.assertEqual(queried_doc_ids, updated_docs_ids,
                              f"Actual: {queried_doc_ids}, Expected: {updated_docs_ids}")
             doc_count_after_update = len(self.run_query(database=database, query=select_query)['results'])
+            time.sleep(30)
             self.assertEqual(doc_count_after_update, expected_doc_count_before_update,
                              f"Actual: {doc_count_after_update}, Expected: {expected_doc_count_before_update}")
 
@@ -171,14 +174,14 @@ class ServerlessGSISanity(BaseGSIServerless):
                            f'("upsert-2", {{"firstName": "George", "age": 95}})' \
                            f' RETURNING VALUE name'
             self.run_query(database=database, query=upsert_query)
-            time.sleep(10)
+            time.sleep(30)
             upsert_doc_ids = self.run_query(database=database, query=upsert_count_query)['results']
             upsert_doc_ids = sorted([item['id'] for item in upsert_doc_ids])
             self.assertEqual(upsert_doc_ids, upsert_doc_list,
                              f"Actual: {upsert_doc_ids}, Expected: {upsert_doc_list}")
             expected_count_after_upsert = count_before_upsert + len(upsert_doc_list)
             docs_after_upsert = self.run_query(database=database, query=upsert_count_query)['results']
-            time.sleep(10)
+            time.sleep(30)
             self.assertEqual(len(docs_after_upsert), expected_count_after_upsert,
                              f"Actual: {len(docs_after_upsert)}, Expected: {expected_count_after_upsert}")
 
@@ -219,6 +222,7 @@ class ServerlessGSISanity(BaseGSIServerless):
                                                   rest_host=database.rest_host)
             self.wait_until_indexes_online(rest_info=rest_info, index_name=index_name, keyspace=keyspace)
             # insert docs
+            time.sleep(30)
             select_query = f'SELECT meta().id from {keyspace} where city like "C%"'
             result = self.run_query(database=database, query=select_query)['results']
             doc_count_start = len(result)
@@ -268,12 +272,14 @@ class ServerlessGSISanity(BaseGSIServerless):
             self.run_query(database=database, query=update_query)
             queried_docs = self.run_query(database=database, query=update_count_query)['results']
             queried_doc_ids = sorted([item['id'] for item in queried_docs])
+            time.sleep(30)
             query = f'SELECT meta().id FROM {namespace} WHERE country="ABCDEF"'
             updated_docs_ids = self.run_query(database=database, query=query)['results']
             updated_docs_ids = sorted([item['id'] for item in updated_docs_ids])
             self.assertEqual(queried_doc_ids, updated_docs_ids,
                              f"Actual: {queried_doc_ids}, Expected: {updated_docs_ids}")
             # upsert docs
+            time.sleep(30)
             upsert_count_query = f'SELECT meta().id FROM {keyspace} WHERE country like "Z%"'
             docs_before_upsert = self.run_query(database=database, query=upsert_count_query)['results']
             count_before_upsert = len(docs_before_upsert)
@@ -284,7 +290,7 @@ class ServerlessGSISanity(BaseGSIServerless):
                            f' RETURNING VALUE name'
             self.run_query(database=database, query=upsert_query)
             expected_count_after_upsert = count_before_upsert + len(upsert_doc_list)
-            time.sleep(10)
+            time.sleep(30)
             docs_after_upsert = self.run_query(database=database, query=upsert_count_query)['results']
             self.assertEqual(len(docs_after_upsert), expected_count_after_upsert,
                              f"Actual: {len(docs_after_upsert)}, Expected: {expected_count_after_upsert}")
@@ -382,6 +388,7 @@ class ServerlessGSISanity(BaseGSIServerless):
                                                   rest_host=database.rest_host)
             self.wait_until_indexes_online(rest_info=rest_info, index_name=index_name, keyspace=keyspace)
             # Run a query that uses array indexes
+            time.sleep(30)
             query = f'explain select count(*) from {keyspace}  where any v in VMs satisfies v.name like "vm_10" END'
             result = self.run_query(database=database, query=query)['results']
             self.assertEqual(result[0]['plan']['~children'][0]['scan']['index'], index_name,
@@ -399,6 +406,7 @@ class ServerlessGSISanity(BaseGSIServerless):
                 self.run_query(database=database, query=query)
             self.wait_until_indexes_online(rest_info=rest_info, index_name=partial_index_name, keyspace=keyspace)
             # Run a query that uses partial array index
+            time.sleep(30)
             query = f'explain select count(*) from {keyspace}  where join_mo > 8 AND ' \
                     f'any v in VMs satisfies v.name like "vm_10" END'
             result = self.run_query(database=database, query=query)['results']
@@ -417,6 +425,7 @@ class ServerlessGSISanity(BaseGSIServerless):
                 self.run_query(database=database, query=query)
             self.wait_until_indexes_online(rest_info=rest_info, index_name=simplified_index_name, keyspace=keyspace)
             # Run a query that uses simplified array index
+            time.sleep(30)
             query = f'Explain select count(*) from {keyspace} where ' \
                     f'any v in VMs satisfies v.name like "vm_10" and v.memory like "%1%" END'
             result = self.run_query(database=database, query=query)['results']
