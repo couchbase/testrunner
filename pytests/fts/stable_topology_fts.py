@@ -33,7 +33,7 @@ class StableTopFTS(FTSBaseTest):
         pass
 
     def suite_tearDown(self):
-        pass
+        super(StableTopFTS, self).suite_tearDown()
 
     def check_fts_service_started(self):
         try:

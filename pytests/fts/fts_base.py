@@ -3795,8 +3795,10 @@ class FTSBaseTest(unittest.TestCase):
         sdk_compression = self._input.param("sdk_compression", True)
         self.num_index_partitions = TestInputSingleton.input.param("num_partitions", 1)
 
-        if self.capella_run:
+        if self.capella_run and CbServer.capella_cluster_id is None:
             self.capella_servers_setup()
+        else:
+            self.use_capella_setup()
 
         self.master = self._input.servers[0]
         first_node = copy.deepcopy(self.master)
@@ -3935,6 +3937,17 @@ class FTSBaseTest(unittest.TestCase):
                         self._cb_cluster._create_collection(bucket=bucket.name, scope=self.scope, collection=self.collection, cli_client=self.cli_client)
         self._master = self._cb_cluster.get_master_node()
 
+    def use_capella_setup(self):
+        self.cluster_id = CbServer.capella_cluster_id
+        capella_credentials = CapellaCredentials(self._input.capella)
+        CbServer.capella_credentials = capella_credentials
+        self.capella_api = CapellaAPI(capella_credentials)
+        servers = self.capella_api.get_nodes_formatted(self.cluster_id, self._input.membase_settings.rest_username, self._input.membase_settings.rest_password)
+        for server in self._input.servers:
+            server.dummy = True
+        for i, server in enumerate(servers):
+            server.services = ",".join(server.services)
+            self._input.servers[i] = server
 
     def set_impossible_params(self):
         """ Skip various params that are impossible if there is no SSH access to the nodes
@@ -4055,10 +4068,14 @@ class FTSBaseTest(unittest.TestCase):
                 processes = shell.get_processes_binding_to_ip_family(ip_family="ipv4")
             self.log.info("{0} : {1} \n {2} \n\n".format(server.ip, len(processes), processes))
 
-    def tearDown(self):
-        """Clusters cleanup"""
+    def suite_tearDown(self):
         if self.capella_run:
             self.capella_api.delete_cluster(self.cluster_id)
+    def tearDown(self):
+        """Clusters cleanup"""
+        if self.capella_run and self._testMethodName not in ['suite_tearDown', 'suite_setUp']:
+            self._cb_cluster.delete_bucket('default')
+            #self.capella_api.delete_cluster(self.cluster_id)
         sys_event_validation_failure = None
         if self.validate_system_event_logs:
             sys_event_validation_failure = \
