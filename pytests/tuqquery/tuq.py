@@ -155,7 +155,7 @@ class QueryTests(BaseTestCase):
         if self.primary_indx_type.lower() == "gsi":
             self.gsi_type = self.input.param("gsi_type", 'plasma')
         self.reload_data = self.input.param("reload_data", False)
-        if self.use_server_groups:
+        if self.use_server_groups and not CbServer.capella_run:
             self._create_server_groups()
         if self.reload_data:
             self.log.info(f"--> reload_data: {self.reload_data}")
@@ -166,7 +166,7 @@ class QueryTests(BaseTestCase):
             # Adding sleep after flushing buckets (see CBQE-5838)
             self.sleep(10)
             self.gens_load = self.gen_docs(self.docs_per_day)
-            verify_data = True
+            verify_data = self.input.param("verify_data", False)
             if CbServer.capella_run:
                 verify_data = False
             self.load(self.gens_load, batch_size=1000, flag=self.item_flag, verify_data=verify_data)
