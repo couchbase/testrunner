@@ -3797,7 +3797,7 @@ class FTSBaseTest(unittest.TestCase):
 
         if self.capella_run and CbServer.capella_cluster_id is None:
             self.capella_servers_setup()
-        else:
+        elif CbServer.capella_cluster_id is not None:
             self.use_capella_setup()
 
         self.master = self._input.servers[0]
