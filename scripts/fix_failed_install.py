@@ -3,8 +3,10 @@ from optparse import OptionParser
 import paramiko
 import logging
 import sys
-from couchbase.auth import PasswordAuthenticator
-from couchbase.cluster import Cluster, ClusterOptions
+from couchbase.bucket import Bucket
+from couchbase.n1ql import N1QLQuery
+from couchbase.cluster import Cluster
+from couchbase.cluster import PasswordAuthenticator
 
 log = logging.getLogger("fix_failed_install")
 ch = logging.StreamHandler()
@@ -38,10 +40,10 @@ password = sys.argv[3]
 cb_username = sys.argv[4]
 cb_userpassword = sys.argv[5]
 
-auth = PasswordAuthenticator(cb_username, cb_userpassword)
-cluster = Cluster('couchbase://172.23.104.162', ClusterOptions(authenticator=auth))
-cb = cluster.bucket('QE-server-pool').default_collection()
-
+cluster = Cluster('couchbase://172.23.104.162')
+authenticator = PasswordAuthenticator(cb_username,cb_userpassword)
+cluster.authenticate(authenticator)
+cb = cluster.open_bucket('QE-server-pool')
 
 def ssh_exec_cmd(ssh, cmds):
     log.debug('Running commands: {0}'.format(cmds))
@@ -74,14 +76,23 @@ def uninstall_clean_cb_debian(ssh):
     cmds = 'dpkg -s couchbase-server'
     out_2 = ssh_exec_cmd(ssh, cmds)
     if out_2 != '':
-        cmds = 'apt remove -y --purge --autoremove couchbase-server && ' \
-               'rm -rf /var/lib/dpkg/info/couchbase-server.* && ' \
-               'dpkg --configure -a && ' \
-               'apt-get update && ' \
-               'rm -rf /opt/couchbase'
+        cmds = "dpkg -P couchbase-server"
         ssh_exec_cmd(ssh, cmds)
-        # cmds = "rm -rf /opt/couchbase"
-        # ssh_exec_cmd(ssh,cmds)
+        cmds = "rm -rf /var/lib/dpkg/info/couchbase-server.*"
+        ssh_exec_cmd(ssh, cmds)
+        cmds = "dpkg --configure -a"
+        ssh_exec_cmd(ssh, cmds)
+        cmds = "apt-get update"
+        ssh_exec_cmd(ssh, cmds)
+        cmds = "rm -rf /opt/couchbase"
+        ssh_exec_cmd(ssh, cmds)
+        cmds = 'iptables -F'
+        ssh_exec_cmd(ssh, cmds)
+        cmds = 'dpkg -s couchbase-server'
+        ssh_exec_cmd(ssh, cmds)
+        cmds = "ps aux | grep 'couchbase' | grep -v grep | " \
+               "awk '{print $2}' | xargs kill -9"
+        ssh_exec_cmd(ssh, cmds)
     else:
         log.warning("No couchbase-server dpkg to delete!")
 
@@ -91,8 +102,8 @@ def setpoolstate(pool_id, ip, fromstate, tostate):
             "state like '{3}%' and ipaddr='{4}';".format(str(tostate), str(pool_id),
                                                          str(pool_id), str(fromstate), str(ip))
     log.info('Running: {0}'.format(query))
-    row_iter = cluster.query(query)
-    for row in row_iter.rows():
+    row_iter = cb.n1ql_query(N1QLQuery(query))
+    for row in row_iter:
         log.info(row)
 
 
@@ -100,8 +111,8 @@ def setipstate(ip, fromstate, tostate):
     query = "update `QE-server-pool` set state='{0}' where state like '{1}%' and ipaddr='{2}';"\
             .format(str(fromstate), str(tostate), str(ip))
     log.debug('Running: {0}'.format(query))
-    row_iter = cluster.query(query)
-    for row in row_iter.rows():
+    row_iter = cb.n1ql_query(N1QLQuery(query))
+    for row in row_iter:
         log.info(row)
 
 
@@ -111,10 +122,10 @@ def get_ips_without_curl(pool_id):
     log.debug('Running: {0}'.format(query))
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    row_iter = cluster.query(query)
+    row_iter = cb.n1ql_query(N1QLQuery(query))
     hosts_down = []
     no_curl = []
-    for row in row_iter.rows():
+    for row in row_iter:
         try:
             log.debug("-----------------------------------------------------")
             log.info(row)
@@ -176,12 +187,12 @@ def clean_failedinstsall_vms(pool_id):
     query = 'SELECT * FROM `QE-server-pool` WHERE ("{0}" IN poolId OR poolId = "{1}") AND ' \
             'state LIKE "failedInstall%%";'.format(str(pool_id), str(pool_id))
     log.info('Running: {0}'.format(query))
-    row_iter = cluster.query(query)
+    row_iter = cb.n1ql_query(N1QLQuery(query))
     fixed_ips = []
     hosts_down = []
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    for row in row_iter.rows():
+    for row in row_iter:
         log.debug('********************************')
         server = row['QE-server-pool']['ipaddr']
         host_os = row['QE-server-pool']['os']
@@ -216,11 +227,11 @@ def clean_failedinstsall_vms(pool_id):
                          " removal not returned empty! {0}".format(out_2))
             ssh.close()
         except socket.timeout as e:
-            hosts_down.append(row['ipaddr'])
-            log.error("Connection timed out to IP: {0}, Exception: {1}".format(row['ipaddr'], e))
+            hosts_down.append(row['QE-server-pool']['ipaddr'])
+            log.error("Connection timed out to IP: {0}, Exception: {1}".format(row['QE-server-pool']['ipaddr'], e))
         except socket.error as e:
-            hosts_down.append(row['ipaddr'])
-            log.error("Connection Failed to IP: {0}, Exception: {1}".format(row['ipaddr'], e))
+            hosts_down.append(row['QE-server-pool']['ipaddr'])
+            log.error("Connection Failed to IP: {0}, Exception: {1}".format(row['QE-server-pool']['ipaddr'], e))
         except Exception as e:
             log.error("Exception: {0}".format(e))
         log.debug('********************************')
