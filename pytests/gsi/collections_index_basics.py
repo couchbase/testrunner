@@ -15,13 +15,19 @@ from couchbase_helper.documentgenerator import SDKDataLoader
 from couchbase_helper.query_definitions import QueryDefinition
 from .base_gsi import BaseSecondaryIndexingTests
 from membase.api.rest_client import RestConnection
-
-
+from membase.api.capella_rest_client import RestConnection as RestConnectionCapella
 class CollectionsIndexBasics(BaseSecondaryIndexingTests):
     def setUp(self):
         super(CollectionsIndexBasics, self).setUp()
         self.log.info("==============  CollectionsIndexBasics setup has started ==============")
-        self.rest.delete_all_buckets()
+        if self.capella_run:
+            buckets = self.rest.get_buckets()
+            if buckets:
+                for bucket in buckets:
+                    RestConnectionCapella.delete_bucket(self, bucket=bucket.name)
+
+        else:
+            self.rest.delete_all_buckets()
         self.password = self.input.membase_settings.rest_password
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
@@ -31,18 +37,17 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                                             bucket_params=self.bucket_params)
         self.buckets = self.rest.get_buckets()
         self._create_server_groups()
-        self.capella_run = self.input.param("capella_run", False)
         if not self.capella_run:
             self.cb_version = float(self.cb_version.split('-')[0][0:3])
         self.log.info("==============  CollectionsIndexBasics setup has completed ==============")
 
     def tearDown(self):
+        pass
+
+    def suite_tearDown(self):
         self.log.info("==============  CollectionsIndexBasics tearDown has started ==============")
         super(CollectionsIndexBasics, self).tearDown()
         self.log.info("==============  CollectionsIndexBasics tearDown has completed ==============")
-
-    def suite_tearDown(self):
-        pass
 
     def suite_setUp(self):
         pass

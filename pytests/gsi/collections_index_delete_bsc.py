@@ -15,6 +15,7 @@ import random
 from .base_gsi import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.documentgenerator import SDKDataLoader
+from membase.api.capella_rest_client import RestConnection as RestConnectionCapella
 
 
 class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
@@ -31,7 +32,14 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
             self.get_dgm_for_plasma(indexer_nodes=[self.index_nodes])
             indexer_mem_quota = self.get_indexer_mem_quota()
             self.log.info("Current Indexer Memory Quota is {0}".format(indexer_mem_quota))
-        self.rest.delete_all_buckets()
+        if self.capella_run:
+            buckets = self.rest.get_buckets()
+            if buckets:
+                for bucket in buckets:
+                    RestConnectionCapella.delete_bucket(self, bucket=bucket.name)
+
+        else:
+            self.rest.delete_all_buckets()
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
@@ -39,17 +47,16 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
         self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
                                             bucket_params=self.bucket_params)
         self.password = self.input.membase_settings.rest_password
-        self.capella_run = self.input.param("capella_run", False)
         self.buckets = self.rest.get_buckets()
         self.log.info("==============  CollectionsIndexBasics setup has completed ==============")
 
     def tearDown(self):
+        pass
+
+    def suite_tearDown(self):
         self.log.info("==============  CollectionsIndexBasics tearDown has started ==============")
         super(CollectionsIndexDeleteBSC, self).tearDown()
         self.log.info("==============  CollectionsIndexBasics tearDown has completed ==============")
-
-    def suite_tearDown(self):
-        pass
 
     def suite_setUp(self):
         pass
