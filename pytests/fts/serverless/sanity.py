@@ -511,6 +511,42 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
             fts_callable.delete_all()
 
+    def create_alias_index_and_validate_query(self):
+        self.provision_databases(self.num_databases)
+        for counter, database in enumerate(self.databases.values()):
+            self.cleanup_database(database_obj=database)
+            scope_name = f'db_{counter}_scope_{random.randint(0, 1000)}'
+            collection_name = f'db_{counter}_collection_{random.randint(0, 1000)}'
+            self.create_scope(database_obj=database, scope_name=scope_name)
+            self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
+            self.load_databases(load_all_databases=False, doc_template="emp",
+                                num_of_docs=self._num_of_docs_per_collection,
+                                database_obj=database, scope=scope_name, collection=collection_name)
+            self.init_input_servers(database)
+            fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
+                                       collections=collection_name, collection_index=True, is_elixir=True)
+
+            _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
+                                                                    collection=collection_name)
+            plan_params = self.construct_plan_params()
+
+            index = fts_callable.create_fts_index("index", source_type='couchbase',
+                                                  source_name=database.id, index_type='fulltext-index',
+                                                  index_params=None, plan_params=plan_params,
+                                                  source_params=None, source_uuid=None, collection_index=True,
+                                                  _type=_type, analyzer="standard",
+                                                  scope=scope_name, collections=[collection_name], no_check=False)
+            alias = fts_callable.create_alias([index], bucket=database.id, scope=scope_name)
+            fts_callable.wait_for_indexing_complete(self._num_of_docs_per_collection)
+
+            hits, _, _, _ = index.execute_query(fts_callable.sample_query,
+                                                zero_results_ok=False)
+            hits2, _, _, _ = alias.execute_query(fts_callable.sample_query,
+                                                 zero_results_ok=False)
+            if hits != hits2:
+                self.fail("Index query yields {0} hits while alias on same index yields only {1} hits".format(hits, hits2))
+            fts_callable.delete_all()
+
     def check_scale_out_condition(self, stats):
         """
             Returns True if scale out condition is satisfied.
@@ -892,8 +928,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
     def start_query_workload(self, fts_callable, index, num_queries):
         while not self.stop_queries:
-            fts_callable.run_query_and_compare(index, num_queries, )
-        time.sleep(100)
+            fts_callable.run_query_and_compare(index, num_queries)
 
     def create_index_and_validate_autoscaling(self, all_info, index_no, db_no, index_arr, variables, summary, queue_sum, queue_cpu):
         plan_params = self.construct_plan_params()

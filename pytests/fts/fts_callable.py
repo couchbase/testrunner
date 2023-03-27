@@ -70,6 +70,7 @@ class FTSCallable:
         self.upd_del_fields = TestInputSingleton.input.param("upd_del_fields", None)
         self._expires = TestInputSingleton.input.param("expires", 0)
         self.dataset = TestInputSingleton.input.param("dataset", "emp")
+        self.sample_query = {"match": "Safiya Morgan", "field": "name"}
         self.run_via_n1ql = False
 
     def __create_buckets(self):
@@ -275,7 +276,7 @@ class FTSCallable:
                     else:
                         break
 
-    def create_alias(self, target_indexes, name=None, alias_def=None):
+    def create_alias(self, target_indexes, name=None, alias_def=None, bucket=None, scope=None):
         """
             Creates an alias spanning one or many target indexes
         """
@@ -289,7 +290,9 @@ class FTSCallable:
 
         return self.cb_cluster.create_fts_index(name=name,
                                                 index_type='fulltext-alias',
-                                                index_params=alias_def)
+                                                index_params=alias_def,
+                                                source_name=bucket,
+                                                scope=scope)
 
     def delete_fts_index(self, name):
         """ Delete an FTSIndex object with the given name from a given node """
