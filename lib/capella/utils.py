@@ -88,7 +88,7 @@ class ServerlessDataPlane:
         self.admin_password = rest_api_info['couchbaseCreds']['password']
         self.rest_host = get_host_from_srv(self.rest_srv)
 
-def get_host_from_srv(srv, attempts=12, retry_wait_time=15):
+def get_host_from_srv(srv, attempts=30, retry_wait_time=60):
     import dns.resolver
     srvInfo = {}
     log = logger.Logger.get_logger()
