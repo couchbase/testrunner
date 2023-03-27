@@ -224,7 +224,7 @@ class QueryTests(BaseTestCase):
                     self.load_directory(self.gens_load)
                 else:
                     self.log.info("-->gens_load flat_json, batch_size=1000")
-                    verify_data = True
+                    verify_data = self.input.param("verify_data", False)
                     if self.enforce_tls or CbServer.capella_run:
                         verify_data = False
                     self.load(self.gens_load, batch_size=1000, flag=self.item_flag, verify_data=verify_data)
