@@ -934,7 +934,6 @@ class RestfulDAPITest(ServerlessBaseTestCase):
 
             batched_gen_obj = BatchedDocumentGenerator(doc_gen, self.batch_size)
 
-            insert_start = time.perf_counter()
             while(batched_gen_obj.has_next()):
                 kv_dapi = []
                 kv = {}
@@ -946,24 +945,19 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                     kv_dapi.append({"id": key, "value": doc})
 
                 # insert bulk document
-                time_start = time.perf_counter()
                 response = self.rest_dapi.insert_bulk_document("_default",
                                                                "_default",
                                                                kv_dapi)
-                time_end = time.perf_counter()
-                self.log.info("Time took to return response for Insert API: {} seconds".format((time_end-time_start)))
+
                 if response is None or response.status_code != 200:
                     self.result = False
                     self.log.critical(response)
                     self.log.critical("Bulk insert failed for {}: Response: {}".format(database.id, response.status_code))
                     return
-            insert_end = time.perf_counter()
-            self.log.info("..............--------------------------------------------............................................---------------------------------------.....")
-            self.log.info("Time to complete insert for {} documents is: {}".format(document_per_thread, (insert_end - insert_start)))
 
             doc_gen.reset()
             batched_gen_obj = BatchedDocumentGenerator(doc_gen, self.batch_size)
-            get_start = time.perf_counter()
+
             while(batched_gen_obj.has_next()):
                 kv = {}
                 next_batch = batched_gen_obj.next_batch()
@@ -973,10 +967,7 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                     doc = json.loads(doc)
                     kv[key] = doc
 
-                time_start = time.perf_counter()
                 response = self.rest_dapi.get_bulk_document("_default", "_default", tuple(kv.keys()))
-                time_end = time.perf_counter()
-                self.log.info("Time took to return response for GET api: {}".format(time_end-time_start))
                 if response is None or response.status_code != 200:
                     self.result = False
                     self.log.critical("Response: ".format(response))
@@ -996,9 +987,6 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                         self.log.critical("Response: ".format(response))
                         self.result = False
                         return
-            get_end = time.perf_counter()
-            self.log.info("..............--------------------------------------------............................................---------------------------------------.....")
-            self.log.info("Time took to complete get for {} documents is: {}".format(document_per_thread, (get_end - get_start)))
 
 
         for database in self.databases.values():
