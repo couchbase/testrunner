@@ -36,8 +36,8 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
                                             bucket_params=self.bucket_params)
         self.buckets = self.rest.get_buckets()
-        self._create_server_groups()
         if not self.capella_run:
+            self._create_server_groups()
             self.cb_version = float(self.cb_version.split('-')[0][0:3])
         self.log.info("==============  CollectionsIndexBasics setup has completed ==============")
 
