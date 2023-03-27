@@ -624,7 +624,7 @@ class TenantManagement(BaseGSIServerless):
             if not rebalance_complete:
                 self.fail("Rebalance not triggered by defrag API despite waiting 1200 seconds")
             # TODO replace with smarter way to wait until all indexes are online
-            time.sleep(120)
+            time.sleep(300)
             indexer_stats_after = self.get_index_metadata_stats(rest_info=rest_info)
             self.log.info(f"Indexer stats after: {indexer_stats_after}")
             for new_db in ddl_list:
@@ -835,4 +835,3 @@ class TenantManagement(BaseGSIServerless):
             # storage_scheme, bucket, storage_prefix = self.get_fast_rebalance_config(rest_info=rest_info,
             #                                                                         indexer_node=indexer_nodes[0])
             # self.s3_utils_obj.check_s3_cleanup(bucket=bucket, folder=storage_prefix)
-
