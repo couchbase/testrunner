@@ -203,15 +203,17 @@ class FTSCallable:
 
         return index
 
-    def wait_for_indexing_complete(self, item_count=None, complete_wait=True):
+    def wait_for_indexing_complete(self, item_count=None, complete_wait=True, idx=None):
         """
             Wait for index_count for any index to stabilize or reach the
             index count specified by item_count
         """
+        found = False
         retry = TestInputSingleton.input.param("index_retry", 20)
         for index in self.cb_cluster.get_indexes():
-            if index.index_type == "alias" or index.index_type == "fulltext-alias":
+            if idx is not None and index.name != idx.name or index.index_type == "alias" or index.index_type == "fulltext-alias":
                 continue
+            found = True
             retry_count = retry
             prev_count = 0
             es_index_count = 0
@@ -275,6 +277,8 @@ class FTSCallable:
                         retry_mut_count -= 1
                     else:
                         break
+        if not found:
+            self.log.critical(f"Couldn't wait for indexing since index {idx.name} was not found")
 
     def create_alias(self, target_indexes, name=None, alias_def=None, bucket=None, scope=None):
         """
@@ -582,7 +586,53 @@ class FTSCallable:
         print("Rebalance Status : ", resp)
         return resp
 
-    def get_fts_cfg_stats(self, fts_node, creds):
+    def get_fts_autoscaling_stats(self, nodes, creds):
         rest = RestConnection(self.cb_cluster.get_random_fts_node())
-        resp = rest.get_fts_cfg_stats(fts_node, creds)
-        return resp
+        stats = []
+        cfg_stats = None
+        absurd_resp = []
+        for node in nodes:
+            attempts = 0
+            stat_found = False
+            stat = {"limits:billableUnitsRate": -1,
+                    "limits:diskBytes": -1,
+                    "limits:memoryBytes": -1,
+                    "resourceUnderUtilizationWaterMark": -1,
+                    "resourceUtilizationHighWaterMark": -1,
+                    "resourceUtilizationLowWaterMark": -1,
+                    "utilization:billableUnitsRate": -1,
+                    "utilization:cpuPercent": -1,
+                    "utilization:diskBytes": -1,
+                    "utilization:memoryBytes": -1
+                    }
+            while attempts < 10:
+                attempts += 1
+                if attempts > 1:
+                    self.log.info(f"Retrying {attempts} time for node {node}")
+                resp = rest.get_specific_nsstats(node, creds)
+                result = resp.json()
+                if 'utilization:memoryBytes' in result and 'utilization:cpuPercent' in result:
+                    stat['limits:billableUnitsRate'] = result['limits:billableUnitsRate']
+                    stat['limits:diskBytes'] = result['limits:diskBytes']
+                    stat['limits:memoryBytes'] = result['limits:memoryBytes']
+                    stat['resourceUnderUtilizationWaterMark'] = result['resourceUnderUtilizationWaterMark']
+                    stat['resourceUtilizationHighWaterMark'] = result['resourceUtilizationHighWaterMark']
+                    stat['resourceUtilizationLowWaterMark'] = result['resourceUtilizationLowWaterMark']
+                    stat['utilization:billableUnitsRate'] = result['utilization:billableUnitsRate']
+                    stat['utilization:cpuPercent'] = result['utilization:cpuPercent']
+                    stat['utilization:diskBytes'] = result['utilization:diskBytes']
+                    stat["utilization:memoryBytes"] = result["utilization:memoryBytes"]
+                    stats.append(result)
+                    stat_found = True
+                    break
+                else:
+                    self.log.info(f"Stats not returned for node : {node}")
+                    if cfg_stats is None:
+                        cfg_stats = rest.get_fts_cfg_stats(node, creds).json()
+                    absurd_resp_obj = {"node": node, "response": resp.text}
+                    absurd_resp.append(absurd_resp_obj)
+            if not stat_found:
+                stats.append(stat)
+        return stats, cfg_stats, absurd_resp
+
+

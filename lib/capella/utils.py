@@ -397,46 +397,14 @@ class CapellaAPI:
                     all_ids.append(database['id'])
         return all_ids
 
-    def get_fts_stats(self):
-        fts_nodes = self.get_fts_nodes_of_dataplane(self.dataplane_id)
-        creds = self.get_access_to_serverless_dataplane_nodes(self.dataplane_id)
-        stats = []
-        http_resp = False
-        for count, node in enumerate(fts_nodes):
-            resp = None
-            attempts = 0
-            while resp is None and attempts < 13:
-                attempts += 1
-                if attempts > 1:
-                    self.log.info(f"Retry {attempts-1}. Unresolved host {fts_nodes[count]}, Trying again.")
-                    self.log.info("Stats not returned here in utils")
-                userpass = f"{creds['couchbaseCreds']['username']}:{creds['couchbaseCreds']['password']}"
-                encoded_u = base64.b64encode(userpass.encode()).decode()
-                CurlUrl = f"curl -s -XGET https://{fts_nodes[count]}:18094/api/nsstats --header 'Authorization: Basic {encoded_u}' --insecure | jq | grep -E 'util|resource|limits'"
-                resp = subprocess.getstatusoutput(CurlUrl)[1]
-            try:
-                resp = resp[:1] + '{' + resp[2:]
-                resp = resp[:len(resp)] + '}' + resp[len(resp):]
-                x = json.loads(resp)
-                stats.append(x)
-            except Exception as e:
-                self.log.info("Stats not returned here in utils")
-                self.log.info(f"Error : {e}")
-                print(f"Response : {resp}")
-                userpass = f"{creds['couchbaseCreds']['username']}:{creds['couchbaseCreds']['password']}"
-                encoded_u = base64.b64encode(userpass.encode()).decode()
-                curl_http = f"curl -v https://{fts_nodes[count]}:18094/api/nsstats --header 'Authorization: Basic {encoded_u}' --insecure"
-                http_resp = subprocess.getstatusoutput(curl_http)
-        return stats, fts_nodes, http_resp
-
-    def get_fts_nodes_of_dataplane(self, dataplane_id):
-        resp = self.serverless_api.get_serverless_dataplane_info(dataplane_id)
+    def get_fts_nodes_of_dataplane(self):
+        resp = self.serverless_api.get_serverless_dataplane_info(self.dataplane_id)
         try:
             info_nodes = resp.json()['couchbase']['nodes']
         except:
             self.log.info("Stats not returned --nodes here")
             print(resp.json(), "get_fts_nodes_of_dataplane")
-            resp = self.serverless_api.get_serverless_dataplane_info(dataplane_id)
+            resp = self.serverless_api.get_serverless_dataplane_info(self.dataplane_id)
             info_nodes = resp.json()['couchbase']['nodes']
 
         fts_hostname = []

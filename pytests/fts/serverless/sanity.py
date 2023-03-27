@@ -11,7 +11,7 @@ import random
 import threading
 from datetime import datetime
 from prettytable import PrettyTable
-from collections import deque
+from collections import defaultdict, deque
 
 class FTSElixirSanity(ServerlessBaseTestCase):
     def setUp(self):
@@ -28,12 +28,21 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         self.LWM_limit = self.input.param("LWM_limit", 0.75)
         self.UWM_limit = self.input.param("UWM_limit", 0.3)
         self.scaling_time = self.input.param("scaling_time", 30)
-        self.num_queries = self.input.param("num_queries", 20)
-        self.query_workload_after_creation = self.input.param("query_workload_after_creation",False)
-        self.query_workload_parallel_creation = self.input.param("query_workload_parallel_creation",True)
+        self.polling_time = self.input.param("polling_time", 2)
+        self.num_queries = self.input.param("num_queries", 50)
+        self.query_workload_after_creation = self.input.param("query_workload_after_creation", False)
+        self.query_workload_parallel_creation = self.input.param("query_workload_parallel_creation", True)
         self.autoscaling_with_queries = self.input.param("autoscaling_with_queries", False)
+
         self.stop_queries = False
         self.stop_monitoring_stats = False
+        self.memory_queue = defaultdict(lambda: deque(maxlen=int(self.scaling_time/self.polling_time)))
+        self.cpu_queue = defaultdict(lambda: deque(maxlen=int(self.scaling_time/self.polling_time)))
+        self.running_avg_memory = {}
+        self.running_avg_cpu = {}
+        self.current_num_fts_nodes = 2
+        self.max_num_fts_nodes = 2
+        self.autoscaling_validations = {'scale_out': False, 'scale_in': False}
         global_vars.system_event_logs = EventHelper()
         return super().setUp()
 
@@ -557,11 +566,12 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         mem_util = int(float(self.LWM_limit) * int(stats[0]['limits:memoryBytes']))
         cpu_util = int(float(self.LWM_limit) * 100)
         lim_util, lim_cpu = True, True
-        for stat in stats:
-            if stat['utilization:memoryBytes'] < mem_util:
+        for running_avg_memory in self.running_avg_memory.values():
+            if running_avg_memory < mem_util:
                 lim_util = False
 
-            if int(stat['utilization:cpuPercent']) < cpu_util:
+        for running_avg_cpu in self.running_avg_cpu.values():
+            if running_avg_cpu < cpu_util:
                 lim_cpu = False
 
         return lim_cpu | lim_util
@@ -570,10 +580,14 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         """
             Returns True if scale in condition is satisfied.
         """
-        mem_util = int(float(self.UWM_limit) * int(stats[0]['limits:memoryBytes']))
-        cpu_util = int(float(self.UWM_limit) * 100)
-        for stat in stats:
-            if stat['utilization:memoryBytes'] > mem_util or stat['utilization:cpuPercent'] > cpu_util:
+        mem_util = int(float(self.LWM_limit) * int(stats[0]['limits:memoryBytes']))
+        cpu_util = int(float(self.LWM_limit) * 100)
+        for running_avg_memory in self.running_avg_memory.values():
+            if running_avg_memory > mem_util:
+                return False
+
+        for running_avg_cpu in self.running_avg_cpu.values():
+            if running_avg_cpu > cpu_util:
                 return False
         return True
 
@@ -581,56 +595,65 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         """
             Returns True if auto rebalance condition is satisfied.
         """
-        try:
-            mem_util = int(float(self.HWM_limit) * int(stats[0]['limits:memoryBytes']))
-            cpu_util = int(float(self.HWM_limit) * 100)
-            for stat in stats:
-                if stat['utilization:memoryBytes'] >= mem_util:
-                    self.log.info(f"HWM CHECK STATUS MEM: {stat['utilization:memoryBytes']}")
-                    return True
-                if stat['utilization:cpuPercent'] >= cpu_util:
-                    self.log.info(f"HWM CHECK STATUS CPU: {stat['utilization:cpuPercent']}")
-                    return True
-            return False
-        except:
-            print(f"stats not returned in check autoreblance condition : {stats}")
+        mem_util = int(float(self.HWM_limit) * int(stats[0]['limits:memoryBytes']))
+        cpu_util = int(float(self.HWM_limit) * 100)
+        for running_avg_memory in self.running_avg_memory.values():
+            if running_avg_memory >= mem_util:
+                return True
 
-    def get_fts_stats(self, print_str=None):
+        for running_avg_cpu in self.running_avg_cpu.values():
+            if running_avg_cpu >= cpu_util:
+                return True
+        return False
+
+
+    def get_fts_stats(self, print_str=None, print_stats=True):
         """
             Print FTS Stats and returns stats along with Current FTS Nodes
         """
-        stats, fts_nodes, http_resp = self.get_all_fts_stats()
-        self.prettyPrintStats(stats, fts_nodes, http_resp, print_str)
+        fts_nodes = self.get_fts_nodes()
+        creds = self.get_bypass_credentials()
+        stats,  cfg_stats, absurd_resp = FTSCallable(self.input.servers).get_fts_autoscaling_stats(fts_nodes, creds)
+        if print_stats:
+            self.prettyPrintStats(stats, fts_nodes, print_str)
+
+        with self.subTest("validate fts stats"):
+            if cfg_stats is not None:
+                self.print_fts_cfg_stats(cfg_stats)
+            if len(absurd_resp) != 0:
+                self.log.info("Problem in fetching stats")
+                self.print_absurd_resp(absurd_resp)
+                self.fail("Problem in fetching stats")
         return stats, fts_nodes
 
-    def prettyPrintStats(self, stats, fts_nodes, http_resp, print_str=None):
+    def prettyPrintStats(self, stats, fts_nodes, print_str=None):
         myTable = PrettyTable(["S.No", "FTS Nodes", "lim_memoryBytes", "util_memoryBytes", "util_cpuPercent", "util_diskByte"])
         for count, stat in enumerate(stats):
-            if http_resp:
-                print(f"Request Response : {http_resp}")
-            try:
-                myTable.add_row([count+1, fts_nodes[count], stat['limits:memoryBytes'], stat['utilization:memoryBytes'], stat['utilization:cpuPercent'], stat['utilization:diskBytes']])
-            except:
-                if fts_nodes[count]:
-                    self.log.info(f"Stats not returned for node {fts_nodes[count]}")
-                    print(stats, fts_nodes, http_resp)
-                    myTable.add_row([count+1, fts_nodes[count], "Stats not returned", "Stats not returned", "Stats not returned", "Stats not returned"])
-                    self.print_fts_cfg_stats(fts_nodes[-1])
-                else:
-                    self.log.info("TESTWARE BUG HERE 2")
-                    print(stats, fts_nodes, http_resp)
-                    self.print_fts_cfg_stats(fts_nodes[-1])
+            myTable.add_row([count+1, fts_nodes[count], stat['limits:memoryBytes'], stat['utilization:memoryBytes'], stat['utilization:cpuPercent'], stat['utilization:diskBytes']])
         if print_str:
             self.log.info(print_str)
         print(myTable)
 
-    def print_fts_cfg_stats(self, fts_node):
-        creds = self.get_bypass_credentials()
-        definitions = FTSCallable(self.input.servers).get_fts_cfg_stats(fts_node, creds)['nodeDefsWanted']['nodeDefs']
+    def prettyPrintRunningAverage(self):
+        myTable = PrettyTable(["S.No", "FTS Node", "30 Min Mem Avg", "30 Min CPU Avg"])
+        for count, node in enumerate(self.memory_queue):
+            myTable.add_row([count+1, node, self.running_avg_memory[node], self.running_avg_cpu[node]])
+        self.log.info("FTS Running Average Stats")
+        print(myTable)
+
+    def print_fts_cfg_stats(self, cfg_stats):
+        definitions = cfg_stats['nodeDefsWanted']['nodeDefs']
         myTable = PrettyTable(["S.No", "FTS Node", "nodeDefID"])
         for count, nodeDef in enumerate(definitions):
             myTable.add_row([count+1, definitions[nodeDef]['hostPort'], nodeDef])
         self.log.info("FTS CFG STATS")
+        print(myTable)
+
+    def print_absurd_resp(self, absurd_resp):
+        myTable = PrettyTable(["S.No", "FTS Node", "Response"])
+        for count, resp in enumerate(absurd_resp):
+            myTable.add_row([count+1, resp["node"], resp["response"]])
+        self.log.info("ABSURD FTS STATISTICS")
         print(myTable)
 
     def verify_HWM_index_rejection(self, stats):
@@ -645,66 +668,8 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 count += 1
 
         if len(stats) - count < 2:
-            self.log.info(f"HWM CHECK PASS STATUS MEM: {stats}")
             return True
 
-        self.log.info(f"HWM CHECK FAIL STATUS MEM: {stats}")
-        return False
-
-    def verify_scale_out(self, variables):
-        """
-            Returns True if FTS Nodes have scaled out
-        """
-        fts_stats, fts_nodes = self.get_fts_stats()
-        new_node_count = len(fts_nodes)
-        if variables['node_count'] == new_node_count:
-            return False
-        else:
-            self.log.info(f"Scale out -> New Count : {new_node_count} , Old Count : {variables['node_count']}")
-            variables['node_count'] = new_node_count
-            return True
-
-    def verify_scale_in(self, variables, summary):
-        """
-            Returns True iff Scale-In is not possible or Scale-In was successful
-        """
-        fts_stats, fts_nodes = self.get_fts_stats()
-        self.log.info("Verifying Scale In ...")
-        if variables['node_count'] == 2:
-            self.generate_summary(summary, fts_stats, fts_nodes, variables, "No Scale-In Required")
-            self.log.info("BUG : ScaleIn verification not possible since scale out didn't happen")
-            self.fail("Autoscaling Failed since Scaling didn't happen")
-
-        self.delete_all_database(True)
-
-        attempts = 5
-        scale_in_status = False
-        for i in range(attempts):
-            self.log.info(f"Sleeping {int((attempts - i) * 8)} minutes for memory to reduce")
-            time.sleep(int((attempts - i) * 8))
-            print(f'------------ STATS @ {i+1} Attempt"  ------------')
-            fts_stats, fts_nodes = self.get_fts_stats()
-            if self.check_scale_in_condition(fts_stats):
-                scale_in_status = True
-                self.log.info(f"Scale In Satisfied at {i+1}th attempt")
-                break
-
-        if not scale_in_status:
-            self.generate_summary(summary, fts_stats, fts_nodes, variables, "Scale-In not possible")
-            self.log.info("CONDITIONAL BUG : ScaleIn verification not possible since Memory didn't decrease")
-            return False
-
-        self.log.info(f"Sleeping {self.scaling_time} to observe Scale In")
-        time.sleep(int(self.scaling_time))
-
-        fts_stats, fts_nodes = self.get_fts_stats()
-        if len(fts_nodes) < variables['node_count']:
-            self.log.info(f"Scale In passed : {fts_stats},{fts_nodes}")
-            self.log.info("PASS : Scale In passed !!")
-            self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale-In")
-            return True
-
-        self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : Scale-In")
         return False
 
     def generate_summary(self, summary, fts_stats, fts_nodes, variables, name="Default", time_taken=0):
@@ -728,339 +693,143 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         }
         summary.append(obj)
 
-    def calculate_running_average_LWM(self, stats, queue_sum, queue_cpu, variables):
-        try:
-            mem_avg = 0
-            cpu_avg = 0
-            for stat in stats:
-                mem_avg += int(stat['utilization:memoryBytes'])
-                cpu_avg += int(stat['utilization:cpuPercent'])
-            mem_avg /= len(stats)
-            cpu_avg /= len(stats)
-
-            variables['moving_avg_sum'] += mem_avg
-            variables['moving_avg_cpu_sum'] += cpu_avg
-
-            queue_sum.append([mem_avg, datetime.now()])
-            queue_cpu.append([cpu_avg, datetime.now()])
-
-            variables['moving_average_mem'] = variables['moving_avg_sum'] / len(queue_sum)
-            variables['moving_average_cpu'] = variables['moving_avg_cpu_sum'] / len(queue_cpu)
-
-            if len(queue_sum) <= 1:
-                return
-
-            first = queue_sum[0]
-            last = queue_sum[-1]
-            if ((last[1]-first[1]).total_seconds()/60) > 30:
-                first_avg = queue_sum.popleft()
-                variables['moving_avg_sum'] -= first_avg[0]
-                variables['moving_average_mem'] = variables['moving_avg_sum'] / len(queue_sum)
-
-            first = queue_cpu[0]
-            last = queue_cpu[-1]
-            if ((last[1]-first[1]).total_seconds()/60) > 30:
-                first_avg = queue_cpu.popleft()
-                variables['moving_avg_cpu_sum'] -= first_avg[0]
-                variables['moving_average_cpu'] = variables['moving_avg_cpu_sum'] / len(queue_sum)
-        except:
-            print(f"stats not returned while calculating moving average {stats}")
-
-    def autoscaling_synchronous(self):
-        self.delete_all_database(True)
-        if self.create_dataplane and self.new_dataplane_id is None:
-            self.fail("Failed to provision a new dataplane, ABORTING")
-
-        summary = []
-        self.provision_databases(self.num_databases, None, self.new_dataplane_id)
-        self.log.info(f"------------ Initial STATS ------------")
-        fts_stats, fts_nodes = self.get_fts_stats()
-        variables = {'node_count': len(fts_nodes), 'scale_out_time': 0, 'HWM_hit': 0, 'scale_out_status': False,
-                     'scale_out_count': 0, 'moving_avg_sum': 0, 'moving_avg_cpu_sum': 0, 'moving_average_mem': 0, 'moving_average_cpu': 0, 'max_no_of_nodes': 2}
-        self.generate_summary(summary, fts_stats, fts_nodes, variables, "Initial Summary")
-
-        failout_encounter = False
-        index_fail_check = False
-        queue_sum = deque()
-        queue_cpu = deque()
-        flag = True
-        for counter, database in enumerate(self.databases.values()):
-            self.cleanup_database(database_obj=database)
-            scope_name = f'db_{counter}_scope_{random.randint(0, 1000)}'
-            collection_name = f'db_{counter}_collection_{random.randint(0, 1000)}'
-            self.create_scope(database_obj=database, scope_name=scope_name)
-            self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
-            self.load_databases(load_all_databases=False, num_of_docs=self._num_of_docs_per_collection,
-                                database_obj=database, scope=scope_name, collection=collection_name,
-                                doc_template="emp")
-            self.init_input_servers(database)
-            fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                       collections=collection_name, collection_index=True, is_elixir=True)
-
-            _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
-                                                                    collection=collection_name)
-            plan_params = self.construct_plan_params()
-            for i in range(self.num_indexes):
-                try:
-                    index = fts_callable.create_fts_index(f"counter_{counter + 1}_idx_{i + 1}", source_type='couchbase',
-                                                          source_name=database.id, index_type='fulltext-index',
-                                                          index_params=None, plan_params=plan_params,
-                                                          source_params=None, source_uuid=None, collection_index=True,
-                                                          _type=_type, analyzer="standard",
-                                                          scope=scope_name, collections=[collection_name], no_check=False)
-                    fts_callable.wait_for_indexing_complete(self._num_of_docs_per_collection)
-                    if self.autoscaling_with_queries:
-                        fts_callable.run_query_and_compare(index, self.num_queries, )
-
-                    if variables['scale_out_count'] != 0 and not index_fail_check:
-                        with self.subTest("Verifying Index Rejection for HWM"):
-                            fts_stats, fts_nodes = self.get_fts_stats()
-                            if self.verify_HWM_index_rejection(fts_stats):
-                                if variables['HWM_hit'] == 0:
-                                    variables['HWM_hit'] += 1
-                                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "HWM HIT-Exempted")
-                                    self.log.info("HWM Hit has taken place, exempting first rejection")
-                                else:
-                                    index_fail_check = True
-                                    self.log.info(f"Index {index.name} created  even though HWM had been satisfied")
-                                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : HWM HIT-Index Created")
-                                    self.fail(f"BUG : Index {index.name} created even though HWM had been satisfied")
-                except Exception as e:
-                    print("Here in the except block")
-                    with self.subTest("Index Creation Check"):
-                        fts_stats, fts_nodes = self.get_fts_stats()
-                        if self.verify_HWM_index_rejection(fts_stats):
-                            # self.assertEqual(str(e), f"rest_create_index: error creating index: , err: manager_api: CreateIndex, Prepare failed, err: limitIndexDef: Cannot accommodate index request: {index_name}, resource utilization over limit(s)")
-                            self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : HWM HIT-Index rejected")
-                            self.log.info(f"PASS : HWM Index Rejection Passed : {str(e)}")
-                        else:
-                            self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : Index Creation Failed")
-                            self.log.info(f"Index Creation Failed : {str(e)}")
-                            self.fail("BUG : Index Creation Failed")
-
-                self.log.info(f"------------ FTS Stats @ DB {counter + 1} Index {i+1} ------------")
-                fts_stats, fts_nodes = self.get_fts_stats()
-
-                with self.subTest("Verify AutoRebalance"):
-                    if self.check_auto_rebalance_condition(fts_stats):
-                        rebalance_status = fts_callable.get_fts_rebalance_status(fts_nodes[0])
-                        if rebalance_status is None:
-                            self.log.info("PASS : AutoRebalance Failed")
-                            self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : AutoRebalance Failed")
-                            self.fail(f"BUG : AutoRebalance Failed..")
-                        else:
-                            self.log.info("PASS : AutoRebalance Passed")
-                            self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : AutoRebalance Passed")
-
-                self.calculate_running_average_LWM(fts_stats, queue_sum, queue_cpu, variables)
-                try:
-                    if not variables['scale_out_status'] and variables['moving_average_mem'] > int(float(self.HWM_limit) * int(fts_stats[0]['limits:memoryBytes'])) or variables['moving_average_cpu'] > int(float(self.HWM_limit) * 100):
-                    # Scale out satisfied using moving average
-                        self.log.info("Scale Out Satisfied using Moving Average")
-                        self.log.info(f"Moving Average: {variables['moving_average']}")
-                        self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Satisfied using Moving Average")
-                        variables['scale_out_time'] = datetime.now()
-                        variables['scale_out_status'] = True
-                except:
-                    print(f"stats not while validating line 816 {fts_stats, fts_nodes}")
-
-                if not variables['scale_out_status'] and self.check_scale_out_condition(fts_stats) and flag:
-                    self.log.info("Scale Out Satisfied")
-                    flag = False
-                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Satisfied b4 Moving Average")
-                    self.prettyPrintStats(fts_stats, fts_nodes, False)
-                    # variables['scale_out_time'] = datetime.now()
-                    # variables['scale_out_status'] = True
-
-                if variables['scale_out_status']:
-                    if divmod((datetime.now() - variables['scale_out_time']).total_seconds(), 60)[0] > int(self.scaling_time):
-                        with self.subTest("Scale Out Condition Check after scaling time"):
-                            if self.verify_scale_out(variables):
-                                time_taken = divmod((datetime.now() - variables['scale_out_time']).total_seconds(), 60)[0]
-                                self.log.info(f"PASS : Scale Out Passed")
-                                self.log.info(f"Scale Out {variables['scale_out_count']}. Passed after {time_taken} minutes!")
-                                self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Passed", time_taken)
-                                self.log.info(f"PASS : Scale Out Passed")
-                                self.log.info(f"Scale Out Stats: \n {fts_stats}, {fts_nodes}")
-                                variables['scale_out_status'] = False
-                                variables['scale_out_count'] += 1
-                                failout_encounter = False
-                            else:
-                                if not failout_encounter:
-                                    failout_encounter = True
-                                    self.log.info(f"FAIL : Scale Out Failed")
-                                    self.log.info(f"Scale Out {variables['scale_out_count']} Failed : {fts_stats}, {fts_nodes}")
-                                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : Scale Out Failed", self.scaling_time)
-                                    self.fail(f"BUG : Scale Out {variables['scale_out_count']}. failed after {self.scaling_time} minutes")
-                    else:
-                        with self.subTest("Scale Out Condition Check before scaling time"):
-                            if self.verify_scale_out(variables):
-                                time_taken = divmod((datetime.now() - variables['scale_out_time']).total_seconds(), 60)[0]
-                                self.log.info(f"BUG : Scale Out happened before scaling time")
-                                self.log.info(f"BUG : Scale Out {variables['scale_out_count']}. happened after {time_taken} minutes!")
-                                self.generate_summary(summary, fts_stats, fts_nodes, variables, f"F : Scale Out Passed < {self.scaling_time}", time_taken)
-                                self.log.info(f"Scale Out Stats: \n {fts_stats}, {fts_nodes}")
-                                variables['scale_out_status'] = False
-                                variables['scale_out_count'] += 1
-                                failout_encounter = False
-                                self.fail(f"Scale Out happened less than scaling time")
-
-            self.log.info(f"------------ FTS Stats @ Database {counter + 1} ------------")
-            fts_stats, fts_nodes = self.get_fts_stats()
-            self.generate_summary(summary, fts_stats, fts_nodes, variables, f"INFO - DB-{counter+1}")
-
-            myTable = PrettyTable(summary[0].keys())
-            for json_obj in summary:
-                myTable.add_row(json_obj.values())
-            self.log.info("Summary Table")
-            print(myTable)
-
-        with self.subTest("Scale In Condition Check"):
-            if not self.verify_scale_in(variables, summary):
-                self.log.info(f"Scale In Failed : {fts_stats}, {fts_nodes}")
-                self.fail("BUG : Scale In Failed")
-
-        myTable = PrettyTable(summary[0].keys())
-        for json_obj in summary:
-            myTable.add_row(json_obj.values())
-        self.log.info("Summary Table")
-        print(myTable)
-
-        if not variables['scale_out_status']:
-            self.fail("Autoscaling Failed since Scaling didn't happen")
-
     def start_query_workload(self, fts_callable, index, num_queries):
         while not self.stop_queries:
             fts_callable.run_query_and_compare(index, num_queries)
 
-    def create_index_and_validate_autoscaling(self, all_info, index_no, db_no, index_arr, variables, summary, queue_sum, queue_cpu):
-        plan_params = self.construct_plan_params()
-        try:
-            # Create an FTS Index
-            index = all_info[db_no]['fts_callable'].create_fts_index(f"counter_{db_no + 1}_idx_{index_no + 1}", source_type='couchbase',
-                                                  source_name=all_info[db_no]['database'].id, index_type='fulltext-index',
-                                                  index_params=None, plan_params=plan_params,
-                                                  source_params=None, source_uuid=None, collection_index=True,
-                                                  _type=all_info[db_no]['type'], analyzer="standard",
-                                                  scope=all_info[db_no]['scope_name'], collections=[all_info[db_no]['collection_name']], no_check=False)
-            all_info[db_no]['fts_callable'].wait_for_indexing_complete(self._num_of_docs_per_collection, complete_wait=False, )
-            index_arr.append([all_info[db_no]['fts_callable'], index])
-            if self.query_workload_parallel_creation:
-                query_thread = threading.Thread(target=self.start_query_workload, kwargs={'fts_callable': all_info[db_no]['fts_callable'], 'index': index, 'num_queries': self.num_queries })
-                query_thread.start()
-
-            # After creating an index check if HWM has hit, if it has hit and index still got created (since we are here), then this is potentially a bug.
-            if not variables['index_fail_check']:
-                with self.subTest("Verifying Index Rejection for HWM"):
-                    fts_stats, fts_nodes = self.get_fts_stats()
-                    if self.verify_HWM_index_rejection(fts_stats):
-                        if variables['HWM_hit'] == 0:
-                            variables['HWM_hit'] += 1
-                            self.generate_summary(summary, fts_stats, fts_nodes, variables, "HWM HIT-Exempted")
-                            self.log.critical("HWM Hit has taken place, exempting first rejection")
-                        else:
-                            variables['index_fail_check'] = True
-                            self.log.critical(f"Index {index.name} created even though HWM had been satisfied")
-                            self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : HWM HIT-Index Created")
-                            self.fail(f"BUG : Index {index.name} created even though HWM had been satisfied")
-        except Exception as e:
-            print("Here in the except block")
-            with self.subTest("Index Creation Check"):
-                fts_stats, fts_nodes = self.get_fts_stats()
-                if self.verify_HWM_index_rejection(fts_stats):
-                    self.assertTrue("limitIndexDef: Cannot accommodate index request" in str(e))
-                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : HWM HIT-Index rejected")
-                    self.log.info(f"PASS : HWM Index Rejection Passed : {str(e)}")
-                else:
-                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : Index Creation Failed")
-                    self.log.critical(f"Index Creation Failed : {str(e)}")
-                    self.fail("BUG : Index Creation Failed")
-
-        fts_stats, fts_nodes = self.get_fts_stats(f"------------ FTS Stats @ DB {db_no + 1} Index {index_no+1} ------------")
-
-        with self.subTest("Verify AutoRebalance"):
-            if self.check_auto_rebalance_condition(fts_stats):
-                rebalance_status = all_info[db_no]['fts_callable'].get_fts_rebalance_status(fts_nodes[0])
-                if rebalance_status == "none":
-                    self.log.critical("FAIL : AutoRebalance Failed")
-                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : AutoRebalance Failed")
-                    self.fail(f"BUG : AutoRebalance Failed..")
-                else:
-                    self.log.info("PASS : AutoRebalance Passed")
-                    self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : AutoRebalance Passed")
-
-        self.calculate_running_average_LWM(fts_stats, queue_sum, queue_cpu, variables)
-
-        if variables['moving_average_mem'] > int(float(self.LWM_limit) * int(fts_stats[0]['limits:memoryBytes'])) or variables['moving_average_cpu'] > int(float(self.LWM_limit) * 100):
-            # Scale out satisfied using moving average sum or moving avg cpu
-            self.log.info("Scale Out Satisfied using Moving Average")
-            self.log.info(f"Moving Average: {variables['moving_average_mem']} | {variables['moving_average_cpu']}")
-            self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Satisfied using Moving Average")
-            variables['scale_out_time'] = datetime.now()
-            variables['scale_out_status'] = True
-
-        if not variables['scale_out_status'] and self.check_scale_out_condition(fts_stats) and variables['flag']:
-            self.log.critical("Scale Out Satisfied b4 Moving Average")
-            variables['flag'] = False
-            self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Satisfied b4 Moving Average")
-            self.prettyPrintStats(fts_stats, fts_nodes, False)
-            # variables['scale_out_time'] = datetime.now()
-            # variables['scale_out_status'] = True
-
-        if variables['scale_out_status']:
-            if divmod((datetime.now() - variables['scale_out_time']).total_seconds(), 60)[0] > int(self.scaling_time):
-                with self.subTest("Scale Out Condition Check after scaling time"):
-                    if self.verify_scale_out(variables):
-                        time_taken = divmod((datetime.now() - variables['scale_out_time']).total_seconds(), 60)[0]
-                        self.log.info(f"PASS : Scale Out Passed")
-                        self.log.info(f"Scale Out {variables['scale_out_count']}. Passed after {time_taken} minutes!")
-                        self.generate_summary(summary, fts_stats, fts_nodes, variables, "P : Scale Out Passed", time_taken)
-                        self.log.info(f"PASS : Scale Out Passed")
-                        self.log.info(f"Scale Out Stats: \n {fts_stats}, {fts_nodes}")
-                        variables['scale_out_status'] = False
-                        variables['scale_out_count'] += 1
-                        variables['failout_encounter'] = False
-                    else:
-                        if not variables['failout_encounter']:
-                            variables['failout_encounter'] = True
-                            self.log.critical(f"FAIL : Scale Out Failed")
-                            self.log.critical(f"Scale Out {variables['scale_out_count']} Failed : {fts_stats}, {fts_nodes}")
-                            self.generate_summary(summary, fts_stats, fts_nodes, variables, "F : Scale Out Failed", self.scaling_time)
-                            self.fail(f"BUG : Scale Out {variables['scale_out_count']}. failed after {self.scaling_time} minutes")
-            else:
-                with self.subTest("Scale Out Condition Check before scaling time"):
-                    if self.verify_scale_out(variables):
-                        time_taken = divmod((datetime.now() - variables['scale_out_time']).total_seconds(), 60)[0]
-                        self.log.critical(f"BUG : Scale Out happened before scaling time")
-                        self.log.critical(f"BUG : Scale Out {variables['scale_out_count']}. happened after {time_taken} minutes!")
-                        self.generate_summary(summary, fts_stats, fts_nodes, variables, f"F : Scale Out Passed < {self.scaling_time}", time_taken)
-                        self.log.critical(f"Scale Out Stats: \n {fts_stats}, {fts_nodes}")
-                        variables['scale_out_status'] = False
-                        variables['scale_out_count'] += 1
-                        variables['failout_encounter'] = False
-                        self.fail(f"Scale Out happened less than scaling time")
-
     def monitor_fts_stats(self):
         while not self.stop_monitoring_stats:
-            self.get_fts_stats()
+            self.get_fts_stats("---FTS STATISTICS---")
             time.sleep(30)
 
+    def validate_scale_out(self, fts_nodes):
+        if len(fts_nodes) == self.current_num_fts_nodes + 2:
+            self.max_num_fts_nodes = len(fts_nodes)
+            self.current_num_fts_nodes = len(fts_nodes)
+            self.autoscaling_validations['scale_out'] = True
+            return True
+        else:
+            return False
+
+    def validate_scale_in(self, fts_nodes):
+        if len(fts_nodes) == self.current_num_fts_nodes - 2:
+            self.current_num_fts_nodes = len(fts_nodes)
+            self.autoscaling_validations['scale_in'] = True
+            return True
+        else:
+            return False
+
+    def monitor_running_average_and_scaling(self):
+        while not self.stop_monitoring_stats:
+            start_time = time.time()
+
+            fts_stats, fts_nodes = self.get_fts_stats(print_stats=False)
+            for i in range(len(fts_nodes)):
+                util_mem = fts_stats[i]['utilization:memoryBytes']
+                util_cpu = fts_stats[i]['utilization:cpuPercent']
+
+                if util_mem == -1 or util_cpu == -1:
+                    util_mem = 0
+                    util_cpu = 0
+
+                self.memory_queue[fts_nodes[i]].append(util_mem)
+                self.cpu_queue[fts_nodes[i]].append(util_cpu)
+
+                self.running_avg_memory[fts_nodes[i]] = sum(self.memory_queue[fts_nodes[i]])/len(self.memory_queue[fts_nodes[i]])
+                self.running_avg_cpu[fts_nodes[i]] = sum(self.cpu_queue[fts_nodes[i]])/len(self.cpu_queue[fts_nodes[i]])
+
+            self.prettyPrintRunningAverage()
+
+            # validate scale out
+            if self.check_scale_out_condition(fts_stats):
+                self.log.info("Scale Out Satisfied using Running Average")
+                with self.subTest("validate scale out"):
+                    if self.validate_scale_out(fts_nodes):
+                        self.log.info("Scale out successful")
+                    else:
+                        self.log.critical("Scale out failed")
+                        self.prettyPrintStats(fts_stats, fts_nodes, "--SCALE OUT FAIL STATS--")
+                        self.fail(f"Scale Out failed")
+            else:
+                with self.subTest("verify scale out before running average"):
+                    if self.validate_scale_out(fts_nodes):
+                        self.log.critical("scale out happened when it wasn't required")
+                        self.prettyPrintStats(fts_stats, fts_nodes, "EARLY SCALE OUT STATS")
+                        self.fail(f"Scale Out happened less than scaling time")
+
+            # verify scale in
+            if len(fts_nodes) != self.max_num_fts_nodes and self.check_scale_in_condition(fts_stats):
+                with self.subTest("Verify Scale In"):
+                    if self.validate_scale_in(fts_nodes):
+                        self.log.info("Scale in successful")
+                    else:
+                        self.log.critical("Scale in failed")
+                        self.prettyPrintStats(fts_stats, fts_nodes, "SCALE IN FAIL STATS")
+                        self.fail(f"Scale in failed")
+
+            if self.check_auto_rebalance_condition(fts_stats):
+                with self.subTest("Verify AutoRebalance"):
+                    rebalance_status = FTSCallable(self.input.servers).get_fts_rebalance_status(fts_nodes[0])
+                    if rebalance_status == "none":
+                        self.log.critical("FAIL : AutoRebalance Failed")
+                        self.prettyPrintStats(fts_stats, fts_nodes, "-- AUTOREBALANCE FAIL STATS--")
+                        self.fail(f"BUG : AutoRebalance Failed..")
+                    else:
+                        self.log.info("PASS : AutoRebalance Passed")
+
+            end_time = time.time()
+            time_taken = end_time - start_time
+            total_sleep_time = max(0, int(int(self.polling_time*60) - time_taken))
+            time.sleep(int(total_sleep_time))
+
+    def create_fts_indexes_for_autoscaling(self, all_info, index_no, db_no, index_arr):
+        fts_stats, fts_nodes = self.get_fts_stats(print_stats=False)
+        try:
+            plan_params = self.construct_plan_params()
+            index = all_info[db_no]['fts_callable'].create_fts_index(f"counter_{db_no + 1}_idx_{index_no + 1}", source_type='couchbase',
+                                                                     source_name=all_info[db_no]['database'].id, index_type='fulltext-index',
+                                                                     index_params=None, plan_params=plan_params,
+                                                                     source_params=None, source_uuid=None, collection_index=True,
+                                                                     _type=all_info[db_no]['type'], analyzer="standard",
+                                                                     scope=all_info[db_no]['scope_name'], collections=[all_info[db_no]['collection_name']], no_check=False)
+            all_info[db_no]['fts_callable'].wait_for_indexing_complete(self._num_of_docs_per_collection, complete_wait=False, idx=index)
+            index_arr.append([all_info[db_no]['fts_callable'], index])
+            if self.query_workload_parallel_creation:
+                query_thread = threading.Thread(target=self.start_query_workload, kwargs={'fts_callable': all_info[db_no]['fts_callable'], 'index': index, 'num_queries': self.num_queries})
+                query_thread.start()
+
+            with self.subTest("Verifying Index Rejection for HWM"):
+                if self.verify_HWM_index_rejection(fts_stats):
+                    self.log.critical(f"Index {index.name} created even though HWM had been satisfied")
+                    self.prettyPrintStats(fts_stats, fts_nodes, f"Index {index.name} created even though HWM had been satisfied")
+                    self.fail(f"BUG : Index {index.name} created even though HWM had been satisfied")
+        except Exception as e:
+            if str(e).find("limiting/throttling: the request has been rejected according to regulator") != -1:
+                self.log.info("Index creation reject exempted due to limiting/throttling")
+            else:
+                with self.subTest("Index Creation Fail Check"):
+                    if self.verify_HWM_index_rejection(fts_stats):
+                        self.assertTrue("limitIndexDef: Cannot accommodate index request" in str(e))
+                        self.log.info(f"PASS : HWM Index Rejection Passed : {str(e)}")
+                    else:
+                        self.log.critical(f"Index Creation Failed : {str(e)}")
+                        self.prettyPrintStats(fts_stats, fts_nodes,"Index Creation Failed ")
+                        self.fail("BUG : Index Creation Failed")
+
     def autoscaling_concurrent(self):
-        self.delete_all_database(True)
-
-        monitor_thread = threading.Thread(target=self.monitor_fts_stats)
-        monitor_thread.start()
-
-        summary = []
         self.provision_databases(self.num_databases, None, self.new_dataplane_id)
-        fts_stats, fts_nodes = self.get_fts_stats("------------ Initial STATS ------------")
-        variables = {'node_count': len(fts_nodes), 'scale_out_time': 0, 'HWM_hit': 0, 'scale_out_status': False,
-                     'scale_out_count': 0, 'moving_avg_sum': 0, 'moving_avg_cpu_sum': 0, 'moving_average_mem': 0, 'moving_average_cpu': 0, 'index_fail_check': False,
-                     'failout_encounter': False, 'flag': True}
-        self.generate_summary(summary, fts_stats, fts_nodes, variables, "Initial Summary")
 
-        queue_sum = deque()
-        queue_cpu = deque()
+        for counter, database in enumerate(self.databases.values()):
+            self.init_input_servers(database)
+            break
+
+        monitor_stat_thread = threading.Thread(target=self.monitor_fts_stats)
+        monitor_avg_thread = threading.Thread(target=self.monitor_running_average_and_scaling)
+
+        monitor_stat_thread.start()
+        monitor_avg_thread.start()
+        time.sleep(120)
+
         all_info = []
         index_arr = []
         # Create 20 databases with scopes and collections
@@ -1079,15 +848,16 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
             _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                     collection=collection_name)
-            all_info.append({'database': database, 'type': _type, 'scope_name': scope_name, 'collection_name': collection_name, 'fts_callable': fts_callable})
+            all_info.append({'database': database, 'type': _type, 'scope_name': scope_name,
+                             'collection_name': collection_name, 'fts_callable': fts_callable})
 
         # Launch a thread in each database to create an index
-        for i in range(self.num_indexes):
+        for index in range(self.num_indexes):
             thread_arr = []
-            for j in range(self.num_databases):
-                thread = threading.Thread(target=self.create_index_and_validate_autoscaling, kwargs={'all_info': all_info, 'index_no': i, 'db_no' : j,
-                                                                    'index_arr': index_arr, 'variables': variables, 'summary': summary,
-                                                                    'queue_sum': queue_sum, 'queue_cpu': queue_cpu})
+            for db in range(self.num_databases):
+                thread = threading.Thread(target=self.create_fts_indexes_for_autoscaling,
+                                          kwargs={'all_info': all_info, 'index_no': index, 'db_no': db,
+                                                  'index_arr': index_arr})
                 thread.start()
                 time.sleep(2)
                 thread_arr.append(thread)
@@ -1095,50 +865,35 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             for thread in thread_arr:
                 thread.join()
 
-        fts_stats, fts_nodes = self.get_fts_stats("------------ FTS DB FINISH STATS  ------------")
-        self.generate_summary(summary, fts_stats, fts_nodes, variables, f"FTS DB FINISH STATS")
-
-        myTable = PrettyTable(summary[0].keys())
-        for json_obj in summary:
-            myTable.add_row(json_obj.values())
-        self.log.info("Summary Table")
-        print(myTable)
-
         if self.query_workload_after_creation:
             thread_2_array = []
             for index in index_arr:
-                thread2 = threading.Thread(target=index[0].run_query_and_compare, kwargs={'index': index[1], 'num_queries': self.num_queries })
+                thread2 = threading.Thread(target=index[0].run_query_and_compare,
+                                           kwargs={'index': index[1], 'num_queries': self.num_queries})
                 thread2.start()
                 thread_2_array.append(thread2)
 
             for thread2 in thread_2_array:
                 thread2.join()
 
-            fts_stats, fts_nodes = self.get_fts_stats("------------ FTS DB QUERY FINISH STATS  ------------")
-            self.generate_summary(summary, fts_stats, fts_nodes, variables, f"FTS DB QUERY FINISH STATS")
         self.stop_queries = True
-        myTable = PrettyTable(summary[0].keys())
-        for json_obj in summary:
-            myTable.add_row(json_obj.values())
-        self.log.info("Summary Table")
-        print(myTable)
 
-        with self.subTest("Scale In Condition Check"):
-            if not self.verify_scale_in(variables, summary):
-                self.log.info(f"Scale In Failed : {fts_stats}, {fts_nodes}")
-                self.fail("BUG : Scale In Failed")
+        self.log.info("Sleeping 30 minutes to observe scale in")
+        time.sleep(1800)
 
         self.stop_monitoring_stats = True
         time.sleep(100)
 
-        myTable = PrettyTable(summary[0].keys())
-        for json_obj in summary:
-            myTable.add_row(json_obj.values())
-        self.log.info("Summary Table")
-        print(myTable)
-
         self.log.info("============== collecting cbcollect logs... ==========================")
         self.collect_log_on_dataplane_nodes()
+
+        if not self.autoscaling_validations['scale_out']:
+            self.fail("Scale out wasn't observed in this test")
+
+        if not self.autoscaling_validations['scale_in']:
+            self.fail("Scale in wasn't observed in this test")
+
+        self.trigger_log_collect = False
 
     def test_n1ql_search(self):
         self.provision_databases(self.num_databases)

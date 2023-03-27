@@ -2288,12 +2288,6 @@ class RestConnection(object):
             except ValueError:
                 pass
 
-    def get_fts_cfg_stats(self, node, creds):
-        endpoint = f"https://{node}:18094/api/cfg"
-        resp = requests.get(endpoint, auth=(creds['username'], creds['password']), verify=False)
-        result = resp.json()
-        return result
-
     def get_index_status(self, timeout=120, index_map=None):
         api = self.baseUrl + 'indexStatus'
         index_map = {}
@@ -2846,6 +2840,25 @@ class RestConnection(object):
             time.sleep(1)
         log.error("ERROR: Stat {0} error on {1} on bucket {2}".
                   format(stat_name, index_name, bucket_name))
+    def get_specific_nsstats(self, node, creds):
+        try:
+            endpoint = f"https://{node}:18094/api/nsstats"
+            r = requests.get(endpoint, auth=(creds['username'], creds['password']), verify=False)
+            r.raise_for_status()
+            return r
+        except requests.exceptions.HTTPError as err:
+            log.error(f"Failed to fetch nsstats, reason : {str(err)}")
+            return {}
+
+    def get_fts_cfg_stats(self, node, creds):
+        try:
+            endpoint = f"https://{node}:18094/api/cfg"
+            resp = requests.get(endpoint, auth=(creds['username'], creds['password']), verify=False)
+            resp.raise_for_status()
+            return resp
+        except requests.exceptions.HTTPError as err:
+            log.error(f"Failed to fetch FTS CFG Stats, reason : {str(err)}")
+            return None
 
     def start_fts_index_compaction(self, index_name):
         api = "{0}{1}".format(self.fts_baseUrl, f'api/index/{index_name}/tasks')
