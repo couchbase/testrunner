@@ -41,46 +41,49 @@ class TenantManagement(BaseGSIServerless):
         for counter, database in enumerate(self.databases.values()):
             for scope in database.collections:
                 for collection in database.collections[scope]:
-                        index1 = f'idx_a_db{counter}_{random.randint(0, 1000)}'
-                        index2 = f'idx_b_db{counter}_{random.randint(0, 1000)}'
-                        index1_replica, index2_replica = f'{index1} (replica 1)', f'{index2} (replica 1)'
-                        self.create_index(database, query_statement=f"create index {index1} on `{database.id}`.{scope}.{collection}(a)",
-                                          use_sdk=self.use_sdk)
-                        self.create_index(database, query_statement=f"create index {index2} on `{database.id}`.{scope}.{collection}(b)",
-                                          use_sdk=self.use_sdk)
-                        self.rest_obj = RestConnection(database.admin_username, database.admin_password, database.rest_host)
-                        rest_info = self.create_rest_info_obj(username=database.admin_username,
-                                                              password=database.admin_password,
-                                                              rest_host=database.rest_host)
-                        nodes_obj = self.rest_obj.get_all_dataplane_nodes()
-                        self.log.debug(f"Dataplane nodes object {nodes_obj}")
-                        for node in nodes_obj:
-                            if 'index' in node['services']:
-                                host1 = self.get_resident_host_for_index(index_name=index1, rest_info=rest_info,
-                                                                         indexer_node=node['hostname'].split(":")[0])
-                                host1_replica = self.get_resident_host_for_index(index_name=index1_replica,
-                                                                                 rest_info=rest_info,
-                                                                                 indexer_node=node['hostname'].split(":")[0])
-                                host2 = self.get_resident_host_for_index(index_name=index2, rest_info=rest_info,
-                                                                         indexer_node=node['hostname'].split(":")[0])
-                                host2_replica = self.get_resident_host_for_index(index_name=index2_replica,
-                                                                                 rest_info=rest_info,
-                                                                                 indexer_node=node['hostname'].split(":")[0])
-                                break
-                        self.log.info(
-                            f"Hosts on which indexes reside. index1 {host1} and index1 replica {host1_replica}. "
-                            f"index2 {host2}and index2 replica {host2_replica}")
-                        if all(item is not None for item in [host1, host2, host1_replica, host2_replica]):
-                            if host1 != host2 and host1 != host2_replica:
-                                self.fail(
-                                    f"Index tenant affinity not honoured. Index1 is on host {host1}. Index2 is on host {host2}. "
-                                    f"Index1 replica is on host {host2}. Index2 replica is on host {host2_replica}")
-                            if host2 != host1 and host2 != host1_replica:
-                                self.fail(
-                                    f"Index tenant affinity not honoured. Index1 is on host {host1}. Index2 is on host {host2}. "
-                                    f"Index1 replica is on host {host2}. Index2 replica is on host {host2_replica}")
-                        else:
-                            self.fail("Not all indexes (or their replicas) have been created. Test failure")
+                    self.log.info(f"Iteration on db {database.id}. scope {scope} collection {collection}")
+                    index1 = f'idx_a_db{counter}_{scope}_{collection}_{random.randint(0, 10000)}'
+                    index2 = f'idx_b_db{counter}_{scope}_{collection}_{random.randint(0, 10000)}'
+                    self.log.info(f"Index names {index1} and {index2}")
+                    index1_replica, index2_replica = f'{index1} (replica 1)', f'{index2} (replica 1)'
+                    self.log.info(f"Index replica names {index1_replica} and {index2_replica}")
+                    self.create_index(database, query_statement=f"create index {index1} on `{database.id}`.{scope}.{collection}(a)",
+                                      use_sdk=self.use_sdk)
+                    self.create_index(database, query_statement=f"create index {index2} on `{database.id}`.{scope}.{collection}(b)",
+                                      use_sdk=self.use_sdk)
+                    self.rest_obj = RestConnection(database.admin_username, database.admin_password, database.rest_host)
+                    rest_info = self.create_rest_info_obj(username=database.admin_username,
+                                                          password=database.admin_password,
+                                                          rest_host=database.rest_host)
+                    nodes_obj = self.rest_obj.get_all_dataplane_nodes()
+                    self.log.debug(f"Dataplane nodes object {nodes_obj}")
+                    for node in nodes_obj:
+                        if 'index' in node['services']:
+                            host1 = self.get_resident_host_for_index(index_name=index1, rest_info=rest_info,
+                                                                     indexer_node=node['hostname'].split(":")[0])
+                            host1_replica = self.get_resident_host_for_index(index_name=index1_replica,
+                                                                             rest_info=rest_info,
+                                                                             indexer_node=node['hostname'].split(":")[0])
+                            host2 = self.get_resident_host_for_index(index_name=index2, rest_info=rest_info,
+                                                                     indexer_node=node['hostname'].split(":")[0])
+                            host2_replica = self.get_resident_host_for_index(index_name=index2_replica,
+                                                                             rest_info=rest_info,
+                                                                             indexer_node=node['hostname'].split(":")[0])
+                            break
+                    self.log.info(
+                        f"Hosts on which indexes reside. index1 {host1} and index1 replica {host1_replica}. "
+                        f"index2 {host2}and index2 replica {host2_replica}")
+                    if all(item is not None for item in [host1, host2, host1_replica, host2_replica]):
+                        if host1 != host2 and host1 != host2_replica:
+                            self.fail(
+                                f"Index tenant affinity not honoured. Index1 is on host {host1}. Index2 is on host {host2}. "
+                                f"Index1 replica is on host {host2}. Index2 replica is on host {host2_replica}")
+                        if host2 != host1 and host2 != host1_replica:
+                            self.fail(
+                                f"Index tenant affinity not honoured. Index1 is on host {host1}. Index2 is on host {host2}. "
+                                f"Index1 replica is on host {host2}. Index2 replica is on host {host2_replica}")
+                    else:
+                        self.fail("Not all indexes (or their replicas) have been created. Test failure")
 
     def test_max_limit_indexes_per_tenant(self):
         self.provision_databases(count=self.num_of_tenants)
