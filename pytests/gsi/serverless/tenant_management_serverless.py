@@ -44,13 +44,14 @@ class TenantManagement(BaseGSIServerless):
                     self.log.info(f"Iteration on db {database.id}. scope {scope} collection {collection}")
                     index1 = f'idx_a_db{counter}_{scope}_{collection}_{random.randint(0, 10000)}'
                     index2 = f'idx_b_db{counter}_{scope}_{collection}_{random.randint(0, 10000)}'
-                    self.log.info(f"Index names {index1} and {index2}")
+                    self.log.info(f"Index names index1: {index1} and index2: {index2}")
                     index1_replica, index2_replica = f'{index1} (replica 1)', f'{index2} (replica 1)'
-                    self.log.info(f"Index replica names {index1_replica} and {index2_replica}")
+                    self.log.info(f"Index replica names index1 replica {index1_replica} and index2 replica {index2_replica}")
                     self.create_index(database, query_statement=f"create index {index1} on `{database.id}`.{scope}.{collection}(a)",
                                       use_sdk=self.use_sdk)
                     self.create_index(database, query_statement=f"create index {index2} on `{database.id}`.{scope}.{collection}(b)",
                                       use_sdk=self.use_sdk)
+                    time.sleep(30)
                     self.rest_obj = RestConnection(database.admin_username, database.admin_password, database.rest_host)
                     rest_info = self.create_rest_info_obj(username=database.admin_username,
                                                           password=database.admin_password,
