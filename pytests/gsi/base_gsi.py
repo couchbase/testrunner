@@ -91,6 +91,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.index_batch_weight = self.input.param("index_batch_weight", 1)
         self.server_group_map = {}
         self.password = self.input.membase_settings.rest_password
+        self.username = self.input.membase_settings.rest_username
         if self.aws_access_key_id:
             from serverless.s3_utils import S3Utils
             self.s3_utils_obj = S3Utils(aws_access_key_id=self.aws_access_key_id,
@@ -1814,7 +1815,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                     self.gen_create = SDKDataLoader(num_ops=num_of_docs_per_collection, percent_create=100,
                                                     percent_update=0, percent_delete=0, scope=s_item,
                                                     collection=c_item, json_template=json_template,
-                                                    output=True, password=self.password)
+                                                    output=True,username=self.username, password=self.password)
                     tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
                                                                     batch_size=batch_size)
                     for task in tasks:
