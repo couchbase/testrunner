@@ -85,6 +85,14 @@ class RestfulDAPI:
         url = self.endpoint_v1 + "/scopes"
         return self._urllib_request(url)
 
+    def get_scope_detail(self, scopeName):
+        url = self.endpoint_v1 + "/scopes/" + scopeName
+        return self._urllib_request(url)
+
+    def get_collection_detail(self, scopeName, collectionName):
+        url = self.endpoint_v1 + "/scopes/" + scopeName + "/collections/" + collectionName
+        return self._urllib_request(url)
+
     def get_collection_list(self, scope="_default"):
         url = self.endpoint_v1 + "/scopes/" + scope + "/collections"
         return self._urllib_request(url)

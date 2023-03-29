@@ -16,8 +16,8 @@ class RestfulDAPITest(ServerlessBaseTestCase):
         self.number_of_docs = self.input.param("number_of_docs", 10)
         self.randomize_value = self.input.param("randomize_value", False)
         self.mixed_key = self.input.param("mixed_key", False)
-        self.number_of_collections = self.input.param("number_of_collections", 10)
-        self.number_of_scopes = self.input.param("number_of_scopes", 10)
+        self.number_of_collections = self.input.param("number_of_collection", 10)
+        self.number_of_scopes = self.input.param("number_of_scope", 10)
         self.number_of_threads = self.input.param("number_of_threads", 1)
         self.batch_size = self.input.param("batch_size",10)
         self.error_message = self.input.param("error_msg", None)
@@ -389,6 +389,23 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                                           "access_secret": dapi_info["access_secret"]})
             self.log.info("Creation of scope for database {}".format(dapi_info["database_id"]))
 
+            # negative tests - create scopes with pre-existing scope name
+            response = self.rest_dapi.create_scope({"scopeName": "_default"})
+            self.log.info(response.status_code)
+            self.assertTrue(response.status_code == 500, "Scope got created with pre-existing scope name")
+            # negative tests - get scope detail for not existing scope
+            response = self.rest_dapi.get_scope_detail("_asdfljasdf")
+            self.log.info(response.status_code)
+            self.assertTrue(response.status_code == 404, "Get datail of unexisting scope is successful")
+            # negative with bad scope name
+            response = self.rest_dapi.create_scope({"scopeName": ".......'..,,**&&&^!@#~~@!#~~!@*:::"})
+            self.log.info(response.status_code)
+            self.assertTrue(response.status_code == 500, "Scope got created with pre-existing scope name")
+            # negative test with malformed request syntax
+            response = self.rest_dapi.create_scope({"asdfasdf": "/Saurabh"})
+            self.log.info(response.status_code)
+            self.assertTrue(response.status_code == 500, "Scope got created with pre-existing scope name")
+
             scope_name, scope_suffix = "scope", 0
             scope_name_list = ["_default", "_system"]
             for i in range(self.number_of_scopes):
@@ -429,6 +446,23 @@ class RestfulDAPITest(ServerlessBaseTestCase):
             self.assertTrue(response.status_code == 200,
                             "Creation of scope failed for database {}".format(dapi_info["database_id"]))
 
+            # negative tests - create scopes with pre-existing scope name
+            response = self.rest_dapi.create_collection(scope, {"name": "_default"})
+            self.log.info(response.status_code)
+            self.assertTrue(response.status_code == 500, "Collection got created with pre-existing scope name")
+            # negative tests - get collection detail for not existing collection
+            response = self.rest_dapi.get_collection_detail(scope, "_asdfljasdf")
+            self.log.info(response.status_code)
+            self.assertTrue(response.status_code == 404, "Get datail of unexisting collection is successful")
+            # negative with bad collection name
+            response = self.rest_dapi.create_collection(scope, {"name": ".......'..,,**&&&^!@#~~@!#~~!@*:::"})
+            self.log.info(response.status_code)
+            self.assertTrue(response.status_code == 500, "Scope got created with pre-existing scope name")
+            # negative test with malformed request syntax
+            response = self.rest_dapi.create_collection(scope, {"asdfasdf": "/Saurabh"})
+            self.log.info(response.status_code)
+            self.assertTrue(response.status_code == 500, "collection got created with pre-existing scope name")
+
             collection_name, collection_suffix = "collection", 0
             collection_name_list = []
             for i in range(self.number_of_collections):
@@ -466,6 +500,11 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                                           "access_secret": dapi_info["access_secret"]})
             self.log.info("Deletion of collection for database {}".format(dapi_info["database_id"]))
 
+            scope = "_default"
+            response = self.rest_dapi.delete_collection(scope, "_asdfasdfasdf__sadfasdf")
+            self.log.info(response.status_code)
+            self.assertTrue(response.status_code == 404, "Collection got deleted with non-existing scope name")
+
             collection_name = "testCollection"
             response = self.rest_dapi.create_collection("_default", {"name": collection_name})
             self.log.info("Response code for creation of collection {}".format(response.status_code))
@@ -501,6 +540,11 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                                           "access_token": dapi_info["access_token"],
                                           "access_secret": dapi_info["access_secret"]})
             self.log.info("Deletion of scope for database {}".format(dapi_info["database_id"]))
+
+            # negative tests - create scopes with pre-existing scope name
+            response = self.rest_dapi.delete_scope("_Dafasdfasdfasd_asdfasdf")
+            self.log.info(response.status_code)
+            self.assertTrue(response.status_code == 404, "Scope got deleted with non-existing scope name")
 
             scope_name = "testScope"
             response = self.rest_dapi.create_scope({"scopeName": scope_name})
