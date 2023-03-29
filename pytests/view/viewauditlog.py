@@ -74,7 +74,7 @@ class ViewAuditLog(createdeleteview.CreateDeleteViewTests):
         expected_results_authentication_failure = {
                                                      "auth":"Administrator",
                                                      "error":"unauthorized",
-                                                     "user_agent": "curl/7.29.0",
+                                                     "user_agent": "curl/7.64.0",
                                                      "id": 40966,
                                                      "name": "Access denied",
                                                      "description": "Access denied to the REST API due to invalid permissions or credentials",
@@ -95,7 +95,7 @@ class ViewAuditLog(createdeleteview.CreateDeleteViewTests):
         expected_results_authorization_failure = {
                                                      "auth": "test",
                                                      "error": "forbidden",
-                                                     "user_agent": "curl/7.29.0",
+                                                     "user_agent": "curl/7.64.0",
                                                      "id": 40966,
                                                      "name": "Access denied",
                                                      "description": "Access denied to the REST API due to invalid permissions or credentials",
