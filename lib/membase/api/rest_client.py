@@ -2997,7 +2997,7 @@ class RestConnection(object):
                     init_params['historyRetentionBytes'] = self.history_retention_bytes
                     init_params['historyRetentionSeconds'] = self.history_retention_secs
                     init_params['magmaKeyTreeDataBlockSize'] = self.magma_seq_tree_data_block_size
-                    init_params['magmaSeqTreeDataBlockSize'] = self.magma_key_tree
+                    init_params['magmaSeqTreeDataBlockSize'] = self.magma_key_tree_data_block_size
             init_params['storageBackend'] = storageBackend
 
         params = urllib.parse.urlencode(init_params)
