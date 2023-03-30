@@ -73,7 +73,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
         """
         summary: This test validate process of index creation with delete/drop of Bucket/Scope/Collection
         """
-        self.prepare_collection_for_indexing(num_of_docs_per_collection=10 ** 6)
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection)
         collection_namespace = self.namespaces[0]
         index_gen = QueryDefinition(index_name='idx', index_fields=['age', 'city'])
         query = index_gen.generate_index_create_query(namespace=collection_namespace)
@@ -97,7 +97,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
             self.assertFalse(index_status)
 
     def test_index_during_scan_with_delete_bsc(self):
-        self.prepare_collection_for_indexing(num_of_docs_per_collection=10 ** 6)
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection)
         collection_namespace = self.namespaces[0]
         index_gen = QueryDefinition(index_name='idx1', index_fields=['age'])
         query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build)
@@ -144,8 +144,8 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
 
     def test_drop_index_with_delete_bsc(self):
 
-        num_of_docs_per_collection = 10 ** 4
-        self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs_per_collection)
+        #num_of_docs_per_collection = 10 ** 4
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection)
         collection_namespace = self.namespaces[0]
         index_gen = QueryDefinition(index_name='#primary')
         query = index_gen.generate_primary_index_create_query(namespace=collection_namespace,
@@ -180,8 +180,8 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
             # running a  select query
             query = f'select count(*) from {collection_namespace} where age >= 0'
             result = self.run_cbq_query(query=query)['results'][0]['$1']
-            self.assertEqual(result, num_of_docs_per_collection,
-                             f"Result not matching. Expected: {num_of_docs_per_collection}, Actual: {result}")
+            self.assertEqual(result, self.num_of_docs_per_collection,
+                             f"Result not matching. Expected: {self.num_of_docs_per_collection}, Actual: {result}")
 
             # deleting BSC while dropping indexes
             with ThreadPoolExecutor() as executor:
@@ -204,8 +204,8 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
             self.assertFalse(index_status)
 
     def test_delete_bsc_while_index_updates_mutation(self):
-        num_of_docs = 10 ** 4
-        self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs)
+        #num_of_docs = 10 ** 4
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection)
         collection_namespace = self.namespaces[0]
         _, keyspace = collection_namespace.split(':')
         bucket, scope, collection = keyspace.split('.')
@@ -216,10 +216,10 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
         self.wait_until_indexes_online()
         select_query = f'select count(age) from {collection_namespace} where age >= 0'
         result = self.run_cbq_query(query=select_query)['results'][0]['$1']
-        self.assertEqual(result, num_of_docs)
-        gen_create = SDKDataLoader(num_ops=num_of_docs * 10, percent_create=80,
+        self.assertEqual(result, self.num_of_docs_per_collection)
+        gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection * 10, percent_create=80,
                                    percent_update=10, percent_delete=10, scope=scope,
-                                   collection=collection, start_seq_num=num_of_docs + 1, password=self.password)
+                                   collection=collection, start_seq_num=self.num_of_docs_per_collection + 1, username=self.username, password=self.password)
         try:
             # deleting BSC while indexes catching up with new mutations
             with ThreadPoolExecutor() as executor:
@@ -232,7 +232,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                 delete_result = delete_bsc.result()
                 self.assertTrue(delete_result, f"Failed to delete: {self.item_to_delete}")
                 count = select_task.result()['results'][0]['$1']
-                self.assertTrue(count > num_of_docs, "Delete bucket happened before mutation operation began")
+                self.assertTrue(count > self.num_of_docs_per_collection, "Delete bucket happened before mutation operation began")
             self.sleep(30)
             index_status = self.rest.get_index_status()
             self.assertFalse(index_status)
@@ -264,7 +264,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
             scope, collection = f'{self.scope_prefix}_1', f'{self.collection_prefix}_1'
             gen_create = SDKDataLoader(num_ops=10 ** 3, percent_create=100,
                                        percent_update=0, percent_delete=0, scope=scope,
-                                       collection=collection, json_template='Person', password=self.password)
+                                       collection=collection, json_template='Person', username=self.username, password=self.password)
             task = self.cluster.async_load_gen_docs(server=self.master, generator=gen_create, bucket=self.test_bucket,
                                                     scope=scope, collection=collection)
             task.result()
@@ -302,8 +302,8 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                             'Index of available bucket is missing')
 
     def test_delete_bsc_with_flush_running(self):
-        num_of_docs_per_collection = 10 ** 6
-        self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs_per_collection, batch_size=5*10**4)
+        #num_of_docs_per_collection = 10 ** 6
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection, batch_size=5*10**4)
         collection_namespace = self.namespaces[0]
         index_gen = QueryDefinition(index_name='idx', index_fields=['age', 'city', 'country'])
         query = index_gen.generate_primary_index_create_query(namespace=collection_namespace, defer_build=False)
@@ -315,8 +315,8 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
             # running a  select query
             query = f'select count(*) from {collection_namespace} where age >= 0'
             result = self.run_cbq_query(query=query)['results'][0]['$1']
-            self.assertEqual(result, num_of_docs_per_collection,
-                             f"Result not matching. Expected: {num_of_docs_per_collection}, Actual: {result}")
+            self.assertEqual(result, self.num_of_docs_per_collection,
+                             f"Result not matching. Expected: {self.num_of_docs_per_collection}, Actual: {result}")
 
             # deleting BSC while Flushing
             with ThreadPoolExecutor() as executor:
@@ -328,15 +328,15 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                 self.assertTrue(result, f"Failed to Delete {self.item_to_delete}")
                 flush_result = task1.result()
                 self.log.info(flush_result)
-                self.sleep(10)
+                self.sleep(30)
                 index_status = self.rest.get_index_status()
                 self.assertFalse(index_status)
         except Exception as err:
             self.fail(str(err))
 
     def test_delete_bsc_with_only_deferred_Index(self):
-        num_of_docs_per_collection = 10 ** 4
-        self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs_per_collection)
+        #num_of_docs_per_collection = 10 ** 4
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection)
         collection_namespace = self.namespaces[0]
         index_gen = QueryDefinition(index_name='idx', index_fields=['age', 'city', 'country'])
         query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=True)
@@ -357,8 +357,8 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
             self.fail(str(err))
 
     def test_delete_recreate_collection_indexes(self):
-        num_of_docs_per_collection = 10 ** 4
-        self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs_per_collection)
+        #num_of_docs_per_collection = 10 ** 4
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection)
         collection_namespace = self.namespaces[0]
         _, keyspace = collection_namespace.split(':')
         bucket, scope, collection = keyspace.split('.')
@@ -385,9 +385,9 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
         if self.item_to_delete == 'bucket':
             self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
                                                 bucket_params=self.bucket_params)
-            self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs_per_collection)
+            self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection)
         elif self.item_to_delete == 'scope':
-            self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs_per_collection)
+            self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection)
         elif self.item_to_delete == 'collection':
             self.collection_rest.create_collection(bucket=bucket, scope=scope, collection=collection)
             self.sleep(10)
@@ -400,10 +400,10 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
 
         select_query = f'select count(*) from {collection_namespace}'
         result = self.run_cbq_query(query=select_query)['results'][0]['$1']
-        self.assertEqual(result, num_of_docs_per_collection)
+        self.assertEqual(result, self.num_of_docs_per_collection)
         age_query = f'select count(age) from {collection_namespace} where age >= 0'
         result = self.run_cbq_query(query=age_query)['results'][0]['$1']
-        self.assertEqual(result, num_of_docs_per_collection)
+        self.assertEqual(result, self.num_of_docs_per_collection)
         self.sleep(10)
         index_status = self.rest.get_index_status()
 
@@ -421,9 +421,9 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
 
 
     def test_delete_multiple_collections_with_indexes(self):
-        num_of_docs_per_collection = 10 ** 2
+        #num_of_docs_per_collection = 10 ** 2
         self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
-                                             num_of_docs_per_collection=num_of_docs_per_collection)
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection)
         for namespace in self.namespaces:
             index_gen1 = QueryDefinition(index_name='idx1', index_fields=['age'])
             index_gen2 = QueryDefinition(index_name='idx2', index_fields=['city'])
@@ -446,13 +446,13 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
         result1 = self.run_cbq_query(query=select_query1)['results'][0]['$1']
         result2 = self.run_cbq_query(query=select_query2)['results'][0]['$1']
         self.assertTrue(result2 > 0)
-        self.assertEqual(result1, num_of_docs_per_collection)
+        self.assertEqual(result1, self.num_of_docs_per_collection)
         index_status = self.rest.get_index_status()
-        self.assertEqual(len(index_status['test_bucket']), 2)
+        self.assertEqual(len(index_status['test_bucket']), 2*(self.num_index_replicas+1))
 
     def test_delete_deleted_bsc(self):
-        num_of_docs_per_collection = 10 ** 5
-        self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs_per_collection)
+        #num_of_docs_per_collection = 10 ** 5
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection)
         collection_namespace = self.namespaces[0]
         index_gen = QueryDefinition(index_name='idx', index_fields=['age', 'city'])
         query = index_gen.generate_index_create_query(namespace=collection_namespace)

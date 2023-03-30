@@ -53,7 +53,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         pass
 
     def test_create_primary_index_for_collections(self):
-        self.prepare_collection_for_indexing()
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection)
         collection_namespace = self.namespaces[0]
         query_gen_1 = QueryDefinition(index_name='#primary')
         query_gen_2 = QueryDefinition(index_name='name_primary_idx')
@@ -244,7 +244,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.run_cbq_query(query=query)
 
     def test_multiple_indexes_on_same_field(self):
-        self.prepare_collection_for_indexing()
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection)
         collection_namespace = self.namespaces[0]
         primary_gen = QueryDefinition(index_name='#primary')
         query_gen = QueryDefinition(index_name='idx', index_fields=['age'])
@@ -590,7 +590,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             col_namespace = f"default:{self.test_bucket}.{scope}.{collection}"
             collection_namespaces.append(col_namespace)
             self.gen_create = SDKDataLoader(num_ops=1000, percent_create=100,
-                                            percent_update=0, percent_delete=0, scope=scope, collection=collection, password=self.password)
+                                            percent_update=0, percent_delete=0, scope=scope, collection=collection, username=self.username, password=self.password)
             self._load_all_buckets(self.master, self.gen_create)
             query = index_gen.generate_index_create_query(namespace=col_namespace)
             self.run_cbq_query(query=query)
@@ -626,7 +626,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.collection_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
             collection_namespaces.append(f"default:{self.test_bucket}.{scope}.{collection}")
             self.gen_create = SDKDataLoader(num_ops=1000, percent_create=100,
-                                            percent_update=0, percent_delete=0, scope=scope, collection=collection, password=self.password)
+                                            percent_update=0, percent_delete=0, scope=scope, collection=collection, username=self.username, password=self.password)
             self._load_all_buckets(self.master, self.gen_create)
         for col_namespace in collection_namespaces:
             _, keyspace = col_namespace.split(':')
@@ -663,7 +663,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.collection_rest.create_collection(bucket=self.test_bucket, scope=scope, collection=collection)
             collection_namespaces.append(f"default:{self.test_bucket}.{scope}.{collection}")
             self.gen_create = SDKDataLoader(num_ops=1000, percent_create=100,
-                                            percent_update=0, percent_delete=0, scope=scope, collection=collection, password=self.password)
+                                            percent_update=0, percent_delete=0, scope=scope, collection=collection, username=self.username, password=self.password)
             self._load_all_buckets(self.master, self.gen_create)
         for col_namespace in collection_namespaces:
             _, keyspace = col_namespace.split(':')
@@ -700,7 +700,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         self.collection_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
         collection_namespace = f"default:{self.test_bucket}.{scope}.{collection}"
         self.gen_create = SDKDataLoader(num_ops=10000, percent_create=100,
-                                        percent_update=0, percent_delete=0, scope=scope, collection=collection)
+                                        percent_update=0, percent_delete=0, scope=scope, collection=collection,username=self.username, password=self.password)
         self._load_all_buckets(self.master, self.gen_create)
         query = primary_gen.generate_primary_index_create_query(namespace=collection_namespace)
         self.run_cbq_query(query=query)
@@ -763,7 +763,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             # Trying with loaded collection
             self.collection_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=col_a)
             self.gen_create = SDKDataLoader(num_ops=1000, percent_create=100, percent_update=0, percent_delete=0,
-                                            scope=scope, collection=col_a)
+                                            scope=scope, collection=col_a,username=self.username, password=self.password)
             self._load_all_buckets(self.master, self.gen_create)
             self.collection_rest.create_collection(bucket=self.test_bucket, scope=scope, collection=col_b)
             query = index_gen_1.generate_index_create_query(namespace=namespace, defer_build=True)
@@ -1008,8 +1008,9 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.assertNotEqual(len(result), 0, "Drop Index didn't work as expected")
             self.sleep(10)
             status = self.rest.get_index_status()
-            if self.cb_version >= 7.5:
-                self.assertEqual(len(status[self.test_bucket]), 3, f"Fail to drop replica of idx index: {status}")
+            if not self.capella_run:
+                if self.cb_version >= 7.5:
+                    self.assertEqual(len(status[self.test_bucket]), 3, f"Fail to drop replica of idx index: {status}")
             else:
                 self.assertEqual(len(status[self.test_bucket]), 1, f"Fail to drop replica of idx index: {status}")
         except Exception as err:
@@ -1258,7 +1259,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
     #                 bucket, scope, collection = keyspace.split('.')
     #                 gen_create = SDKDataLoader(num_ops=num_docs, percent_create=100,
     #                                            percent_update=0, percent_delete=0, scope=scope,
-    #                                            collection=collection, json_template='Person')
+    #                                            collection=collection, json_template='Person',username=self.username, password=self.password)
     #                 task = self.cluster.async_load_gen_docs(server=self.master, generator=gen_create,
     #                                                         bucket=bucket,
     #                                                         scope=scope, collection=collection)
@@ -1314,7 +1315,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection,
                                         percent_create=0,
                                         percent_update=50, percent_delete=50, scope=scope,
-                                        collection=collection, json_template="Person", password=self.password)
+                                        collection=collection, json_template="Person", username=self.username, password=self.password)
         tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
                                                         batch_size=10 ** 4)
         for task in tasks:

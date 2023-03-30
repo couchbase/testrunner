@@ -69,7 +69,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.collection_prefix = self.input.param('collection_prefix', 'test_collection')
         self.initial_index_num = self.input.param("initial_index_num", 20)
         self.run_cbq_query = self.n1ql_helper.run_cbq_query
-        self.num_of_docs_per_collection = self.input.param('num_of_docs_per_collection', 1000)
+        self.num_of_docs_per_collection = self.input.param('num_of_docs_per_collection', 10000)
         self.deploy_node_info = None
         self.server_grouping = self.input.param("server_grouping", None)
         self.partition_fields = self.input.param('partition_fields', None)
@@ -125,6 +125,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.gsi_thread = Cluster()
         self.defer_build = self.defer_build and self.use_gsi_for_secondary
         self.num_index_replicas = self.input.param("num_index_replica", 0)
+        if self.capella_run:
+            if self.num_index_replicas == 0:
+                self.num_index_replicas = 1
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
         if self.use_https:
             self.node_port = '18091'
