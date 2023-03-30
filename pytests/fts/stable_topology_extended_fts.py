@@ -93,12 +93,12 @@ class StableTopExtendedFTS(StableTopFTS):
             self.log.info("FTS Hits for Search query: %s" % hits)
 
             if hits == self.ipVSexpectedHits[ip_address]:
-                self.log.info(f"Query Passed! FTS returned {hits} for a VALID IP - {ip_address}")
+                self.log.info(f"Query Passed! FTS returned {hits} hits for a VALID IP - {ip_address}")
             else:
-                self.log.info(f"Query Failed! FTS returned {hits} for VALID IP - {ip_address} while expected were {self.ipVSexpectedHits[ip_address]}")
+                self.log.info(f"Query Failed! FTS returned {hits} hits for VALID IP - {ip_address} while expected were {self.ipVSexpectedHits[ip_address]}")
                 fail_count += 1
                 failed_queries.append({"query": query,
-                                       "reason": f"FTS returned {hits} for VALID IP - {ip_address} while expected were {self.ipVSexpectedHits[ip_address]}"})
+                                       "reason": f"FTS returned {hits} hits for VALID IP - {ip_address} while expected were {self.ipVSexpectedHits[ip_address]}"})
 
             if self.validate_n1ql_and_FTS:
                 if n1ql_hits == hits:
@@ -182,12 +182,12 @@ class StableTopExtendedFTS(StableTopFTS):
             self.log.info("FTS Hits for query: %s" % hits)
 
             if hits == self.ipVSexpectedHits[ip_address]:
-                self.log.info(f"Query Passed! FTS returned {hits} for an INVALID IP - {ip_address}")
+                self.log.info(f"Query Passed! FTS returned {hits} hits for an INVALID IP - {ip_address}")
             else:
-                self.log.info(f"Query Failed! FTS returned {hits} for INVALID IP - {ip_address} while expected were {self.ipVSexpectedHits[ip_address]}")
+                self.log.info(f"Query Failed! FTS returned {hits} hits for INVALID IP - {ip_address} while expected were {self.ipVSexpectedHits[ip_address]}")
                 fail_count += 1
                 failed_queries.append({"query": query,
-                                       "reason": f"FTS returned {hits} for IP - {ip_address} while expected were {self.ipVSexpectedHits[ip_address]}"})
+                                       "reason": f"FTS returned {hits} hits for IP - {ip_address} while expected were {self.ipVSexpectedHits[ip_address]}"})
 
             if self.validate_n1ql_and_FTS:
                 if n1ql_hits == hits:
@@ -253,7 +253,7 @@ class StableTopExtendedFTS(StableTopFTS):
                 query = json.loads(range_query)
             n1ql_hits = -1
             if self.run_n1ql_search_function:
-                n1ql_query = f"SELECT COUNT(*) FROM `default`.{index_scope}.{index_collections[0]} AS t1 WHERE SEARCH(t1, {{\"field\": \"ip\", \"cidr\": \"{query}\"}});"
+                n1ql_query = f"SELECT COUNT(*) FROM `default`.{index_scope}.{index_collections[0]} AS t1 WHERE SEARCH(t1, {query});"
                 n1ql_hits = self._cb_cluster.run_n1ql_query(n1ql_query)['results'][0]['$1']
                 if n1ql_hits == 0:
                     n1ql_hits = -1
@@ -283,25 +283,25 @@ class StableTopExtendedFTS(StableTopFTS):
                         pass
 
             if hits == expected_hits:
-                self.log.info(f"Query Passed! FTS returned {hits} for range query - {query}")
+                self.log.info(f"Query Passed! FTS returned {hits} hits for range query - {query}")
             else:
                 self.log.error(
-                    f"Query Failed! FTS returned {hits} for a range query - {query} having VALID IP while expected hits were {expected_hits}")
+                    f"Query Failed! FTS returned {hits} hits for a range query - {query} having VALID IP while expected hits were {expected_hits}")
                 self.log.error(f"Expected IPs to be returned : {expected_ip_hits}")
                 fail_count += 1
                 failed_queries.append({"query": query,
-                                       "reason": f"FTS returned {hits} for a range query - {query} having VALID IP while expected hits were {expected_hits}"})
+                                       "reason": f"FTS returned {hits} hits for a range query - {query} having VALID IP while expected hits were {expected_hits}"})
 
             if self.validate_n1ql_and_FTS:
                 if n1ql_hits == hits:
                     self.log.info("Validation for N1QL and FTS Passed!")
                 else:
                     if fail_count:
-                        raise Exception(f"{fail_count} out of {self.num_queries} queries failed! - {failed_queries}. \n"
+                        raise Exception(f"{fail_count} out of {len(self.IP_range_queries)} queries failed! - {failed_queries}. \n"
                                         f"N1QL Validation Failed N1QL hits =  {n1ql_hits}, FTS hits = {hits}")
                     else:
                         raise Exception(
-                            f"SUCCESS: {self.num_queries - fail_count} out of {self.num_queries} queries passed. \n"
+                            f"SUCCESS: {len(self.IP_range_queries) - fail_count} out of {len(self.IP_range_queries)} queries passed. \n"
                             f"N1QL Validation Failed N1QL hits =  {n1ql_hits}, FTS hits = {hits}")
 
             if self.validate_n1ql_and_FTS:
@@ -322,19 +322,19 @@ class StableTopExtendedFTS(StableTopFTS):
                                                                        failed_queries))
             else:
                 self.log.info(
-                    "SUCCESS: %s out of %s queries passed" % (self.num_queries - fail_count, self.num_queries))
+                    "SUCCESS: %s out of %s queries passed" % (len(self.IP_range_queries) - fail_count, len(self.IP_range_queries)))
 
         if fail_count and validation_fail_count:
-            raise Exception(f"{fail_count} out of {self.num_queries} queries failed! - {failed_queries}. \n"
-                            f"{validation_fail_count} out of {self.num_queries} n1ql-fts validation failed! - {validation_failed_queries}")
+            raise Exception(f"{fail_count} out of {len(self.IP_range_queries)} queries failed! - {failed_queries}. \n"
+                            f"{validation_fail_count} out of {len(self.IP_range_queries)} n1ql-fts validation failed! - {validation_failed_queries}")
         elif fail_count:
-            raise Exception(f"{fail_count} out of {self.num_queries} queries failed! - {failed_queries}. \n"
-                            f"SUCCESS {self.num_queries - validation_fail_count} out of {self.num_queries} n1ql-fts validation passed!")
+            raise Exception(f"{fail_count} out of {len(self.IP_range_queries)} queries failed! - {failed_queries}. \n"
+                            f"SUCCESS {len(self.IP_range_queries) - validation_fail_count} out of {len(self.IP_range_queries)} n1ql-fts validation passed!")
         elif validation_fail_count:
             raise Exception(
-                f"{validation_fail_count} out of {self.num_queries} n1ql-fts validation failed! - {validation_failed_queries}\n"
-                f"SUCCESS: {self.num_queries - fail_count} out of {self.num_queries} queries passed.")
+                f"{validation_fail_count} out of {len(self.IP_range_queries)} n1ql-fts validation failed! - {validation_failed_queries}\n"
+                f"SUCCESS: {len(self.IP_range_queries) - fail_count} out of {len(self.IP_range_queries)} queries passed.")
         else:
-            self.log.info(f"SUCCESS: {self.num_queries - fail_count} out of {self.num_queries} queries passed")
+            self.log.info(f"SUCCESS: {len(self.IP_range_queries) - fail_count} out of {len(self.IP_range_queries)} queries passed")
             self.log.info(
-                f"SUCCESS: {self.num_queries - validation_fail_count} out of {self.num_queries} n1ql-fts validation passed.")
+                f"SUCCESS: {len(self.IP_range_queries) - validation_fail_count} out of {len(self.IP_range_queries)} n1ql-fts validation passed.")
