@@ -1134,6 +1134,9 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         self.log.info("Summary Table")
         print(myTable)
 
+        self.log.info("============== collecting cbcollect logs... ==========================")
+        self.collect_log_on_dataplane_nodes()
+
     def test_n1ql_search(self):
         self.provision_databases(self.num_databases)
         for counter, database in enumerate(self.databases.values()):
