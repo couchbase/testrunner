@@ -37,6 +37,9 @@ class RestfulDAPI:
             elif method == "POST":
                 resp = session.post(api, data=params, headers=headers,
                                     timeout=timeout, verify=verify)
+            elif method == "HEAD":
+                resp = session.head(api, params=params, headers=headers,
+                                    timeout=timeout, verify=verify)
             elif method == "DELETE":
                 resp = session.delete(api, data=params, headers=headers,
                                       timeout=timeout, verify=verify)
@@ -58,6 +61,11 @@ class RestfulDAPI:
     def check_dapi_health(self):
         url = self.endpoint + "/health"
         return self._urllib_request(url)
+
+    def check_doc_exists(self, doc_id, scope, collection):
+        url = self.endpoint_v1 + "/scopes/" + scope + "/collections/" \
+            + collection + "/docs/" + doc_id
+        return self._urllib_request(url, method="HEAD")
 
     def insert_doc(self, doc_id, doc_content, scope, collection):
         params = doc_content

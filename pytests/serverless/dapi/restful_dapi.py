@@ -117,6 +117,23 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                         self.result = False
                         return
 
+                # check doc exists
+                response = self.rest_dapi.check_doc_exists(key, "_default", "_default")
+                if mutate_type == "delete":
+                    if response is None or response.status_code != 404:
+                        self.result = False
+                        self.log.critical(response)
+                        self.log.critical("Check doc exists failed: {}"
+                                           "for database: {}".format(bucket_name, response.status_code))
+                        return
+                else:
+                    if response is None or response.status_code != 204:
+                        self.result = False
+                        self.log.critical(response)
+                        self.log.critical("Check doc exists failed: {}"
+                                           "for datbase: {}".format(bucket_name, response.status_code))
+                        return
+
                 # Get doc
                 response = self.rest_dapi.get_doc(key, "_default", "_default")
                 if mutate_type == "delete":
@@ -172,13 +189,18 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                 thread.join()
 
             self.assertTrue(self.result, "insert doc failed, check logs..............")
+            #negative tests
+            self.log.info("Running negative tests.........")
             # upsert a doc which is not inserted yet
             key, doc = "key", {"inserted": True}
             response = self.rest_dapi.upsert_doc(key, doc, "_default", "_default")
             self.log.info("Response code for upsertion of doc: {}".format(response.status_code))
             self.assertTrue(response.status_code == 200, "Upsert failed not inserted"
                             "doc for database: {}".format(dapi_info["database_id"]))
-
+            # insert a already inserted doc
+            response = self.rest_dapi.insert_doc(key, doc, "_default", "_default")
+            self.log.info("Response code for insetion of already inserted doc: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 409, "Insert success for already inserted doc")
             # delete unavailable doc
             key = "monkey"
             response = self.rest_dapi.delete_doc(key, "_default", "_default")
@@ -1069,5 +1091,65 @@ class RestfulDAPITest(ServerlessBaseTestCase):
             test_end = time.perf_counter()
 
             self.log.info("Time took to complete test: {}".format((test_end - test_start)))
+
+            self.assertTrue(self.result, "Check the test logs...")
+
+
+    def test_crud_drop_bucket(self):
+        self.result = True
+
+        def test_crud_thread():
+            response = self.rest_dapi.insert_doc("key1", {"inserted": True}, "_default", "_default")
+            if response is None or response.status_code != 500:
+                self.result = False
+                self.log.critical(response)
+                self.log.critical("Ambiguous response for insertion of doc "
+                                  "while drop bucket: {}".format(response.status_code))
+                return
+
+            response = self.rest_dapi.get_doc("key1", "_default", "_default")
+            if response is None or response.status_code != 500:
+                self.result = False
+                self.log.critical(response)
+                self.log.critical("Ambiguous response for getting doc "
+                                  "while drop bucket: {}".format(response.status_code))
+                return
+
+            response = self.rest_dapi.upsert_doc("key1", {"updated": True}, "_default", "_default")
+            if response is None or response.status_code != 500:
+                self.result = False
+                self.log.critical(response)
+                self.log.critical("Ambiguous response for updation of  doc "
+                                  "while drop bucket: {}".format(response.status_code))
+                return
+
+            response = self.rest_dapi.delete_doc("key1",  "_default", "_default")
+
+            if response is None or response.status_code != 500:
+                self.result = False
+                self.log.critical(response)
+                self.log.critical("Ambiguous response for deletion of doc "
+                                  "while drop bucket: {}".format(response.status_code))
+                return
+
+        def drop_bucket_thread():
+            self.tearDown()
+
+        for database in self.databases.values():
+
+            self.rest_dapi = RestfulDAPI({"dapi_endpoint": database.data_api,
+                                        "access_token": database.access_key,
+                                        "access_secret": database.secret_key})
+
+            self.log.info("Test crud and drop bucket simultaneously for database {}".format(database.id))
+
+            crud_thread = threading.Thread(target=test_crud_thread)
+            bucket_drop_thread = threading.Thread(target=drop_bucket_thread)
+
+            bucket_drop_thread.start()
+            bucket_drop_thread.join()
+
+            crud_thread.start()
+            crud_thread.join()
 
             self.assertTrue(self.result, "Check the test logs...")
