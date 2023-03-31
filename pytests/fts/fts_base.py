@@ -1371,9 +1371,7 @@ class FTSIndex:
     def get_indexed_doc_count(self, rest=None):
         if not rest:
             rest = RestConnection(self.__cluster.get_random_fts_node())
-        if self.is_elixir:
-            return rest.get_fts_index_doc_count(self._source_name + "." + self.scope+"." + self.name)
-        return rest.get_fts_index_doc_count(self.name)
+        return rest.get_fts_index_doc_count(self.name, bucket=self._source_name, scope=self.scope)
 
     def get_num_mutations_to_index(self, rest=None):
         if not rest:

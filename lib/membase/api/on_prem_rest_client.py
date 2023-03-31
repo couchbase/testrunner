@@ -3622,10 +3622,12 @@ class RestConnection(object):
             json_parsed = json.loads(content)
         return status, json_parsed
 
-    def get_fts_index_doc_count(self, name, timeout=30):
+    def get_fts_index_doc_count(self, name, bucket=None, scope=None):
         """ get number of docs indexed"""
         json_parsed = {}
         api = self.fts_baseUrl + "api/index/{0}/count".format(name)
+        if self.is_elixir:
+            api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}/count".format(bucket, scope, name)
         status, content, header = self.urllib_request(api)
         if status:
             json_parsed = json.loads(content)
