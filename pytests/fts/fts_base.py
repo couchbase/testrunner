@@ -776,7 +776,7 @@ class FTSIndex:
                  source_name=None, index_type='fulltext-index', index_params=None,
                  plan_params=None, source_params=None, source_uuid=None, dataset=None, index_storage_type=None,
                  type_mapping=None, collection_index=False, scope=None, collections=None, multiple_ca=False,
-                 is_elixir=False):
+                 is_elixir=False, reduce_query_logging=False):
 
         """
          @param name : name of index/alias
@@ -809,6 +809,7 @@ class FTSIndex:
         self.collections = collections
         self.multiple_ca=multiple_ca
         self.is_elixir = is_elixir
+        self.reduce_query_logging = reduce_query_logging
         if not index_storage_type:
             self.index_storage_type = TestInputSingleton.input.param("index_type", None)
         else:
@@ -2018,7 +2019,7 @@ class FTSIndex:
 
 
 class CouchbaseCluster:
-    def __init__(self, name, nodes, log, use_hostname=False, sdk_compression=True):
+    def __init__(self, name, nodes, log, use_hostname=False, sdk_compression=True, reduce_query_logging=False):
         """
         @param name: Couchbase cluster name. e.g C1, C2 to distinguish in logs.
         @param nodes: list of server objects (read from ini file).
@@ -2051,6 +2052,7 @@ class CouchbaseCluster:
         self.__separate_nodes_on_services()
         self.__set_fts_ram_quota()
         self.sdk_compression = sdk_compression
+        self.reduce_query_logging = reduce_query_logging
 
     def update_servers(self, servers):
         self.__nodes = servers
@@ -2705,9 +2707,10 @@ class CouchbaseCluster:
             node = self.get_random_fts_node()
         if not rest:
              rest = RestConnection(node)
-        self.__log.info("Running query %s on node as %s : %s:%s"
-                        % (json.dumps(query_dict, ensure_ascii=False),
-                           node.ip, rest.username, node.fts_port))
+        if not self.reduce_query_logging:
+            self.__log.info("Running query %s on node as %s : %s:%s"
+                            % (json.dumps(query_dict, ensure_ascii=False),
+                               node.ip, rest.username, node.fts_port))
 
         total_hits, hit_list, time_taken, status = \
             rest.run_fts_query(index_name, query_dict, timeout=timeout, bucket=bucket_name, scope=scope_name)
@@ -3277,7 +3280,8 @@ class CouchbaseCluster:
                                                             es_index_name=es_index_name,
                                                             n1ql_executor=n1ql_executor,
                                                             use_collections=use_collections,
-                                                            dataset=dataset)
+                                                            dataset=dataset,
+                                                            reduce_query_logging=self.reduce_query_logging)
         return task
 
     def run_expiry_pager(self, val=10):

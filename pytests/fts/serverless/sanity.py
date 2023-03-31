@@ -851,7 +851,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                 doc_template="emp")
             self.init_input_servers(database)
             fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope_name,
-                                       collections=collection_name, collection_index=True,  is_elixir=True)
+                                       collections=collection_name, collection_index=True,  is_elixir=True, reduce_query_logging=True)
 
             _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
                                                                     collection=collection_name)

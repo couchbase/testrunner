@@ -34,9 +34,9 @@ class FTSCallable:
         fts_obj.delete_all()
     """
 
-    def __init__(self, nodes, es_validate=False, es_reset=True, scope=None, collections=None, collection_index=False, is_elixir=False):
+    def __init__(self, nodes, es_validate=False, es_reset=True, scope=None, collections=None, collection_index=False, is_elixir=False, reduce_query_logging=False):
         self.log = logger.Logger.get_logger()
-        self.cb_cluster = CouchbaseCluster(name="C1", nodes= nodes, log=self.log)
+        self.cb_cluster = CouchbaseCluster(name="C1", nodes= nodes, log=self.log, reduce_query_logging=reduce_query_logging)
         self.cb_cluster.get_buckets()
         self.fts_indexes = self.cb_cluster.get_indexes()
         """ have to have a elastic search node to run these tests """
@@ -72,6 +72,7 @@ class FTSCallable:
         self.dataset = TestInputSingleton.input.param("dataset", "emp")
         self.sample_query = {"match": "Safiya Morgan", "field": "name"}
         self.run_via_n1ql = False
+        self.reduce_query_logging = reduce_query_logging
 
     def __create_buckets(self):
         self.log.info("__create_buckets() is not implemented yet.")
@@ -133,7 +134,8 @@ class FTSCallable:
             collection_index=collection_index,
             scope=scope,
             collections=collections,
-            is_elixir=self.is_elixir
+            is_elixir=self.is_elixir,
+            reduce_query_logging=self.reduce_query_logging
         )
         if collection_index:
             if not index.custom_map and not specify_fields:
@@ -371,7 +373,7 @@ class FTSCallable:
             raise Exception("%s out of %s queries failed! - %s" % (fail_count,
                                                                    num_queries,
                                                                    failed_queries))
-        else:
+        elif not fail_count and not self.reduce_query_logging:
             self.log.info("SUCCESS: %s out of %s queries passed"
                           % (num_queries - fail_count, num_queries))
 

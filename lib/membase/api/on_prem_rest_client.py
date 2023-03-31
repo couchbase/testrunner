@@ -329,6 +329,7 @@ class RestConnection(object):
             self.services_node_init = self.input.param("new_services", None)
             self.debug_logs = self.input.param("debug-logs", False)
             self.is_elixir = self.input.param("is_elixir", False)
+            self.reduce_query_logging = self.input.param("reduce_query_logging", False)
             # Adding CDC params
             self.enable_cdc = self.input.param("enable_cdc", False)
             self.history_retention_collection_default = self.input.param("history_retention_collection_default", 'true')
@@ -1121,8 +1122,9 @@ class RestConnection(object):
         else:
             verify = False
         tries = 0
-        log.info("Making a rest request api={0} verb={1} params={2} "
-                 "client_cert={3} verify={4}".format(api, verb, params, client_cert_path_tuple, verify))
+        if not self.reduce_query_logging:
+            log.info("Making a rest request api={0} verb={1} params={2} "
+                     "client_cert={3} verify={4}".format(api, verb, params, client_cert_path_tuple, verify))
         while tries < try_count:
             try:
                 if verb == 'GET':
@@ -2843,7 +2845,7 @@ class RestConnection(object):
     def get_specific_nsstats(self, node, creds):
         try:
             endpoint = f"https://{node}:18094/api/nsstats"
-            r = requests.get(endpoint, auth=(creds['username'], creds['password']), verify=False)
+            r = requests.get(endpoint, auth=(creds['username'], creds['password']), verify=False, timeout=300)
             r.raise_for_status()
             return r
         except Exception as err:
@@ -2853,7 +2855,7 @@ class RestConnection(object):
     def get_fts_cfg_stats(self, node, creds):
         try:
             endpoint = f"https://{node}:18094/api/cfg"
-            resp = requests.get(endpoint, auth=(creds['username'], creds['password']), verify=False)
+            resp = requests.get(endpoint, auth=(creds['username'], creds['password']), verify=False, timeout=300)
             resp.raise_for_status()
             return resp
         except Exception as err:

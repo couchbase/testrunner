@@ -1735,7 +1735,7 @@ class ESBulkLoadGeneratorTask(Task):
 
 class ESRunQueryCompare(Task):
     def __init__(self, fts_index, es_instance, query_index, es_index_name=None, n1ql_executor=None,
-                 use_collections=False,dataset=None):
+                 use_collections=False,dataset=None,reduce_query_logging=False):
         Task.__init__(self, "Query_runner_task")
         self.fts_index = fts_index
         self.fts_query = fts_index.fts_queries[query_index]
@@ -1751,6 +1751,7 @@ class ESRunQueryCompare(Task):
         self.score = TestInputSingleton.input.param("score",'')
         self.use_collections = use_collections
         self.dataset = dataset
+        self.reduce_query_logging = reduce_query_logging
 
     def check(self, task_manager):
         self.state = FINISHED
@@ -1788,14 +1789,21 @@ class ESRunQueryCompare(Task):
         self.es_compare = True
         should_verify_n1ql = True
         try:
-            self.log.info("---------------------------------------"
-                          "-------------- Query # %s -------------"
-                          "---------------------------------------"
-                          % str(self.query_index + 1))
+            if not self.reduce_query_logging:
+                self.log.info("---------------------------------------"
+                              "-------------- Query # %s -------------"
+                              "---------------------------------------"
+                              % str(self.query_index + 1))
             try:
                 fts_hits, fts_doc_ids, fts_time, fts_status = \
                     self.run_fts_query(self.fts_query, self.score)
-                self.log.info("Status: %s" % fts_status)
+                if not self.reduce_query_logging:
+                    self.log.info("Status: %s" % fts_status)
+                elif fts_status == 'fail':
+                    if str(fts_doc_ids).find("limiting/throttling: the request has been rejected according to regulator") != -1:
+                        self.log.error(f"Query Failed due to throttling, reason : {fts_doc_ids}")
+                    else:
+                        self.log.error(f"Query failed abruptly, reason : {fts_doc_ids}")
 
                 if fts_status == 'fail':
                     error = fts_doc_ids
@@ -1825,10 +1833,19 @@ class ESRunQueryCompare(Task):
                                       "skipping ES validation")
                         self.passed = True
                         self.es_compare = False
-                self.log.info("FTS hits for query: %s is %s (took %sms)" % \
-                              (json.dumps(self.fts_query, ensure_ascii=False),
-                               fts_hits,
-                               float(fts_time) / 1000000))
+                if not self.reduce_query_logging:
+                    self.log.info("FTS hits for query: %s is %s (took %sms)" % \
+                                  (json.dumps(self.fts_query, ensure_ascii=False),
+                                   fts_hits,
+                                   float(fts_time) / 1000000))
+                else:
+                    if fts_hits < 0:
+                        self.log.info("FTS hits for query %s : %s is %s (took %sms)" % \
+                                      (str(self.query_index + 1),
+                                       json.dumps(self.fts_query, ensure_ascii=False),
+                                       fts_hits,
+                                       float(fts_time) / 1000000))
+
             except ServerUnavailableException:
                 self.log.error("ERROR: FTS Query timed out (client timeout=70s)!")
                 self.passed = False
