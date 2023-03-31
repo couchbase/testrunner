@@ -545,6 +545,9 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                                                  zero_results_ok=False)
             if hits != hits2:
                 self.fail("Index query yields {0} hits while alias on same index yields only {1} hits".format(hits, hits2))
+            else:
+                self.log.info(f"Hits by FTS Index : {hits}, Hits by FTS Alias Index : {hits2}")
+
             fts_callable.delete_all()
 
     def check_scale_out_condition(self, stats):
