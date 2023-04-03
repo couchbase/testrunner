@@ -108,12 +108,19 @@ CREATE_SERVERLESS_PROFILE_FILE = {
 CMDS = {
     "deb": {
         "uninstall":
+            "systemctl -q stop couchbase-server;" +
             UNMOUNT_NFS_CMD +
-            "apt-get purge -y 'couchbase*' > /dev/null; "
+            "apt-get purge -y 'couchbase*' > /dev/null; sleep 10;"
             "dpkg --purge $(dpkg -l | grep couchbase | awk '{print $2}'"
-            " | xargs echo); kill -9 `ps -ef "
-            "|egrep couchbase|cut -f3 -d' '`;  " +
-            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
+            " | xargs echo); sleep 10; "
+            "rm /var/lib/dpkg/info/couchbase-server.*; sleep 10;"
+            "kill -9 `ps -ef |egrep couchbase|cut -f3 -d' '`;" +
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] +
+            " > /dev/null && echo 1 || echo 0; "
+            "dpkg -P couchbase-server; "
+            "rm -rf /var/lib/dpkg/info/couchbase-server.*;"
+            "dpkg --configure -a; apt-get update; rm -rf" +
+            DEFAULT_INSTALL_DIR["LINUX_DISTROS"],
         "pre_install": None,
         "install": "DEBIAN_FRONTEND='noninteractive' apt-get -y -f install buildpath > /dev/null && echo 1 || echo 0",
         "post_install": "systemctl -q is-active couchbase-server.service && echo 1 || echo 0",
