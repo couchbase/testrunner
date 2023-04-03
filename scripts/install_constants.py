@@ -97,9 +97,19 @@ UNMOUNT_NFS_CMD = "umount -a -t nfs,nfs4 -f -l;"
 CMDS = {
     "deb": {
         "uninstall":
+            "systemctl -q stop couchbase-server;" +
             UNMOUNT_NFS_CMD +
-            "apt-get remove -y 'couchbase*' > /dev/null; " +
-            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
+            "apt-get purge -y 'couchbase*' > /dev/null; sleep 10;"
+            "dpkg --purge $(dpkg -l | grep couchbase | awk '{print $2}'"
+            " | xargs echo); sleep 10; "
+            "rm /var/lib/dpkg/info/couchbase-server.*; sleep 10;"
+            "kill -9 `ps -ef |egrep couchbase|cut -f3 -d' '`;" +
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] +
+            " > /dev/null && echo 1 || echo 0; "
+            "dpkg -P couchbase-server; "
+            "rm -rf /var/lib/dpkg/info/couchbase-server.*;"
+            "dpkg --configure -a; apt-get update; rm -rf" +
+            DEFAULT_INSTALL_DIR["LINUX_DISTROS"],
         "pre_install": None,
         "install": "DEBIAN_FRONTEND='noninteractive' apt-get -f install buildpath > /dev/null && echo 1 || echo 0",
         "post_install": "systemctl -q is-active couchbase-server.service && echo 1 || echo 0",
