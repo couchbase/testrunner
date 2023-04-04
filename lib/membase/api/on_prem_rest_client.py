@@ -2846,7 +2846,7 @@ class RestConnection(object):
             r = requests.get(endpoint, auth=(creds['username'], creds['password']), verify=False)
             r.raise_for_status()
             return r
-        except requests.exceptions.HTTPError as err:
+        except Exception as err:
             log.error(f"Failed to fetch nsstats, reason : {str(err)}")
             return {}
 
@@ -2856,7 +2856,7 @@ class RestConnection(object):
             resp = requests.get(endpoint, auth=(creds['username'], creds['password']), verify=False)
             resp.raise_for_status()
             return resp
-        except requests.exceptions.HTTPError as err:
+        except Exception as err:
             log.error(f"Failed to fetch FTS CFG Stats, reason : {str(err)}")
             return None
 
