@@ -5,6 +5,7 @@ from pytests.serverless.dapi.dapi_helper import doc_generator
 import json
 import threading
 import time
+import datetime
 
 class RestfulDAPITest(ServerlessBaseTestCase):
     def setUp(self):
@@ -195,12 +196,15 @@ class RestfulDAPITest(ServerlessBaseTestCase):
             key, doc = "key", {"inserted": True}
             response = self.rest_dapi.upsert_doc(key, doc, "_default", "_default")
             self.log.info("Response code for upsertion of doc: {}".format(response.status_code))
-            self.assertTrue(response.status_code == 200, "Upsert failed not inserted"
+            self.assertTrue(response.status_code == 404, "Upsert failed not inserted"
                             "doc for database: {}".format(dapi_info["database_id"]))
             # insert a already inserted doc
+            response = self.rest_dapi.insert_doc(key, doc, "_default", "_default", "?upsert=true")
+            self.log.info("Response code for insertion of doc: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 201, "Insert doc failed")
             response = self.rest_dapi.insert_doc(key, doc, "_default", "_default")
-            self.log.info("Response code for insetion of already inserted doc: {}".format(response.status_code))
-            self.assertTrue(response.status_code == 409, "Insert success for already inserted doc")
+            self.log.info("Response code for insert of already inserted doc is: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 409, "Insert succees for already inserted doc")
             # delete unavailable doc
             key = "monkey"
             response = self.rest_dapi.delete_doc(key, "_default", "_default")
@@ -1153,3 +1157,209 @@ class RestfulDAPITest(ServerlessBaseTestCase):
             crud_thread.join()
 
             self.assertTrue(self.result, "Check the test logs...")
+
+
+    def test_query_parameters_get_docs(self):
+        for database in self.databases.values():
+            self.rest_dapi = RestfulDAPI({"dapi_endpoint": database.data_api,
+                                        "access_token": database.access_key,
+                                        "access_secret": database.secret_key})
+
+            # insert doc
+            doc = dict()
+            doc['name'] = "a" * 1024 * 1024 * 10
+            response = self.rest_dapi.insert_doc("key", doc, "_default", "_default")
+            self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(database.id))
+            # test timeout parameter
+            response = self.rest_dapi.get_doc("key", "_default", "_default", "?timeout=0.00001s&meta=true")
+            self.assertTrue(response.status_code == 200, "Get doc failed with timeout parameter")
+            error_msg = json.loads(response.content)["error"]["message"]
+            self.assertTrue(error_msg == self.error_message, "Got wrong error message for timeout parametere: {}".format(error_msg))
+            # test meta parameter
+            response = self.rest_dapi.get_doc("key", "_default", "_default", "?meta=true")
+            self.assertTrue(response.status_code == 200, "Get doc failed for database: {}".format(database.id))
+            content = json.loads(response.content)
+            flag = True
+            if 'meta' not in content:
+                flag = False
+                self.log.critical("Not getting meta data for Get doc api: {}".format(database.id))
+
+            self.assertTrue(flag == True, "Get meta data failed for GET doc api for database: {}".format(database.id))
+
+            # replica is still pending
+
+    def test_query_parameter_check_doc(self):
+        for database in self.databases.values():
+            self.rest_dapi = RestfulDAPI({"dapi_endpoint": database.data_api,
+                                        "access_token": database.access_key,
+                                        "access_secret": database.secret_key})
+            self.log.info("test query parameters for check doc exists api for database: ".format(database.id))
+
+            #insert doc
+            doc = dict()
+            doc['name'] = "a" * 1024 * 1024 * 19
+            response = self.rest_dapi.insert_doc("key", doc, "_default", "_default")
+            self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(database.id))
+            # test timeout
+            response = self.rest_dapi.check_doc_exists("key", "_default", "_default", "?timeout=0.000001s&meta=true")
+            self.assertTrue(response.status_code == 200, "Check doc failed with timeout parameter")
+            error_msg = json.loads(response.content)["error"]["message"]
+            self.assertTrue(error_msg == self.error_message, "Got wrong error message for timeout parametere: {}".format(error_msg))
+
+
+    def test_query_paramter_insert_doc(self):
+        for database in self.databases.values():
+            self.rest_dapi = RestfulDAPI({"dapi_endpoint": database.data_api,
+                                        "access_token": database.access_key,
+                                        "access_secret": database.secret_key})
+            self.log.info("Test query parameters for insert doc api for database: {}".format(database.id))
+
+            # insert doc with parameters
+            doc = dict()
+            doc['name'] = "a" * 1024 * 1024 * 19
+            response = self.rest_dapi.insert_doc("key", doc, "_default", "_default",
+                                                "?timeout=0.001s&meta=true")
+            self.log.info("Response code for insetion of doc: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200, "Insert doc failed with timeout parameter")
+            error_msg = json.loads(response.content)["error"]["message"]
+            self.assertTrue(error_msg == self.error_message, "Got wrong error message for timeout parametere: {}".format(error_msg))
+
+
+            # test expiry
+            response = self.rest_dapi.insert_doc("key1", {"inserted": True}, "_default", "_default", "?expiry=60s&meta=true")
+            self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(database.id))
+            response = self.rest_dapi.get_doc("key1", "_default", "_default", "?meta=true")
+            self.assertTrue(response.status_code == 200, "Get doc failed for database: {}".format(database.id))
+            expiryTime = json.loads(response.content)['meta']["api"]["expiryTime"]
+            expiryTime = datetime.datetime.strptime(expiryTime, '%Y-%m-%dT%H:%M:%SZ')
+            now = datetime.datetime.now()
+            self.assertTrue(now < expiryTime, "Unexpected expiry time for database: {}".format(database.id))
+            time.sleep(60)
+            response = self.rest_dapi.get_doc("key1", "_default", "_default")
+            self.assertTrue(response.status_code == 404, "Get for expired doc is"
+                            "successful for database: {}".format(database.id))
+
+            # test preserveExpiry parameter
+            response = self.rest_dapi.insert_doc("key1", {"inserted": True}, "_default", "_default",
+                                                 "?expiry=120s&meta=true&preserveExpiry=true")
+            self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(database.id))
+            response = self.rest_dapi.upsert_doc("key1", {"upserted": True}, "_default", "_default",
+                                                 "?expiry=20s")
+            self.log.info("Response code for upsertion of document is: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 201, "Insert doc with upsert query"
+                            "parameter failed for database: {}".format(database.id))
+            time.sleep(20)
+            response = self.rest_dapi.get_doc("key1", "_default", "_default")
+            self.log.info("response code for get doc: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200, "Get doc failed within expiry time by"
+                            "keeping preserver expiry for database: {}".fomrat(database.id))
+            # durability is pending
+
+
+    def test_query_parameter_upsert_doc(self):
+        for database in self.databases.values():
+            self.rest_dapi = RestfulDAPI({"dapi_endpoint": database.data_api,
+                                        "access_token": database.access_key,
+                                        "access_secret": database.secret_key})
+            self.log.info("Test query parameters for upsert doc for database: {}".format(database.id))
+
+            # insert a doc
+            doc = dict()
+            doc['age'] = 10
+            temp_doc = doc.copy()
+            temp_doc['name'] = "a" * 1024 * 1024 * 19
+            response = self.rest_dapi.insert_doc("key", doc, "_default", "_default")
+            self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(database.id))
+
+            # # test timeout for upsert
+            response = self.rest_dapi.upsert_doc("key", temp_doc, "_default", "_default",
+                                                 "?timeout=0.0001s&meta=true")
+
+            self.assertTrue(response.status_code == 200, "Upsert doc failed for database: {}".format(database.id))
+            error_msg = json.loads(response.content)["error"]["message"]
+            self.assertTrue(error_msg == self.error_message, "Got wrong error message for timeout parametere: {}".format(error_msg))
+
+            # # test expiry
+            temp_doc['upserted'] = True
+            response = self.rest_dapi.upsert_doc("key", temp_doc, "_default", "_default", "?expiry=30s&meta=true")
+            self.assertTrue(response.status_code == 200, "Upsert doc failed for database: {}".format(database.id))
+            response = self.rest_dapi.get_doc("key", "_default", "_default", "?meta=true")
+            self.assertTrue(response.status_code == 200, "Get doc failed for database: {}".format(database.id))
+            expiryTime = json.loads(response.content)['meta']["api"]["expiryTime"]
+            expiryTime = datetime.datetime.strptime(expiryTime, '%Y-%m-%dT%H:%M:%SZ')
+            now = datetime.datetime.now()
+            self.assertTrue(now < expiryTime, "Unexpected expiry time for database: {}".format(database.id))
+
+            # sleep for 60 second so that doc get expired
+
+            time.sleep(60)
+            response = self.rest_dapi.get_doc("key", "_default", "_default")
+            self.assertTrue(response.status_code == 404, "doc is still present after the"
+                            "expiry time for database: {}".format(database.id))
+
+            # test preserve expiry
+
+            response = self.rest_dapi.insert_doc("key", {"inserted": True}, "_default", "_default")
+            self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(database.id))
+
+            response = self.rest_dapi.upsert_doc("key", {"upserted": True}, "_default", "_default", "?preserveExpiry=True&expiry=60s")
+            self.assertTrue(response.status_code == 200, "Upsert doc failed for database: {}".format(database.id))
+
+            self.rest_dapi.upsert_doc("key", {"upserted": 3}, "_default", "_default", "?expiry=20s")
+            self.assertTrue(response.status_code == 200, "Upsert doc failed for database: {}".format(database.id))
+
+            time.sleep(30)
+            response = self.rest_dapi.get_doc("key", "_default", "_default")
+            self.assertTrue(response.status_code == 200, "doc is not present for database: {}".format(database.id))
+
+            time.sleep(40)
+            response = self.rest_dapi.get_doc("key", "_default", "_default")
+            self.assertTrue(response.status_code == 404, "Doc is still present after adding expiry time of 60s")
+
+            # test locktime parameter
+            doc = dict()
+            doc["inserted"] = True
+            response = self.rest_dapi.insert_doc("key", doc, "_default", "_default")
+            self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(response.status_code))
+
+            response = self.rest_dapi.upsert_doc("key", doc, "_default", "_default", "?lockTime=60s")
+            self.log.info("Response code for upsertion of doc: {}".format(response.status_code))
+
+            temp_doc = doc.copy()
+            temp_doc["upserted"] = True
+
+            response = self.rest_dapi.upsert_doc("key", temp_doc, "_default", "_default")
+            self.assertTrue(response.status_code == 200, "Upsertion of doc failed for database: {}".format(database.id))
+
+            response = self.rest_dapi.get_doc("key", "_default", "_default")
+            self.assertTrue(response.status_code == 200, "Get doc failed for database: {}".format(database.id))
+            doc_retrieved = list(json.loads(response.content).values())[0]
+            self.assertTrue(doc_retrieved == doc, "doc is getting upaded instead putting locktime parameter of 60 seconds")
+
+            time.sleep(70)
+
+            response = self.rest_dapi.upsert_doc("key", temp_doc, "_default", "_default")
+            self.assertTrue(response.status_code == 200, "Upsert of doc failed for database: {}".format(database.id))
+
+            response = self.rest_dapi.get_doc("key", "_default", "_default")
+            self.assertTrue(response.status_code == 200, "Get doc failed for database: {}".format(database.id))
+            doc_retrieved = list(json.loads(response.content).values())[0]
+            self.assertTrue(doc_retrieved == temp_doc, "doc is not getting upaded after the locktime is over")
+
+            #test duruability parameter is still pending
+
+    def test_query_paramete_delete_doc(self):
+        for database in self.databases.values():
+            self.rest_dapi = RestfulDAPI({"dapi_endpoint": database.data_api,
+                                        "access_token": database.access_key,
+                                        "access_secret": database.secret_key})
+            self.log.info("Test query parameters for delete doc api for database: {}".format(database.id))
+
+            response = self.rest_dapi.insert_doc("key", {"inserted": True}, "_default", "_default")
+            self.assertTrue(response.status_code == 201, "Insert doc failed for databbase: {}".format(database.id))
+
+            response = self.rest_dapi.delete_doc("key", "_default", "_default", "?timeout=0.00000001s&meta=true")
+
+            self.assertTrue(response.status_code == 200, "Delete doc failed for database: {}".format(database.id))
+            error_msg = json.loads(response.content)["error"]["message"]
+            self.assertTrue(error_msg == self.error_message, "Got wrong error message for timeout parametere: {}".format(error_msg))
