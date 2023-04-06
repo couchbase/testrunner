@@ -591,19 +591,20 @@ class FTSCallable:
         stats = []
         cfg_stats = None
         absurd_resp = []
+        node_achiever = None
         for node in nodes:
             attempts = 0
             stat_found = False
-            stat = {"limits:billableUnitsRate": -1,
-                    "limits:diskBytes": -1,
-                    "limits:memoryBytes": -1,
-                    "resourceUnderUtilizationWaterMark": -1,
-                    "resourceUtilizationHighWaterMark": -1,
-                    "resourceUtilizationLowWaterMark": -1,
-                    "utilization:billableUnitsRate": -1,
-                    "utilization:cpuPercent": -1,
-                    "utilization:diskBytes": -1,
-                    "utilization:memoryBytes": -1
+            stat = {"limits:billableUnitsRate": 0,
+                    "limits:diskBytes": 0,
+                    "limits:memoryBytes": 0,
+                    "resourceUnderUtilizationWaterMark": 0,
+                    "resourceUtilizationHighWaterMark": 0,
+                    "resourceUtilizationLowWaterMark": 0,
+                    "utilization:billableUnitsRate": 0,
+                    "utilization:cpuPercent": 0,
+                    "utilization:diskBytes": 0,
+                    "utilization:memoryBytes": 0
                     }
             while attempts < 10:
                 attempts += 1
@@ -625,12 +626,21 @@ class FTSCallable:
                     stat["utilization:memoryBytes"] = resp["utilization:memoryBytes"]
                     stats.append(resp)
                     stat_found = True
+                    node_achiever = node
                     break
                 else:
                     self.log.info(f"Stats not returned for node : {node}")
                     if cfg_stats is None:
-                        cfg_stats = rest.get_fts_cfg_stats(node, creds).json()
-                    absurd_resp_obj = {"node": node, "response": resp.text}
+                        if node_achiever is not None:
+                            cfg_stats = rest.get_fts_cfg_stats(node_achiever, creds)
+                        else:
+                            cfg_stats = rest.get_fts_cfg_stats(node, creds)
+                        if cfg_stats is not None:
+                            cfg_stats = cfg_stats.json()
+                    if type(resp) != dict:
+                        absurd_resp_obj = {"node": node, "response": resp.text}
+                    else:
+                        absurd_resp_obj = {"node": node, "response": ""}
                     absurd_resp.append(absurd_resp_obj)
             if not stat_found:
                 stats.append(stat)

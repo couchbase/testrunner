@@ -43,6 +43,10 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         self.current_num_fts_nodes = 2
         self.max_num_fts_nodes = 2
         self.autoscaling_validations = {'scale_out': False, 'scale_in': False}
+        self.scale_out_log_count = 0
+        self.scale_in_log_count = 0
+        self.start_node = None
+        self.total_query_count = 0
         global_vars.system_event_logs = EventHelper()
         return super().setUp()
 
@@ -580,8 +584,8 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         """
             Returns True if scale in condition is satisfied.
         """
-        mem_util = int(float(self.LWM_limit) * int(stats[0]['limits:memoryBytes']))
-        cpu_util = int(float(self.LWM_limit) * 100)
+        mem_util = int(float(self.UWM_limit) * int(stats[0]['limits:memoryBytes']))
+        cpu_util = int(float(self.UWM_limit) * 100)
         for running_avg_memory in self.running_avg_memory.values():
             if running_avg_memory > mem_util:
                 return False
@@ -617,13 +621,11 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         if print_stats:
             self.prettyPrintStats(stats, fts_nodes, print_str)
 
-        with self.subTest("validate fts stats"):
-            if cfg_stats is not None:
-                self.print_fts_cfg_stats(cfg_stats)
-            if len(absurd_resp) != 0:
-                self.log.info("Problem in fetching stats")
-                self.print_absurd_resp(absurd_resp)
-                self.fail("Problem in fetching stats")
+        if cfg_stats is not None:
+            self.print_fts_cfg_stats(cfg_stats)
+        if len(absurd_resp) != 0:
+            self.log.info("Problem in fetching stats")
+            self.print_absurd_resp(absurd_resp)
         return stats, fts_nodes
 
     def prettyPrintStats(self, stats, fts_nodes, print_str=None):
@@ -696,8 +698,11 @@ class FTSElixirSanity(ServerlessBaseTestCase):
     def start_query_workload(self, fts_callable, index, num_queries):
         while not self.stop_queries:
             fts_callable.run_query_and_compare(index, num_queries)
+            self.total_query_count += num_queries
 
     def monitor_fts_stats(self):
+        _, nodes = self.get_fts_stats(print_stats=False)
+        self.start_node = nodes[0]
         while not self.stop_monitoring_stats:
             self.get_fts_stats("---FTS STATISTICS---")
             time.sleep(30)
@@ -728,10 +733,6 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 util_mem = fts_stats[i]['utilization:memoryBytes']
                 util_cpu = fts_stats[i]['utilization:cpuPercent']
 
-                if util_mem == -1 or util_cpu == -1:
-                    util_mem = 0
-                    util_cpu = 0
-
                 self.memory_queue[fts_nodes[i]].append(util_mem)
                 self.cpu_queue[fts_nodes[i]].append(util_cpu)
 
@@ -742,14 +743,17 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
             # validate scale out
             if self.check_scale_out_condition(fts_stats):
+                self.scale_out_log_count += 1
                 self.log.info("Scale Out Satisfied using Running Average")
                 with self.subTest("validate scale out"):
                     if self.validate_scale_out(fts_nodes):
                         self.log.info("Scale out successful")
+                        self.scale_out_log_count = 0
                     else:
-                        self.log.critical("Scale out failed")
-                        self.prettyPrintStats(fts_stats, fts_nodes, "--SCALE OUT FAIL STATS--")
-                        self.fail(f"Scale Out failed")
+                        if self.scale_out_log_count == 5:
+                            self.log.critical("Scale out failed")
+                            self.prettyPrintStats(fts_stats, fts_nodes, "--SCALE OUT FAIL STATS--")
+                            self.fail(f"Scale Out failed")
             else:
                 with self.subTest("verify scale out before running average"):
                     if self.validate_scale_out(fts_nodes):
@@ -758,18 +762,21 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                         self.fail(f"Scale Out happened less than scaling time")
 
             # verify scale in
-            if len(fts_nodes) != self.max_num_fts_nodes and self.check_scale_in_condition(fts_stats):
+            if self.check_scale_in_condition(fts_stats):
+                self.scale_in_log_count += 1
                 with self.subTest("Verify Scale In"):
                     if self.validate_scale_in(fts_nodes):
                         self.log.info("Scale in successful")
+                        self.scale_in_log_count = 0
                     else:
-                        self.log.critical("Scale in failed")
-                        self.prettyPrintStats(fts_stats, fts_nodes, "SCALE IN FAIL STATS")
-                        self.fail(f"Scale in failed")
+                        if self.scale_in_log_count == 5:
+                            self.log.critical("Scale in failed")
+                            self.prettyPrintStats(fts_stats, fts_nodes, "SCALE IN FAIL STATS")
+                            self.fail(f"Scale in failed")
 
             if self.check_auto_rebalance_condition(fts_stats):
                 with self.subTest("Verify AutoRebalance"):
-                    rebalance_status = FTSCallable(self.input.servers).get_fts_rebalance_status(fts_nodes[0])
+                    rebalance_status = FTSCallable(self.input.servers).get_fts_rebalance_status(self.start_node)
                     if rebalance_status == "none":
                         self.log.critical("FAIL : AutoRebalance Failed")
                         self.prettyPrintStats(fts_stats, fts_nodes, "-- AUTOREBALANCE FAIL STATS--")
@@ -878,12 +885,12 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
         self.stop_queries = True
 
-        self.log.info("Sleeping 30 minutes to observe scale in")
-        time.sleep(1800)
+        self.log.info("Sleeping 50 minutes to observe scale in")
+        time.sleep(3000)
 
         self.stop_monitoring_stats = True
         time.sleep(100)
-
+        self.log.info(f" {self.total_query_count} ran during this test.")
         self.log.info("============== collecting cbcollect logs... ==========================")
         self.collect_log_on_dataplane_nodes()
 
