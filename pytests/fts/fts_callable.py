@@ -610,19 +610,20 @@ class FTSCallable:
                 if attempts > 1:
                     self.log.info(f"Retrying {attempts} time for node {node}")
                 resp = rest.get_specific_nsstats(node, creds)
-                result = resp.json()
-                if 'utilization:memoryBytes' in result and 'utilization:cpuPercent' in result:
-                    stat['limits:billableUnitsRate'] = result['limits:billableUnitsRate']
-                    stat['limits:diskBytes'] = result['limits:diskBytes']
-                    stat['limits:memoryBytes'] = result['limits:memoryBytes']
-                    stat['resourceUnderUtilizationWaterMark'] = result['resourceUnderUtilizationWaterMark']
-                    stat['resourceUtilizationHighWaterMark'] = result['resourceUtilizationHighWaterMark']
-                    stat['resourceUtilizationLowWaterMark'] = result['resourceUtilizationLowWaterMark']
-                    stat['utilization:billableUnitsRate'] = result['utilization:billableUnitsRate']
-                    stat['utilization:cpuPercent'] = result['utilization:cpuPercent']
-                    stat['utilization:diskBytes'] = result['utilization:diskBytes']
-                    stat["utilization:memoryBytes"] = result["utilization:memoryBytes"]
-                    stats.append(result)
+                if type(resp) != dict:
+                    resp = resp.json()
+                if 'utilization:memoryBytes' in resp and 'utilization:cpuPercent' in resp:
+                    stat['limits:billableUnitsRate'] = resp['limits:billableUnitsRate']
+                    stat['limits:diskBytes'] = resp['limits:diskBytes']
+                    stat['limits:memoryBytes'] = resp['limits:memoryBytes']
+                    stat['resourceUnderUtilizationWaterMark'] = resp['resourceUnderUtilizationWaterMark']
+                    stat['resourceUtilizationHighWaterMark'] = resp['resourceUtilizationHighWaterMark']
+                    stat['resourceUtilizationLowWaterMark'] = resp['resourceUtilizationLowWaterMark']
+                    stat['utilization:billableUnitsRate'] = resp['utilization:billableUnitsRate']
+                    stat['utilization:cpuPercent'] = resp['utilization:cpuPercent']
+                    stat['utilization:diskBytes'] = resp['utilization:diskBytes']
+                    stat["utilization:memoryBytes"] = resp["utilization:memoryBytes"]
+                    stats.append(resp)
                     stat_found = True
                     break
                 else:
