@@ -304,7 +304,7 @@ class RestfulDAPITest(ServerlessBaseTestCase):
             self.log.info("Get list of all documents within a collection in database {}".format(dapi_info["database_id"]))
             self.log.info(dapi_info["dapi_endpoint"])
 
-            length_of_list, key, content = 10, "key", "content"
+            length_of_list, key, content = 100, "key", "content"
             keys_inserted = list()
             key_value, content_value = 0, 0
 
