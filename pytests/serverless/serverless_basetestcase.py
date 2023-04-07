@@ -106,6 +106,8 @@ class ServerlessBaseTestCase(unittest.TestCase):
             self.log.info(f"Deleting dataplane : {self.new_dataplane_id}")
             self.delete_all_database(True, self.new_dataplane_id)
             self.delete_dataplane(self.new_dataplane_id)
+            # cooling period of 1 min before teardown
+            time.sleep(60)
         self.task_manager.shutdown(force=True)
 
     def collect_log_on_dataplane_nodes(self):

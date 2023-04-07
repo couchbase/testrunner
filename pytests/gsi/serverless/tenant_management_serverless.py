@@ -563,6 +563,9 @@ class TenantManagement(BaseGSIServerless):
             self.log.info(f"No. of stats for indexes available {len(indexer_stats_before)}")
             if len(indexer_stats_before) == 0:
                 self.fail("Stats for indexes before rebalance/ddl conflict not available")
+            self.log.info(
+                "============== cbcollect just before defragmentation is triggered ==========================")
+            self.collect_log_on_dataplane_nodes()
             delete_count, num_dbs_deleted = max(rev_dict.keys()) + min(rev_dict.keys()) - 15, 0
             for database in self.databases.values():
                 if num_dbs_deleted < delete_count and database.id not in id_ddl_list:
@@ -780,6 +783,9 @@ class TenantManagement(BaseGSIServerless):
                             tasks.append(task)
                 for task in tasks:
                     task.result()
+            self.log.info(
+                "============== cbcollect just before defragmentation is triggered ==========================")
+            self.collect_log_on_dataplane_nodes()
             self.build_all_indexes(ddl_list)
             delete_count, num_dbs_deleted = max(rev_dict.keys()) + min(rev_dict.keys()) - 15, 0
             for database in self.databases.values():
