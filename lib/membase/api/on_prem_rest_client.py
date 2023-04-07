@@ -2135,6 +2135,12 @@ class RestConnection(object):
             return json_parsed
         raise Exception("API defrag didn't return result.")
 
+    def get_fts_defrag_output(self, node, creds):
+        api = "https://%s:%s/pools/default/services/fts/defragmented" % (node, CbServer.ssl_port)
+        r = requests.get(api, auth=(creds['username'], creds['password']), verify=False)
+        r.raise_for_status()
+        return r
+
     def get_index_stats(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'stats'
         status, content, header = self._http_request(api, timeout=timeout)

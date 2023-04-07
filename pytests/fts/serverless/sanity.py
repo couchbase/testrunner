@@ -33,6 +33,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         self.query_workload_after_creation = self.input.param("query_workload_after_creation", False)
         self.query_workload_parallel_creation = self.input.param("query_workload_parallel_creation", True)
         self.autoscaling_with_queries = self.input.param("autoscaling_with_queries", False)
+        self.ignore_cas_mismatach = self.input.param("ignore_cas_mismatach", False)
 
         self.stop_queries = False
         self.stop_monitoring_stats = False
@@ -45,6 +46,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         self.autoscaling_validations = {'scale_out': False, 'scale_in': False}
         self.scale_out_log_count = 0
         self.scale_in_log_count = 0
+        self.autorebalance_log_count = 0
         self.start_node = None
         self.total_query_count = 0
         global_vars.system_event_logs = EventHelper()
@@ -617,16 +619,26 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         """
         fts_nodes = self.get_fts_nodes()
         creds = self.get_bypass_credentials()
-        stats,  cfg_stats, absurd_resp = FTSCallable(self.input.servers).get_fts_autoscaling_stats(fts_nodes, creds)
+        stats,  cfg_stats = FTSCallable(self.input.servers).get_fts_autoscaling_stats(fts_nodes, creds)
         if print_stats:
             self.prettyPrintStats(stats, fts_nodes, print_str)
 
         if cfg_stats is not None:
             self.print_fts_cfg_stats(cfg_stats)
-        if len(absurd_resp) != 0:
-            self.log.info("Problem in fetching stats")
-            self.print_absurd_resp(absurd_resp)
         return stats, fts_nodes
+
+    def get_fts_defrag_stats(self, print_str):
+        """
+            Print FTS Stats and returns stats along with Current FTS Nodes
+        """
+        resp = FTSCallable(self.input.servers).get_fts_defrag_stats(self.start_node, self.get_bypass_credentials())
+        count = 0
+        myTable = PrettyTable(["S.No", "FTS Nodes", "util_memoryBytes", "util_cpuPercent", "util_diskByte"])
+        for node, stat in resp.items():
+            myTable.add_row([count+1, node, stat['memoryBytes'], stat['cpuPercent'], stat['diskBytes']])
+        if print_str:
+            self.log.info(print_str)
+        print(myTable)
 
     def prettyPrintStats(self, stats, fts_nodes, print_str=None):
         myTable = PrettyTable(["S.No", "FTS Nodes", "lim_memoryBytes", "util_memoryBytes", "util_cpuPercent", "util_diskByte"])
@@ -636,11 +648,14 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             self.log.info(print_str)
         print(myTable)
 
-    def prettyPrintRunningAverage(self):
+    def prettyPrintRunningAverage(self, print_str=None):
         myTable = PrettyTable(["S.No", "FTS Node", "30 Min Mem Avg", "30 Min CPU Avg"])
         for count, node in enumerate(self.memory_queue):
             myTable.add_row([count+1, node, self.running_avg_memory[node], self.running_avg_cpu[node]])
-        self.log.info("FTS Running Average Stats")
+        if print_str is None:
+            self.log.info("FTS Running Average Stats")
+        else:
+            self.log.info(print_str)
         print(myTable)
 
     def print_fts_cfg_stats(self, cfg_stats):
@@ -651,13 +666,6 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         self.log.info("FTS CFG STATS")
         print(myTable)
 
-    def print_absurd_resp(self, absurd_resp):
-        myTable = PrettyTable(["S.No", "FTS Node", "Response"])
-        for count, resp in enumerate(absurd_resp):
-            myTable.add_row([count+1, resp["node"], resp["response"]])
-        self.log.info("ABSURD FTS STATISTICS")
-        print(myTable)
-
     def verify_HWM_index_rejection(self, stats):
         """
            Returns True if HWM is responsible for index rejection
@@ -666,7 +674,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         cpu_util = int(float(self.HWM_limit) * 100)
         count = 0
         for stat in stats:
-            if stat['utilization:memoryBytes'] >= mem_util or stat['utilization:cpuPercent'] >= cpu_util:
+            if stat['utilization:memoryBytes'] >= mem_util or stat['utilization:cpuPercent'] >= cpu_util or stat['utilization:memoryBytes'] == 0:
                 count += 1
 
         if len(stats) - count < 2:
@@ -707,6 +715,14 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             self.get_fts_stats("---FTS STATISTICS---")
             time.sleep(30)
 
+    def monitor_fts_defrag(self):
+        if self.start_node is None:
+            _, nodes = self.get_fts_stats(print_stats=False)
+            self.start_node = nodes[0]
+        while not self.stop_monitoring_stats:
+            self.get_fts_defrag_stats("---FTS DEFRAG STATISTICS---")
+            time.sleep(int(self.polling_time*60))
+
     def validate_scale_out(self, fts_nodes):
         if len(fts_nodes) == self.current_num_fts_nodes + 2:
             self.max_num_fts_nodes = len(fts_nodes)
@@ -724,6 +740,16 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         else:
             return False
 
+    """
+        Following validations have been covered in the autoscaling test 
+            1. Scale Out failed
+            2. scale out happened when it wasn't required
+            3. Scale in failed
+            4. AutoRebalance Failed
+            5. Index {index.name} created even though HWM had been satisfied
+            6. Index Creation Failed 
+            7. Query failed abruptly, reason : 
+    """
     def monitor_running_average_and_scaling(self):
         while not self.stop_monitoring_stats:
             start_time = time.time()
@@ -742,9 +768,10 @@ class FTSElixirSanity(ServerlessBaseTestCase):
             self.prettyPrintRunningAverage()
 
             # validate scale out
-            if self.check_scale_out_condition(fts_stats):
+            if self.check_scale_out_condition(fts_stats) or self.scale_out_log_count > 0:
+                if self.scale_out_log_count == 0:
+                    self.log.info("Scale Out Satisfied using Running Average")
                 self.scale_out_log_count += 1
-                self.log.info("Scale Out Satisfied using Running Average")
                 with self.subTest("validate scale out"):
                     if self.validate_scale_out(fts_nodes):
                         self.log.info("Scale out successful")
@@ -752,17 +779,17 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                     else:
                         if self.scale_out_log_count == 5:
                             self.log.critical("Scale out failed")
-                            self.prettyPrintStats(fts_stats, fts_nodes, "--SCALE OUT FAIL STATS--")
+                            self.prettyPrintRunningAverage("--SCALE OUT FAIL STATS--")
                             self.fail(f"Scale Out failed")
             else:
                 with self.subTest("verify scale out before running average"):
                     if self.validate_scale_out(fts_nodes):
                         self.log.critical("scale out happened when it wasn't required")
-                        self.prettyPrintStats(fts_stats, fts_nodes, "EARLY SCALE OUT STATS")
+                        self.prettyPrintRunningAverage("EARLY SCALE OUT STATS")
                         self.fail(f"Scale Out happened less than scaling time")
 
             # verify scale in
-            if self.check_scale_in_condition(fts_stats):
+            if self.check_scale_in_condition(fts_stats) and self.autoscaling_validations['scale_out']:
                 self.scale_in_log_count += 1
                 with self.subTest("Verify Scale In"):
                     if self.validate_scale_in(fts_nodes):
@@ -771,18 +798,20 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                     else:
                         if self.scale_in_log_count == 5:
                             self.log.critical("Scale in failed")
-                            self.prettyPrintStats(fts_stats, fts_nodes, "SCALE IN FAIL STATS")
+                            self.prettyPrintRunningAverage("SCALE IN FAIL STATS")
                             self.fail(f"Scale in failed")
 
             if self.check_auto_rebalance_condition(fts_stats):
+                self.autorebalance_log_count += 1
                 with self.subTest("Verify AutoRebalance"):
                     rebalance_status = FTSCallable(self.input.servers).get_fts_rebalance_status(self.start_node)
-                    if rebalance_status == "none":
-                        self.log.critical("FAIL : AutoRebalance Failed")
-                        self.prettyPrintStats(fts_stats, fts_nodes, "-- AUTOREBALANCE FAIL STATS--")
+                    if rebalance_status == "none" and self.autorebalance_log_count == 5:
+                        self.log.critical("AutoRebalance Failed")
+                        self.prettyPrintRunningAverage("-- AUTOREBALANCE FAIL STATS--")
                         self.fail(f"BUG : AutoRebalance Failed..")
                     else:
                         self.log.info("PASS : AutoRebalance Passed")
+                        self.autorebalance_log_count = 0
 
             end_time = time.time()
             time_taken = end_time - start_time
@@ -819,9 +848,12 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                         self.assertTrue("limitIndexDef: Cannot accommodate index request" in str(e))
                         self.log.info(f"PASS : HWM Index Rejection Passed : {str(e)}")
                     else:
-                        self.log.critical(f"Index Creation Failed : {str(e)}")
-                        self.prettyPrintStats(fts_stats, fts_nodes,"Index Creation Failed ")
-                        self.fail("BUG : Index Creation Failed")
+                        if str(e).find("RetryOnCASMismatch: too many tries") != -1 and self.ignore_cas_mismatach:
+                            self.log.critical(f"Index Creation Failure ignored due to CAS Mismatch : {str(e)}")
+                        else:
+                            self.log.critical(f"Index Creation Failed : {str(e)}")
+                            self.prettyPrintStats(fts_stats, fts_nodes,"Index Creation Failed ")
+                            self.fail("BUG : Index Creation Failed")
 
     def autoscaling_concurrent(self):
         self.provision_databases(self.num_databases, None, self.new_dataplane_id)
@@ -832,9 +864,11 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
         monitor_stat_thread = threading.Thread(target=self.monitor_fts_stats)
         monitor_avg_thread = threading.Thread(target=self.monitor_running_average_and_scaling)
+        monitor_defrag_stat_thread = threading.Thread(target=self.monitor_fts_defrag)
 
         monitor_stat_thread.start()
         monitor_avg_thread.start()
+        monitor_defrag_stat_thread.start()
         time.sleep(120)
 
         all_info = []

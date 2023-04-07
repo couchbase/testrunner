@@ -592,8 +592,8 @@ class FTSCallable:
         rest = RestConnection(self.cb_cluster.get_random_fts_node())
         stats = []
         cfg_stats = None
-        absurd_resp = []
         node_achiever = None
+        num_attempts = 1
         for node in nodes:
             attempts = 0
             stat_found = False
@@ -608,7 +608,7 @@ class FTSCallable:
                     "utilization:diskBytes": 0,
                     "utilization:memoryBytes": 0
                     }
-            while attempts < 10:
+            while attempts < num_attempts:
                 attempts += 1
                 if attempts > 1:
                     self.log.info(f"Retrying {attempts} time for node {node}")
@@ -639,13 +639,13 @@ class FTSCallable:
                             cfg_stats = rest.get_fts_cfg_stats(node, creds)
                         if cfg_stats is not None:
                             cfg_stats = cfg_stats.json()
-                    if type(resp) != dict:
-                        absurd_resp_obj = {"node": node, "response": resp.text}
-                    else:
-                        absurd_resp_obj = {"node": node, "response": ""}
-                    absurd_resp.append(absurd_resp_obj)
             if not stat_found:
                 stats.append(stat)
-        return stats, cfg_stats, absurd_resp
+        return stats, cfg_stats
+
+    def get_fts_defrag_stats(self, node, creds):
+        rest = RestConnection(self.cb_cluster.get_random_fts_node())
+        return rest.get_fts_defrag_output(node, creds).json()
+
 
 

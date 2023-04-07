@@ -1800,9 +1800,7 @@ class ESRunQueryCompare(Task):
                 if not self.reduce_query_logging:
                     self.log.info("Status: %s" % fts_status)
                 elif fts_status == 'fail':
-                    if str(fts_doc_ids).find("limiting/throttling: the request has been rejected according to regulator") != -1:
-                        self.log.error(f"Query Failed due to throttling, reason : {fts_doc_ids}")
-                    else:
+                    if str(fts_doc_ids).find("limiting/throttling: the request has been rejected according to regulator") == -1:
                         self.log.error(f"Query failed abruptly, reason : {fts_doc_ids}")
 
                 if fts_status == 'fail':
