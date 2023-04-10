@@ -1,9 +1,11 @@
 import time
-from membase.api.on_prem_rest_client import RestConnection as OnPremRestConnection
+from json import loads
+
+from membase.api.on_prem_rest_client import RestConnection as OnPremRestConnection, RestParser
 import requests
 from lib.Cb_constants.CBServer import CbServer
 import logger
-from TestInput import TestInputSingleton
+
 
 class ServerlessRestConnection(OnPremRestConnection):
     def __new__(cls, rest_username, rest_password, rest_srv):
@@ -64,13 +66,15 @@ class ServerlessRestConnection(OnPremRestConnection):
         data = f'uploadHost={upload_url}%2F&customer={test_name}&&nodes={nodes}'
         api = f"https://{self.rest_srv}:18091/controller/startLogsCollection"
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-        resp = requests.post(api, data=data, verify=False, headers=headers, auth=(self.rest_username, self.rest_password))
+        resp = requests.post(api, data=data, verify=False, headers=headers,
+                             auth=(self.rest_username, self.rest_password))
         resp.raise_for_status()
         time.sleep(30)
         log_collection_complete, cb_collect_list, time_now = False, [], time.time()
-        while not log_collection_complete and time.time() - time_now < timeout*60:
+        while not log_collection_complete and time.time() - time_now < timeout * 60:
             log_collection_task = self.poll_for_tasks("clusterLogsCollection")
-            self.log.info(f"Waiting for the log collection process to complete. Current task status {log_collection_task}")
+            self.log.info(
+                f"Waiting for the log collection process to complete. Current task status {log_collection_task}")
             if log_collection_task['status'] == 'completed':
                 for perNode in log_collection_task['perNode']:
                     if log_collection_task['perNode'][perNode]['status'] == 'uploaded':
@@ -79,3 +83,10 @@ class ServerlessRestConnection(OnPremRestConnection):
             time.sleep(30)
         self.log.info(f"cb_collect bundle for the test {test_name} list: {cb_collect_list}")
         return cb_collect_list
+
+    def query_prometheus(self, query):
+        api = f"{self.baseUrl}_prometheus/api/v1/query?query={query}"
+        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+        auth = (self.rest_username, self.rest_password)
+        resp = requests.get(api, verify=False, headers=headers, auth=auth)
+        return resp.status_code, loads(resp.content)

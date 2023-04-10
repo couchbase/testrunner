@@ -75,7 +75,6 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.partition_fields = self.input.param('partition_fields', None)
         self.partitoned_index = self.input.param('partitioned_index', False)
         self.json_template = self.input.param("json_template", "Person")
-        self.use_magma_loader = self.input.param("use_magma_loader", False)
         if self.partition_fields:
             self.partition_fields = self.partition_fields.split(',')
         self.num_partition = self.input.param('num_partition', 8)

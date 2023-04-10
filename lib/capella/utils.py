@@ -100,7 +100,7 @@ def get_host_from_srv(srv, attempts=30, retry_wait_time=60):
         except Exception as ex:
             if i == attempts:
                 raise(ex)
-            log.warn(f"Failed ({ex.__class__.__name__}) to resolve {srv}. Retrying in {retry_wait_time} seconds ...")
+            log.warning(f"Failed ({ex.__class__.__name__}) to resolve {srv}. Retrying in {retry_wait_time} seconds ...")
             time.sleep(retry_wait_time)
     for srv in srv_records:
         srvInfo['host'] = str(srv.target).rstrip('.')

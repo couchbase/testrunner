@@ -1,6 +1,8 @@
 import logging
 import random
 import string
+from threading import Event
+
 import requests
 import time
 import copy
@@ -348,17 +350,24 @@ class BaseGSIServerless(QueryBaseServerless):
                 units_quota = nodes[node]['units_quota']
                 units_used_actual = nodes[node]['units_used_actual']
                 num_tenants = nodes[node]['num_tenants']
+                num_indexes = nodes[node]['num_indexes']
+                memory_used_percentage = memory_used_actual / mem_quota * 100
+                units_used_percentage = units_used_actual / units_quota * 100
                 self.log.info(f"Index stats for {node} are memory_quota: {mem_quota}. "
                               f"Memory used actual {memory_used_actual}."
                               f"units_quota {units_quota} "
                               f"units_used_actual {units_used_actual} num of tenants {num_tenants} ")
-                self.log.info(f"Memory used ratio: {memory_used_actual / mem_quota}. \n "
-                              f"Units used ratio : {units_used_actual / units_quota} \n Num. of tenants:{num_tenants}")
+                self.log.info(f"Memory used %: {memory_used_percentage} . \n "
+                              f"Units used % : {units_used_percentage} "
+                              f"\n Num. of tenants:{num_tenants}")
                 node_wise_stats.update({node: {"memory_quota": mem_quota,
                                                "memory_used_actual": memory_used_actual,
                                                "units_quota": units_quota,
                                                "units_used_actual": units_used_actual,
-                                               "num_tenants": num_tenants}})
+                                               "num_tenants": num_tenants,
+                                               "num_indexes": num_indexes,
+                                               "memory_used_percentage": memory_used_percentage,
+                                               "units_used_percentage": units_used_percentage}})
         return node_wise_stats
 
     def scale_up_index_subcluster(self, dataplane, wait_for_rebalance_completion=True):
@@ -597,3 +606,16 @@ class BaseGSIServerless(QueryBaseServerless):
             return resp.json()
         else:
             raise Exception("Unable to fetch index node from the dataplane nodes object")
+
+    def get_cluster_balanced_state(self):
+        """
+        @summary: returns cluster's balanced state
+        """
+        kv_node = self.get_nodes_from_services_map(service='kv', rest_info=self.dp_obj)[0]
+        try:
+            content = RestConnection(rest_username=self.dp_obj.admin_username,
+                                     rest_password=self.dp_obj.admin_password,
+                                     rest_srv=kv_node).get_pools_default()
+            return content["balanced"]
+        except Exception as err:
+            self.log.critical(f"{self.dataplane_id} /pools/default has failed!!! -  {err}")

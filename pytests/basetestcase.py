@@ -45,6 +45,7 @@ import testconstants
 
 from TestInput import TestInputSingleton, TestInputServer
 from scripts.java_sdk_setup import JavaSdkSetup
+from scripts.magma_docloader_setup import MagmaDocloaderSetup
 from tasks.future import Future
 
 
@@ -195,6 +196,10 @@ class OnPremBaseTestCase(unittest.TestCase):
             if self.java_sdk_client:
                 self.log.info("Building docker image with java sdk client")
                 JavaSdkSetup()
+
+            if self.use_magma_loader:
+                self.log.info("Building docker image with magma docloader")
+                MagmaDocloaderSetup()
 
             # avoid any cluster operations in setup for new upgrade
             #  & upgradeXDCR tests
@@ -573,6 +578,7 @@ class OnPremBaseTestCase(unittest.TestCase):
         self.use_https = self.input.param("use_https", False)
         self.enforce_tls = self.input.param("enforce_tls", False)
         self.java_sdk_client = self.input.param("java_sdk_client", False)
+        self.use_magma_loader = self.input.param("use_magma_loader", False)
         """ some tests need to bypass checking cb server at set up
             to run installation """
         self.skip_init_check_cbserver = \

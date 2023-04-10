@@ -8,13 +8,11 @@ __git_user__ = "hrajput89"
 __created_on__ = 04/10/22 11:53 am
 
 """
-import boto3
 import datetime
 import random
 import string
 import uuid
 import logger
-import re
 from functools import reduce
 from concurrent.futures import ThreadPoolExecutor
 
@@ -155,15 +153,39 @@ class GSIUtils(object):
         prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
         definitions_list.append(
             QueryDefinition(index_name=prim_index_name, index_fields=[],
-                            query_template=RANGE_SCAN_TEMPLATE.format("*", "suffix is not NULL", is_primary=True)))
+                            query_template=RANGE_SCAN_TEMPLATE.format("*", "suffix is not NULL"), is_primary=True))
 
         # GSI index on multiple fields
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'free_breakfast_avg_rating',
                             index_fields=['free_breakfast', 'avg_rating'],
                             query_template=RANGE_SCAN_TEMPLATE.format("*",
-                                                                      'avg_rating > 3 AND'
+                                                                      'avg_rating > 3 AND '
                                                                       'free_breakfast = true')))
+
+        # GSI index on multiple fields
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'free_breakfast_array_count',
+                            index_fields=['free_breakfast', 'type', 'free_parking', 'array_count(public_likes)',
+                                          'price', 'country'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("avg(price) as AvgPrice, min(price) as MinPrice,"
+                                                                      " max(price) as MaxPrice",
+                                                                      "free_breakfast=True and free_parking=True and "
+                                                                      "price is not null and "
+                                                                      "array_count(public_likes)>5 and "
+                                                                      "`type`='Hotel' group by country limit 100")))
+
+        # GSI index with Flatten Keys
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'flatten_keys',
+                            index_fields=['DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness)'
+                                          ' FOR r IN reviews when r.ratings.Cleanliness < 4 END',
+                                          'country', 'email', 'free_parking'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*",
+                                                                      "ANY r IN reviews SATISFIES r.author LIKE 'M%%' "
+                                                                      "AND r.ratings.Cleanliness = 3 END AND "
+                                                                      "free_parking = TRUE AND country IS NOT NULL "
+                                                                      "limit 100")))
 
         # GSI index with missing keys
         definitions_list.append(
@@ -194,6 +216,20 @@ class GSIUtils(object):
                             query_template=RANGE_SCAN_TEMPLATE.format("*",
                                                                       'ANY v IN reviews SATISFIES v.ratings.'
                                                                       '`Rooms` > 3  END and price > 1000 ')))
+
+        # Array Index
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'array_index_checkin',
+                            index_fields=['country', 'DISTINCT ARRAY `r`.`ratings`.`Check in / front desk` '
+                                                     'FOR r in `reviews` END', 'array_count(`public_likes`)',
+                                          'array_count(`reviews`) DESC', '`type`', 'phone', 'price', 'email',
+                                          'address', 'name', 'url'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*",
+                                                                      'country is not null and `type` is not null '
+                                                                      'and (any r in reviews satisfies '
+                                                                      'r.ratings.`Check in / front desk` '
+                                                                      'is not null end) limit 100')))
+
         self.batch_size = len(definitions_list)
         return definitions_list
 
@@ -246,10 +282,16 @@ class GSIUtils(object):
         for index_gen in definition_list:
             if defer_build_mix:
                 defer_build = random.choice([True, False])
-            index_gen = index_gen
             query = index_gen.generate_index_create_query(namespace=namespace, defer_build=defer_build)
             create_index_list.append(query)
         return create_index_list
+
+    def get_drop_index_list(self, definition_list, namespace):
+        drop_index_list = []
+        for index_gen in definition_list:
+            query = index_gen.generate_index_drop_query(namespace=namespace)
+            drop_index_list.append(query)
+        return drop_index_list
 
     def get_select_queries(self, definition_list, namespace):
         select_query_list = []

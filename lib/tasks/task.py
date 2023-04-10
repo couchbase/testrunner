@@ -6576,10 +6576,7 @@ class MagmaDocLoader(Task):
         self.sdk_docloader = sdk_docloader
 
     def execute(self, task_manager):
-        curr_dir = os.getcwd()
-        os.chdir(os.path.join(curr_dir, 'magma_loader/DocLoader/'))
-        command = f"mvn compile exec:java -Dexec.cleanupDaemonThreads=false " \
-                  f"-Dexec.mainClass='couchbase.test.sdk.Loader' -Dexec.args='-n {self.server.ip} " \
+        command = f"java -jar magma_loader/DocLoader/target/magmadocloader/magmadocloader.jar -n {self.server.ip} " \
                   f"-user {self.sdk_docloader.username} -pwd {self.sdk_docloader.password} -b {self.bucket} " \
                   f"-p 11207 -create_s {self.sdk_docloader.start_seq_num} -create_e {self.sdk_docloader.end+1} " \
                   f"-cr {self.sdk_docloader.percent_create} -up {self.sdk_docloader.percent_delete} -rd 0" \
