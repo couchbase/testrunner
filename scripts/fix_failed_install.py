@@ -50,10 +50,10 @@ def ssh_exec_cmd(ssh, cmds):
     ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(cmds)
     out_1 = ssh_stdout.read()
     err_1 = ssh_stderr.read()
-    if len(err_1) > 0:
-        log.error('STDERR: {0}'.format(err_1))
     if len(out_1) > 0:
         log.info('STDOUT: {0}'.format(out_1))
+    if len(err_1) > 0:
+        log.error('STDERR: {0}'.format(err_1))
     return out_1
 
 
@@ -98,9 +98,9 @@ def uninstall_clean_cb_debian(ssh):
 
 
 def setpoolstate(pool_id, ip, fromstate, tostate):
-    query = "update `QE-server-pool` set state='{0}' where ('{1}' in poolId or poolId='{2}') and " \
-            "state like '{3}%' and ipaddr='{4}';".format(str(tostate), str(pool_id),
-                                                         str(pool_id), str(fromstate), str(ip))
+    query = "update `QE-server-pool` set state='{0}' where ('{1}' in poolId or poolId='{1}') and " \
+            "state like '{2}%' and ipaddr='{3}';".format(str(tostate), str(pool_id),
+                                                         str(fromstate), str(ip))
     log.info('Running: {0}'.format(query))
     row_iter = cb.n1ql_query(N1QLQuery(query))
     for row in row_iter:
@@ -116,15 +116,100 @@ def setipstate(ip, fromstate, tostate):
         log.info(row)
 
 
+def get_ips_without_libtinfo5(pool_id):
+    query = "SELECT username, ipaddr, state FROM `QE-server-pool` WHERE (os = 'debian') AND " \
+            "(poolId = '{0}' OR '{0}' IN poolId)".format(pool_id)
+    if pool_id == 'all':
+        query = "SELECT username, ipaddr, state FROM `QE-server-pool` WHERE (os = 'debian')"
+    log.debug('Running: {0}'.format(query))
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    row_iter = cluster.query(query)
+    hosts_down = []
+    no_apt = []
+    for row in row_iter.rows():
+        try:
+            log.debug("-----------------------------------------------------")
+            log.info(row)
+            ssh.connect(row['ipaddr'], username=username, password=password, timeout=10)
+            try:
+                stdout = ssh_exec_cmd(ssh, 'apt-get install -y libtinfo5')
+                if len(stdout) == 0:
+                    no_apt.append(row['ipaddr'])
+            except Exception as e:
+                log.error("Error installing for IP: {0} => {1}".format(row['ipaddr'], e))
+            ssh.close()
+        except socket.timeout as e:
+            hosts_down.append(row['ipaddr'])
+            log.error("Connection timed out to IP: {0}, Exception: {1}".format(row['ipaddr'], e))
+        except socket.error as e:
+            hosts_down.append(row['ipaddr'])
+            log.error("Connection Failed to IP: {0}, Exception: {1}".format(row['ipaddr'], e))
+        except Exception as e:
+            log.error("Unknown Exception: {0}".format(e))
+
+    log.debug("*****************************************************")
+    log.info("Total IPs: {0}".format(len(row_iter.rows())))
+    log.info("Installed on IPs {0}".format(len(row_iter.rows()) - len(no_apt) - len(hosts_down)))
+    if len(no_apt) > 0:
+        log.warning("{0} IPs did not have apt-get. => {1}".format(len(no_apt), no_apt))
+    if len(hosts_down) > 0:
+        log.warning("Failed to connect to {0} IPs. => {1}".format(len(hosts_down), hosts_down))
+
+
+def get_ips_without_wget(pool_id):
+    query = "SELECT username, ipaddr, state FROM `QE-server-pool` WHERE (os = 'ubuntu22' OR os = 'debian') AND " \
+            "(poolId = '{0}' OR '{0}' IN poolId)".format(pool_id)
+    if pool_id == 'all':
+        query = "SELECT username, ipaddr, state FROM `QE-server-pool` WHERE (os = 'ubuntu22' OR os = 'debian')"
+    log.debug('Running: {0}'.format(query))
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    row_iter = cluster.query(query)
+    hosts_down = []
+    no_apt = []
+    for row in row_iter.rows():
+        try:
+            log.debug("-----------------------------------------------------")
+            log.info(row)
+            ssh.connect(row['ipaddr'], username=username, password=password, timeout=10)
+            try:
+                stdout = ssh_exec_cmd(ssh, 'apt-get install -y wget')
+                if len(stdout) == 0:
+                    no_apt.append(row['ipaddr'])
+            except Exception as e:
+                log.error("Error installing for IP: {0} => {1}".format(row['ipaddr'], e))
+            ssh.close()
+        except socket.timeout as e:
+            hosts_down.append(row['ipaddr'])
+            log.error("Connection timed out to IP: {0}, Exception: {1}".format(row['ipaddr'], e))
+        except socket.error as e:
+            hosts_down.append(row['ipaddr'])
+            log.error("Connection Failed to IP: {0}, Exception: {1}".format(row['ipaddr'], e))
+        except Exception as e:
+            log.error("Unknown Exception: {0}".format(e))
+
+    log.debug("*****************************************************")
+    log.info("Total IPs: {0}".format(len(row_iter.rows())))
+    log.info("Installed on IPs {0}".format(len(row_iter.rows()) - len(no_apt) - len(hosts_down)))
+    if len(no_apt) > 0:
+        log.warning("{0} IPs did not have apt-get. => {1}".format(len(no_apt), no_apt))
+    if len(hosts_down) > 0:
+        log.warning("Failed to connect to {0} IPs. => {1}".format(len(hosts_down), hosts_down))
+
+
 def get_ips_without_curl(pool_id):
-    query = "SELECT username, ipaddr, state FROM `QE-server-pool` WHERE os = 'debian' AND " \
-            "(poolId = '{0}' OR '{1}' IN poolId)".format(pool_id, pool_id)
+    query = "SELECT username, ipaddr, state FROM `QE-server-pool` WHERE (os = 'debian') AND " \
+            "(poolId = '{0}' OR '{0}' IN poolId)".format(pool_id)
+    if pool_id == 'all':
+        query = "SELECT username, ipaddr, state FROM `QE-server-pool` WHERE (os = 'debian')"
     log.debug('Running: {0}'.format(query))
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     row_iter = cb.n1ql_query(N1QLQuery(query))
     hosts_down = []
     no_curl = []
+    no_apt = []
     for row in row_iter:
         try:
             log.debug("-----------------------------------------------------")
@@ -141,7 +226,10 @@ def get_ips_without_curl(pool_id):
                 no_curl.append(row['ipaddr'])
                 try:
                     stdout_2 = ssh_exec_cmd(ssh, 'apt-get --assume-yes install curl')
-                    log.info("Curl Installed on {0}. STDOUT => {1}".format(row['ipaddr'], stdout_2))
+                    if len(stdout_2) == 0:
+                        no_apt.append(row['ipaddr'])
+                    else:
+                        log.info("Curl Installed on {0}".format(row['ipaddr']))
                 except Exception as e:
                     log.error("Error installing curl for IP: {0} => {1}".format(row['ipaddr'], e))
             ssh.close()
@@ -152,17 +240,19 @@ def get_ips_without_curl(pool_id):
             hosts_down.append(row['ipaddr'])
             log.error("Connection Failed to IP: {0}, Exception: {1}".format(row['ipaddr'], e))
         except Exception as e:
-            log.error("Exception: {0}".format(e))
+            log.error("Unknown Exception: {0}".format(e))
 
     log.debug("*****************************************************")
     log.info("Total IPs: {0}".format(len(row_iter.rows())))
     if len(no_curl) > 0:
-        log.debug("{0} IPs did not have curl. => {1}".format(len(no_curl), no_curl))
+        log.debug("{0} IPs did not have curl.".format(len(no_curl)))
         log.info("Curl installed on all accessible IPs successfully")
     else:
         log.info("All hosts had Curl!")
+    if len(no_apt) > 0:
+        log.warning("{0} IPs did not have apt-get. => {1}".format(len(no_apt), no_apt))
     if len(hosts_down) > 0:
-        log.warning("Failed to connect to {0} IPs => {1}".format(len(hosts_down), hosts_down))
+        log.warning("Failed to connect to {0} IPs. => {1}".format(len(hosts_down), hosts_down))
 
 
 def uninstall_all(ips):
@@ -182,10 +272,87 @@ def uninstall_all(ips):
             pass
 
 
+def install_ntp_on_deb(pool_id):
+    query = "SELECT username, ipaddr, state FROM `QE-server-pool` WHERE (os = 'ubuntu22' OR os = 'debian') AND " \
+            "('{0}' IN poolId OR poolId = '{0}')".format(str(pool_id))
+    if pool_id == 'all':
+        query = "SELECT username, ipaddr, state FROM `QE-server-pool` WHERE (os = 'ubuntu22' OR os = 'debian')"
+    log.info('Running: {0}'.format(query))
+    row_iter = cluster.query(query)
+    hosts_down = []
+    no_apt = []
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    for row in row_iter.rows():
+        try:
+            log.debug("-----------------------------------------------------")
+            log.info(row)
+            ssh.connect(row['ipaddr'], username=username, password=password, timeout=10)
+            try:
+                stdout = ssh_exec_cmd(ssh, 'apt-get install -y ntp')
+                if len(stdout) == 0:
+                    no_apt.append(row['ipaddr'])
+                else:
+                    ssh_exec_cmd(ssh, 'service ntp restart')
+            except Exception as e:
+                log.error("Error installing for IP: {0} => {1}".format(row['ipaddr'], e))
+            ssh.close()
+        except socket.timeout as e:
+            hosts_down.append(row['ipaddr'])
+            log.error("Connection timed out to IP: {0}, Exception: {1}".format(row['ipaddr'], e))
+        except socket.error as e:
+            hosts_down.append(row['ipaddr'])
+            log.error("Connection Failed to IP: {0}, Exception: {1}".format(row['ipaddr'], e))
+        except Exception as e:
+            log.error("Unknown Exception: {0}".format(e))
+
+    log.debug("*****************************************************")
+    log.info("Total IPs: {0}".format(len(row_iter.rows())))
+    log.info("Installed on IPs {0}".format(len(row_iter.rows()) - len(no_apt) - len(hosts_down)))
+    if len(no_apt) > 0:
+        log.warning("{0} IPs did not have apt-get. => {1}".format(len(no_apt), no_apt))
+    if len(hosts_down) > 0:
+        log.warning("Failed to connect to {0} IPs => {1}".format(len(hosts_down), hosts_down))
+
+
+def install_ntp_on_cent(pool_id):
+    query = "SELECT username, ipaddr, state FROM `QE-server-pool` WHERE (os = 'rhel9' OR os = 'oel9') " \
+            "AND ('{0}' IN poolId OR poolId = '{0}')".format(str(pool_id))
+    if pool_id == 'all':
+        query = "SELECT username, ipaddr, state FROM `QE-server-pool` WHERE (os = 'rhel9' OR os = 'oel9')"
+    log.debug('Running: {0}'.format(query))
+    row_iter = cluster.query(query)
+    hosts_down = []
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    for row in row_iter.rows():
+        server = row['ipaddr']
+        try:
+            log.debug("-----------------------------------------------------")
+            log.info(row)
+            ssh.connect(server, username=username, password=password, timeout=10)
+            cmds = 'yum install -y ntpstat && ntpstat'
+            ssh_exec_cmd(ssh, cmds)
+            ssh.close()
+        except socket.timeout as e:
+            hosts_down.append(server)
+            log.error("Connection timed out to IP: {0}, Exception: {1}".format(server, e))
+        except socket.error as e:
+            hosts_down.append(server)
+            log.error("Connection Failed to IP: {0}, Exception: {1}".format(server, e))
+        except Exception as e:
+            log.error("Unknown Exception: {0}".format(e))
+
+    log.debug("*****************************************************")
+    log.info("Total IPs: {0}".format(len(row_iter.rows())))
+    if len(hosts_down) > 0:
+        log.warning("Failed to connect to {0} IPs => {1}".format(len(hosts_down), hosts_down))
+
+
 def clean_failedinstsall_vms(pool_id):
     log.debug("*** Cleaning failedInstall VMs ***")
-    query = 'SELECT * FROM `QE-server-pool` WHERE ("{0}" IN poolId OR poolId = "{1}") AND ' \
-            'state LIKE "failedInstall%%";'.format(str(pool_id), str(pool_id))
+    query = 'SELECT * FROM `QE-server-pool` WHERE ("{0}" IN poolId OR poolId = "{0}") AND ' \
+            'state LIKE "failedInstall%%";'.format(str(pool_id))
     log.info('Running: {0}'.format(query))
     row_iter = cb.n1ql_query(N1QLQuery(query))
     fixed_ips = []
@@ -193,7 +360,7 @@ def clean_failedinstsall_vms(pool_id):
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     for row in row_iter:
-        log.debug('********************************')
+        log.debug("-----------------------------------------------------")
         server = row['QE-server-pool']['ipaddr']
         host_os = row['QE-server-pool']['os']
         try:
@@ -212,6 +379,8 @@ def clean_failedinstsall_vms(pool_id):
                 uninstall_clean_cb_debian(ssh)
                 cmds = 'dpkg -s couchbase-server'
                 out_2 = ssh_exec_cmd(ssh, cmds)
+                cmds = 'apt-get install -y ntp && service ntp restart'
+                ssh_exec_cmd(ssh, cmds)
             cmds = 'iptables -F'
             ssh_exec_cmd(ssh, cmds)
             # cmds = 'mkdir /var/lib/rpm/backup | cp -a /var/lib/rpm/__db* /var/lib/rpm/backup/ |
@@ -234,13 +403,11 @@ def clean_failedinstsall_vms(pool_id):
             log.error("Connection Failed to IP: {0}, Exception: {1}".format(row['QE-server-pool']['ipaddr'], e))
         except Exception as e:
             log.error("Exception: {0}".format(e))
-        log.debug('********************************')
 
+    log.debug("*****************************************************")
     if len(fixed_ips) > 0:
         log.info("*** Fixed IPs list: ***")
-        log.info(fixed_ips)
-        for ip in fixed_ips:
-            setpoolstate(pool_id, ip, "failedInstall", "available")
+        log.debug(fixed_ips)
     else:
         log.info("*** Fixed IPs: None ***")
     if len(hosts_down) > 0:
@@ -252,8 +419,8 @@ parser = OptionParser()
 parser.add_option("-a", "--action", dest="action",
                   default="clean_failedinstsall_vms",
                   help="Enter action")
-parser.add_option("--log-level", dest="log_level",
-                  default="info",
+parser.add_option("-l", "--log-level", dest="log_level",
+                  default="debug",
                   help="Enter Log Level")
 (options, args) = parser.parse_args()
 set_log_level(options.log_level)
@@ -264,5 +431,13 @@ elif options.action == "uninstall":
     uninstall_all(poolId)
 elif options.action == "get_ips_without_curl":
     get_ips_without_curl(poolId)
+elif options.action == "install_ntp_on_deb":
+    install_ntp_on_deb(poolId)
+elif options.action == "install_ntp_on_cent":
+    install_ntp_on_cent(poolId)
+elif options.action == "get_ips_without_wget":
+    get_ips_without_wget(poolId)
+elif options.action == "get_ips_without_libtinfo5":
+    get_ips_without_libtinfo5(poolId)
 else:
     log.error("Not yet supported action!")
