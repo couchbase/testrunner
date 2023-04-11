@@ -1091,7 +1091,7 @@ class QueryCollectionsDDLTests(QueryTests):
             "test_queries": [
                 {
                     "text": "create scope mykeyspace:bucket1.scope1",
-                    "expected_error": "syntax error"
+                    "expected_error": "3 path parts are expected"
                 }
             ]
         },
@@ -1133,7 +1133,7 @@ class QueryCollectionsDDLTests(QueryTests):
             "test_queries": [
                 {
                     "text": "create collection bucket1.collection1",
-                    "expected_error": "syntax error"
+                    "expected_error": "only 2 or 4 parts are valid"
                 }
             ]
         },
@@ -1151,7 +1151,7 @@ class QueryCollectionsDDLTests(QueryTests):
             "test_queries": [
                 {
                     "text": "create collection bucket1.collection1",
-                    "expected_error": "syntax error"
+                    "expected_error": "only 2 or 4 parts are valid"
                 }
             ]
         },
@@ -1223,7 +1223,7 @@ class QueryCollectionsDDLTests(QueryTests):
             "test_queries": [
                 {
                     "text": "drop collection scope1.collection1",
-                    "expected_error": "syntax error"
+                    "expected_error": "only 2 or 4 parts are valid"
                 }
             ]
         },
@@ -1241,7 +1241,7 @@ class QueryCollectionsDDLTests(QueryTests):
             "test_queries": [
                 {
                     "text": "drop scope scope1",
-                    "expected_error": "syntax error"
+                    "expected_error": "3 path parts are expected"
                 }
             ]
         },
