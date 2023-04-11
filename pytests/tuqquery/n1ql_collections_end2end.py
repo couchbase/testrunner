@@ -327,25 +327,30 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 keyspace = namespace+':'+keyspace
                 _, _, collection_name = self._extract_object_names(full_keyspace_name=keyspace)
 
-                # select upon not indexed collection. Expected result - fail
+                # select upon not indexed collection. Expected result - success due to sequential scan
                 try:
                     query = "select name from "+keyspace+" where val=1"
                     result = self.run_cbq_query(query)
-                    if result['status'] == 'success':
-                        errors.append({"reason": "select_no_index", "message": "Select upon unindexed collection was unexpectedly successful."})
+                    if result['status'] != 'success':
+                        errors.append({"reason": "update_no_index",
+                                       "message": "Update upon unindexed collection was unexpectedly unsuccessful."})
                 except CBQError as e:
-                    pass
+                    errors.append({"reason": "select_no_index",
+                                   "message": "Select upon unindexed collection was unexpectedly unsuccessful."})
 
-                # update upon not indexed collection. Expected result - fail
+
+                # update upon not indexed collection. Expected result - success due to sequential scan
                 try:
                     query = "update "+keyspace+" set name=name||'_updated' where val=1"
                     result = self.run_cbq_query(query)['status']
-                    if result == 'success':
-                        errors.append({"reason": "update_no_index", "message": "Update upon unindexed collection was unexpectedly successful."})
+                    if result != 'success':
+                        errors.append({"reason": "update_no_index",
+                                       "message": "Update upon unindexed collection was unexpectedly unsuccessful."})
                 except CBQError as e:
+                    errors.append({"reason": "update_no_index",
+                                   "message": "Update upon unindexed collection was unexpectedly unsuccessful."})
                     pass
-
-                # upsert as update upon not indexed collection. Expected result - success
+                # upsert as update upon not indexed collection. Expected result - success due to sequential scan
                 try:
                     query = "upsert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id', {'val':1, 'name' : '"+keyspace+"_name_updated' })"
                     result = self.run_cbq_query(query)
@@ -360,7 +365,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 except CBQError as e:
                     pass
 
-                # upsert as insert upon not indexed collection. Expected result - success - remove
+                # upsert as insert upon not indexed collection. Expected result - success - remove due to sequential scan
                 try:
                     query = "upsert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id1', {'val':10, 'name' : '"+keyspace+"_name2' })"
                     result = self.run_cbq_query(query)
@@ -375,7 +380,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 except CBQError as e:
                     pass
 
-                # merge as insert upon not indexed collection. Expected result - fail 0 remove
+                # merge as insert upon not indexed collection. success due to sequential scan
                 try:
                     query = "MERGE INTO "+keyspace+" AS target " \
                                            "USING [ {'name':'"+keyspace+"_name2', 'val': 10} ] AS source " \
@@ -385,12 +390,14 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                                            "WHEN NOT MATCHED THEN " \
                                            "INSERT (KEY UUID(), VALUE {'name': source.name, 'val': source.val})"
                     result = self.run_cbq_query(query)['status']
-                    if result == 'success':
-                        errors.append({"reason": "merge(insert)_no_index", "message": "Merge(insert) upon unindexed collection was unexpectedly successful."})
+                    if result != 'success':
+                        errors.append({"reason": "update_no_index",
+                                       "message": "Update upon unindexed collection was unexpectedly unsuccessful."})
                 except CBQError as e:
+                    errors.append({"reason": "merge(insert)_no_index",
+                                   "message": "Merge(insert) upon unindexed collection was unexpectedly unsuccessful."})
                     pass
-
-                # merge as update upon not indexed collection. Expected result - fail - remobe
+                # merge as update upon not indexed collection. Expected result - success due to sequential scan
                 try:
                     query = "MERGE INTO "+keyspace+" AS target " \
                                            "USING [ {'name':'"+keyspace+"_name2', 'val': 1} ] AS source " \
@@ -400,20 +407,23 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                                            "WHEN NOT MATCHED THEN " \
                                            "INSERT (KEY UUID(), VALUE {'name': source.name, 'val': source.val})"
                     result = self.run_cbq_query(query)['status']
-                    if result == 'success':
-                        errors.append({"reason": "merge(update)_no_index", "message": "Merge(update) upon unindexed collection was unexpectedly successful."})
+                    if result != 'success':
+                        errors.append({"reason": "update_no_index",
+                                       "message": "Update upon unindexed collection was unexpectedly unsuccessful."})
                 except CBQError as e:
+                    errors.append({"reason": "merge(update)_no_index",
+                                   "message": "Merge(update) upon unindexed collection was unexpectedly unsuccessful."})
                     pass
-
-                # delete upon not indexed collection. Expected result - fail
+                # delete upon not indexed collection. Expected result - success due to sequential scan
                 try:
                     query = "delete from "+keyspace+" where val='1'"
                     result = self.run_cbq_query(query)['status']
-                    if result == 'success':
-                        errors.append({"reason": "delete_no_index", "message": "Delete upon unindexed collection was unexpectedly successful."})
+                    if result != 'success':
+                        errors.append({"reason": "update_no_index",
+                                       "message": "Update upon unindexed collection was unexpectedly unsuccessful."})
                 except CBQError as e:
+                    errors.append({"reason": "delete_no_index", "message": "Delete upon unindexed collection was unexpectedly unsuccessful."})
                     pass
-
         for keyspace in tests:
             keyspace = namespace+':'+keyspace
             bucket_name, scope_name, collection_name = self._extract_object_names(full_keyspace_name=keyspace)
@@ -425,10 +435,12 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 if result['status'] != 'success':
                     self.log.info(result['errors'])
                     errors.append({"reason": "create_primary_index", "message": "Creation of primary index is failed."})
+                self.sleep(5)
                 query = "select count(*) from system:all_indexes where bucket_id='"+bucket_name+"' and scope_id='"+scope_name+"' and keyspace_id='"+collection_name+"'"
                 result = self.run_cbq_query(query)
-                if result['results'][0]['$1'] != 1:
-                    errors.append({"reason": "create_primary_index", "message": "Primary index for collection is not presented in system:all_indexes."})
+                # sequential scan will come up in this result list
+                if result['results'][0]['$1'] != 2:
+                    errors.append({"reason": "create_primary_index", "message": f"Primary index for collection is not present in system:all_indexes.{result}"})
             except CBQError as e:
                 self.log.info(str(e))
                 errors.append({"reason": "create_primary_index", "message": "Creation of primary index is failed."})
@@ -518,10 +530,12 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 if result['status'] != 'success':
                     self.log.info(result['errors'])
                     errors.append({"reason": "drop_primary_index", "message": "Drop of primary index for collection is failed."})
+                self.sleep(5)
                 query = "select count(*) from system:all_indexes where bucket_id='"+bucket_name+"' and scope_id='"+scope_name+"' and keyspace_id='"+collection_name+"'"
                 result = self.run_cbq_query(query)
-                if result['results'][0]['$1'] != 0:
-                    errors.append({"reason": "drop_primary_index", "message": "Primary index for collection is presented in system:all_indexes after drop."})
+                # sequential scan will appear in this list
+                if result['results'][0]['$1'] != 1:
+                    errors.append({"reason": "drop_primary_index", "message": f"Primary index for collection is presented in system:all_indexes after drop.{result}"})
             except CBQError as e:
                 self.log.info(str(e))
                 errors.append(
@@ -539,11 +553,12 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 if result['status'] != 'success':
                     self.log.info(result['errors'])
                     errors.append({"reason": "create_secondary_index", "message": "Create of secondary index for collection is failed."})
+                self.sleep(5)
                 query = "select count(*) from system:all_indexes where bucket_id='"+bucket_name+"' and scope_id='"+scope_name+"' and keyspace_id='"+collection_name+"' and name='idx_val'"
                 result = self.run_cbq_query(query)
                 if result['results'][0]['$1'] != 1:
                     errors.append({"reason": "create_secondary_index",
-                                   "message": "Secondary index for collection is created but not presented in system:indexes."})
+                                   "message": f"Secondary index for collection is created but not presented in system:indexes.{result}"})
             except CBQError as e:
                 self.log.info(str(e))
                 errors.append({"reason": "create_secondary_index",
@@ -759,11 +774,12 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 if result['status'] != 'success':
                     self.log.info(result['errors'])
                     errors.append({"reason": "drop_secondary_index", "message": "Drop secondary index for collection is failed."})
+                self.sleep(5)
                 query = "select count(*) from system:all_indexes where bucket_id='"+bucket_name+"' and scope_id='"+scope_name+"' and keyspace_id='"+collection_name+"' and name='idx_val'"
                 result = self.run_cbq_query(query)
                 if result['results'][0]['$1'] != 0:
                     errors.append(
-                        {"reason": "drop_secondary_index", "message": "Secondary index for collection is presented in system:all_indexes after drop."})
+                        {"reason": "drop_secondary_index", "message": f"Secondary index for collection is presented in system:all_indexes after drop.{result}"})
             except CBQError as e:
                 self.log.info(str(e))
                 errors.append(
