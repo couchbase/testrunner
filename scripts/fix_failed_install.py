@@ -124,10 +124,11 @@ def get_ips_without_libtinfo5(pool_id):
     log.debug('Running: {0}'.format(query))
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    row_iter = cluster.query(query)
+    row_iter = cb.n1ql_query(N1QLQuery(query))
+    total_ips = len(row_iter)
     hosts_down = []
     no_apt = []
-    for row in row_iter.rows():
+    for row in row_iter:
         try:
             log.debug("-----------------------------------------------------")
             log.info(row)
@@ -149,8 +150,8 @@ def get_ips_without_libtinfo5(pool_id):
             log.error("Unknown Exception: {0}".format(e))
 
     log.debug("*****************************************************")
-    log.info("Total IPs: {0}".format(len(row_iter.rows())))
-    log.info("Installed on IPs {0}".format(len(row_iter.rows()) - len(no_apt) - len(hosts_down)))
+    log.info("Total IPs: {0}".format(total_ips))
+    log.info("Installed on IPs {0}".format(total_ips - len(no_apt) - len(hosts_down)))
     if len(no_apt) > 0:
         log.warning("{0} IPs did not have apt-get. => {1}".format(len(no_apt), no_apt))
     if len(hosts_down) > 0:
@@ -165,10 +166,11 @@ def get_ips_without_wget(pool_id):
     log.debug('Running: {0}'.format(query))
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    row_iter = cluster.query(query)
+    row_iter = cb.n1ql_query(N1QLQuery(query))
+    total_ips = len(row_iter)
     hosts_down = []
     no_apt = []
-    for row in row_iter.rows():
+    for row in row_iter:
         try:
             log.debug("-----------------------------------------------------")
             log.info(row)
@@ -190,8 +192,8 @@ def get_ips_without_wget(pool_id):
             log.error("Unknown Exception: {0}".format(e))
 
     log.debug("*****************************************************")
-    log.info("Total IPs: {0}".format(len(row_iter.rows())))
-    log.info("Installed on IPs {0}".format(len(row_iter.rows()) - len(no_apt) - len(hosts_down)))
+    log.info("Total IPs: {0}".format(total_ips))
+    log.info("Installed on IPs {0}".format(total_ips - len(no_apt) - len(hosts_down)))
     if len(no_apt) > 0:
         log.warning("{0} IPs did not have apt-get. => {1}".format(len(no_apt), no_apt))
     if len(hosts_down) > 0:
@@ -207,6 +209,7 @@ def get_ips_without_curl(pool_id):
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     row_iter = cb.n1ql_query(N1QLQuery(query))
+    total_ips = len(row_iter)
     hosts_down = []
     no_curl = []
     no_apt = []
@@ -243,7 +246,7 @@ def get_ips_without_curl(pool_id):
             log.error("Unknown Exception: {0}".format(e))
 
     log.debug("*****************************************************")
-    log.info("Total IPs: {0}".format(len(row_iter.rows())))
+    log.info("Total IPs: {0}".format(total_ips))
     if len(no_curl) > 0:
         log.debug("{0} IPs did not have curl.".format(len(no_curl)))
         log.info("Curl installed on all accessible IPs successfully")
@@ -278,12 +281,13 @@ def install_ntp_on_deb(pool_id):
     if pool_id == 'all':
         query = "SELECT username, ipaddr, state FROM `QE-server-pool` WHERE (os = 'ubuntu22' OR os = 'debian')"
     log.info('Running: {0}'.format(query))
-    row_iter = cluster.query(query)
+    row_iter = cb.n1ql_query(N1QLQuery(query))
+    total_ips = len(row_iter)
     hosts_down = []
     no_apt = []
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    for row in row_iter.rows():
+    for row in row_iter:
         try:
             log.debug("-----------------------------------------------------")
             log.info(row)
@@ -307,8 +311,8 @@ def install_ntp_on_deb(pool_id):
             log.error("Unknown Exception: {0}".format(e))
 
     log.debug("*****************************************************")
-    log.info("Total IPs: {0}".format(len(row_iter.rows())))
-    log.info("Installed on IPs {0}".format(len(row_iter.rows()) - len(no_apt) - len(hosts_down)))
+    log.info("Total IPs: {0}".format(total_ips))
+    log.info("Installed on IPs {0}".format(total_ips - len(no_apt) - len(hosts_down)))
     if len(no_apt) > 0:
         log.warning("{0} IPs did not have apt-get. => {1}".format(len(no_apt), no_apt))
     if len(hosts_down) > 0:
@@ -321,11 +325,12 @@ def install_ntp_on_cent(pool_id):
     if pool_id == 'all':
         query = "SELECT username, ipaddr, state FROM `QE-server-pool` WHERE (os = 'rhel9' OR os = 'oel9')"
     log.debug('Running: {0}'.format(query))
-    row_iter = cluster.query(query)
+    row_iter = cb.n1ql_query(N1QLQuery(query))
+    total_ips = len(row_iter)
     hosts_down = []
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    for row in row_iter.rows():
+    for row in row_iter:
         server = row['ipaddr']
         try:
             log.debug("-----------------------------------------------------")
@@ -344,7 +349,7 @@ def install_ntp_on_cent(pool_id):
             log.error("Unknown Exception: {0}".format(e))
 
     log.debug("*****************************************************")
-    log.info("Total IPs: {0}".format(len(row_iter.rows())))
+    log.info("Total IPs: {0}".format(total_ips))
     if len(hosts_down) > 0:
         log.warning("Failed to connect to {0} IPs => {1}".format(len(hosts_down), hosts_down))
 
