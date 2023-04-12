@@ -1363,3 +1363,157 @@ class RestfulDAPITest(ServerlessBaseTestCase):
             self.assertTrue(response.status_code == 200, "Delete doc failed for database: {}".format(database.id))
             error_msg = json.loads(response.content)["error"]["message"]
             self.assertTrue(error_msg == self.error_message, "Got wrong error message for timeout parametere: {}".format(error_msg))
+            # durability and consistency parameter is pending
+
+
+    def test_query_parameter_max_page_size(self):
+        for database in self.databases.values():
+            self.rest_dapi = RestfulDAPI({"dapi_endpoint": database.data_api,
+                                        "access_token": database.access_key,
+                                        "access_secret": database.secret_key})
+
+            self.log.info("Test query parametere max page size ie 10000 for database: {}".format(database.id))
+            self.log.info("Batch size is: {}".format(self.batch_size))
+            doc_gen = doc_generator("key", self.key_size, self.value_size,
+                                    self.number_of_docs, self.randomize_value,
+                                    self.mixed_key)
+            batched_gen_obj = BatchedDocumentGenerator(doc_gen, self.batch_size)
+            while batched_gen_obj.has_next():
+                kv_dapi = []
+                next_batch = batched_gen_obj.next_batch()
+                for key in next_batch:
+                    doc = next_batch[key]
+                    doc = json.loads(doc)
+                    kv_dapi.append({"id": key, "value": doc})
+
+                response = self.rest_dapi.insert_bulk_document("_default", "_default", kv_dapi)
+                self.log.info("Response code for bulk insert doc is: {}".format(response.status_code))
+
+            response = self.rest_dapi.get_document_list("_default", "_default", "?pagesize=10001")
+            self.assertTrue(response.status_code == 500, "Negative test for pagesize greater than 10000 failed")
+            error_msg = json.loads(response.content)["error"]["message"]
+            self.assertTrue(self.error_message == error_msg, "Ambigous error message got for pagesize greater than 10000")
+
+            response = self.rest_dapi.get_document_list("_default", "_default", "?limit=10001")
+            self.assertTrue(response.status_code == 500, "Negative test for limit greater than 10000 failed")
+            error_msg = json.loads(response.content)["error"]["message"]
+            self.assertTrue(self.error_message == error_msg, "Ambigous error message got for limit greater than 10000")
+
+
+    def test_query_parameter_get_doc_list(self):
+        for database in self.databases.values():
+            self.rest_dapi = RestfulDAPI({"dapi_endpoint": database.data_api,
+                                        "access_token": database.access_key,
+                                        "access_secret": database.secret_key})
+
+            self.log.info("Test query parameters for bulk doc get api for database: {}".format(database.id))
+
+            self.log.info("Batch size is: {}".format(self.batch_size))
+            doc_gen = doc_generator("key", self.key_size, self.value_size,
+                                    self.number_of_docs, self.randomize_value,
+                                    self.mixed_key)
+            batched_gen_obj = BatchedDocumentGenerator(doc_gen, self.batch_size)
+            key_doc = dict()
+            while batched_gen_obj.has_next():
+                kv_dapi = []
+                next_batch = batched_gen_obj.next_batch()
+                for key in next_batch:
+                    doc = next_batch[key]
+                    doc = json.loads(doc)
+                    key_doc[key] = doc
+                    kv_dapi.append({"id": key, "value": doc})
+
+                response = self.rest_dapi.insert_bulk_document("_default", "_default", kv_dapi)
+                self.log.info("Response code for bulk insert doc is: {}".format(response.status_code))
+
+            # test very less timeout parameter
+            response = self.rest_dapi.get_document_list("_default", "_default", "?timeout=0.05s&meta=true")
+            self.assertTrue(response.status_code == 400, "Get doc list with less timeout parameter for database: {}".format(database.id))
+            error_msg = json.loads(response.content)["error"]["message"]
+            self.assertTrue(error_msg == self.error_message, "Wrong error message received")
+
+            # test pagesize=0 parameter
+            response = self.rest_dapi.get_document_list("_default", "_default", "?pagesize=0&pretty=true")
+            self.assertTrue(response.status_code == 200, "Get document list failef with pagesize=0 parametere: {}".format(response.status_code))
+            doc_list = json.loads(response.content)["docs"]
+            keys_inserted = list(key_doc.keys())
+            keys_retrieved = list(doc["id"] for doc in doc_list)
+            self.assertTrue(len(keys_retrieved) == 20, "Get doc list does not have length equals 20")
+            validate_keys = next((keys for keys in keys_retrieved if keys not in keys_inserted), True)
+            self.assertTrue(validate_keys == True, "Get unambigous keys while fetching list of docs"
+                            "key: {} for database: {}".format(validate_keys, database.id))
+
+            # test pagesize > 0 parameter
+            response = self.rest_dapi.get_document_list("_default", "_default", "?pagesize=10")
+            self.assertTrue(response.status_code == 200, "Getting doc list failed with pagesize parameter: {}".format(response.status_code))
+            doc_list = json.loads(response.content)["docs"]
+            keys_retrieved = list(doc["id"] for doc in doc_list)
+            self.assertTrue(len(keys_retrieved) == 10, "Get doc list does not have length equals 10")
+            validate_keys = next((keys for keys in keys_retrieved if keys not in keys_inserted), True)
+            self.assertTrue(validate_keys == True, "Get unambigous keys while fetching list of docs"
+                            "key: {} for database: {}".format(validate_keys, database.id))
+
+            # test limit parameter wiht 0 value
+            response = self.rest_dapi.get_document_list("_default", "_default", "?limit=0")
+            self.assertTrue(response.status_code == 200, "Get doc list failed with limit parametere: {}".format(response.status_code))
+            doc_list = json.loads(response.content)["docs"]
+            keys_retrieved = list(doc["id"] for doc in doc_list)
+            self.assertTrue(len(keys_retrieved) == 20, "Get doc list does not have length equals 20")
+            validate_keys = next((keys for keys in keys_retrieved if keys not in keys_inserted), True)
+            self.assertTrue(validate_keys == True, "Get unambigous keys while fetching list of docs"
+                            "key: {} for database: {}".format(validate_keys, database.id))
+
+            # test limit parameter for greater than 0
+            response = self.rest_dapi.get_document_list("_default", "_default", "?limit=10")
+            self.assertTrue(response.status_code == 200, "Getting doc list failed with limit parameter: {}".format(response.status_code))
+            doc_list = json.loads(response.content)["docs"]
+            keys_retrieved = list(doc["id"] for doc in doc_list)
+            self.assertTrue(len(keys_retrieved) == 10, "Get doc list does not have length equals 10")
+            validate_keys = next((keys for keys in keys_retrieved if keys not in keys_inserted), True)
+            self.assertTrue(validate_keys == True, "Get unambigous keys while fetching list of docs"
+                            "key: {} for database: {}".format(validate_keys, database.id))
+
+            # test pass limit and pagesize parameter together, pagesize should override limit parameter
+            response = self.rest_dapi.get_document_list("_default", "_default", "?limit=10&pagesize=20")
+            self.assertTrue(response.status_code == 200, "Get doc list failed with limit and"
+                            "pagesize parametere: {}".format(response.status_code))
+            doc_list = json.loads(response.content)["docs"]
+            keys_retrieved = list(doc["id"] for doc in doc_list)
+            self.assertTrue(len(keys_retrieved) == 20, "Get doc list does not have length equals 20")
+            validate_keys = next((keys for keys in keys_retrieved if keys not in keys_inserted), True)
+            self.assertTrue(validate_keys == True, "Get unambigous keys while fetching list of docs"
+                            "key: {} for database: {}".format(validate_keys, database.id))
+
+            # test page parameter
+            mark = dict()
+            for i in range(1, 11):
+                query_param = "?orderby=META().id&order=ASC&pagesize=10&page=" + str(i)
+                response = self.rest_dapi.get_document_list("_default", "_default", query_param)
+                self.assertTrue(response.status_code == 200, "Get document list failed with pagesize=10 and"
+                                "page = {} for database: {}".format(i, database.id))
+                doc_list = json.loads(response.content)["docs"]
+                keys_retrieved = list(doc["id"] for doc in doc_list)
+                # check if the same documents comes in two different pages
+                validate_flag = True
+                for key in keys_retrieved:
+                    self.log.info(key)
+
+                for key in keys_retrieved:
+                    if key in list(mark.keys()):
+                        validate_flag = False
+                        break
+                    mark[key] = True
+                self.assertTrue(validate_flag == True, "Getting the same document in two different pages")
+
+            # test offset parameter
+            response = self.rest_dapi.get_document_list("_default", "_default", "?offset=30&pagesize={}".format(self.number_of_docs))
+            self.assertTrue(response.status_code == 200, "Get doc list failed for database: {}".format(database.id))
+            document_list = json.loads(response.content)["docs"]
+            self.assertTrue(len(document_list) == (self.number_of_docs - 30),
+                            "Offset parameter is not working properly for database: {}".format(database.id))
+
+            # test offset parameter along with pagesize and page
+            response = self.rest_dapi.get_document_list("_default", "_default", "?offset=40&pagesize=80&page=0")
+            self.assertTrue(response.status_code == 200, "Get doc list failed with offset, pagesize and page parameter")
+            document_list = json.loads(response.content)["docs"]
+            self.assertTrue(len(document_list) == 60, "Length of document list is as expected")
