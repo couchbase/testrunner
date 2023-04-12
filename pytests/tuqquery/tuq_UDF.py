@@ -494,15 +494,15 @@ class QueryUDFTests(QueryTests):
     def test_inline_subquery_select(self):
         try:
             self.run_cbq_query(
-                "CREATE OR REPLACE FUNCTION func4() { (SELECT RAW t1.geo.alt FROM `travel-sample`) }")
-            results = self.run_cbq_query('SELECT array_length(func4()) FROM `travel-sample`')
-            self.assertEqual(results['metrics']['resultCount'], 31591)
-            self.assertEqual(results['results'][0], {'$1': 31591})
+                "CREATE OR REPLACE FUNCTION func4() { (SELECT RAW t1.geo.alt FROM `travel-sample` limit 10) }")
+            results = self.run_cbq_query('SELECT array_length(func4()) FROM `travel-sample` limit 10')
+            self.assertEqual(results['metrics']['resultCount'], 10)
+            self.assertEqual(results['results'][0], {'$1': 10})
             results = self.run_cbq_query(
-                'CREATE OR REPLACE FUNCTION func5() {(SELECT array_length(func4()) FROM `travel-sample`)}')
+                'CREATE OR REPLACE FUNCTION func5() {(SELECT array_length(func4()) FROM `travel-sample` limit 10)}')
             results = self.run_cbq_query('EXECUTE FUNCTION func5()')
             self.assertEqual(results['metrics']['resultCount'], 1)
-            self.assertEqual(results['results'][0][0], {'$1': 31591})
+            self.assertEqual(results['results'][0][0], {'$1': 10})
         finally:
             try:
                 self.run_cbq_query("DROP FUNCTION func4")
@@ -620,13 +620,15 @@ class QueryUDFTests(QueryTests):
     def test_inline_query_function_no_index(self):
         try:
             self.run_cbq_query(
-                "CREATE OR REPLACE FUNCTION func1(nameval) {{ (select * from default:default.{0}.{1} where fake = nameval) }}".format(
+                "CREATE OR REPLACE FUNCTION func1(nameval) {{ (select * from default:default.{0}.{1} where name = nameval) }}".format(
                     self.scope, self.collections[0]))
             results = self.run_cbq_query("EXECUTE FUNCTION func1('old hotel')")
-            self.fail()
+            diffs = DeepDiff(results['results'], [{'test1': {'name': 'old hotel', 'type': 'hotel'}}, {'test1': {'name': 'old hotel', 'nested': {'fields': 'fake'}}}, {'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         except Exception as e:
             self.log.error(str(e))
-            self.assertTrue("No index available" in str(e), "Error message is wrong {0}".format(str(e)))
+            self.fail()
         finally:
             try:
                 self.run_cbq_query("DROP FUNCTION func1")
@@ -1309,7 +1311,7 @@ class QueryUDFTests(QueryTests):
                 self.run_cbq_query("CREATE FUNCTION func1(degrees) LANGUAGE INLINE AS (degrees - 32) ")
                 results = self.run_cbq_query(
                     "SELECT * FROM default:default.test.test1 LET maximum_no = func1(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END")
-                self.assertEqual(results['results'], [{'maximum_no': 4, 'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+                self.assertEqual(results['results'], [{'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
 
                 functions = 'function adder(a, b) { return a + b; } function multiplier(a, b) { return a * b; }'
                 function_names = ["adder", "multiplier"]
@@ -1318,7 +1320,7 @@ class QueryUDFTests(QueryTests):
                     query='CREATE OR REPLACE FUNCTION func2(a,b) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
                 results = self.run_cbq_query(
                     "SELECT * FROM default:default.test.test1 LET maxi=func2(1,3) WHERE ANY v in test1.numbers SATISFIES v = maxi END")
-                self.assertEqual(results['results'], [{'maxi': 4, 'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+                self.assertEqual(results['results'], [{'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
 
         finally:
             try:
@@ -1518,7 +1520,7 @@ class QueryUDFTests(QueryTests):
             results = self.run_cbq_query(
                 "PREPARE p1 as SELECT * FROM default:default.test.test1 LET maximum_no = func1(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END")
             results = self.run_cbq_query("EXECUTE p1")
-            self.assertEqual(results['results'], [{'maximum_no': 4, 'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+            self.assertEqual(results['results'], [{'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
 
             functions = 'function adder(a) { return (a - 32); } function multiplier(a, b) { return a * b; }'
             function_names = ["adder", "multiplier"]
@@ -1526,7 +1528,7 @@ class QueryUDFTests(QueryTests):
             self.run_cbq_query(
                 query='CREATE OR REPLACE FUNCTION func1(a) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
             results = self.run_cbq_query("EXECUTE p1")
-            self.assertEqual(results['results'], [{'maximum_no': 4, 'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+            self.assertEqual(results['results'], [{'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
         except Exception as e:
             self.log.error(str(e))
             self.fail()

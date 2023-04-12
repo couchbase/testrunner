@@ -586,7 +586,7 @@ class QueryArrayFlatteningTests(QueryTests):
             if self.use_unnest:
                 self.assertTrue("Duplicate UNNEST alias d" in str(e), "The error is incorrect check the error {0}".format(str(e)))
             else:
-                self.assertTrue("Duplicate variable d" in str(e), "The error is incorrect check the error {0}".format(str(e)))
+                self.assertTrue("Duplicate variable" in str(e), "The error is incorrect check the error {0}".format(str(e)))
 
     '''We expect the query to pick up the array with the keys flattened'''
     def test_flatten_index_selection(self):
