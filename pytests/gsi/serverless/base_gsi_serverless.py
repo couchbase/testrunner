@@ -563,3 +563,20 @@ class BaseGSIServerless(QueryBaseServerless):
                     if f':{req_stat}' in stat:
                         result[stat] = value
         return result
+
+    def get_defrag_response(self, rest_info):
+        rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
+        nodes_obj = rest_obj.get_all_dataplane_nodes()
+        self.log.debug(f"Dataplane nodes object {nodes_obj}")
+        indexer_node = None
+        for node in nodes_obj:
+            if 'index' in node['services']:
+                indexer_node = node['hostname'].split(":")[0]
+                break
+        if indexer_node is not None:
+            api = "https://{}:18091/pools/default/services/index/defragmented".format(indexer_node)
+            resp = requests.get(api, auth=(rest_info.admin_username, rest_info.admin_password), verify=False)
+            resp.raise_for_status()
+            return resp.json()
+        else:
+            raise Exception("Unable to fetch index node from the dataplane nodes object")

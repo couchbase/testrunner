@@ -571,6 +571,8 @@ class TenantManagement(BaseGSIServerless):
                 if num_dbs_deleted < delete_count and database.id not in id_ddl_list:
                     self.delete_database(database_id=database.id)
                     num_dbs_deleted += 1
+            defrag_result_b4_reb = self.get_defrag_response(rest_info=rest_info)
+            self.log.info("Defrag response is {}".format(defrag_result_b4_reb))
             time_now, rebalance_started = time.time(), False
             rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
             while time.time() - time_now < 1200:
@@ -794,6 +796,8 @@ class TenantManagement(BaseGSIServerless):
                     num_dbs_deleted += 1
             time_now, rebalance_started = time.time(), False
             rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
+            defrag_result_b4_reb = self.get_defrag_response(rest_info=rest_info)
+            self.log.info("Defrag response is {}".format(defrag_result_b4_reb))
             while time.time() - time_now < 1200:
                 status, progress = rest_obj._rebalance_status_and_progress()
                 if status == 'running':
