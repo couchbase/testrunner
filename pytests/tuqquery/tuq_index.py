@@ -448,13 +448,15 @@ class QueriesViewsTests(QuerySanityTests):
                     idx1, query_bucket, "VMs")
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx1)
-                self._verify_results(actual_result['results'], [])
+                self.assertTrue(idx1 in str(actual_result['results']),
+                                f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx1)
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY i.memory FOR i in %s END) " % (
                     idx2, query_bucket, "VMs")
                 actual_result = self.run_cbq_query()
-                self._wait_for_index_online(bucket, idx1)
-                self._verify_results(actual_result['results'], [])
+                self._wait_for_index_online(bucket, idx2)
+                self.assertTrue(idx2 in str(actual_result['results']),
+                                f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx2)
                 self.assertTrue(self._is_index_in_list(bucket, idx1), "Index is not in list")
                 self.query = "EXPLAIN select d.name from %s d UNNEST VMs as x where any i in " \
