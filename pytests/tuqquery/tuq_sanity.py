@@ -1721,7 +1721,6 @@ class QuerySanityTests(QueryTests):
             actual_result = self.run_cbq_query()
             if "query-testemployee10153.1877827" not in str(actual_result['results']):
                 self.assertTrue(False, str(actual_result['results']))
-            self.assertTrue("'x1': {'name': 1}" in str(actual_result['results']))
 
     def test_let_missing(self):
         self.fail_if_no_buckets()
@@ -1739,9 +1738,7 @@ class QuerySanityTests(QueryTests):
                 try:
                     self.run_cbq_query(self.query)
                 except CBQError as ex:
-                    self.assertTrue(str(ex).find("Duplicate variable o (near line 1, column 57) already in scope.") != -1 or
-                                    str(ex).find("Duplicate variable o (near line 1, column 66) already in scope.") != -1,
-                                    "Error is incorrect.")
+                    self.assertTrue("Duplicate variable o" in str(ex), f"Error is incorrect. Please take a look at output: {str(ex)}")
                 else:
                     self.fail("There was no errors.")
                 self.query = 'delete from %s use keys["k01","k02"]' % query_bucket

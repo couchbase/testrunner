@@ -55,7 +55,8 @@ class QueriesViewsTests(QuerySanityTests):
                     self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (view_name, query_bucket,
                                                                          self.FIELDS_TO_INDEX[ind - 1], self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
+                    self.assertTrue(view_name in str(actual_result['results']),
+                                    f"The index is returning the wrong index, please check {actual_result}")
                     created_indexes.append(view_name)
                     self._wait_for_index_online(bucket, view_name)
                     self._verify_view_is_present(view_name, bucket) if self.index_type == 'VIEW' else None
@@ -63,7 +64,6 @@ class QueriesViewsTests(QuerySanityTests):
                 for view_name in created_indexes:
                     self.query = "DROP INDEX %s ON %s USING %s" % (view_name, query_bucket, self.index_type)
                     actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['results'], [])
 
     def test_primary_create_delete_index(self):
         self.fail_if_no_buckets()

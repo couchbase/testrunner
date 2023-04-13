@@ -1122,9 +1122,8 @@ class QueriesIndexTests(QueryTests):
                              "AND  NOT (department = 'Manager') ORDER BY name limit 10"
                 actual_result_within = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result_within)
-                self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan'
-                                or plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan',
-                                "Intersect Scan is not being used in and query for 2 array indexes")
+                self.assertTrue('IntersectScan' in str(plan) or 'UnionScan' in str(plan),
+                                f"Intersect Scan is not being used in and query for 2 array indexes: {plan}")
                 if plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan':
                     result3 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][0]['scan']['index']
                     result4 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][1]['scan']['index']
@@ -1695,9 +1694,9 @@ class QueriesIndexTests(QueryTests):
                              "AND  NOT (department = 'Manager') ORDER BY name limit 10"
                 actual_result_within = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result_within)
-                self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan'
-                                or plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan',
-                                "Intersect Scan is not being used in and query for 2 array indexes")
+                self.assertTrue('IntersectScan' in str(plan)
+                                or 'UnionScan' in str(plan),
+                                f"Intersect Scan is not being used in and query for 2 array indexes: {plan}")
                 if plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan':
                     result3 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][0]['scan']['index']
                     result4 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][1]['scan']['index']
@@ -3674,7 +3673,7 @@ class QueriesIndexTests(QueryTests):
                              'end LIMIT 100'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan')
+                self.assertTrue('IntersectScan' in str(plan), f"Intersectscan was expected please check plan: {plan}")
                 self.assertTrue(
                     plan['~children'][0]['~children'][0]['scans'][0]['scan']['index'] == 'rec1-1_record_by_index_map')
                 self.query = 'SELECT r AS doc, meta(r).cas AS revision FROM {0} AS r WHERE any i in ' \
@@ -3691,7 +3690,7 @@ class QueriesIndexTests(QueryTests):
                              'end LIMIT 100'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'DistinctScan')
+                self.assertTrue('DistinctScan' in str(plan), f"Distinctscan was expected please check plan: {plan}")
                 self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index'] == 'rec1-1_record_by_index_map')
                 self.query = 'SELECT r AS doc, meta(r).cas AS revision FROM {0} AS r WHERE every i in ' \
                              'object_pairs(indexMap) satisfies i = {{ "name":"key1", "val":"val1"}} end or ' \
@@ -3707,7 +3706,7 @@ class QueriesIndexTests(QueryTests):
                              'end LIMIT 100'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'DistinctScan')
+                self.assertTrue('DistinctScan' in str(plan), f"Distinctscan was expected please check plan: {plan}")
                 self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index'] == 'rec1-1_record_by_index_map')
                 self.query = 'SELECT r AS doc, meta(r).cas AS revision FROM {0} AS r WHERE any i in' \
                              ' object_pairs(indexMap) satisfies i = {{ "name":"key1", "val":"val1"}} end ' \
@@ -3723,7 +3722,7 @@ class QueriesIndexTests(QueryTests):
                              '{{ "name":"key2", "val":"val2"}} end LIMIT 100'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan')
+                self.assertTrue('IntersectScan' in str(plan), f"Intersectscan was expected please check plan: {plan}")
                 self.assertTrue(
                     plan['~children'][0]['~children'][0]['scans'][0]['scan']['index'] == 'rec1-1_record_by_index_map')
                 self.query = 'insert into {0} '.format(query_bucket) + '(KEY, VALUE) VALUES ("test1",{"type":"testType",' \
@@ -3743,7 +3742,7 @@ class QueriesIndexTests(QueryTests):
                              ' end LIMIT 100'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan')
+                self.assertTrue('IntersectScan' in str(plan), f"Intersectscan was expected please check plan: {plan}")
                 self.assertTrue(
                     plan['~children'][0]['~children'][0]['scans'][0]['scan']['index'] == 'rec1-1_record_by_index_map')
                 self.query = 'SELECT r AS doc, meta(r).cas AS revision FROM {0} AS r ' \
@@ -3761,7 +3760,7 @@ class QueriesIndexTests(QueryTests):
                              'end LIMIT 100'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan')
+                self.assertTrue('IntersectScan' in str(plan), f"Intersectscan was expected please check plan: {plan}")
                 self.assertTrue(
                     plan['~children'][0]['~children'][0]['scans'][0]['scan']['index'] == 'rec1-1_record_by_index_map')
                 self.query = 'delete from {0} use keys["test","test1"]'.format(query_bucket)

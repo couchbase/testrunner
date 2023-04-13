@@ -117,7 +117,7 @@ class QueryContextTests(QueryTests):
             results2 = self.run_cbq_query(query='select * from test1 where name = "new hotel"', query_context='fakevalue')
             self.fail()
         except Exception as e:
-            self.assertTrue('only 2 or 4 parts are valid' in str(e))
+            self.assertTrue('Keyspace not found in CB datastore: default:fakevalue' in str(e))
 
     def test_special_characters(self):
         try:
