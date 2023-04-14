@@ -1,20 +1,20 @@
 USAGE = """\
             Syntax: new_install.py [options]
-            
+
             Options:
              -p <param=val,...> Comma-separated key=value info
              -i <file>          Path to .ini file containing cluster information
-            
+
             Available params:
              debug_logs=False                               Print debug logs
-             install_tasks=uninstall-install-init-cleanup   Pick 1 or more tasks  
+             install_tasks=uninstall-install-init-cleanup   Pick 1 or more tasks
              v, version=<numeric version>                   Example: "6.5.0-1234".
              url=<build url>                                Example: "http://172.23.126.166/builds/latestbuilds/couchbase-server/mad-hatter/1234/couchbase-server-enterprise-6.5.0-1234-centos7.x86_64.rpm
              edition, type=enterprise                       CB edition, community or enterprise
              timeout=600                                    End install after timeout seconds
              storage_mode=plasma                            Sets indexer storage mode
              enable_ipv6=False                              Enable ipv6 mode in ns_server
-        
+
             Examples:
              new_install.py -i /tmp/test.ini -p install_tasks=uninstall,debug_logs=true
              new_install.py -i /tmp/test.ini -p url=http://...,timeout=100
@@ -276,7 +276,7 @@ NON_ROOT_CMDS = {
             "./cb-non-package-installer --install --package buildpath --install-location " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/",
         "suse_install":
             "mkdir " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb;"
-            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; " 
+            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; "
             "./cb-non-package-installer --install --package buildpath --install-location " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/",
         "post_install": NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/opt/couchbase/bin/couchbase-server --start",
         "post_install_retry": None,
@@ -351,13 +351,13 @@ NON_ROOT_MANUAL_CMDS = {
                                                          "-ef |egrep couchbase|cut -f3 -d' '`; " +
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0; ",
         "install":
-            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; " 
-            "rpm2cpio buildpath | cpio --extract --make-directories --no-absolute-filenames  > /dev/null && echo 1 || echo 0; " 
-            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "/opt/couchbase/; " 
+            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; "
+            "rpm2cpio buildpath | cpio --extract --make-directories --no-absolute-filenames  > /dev/null && echo 1 || echo 0; "
+            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "/opt/couchbase/; "
             "./bin/install/reloc.sh `pwd`  > /dev/null && echo 1 || echo 0; ",
-        "suse_install": "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; " 
-            "rpm2cpio buildpath | cpio --extract --make-directories --no-absolute-filenames  > /dev/null && echo 1 || echo 0; " 
-            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "/opt/couchbase/; " 
+        "suse_install": "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; "
+            "rpm2cpio buildpath | cpio --extract --make-directories --no-absolute-filenames  > /dev/null && echo 1 || echo 0; "
+            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "/opt/couchbase/; "
             "./bin/install/reloc.sh `pwd`  > /dev/null && echo 1 || echo 0; ",
         "post_install": NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "opt/couchbase/bin/couchbase-server \-- -noinput -detached",
         "post_install_retry": None,
