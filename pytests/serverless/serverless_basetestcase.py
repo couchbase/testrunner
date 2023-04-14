@@ -268,6 +268,13 @@ class ServerlessBaseTestCase(unittest.TestCase):
     def delete_dataplane(self, dataplane_id):
         self.api.delete_dataplane(dataplane_id)
 
+    def get_admin(self, database, endpoint):
+        api = f"https://{database.nebula}:18093/admin"
+        auth = (database.access_key, database.secret_key)
+        resp = requests.get(api + '/' + endpoint, auth=auth, timeout=120, verify=False)
+        resp.raise_for_status()
+        return resp.json()
+
     def run_query(self, database, query, query_params=None, use_sdk=False, query_node=None, **kwargs):
         """
         By default runs against nebula endpoint. In case, you need to use a specific query node,
