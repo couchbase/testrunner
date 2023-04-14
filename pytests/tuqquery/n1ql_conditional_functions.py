@@ -113,7 +113,7 @@ class QueryConditionalFunctionsTests(QueryTests):
     def test_decode_functions(self):
         queries = dict()
 
-        index_1 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0)], 'state': 'online',
+        index_1 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': [("join_yr INCLUDE MISSING", 0)], 'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
 
         query_1 = "select decode(join_yr-round(join_yr,-1), 0, 'first_result_term', 1, 'second_result_term') " \
@@ -406,7 +406,7 @@ class QueryConditionalFunctionsTests(QueryTests):
     def test_decode_joins(self):
         queries = dict()
 
-        index_1 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0)], 'state': 'online',
+        index_1 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': [("join_yr INCLUDE MISSING", 0)], 'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
 
         query_1 = "select decode(d.join_yr, 2010, 'first_result_term', 2011, 'second_result_term', 'default') from " \
