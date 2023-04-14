@@ -413,7 +413,7 @@ class StableTopFTS(FTSBaseTest):
         bucket = self._cb_cluster.get_bucket_by_name('default')
         collection_index, type, index_scope, index_collections = self.define_index_parameters_collection_related()
         index = self.create_index(bucket, "wiki_index", collection_index=collection_index, _type=type,
-                                  scope=index_scope, collections=index_collections)
+                                  scope=index_scope, collections=index_collections, analyzer=self.analyzer)
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True,
                                   zero_rows_ok=False)
