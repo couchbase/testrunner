@@ -1413,7 +1413,7 @@ class QueriesIndexTests(QueryTests):
             else:
                 self.fail("There was no errors. Error expected: No index available for join term default")
 
-            self.query = 'create index {0} on {1}("{2}" || {1}.chkey)'.format(idx2, query_bucket, std_bucket)
+            self.query = 'create index {0} on {1}("{2}" || chkey)'.format(idx2, query_bucket, std_bucket)
             self.run_cbq_query()
             created_indexes.append(idx2)
             self.query = 'select {0},{1} from {1} left outer join {0} on key ("{1}" || {0}.chkey) for {1} ' \

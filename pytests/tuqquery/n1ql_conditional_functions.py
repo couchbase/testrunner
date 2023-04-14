@@ -113,7 +113,7 @@ class QueryConditionalFunctionsTests(QueryTests):
     def test_decode_functions(self):
         queries = dict()
 
-        index_1 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0)], 'state': 'online',
+        index_1 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': [("join_yr INCLUDE MISSING", 0)], 'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
 
         query_1 = "select decode(join_yr-round(join_yr,-1), 0, 'first_result_term', 1, 'second_result_term') " \
@@ -406,13 +406,13 @@ class QueryConditionalFunctionsTests(QueryTests):
     def test_decode_joins(self):
         queries = dict()
 
-        index_1 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0)], 'state': 'online',
+        index_1 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': [("join_yr INCLUDE MISSING", 0)], 'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
 
-        query_1 = "select decode(join_yr, 2010, 'first_result_term', 2011, 'second_result_term', 'default') from " \
+        query_1 = "select decode(d.join_yr, 2010, 'first_result_term', 2011, 'second_result_term', 'default') from " \
                   "(select join_yr from {0} order by meta().id limit 10) d inner join (select join_yr from {0} order" \
                   " by meta().id limit 10) dd on (d.join_yr == dd.join_yr)".format(self.query_bucket)
-        verify_1 = "select case when join_yr = 2010 then 'first_result_term' when join_yr = 2011 then " \
+        verify_1 = "select case when d.join_yr = 2010 then 'first_result_term' when d.join_yr = 2011 then " \
                    "'second_result_term' else 'default_term' end from (select join_yr from {0} order by meta().id" \
                    " limit 10) d inner join (select join_yr from {0} order by meta().id limit 10) dd on (d.join_yr" \
                    " == dd.join_yr)".format(self.query_bucket)
