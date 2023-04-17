@@ -5,6 +5,7 @@ from pytests.serverless.dapi.dapi_helper import doc_generator
 import json
 import threading
 import time
+import pytz
 import datetime
 
 class RestfulDAPITest(ServerlessBaseTestCase):
@@ -1226,33 +1227,38 @@ class RestfulDAPITest(ServerlessBaseTestCase):
 
 
             # test expiry
-            # response = self.rest_dapi.insert_doc("key1", {"inserted": True}, "_default", "_default", "?expiry=60s&meta=true")
-            # self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(database.id))
-            # response = self.rest_dapi.get_doc("key1", "_default", "_default", "?meta=true")
-            # self.assertTrue(response.status_code == 200, "Get doc failed for database: {}".format(database.id))
-            # expiryTime = json.loads(response.content)['meta']["api"]["expiryTime"]
-            # expiryTime = datetime.datetime.strptime(expiryTime, '%Y-%m-%dT%H:%M:%SZ')
-            # now = datetime.datetime.now()
-            # self.assertTrue(now < expiryTime, "Unexpected expiry time for database: {}".format(database.id))
-            # time.sleep(60)
-            # response = self.rest_dapi.get_doc("key1", "_default", "_default")
-            # self.assertTrue(response.status_code == 404, "Get for expired doc is"
-            #                 "successful for database: {}".format(database.id))
+            response = self.rest_dapi.insert_doc("key1", {"inserted": True}, "_default", "_default", "?expiry=60s&meta=true")
+            self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(database.id))
+            response = self.rest_dapi.get_doc("key1", "_default", "_default", "?meta=true&withExpiry=true")
+            self.assertTrue(response.status_code == 200, "Get doc failed for database: {}".format(database.id))
+            expiryTime = json.loads(response.content)['meta']["api"]["expiryTime"]
+            expiryTime = datetime.datetime.strptime(expiryTime, '%Y-%m-%dT%H:%M:%SZ')
+            expiryTime = expiryTime.strftime("%Y-%m-%d %H:%M:%S")
+
+            UTC = pytz.utc
+            now = datetime.datetime.now(UTC)
+            now = now.strftime("%Y-%m-%d %H:%M:%S")
+            self.assertTrue(now < expiryTime, "Unexpected expiry time for database: {}".format(database.id))
+
+            time.sleep(70)
+            response = self.rest_dapi.get_doc("key1", "_default", "_default")
+            self.assertTrue(response.status_code == 404, "Get for expired doc is"
+                            "successful for database: {}".format(database.id))
 
             # test preserveExpiry parameter
-            # response = self.rest_dapi.insert_doc("key1", {"inserted": True}, "_default", "_default",
-            #                                      "?expiry=120s&meta=true&preserveExpiry=true")
-            # self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(database.id))
-            # response = self.rest_dapi.upsert_doc("key1", {"upserted": True}, "_default", "_default",
-            #                                      "?expiry=20s")
-            # self.log.info("Response code for upsertion of document is: {}".format(response.status_code))
-            # self.assertTrue(response.status_code == 201, "Insert doc with upsert query"
-            #                 "parameter failed for database: {}".format(database.id))
-            # time.sleep(20)
-            # response = self.rest_dapi.get_doc("key1", "_default", "_default")
-            # self.log.info("response code for get doc: {}".format(response.status_code))
-            # self.assertTrue(response.status_code == 200, "Get doc failed within expiry time by"
-            #                 "keeping preserver expiry for database: {}".fomrat(database.id))
+            response = self.rest_dapi.insert_doc("key1", {"inserted": True}, "_default", "_default",
+                                                 "?expiry=60s&meta=true")
+            self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(database.id))
+            response = self.rest_dapi.upsert_doc("key1", {"upserted": True}, "_default", "_default",
+                                                 "?preserveExpiry=true")
+            self.log.info("Response code for upsertion of document is: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200, "Upsert doc with preserve expiry query"
+                            "parameter failed for database: {}".format(database.id))
+            time.sleep(60)
+            response = self.rest_dapi.get_doc("key1", "_default", "_default")
+            self.log.info("response code for get doc: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 404, "Doc is still present after putting expiry time and"
+                            "keeping preserver expiry for database: {}".format(database.id))
             # durability is pending
 
 
@@ -1271,7 +1277,7 @@ class RestfulDAPITest(ServerlessBaseTestCase):
             response = self.rest_dapi.insert_doc("key", doc, "_default", "_default")
             self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(database.id))
 
-            # # test timeout for upsert
+            # test timeout for upsert
             response = self.rest_dapi.upsert_doc("key", temp_doc, "_default", "_default",
                                                  "?timeout=0.0001s&meta=true")
 
@@ -1279,42 +1285,39 @@ class RestfulDAPITest(ServerlessBaseTestCase):
             error_msg = json.loads(response.content)["error"]["message"]
             self.assertTrue(error_msg == self.error_message, "Got wrong error message for timeout parametere: {}".format(error_msg))
 
-            # # test expiry
-            # temp_doc['upserted'] = True
-            # response = self.rest_dapi.upsert_doc("key", temp_doc, "_default", "_default", "?expiry=30s&meta=true")
-            # self.assertTrue(response.status_code == 200, "Upsert doc failed for database: {}".format(database.id))
-            # response = self.rest_dapi.get_doc("key", "_default", "_default", "?meta=true")
-            # self.assertTrue(response.status_code == 200, "Get doc failed for database: {}".format(database.id))
-            # expiryTime = json.loads(response.content)['meta']["api"]["expiryTime"]
-            # expiryTime = datetime.datetime.strptime(expiryTime, '%Y-%m-%dT%H:%M:%SZ')
-            # now = datetime.datetime.now()
-            # self.assertTrue(now < expiryTime, "Unexpected expiry time for database: {}".format(database.id))
+            # test expiry
+            temp_doc['upserted'] = True
+            response = self.rest_dapi.upsert_doc("key", temp_doc, "_default", "_default", "?expiry=60s&meta=true")
+            self.assertTrue(response.status_code == 200, "Upsert doc failed for database: {}".format(database.id))
+            response = self.rest_dapi.get_doc("key", "_default", "_default", "?meta=true&withExpiry=true")
+            self.assertTrue(response.status_code == 200, "Get doc failed for database: {}".format(database.id))
+            expiryTime = json.loads(response.content)['meta']["api"]["expiryTime"]
+            expiryTime = datetime.datetime.strptime(expiryTime, '%Y-%m-%dT%H:%M:%SZ')
+            expiryTime = expiryTime.strftime("%Y-%m-%d %H:%M:%S")
+
+            UTC = pytz.utc
+            now = datetime.datetime.now(UTC)
+            now = now.strftime("%Y-%m-%d %H:%M:%S")
+            self.assertTrue(now < expiryTime, "Unexpected expiry time for database: {}".format(database.id))
 
             # sleep for 60 second so that doc get expired
 
-            # time.sleep(60)
-            # response = self.rest_dapi.get_doc("key", "_default", "_default")
-            # self.assertTrue(response.status_code == 404, "doc is still present after the"
-            #                 "expiry time for database: {}".format(database.id))
+            time.sleep(60)
+            response = self.rest_dapi.get_doc("key", "_default", "_default")
+            self.assertTrue(response.status_code == 404, "doc is still present after the"
+                            "expiry time for database: {}".format(database.id))
 
             # test preserve expiry
 
-            # response = self.rest_dapi.insert_doc("key", {"inserted": True}, "_default", "_default")
-            # self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(database.id))
+            response = self.rest_dapi.insert_doc("key", {"inserted": True}, "_default", "_default", "?expiry=60s")
+            self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(database.id))
 
-            # response = self.rest_dapi.upsert_doc("key", {"upserted": True}, "_default", "_default", "?preserveExpiry=True&expiry=60s")
-            # self.assertTrue(response.status_code == 200, "Upsert doc failed for database: {}".format(database.id))
+            response = self.rest_dapi.upsert_doc("key", {"upserted": True}, "_default", "_default", "?preserveExpiry=true")
+            self.assertTrue(response.status_code == 200, "Upsert doc failed for database: {}".format(database.id))
 
-            # self.rest_dapi.upsert_doc("key", {"upserted": 3}, "_default", "_default", "?expiry=20s")
-            # self.assertTrue(response.status_code == 200, "Upsert doc failed for database: {}".format(database.id))
-
-            # time.sleep(30)
-            # response = self.rest_dapi.get_doc("key", "_default", "_default")
-            # self.assertTrue(response.status_code == 200, "doc is not present for database: {}".format(database.id))
-
-            # time.sleep(40)
-            # response = self.rest_dapi.get_doc("key", "_default", "_default")
-            # self.assertTrue(response.status_code == 404, "Doc is still present after adding expiry time of 60s")
+            time.sleep(60)
+            response = self.rest_dapi.get_doc("key", "_default", "_default")
+            self.assertTrue(response.status_code == 404, "Doc is still present after adding expiry time of 60s")
 
             # test locktime parameter
             doc = dict()
@@ -1323,7 +1326,6 @@ class RestfulDAPITest(ServerlessBaseTestCase):
             self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(response.status_code))
 
             response = self.rest_dapi.upsert_doc("key1", doc, "_default", "_default", "?lockTime=60s")
-            self.log.info("Response code for upsertion of doc: {}".format(response.status_code))
 
             temp_doc = doc.copy()
             temp_doc["upserted"] = True
