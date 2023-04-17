@@ -1519,3 +1519,49 @@ class RestfulDAPITest(ServerlessBaseTestCase):
             self.assertTrue(response.status_code == 200, "Get doc list failed with offset, pagesize and page parameter")
             document_list = json.loads(response.content)["docs"]
             self.assertTrue(len(document_list) == 60, "Length of document list is as expected")
+
+    def test_consistency_token_for_crud(self):
+        for database in self.databases.values():
+            self.rest_dapi = RestfulDAPI({"dapi_endpoint": database.data_api,
+                                        "access_token": database.access_key,
+                                        "access_secret": database.secret_key})
+
+            doc_gen = doc_generator("key", self.key_size, self.value_size,self.number_of_docs,
+                                    self.randomize_value,self.mixed_key)
+            key, doc = doc_gen.__next__()
+            doc = json.loads(doc)
+
+            response = self.rest_dapi.insert_doc(key, doc, "_default", "_default", "?meta=true")
+            self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(database.id))
+            consistency_token = json.loads(response.content)["meta"]["api"]["consistencyToken"]
+
+            doc["upsert"] = True
+            response = self.rest_dapi.upsert_doc(key, doc, "_default", "_default",
+                                                 "?meta=true&consistencyToken={}".format(consistency_token))
+            self.assertTrue(response.status_code == 200, "Upsert doc failed for database: {}".format(database.id))
+            prev_consistency_token = json.loads(response.content)["meta"]["api"]["consistencyToken"]
+            doc["upserted1"] = True
+            response = self.rest_dapi.upsert_doc(key, doc, "_default", "_default", "?meta=true")
+            self.assertTrue(response.status_code == 200, "Upsert doc failed for database: {}".format(database.id))
+            cr_consistency_token = json.loads(response.content)["meta"]["api"]["consistencyToken"]
+
+            doc["upserted2"]= True
+            response = self.rest_dapi.upsert_doc(key, doc, "_default", "_default",
+                                                 "?meta=true&consistencyToken={}".format(prev_consistency_token))
+            self.assertTrue(response.status_code == 409, "Upsert doc success with wrong CAS for"
+                            "database: {}".format(database.id))
+            response = self.rest_dapi.upsert_doc(key, doc, "_default", "_default",
+                                                 "?meta=true&consistencyToken={}".format(cr_consistency_token))
+            self.assertTrue(response.status_code == 200, "Upsert doc failed with correct CAS for"
+                            " database: {}".format(database.id))
+
+            prev_consistency_token = cr_consistency_token
+            cr_consistency_token = json.loads(response.content)["meta"]["api"]["consistencyToken"]
+            response = self.rest_dapi.delete_doc(key, "_default", "_default",
+                                                 "?meta=true&consistencyToken={}".format(prev_consistency_token))
+            self.assertTrue(response.status_code == 409, "Delete doc success with wrong CAS for"
+                            " database: {}".format(database.id))
+            response = self.rest_dapi.delete_doc(key, "_default", "_default",
+                                                 "?meta=true&consistencyToken={}".format(cr_consistency_token))
+            self.assertTrue(response.status_code == 200, "Delete doc failed with correct CAS for"
+                            " database: {}".format(database.id))
