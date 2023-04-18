@@ -2051,7 +2051,9 @@ class QueryArrayFlatteningTests(QueryTests):
         self.conn.create_bucket(bucket="default", ramQuotaMB=256, proxyPort=11220, storageBackend=self.bucket_storage, replicaNumber=0)
         for i in range(0, num_extra_buckets):
             self.conn.create_bucket(bucket="bucket{0}".format(i), ramQuotaMB=256, proxyPort=11220, storageBackend=self.bucket_storage, replicaNumber=0)
+            time.sleep(5)
             self.run_cbq_query("CREATE PRIMARY INDEX on bucket{0}".format(i))
+        time.sleep(5)
         self.run_cbq_query("CREATE PRIMARY INDEX on default")
         self.buckets = self.conn.get_buckets()
         self.query_buckets = self.buckets

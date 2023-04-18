@@ -3673,9 +3673,9 @@ class QueriesIndexTests(QueryTests):
                              'end LIMIT 100'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue('IntersectScan' in str(plan), f"Intersectscan was expected please check plan: {plan}")
-                self.assertTrue(
-                    plan['~children'][0]['~children'][0]['scans'][0]['scan']['index'] == 'rec1-1_record_by_index_map')
+                #with cbo intersectscan might not happen
+                self.assertTrue('IntersectScan' in str(plan) or 'DistinctScan' in str(plan), f"Intersectscan or DistinctScan was expected please check plan: {plan}")
+                self.assertTrue('rec1-1_record_by_index_map' in str(plan), f"The right index is not being used, check plan {plan}")
                 self.query = 'SELECT r AS doc, meta(r).cas AS revision FROM {0} AS r WHERE any i in ' \
                              'object_pairs(indexMap) satisfies i = {{ "name":"key1", "val":"val1"}} end ' \
                              'AND any i in object_pairs(indexMap) satisfies i = {{ "name":"key2", "val":"val2"}} ' \
@@ -3691,7 +3691,7 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.assertTrue('DistinctScan' in str(plan), f"Distinctscan was expected please check plan: {plan}")
-                self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index'] == 'rec1-1_record_by_index_map')
+                self.assertTrue('rec1-1_record_by_index_map' in str(plan), f"The right index is not being used, check plan {plan}")
                 self.query = 'SELECT r AS doc, meta(r).cas AS revision FROM {0} AS r WHERE every i in ' \
                              'object_pairs(indexMap) satisfies i = {{ "name":"key1", "val":"val1"}} end or ' \
                              'any i in object_pairs(indexMap) satisfies i = {{ "name":"key2", "val":"val2"}} ' \
@@ -3707,7 +3707,7 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.assertTrue('DistinctScan' in str(plan), f"Distinctscan was expected please check plan: {plan}")
-                self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index'] == 'rec1-1_record_by_index_map')
+                self.assertTrue('rec1-1_record_by_index_map' in str(plan), f"The right index is not being used, check plan {plan}")
                 self.query = 'SELECT r AS doc, meta(r).cas AS revision FROM {0} AS r WHERE any i in' \
                              ' object_pairs(indexMap) satisfies i = {{ "name":"key1", "val":"val1"}} end ' \
                              'or every i in object_pairs(indexMap) satisfies i = {{ "name":"key2", "val":"val2"}} end' \
@@ -3722,9 +3722,9 @@ class QueriesIndexTests(QueryTests):
                              '{{ "name":"key2", "val":"val2"}} end LIMIT 100'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue('IntersectScan' in str(plan), f"Intersectscan was expected please check plan: {plan}")
-                self.assertTrue(
-                    plan['~children'][0]['~children'][0]['scans'][0]['scan']['index'] == 'rec1-1_record_by_index_map')
+                #with cbo intersectscan might not happen
+                self.assertTrue('IntersectScan' in str(plan) or 'DistinctScan' in str(plan), f"Intersectscan was expected please check plan: {plan}")
+                self.assertTrue('rec1-1_record_by_index_map' in str(plan), f"The right index is not being used, check plan {plan}")
                 self.query = 'insert into {0} '.format(query_bucket) + '(KEY, VALUE) VALUES ("test1",{"type":"testType",' \
                              '"indexMap":{"key1":"val1"},"data":{"foo":"bar"}})'
                 self.run_cbq_query()
@@ -3742,9 +3742,9 @@ class QueriesIndexTests(QueryTests):
                              ' end LIMIT 100'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue('IntersectScan' in str(plan), f"Intersectscan was expected please check plan: {plan}")
-                self.assertTrue(
-                    plan['~children'][0]['~children'][0]['scans'][0]['scan']['index'] == 'rec1-1_record_by_index_map')
+                self.assertTrue('IntersectScan' in str(plan) or 'DistinctScan' in str(plan), f"Intersectscan was expected please check plan: {plan}")
+                self.assertTrue('rec1-1_record_by_index_map' in str(plan), f"The right index is not being used, check plan {plan}")
+
                 self.query = 'SELECT r AS doc, meta(r).cas AS revision FROM {0} AS r ' \
                              'WHERE any i in object_pairs(indexMap) satisfies i = {{ "name":"key1", "val":"val1"}} ' \
                              'end AND any j in object_pairs(indexMap) satisfies j = ' \
@@ -3760,9 +3760,8 @@ class QueriesIndexTests(QueryTests):
                              'end LIMIT 100'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue('IntersectScan' in str(plan), f"Intersectscan was expected please check plan: {plan}")
-                self.assertTrue(
-                    plan['~children'][0]['~children'][0]['scans'][0]['scan']['index'] == 'rec1-1_record_by_index_map')
+                self.assertTrue('IntersectScan' in str(plan) or 'DistinctScan' in str(plan), f"Intersectscan was expected please check plan: {plan}")
+                self.assertTrue('rec1-1_record_by_index_map' in str(plan), f"The right index is not being used, check plan {plan}")
                 self.query = 'delete from {0} use keys["test","test1"]'.format(query_bucket)
                 self.run_cbq_query()
             finally:
