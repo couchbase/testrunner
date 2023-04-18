@@ -286,6 +286,12 @@ class EventingCurl(EventingBaseTest):
             self.verify_doc_count_collections("dst_bucket._default._default", 0)
             self.undeploy_and_delete_function(body)
 
-
-
-
+        # MB-55045
+        def test_curl_url_encoding_behaviour_based_on_language_compatibility(self):
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+            body = self.import_function_from_directory(self.import_function)
+            self.deploy_function(body)
+            self.verify_doc_count_collections("dst_bucket._default._default",
+                                              self.docs_per_day * self.num_docs * 3)
+            self.undeploy_and_delete_function(body)

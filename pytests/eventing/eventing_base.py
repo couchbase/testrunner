@@ -63,6 +63,7 @@ class EventingBaseTest(QueryHelperTests):
                                                   memoryQuota=INDEX_QUOTA)
                 self.rest.set_service_memoryQuota(service='eventingMemoryQuota',
                                                   memoryQuota=EVENTING_QUOTA)
+        self.import_function = self.input.param('import_function', None)
         self.src_bucket_name = self.input.param('src_bucket_name', 'src_bucket')
         self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
         self.dst_bucket_name = self.input.param('dst_bucket_name', 'dst_bucket')
@@ -170,7 +171,7 @@ class EventingBaseTest(QueryHelperTests):
                                   timer_worker_pool_size=3, worker_count=3, processing_status=False ,
                                   cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=20,
                                   data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62,
-                                  language_compatibility='6.6.2',hostpath=None,validate_ssl=False,src_binding=False,
+                                  language_compatibility='7.2.0',hostpath=None,validate_ssl=False,src_binding=False,
                                   username="Administrator", password="password"):
         body = {}
         body['appname'] = appname
@@ -1157,7 +1158,7 @@ class EventingBaseTest(QueryHelperTests):
                                  dcp_stream_boundary="everything",src_namespace="src_bucket._default._default",
                                         meta_namespace="metadata._default._default",
                                         collection_bindings=["dst_bucket.dst_bucket._default._default.rw"],is_curl=False,
-                                        hostpath=None, validate_ssl=False,worker_count=1,language_compatibility='6.6.2',
+                                        hostpath=None, validate_ssl=False,worker_count=1,language_compatibility='7.2.0',
                                         username="Administrator", password="password"):
         src_map=src_namespace.split(".")
         meta_map=meta_namespace.split(".")
@@ -1233,6 +1234,7 @@ class EventingBaseTest(QueryHelperTests):
         fh = open(abs_file_path, "r")
         body = fh.read()
         self.rest.import_function(body)
+        return json.loads(body)
 
     def wait_for_handler_internal_undeployment_and_deletion(self, name,
                                                             iterations=60):
