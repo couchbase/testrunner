@@ -376,38 +376,198 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                             "Getting subdocs failed for database {}".format(dapi_info["database_id"]))
 
     def test_insert_subdocument(self):
-        for dapi_info in self.dapi_info_list:
-            self.rest_dapi = RestfulDAPI({"dapi_endpoint": dapi_info["dapi_endpoint"],
-                                          "access_token": dapi_info["access_token"],
-                                          "access_secret": dapi_info["access_secret"]})
+        for database in self.databases.values():
+            self.rest_dapi = RestfulDAPI({"dapi_endpoint": database.data_api,
+                                        "access_token": database.access_key,
+                                        "access_secret": database.secret_key})
 
-            self.log.info("Mutating subdocument inside a document in database {}".format(dapi_info["database_id"]))
-            self.log.info(dapi_info["dapi_endpoint"])
-
-            response = self.rest_dapi.insert_doc("k", {"inserted": True}, "_default", "_default")
-            self.log.info("Response code for insertion of document {}".format(response.status_code))
-
+            self.log.info("Mutating subdocument inside a document in database {}".format(database.id))
+            #insert doc
+            doc = {
+                "name" : "Saurabh",
+                "age" : 23,
+                "hobby" : ["cycling", "Football", "chess", "guitar", "flute"],
+                "Birthday" : {
+                    "day": 16,
+                    "month": "December",
+                    "Year" : 1999
+                    }
+            }
+            response = self.rest_dapi.insert_doc("k", doc, "_default", "_default")
             self.assertTrue(response.status_code == 201,
-                            "Insertion failed for database {}".format(dapi_info["database_id"]))
+                            "Insertion failed for database {}".format(database.id))
 
-            response = self.rest_dapi.get_doc("k", "_default", "_default")
-            self.log.info("Response code to get document {}".format(response.status_code))
-
-            self.assertTrue(response.status_code == 200,
-                            "Getting document failed for database {}".format(dapi_info["database_id"]))
-
+            # insert subdoc
             response = self.rest_dapi.insert_subdoc("k",
-                                                    [{"type": "insert", "path": "counter3", "value": 4},
-                                                     {"type": "insert", "path": "counter1", "value": 10}],
+                                                    [{"type": "insert", "path": "rating", "value": 4},
+                                                    {"type": "insert", "path": "Personality", "value": "Good"}],
                                                     "_default", "_default")
-            self.log.info("Response code for insertion of subdocument {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200, "Insert subdoc failed for database: {}".format(database.id))
 
+            # insert multi path subdoc
+            response = self.rest_dapi.insert_subdoc("k",
+                                                    [{"type": "insert", "path": "Birthday.time",
+                                                      "value": {'hours':12, 'minutes': 42, 'seconds': 12}}],
+                                                    "_default", "_default")
             self.assertTrue(response.status_code == 200,
-                            "Sub doc insertion failed for database {}".format(dapi_info["database_id"]))
+                            "Sub doc insertion for multipath failed for database {}".format(database.id))
 
-            response = self.rest_dapi.get_subdoc("k", [{"type": "get", "path": "counter3"}], "_default", "_default")
-            self.log.info("printing response status code for getting subdoc {}".format(response.status_code))
-            self.assertTrue(response.status_code == 200, "Getting subdoc failed for database {}".format(dapi_info["database_id"]))
+            # get multipath subdoc
+            response = self.rest_dapi.get_subdoc("k",
+                                                [{"type": "get", "path": "Birthday.time"}],
+                                                "_default", "_default")
+            self.assertTrue(response.status_code == 200,
+                            "Getting subdoc for multi path failed for database {}".format(database.id))
+            subdoc = json.loads(response.content)['subdocs'][0]['content']
+            self.assertTrue(dict(subdoc) == dict({'hours':12, 'minutes': 42, 'seconds': 12}),
+                            "Ambiguous get multipath subdoc for database: {}".format(database.id))
+            # arrayinsert in subdoc
+            response = self.rest_dapi.insert_subdoc("k",
+                                                    [{"type": "arrayInsert", "path": "hobby[2]", "value": "cricket"}],
+                                                    "_default", "_default")
+            self.assertTrue(response.status_code == 200,
+                            "ArrayInsert subdoc failed for"
+                            "database: {}".format(database.id))
+            doc["hobby"].insert(2,"cricket")
+            # get list of hobby inside as subdoc
+            response = self.rest_dapi.get_subdoc("k",
+                                                 [{"type": "get", "path": "hobby"}],
+                                                 "_default", "_default")
+            self.assertTrue(response.status_code == 200,
+                            "Get subdoc failed for database: {}".format(database.id))
+            hobby_list = json.loads(response.content)['subdocs'][0]['content']
+            self.assertTrue(hobby_list == doc["hobby"],
+                            "Ambigous get for hobby list subdoc for database: {}".format(database.id))
+
+            # arrayAppend in subdoc
+            response = self.rest_dapi.insert_subdoc("k",
+                                                    [{"type": "arrayAppend", "path":
+                                                        "hobby", "value": "baseball"}],
+                                                    "_default", "_default")
+            self.assertTrue(response.status_code == 200,
+                            "InsertAppend subdoc failed for database: {}".format(database.id))
+            doc["hobby"].append("baseball")
+            # get list of hobby inside as subdoc after arrayappend
+            response = self.rest_dapi.get_subdoc("k",
+                                                 [{"type": "get", "path": "hobby"}],
+                                                 "_default", "_default")
+            self.assertTrue(response.status_code == 200,
+                            "Get subdoc failed for database: {}".format(database.id))
+            hobby_list = json.loads(response.content)['subdocs'][0]['content']
+            self.assertTrue(hobby_list == doc["hobby"],
+                            "Ambigous get subdoc for arrayapend"
+                            "for database: {}".format(database.id))
+            # arrayPrepend in subdoc
+            response = self.rest_dapi.insert_subdoc("k",
+                                                    [{"type": "arrayPrepend", "path":
+                                                        "hobby", "value": "Travelling"}],
+                                                    "_default", "_default")
+            self.assertTrue(response.status_code == 200,
+                            "InsertPrepend subdoc failed for database: {}".format(database.id))
+            doc["hobby"].insert(0,"Travelling")
+            # get list of hobby inside as subdoc after arrayprepend
+            response = self.rest_dapi.get_subdoc("k",
+                                                 [{"type": "get", "path": "hobby"}],
+                                                 "_default", "_default")
+            self.assertTrue(response.status_code == 200,
+                            "Get subdoc failed after arrayprepend for database: {}".format(database.id))
+            hobby_list = json.loads(response.content)['subdocs'][0]['content']
+            self.assertTrue(hobby_list == doc["hobby"],
+                            "Ambigous get subdoc after arrayprepend"
+                            "for database: {}".format(database.id))
+            # arrayAddUnique in subdoc
+            response = self.rest_dapi.insert_subdoc("k",
+                                                    [{"type": "arrayAddUnique", "path":"hobby",
+                                                      "value": "Skating"}],
+                                                    "_default", "_default")
+            self.assertTrue(response.status_code == 200,
+                            "InsertPrepend subdoc failed for database: {}".format(database.id))
+            doc["hobby"].append("Skating")
+            # get list of hobby inside as subdoc after arrayAddUnique
+            response = self.rest_dapi.get_subdoc("k",
+                                                 [{"type": "get", "path": "hobby"}],
+                                                 "_default", "_default")
+            self.assertTrue(response.status_code == 200,
+                            "Get subdoc failed after arrayAddUnique"
+                            "for database: {}".format(database.id))
+            hobby_list = json.loads(response.content)['subdocs'][0]['content']
+            self.assertTrue(hobby_list == doc["hobby"],
+                            "Ambigous get subdoc after arrayAddUnique"
+                            "for database: {}".format(database.id))
+            # test increment
+            response = self.rest_dapi.insert_subdoc("k",
+                                                    [{"type": "increment", "path":"age",
+                                                      "value": 1}],
+                                                    "_default", "_default")
+            self.assertTrue(response.status_code == 200,
+                            "Increment subdoc failed for database: {}".format(database.id))
+            doc["age"] += 1
+            # get age as subdoc
+            response = self.rest_dapi.get_subdoc("k",
+                                                 [{"type": "get", "path": "age"}],
+                                                 "_default", "_default")
+            self.assertTrue(response.status_code == 200,
+                            "Get subdoc failed after increment age"
+                            "for database: {}".format(database.id))
+            age = json.loads(response.content)['subdocs'][0]['content']
+            self.assertTrue(age == doc["age"],
+                            "Ambigous get subdoc after increment age"
+                            "for database: {}".format(database.id))
+            # test decrement
+            response = self.rest_dapi.insert_subdoc("k",
+                                                    [{"type": "decrement", "path":"age",
+                                                      "value": 1}],
+                                                    "_default", "_default")
+            self.assertTrue(response.status_code == 200,
+                            "Increment subdoc failed for database: {}".format(database.id))
+            doc["age"] -= 1
+            # get age as subdoc
+            response = self.rest_dapi.get_subdoc("k",
+                                                 [{"type": "get", "path": "age"}],
+                                                 "_default", "_default")
+            self.assertTrue(response.status_code == 200,
+                            "Get subdoc failed after decrement age"
+                            "for database: {}".format(database.id))
+            age = json.loads(response.content)['subdocs'][0]['content']
+            self.assertTrue(age == doc["age"],
+                            "Ambigous get subdoc after decrement age"
+                            "for database: {}".format(database.id))
+            # upsert a subdoc
+            response = self.rest_dapi.insert_subdoc("k",
+                                                    [{"type": "upsert", "path":"age",
+                                                      "value": 24}],
+                                                    "_default", "_default")
+            self.assertTrue(response.status_code == 200,
+                            "Upsert subdoc failed for database: {}".format(database.id))
+            doc["age"] = 24
+            # get age as subdoc
+            response = self.rest_dapi.get_subdoc("k",
+                                                 [{"type": "get", "path": "age"}],
+                                                 "_default", "_default")
+            self.assertTrue(response.status_code == 200,
+                            "Get subdoc failed after Upsert age"
+                            "for database: {}".format(database.id))
+            age = json.loads(response.content)['subdocs'][0]['content']
+            self.assertTrue(age == doc["age"],
+                            "Ambigous get subdoc after Upsert age"
+                            "for database: {}".format(database.id))
+            # remove a subdoc
+            response = self.rest_dapi.insert_subdoc("k",
+                                                    [{"type": "remove", "path":"age",
+                                                      "value": 24}],
+                                                    "_default", "_default")
+            self.assertTrue(response.status_code == 200,
+                            "Upsert subdoc failed for database: {}".format(database.id))
+            del doc['age']
+            # get age as subdoc
+            response = self.rest_dapi.get_doc("k", "_default", "_default")
+            self.assertTrue(response.status_code == 200,
+                            "Get doc failed after remove age"
+                            "for database: {}".format(database.id))
+            doc_retrieved = json.loads(response.content)['doc']
+            self.assertTrue("age" not in doc_retrieved,
+                            "Ambigous get doc after removed age"
+                            "for database: {}".format(database.id))
 
     def test_create_scope(self):
         for dapi_info in self.dapi_info_list:
