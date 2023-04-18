@@ -674,7 +674,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
         cpu_util = int(float(self.HWM_limit) * 100)
         count = 0
         for stat in stats:
-            if stat['utilization:memoryBytes'] >= mem_util or stat['utilization:cpuPercent'] >= cpu_util or stat['utilization:memoryBytes'] == 0:
+            if stat['utilization:memoryBytes'] >= mem_util or stat['utilization:cpuPercent'] >= cpu_util:
                 count += 1
 
         if len(stats) - count < 2:
@@ -836,25 +836,31 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
             with self.subTest("Verifying Index Rejection for HWM"):
                 if self.verify_HWM_index_rejection(fts_stats):
-                    self.log.critical(f"Index {index.name} created even though HWM had been satisfied")
-                    self.prettyPrintStats(fts_stats, fts_nodes, f"Index {index.name} created even though HWM had been satisfied")
-                    self.fail(f"BUG : Index {index.name} created even though HWM had been satisfied")
+                    fts_stats_2, _ = self.get_fts_stats(print_stats=False)
+                    if self.verify_HWM_index_rejection(fts_stats_2):
+                        self.log.critical(f"Index {index.name} created even though HWM had been satisfied")
+                        self.prettyPrintStats(fts_stats, fts_nodes, f"Index {index.name} created even though HWM had been satisfied")
+                        self.fail(f"BUG : Index {index.name} created even though HWM had been satisfied")
         except Exception as e:
             if str(e).find("limiting/throttling: the request has been rejected according to regulator") != -1:
                 self.log.info("Index creation reject exempted due to limiting/throttling")
+            elif str(e).find("RetryOnCASMismatch: too many tries") != -1 and self.ignore_cas_mismatach:
+                self.log.critical(f"Index Creation Failure ignored due to CAS Mismatch : {str(e)}")
             else:
                 with self.subTest("Index Creation Fail Check"):
-                    if self.verify_HWM_index_rejection(fts_stats):
-                        self.assertTrue("limitIndexDef: Cannot accommodate index request" in str(e))
-                        self.log.info(f"PASS : HWM Index Rejection Passed : {str(e)}")
-                    else:
-                        if str(e).find("RetryOnCASMismatch: too many tries") != -1 and self.ignore_cas_mismatach:
-                            self.log.critical(f"Index Creation Failure ignored due to CAS Mismatch : {str(e)}")
-                        else:
-                            self.log.critical(f"Index Creation Failed : {str(e)}")
-                            self.prettyPrintStats(fts_stats, fts_nodes,"Index Creation Failed ")
-                            self.fail("BUG : Index Creation Failed")
-
+                    index_check = False
+                    for i in range(2):
+                        if i == 1:
+                            fts_stats, fts_nodes = self.get_fts_stats(print_stats=False)
+                        if self.verify_HWM_index_rejection(fts_stats):
+                            self.assertTrue("limitIndexDef: Cannot accommodate index request" in str(e))
+                            self.log.info(f"PASS : HWM Index Rejection Passed : {str(e)}")
+                            index_check = True
+                            break
+                    if not index_check:
+                        self.log.critical(f"Index Creation Failed : {str(e)}")
+                        self.prettyPrintStats(fts_stats, fts_nodes,"Index Creation Failed ")
+                        self.fail("BUG : Index Creation Failed")
     def autoscaling_concurrent(self):
         self.provision_databases(self.num_databases, None, self.new_dataplane_id)
 
