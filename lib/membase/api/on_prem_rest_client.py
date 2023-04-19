@@ -3097,6 +3097,9 @@ class RestConnection(object):
                     init_params['magmaKeyTreeDataBlockSize'] = self.magma_seq_tree_data_block_size
                     init_params['magmaSeqTreeDataBlockSize'] = self.magma_key_tree_data_block_size
             init_params['storageBackend'] = storageBackend
+            if self.cluster_profile == 'serverless':
+                init_params['width'] = self.bucket_width
+                init_params['weight'] = self.bucket_weight
 
         params = urllib.parse.urlencode(init_params)
 
