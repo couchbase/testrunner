@@ -1097,3 +1097,88 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 finally:
                     self.run_query(database, f'DROP INDEX idx1 on {scope_name}.{collection_name}')
             fts_callable.delete_all()
+
+    def fts_security_test(self):
+        """
+            Scenario : Single user creates 2 DBs/tenants and user cannot create indexes on one DB with auth of another DB
+        """
+        self.provision_databases(count=2)
+        db1, creds1, type1, scope1, collection1 = None, None, None, None, None
+        db2, creds2, type2, scope2, collection2 = None, None, None, None, None
+
+        for counter, database in enumerate(self.databases.values()):
+            self.cleanup_database(database_obj=database)
+            scope_name = f'db_{counter}_scope_{random.randint(0, 1000)}'
+            collection_name = f'db_{counter}_collection_{random.randint(0, 1000)}'
+            self.create_scope(database_obj=database, scope_name=scope_name)
+            self.create_collection(database_obj=database, scope_name=scope_name, collection_name=collection_name)
+            self.load_databases(load_all_databases=False, num_of_docs=self._num_of_docs_per_collection,
+                                database_obj=database, scope=scope_name, collection=collection_name)
+            _type = self.define_index_parameters_collection_related(container_type="collection", scope=scope_name,
+                                                                    collection=collection_name)
+            if counter == 0:
+                db1, type1, scope1, collection1 = database, _type, scope_name, collection_name
+            else:
+                db2, type2, scope2, collection2 = database, _type, scope_name, collection_name
+
+        self.log.info(f"Credentials of DB1 -> {db1.id, db1.access_key, db1.secret_key}")
+        self.log.info(f"Credentials of DB2 -> {db2.id, db2.access_key, db2.secret_key}")
+
+        for count in range(2):
+            plan_params = self.construct_plan_params()
+            if count == 0:
+                # Get the FTSIndex Object with the correct set of credentials
+                self.init_input_servers(db1)
+                fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope1,
+                                           collections=collection1, collection_index=True, is_elixir=True)
+                FTSIndex = fts_callable.generate_FTSIndex_info("idx", source_type='couchbase',
+                                                                  source_name=db1.id, index_type='fulltext-index',
+                                                                  index_params=None, plan_params=plan_params,
+                                                                  source_params=None, source_uuid=None, collection_index=True,
+                                                                  _type=type1, scope=scope1, collections=[collection1])
+
+                # Change all the credentials to credentials of second DB
+                self.init_input_servers(db2)
+                fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope1,
+                                           collections=collection1, collection_index=True, is_elixir=True)
+                try:
+                    # Create FTS Index with wrong updated credentials
+                    fts_callable.create_fts_index("idx", source_type='couchbase',
+                                                  source_name=db1.id, index_type='fulltext-index',
+                                                  index_params=None, plan_params=plan_params,
+                                                  source_params=None, source_uuid=None, collection_index=True,
+                                                  _type=type1, analyzer="standard",
+                                                  scope=scope1, collections=[collection1], no_check=False,
+                                                  FTSIndex=FTSIndex)
+                    self.fail("Security Breach : Index created with credentials of different database")
+                except Exception as err:
+                    self.log.error({str(err)})
+                    self.assertTrue('Error creating index: b\'{"message":"Forbidden. User needs one of the following permissions","permissions":["write permission for the source."]}\'' in str(err))
+            else:
+                self.init_input_servers(db2)
+                fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope2,
+                                           collections=collection2, collection_index=True, is_elixir=True)
+                # Get the FTSIndex Object with the correct set of credentials
+                FTSIndex = fts_callable.generate_FTSIndex_info("idx", source_type='couchbase',
+                                                                  source_name=db2.id, index_type='fulltext-index',
+                                                                  index_params=None, plan_params=plan_params,
+                                                                  source_params=None, source_uuid=None, collection_index=True,
+                                                                  _type=type2, scope=scope2, collections=[collection2])
+
+                # Change all the credentials to credentials of second DB
+                self.init_input_servers(db1)
+                fts_callable = FTSCallable(self.input.servers, es_validate=False, es_reset=False, scope=scope2,
+                                           collections=collection2, collection_index=True, is_elixir=True)
+                try:
+                    # Create FTS Index with wrong updated credentials
+                    fts_callable.create_fts_index("idx", source_type='couchbase',
+                                                  source_name=db2.id, index_type='fulltext-index',
+                                                  index_params=None, plan_params=plan_params,
+                                                  source_params=None, source_uuid=None, collection_index=True,
+                                                  _type=type2, analyzer="standard",
+                                                  scope=scope2, collections=[collection2], no_check=False, FTSIndex=FTSIndex)
+                    self.fail("Security Breach : Index created with credentials of different database")
+                except Exception as err:
+                    self.log.error({str(err)})
+                    self.assertTrue('Error creating index: b\'{"message":"Forbidden. User needs one of the following permissions","permissions":["write permission for the source."]}\'' in str(err))
+            fts_callable.delete_all()

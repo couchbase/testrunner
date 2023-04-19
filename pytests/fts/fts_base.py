@@ -918,6 +918,9 @@ class FTSIndex:
     def get_cluster(self):
         return self.__cluster
 
+    def set_cluster(self, cluster):
+        self.__cluster = cluster
+
     def is_scorch(self):
         return self.get_index_type() == "scorch"
 

@@ -94,7 +94,7 @@ class FTSCallable:
                          source_name=None, index_type='fulltext-index',
                          index_params=None, plan_params=None,
                          source_params=None, source_uuid=None, collection_index=False, _type=None, analyzer="standard",
-                         scope=None, collections=None, no_check=False, cluster=None, specify_fields=False):
+                         scope=None, collections=None, no_check=False, cluster=None, specify_fields=False, FTSIndex=None):
         """Create fts index/alias
         @param node: Node on which index is created
         @param name: name of the index/alias
@@ -117,26 +117,16 @@ class FTSCallable:
         @analyzer: index analyzer
         """
 
-        if not cluster:
-            cluster = self.cb_cluster
+        index = FTSIndex
+        if index is None:
+            index = self.generate_FTSIndex_info(name, source_type=source_type,
+                                            source_name=source_name, index_type=index_type,
+                                            index_params=index_params, plan_params=plan_params,
+                                            source_params=source_params, source_uuid=source_uuid, collection_index=collection_index, _type=_type,
+                                            scope=scope, collections=collections, cluster=cluster)
+        else:
+            index.set_cluster(self.cb_cluster)
 
-        index = FTSIndex(
-            cluster=cluster,
-            name=name,
-            source_type=source_type,
-            source_name=source_name,
-            index_type=index_type,
-            index_params=index_params,
-            plan_params=plan_params,
-            source_params=source_params,
-            source_uuid=source_uuid,
-            type_mapping=_type,
-            collection_index=collection_index,
-            scope=scope,
-            collections=collections,
-            is_elixir=self.is_elixir,
-            reduce_query_logging=self.reduce_query_logging
-        )
         if collection_index:
             if not index.custom_map and not specify_fields:
                 if type(_type) is list:
@@ -159,6 +149,35 @@ class FTSCallable:
         else:
             index.create()
         self.cb_cluster.get_indexes().append(index)
+        return index
+
+    def generate_FTSIndex_info(self, name, source_type='couchbase',
+                           source_name=None, index_type='fulltext-index',
+                           index_params=None, plan_params=None,
+                           source_params=None, source_uuid=None, collection_index=False, _type=None,
+                           scope=None, collections=None, cluster=None):
+
+        if not cluster:
+            cluster = self.cb_cluster
+
+        index = FTSIndex(
+            cluster=cluster,
+            name=name,
+            source_type=source_type,
+            source_name=source_name,
+            index_type=index_type,
+            index_params=index_params,
+            plan_params=plan_params,
+            source_params=source_params,
+            source_uuid=source_uuid,
+            type_mapping=_type,
+            collection_index=collection_index,
+            scope=scope,
+            collections=collections,
+            is_elixir=self.is_elixir,
+            reduce_query_logging=self.reduce_query_logging
+        )
+
         return index
 
     def create_default_index(self, index_name, bucket_name, analyzer='standard',
