@@ -120,11 +120,16 @@ CMDS = {
             " > /dev/null && echo 1 || echo 0; "
             "dpkg -P couchbase-server; "
             "rm -rf /var/lib/dpkg/info/couchbase-server.*;"
-            "dpkg --configure -a; apt-get update; rm -rf" +
-            DEFAULT_INSTALL_DIR["LINUX_DISTROS"],
+            "dpkg --configure -a; apt-get update; "
+
+            "grep 'kernel.dmesg_restrict=0' /etc/sysctl.conf || "
+            "(echo 'kernel.dmesg_restrict=0' >> /etc/sysctl.conf "
+            "&& service procps restart) ; "
+
+            "rm -rf" + DEFAULT_INSTALL_DIR["LINUX_DISTROS"],
         "pre_install": None,
         "install": "DEBIAN_FRONTEND='noninteractive' apt-get -y -f install buildpath > /dev/null && echo 1 || echo 0",
-        "post_install": "systemctl -q is-active couchbase-server.service && echo 1 || echo 0",
+        "post_install": "usermod -aG adm couchbase && systemctl -q is-active couchbase-server.service && echo 1 || echo 0",
         "post_install_retry": "systemctl restart couchbase-server.service",
         "init": None,
         "cleanup": "ls -td " + DOWNLOAD_DIR["LINUX_DISTROS"] + "couchbase*.deb | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
