@@ -337,6 +337,9 @@ class RestConnection(object):
             self.history_retention_secs = self.input.param("history_retention_secs", 86400)  # 1 day
             self.magma_key_tree_data_block_size = self.input.param("magma_key_tree_data_block_size", 10096)
             self.magma_seq_tree_data_block_size = self.input.param("magma_seq_tree_data_block_size", 131072)
+            # Adding bucket weight and width params
+            self.bucket_width = self.input.param("bucket_width", 1)
+            self.bucket_weight = self.input.param("bucket_weight", 30)
 
         if CbServer.use_https:
             self.port = CbServer.ssl_port_map.get(str(self.port),
@@ -3097,6 +3100,10 @@ class RestConnection(object):
                     init_params['magmaKeyTreeDataBlockSize'] = self.magma_seq_tree_data_block_size
                     init_params['magmaSeqTreeDataBlockSize'] = self.magma_key_tree_data_block_size
             init_params['storageBackend'] = storageBackend
+
+            if CbServer.cluster_profile == "serverless":
+                init_params['width'] = self.bucket_width
+                init_params['weight'] = self.bucket_weight
 
         params = urllib.parse.urlencode(init_params)
 
