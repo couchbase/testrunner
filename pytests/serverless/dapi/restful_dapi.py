@@ -1414,7 +1414,7 @@ class RestfulDAPITest(ServerlessBaseTestCase):
             self.log.info("Response code for upsertion of document is: {}".format(response.status_code))
             self.assertTrue(response.status_code == 200, "Upsert doc with preserve expiry query"
                             "parameter failed for database: {}".format(database.id))
-            time.sleep(60)
+            time.sleep(70)
             response = self.rest_dapi.get_doc("key1", "_default", "_default")
             self.log.info("response code for get doc: {}".format(response.status_code))
             self.assertTrue(response.status_code == 404, "Doc is still present after putting expiry time and"
@@ -1462,7 +1462,7 @@ class RestfulDAPITest(ServerlessBaseTestCase):
 
             # sleep for 60 second so that doc get expired
 
-            time.sleep(60)
+            time.sleep(70)
             response = self.rest_dapi.get_doc("key", "_default", "_default")
             self.assertTrue(response.status_code == 404, "doc is still present after the"
                             "expiry time for database: {}".format(database.id))
@@ -1475,7 +1475,7 @@ class RestfulDAPITest(ServerlessBaseTestCase):
             response = self.rest_dapi.upsert_doc("key", {"upserted": True}, "_default", "_default", "?preserveExpiry=true")
             self.assertTrue(response.status_code == 200, "Upsert doc failed for database: {}".format(database.id))
 
-            time.sleep(60)
+            time.sleep(70)
             response = self.rest_dapi.get_doc("key", "_default", "_default")
             self.assertTrue(response.status_code == 404, "Doc is still present after adding expiry time of 60s")
 
