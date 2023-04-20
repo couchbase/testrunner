@@ -53,6 +53,7 @@ class DataAPITests(ServerlessBaseTestCase):
             dapi_info["access_secret"] = database.secret_key
             dapi_info["database_id"] = database.id
             dapi_list.append(dapi_info)
+        time.sleep(60)
         self.dapi_info_list = dapi_list
 
 
@@ -63,7 +64,7 @@ class DataAPITests(ServerlessBaseTestCase):
                                           "access_secret": dapi_info["access_secret"]})
             scope_name = "testScope"
             response = self.rest_dapi.create_scope({"scopeName": scope_name})
-            self.log.info("Response Received, status ->", response.status_code)
+            self.log.info("Response Received, status ->".format(response.status_code))
             self.assertEqual(response.status_code,401)
 
     def test_create_scope_with_incorrect_access_secret(self):
@@ -73,7 +74,7 @@ class DataAPITests(ServerlessBaseTestCase):
                                           "access_secret": "0000000000000000000000000000"})
             scope_name = "testScope"
             response = self.rest_dapi.create_scope({"scopeName": scope_name})
-            self.log.info("Response Received, status ->", response.status_code)
+            self.log.info("Response Received, status ->".format(response.status_code))
             self.assertEqual(response.status_code,401)
 
     def test_brute_force_access_secret_60_seconds(self):
