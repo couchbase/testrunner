@@ -100,15 +100,11 @@ CMDS = {
         "uninstall":
             "systemctl -q stop couchbase-server;" +
             UNMOUNT_NFS_CMD +
+            "apt-get remove -y 'couchbase*' > /dev/null; sleep 10;"
             "apt-get purge -y 'couchbase*' > /dev/null; sleep 10;"
-            "dpkg --purge $(dpkg -l | grep couchbase | awk '{print $2}'"
-            " | xargs echo); sleep 10; "
             "rm /var/lib/dpkg/info/couchbase-server.*; sleep 10;"
             "kill -9 `ps -ef |egrep couchbase|cut -f3 -d' '`;" +
-            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] +
-            " > /dev/null && echo 1 || echo 0; "
-            "dpkg -P couchbase-server; "
-            "rm -rf /var/lib/dpkg/info/couchbase-server.*;"
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null;"
             "dpkg --configure -a; apt-get update; "
 
             "grep 'kernel.dmesg_restrict=0' /etc/sysctl.conf || "
