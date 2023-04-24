@@ -693,7 +693,14 @@ def main():
 
                 dispatch_job = True
                 if not options.fresh_run:
-                    parameters = testsToLaunch[i]['parameters'] + ',' + runTimeTestRunnerParameters
+                    if runTimeTestRunnerParameters is None:
+                        parameters = testsToLaunch[i]['parameters']
+                    else:
+                        if testsToLaunch[i]['parameters'] == 'None':
+                            parameters = runTimeTestRunnerParameters
+                        else:
+                            parameters = testsToLaunch[i][
+                                             'parameters'] + ',' + runTimeTestRunnerParameters
                     dispatch_job = \
                         find_rerun_job.should_dispatch_job(
                             options.os, testsToLaunch[i][
