@@ -693,11 +693,12 @@ def main():
 
                 dispatch_job = True
                 if not options.fresh_run:
+                    parameters = testsToLaunch[i]['parameters'] + ',' + runTimeTestRunnerParameters
                     dispatch_job = \
                         find_rerun_job.should_dispatch_job(
                             options.os, testsToLaunch[i][
                                 'component'], dashboardDescriptor
-                            , options.version)
+                            , options.version, parameters)
 
                 # and this is the Jenkins descriptor
                 descriptor = testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] + '-' + time.strftime('%b-%d-%X') + '-' + options.version

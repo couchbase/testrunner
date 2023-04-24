@@ -114,7 +114,13 @@ def find_rerun_job(args):
         component = OS.getenv('component')
         sub_component = OS.getenv('subcomponent')
         version_build = OS.getenv('version_number')
+        parameters = OS.getenv('parameters')
+        bucket_type, gsi_type = get_bucket_gsi_types(parameters)
         name = "{}_{}_{}".format(os, component, sub_component)
+        if bucket_type:
+            name = "{}_{}".format(name, bucket_type)
+        if gsi_type:
+            name = "{}_{}".format(name, gsi_type)
     elif args['jenkins_job']:
         name = OS.getenv('JOB_NAME')
         version_build = args['build_version']
@@ -122,8 +128,14 @@ def find_rerun_job(args):
         os = args['os']
         component = args['component']
         sub_component = args['sub_component']
+        parameters = args['parameters']
+        bucket_type, gsi_type = get_bucket_gsi_types(parameters)
         if os and component and sub_component:
             name = "{}_{}_{}".format(os, component, sub_component)
+            if bucket_type:
+                name = "{}_{}".format(name, bucket_type)
+            if gsi_type:
+                name = "{}_{}".format(name, gsi_type)
         elif args['name']:
             name = args['name']
         version_build = args['build_version']
@@ -165,7 +177,8 @@ def find_rerun_job(args):
         return False, {}
 
 
-def should_dispatch_job(os, component, sub_component, version):
+def should_dispatch_job(os, component, sub_component, version,
+                        parameters):
     """
     Finds if a job has to be dispatched for a particular os, component,
     subcomponent and version. The method finds if the job had run
@@ -178,11 +191,18 @@ def should_dispatch_job(os, component, sub_component, version):
     :type sub_component: str
     :param version: Version of the server for the job
     :type version: str
+    :param parameters: Get the test parameters
+    :type parameters: str
     :return: Boolean on whether to dispatch the job or not
     :rtype: bool
     """
-    doc_id = "{0}_{1}_{2}_{3}".format(os, component, sub_component,
-                                    version)
+    bucket_type, gsi_type = get_bucket_gsi_types(parameters)
+    doc_id = "{0}_{1}_{2}".format(os, component, sub_component)
+    if bucket_type:
+        doc_id = "{0}_{1}".format(doc_id, bucket_type)
+    if gsi_type:
+        doc_id = "{0}_{1}".format(doc_id, gsi_type)
+    doc_id = "{0}_{1}".format(doc_id, version)
     cluster = get_cluster()
     rerun_jobs = get_bucket(cluster, bucket_name)
     user_name = "{0}-{1}%{2}".format(component, sub_component, version)
@@ -208,6 +228,23 @@ def should_dispatch_job(os, component, sub_component, version):
         return False
     return True
 
+def get_bucket_gsi_types(parameters):
+    """
+    Parse the test params and determince the bucket type and gsi type
+    if any.
+    :param parameters: Get the test parameters from job
+    :type parameters: str
+    :return: Bucket storage type and gsi type, if any
+    :rtype: string, string
+    """
+    bucket_type = ""
+    gsi_type = ""
+    for parameter in parameters.split(","):
+        if "bucket_storage" in parameter:
+            bucket_type = parameter.split("=")[1]
+        elif "gsi_type" in parameter:
+            gsi_type = parameter.split("=")[1]
+    return bucket_type, gsi_type
 
 if __name__ == "__main__":
     args = parse_args()
