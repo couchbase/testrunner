@@ -24,7 +24,8 @@ def get_params(url):
     for vals in res['actions']:
         if "parameters" in vals:
             for params in vals['parameters']:
-                parameters[params['name']] = params['value']
+                if "value" in params:
+                    parameters[params['name']] = params['value']
             break
     return parameters
 
