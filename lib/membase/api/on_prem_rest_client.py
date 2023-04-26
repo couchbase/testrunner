@@ -7,6 +7,7 @@ from urllib3._collections import HTTPHeaderDict
 
 from . import httplib2
 import logger
+from table_view import TableView
 import traceback
 import socket
 import time
@@ -40,6 +41,28 @@ log = logger.Logger.get_logger()
 class RestHelper(object):
     def __init__(self, rest_connection):
         self.rest = rest_connection
+
+    @staticmethod
+    def humanBytes(b):
+        """Return the given bytes as a human friendly
+        KB, MB, GB, or TB string"""
+
+        B = float(b)
+        KB = float(1024)
+        MB = float(KB ** 2)  # 1,048,576
+        GB = float(KB ** 3)  # 1,073,741,824
+        TB = float(KB ** 4)  # 1,099,511,627,776
+
+        if B < KB:
+            return '{0} {1}'.format(B, 'Bytes' if 0 == B > 1 else 'Byte')
+        elif KB <= B < MB:
+            return '{0:.2f} KiB'.format(B / KB)
+        elif MB <= B < GB:
+            return '{0:.2f} MiB'.format(B / MB)
+        elif GB <= B < TB:
+            return '{0:.2f} GiB'.format(B / GB)
+        elif TB <= B:
+            return '{0:.2f} TiB'.format(B / TB)
 
     def is_ns_server_running(self, timeout_in_seconds=360):
         log.info("-->is_ns_server_running?")
@@ -2569,6 +2592,38 @@ class RestConnection(object):
                 bucket_map[bucketInfo.name] = bucketInfo.stats.itemCount
         return bucket_map
 
+    def print_on_prem_bucket_stats(self):
+        table = TableView(log.info)
+        buckets = self.get_buckets()
+        if len(buckets) == 0:
+            table.add_row(["No buckets"])
+        else:
+            table.set_headers(["Bucket", "Type", "Storage", "Replicas",
+                               "Durability", "TTL", "Items", "Vbuckets",
+                               "RAM Quota", "RAM Used", "Disk Used", "ARR"])
+            if CbServer.cluster_profile == "serverless":
+                table.headers += ["Width/Weight"]
+            for bucket in buckets:
+                num_vbuckets = resident_ratio = storage_backend = "-"
+                if bucket.type == "membase":
+                    storage_backend = bucket.bucket_storage
+                    try:
+                        resident_ratio = self.fetch_bucket_stats(bucket.name)[
+                            "op"]["samples"]["vb_active_resident_items_ratio"][-1]
+                    except KeyError:
+                        resident_ratio = 100
+                    num_vbuckets = str(bucket.numVBuckets)
+                bucket_data = [
+                    bucket.name, bucket.type, storage_backend,
+                    bucket.numReplicas, bucket.durability_level,
+                    bucket.maxttl, bucket.stats.itemCount, num_vbuckets,
+                    RestHelper.humanBytes(str(bucket.stats.ram)),
+                    RestHelper.humanBytes(str(bucket.stats.memUsed)),
+                    RestHelper.humanBytes(str(bucket.stats.diskUsed)),
+                    resident_ratio]
+                table.add_row(bucket_data)
+        table.display("Bucket statistics")
+
     def get_bucket_stats_for_node(self, bucket='default', node=None):
         if not node:
             log.error('node_ip not specified')
@@ -3133,6 +3188,7 @@ class RestConnection(object):
         create_time = time.time() - create_start_time
         log.info("{0:.02f} seconds to create bucket {1}".
                  format(round(create_time, 2), bucket))
+        self.print_on_prem_bucket_stats()
         return status
 
     def change_bucket_props(self, bucket,
@@ -6361,7 +6417,8 @@ class Bucket(object):
                  type='', eviction_policy="valueOnly", bucket_priority=None, uuid="", lww=False, maxttl=None,
                  bucket_storage=None, history_retention_bytes=4294967296, history_retention_secs=86400,
                  magma_key_tree_data_block_size=10096, magma_seq_tree_data_block_size=13107,
-                 history_retention_collection_default=True):
+                 history_retention_collection_default=True, durabilityMinLevel=None,
+                 numVBuckets=None):
         self.name = name
         self.port = port
         self.type = type
@@ -6374,6 +6431,8 @@ class Bucket(object):
         self.bucket_size = bucket_size
         self.kvs = {1:KVStore()}
         self.master_id = master_id
+        self.numVBuckets = numVBuckets
+        self.durability_level = durabilityMinLevel
         self.eviction_policy = eviction_policy
         self.bucket_priority = bucket_priority
         self.uuid = uuid
@@ -6675,16 +6734,19 @@ class RestParser(object):
 
         return alt_addr_map
 
-
     def parse_get_bucket_json(self, parsed):
         bucket = Bucket()
         bucket.name = parsed['name']
         bucket.uuid = parsed['uuid']
         if 'bucketType' in parsed:
             bucket.type = parsed['bucketType']
+        if 'storageBackend' in parsed:
+            bucket.bucket_storage = parsed['storageBackend']
         if 'proxyPort' in parsed:
             bucket.port = parsed['proxyPort']
         bucket.nodes = list()
+        if 'numVBuckets' in parsed:
+            bucket.num_vbuckets = parsed['numVBuckets']
         if 'vBucketServerMap' in parsed:
             vBucketServerMap = parsed['vBucketServerMap']
             serverList = vBucketServerMap['serverList']
@@ -6729,6 +6791,8 @@ class RestParser(object):
             # who is master , who is replica
         # get the 'storageTotals'
         log.debug('read {0} vbuckets'.format(len(bucket.vbuckets)))
+        if 'durabilityLevel' in parsed:
+            bucket.durability_level = parsed['durabilityLevel']
         if 'basicStats' in parsed:
             stats = parsed['basicStats']
             # vBucketServerMap
