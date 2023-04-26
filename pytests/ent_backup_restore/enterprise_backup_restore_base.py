@@ -2318,7 +2318,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def _verify_cbbackupmgr_logs(self, log_collect_datetime):
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         self.log.info("\n**** start to verify cbbackupmgr logs ****")
-
+        os_dist = shell.info.distribution_version.replace(" ", "").lower()
+        if "debian" in os_dist:
+            shell.execute_command("apt update -y && apt install -y unzip")
         if not self.backupset.ex_logs_path:
             logs_path = self.backupset.directory + "/logs"
         elif self.backupset.ex_logs_path:
