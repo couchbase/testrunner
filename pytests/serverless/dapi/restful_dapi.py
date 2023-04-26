@@ -7,6 +7,7 @@ import threading
 import time
 import pytz
 import datetime
+import random
 
 class RestfulDAPITest(ServerlessBaseTestCase):
     def setUp(self):
@@ -1725,3 +1726,172 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                                                  "?meta=true&consistencyToken={}".format(cr_consistency_token))
             self.assertTrue(response.status_code == 200, "Delete doc failed with correct CAS for"
                             " database: {}".format(database.id))
+
+
+    def test_query_param_subdoc_mutate(self):
+        for database in self.databases.values():
+            self.rest_dapi = RestfulDAPI({"dapi_endpoint": database.data_api,
+                                        "access_token": database.access_key,
+                                        "access_secret": database.secret_key})
+
+            self.log.info("Test query param for subdoc mutate for database: {}".format(database.id))
+
+            # insert a document
+            doc = {
+                "name" : "Saurabh",
+                "age" : 23,
+                "hobby" : ["cycling", "Football", "chess", "guitar", "flute"],
+                "Birthday" : {
+                    "day": 16,
+                    "month": "December",
+                    "Year" : 1999
+                    }
+            }
+            response = self.rest_dapi.insert_doc("key", doc, "_default", "_default")
+            self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(database.id))
+
+            # test timeout parameter
+            response = self.rest_dapi.insert_subdoc("key",
+                                                    [{"type": "insert", "path": "Birthday.time",
+                                                      "value": {"Hours": 12, "minute": 12, "seconds": 12}}]
+                                                    ,"_default", "_default", "?timeout=0.00001s&meta=true")
+
+            self.assertTrue(response.status_code == 200,
+                            "Insert subdoc failed for database: {}".format(database.id))
+            error_msg = json.loads(response.content)["error"]["message"]
+            self.assertTrue(error_msg == self.error_message,
+                            "Got wrong error message for timeout parametere: {}".format(error_msg))
+
+            # test expiry
+            # response = self.rest_dapi.insert_subdoc("key",
+            #                                         [{"type": "insert", "path":"star", "value": 3}],
+            #                                         "_default", "_default", "?expiry=20s&meta=true")
+            # self.log.info("Response code to insert subdoc: {}".format(response.status_code))
+            # self.assertTrue(response.status_code == 200,
+            #                 "Insert subdoc failed with expiry parameter for database: {}".format(database.id))
+            # response = self.rest_dapi.get_subdoc("key",
+            #                                      [{"type": "get", "path": "star"}],
+            #                                      "_default", "_default",
+            #                                      "?meta=true&withExpiry=true")
+            # self.log.info("Response code to get the subdoc with expiry time: {}".format(response.status_code))
+            # self.assertTrue(response.status_code == 200,
+            #                 "Get subdoc with expiry time failed for database: {}".format(database.id))
+            # self.log.info(response.content)
+            # time.sleep(30)
+            # response = self.rest_dapi.get_subdoc("key",
+            #                                      [{"type": "get", "path": "star"}],
+            #                                      "_default", "_default",
+            #                                      "?meta=true&withExpiry=true")
+            # self.log.info("Response code to get the subdoc with expiry time: {}".format(response.status_code))
+            # self.assertTrue(response.status_code == 404,
+            #                 "Still able to find after the expiry time: {}".format(database.id))
+
+            # implement preserveExpiry query parameter
+
+            # test consistency token
+            response = self.rest_dapi.get_subdoc("key",
+                                                 [{"type": "get", "path": "Birthday"}],
+                                                 "_default", "_default", "?meta=true")
+            self.assertTrue(response.status_code == 200,
+                            "Get subdoc failed in test consistency token for database: {}".format(database.id))
+            prev_consistency_token = json.loads(response.content)['meta']['api']['consistencyToken']
+            # update consistency token
+            response = self.rest_dapi.insert_subdoc("key",
+                                                    [{"type": "upsert", "path": "age", "value": 32}],
+                                                    "_default", "_default", "?meta=true")
+            self.assertTrue(response.status_code == 200,
+                            "Upsert subdoc failed in test consistency token for database: {}".format(database.id))
+            cr_consistency_token = json.loads(response.content)['meta']['api']['consistencyToken']
+            # update subdoc with wrong consistency token
+            response = self.rest_dapi.insert_subdoc("key",
+                                                    [{"type": "upsert", "path": "age", "value": 45}],
+                                                    "_default", "_default",
+                                                    "?consistencyToken={}".format(prev_consistency_token))
+            # should be getting error for wrong CAS
+            response = self.rest_dapi.insert_subdoc("key",
+                                                    [{"type": "upsert", "path": "age", "value": 45}],
+                                                    "_default", "_default",
+                                                    "?consistencyToken={}".format(cr_consistency_token))
+            # should be getting correct response after passing correct CAS
+
+            # durability and storesemantics is still left
+
+
+    def test_query_param_n1ql(self):
+        for database in self.databases.values():
+            self.rest_dapi = RestfulDAPI({"dapi_endpoint": database.data_api,
+                                        "access_token": database.access_key,
+                                        "access_secret": database.secret_key})
+            self.log.info("Test query parameters for niql query api for database: {}".format(database.id))
+
+            name = ["saurabh", "akash", "deepanshu", " ritesh", "ajay", "aurn", "ayush", "abhishek"]
+            hobbies = ["cycling", "Football", "chess", "guitar", "flute", "Travelling", "cricket", "Ludo"]
+            city = ["prayagraj", "allahabad", "lucknow", "delhi", "ghaziabad", "noida", "kanpur", "banaras"]
+            key_prefix, doc, key_doc_list = "key", dict(), []
+            for i in range(1, self.number_of_docs + 1):
+                doc['name'] = random.choice(name)
+                doc['hobby'] = random.choice(hobbies)
+                doc['city'] = random.choice(city)
+                doc['age'] = random.randint(1, 1000)
+                doc['friends'] = random.randint(1,100)
+                key = key_prefix + "-" + str(i)
+                key_doc_list.append({"id": key, "value": doc})
+            response = self.rest_dapi.insert_bulk_document("_default",
+                                                           "_default",
+                                                           key_doc_list)
+            self.assertTrue(response.status_code == 200,
+                            "Bulk insert doc failed for database: {}".format(database.id))
+            query = {"query": "SELECT name, hobby FROM _default limit 10"}
+            # test timeout param
+            response = self.rest_dapi.execute_query(query, "_default",
+                                                    "?timeout=0.0001s&meta=true")
+            self.assertTrue(response.status_code == 400,
+                            "Test timeout param for niql query param"
+                            "failed for database: {}".format(database.id))
+            # test readonly param
+            response = self.rest_dapi.execute_query(query, "_default", "?readonly=true&meta=true")
+            self.assertTrue(response.status_code == 200, "Query execution failed for test readonly param")
+            # test negative test of readonly
+            query = {"query": "UPSERT INTO _default (KEY, VALUE) VALUES ('key-1', { 'type' : 'name', 'name' : 'SaurabhMishra' })"}
+            response = self.rest_dapi.execute_query(query, "_default", "?readonly=true&meta=true")
+            self.log.info(response.status_code)
+
+            response = self.rest_dapi.get_doc("key-1", "_default", "_default")
+            self.log.info(response.content)
+
+
+    def test_2thsnd_collection_over_20buckets(self):
+        self.result = True
+        self.log.info("Test create two thousand collections over hundread buckets")
+        collection_thread_list = list()
+        def create_collection_thread(scope, collection_prefix, rest_dapi_obj):
+            for number in range(100):
+                collection_name = collection_prefix + "-" + str(number)
+                response = rest_dapi_obj.create_collection(scope, {"name": collection_name})
+                if response is None or response.status_code != 200:
+                    self.result = False
+                    self.log.critical("Create collection failed: {}".format(response))
+                    return
+
+        for index,database in enumerate(self.databases.values()):
+            rest_dapi_obj = RestfulDAPI({"dapi_endpoint": database.data_api,
+                                        "access_token": database.access_key,
+                                        "access_secret": database.secret_key})
+
+            collection_prefix = "collection" + "-" + str(index)
+            scope = "temp-scope"
+            response = rest_dapi_obj.create_scope({"scopeName": scope})
+            self.assertTrue(response.status_code == 200, "Create scope failed with response: {} for"
+                            "database: {}".format(response.status_code, database.id))
+
+            collection_thread = threading.Thread(target=create_collection_thread,
+                                                 args=(scope, collection_prefix,rest_dapi_obj))
+            collection_thread_list.append(collection_thread)
+
+        for collection_thread in collection_thread_list:
+            collection_thread.start()
+
+        for collection_thread in collection_thread_list:
+            collection_thread.join()
+
+        self.assertTrue(self.result == True, "Create two thousand collection over 20 bucket failed")

@@ -30,33 +30,40 @@ class RestfulDAPI:
         session = requests.Session()
         headers = headers or self.header
         params = json.dumps(params)
-        try:
-            if method == "GET":
-                resp = session.get(api, params=params, headers=headers,
-                                   timeout=timeout, verify=verify)
-            elif method == "POST":
-                resp = session.post(api, data=params, headers=headers,
+        retries, resp = 5, None
+        while retries > 0:
+            try:
+                if method == "GET":
+                    resp = session.get(api, params=params, headers=headers,
                                     timeout=timeout, verify=verify)
-            elif method == "HEAD":
-                resp = session.head(api, params=params, headers=headers,
+                elif method == "POST":
+                    resp = session.post(api, data=params, headers=headers,
+                                        timeout=timeout, verify=verify)
+                elif method == "HEAD":
+                    resp = session.head(api, params=params, headers=headers,
+                                        timeout=timeout, verify=verify)
+                elif method == "DELETE":
+                    resp = session.delete(api, data=params, headers=headers,
+                                        timeout=timeout, verify=verify)
+                elif method == "PUT":
+                    resp = session.put(api, data=params, headers=headers,
                                     timeout=timeout, verify=verify)
-            elif method == "DELETE":
-                resp = session.delete(api, data=params, headers=headers,
-                                      timeout=timeout, verify=verify)
-            elif method == "PUT":
-                resp = session.put(api, data=params, headers=headers,
-                                   timeout=timeout, verify=verify)
-            return resp
-        except requests.exceptions.HTTPError as errh:
-            self._log.error("HTTP Error {0}".format(errh))
-        except requests.exceptions.ConnectionError as errc:
-            self._log.error("Error Connecting {0}".format(errc))
-        except requests.exceptions.Timeout as errt:
-            self._log.error("Timeout Error: {0}".format(errt))
-        except requests.exceptions.RequestException as err:
-            self._log.error("Something else: {0}".format(err))
-        except Exception as err:
-            self._log.error("Something else: {0}".format(err))
+
+            except requests.exceptions.HTTPError as errh:
+                self._log.error("HTTP Error {0}".format(errh))
+            except requests.exceptions.ConnectionError as errc:
+                self._log.error("Error Connecting {0}".format(errc))
+            except requests.exceptions.Timeout as errt:
+                self._log.error("Timeout Error: {0}".format(errt))
+            except requests.exceptions.RequestException as err:
+                self._log.error("Something else: {0}".format(err))
+            except Exception as err:
+                self._log.error("Something else: {0}".format(err))
+
+            if resp != None:
+                return resp
+            self._log.info("Retrying the request.................")
+            retries -= 1
 
     def check_dapi_health(self, query_param=""):
         url = self.endpoint + "/health" + query_param
@@ -147,7 +154,8 @@ class RestfulDAPI:
 
     def get_bulk_document(self, scope, collection, document_ids=(), query_param=""):
         url = self.endpoint_v1 + "/scopes/" + scope + "/collections/" + collection + "/docs?ids="
-        url = url + ','.join(document_ids)
+        url = url + ','.join(document_ids) + query_param
+        log.info(url)
         return self._urllib_request(url)
 
     def insert_bulk_document(self, scope, collection, key_documents, query_param=""):
