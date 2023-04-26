@@ -612,7 +612,6 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 return True
         return False
 
-
     def get_fts_stats(self, print_str=None, print_stats=True):
         """
             Print FTS Stats and returns stats along with Current FTS Nodes
@@ -752,13 +751,14 @@ class FTSElixirSanity(ServerlessBaseTestCase):
     """
     def monitor_running_average_and_scaling(self):
         while not self.stop_monitoring_stats:
+            invalid_stat_present = False
             start_time = time.time()
-
             fts_stats, fts_nodes = self.get_fts_stats(print_stats=False)
             for i in range(len(fts_nodes)):
                 util_mem = fts_stats[i]['utilization:memoryBytes']
                 util_cpu = fts_stats[i]['utilization:cpuPercent']
-
+                if util_cpu == 0 or util_mem == 0:
+                    invalid_stat_present = True
                 self.memory_queue[fts_nodes[i]].append(util_mem)
                 self.cpu_queue[fts_nodes[i]].append(util_cpu)
 
@@ -782,11 +782,12 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                             self.prettyPrintRunningAverage("--SCALE OUT FAIL STATS--")
                             self.fail(f"Scale Out failed")
             else:
-                with self.subTest("verify scale out before running average"):
-                    if self.validate_scale_out(fts_nodes):
-                        self.log.critical("scale out happened when it wasn't required")
-                        self.prettyPrintRunningAverage("EARLY SCALE OUT STATS")
-                        self.fail(f"Scale Out happened less than scaling time")
+                if not invalid_stat_present:
+                    with self.subTest("verify scale out before running average"):
+                        if self.validate_scale_out(fts_nodes):
+                            self.log.critical("scale out happened when it wasn't required")
+                            self.prettyPrintRunningAverage("EARLY SCALE OUT STATS")
+                            self.fail(f"Scale Out happened less than scaling time")
 
             # verify scale in
             if self.check_scale_in_condition(fts_stats) and self.autoscaling_validations['scale_out']:
