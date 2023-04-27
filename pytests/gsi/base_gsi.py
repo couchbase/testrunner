@@ -148,6 +148,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.log.info("server groups : %s", server_groups)
 
             zones = list(self.rest.get_zone_names().keys())
+            group_1 = zones[0]
 
             # Delete Server groups
             for zone in zones:
@@ -180,6 +181,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                         server_grp_name)
                     server_list.append(self.servers[int(node)].ip + ":" + self.servers[int(node)].port)
                 self.server_group_map[server_grp_name] = server_list
+            self.rest.delete_zone(group_1)
 
     def create_index(self, bucket, query_definition, deploy_node_info=None, desc=None):
         create_task = self.async_create_index(bucket, query_definition, deploy_node_info, desc=desc)
@@ -1632,6 +1634,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                             replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                             enable_replica_index=self.enable_replica_index,
                                                             eviction_policy=self.eviction_policy, lww=self.lww)
+
             bucket_name = f"{bucket_prefix}{bucket_num_offset + i}"
             self.cluster.create_standard_bucket(name=bucket_name, port=11222, bucket_params=self.bucket_params)
             self.sleep(10)
