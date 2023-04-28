@@ -59,10 +59,13 @@ class ServerlessGSISanity(BaseGSIServerless):
                     else:
                         build_query = f"BUILD INDEX ON {namespace}(`#primary`)"
                     self.run_query(database=database, query=build_query)
-                rest_info = self.create_rest_info_obj(username=database.admin_username,
-                                                      password=database.admin_password,
-                                                      rest_host=database.rest_host)
-                self.wait_until_indexes_online(rest_info=rest_info, index_name=index_name, keyspace=keyspace)
+                rest_info = None
+                if self.create_bypass_user:
+                    rest_info = self.create_rest_info_obj(username=database.admin_username,
+                                                          password=database.admin_password,
+                                                          rest_host=database.rest_host)
+                self.wait_until_indexes_online(rest_info=rest_info, index_name=index_name,
+                                               keyspace=keyspace, use_rest=self.create_bypass_user)
                 time.sleep(30)
                 count_query = f'SELECT COUNT(*) from {namespace}'
                 resp = self.run_query(database=database, query=count_query)['results']
@@ -98,9 +101,13 @@ class ServerlessGSISanity(BaseGSIServerless):
             if self.defer_build:
                 build_query = query_gen.generate_build_query(namespace=namespace)
                 self.run_query(database=database, query=build_query)
-            rest_info = self.create_rest_info_obj(username=database.admin_username, password=database.admin_password,
-                                                  rest_host=database.rest_host)
-            self.wait_until_indexes_online(rest_info=rest_info, index_name=index_name, keyspace=keyspace)
+            rest_info = None
+            if self.create_bypass_user:
+                rest_info = self.create_rest_info_obj(username=database.admin_username,
+                                                      password=database.admin_password,
+                                                      rest_host=database.rest_host)
+            self.wait_until_indexes_online(rest_info=rest_info, index_name=index_name,
+                                           keyspace=keyspace, use_rest=self.create_bypass_user)
             # insert docs
             time.sleep(30)
             select_query = f'SELECT meta().id from {keyspace} where age > 30 and age < 60'
@@ -218,9 +225,13 @@ class ServerlessGSISanity(BaseGSIServerless):
             if self.defer_build:
                 build_query = query_gen.generate_build_query(namespace=namespace)
                 self.run_query(database=database, query=build_query)
-            rest_info = self.create_rest_info_obj(username=database.admin_username, password=database.admin_password,
-                                                  rest_host=database.rest_host)
-            self.wait_until_indexes_online(rest_info=rest_info, index_name=index_name, keyspace=keyspace)
+            rest_info = None
+            if self.create_bypass_user:
+                rest_info = self.create_rest_info_obj(username=database.admin_username,
+                                                      password=database.admin_password,
+                                                      rest_host=database.rest_host)
+            self.wait_until_indexes_online(rest_info=rest_info, index_name=index_name,
+                                           keyspace=keyspace, use_rest=self.create_bypass_user)
             # insert docs
             time.sleep(30)
             select_query = f'SELECT meta().id from {keyspace} where city like "C%"'
@@ -384,9 +395,13 @@ class ServerlessGSISanity(BaseGSIServerless):
                 self.run_query(database=database, query=query)
                 query = f"BUILD INDEX ON {namespace}(`{index_name}`)"
                 self.run_query(database=database, query=query)
-            rest_info = self.create_rest_info_obj(username=database.admin_username, password=database.admin_password,
-                                                  rest_host=database.rest_host)
-            self.wait_until_indexes_online(rest_info=rest_info, index_name=index_name, keyspace=keyspace)
+            rest_info = None
+            if self.create_bypass_user:
+                rest_info = self.create_rest_info_obj(username=database.admin_username,
+                                                      password=database.admin_password,
+                                                      rest_host=database.rest_host)
+            self.wait_until_indexes_online(rest_info=rest_info, index_name=index_name,
+                                           keyspace=keyspace, use_rest=self.create_bypass_user)
             # Run a query that uses array indexes
             time.sleep(30)
             query = f'explain select count(*) from {keyspace}  where any v in VMs satisfies v.name like "vm_10" END'
@@ -404,7 +419,13 @@ class ServerlessGSISanity(BaseGSIServerless):
             if self.defer_build:
                 query = f"BUILD INDEX ON {namespace}(`{partial_index_name}`)"
                 self.run_query(database=database, query=query)
-            self.wait_until_indexes_online(rest_info=rest_info, index_name=partial_index_name, keyspace=keyspace)
+            rest_info = None
+            if self.create_bypass_user:
+                rest_info = self.create_rest_info_obj(username=database.admin_username,
+                                                      password=database.admin_password,
+                                                      rest_host=database.rest_host)
+            self.wait_until_indexes_online(rest_info=rest_info, index_name=partial_index_name,
+                                           keyspace=keyspace, use_rest=self.create_bypass_user)
             # Run a query that uses partial array index
             time.sleep(30)
             query = f'explain select count(*) from {keyspace}  where join_mo > 8 AND ' \
@@ -423,7 +444,13 @@ class ServerlessGSISanity(BaseGSIServerless):
             if self.defer_build:
                 query = f"BUILD INDEX ON {namespace}(`{simplified_index_name}`)"
                 self.run_query(database=database, query=query)
-            self.wait_until_indexes_online(rest_info=rest_info, index_name=simplified_index_name, keyspace=keyspace)
+            rest_info = None
+            if self.create_bypass_user:
+                rest_info = self.create_rest_info_obj(username=database.admin_username,
+                                                      password=database.admin_password,
+                                                      rest_host=database.rest_host)
+            self.wait_until_indexes_online(rest_info=rest_info, index_name=simplified_index_name,
+                                           keyspace=keyspace, use_rest=self.create_bypass_user)
             # Run a query that uses simplified array index
             time.sleep(30)
             query = f'Explain select count(*) from {keyspace} where ' \

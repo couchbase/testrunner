@@ -113,35 +113,52 @@ class BaseGSIServerless(QueryBaseServerless):
         results = self.run_query(query=query, database=database_obj)['results']
         return len(results)
 
-    def wait_until_indexes_online(self, rest_info, index_name, keyspace, timeout=20):
-        rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
-        indexer_node = None
-        nodes_obj = rest_obj.get_all_dataplane_nodes()
-        self.log.debug(f"Dataplane nodes object {nodes_obj}")
-        for node in nodes_obj:
-            if 'index' in node['services']:
-                indexer_node = node['hostname'].split(":")[0]
-                self.log.info(f"Will use this indexer node to obtain metadata {indexer_node}")
-                break
-        index_online, index_replica_online = False, False
-        time_now = time.time()
-        index_name = f"{index_name}".rstrip("`").lstrip("`")
-        while time.time() - time_now < timeout * 60:
-            index_metadata = self.get_indexer_metadata(rest_info=rest_info, indexer_node=indexer_node)
-            for index in index_metadata:
-                if index['index'] == index_name and keyspace in index['definition'] and index['status'] == 'Ready':
-                    index_online = True
-                if index['index'] == f"{index_name} (replica 1)" and keyspace in index['definition'] \
-                        and index['status'] == 'Ready':
-                    index_replica_online = True
-            if index_online and index_replica_online:
-                break
-            time.sleep(30)
-        if not index_online:
-            raise Exception(f"Index {index_name}  not online despite waiting for {timeout} mins")
-        if not index_replica_online:
-            raise Exception(
-                f"Replica of {index_name} not online despite waiting for {timeout} mins")
+    def wait_until_indexes_online(self, rest_info, index_name, keyspace, timeout=20, use_rest=True):
+        if use_rest:
+            rest_obj = RestConnection(rest_info.admin_username, rest_info.admin_password, rest_info.rest_host)
+            indexer_node = None
+            nodes_obj = rest_obj.get_all_dataplane_nodes()
+            self.log.debug(f"Dataplane nodes object {nodes_obj}")
+            for node in nodes_obj:
+                if 'index' in node['services']:
+                    indexer_node = node['hostname'].split(":")[0]
+                    self.log.info(f"Will use this indexer node to obtain metadata {indexer_node}")
+                    break
+            index_online, index_replica_online = False, False
+            time_now = time.time()
+            index_name = f"{index_name}".rstrip("`").lstrip("`")
+            while time.time() - time_now < timeout * 60:
+                index_metadata = self.get_indexer_metadata(rest_info=rest_info, indexer_node=indexer_node)
+                for index in index_metadata:
+                    if index['index'] == index_name and keyspace in index['definition'] and index['status'] == 'Ready':
+                        index_online = True
+                    if index['index'] == f"{index_name} (replica 1)" and keyspace in index['definition'] \
+                            and index['status'] == 'Ready':
+                        index_replica_online = True
+                if index_online and index_replica_online:
+                    break
+                time.sleep(30)
+            if not index_online:
+                raise Exception(f"Index {index_name}  not online despite waiting for {timeout} mins")
+            if not index_replica_online:
+                raise Exception(
+                    f"Replica of {index_name} not online despite waiting for {timeout} mins")
+        else:
+            index_online = False
+            time_now = time.time()
+            index_name = f"{index_name}".rstrip("`").lstrip("`")
+            database_name = keyspace.split(".")[0].replace("`", "")
+            database = self.databases[database_name]
+            while time.time() - time_now < timeout * 60:
+                index_metadata = self.run_query(database=database, query="select * from system:indexes")
+                for index in index_metadata['results']:
+                    if index['indexes']['name'] == index_name and index['indexes']['state'] == 'online':
+                        index_online = True
+                if index_online:
+                    break
+                time.sleep(30)
+            if not index_online:
+                raise Exception(f"Index {index_name}  not online despite waiting for {timeout} mins")
 
     def check_if_index_exists(self, database_obj, index_name):
         query = f"select * from system:indexes"
