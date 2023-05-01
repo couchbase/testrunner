@@ -12,36 +12,82 @@ import io
   Azure needs to install azure cli 'az' in dispatcher slave
 """
 
-def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
+def check_root_login(host, username ="root", password="couchbase"):
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(host,
+                    username=username,
+                    password=password)
+        return True
+    except :
+        return False
+
+def install_iptables(host, username="root", password="couchbase"):
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(host, username=username, key_filename=ssh_key_path)
-    ssh.exec_command("echo -e 'couchbase\ncouchbase' | sudo passwd root")
-    ssh.exec_command("sudo sed -i '/#PermitRootLogin yes/c\PermitRootLogin yes' /etc/ssh/sshd_config")
-    ssh.exec_command("sudo sed -i '/PermitRootLogin no/c\PermitRootLogin yes' /etc/ssh/sshd_config")
-    ssh.exec_command("sudo sed -i '/PermitRootLogin prohibit-password/c\PermitRootLogin yes' /etc/ssh/sshd_config")
-    ssh.exec_command("sudo sed -i '/PermitRootLogin forced-commands-only/c\#PermitRootLogin forced-commands-only' /etc/ssh/sshd_config")
-    ssh.exec_command("sudo sed -i '/PasswordAuthentication no/c\PasswordAuthentication yes' /etc/ssh/sshd_config")
-    ssh.exec_command("sudo service sshd restart")
-    # terminate the instance after 12 hours
-    ssh.exec_command("sudo shutdown -P +720")
+    ssh.connect(host,
+                username=username,
+                password=password)
+    
+    commands = ["yum install -y iptables-services ",
+                "systemctl start iptables"]
 
-    if modify_hosts:
-        # add hostname to /etc/hosts so node-init-hostname works by binding to 127.0.0.1
-        # as recommended in https://docs.couchbase.com/server/current/cloud/couchbase-cloud-deployment.html
-        sftp = ssh.open_sftp()
-        with io.BytesIO() as fl:
-            sftp.getfo('/etc/hosts', fl)
-            hosts = fl.getvalue().decode()
-            modified_hosts = str()
-            for line in hosts.splitlines():
-                ip, hostnames = line.split(maxsplit=1)
-                if ip == "127.0.0.1":
-                    hostnames += f" {host}"
-                modified_hosts += f"{ip} {hostnames}\n"
-            # need to be root to write to /etc/hosts so write to a new file and move it with sudo
-            sftp.putfo(io.BytesIO(modified_hosts.encode()), '/tmp/newhosts')
-            ssh.exec_command("sudo mv /tmp/newhosts /etc/hosts")
+    for command in commands:
+            stdin, stdout, stderr = ssh.exec_command(command)
+            if stdout.channel.recv_exit_status() != 0:
+                ssh.close()
+                ssh.exec_command("sudo shutdown")
+                raise Exception("iptables could not be installed on {}".format(host))
+            
+    ssh.close()
+
+
+def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(host,
+                    username=username,
+                    key_filename=ssh_key_path)
+        
+        commands = ["echo -e 'couchbase\ncouchbase' | sudo passwd root",
+                    "sudo sed -i '/#PermitRootLogin yes/c\PermitRootLogin yes' /etc/ssh/sshd_config",
+                    "sudo sed -i '/PermitRootLogin no/c\PermitRootLogin yes' /etc/ssh/sshd_config",
+                    "sudo sed -i '/PermitRootLogin prohibit-password/c\PermitRootLogin yes' /etc/ssh/sshd_config",
+                    "sudo sed -i '/PermitRootLogin forced-commands-only/c\#PermitRootLogin forced-commands-only' /etc/ssh/sshd_config",
+                    "sudo sed -i '/PasswordAuthentication no/c\PasswordAuthentication yes' /etc/ssh/sshd_config",
+                    "sudo service sshd restart"]
+        
+        for command in commands:
+            stdin, stdout, stderr = ssh.exec_command(command)
+            if stdout.channel.recv_exit_status() != 0:
+                break 
+
+        if check_root_login(host):
+            print("root login to host {} successful.".format(host))
+            ssh.exec_command("sudo shutdown -P +720")
+        else:
+            print("root login to host {} failed. Terminating the EC2 instance".format(host))
+            ssh.exec_command("sudo shutdown")
+
+        if modify_hosts:
+            # add hostname to /etc/hosts so node-init-hostname works by binding to 127.0.0.1
+            # as recommended in https://docs.couchbase.com/server/current/cloud/couchbase-cloud-deployment.html
+            sftp = ssh.open_sftp()
+            with io.BytesIO() as fl:
+                sftp.getfo('/etc/hosts', fl)
+                hosts = fl.getvalue().decode()
+                modified_hosts = str()
+                for line in hosts.splitlines():
+                    ip, hostnames = line.split(maxsplit=1)
+                    if ip == "127.0.0.1":
+                        hostnames += f" {host}"
+                    modified_hosts += f"{ip} {hostnames}\n"
+                # need to be root to write to /etc/hosts so write to a new file and move it with sudo
+                sftp.putfo(io.BytesIO(modified_hosts.encode()), '/tmp/newhosts')
+                ssh.exec_command("sudo mv /tmp/newhosts /etc/hosts")
+
+        ssh.close()
 
 
 def aws_terminate(name):
@@ -71,6 +117,10 @@ AWS_AMI_MAP = {
             "aarch64": "ami-0289ff69e0069c2ed",
             "x86_64": "ami-070ac986a212c4d9b"
         },
+        "al2023": {
+            "aarch64": "ami-08f0305fa4286a9d0",
+            "x86_64": "ami-037d1d9dfa436c7c6"
+        },
         "ubuntu20": {
             "arm64": "ami-0d70a59d7191a8079"
         }
@@ -82,7 +132,8 @@ AWS_AMI_MAP = {
 AWS_OS_USERNAME_MAP = {
     "amzn2": "ec2-user",
     "ubuntu20": "ubuntu",
-    "centos": "centos"
+    "centos": "centos",
+    "al2023": "ec2-user"
 }
 
 def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
@@ -109,8 +160,8 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
         MaxCount=count,
         InstanceType=instance_type,
         LaunchTemplate={
-            'LaunchTemplateName': 'TestrunnerCouchbase',
-            'Version': '5'
+            'LaunchTemplateName': 'qe-al-template',
+            'Version': '1'
         },
         TagSpecifications=[
             {
@@ -138,9 +189,10 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
 
     instances = ec2_client.describe_instances(InstanceIds=instance_ids)
     ips = [instance['PublicDnsName'] for instance in instances['Reservations'][0]['Instances']]
-
+    print("EC2 Instances : ", ips)
     for ip in ips:
         post_provisioner(ip, ssh_username, ssh_key_path)
+        install_iptables(ip)
 
     return ips
 
