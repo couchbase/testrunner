@@ -53,7 +53,7 @@ class DataAPITests(ServerlessBaseTestCase):
             dapi_info["access_secret"] = database.secret_key
             dapi_info["database_id"] = database.id
             dapi_list.append(dapi_info)
-        time.sleep(60)
+        time.sleep(70)
         self.dapi_info_list = dapi_list
 
 
