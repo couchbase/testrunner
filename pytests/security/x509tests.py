@@ -319,7 +319,7 @@ class x509tests(BaseTestCase):
         servs_inout = self.servers[1:]
         serv_out = 'ns_1@' + servs_inout[1].ip
 
-        rest.create_bucket(bucket='default', ramQuotaMB=100)
+        rest.create_bucket(bucket='default', ramQuotaMB=256)
 
         x509main(self.master).setup_master()
         for node in servs_inout:
@@ -352,7 +352,7 @@ class x509tests(BaseTestCase):
         shell = RemoteMachineShellConnection(serv_out)
         known_nodes = ['ns_1@' + self.master.ip]
 
-        rest.create_bucket(bucket='default', ramQuotaMB=100)
+        rest.create_bucket(bucket='default', ramQuotaMB=256)
         rest.update_autofailover_settings(True, 30)
 
         x509main(self.master).setup_master()

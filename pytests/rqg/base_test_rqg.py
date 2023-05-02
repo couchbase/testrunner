@@ -1805,7 +1805,7 @@ class BaseRQGTests(BaseTestCase):
             self.rest.delete_bucket(bucket.name)
         self.buckets = []
         # Create New Buckets
-        self._create_buckets(self.master, bucket_list, server_id=None, bucket_size=100)
+        self._create_buckets(self.master, bucket_list, server_id=None, bucket_size=256)
         # Wait till the buckets are up
         self.sleep(15)
         # Read Data from mysql database and populate the couchbase server

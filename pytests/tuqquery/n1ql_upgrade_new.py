@@ -1221,19 +1221,19 @@ class QueriesUpgradeTestsNew(QueryTests, NewUpgradeBaseTest):
                                                         eviction_policy=self.eviction_policy, lww=self.lww)
         self.cluster.create_standard_bucket("test_bucket", 11222, test_bucket_params)
 
-        test_bucket_params = self._create_bucket_params(server=self.master, size=100,
+        test_bucket_params = self._create_bucket_params(server=self.master, size=256,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=self.eviction_policy, lww=self.lww)
         self.cluster.create_standard_bucket("wf_bucket", 11222, test_bucket_params)
 
-        temp_bucket_params = self._create_bucket_params(server=self.master, size=100,
+        temp_bucket_params = self._create_bucket_params(server=self.master, size=256,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=self.eviction_policy, lww=self.lww)
         self.cluster.create_standard_bucket("aggs_bucket", 11222, temp_bucket_params)
 
-        temp_bucket_params = self._create_bucket_params(server=self.master, size=100,
+        temp_bucket_params = self._create_bucket_params(server=self.master, size=256,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=self.eviction_policy, lww=self.lww)

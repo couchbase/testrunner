@@ -98,7 +98,7 @@ class Lww(XDCRNewBaseTest):
             conn.execute_command("timedatectl set-timezone " + time_zone, debug=False)
 
     def _create_buckets(self, bucket='',
-                        ramQuotaMB=1,
+                        ramQuotaMB=256,
                         replicaNumber=1,
                         proxyPort=11211,
                         replica_index=1,
@@ -244,13 +244,13 @@ class Lww(XDCRNewBaseTest):
     def test_lww_enable(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
         dest_conn = RestConnection(self.c2_cluster.get_master_node())
-        self._create_buckets(bucket='default', ramQuotaMB=100, src_lww=False, dst_lww=False)
+        self._create_buckets(bucket='default', ramQuotaMB=256, src_lww=False, dst_lww=False)
         src_conn.delete_bucket()
         dest_conn.delete_bucket()
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
 
     def test_replication_with_lww_default(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
         self.merge_all_buckets()
         self.c1_cluster.pause_all_replications_by_id()
@@ -259,7 +259,7 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_replication_with_lww_sasl(self):
-        self._create_buckets(bucket='sasl_bucket', ramQuotaMB=100)
+        self._create_buckets(bucket='sasl_bucket', ramQuotaMB=256)
         self.setup_xdcr()
         self.merge_all_buckets()
         self.c1_cluster.pause_all_replications_by_id()
@@ -268,7 +268,7 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_replication_with_lww_standard(self):
-        self._create_buckets(bucket='standard_bucket', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='standard_bucket', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
         self.setup_xdcr()
         self.merge_all_buckets()
         self.c1_cluster.pause_all_replications_by_id()
@@ -277,8 +277,8 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_replication_with_lww_and_no_lww(self):
-        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
-        self._create_buckets(bucket='nolww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
+        self._create_buckets(bucket='lww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='nolww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
                              dst_lww=False)
         self.setup_xdcr()
         self.merge_all_buckets()
@@ -288,8 +288,8 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_seq_upd_on_uni_with_src_wins(self):
-        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
-        self._create_buckets(bucket='nolww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
+        self._create_buckets(bucket='lww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='nolww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
                              dst_lww=False)
         src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
         src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww')
@@ -316,7 +316,7 @@ class Lww(XDCRNewBaseTest):
             self.log.info("Target doc won using Rev Id as expected")
 
     def test_seq_upd_on_uni_with_dest_wins(self):
-        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='lww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
         self._create_buckets(bucket='nolww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
                              dst_lww=False)
         self.setup_xdcr()
@@ -1450,11 +1450,13 @@ class Lww(XDCRNewBaseTest):
         self.c3_cluster = self.get_cb_cluster_by_name('C3')
         c3_conn = RestConnection(self.c3_cluster.get_master_node())
 
-        self._create_buckets(bucket='default', ramQuotaMB=100, src_lww=True, dst_lww=False)
-        c3_conn.create_bucket(bucket='default', ramQuotaMB=100, replicaNumber=1,
+        self._create_buckets(bucket='default', ramQuotaMB=256, src_lww=True,
+                             dst_lww=False)
+        c3_conn.create_bucket(bucket='default', ramQuotaMB=256,
+                              replicaNumber=1,
                               proxyPort=11211, replica_index=1, threadsNumber=3,
                               flushEnabled=1, lww=True)
-        self.c3_cluster.add_bucket(ramQuotaMB=100, bucket='default',
+        self.c3_cluster.add_bucket(ramQuotaMB=256, bucket='default',
                                    replicaNumber=1, proxyPort=11211)
         self.assertTrue(c3_conn.is_lww_enabled(), "LWW not enabled on C3 bucket")
         self.log.info("LWW enabled on C3 bucket as expected")
@@ -1470,11 +1472,12 @@ class Lww(XDCRNewBaseTest):
         self.c3_cluster = self.get_cb_cluster_by_name('C3')
         c3_conn = RestConnection(self.c3_cluster.get_master_node())
 
-        self._create_buckets(bucket='default', ramQuotaMB=100, src_lww=True, dst_lww=True)
-        c3_conn.create_bucket(bucket='default', ramQuotaMB=100, replicaNumber=1,
+        self._create_buckets(bucket='default', ramQuotaMB=256, src_lww=True, dst_lww=True)
+        c3_conn.create_bucket(bucket='default', ramQuotaMB=256,
+                              replicaNumber=1,
                               proxyPort=11211, replica_index=1, threadsNumber=3,
                               flushEnabled=1, lww=True)
-        self.c3_cluster.add_bucket(ramQuotaMB=100, bucket='default',
+        self.c3_cluster.add_bucket(ramQuotaMB=256, bucket='default',
                                    replicaNumber=1, proxyPort=11211)
         self.assertTrue(c3_conn.is_lww_enabled(), "LWW not enabled on C3 bucket")
         self.log.info("LWW enabled on C3 bucket as expected")

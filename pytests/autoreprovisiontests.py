@@ -709,8 +709,8 @@ class AutoReprovisionTests(unittest.TestCase):
         keys_count = self.input.param("keys-count", 0)
         num_buckets = self.input.param("num-buckets", 1)
         bucketType = self.input.param("bucketType", "ephemeral")
-        evictionPolicy = self.input.param("evictionPolicy", "noEviction")  # fullEviction
-        self.bucket_storage = self.input.param("bucket_storage", 'couchstore')
+        evictionPolicy = self.input.param("evictionPolicy", "fullEviction")  # fullEviction
+        self.bucket_storage = self.input.param("bucket_storage", 'magma')
 
         # master = self.servers[0]
         # credentials = self.input.membase_settings

@@ -2372,10 +2372,12 @@ class CouchbaseCluster:
             except Exception as e:
                 self.__log.info(e)
 
-    def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
-                              bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
+    def _create_bucket_params(self, server, replicas=1, size=256, port=11211,
+                              password=None,
+                              bucket_type='membase', enable_replica_index=1,
+                              eviction_policy='fullEviction',
                               bucket_priority=None, flush_enabled=1, lww=False, maxttl=None,
-                              bucket_storage='couchstore'):
+                              bucket_storage='magma'):
         """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
         Parameters:
             server - The server to create the bucket on. (TestInputServer)
@@ -2407,8 +2409,9 @@ class CouchbaseCluster:
         bucket_params['flush_enabled'] = flush_enabled
         bucket_params['lww'] = lww
         bucket_params['maxTTL'] = maxttl
-        if bucket_type == "membase" or bucket_type == "ephemeral":
-            bucket_params['bucket_storage'] = bucket_storage
+        bucket_params['bucket_storage'] = bucket_storage
+        if bucket_type == "ephemeral":
+            bucket_params['bucket_storage'] = 'couchstore'
         return bucket_params
 
     def create_sasl_buckets(
@@ -2465,7 +2468,7 @@ class CouchbaseCluster:
             buckets = data_structure["buckets"]
             for bucket in buckets:
                 if bucket not in existing_buckets:
-                    self.create_standard_buckets(bucket_size=100, name=bucket["name"])
+                    self.create_standard_buckets(bucket_size=256, name=bucket["name"])
                 if "scopes" in bucket.keys():
                     scopes = bucket["scopes"]
                     for scope in scopes:
@@ -3786,7 +3789,7 @@ class FTSBaseTest(unittest.TestCase):
         self.restart_couchbase = self._input.param("restart_couchbase", False)
         self.expiry = self._input.param("expiry", 0)
         self.value_size = self._input.param("value_size", 0)
-        self.bucket_storage = self._input.param('bucket_storage', 'couchstore')
+        self.bucket_storage = self._input.param('bucket_storage', 'magma')
         self.enable_dp = self._input.param("enable_dp", False)
         self.use_https = self._input.param("use_https", False)
         self.enforce_tls = self._input.param("enforce_tls", False)
@@ -4323,9 +4326,9 @@ class FTSBaseTest(unittest.TestCase):
         self.__case_number = self._input.param("case_number", 0)
         self.__num_sasl_buckets = self._input.param("sasl_buckets", 0)
         self.__num_stand_buckets = self._input.param("standard_buckets", 0)
-        self.__eviction_policy = self._input.param("eviction_policy", 'valueOnly')
+        self.__eviction_policy = self._input.param("eviction_policy", 'fullEviction')
         self.__mixed_priority = self._input.param("mixed_priority", None)
-        self.__bucket_storage = self._input.param('bucket_storage', 'couchstore')
+        self.__bucket_storage = self._input.param('bucket_storage', 'magma')
         self.expected_no_of_results = self._input.param("expected_no_of_results", None)
         self.polygon_feature = self._input.param("polygon_feature", "regular")
         self.num_vertices = self._input.param("num_vertices", None)

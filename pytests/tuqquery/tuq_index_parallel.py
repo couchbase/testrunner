@@ -45,7 +45,7 @@ class IndexerParallel(QueryTests):
     def test_create_index(self):
         # create buckets
         buckets = [f'bucket{i}' for i in range(self.bucket_count)]
-        self._create_buckets(self.master, bucket_list=buckets, server_id=None, bucket_size=100)
+        self._create_buckets(self.master, bucket_list=buckets, server_id=None, bucket_size=256)
 
         # Create collections and thread
         scopes = [f'scope{i}' for i in range(self.scope_count)]

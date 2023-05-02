@@ -45,8 +45,8 @@ class BucketOperationHelper:
     @staticmethod
     def create_multiple_buckets(server, replica, bucket_ram_ratio=(2.0 / 3.0),
                                 howmany=3, sasl=True, saslPassword='password',
-                                bucketType='membase', evictionPolicy='valueOnly',
-                                bucket_storage='couchstore'):
+                                bucketType='membase', evictionPolicy='fullEviction',
+                                bucket_storage='magma'):
         success = True
         log = logger.Logger.get_logger()
         rest = RestConnection(server)
@@ -56,10 +56,14 @@ class BucketOperationHelper:
             success = False
         else:
             available_ram = info.memoryQuota * bucket_ram_ratio
-            if available_ram // howmany > 100:
-                bucket_ram = int(available_ram / howmany)
+            if bucket_storage == 'magma':
+                bucket_ram = 256
+                if available_ram // howmany > 256:
+                    bucket_ram = int(available_ram / howmany)
             else:
                 bucket_ram = 100
+                if available_ram // howmany > 100:
+                    bucket_ram = int(available_ram / howmany)
                 # choose a port that is not taken by this ns server
             for i in range(0, howmany):
                 name = "bucket-{0}".format(i)

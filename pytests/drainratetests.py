@@ -60,7 +60,7 @@ class DrainRateTests(unittest.TestCase):
 
     def _create_default_bucket(self, replica=1):
         name = "default"
-        self.bucket_storage = self.input.param("bucket_storage", 'couchstore')
+        self.bucket_storage = self.input.param("bucket_storage", 'magma')
         master = self.input.servers[0]
         rest = RestConnection(master)
         helper = RestHelper(RestConnection(master))

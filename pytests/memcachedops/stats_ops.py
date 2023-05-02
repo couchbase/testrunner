@@ -12,7 +12,7 @@ class StatsCrashRepro(BaseTestCase):
         super(StatsRepro, self).setUp()
         self.timeout = 120
         self.bucket_name = self.input.param("bucket", "default")
-        self.bucket_size = self.input.param("bucket_size", 100)
+        self.bucket_size = self.input.param("bucket_size", 256)
         self.data_size = self.input.param("data_size", 2048)
         self.threads_to_run = self.input.param("threads_to_run", 5)
 #        self.nodes_in = int(self.input.param("nodes_in", 1))

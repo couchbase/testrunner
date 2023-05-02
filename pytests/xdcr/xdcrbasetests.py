@@ -286,8 +286,8 @@ class XDCRBaseTest(unittest.TestCase):
 
         self._num_replicas = self._input.param("replicas", 1)
         self._mem_quota_int = 0  # will be set in subsequent methods
-        self.eviction_policy = self._input.param("eviction_policy", 'valueOnly')  # or 'fullEviction'
-        self.bucket_storage = self._input.param('bucket_storage', 'couchstore')
+        self.eviction_policy = self._input.param("eviction_policy", 'fullEviction')  # or 'fullEviction'
+        self.bucket_storage = self._input.param('bucket_storage', 'magma')
         self.mixed_priority = self._input.param("mixed_priority", None)
         # if mixed priority is set by user, set high priority for sasl and standard buckets
         if self.mixed_priority:
@@ -581,8 +581,9 @@ class XDCRBaseTest(unittest.TestCase):
                                                                 testuser[0]["name"]))
         RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
         
-    def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
-                             bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
+    def _create_bucket_params(self, server, replicas=1, size=256, port=11211,
+                              password=None,
+                             bucket_type='membase', enable_replica_index=1, eviction_policy='fullEviction',
                              bucket_priority=None, flush_enabled=1, lww=False):
         """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
         Parameters:
@@ -684,7 +685,7 @@ class XDCRBaseTest(unittest.TestCase):
 
     def _get_bucket_size(self, mem_quota, num_buckets):
         #min size is 100MB now
-        return max(100, int(float(mem_quota) / float(num_buckets)))
+        return max(256, int(float(mem_quota) / float(num_buckets)))
 
     def _get_cluster_buckets(self, master_server):
         rest = RestConnection(master_server)

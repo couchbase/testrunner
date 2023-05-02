@@ -12,7 +12,7 @@ class EventingSettings(EventingBaseTest):
     def setUp(self):
         super(EventingSettings, self).setUp()
         if self.create_functions_buckets:
-            self.bucket_size = 100
+            self.bucket_size = 256
             log.info(self.bucket_size)
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                        replicas=self.num_replicas)

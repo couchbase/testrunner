@@ -1322,10 +1322,11 @@ class CouchbaseCluster:
         else:
             self.__log.info("Running in compatibility mode, not enabled diag/eval for non-local hosts")
 
-    def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
-                             bucket_type=None, enable_replica_index=1, eviction_policy='valueOnly',
+    def _create_bucket_params(self, server, replicas=1, size=256, port=11211,
+                              password=None,
+                             bucket_type=None, enable_replica_index=1, eviction_policy='fullEviction',
                              bucket_priority=None, flush_enabled=1, lww=False, maxttl=None,
-                             bucket_storage='couchstore'):
+                             bucket_storage='magma'):
         """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
         Parameters:
             server - The server to create the bucket on. (TestInputServer)
@@ -3011,8 +3012,8 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__num_sasl_buckets = self._input.param("sasl_buckets", 0)
         self.__num_stand_buckets = self._input.param("standard_buckets", 0)
 
-        self.__eviction_policy = self._input.param("eviction_policy", 'valueOnly')
-        self.__bucket_storage = self._input.param("bucket_storage", 'couchstore')
+        self.__eviction_policy = self._input.param("eviction_policy", 'fullEviction')
+        self.__bucket_storage = self._input.param("bucket_storage", 'magma')
         self.__mixed_priority = self._input.param("mixed_priority", None)
 
         self.__lww = self._input.param("lww", 0)

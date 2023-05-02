@@ -701,7 +701,7 @@ class DiskAutoFailoverBasetest(AutoFailoverBaseTest):
                                [], services=self.services)
         self.add_built_in_server_user(node=self.master)
         if self.read_loadgen:
-            self.bucket_size = 100
+            self.bucket_size = 256
         # super(DiskAutoFailoverBasetest,self)._bucket_creation()
         self._load_all_buckets(self.servers[0], self.initial_load_gen,
                                "create", 0)

@@ -36,7 +36,7 @@ class MemcapableTestBase(object):
         self.master = self.input.servers[0]
         self.bucket_port = port
         self.bucket_name = bucket_name
-        self.bucket_storage = self.input.param("bucket_storage", 'couchstore')
+        self.bucket_storage = self.input.param("bucket_storage", 'magma')
         ClusterOperationHelper.cleanup_cluster([self.master])
         BucketOperationHelper.delete_all_buckets_or_assert([self.master], self.test)
 

@@ -33,7 +33,7 @@ class ROUserTests(BaseTestCase):
 
         self.log.info("Try to edit bucket")
         try:
-            rest.create_bucket(bucket='bucket0', ramQuotaMB=100)
+            rest.create_bucket(bucket='bucket0', ramQuotaMB=256)
         except BucketCreationException as e:
             self.log.info("Unable to create the bucket. Expected")
         else:

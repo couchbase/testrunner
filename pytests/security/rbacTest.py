@@ -257,9 +257,9 @@ class rbacTest(ldaptest, AutoFailoverBaseTest):
 
     def test_role_permission_multiple_buckets(self):
         rest = RestConnection(self.master)
-        rest.create_bucket(bucket='default', ramQuotaMB=100)
+        rest.create_bucket(bucket='default', ramQuotaMB=256)
         rest1 = RestConnection(self.master)
-        rest1.create_bucket(bucket='default1', ramQuotaMB=100, proxyPort=11212)
+        rest1.create_bucket(bucket='default1', ramQuotaMB=256, proxyPort=11212)
         bucket_name = self.bucket_name.split(":")
         for server in self.servers[:self.nodes_init]:
             if (len(bucket_name) > 1):

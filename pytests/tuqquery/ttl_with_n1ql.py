@@ -44,7 +44,7 @@ class QueryExpirationTests(QueryTests):
          -t tuqquery.ttl_with_n1ql.QueryExpirationTests.test_insert_with_ttl
         """
         # creating default bucket
-        default_params = self._create_bucket_params(server=self.master, size=100,
+        default_params = self._create_bucket_params(server=self.master, size=256,
                                                     replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                     enable_replica_index=self.enable_replica_index,
                                                     eviction_policy=self.eviction_policy, lww=self.lww,
@@ -131,7 +131,7 @@ class QueryExpirationTests(QueryTests):
         self._wait_for_index_online(self.sample_bucket, self.sample_bucket_index)
 
         # creating default bucket
-        default_params = self._create_bucket_params(server=self.master, size=100,
+        default_params = self._create_bucket_params(server=self.master, size=256,
                                                     replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                     enable_replica_index=self.enable_replica_index,
                                                     eviction_policy=self.eviction_policy, lww=self.lww,
@@ -210,7 +210,7 @@ class QueryExpirationTests(QueryTests):
         bucket_size=100 -t tuqquery.ttl_with_n1ql.QueryExpirationTests.test_insert_with_invalid_ttl
         """
         # creating default bucket
-        default_params = self._create_bucket_params(server=self.master, size=100,
+        default_params = self._create_bucket_params(server=self.master, size=256,
                                                     replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                     enable_replica_index=self.enable_replica_index,
                                                     eviction_policy=self.eviction_policy, lww=self.lww,
@@ -318,7 +318,7 @@ class QueryExpirationTests(QueryTests):
         expiration_time = 10
 
         # creating default bucket
-        default_params = self._create_bucket_params(server=self.master, size=100,
+        default_params = self._create_bucket_params(server=self.master, size=256,
                                                     replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                     enable_replica_index=self.enable_replica_index,
                                                     eviction_policy=self.eviction_policy, lww=self.lww,
@@ -388,7 +388,7 @@ class QueryExpirationTests(QueryTests):
         self._wait_for_index_online(self.sample_bucket, self.sample_bucket_index)
 
         # creating default bucket
-        default_params = self._create_bucket_params(server=self.master, size=100,
+        default_params = self._create_bucket_params(server=self.master, size=256,
                                                     replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                     enable_replica_index=self.enable_replica_index,
                                                     eviction_policy=self.eviction_policy, lww=self.lww,
@@ -459,7 +459,7 @@ class QueryExpirationTests(QueryTests):
         bucket_size=100 -t tuqquery.ttl_with_n1ql.QueryExpirationTests.test_upsert_with_invalid_ttl
         """
         # creating default bucket
-        default_params = self._create_bucket_params(server=self.master, size=100,
+        default_params = self._create_bucket_params(server=self.master, size=256,
                                                     replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                     enable_replica_index=self.enable_replica_index,
                                                     eviction_policy=self.eviction_policy, lww=self.lww,
@@ -641,7 +641,7 @@ class QueryExpirationTests(QueryTests):
         num_iter = 10
 
         # creating default bucket
-        default_params = self._create_bucket_params(server=self.master, size=100,
+        default_params = self._create_bucket_params(server=self.master, size=256,
                                                     replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                     enable_replica_index=self.enable_replica_index,
                                                     eviction_policy=self.eviction_policy, lww=self.lww,

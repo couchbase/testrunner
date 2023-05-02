@@ -214,7 +214,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         where we are adding back and removing at least half of the nodes.
         """
         self.add_remove_servers_and_rebalance(self.servers[1:self.num_servers], [])
-        self.bucket_size = self.input.param("bucket_size", 10)
+        self.bucket_size = self.input.param("bucket_size", 256)
         bucket_num = min(10, self.quota // self.bucket_size)
         self.log.info('total %s buckets will be created with size %s MB' % (bucket_num, self.bucket_size))
         bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,

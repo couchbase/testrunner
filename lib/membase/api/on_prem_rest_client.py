@@ -3096,19 +3096,18 @@ class RestConnection(object):
 
     # figure out the proxy port
     def create_bucket(self, bucket='',
-                      ramQuotaMB=1,
+                      ramQuotaMB=256,
                       replicaNumber=1,
                       proxyPort=11211,
                       bucketType='membase',
                       replica_index=1,
                       threadsNumber=3,
                       flushEnabled=1,
-                      evictionPolicy='valueOnly',
+                      evictionPolicy='fullEviction',
                       lww=False,
                       maxTTL=None,
                       compressionMode='passive',
-                      storageBackend='couchstore'):
-
+                      storageBackend='magma'):
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
         params = urllib.parse.urlencode({})
 

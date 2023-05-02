@@ -664,7 +664,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
     def create_buckets(self):
         self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=1000)
         self.rest.delete_bucket("default")
-        self.bucket_size = 100
+        self.bucket_size = 256
         log.info("Create the required buckets in the initial version")
         bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                    replicas=self.num_replicas)

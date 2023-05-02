@@ -2469,7 +2469,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         load_all = self.input.param("load_all", None)
         num_backup_bucket = self.input.param("num_backup_bucket", "all")
         num_sasl_buckets = self.input.param("num_sasl_buckets", 1)
-        self.bucket_size = 200
+        self.bucket_size = 256
         bucket_params=self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas,
                                                         enable_replica_index=self.enable_replica_index,

@@ -417,7 +417,7 @@ class SecretsMgmtTests(BaseTestCase):
     # services_init=kv-kv-index-index:n1ql,nodes_init=4,default_bucket=False,bucket_type=standard
     # services_init=kv-kv-index-index:n1ql,nodes_init=4,default_bucket=False,bucket_type=standard,password=a@cd#efgh@
     # services_init=kv-kv-index-index:n1ql,nodes_init=4,default_bucket=False,bucket_type=standard,password=a@cd#efgh@
-    def test_bucket_create_password(self, bucket_name='secretsbucket', num_replicas=1, bucket_size=100):
+    def test_bucket_create_password(self, bucket_name='secretsbucket', num_replicas=1, bucket_size=256):
         for servers in self.servers:
             self.secretmgmt_base_obj.setup_pass_node(servers, self.password)
         bucket_type = self.input.param("bucket_type", 'couchbase')
@@ -425,7 +425,7 @@ class SecretsMgmtTests(BaseTestCase):
         if bucket_type == 'couchbase':
             # self.cluster.create_sasl_bucket(self.master, bucket_name, self.password, num_replicas)
             rest = RestConnection(self.master)
-            rest.create_bucket(bucket_name, ramQuotaMB=100)
+            rest.create_bucket(bucket_name, ramQuotaMB=256)
         elif bucket_type == 'standard':
             self.cluster.create_standard_bucket(self.master, bucket_name, STANDARD_BUCKET_PORT + 1,
                                                 bucket_size)
@@ -487,7 +487,7 @@ class SecretsMgmtTests(BaseTestCase):
         num_replicas = 1
         bucket_size = 100
         # self.cluster.create_sasl_bucket(self.master, bucket_name, self.password, num_replicas, bucket_size)
-        rest.create_bucket(bucket_name, ramQuotaMB=100)
+        rest.create_bucket(bucket_name, ramQuotaMB=256)
         result = self.secretmgmt_base_obj.generate_cb_collect(self.master, "cbcollect.zip", self.password)
         self.assertTrue(result, "Bucket password appears in the cbcollect info")
 

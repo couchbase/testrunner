@@ -35,7 +35,7 @@ class ExpiryTests(unittest.TestCase):
         BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
 
         self._bucket_name = 'default'
-        self.bucket_storage = TestInputSingleton.input.param("bucket_storage", 'couchstore')
+        self.bucket_storage = TestInputSingleton.input.param("bucket_storage", 'magma')
         serverInfo = self.master
 
         rest = RestConnection(serverInfo)

@@ -18,7 +18,7 @@ class SaslTest(BaseTestCase):
     def create_pwd_buckets(self, server, buckets):
         tasks = []
         for name in buckets:
-            sasl_params = self._create_bucket_params(server=server, size=100, replicas=0)
+            sasl_params = self._create_bucket_params(server=server, size=256, replicas=0)
             tasks.append(self.cluster.async_create_sasl_bucket(name=name, password=buckets[name], bucket_params=sasl_params))
 
         for task in tasks:
@@ -156,7 +156,7 @@ class SaslTest(BaseTestCase):
         invalid_pass = self.input.param("invalid_pass", [])
         if invalid_pass:
             invalid_pass = invalid_pass.split(";")
-        self._create_sasl_buckets(self.master, buckets_num, bucket_size=100,
+        self._create_sasl_buckets(self.master, buckets_num, bucket_size=256,
                                                     password=valid_password)
         if self.input.param("include_restart", False):
             self.restart_server(self.servers[:self.nodes_init])

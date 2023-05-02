@@ -539,9 +539,9 @@ class OnPremBaseTestCase(unittest.TestCase):
         self.enable_time_sync = self.input.param("enable_time_sync", False)
         self.gsi_type = self.input.param("gsi_type", 'plasma')
         # bucket parameters go here,
-        self.bucket_size = self.input.param("bucket_size", None)
+        self.bucket_size = self.input.param("bucket_size", 256)
         self.bucket_type = self.input.param("bucket_type", 'membase')
-        self.bucket_storage = self.input.param("bucket_storage", 'couchstore')
+        self.bucket_storage = self.input.param("bucket_storage", 'magma')
         self.num_replicas = self.input.param("replicas", 1)
         self.enable_replica_index = self.input.param("index_replicas", 1)
         self.skip_bucket_setup = self.input.param("skip_bucket_setup", False)
@@ -897,7 +897,8 @@ class OnPremBaseTestCase(unittest.TestCase):
                 remote_client.disconnect()
         return quota
 
-    def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
+    def _create_bucket_params(self, server, replicas=1, size=256, port=11211,
+                              password=None,
                               bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
                               bucket_priority=None, flush_enabled=1, lww=False, maxttl=None,
                               compression_mode='passive'):
@@ -987,11 +988,11 @@ class OnPremBaseTestCase(unittest.TestCase):
             task.result(self.wait_timeout)
 
     def _get_bucket_size(self, mem_quota, num_buckets):
-        # min size is 100MB now
+        # min size is 256MB now
         if num_buckets > 0:
-            return max(100, int(float(mem_quota) / float(num_buckets)))
+            return max(256, int(float(mem_quota) / float(num_buckets)))
         else:
-            return 100
+            return 256
 
     def _set_time_sync_on_buckets(self, buckets):
 

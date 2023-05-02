@@ -14,7 +14,7 @@ class EventingConcurrency(EventingBaseTest):
         self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
         if self.create_functions_buckets:
             self.replicas = self.input.param("replicas", 0)
-            self.bucket_size = 100
+            self.bucket_size = 256
             # This is needed as we have increased the context size to 93KB. If this is not increased the metadata
             # bucket goes into heavy DGM
             self.metadata_bucket_size = 300
@@ -138,7 +138,7 @@ class EventingConcurrency(EventingBaseTest):
             rest_src.remove_all_remote_clusters()
             rest_src.add_remote_cluster(self.servers[2].ip, self.servers[2].port, self.servers[0].rest_username,
                                         self.servers[0].rest_password, "C2")
-            rest_dst.create_bucket(bucket=self.src_bucket_name, ramQuotaMB=100)
+            rest_dst.create_bucket(bucket=self.src_bucket_name, ramQuotaMB=256)
             self.sleep(30)
             # setup xdcr relationship
             repl_id = rest_src.start_replication('continuous', self.src_bucket_name, "C2")

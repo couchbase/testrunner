@@ -48,7 +48,7 @@ class EventingMultiHandler(EventingBaseTest):
         self.binding_map={}
 
     def create_n_buckets(self,name,number):
-        self.bucket_size = 100
+        self.bucket_size = 256
         bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                    replicas=self.num_replicas)
         for i in range(number):

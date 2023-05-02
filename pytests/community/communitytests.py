@@ -437,7 +437,7 @@ class CommunityTests(CommunityBaseTest):
         self.sleep(7, "wait for node reset done")
         self.rest.init_node()
         bucket = "default"
-        self.rest.create_bucket(bucket, ramQuotaMB=200)
+        self.rest.create_bucket(bucket, ramQuotaMB=256)
         api = self.rest.query_baseUrl + "query/service"
         param = urllib.parse.urlencode({"statement":"infer `%s` ;" % bucket})
         try:
@@ -456,7 +456,7 @@ class CommunityTests(CommunityBaseTest):
         self.sleep(7, "wait for node reset done")
         self.rest.init_node()
         bucket = "default"
-        self.rest.create_bucket(bucket, ramQuotaMB=200)
+        self.rest.create_bucket(bucket, ramQuotaMB=256)
         api = self.rest.query_baseUrl + "admin/settings"
         param = {'profile': 'phases'}
         try:
@@ -480,7 +480,7 @@ class CommunityTests(CommunityBaseTest):
         self.sleep(7, "wait for node reset done")
         self.rest.init_node()
         bucket = "default"
-        self.rest.create_bucket(bucket, ramQuotaMB=200)
+        self.rest.create_bucket(bucket, ramQuotaMB=256)
         api = self.rest.query_baseUrl + "query/service"
         param = urllib.parse.urlencode({"statement":"SELECT META(d).id FROM `%s` AS d USE INDEX (USING FTS) WHERE d.f2 = 100;" % bucket})
         try:

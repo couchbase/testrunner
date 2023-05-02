@@ -18,7 +18,7 @@ class EventingCurl(EventingBaseTest):
             self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
             if self.create_functions_buckets:
                 self.replicas = self.input.param("replicas", 0)
-                self.bucket_size = 100
+                self.bucket_size = 256
                 # This is needed as we have increased the context size to 93KB. If this is not increased the metadata
                 # bucket goes into heavy DGM
                 self.metadata_bucket_size = 400

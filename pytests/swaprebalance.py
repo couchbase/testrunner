@@ -39,7 +39,7 @@ class SwapRebalanceBase(unittest.TestCase):
         self.ratio_expiry = self.input.param("ratio-expiry", 0.03)
         self.ratio_deletes = self.input.param("ratio-deletes", 0.13)
         self.num_buckets = self.input.param("num-buckets", 1)
-        self.bucket_storage = self.input.param("bucket_storage", 'couchstore')
+        self.bucket_storage = self.input.param("bucket_storage", 'magma')
         self.failover_factor = self.num_swap = self.input.param("num-swap", 1)
         self.num_initial_servers = self.input.param("num-initial-servers", 3)
         self.fail_orchestrator = self.swap_orchestrator = self.input.param("swap-orchestrator", False)

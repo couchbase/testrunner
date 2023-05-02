@@ -226,7 +226,8 @@ class QueryCollectionsEnd2EndTests(QueryTests):
         self.log.info("==============  QueryCollectionsEnd2EndTests setup has started ==============")
         self.log_config_info()
         self.collections_helper = CollectionsN1QL(self.master)
-        self.bucket_params = self._create_bucket_params(server=self.master, size=100,
+        self.bucket_params = self._create_bucket_params(server=self.master,
+                                                        size=256,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=self.eviction_policy, lww=self.lww)

@@ -339,7 +339,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 self.buckets = []
 
             if self.input.param('extra_verification', False):
-                self.bucket_size = 100
+                self.bucket_size = 256
                 self._create_sasl_buckets(self.master, 1)
                 self._create_standard_buckets(self.master, 1)
                 if self.ddocs_num:
@@ -780,7 +780,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
         if after_upgrade_buckets_in is not False:
-            self.bucket_size = 100
+            self.bucket_size = 256
             self._create_sasl_buckets(self.master, 1)
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
@@ -882,7 +882,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
         if after_upgrade_buckets_in is not False:
-            self.bucket_size = 100
+            self.bucket_size = 256
             self._create_sasl_buckets(self.master, 1)
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
@@ -1059,7 +1059,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
         if after_upgrade_buckets_in is not False:
-            self.bucket_size = 100
+            self.bucket_size = 256
             self._create_sasl_buckets(self.master, 1)
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
@@ -1134,7 +1134,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
         if after_upgrade_buckets_in is not False:
-            self.bucket_size = 100
+            self.bucket_size = 256
             self._create_sasl_buckets(self.master, 1)
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
@@ -1238,7 +1238,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
         if after_upgrade_buckets_in is not False:
-            self.bucket_size = 100
+            self.bucket_size = 256
             self._create_sasl_buckets(self.master, 1)
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
@@ -1339,7 +1339,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
         if after_upgrade_buckets_in is not False:
-            self.bucket_size = 100
+            self.bucket_size = 256
             self._create_sasl_buckets(self.master, 1)
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
@@ -1439,7 +1439,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
         if after_upgrade_buckets_in is not False:
-            self.bucket_size = 100
+            self.bucket_size = 256
             self._create_sasl_buckets(self.master, 1)
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
@@ -1539,7 +1539,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
         if after_upgrade_buckets_in is not False:
-            self.bucket_size = 100
+            self.bucket_size = 256
             self._create_sasl_buckets(self.master, 1)
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
@@ -1639,7 +1639,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
         if after_upgrade_buckets_in is not False:
-            self.bucket_size = 100
+            self.bucket_size = 256
             self._create_sasl_buckets(self.master, 1)
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
@@ -1739,7 +1739,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
         if after_upgrade_buckets_in is not False:
-            self.bucket_size = 100
+            self.bucket_size = 256
             self._create_sasl_buckets(self.master, 1)
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
@@ -1839,7 +1839,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
         if after_upgrade_buckets_in is not False:
-            self.bucket_size = 100
+            self.bucket_size = 256
             self._create_sasl_buckets(self.master, 1)
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
@@ -1947,7 +1947,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
         if after_upgrade_buckets_in is not False:
-            self.bucket_size = 100
+            self.bucket_size = 256
             self._create_sasl_buckets(self.master, 1)
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
@@ -2075,7 +2075,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
         if after_upgrade_buckets_in is not False:
-            self.bucket_size = 100
+            self.bucket_size = 256
             self._create_sasl_buckets(self.master, 1)
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
@@ -2181,7 +2181,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
         if after_upgrade_buckets_in is not False:
-            self.bucket_size = 100
+            self.bucket_size = 256
             self._create_sasl_buckets(self.master, 1)
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
@@ -2560,7 +2560,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                          rest=cbas_rest)
                 self.test_create_dataset_on_bucket()
         if after_upgrade_buckets_in is not False:
-            self.bucket_size = 100
+            self.bucket_size = 256
             self._create_sasl_buckets(self.master, 1)
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:

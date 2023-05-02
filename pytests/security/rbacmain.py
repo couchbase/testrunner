@@ -262,7 +262,7 @@ class rbacmain:
         func_name, http_code = self.get_role_permission(permission)
         rest = RestConnection(self.master_ip)
         try:
-            rest.create_bucket(bucket='default', ramQuotaMB=100)
+            rest.create_bucket(bucket='default', ramQuotaMB=256)
         except:
             log.info("Default Bucket already exists")
         final_func = "rbacPermissionList()."+ func_name + "('" + user + "','" + password + "',host=self.master_ip,servers=self.servers,cluster=self.cluster,httpCode=" + str(http_code) +",user_role="+"'" + str(user_role)+"'" + ")"

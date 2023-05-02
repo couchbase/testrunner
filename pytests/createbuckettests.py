@@ -24,7 +24,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
         self.servers = self.input.servers
         BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers, test_case=self)
         self.master = self.servers[0]
-        self.bucket_storage = self.input.param("bucket_storage", 'couchstore')
+        self.bucket_storage = self.input.param("bucket_storage", 'magma')
         self._log_start()
 
     def tearDown(self):
@@ -62,7 +62,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
             try:
-                rest.create_bucket(bucket=name, ramQuotaMB=99)
+                rest.create_bucket(bucket=name, ramQuotaMB=255)
                 self.fail('create-bucket did not throw exception while creating a new bucket with 99 MB quota')
             #make sure it raises bucketcreateexception
             except BucketCreationException as ex:

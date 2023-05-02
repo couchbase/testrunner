@@ -116,7 +116,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.test_timeout = self.input.param("test_timeout", 60)
         self.test_bucket = self.input.param('test_bucket', 'test_bucket')
         self.system_failure = self.input.param('system_failure', 'disk_failure')
-        self.bucket_size = self.input.param('bucket_size', 100)
+        self.bucket_size = self.input.param('bucket_size', 256)
         self.drop_sleep = self.input.param('drop_sleep', 30)
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,

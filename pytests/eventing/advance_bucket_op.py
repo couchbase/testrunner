@@ -10,7 +10,7 @@ class AdvanceBucketOp(EventingBaseTest):
         super(AdvanceBucketOp, self).setUp()
         self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=900)
         if self.create_functions_buckets:
-            self.bucket_size = 200
+            self.bucket_size = 256
             log.info(self.bucket_size)
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                        replicas=0)

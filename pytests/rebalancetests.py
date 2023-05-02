@@ -30,7 +30,7 @@ class RebalanceBaseTest(unittest.TestCase):
 
         # Initialize test params
         self.replica = self.input.param("replica", 1)
-        self.bucket_storage = self.input.param("bucket_storage", 'couchstore')
+        self.bucket_storage = self.input.param("bucket_storage", 'magma')
 
         # By default we use keys-count for LoadTask
         # Use keys-count=-1 to use load-ratio

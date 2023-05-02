@@ -162,7 +162,7 @@ class XDCRUpgradeCollectionsTests(NewUpgradeBaseTest):
         self.verify_doc_counts()
 
         if after_upgrade_buckets_in is not False:
-            self.bucket_size = 100
+            self.bucket_size = 256
             self._create_sasl_buckets(self.master, 1)
             self._create_standard_buckets(self.master, 1)
             if self.input.param("ddocs_num", 0) > 0:

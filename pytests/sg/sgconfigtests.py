@@ -46,7 +46,8 @@ class SGConfigTests(GatewayConfigBaseTest):
             shutil.copy2('pytests/sg/resources/gateway_config_backup.json', 'pytests/sg/resources/gateway_config.json')
             BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
             self.cluster = Cluster()
-            shared_params=self._create_bucket_params(server=self.master, size=150)
+            shared_params=self._create_bucket_params(server=self.master,
+                                                     size=256)
             self.cluster.create_default_bucket(shared_params)
             task = self.cluster.async_create_sasl_bucket(name='test_%E-.5', password='password',
                                                          bucket_params=shared_params)
@@ -60,7 +61,8 @@ class SGConfigTests(GatewayConfigBaseTest):
         if self.case_number == 1:
             self.cluster.shutdown(force=True)
 
-    def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
+    def _create_bucket_params(self, server, replicas=1, size=256, port=11211,
+                              password=None,
                              bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
                              bucket_priority=None, flush_enabled=1, lww=False):
         """Create a set of bucket_parameters to be sent to all of the bucket_creation methods

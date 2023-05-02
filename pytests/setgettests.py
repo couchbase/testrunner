@@ -56,7 +56,7 @@ class SimpleSetGetTestBase(object):
         bucket_ram = int(rest.get_nodes_self().memoryQuota // 4)
 
         mcport = rest.get_nodes_self().memcached
-        self.bucket_storage = self.input.param('bucket_storage', 'couchstore')
+        self.bucket_storage = self.input.param('bucket_storage', 'magma')
         for name, replica in specs:
             rest.create_bucket(name, bucket_ram, replica, mcport,
                                storageBackend=self.bucket_storage)

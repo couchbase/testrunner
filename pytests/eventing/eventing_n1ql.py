@@ -16,7 +16,7 @@ class EventingN1QL(EventingBaseTest):
         super(EventingN1QL, self).setUp()
         self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=1400)
         if self.create_functions_buckets:
-            self.bucket_size = 100
+            self.bucket_size = 256
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                        replicas=self.num_replicas)
             self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,

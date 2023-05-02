@@ -246,7 +246,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         source_zone = zones[0]
         self._create_server_groups()
         num_of_docs = 10 ** 2
-        self.bucket_params = self._create_bucket_params(server=self.master, size=100,
+        self.bucket_params = self._create_bucket_params(server=self.master, size=256,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=self.eviction_policy, lww=self.lww)
@@ -345,7 +345,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         source_zone = zones[0]
         self._create_server_groups()
         num_of_docs = 10 ** 2
-        self.bucket_params = self._create_bucket_params(server=self.master, size=100,
+        self.bucket_params = self._create_bucket_params(server=self.master, size=256,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=self.eviction_policy, lww=self.lww)
