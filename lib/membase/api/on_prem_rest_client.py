@@ -6177,6 +6177,124 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
+    def pause_bucket(self, blob_region, s3_path, bucket='default', rate_limiter=104857600):
+        api = f'{self.baseUrl}controller/pause'
+        params_dict = {}
+        params_dict['bucket'] = bucket
+        params_dict['blob_storage_region'] = blob_region
+        params_dict['remote_path'] = s3_path
+        params_dict['rate_limit'] = rate_limiter
+        params = json.dumps(params_dict)
+        log.info(f"Params: {params}")
+        header = self._create_capi_headers()
+        status, content, _ = self._http_request(api, 'POST', params, headers=header)
+        if not status:
+            raise Exception(content)
+        json_parsed = json.loads(content)
+        return status, json_parsed
+
+    def pause_operation(self, bucket_name, blob_region, s3_bucket, pause_complete=True):
+        hibernation_path = s3_bucket + "/" + bucket_name
+        s3_path = 's3://' + hibernation_path
+        result, content = self.pause_bucket(blob_region=blob_region, s3_path=s3_path, bucket=bucket_name)
+        status = True
+        if not result:
+            raise Exception(content)
+        if pause_complete:
+            if not self.wait_bucket_hibernation(task='pause_bucket', operation='completed'):
+                raise Exception(f"Pause operation on bucket {bucket_name} timed out")
+        return status, content
+
+    def stop_pause(self, bucket='default'):
+        api = f'{self.baseUrl}controller/stopPause'
+        params_dict = {}
+        params_dict['bucket'] = bucket
+        params = json.dumps(params_dict)
+        log.info(f"Params: {params}")
+        header = self._create_capi_headers()
+        status, content, _ = self._http_request(api, 'POST', params, headers=header)
+        if not status:
+            raise Exception(content)
+        json_parsed = json.loads(content)
+        return status, json_parsed
+
+    def resume_bucket(self, blob_region, s3_path, bucket='default', rate_limiter=104857600):
+        s3_path = 's3://' + s3_path
+        api = f'{self.baseUrl}controller/resume'
+        params_dict = {}
+        params_dict['bucket'] = bucket
+        params_dict['blob_storage_region'] = blob_region
+        params_dict['remote_path'] = s3_path
+        params_dict['rate_limit'] = rate_limiter
+        params = json.dumps(params_dict)
+        log.info(f"Params: {params}")
+        header = self._create_capi_headers()
+        status, content, _ = self._http_request(api, 'POST', params, headers=header)
+        if not status:
+            raise Exception(content)
+        json_parsed = json.loads(content)
+        return status, json_parsed
+
+    def resume_operation(self, bucket_name, blob_region, s3_bucket, resume_complete=True):
+        hibernation_path = s3_bucket + "/" + bucket_name
+        s3_path = 's3://' + hibernation_path
+        result, content = self.resume_bucket(blob_region=blob_region, s3_path=s3_path, bucket=bucket_name)
+        status = True
+        if not result:
+            raise Exception(content)
+        if resume_complete:
+            if not self.wait_bucket_hibernation(task='resume_bucket', operation='completed'):
+                raise Exception(f"Resume operation on bucket {bucket_name} timed out")
+        return status,content
+
+    def stop_resume(self, bucket='default'):
+        api = f"{self.baseUrl}controller/stopResume"
+        params_dict = {}
+        params_dict['bucket'] = bucket
+        params = json.dumps(params_dict)
+        log.info(f"Params: {params}")
+        header = self._create_capi_headers()
+        status, content, _ = self._http_request(api, 'POST', params, headers=header)
+        if not status:
+            raise Exception(f"stopResume for bucket {bucket} has failed. Content : {content}")
+        json_parsed = json.loads(content)
+        return status, json_parsed
+
+    def wait_bucket_hibernation(self, task, operation, timeout=300):
+        status = self.get_hibernation_status(operation=task)
+        if status == operation:
+            return True
+        timer = 0
+        while timer <= 600:
+            status = self.get_hibernation_status(operation=task)
+            if status == 'failed':
+                raise Exception(f"Operation {operation} failed")
+            elif status != operation:
+                timer += 1
+                time.sleep(1)
+            else:
+                return True
+        raise Exception(f"Operation {operation} timed out")
+
+    def get_hibernation_status(self, tasktype='hibernation', operation=None):
+        tasklist = self.ns_server_tasks()
+        clustertasks = None
+        retry = 0
+        try:
+            for task in tasklist:
+                if task['type'] == tasktype:
+                    if operation is None or task['op'] != operation:
+                        retry +=1
+                        time.sleep(1)
+                        if retry > 300:
+                            break
+                    elif task['op'] == operation:
+                        clustertasks = task['status']
+                        break
+        except ValueError:
+            pass
+        return clustertasks
+
     def get_user(self, user_id):
         url = "settings/rbac/users/"
         api = self.baseUrl + url

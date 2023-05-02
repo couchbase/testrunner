@@ -1624,7 +1624,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                              wait_if_warmup=True)
 
     def prepare_tenants(self, data_load=True, index_creations=True, query_node=None, json_template=None,
-                        bucket_prefix='test_bucket_', bucket_num_offset=0, num_buckets=None, defer_build_mix=False):
+                        bucket_prefix='test_bucket_', bucket_num_offset=0, num_buckets=None, defer_build_mix=False, random_bucket_name=None):
         if not json_template:
             json_template = self.json_template
         if not num_buckets:
@@ -1634,8 +1634,11 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                             replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                             enable_replica_index=self.enable_replica_index,
                                                             eviction_policy=self.eviction_policy, lww=self.lww)
-
-            bucket_name = f"{bucket_prefix}{bucket_num_offset + i}"
+            if random_bucket_name:
+                bucket_name = f"{bucket_prefix}{bucket_num_offset + i}" + "".join(
+                    random.choices(string.ascii_lowercase + string.digits, k=5))
+            else:
+                bucket_name = f"{bucket_prefix}{bucket_num_offset + i}"
             self.cluster.create_standard_bucket(name=bucket_name, port=11222, bucket_params=self.bucket_params)
             self.sleep(10)
             self.collection_rest.create_scope_collection_count(scope_num=self.num_scopes,
