@@ -1062,7 +1062,6 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             (dict): Returns a dictionary mapping a tuple (scope_name, collection_name) to its collection id.
         """
         rest_conn = RestConnection(cluster_host)
-
         # Grab the current manifest and remove the uids
         manifest = rest_conn.get_bucket_manifest(bucket_name)
         manifest.pop('uid')
@@ -1070,6 +1069,8 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             scope.pop('uid')
             for collection in scope['collections']:
                 collection.pop('uid')
+                if "history" in collection and self.bucket_storage == 'couchstore': # CDC is only for magma
+                    collection.pop('history')
 
         # Do a bulk update to create scopes and collections
         manifest['scopes'] += [{'name': f"scope{i}", 'collections': [{'name': f"collection{j}"} for j in range(no_of_collections)]} for i in range(no_of_scopes)]
