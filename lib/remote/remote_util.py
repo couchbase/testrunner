@@ -378,29 +378,6 @@ class RemoteMachineShellConnection(KeepRefs):
                 if not 'grep' in line.strip().split(' '):
                     return float(line.strip().split(' ')[0])
 
-    def stop_network(self, stop_time):
-        """
-        Stop the network for given time period and then restart the network
-        on the machine.
-        :param stop_time: Time duration for which the network service needs
-        to be down in the machine
-        :return: Nothing
-        """
-        self.extract_remote_info()
-        os_type = self.info.type.lower()
-        if os_type == "unix" or os_type == "linux":
-            if self.info.distribution_type.lower() == "ubuntu":
-                command = "ifdown -a && sleep {} && ifup -a eth0"
-            else:
-                command = "service network stop && sleep {} && service network " \
-                          "start"
-            output, error = self.execute_command(command.format(stop_time))
-            self.log_command_output(output, error)
-        elif os_type == "windows":
-            command = "net stop Netman && timeout {} && net start Netman"
-            output, error = self.execute_command(command.format(stop_time))
-            self.log_command_output(output, error)
-
     def cpu_stress(self, stop_time):
         self.extract_remote_info()
         os_type = self.info.type.lower()
@@ -449,7 +426,7 @@ class RemoteMachineShellConnection(KeepRefs):
         os_type = self.info.type.lower()
         if os_type == "unix" or os_type == "linux":
             if self.info.distribution_type.lower() == "ubuntu":
-                command = "ifdown -a && sleep {} && ifup -a"
+                command = "ifdown -a && sleep {} && ifup -a eth0"
             else:
                 command = "nohup service network stop && sleep {} && service network " \
                           "start &"
