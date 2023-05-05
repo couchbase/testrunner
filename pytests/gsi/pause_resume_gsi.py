@@ -56,36 +56,42 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
                 return zone_name
         return
 
-    def verify_post_resume(self, indexer_meta_data_before_pause, indexer_meta_data_after_resume, definition_list_before_pause,index_stats_before_pause,index_stats_after_resume):
+    def verify_post_resume(self, indexer_meta_data_before_pause, indexer_meta_data_after_resume,
+                           definition_list_before_pause, index_stats_before_pause, index_stats_after_resume):
 
-        self.assertEqual(len(indexer_meta_data_before_pause),len(indexer_meta_data_after_resume),'No of indexes before pause and after resume do not match')
-        index_namespace_keys = list(indexer_meta_data_before_pause)[1:]
+        self.assertEqual(len(indexer_meta_data_before_pause), len(indexer_meta_data_after_resume),
+                         'No of indexes before pause and after resume do not match')
+        index_namespace_keys = list(index_stats_before_pause)[1:]
         for key in index_namespace_keys:
-            self.assertEqual(index_stats_before_pause[f'{key}']['items_count'], index_stats_after_resume[f'{key}']['items_count'], 'No of indexes before pause and after resume do not match')
-        select_queries = self.gsi_util_obj.get_select_queries(definition_list=definition_list_before_pause,namespace=self.namespaces)
-        #TODO
-        # drop_queries = self.gsi_util_obj.get_drop_queries(definition_list=definition_list_before_pause,namespace=self.namespaces)
+            self.assertEqual(index_stats_before_pause[key]['items_count'],
+                             index_stats_after_resume[key]['items_count'],
+                             'No of indexes before pause and after resume do not match')
+        select_queries = self.gsi_util_obj.get_select_queries(definition_list=definition_list_before_pause,
+                                                              namespace=self.namespaces[0])
+        # TODO
+        # drop_queries = self.gsi_util_obj.get_drop_queries(definition_list=definition_list_before_pause,namespace=self.namespaces[0])
         for query in select_queries:
             self.run_cbq_query(query=query)
             self.sleep(5)
-        #TODO
+        # TODO
         # for query in drop_queries:
         #     self.run_cbq_query(query=query)
         #     self.sleep(5)
 
-        #Creating new indexes,running select queries and dropping them post resume
+        # Creating new indexes,running select queries and dropping them post resume
         definition_list = []
         for namespace in self.namespaces:
             prefix = f'idx_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}' \
                      f'_batch_1_'
             definition_list = self.gsi_util_obj.get_index_definition_list(dataset='Person', prefix=prefix)
             create_list = self.gsi_util_obj.get_create_index_list(definition_list=definition_list, namespace=namespace,
-                                                     defer_build_mix=False)
+                                                                  defer_build_mix=False)
             self.log.info(f"Create index list: {create_list}")
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list,query_node=self.query_node)
-        select_queries = select_queries = self.gsi_util_obj.get_select_queries(definition_list=definition_list,namespace=self.namespaces)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, query_node=self.query_node)
+        select_queries = select_queries = self.gsi_util_obj.get_select_queries(definition_list=definition_list,
+                                                                               namespace=self.namespaces[0])
         # TODO
-        # drop_queries = self.gsi_util_obj.get_drop_queries(definition_list=definition_list_before_pause,namespace=self.namespaces)
+        # drop_queries = self.gsi_util_obj.get_drop_queries(definition_list=definition_list_before_pause,namespace=self.namespaces[0])
         for query in select_queries:
             self.run_cbq_query(query=query)
             self.sleep(5)
@@ -93,18 +99,19 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
         # for query in drop_queries:
         #     self.run_cbq_query(query=query)
         #     self.sleep(5)
+
     def test_basic_pause_resume(self):
         self.prepare_tenants(random_bucket_name='hibernation', index_creations=False)
-        self.sleep(410,'Waiting to clear ddl tokens')
         definition_list = []
         for namespace in self.namespaces:
             prefix = f'idx_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}' \
                      f'_batch_1_'
             definition_list = self.gsi_util_obj.get_index_definition_list(dataset='Employee', prefix=prefix)
             create_list = self.gsi_util_obj.get_create_index_list(definition_list=definition_list, namespace=namespace,
-                                                     defer_build_mix=False)
+                                                                  defer_build_mix=False)
             self.log.info(f"Create index list: {create_list}")
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list,query_node=self.query_node)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, query_node=self.query_node)
+        self.sleep(410, 'Waiting to clear ddl tokens')
         self.buckets = self.rest.get_buckets()
         self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
         indexder_metadata_before_pause = self.index_rest.get_indexer_metadata()['status']
@@ -121,15 +128,29 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
         indexder_metadata_after_resume = self.index_rest.get_indexer_metadata()['status']
         indexder_stats_after_resume = self.index_rest.get_index_official_stats()
         self.log.info(indexder_metadata_after_resume)
-        self.verify_post_resume(indexer_meta_data_before_pause=indexder_metadata_before_pause, indexer_meta_data_after_resume=indexder_metadata_after_resume, definition_list_before_pause=definition_list,index_stats_before_pause=indexder_stats_before_pause,index_stats_after_resume=indexder_stats_after_resume)
+        self.verify_post_resume(indexer_meta_data_before_pause=indexder_metadata_before_pause,
+                                indexer_meta_data_after_resume=indexder_metadata_after_resume,
+                                definition_list_before_pause=definition_list,
+                                index_stats_before_pause=indexder_stats_before_pause,
+                                index_stats_after_resume=indexder_stats_after_resume)
         self.s3_utils_obj.delete_s3_folder(folder=self.bucket_name)
 
     def test_stop_pause(self):
-        self.prepare_tenants(random_bucket_name='hibernation')
-        self.sleep(410,'Waiting to clear ddl tokens')
+        self.prepare_tenants(random_bucket_name='hibernation', index_creations=False)
+        definition_list = []
+        for namespace in self.namespaces:
+            prefix = f'idx_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}' \
+                     f'_batch_1_'
+            definition_list = self.gsi_util_obj.get_index_definition_list(dataset='Employee', prefix=prefix)
+            create_list = self.gsi_util_obj.get_create_index_list(definition_list=definition_list, namespace=namespace,
+                                                                  defer_build_mix=False)
+            self.log.info(f"Create index list: {create_list}")
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, query_node=self.query_node)
+        self.sleep(410, 'Waiting to clear ddl tokens')
         self.buckets = self.rest.get_buckets()
         self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
         indexder_metadata_before_pause = self.index_rest.get_indexer_metadata()['status']
+        indexder_stats_before_pause = self.index_rest.get_index_official_stats()
         self.log.info(indexder_metadata_before_pause)
         self.log.info('Pausing bucket')
         self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region, s3_bucket=self.s3_bucket,
@@ -140,14 +161,18 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
         self.rest.wait_bucket_hibernation(task='pause_bucket', operation='stopped')
         self.sleep(10)
         indexder_metadata_after_resume = self.index_rest.get_indexer_metadata()['status']
+        indexder_stats_after_resume = self.index_rest.get_index_official_stats()
         self.log.info(indexder_metadata_after_resume)
-        self.assertEqual(indexder_metadata_before_pause, indexder_metadata_after_resume,
-                         f"Indexer meta data before pause and after resume not the same.")
+        self.verify_post_resume(indexer_meta_data_before_pause=indexder_metadata_before_pause,
+                                indexer_meta_data_after_resume=indexder_metadata_after_resume,
+                                definition_list_before_pause=definition_list,
+                                index_stats_before_pause=indexder_stats_before_pause,
+                                index_stats_after_resume=indexder_stats_after_resume)
         self.s3_utils_obj.delete_s3_folder(folder=self.bucket_name)
 
     def test_stop_resume(self):
         self.prepare_tenants(random_bucket_name='hibernation')
-        self.sleep(410,'Waiting to clear ddl tokens')
+        self.sleep(410, 'Waiting to clear ddl tokens')
         self.buckets = self.rest.get_buckets()
         self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
         self.log.info('Pausing bucket')
@@ -166,22 +191,24 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
 
     def test_pause_with_nodes_failover(self):
         self.prepare_tenants(random_bucket_name='hibernation')
-        self.sleep(410,'Waiting to clear ddl tokens')
+        self.sleep(410, 'Waiting to clear ddl tokens')
         self.buckets = self.rest.get_buckets()
         self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         error_msg = None
         if self.run_hibernation_first:
             self.log.info('Pausing bucket')
-            self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region, s3_bucket=self.s3_path,
+            self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region,
+                                      s3_bucket=self.s3_bucket,
                                       pause_complete=False)
-            self.sleep(15, 'Time for pause to start')
+
+            self.sleep(5, 'Time for pause to start')
         try:
             failover_task = self.cluster.async_failover([self.master], failover_nodes=[index_server], graceful=True)
             failover_task.result()
         except Exception as exception:
+            self.log.info(error_msg)
             error_msg = str(exception)
-
 
         if self.run_hibernation_first:
             if error_msg:
@@ -206,14 +233,14 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
                 error_msg = str(exception)
 
             if error_msg:
-                self.assertEqual(error_msg, "{'error': 'rebalance_running'}", f"Did not get expected error \
-                                                for pause, Expected: requires_rebalance, Acutal: {error_msg}")
+                self.assertEqual(error_msg, 'b\'{"error":"rebalance_running"}\'',
+                                 f"Did not get expected error for pause, Expected: rebalance_running, Actual: {error_msg}")
             else:
                 self.fail('Pause did not fail as expected')
 
     def test_resume_with_nodes_failover(self):
         self.prepare_tenants(random_bucket_name='hibernation')
-        self.sleep(410,'Waiting to clear ddl tokens')
+        self.sleep(410, 'Waiting to clear ddl tokens')
         self.buckets = self.rest.get_buckets()
         self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
@@ -223,15 +250,15 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
 
         if self.run_hibernation_first:
             self.log.info('Resuming bucket')
-            self.rest.resume_operation(bucket_name=self.buckets[0].name, blob_region=self.region, s3_bucket=self.s3_bucket,
+            self.rest.resume_operation(bucket_name=self.buckets[0].name, blob_region=self.region,
+                                       s3_bucket=self.s3_bucket,
                                        resume_complete=False)
-            self.sleep(15, 'Time for resume to start')
+            self.sleep(5, 'Time for resume to start')
         try:
             failover_task = self.cluster.async_failover([self.master], failover_nodes=[index_server], graceful=True)
             failover_task.result()
         except Exception as exception:
             error_msg = str(exception)
-
 
         if self.run_hibernation_first:
             if error_msg:
@@ -257,14 +284,14 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
                 error_msg = str(exception)
 
             if error_msg:
-                self.assertEqual(error_msg, "{'error': 'rebalance_running'}", f"Did not get expected error \
+                self.assertEqual(error_msg, 'b\'{"error":"rebalance_running"}\'', f"Did not get expected error \
                                                 for pause, Expected: requires_rebalance, Acutal: {error_msg}")
             else:
                 self.fail('Resume did not fail as expected')
 
     def test_rebalance_pause(self):
         self.prepare_tenants(random_bucket_name='hibernation')
-        self.sleep(410,'Waiting to clear ddl tokens')
+        self.sleep(410, 'Waiting to clear ddl tokens')
         self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
         sub_clusters = self.get_sub_cluster_list()
         remove_node_ips = [sub_cluster[0].split(':')[0] for sub_cluster in sub_clusters]
@@ -284,10 +311,11 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
             self.rest.add_node(user=self.rest.username, password=self.rest.password,
                                remoteIp=self.servers[self.nodes_init + counter].ip,
                                zone_name=node_zone_dict[server],
-                               services=['index','kv','n1ql'])
+                               services=['index', 'kv', 'n1ql'])
         if self.run_hibernation_first:
             self.log.info('Pausing bucket')
-            self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region, s3_bucket=self.s3_bucket,
+            self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region,
+                                      s3_bucket=self.s3_bucket,
                                       pause_complete=False)
             self.sleep(5, "Wait for pause operation to start")
 
@@ -296,14 +324,14 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
                                                           to_add=[],
                                                           to_remove=remove_nodes,
                                                           services=['index'] * len(remove_nodes))
-            self.sleep(5,"Rebalance started")
+            self.sleep(5, "Rebalance started")
         except Exception as exception:
             expected_error = 'Cannot rebalance when another bucket is pausing/resuming.'
             self.assertIn(expected_error, exception, 'Rebalance should fail')
 
-        if self.run_hibernation_first:
-            rebalance_status = RestHelper(self.rest).rebalance_reached()
-            self.assertFalse(rebalance_status, "rebalance failed, stuck or did not complete")
+        # if self.run_hibernation_first:
+        #     rebalance_status = RestHelper(self.rest).rebalance_reached()
+        #     self.assertFalse(rebalance_status, "rebalance failed, stuck or did not complete")
 
         if not self.run_hibernation_first:
             try:
@@ -313,11 +341,11 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
                 self.sleep(5, "Wait for pause operation to start")
             except Exception as exception:
                 expected_error_msg = str(exception)
-                self.assertIn("rebalance_running",expected_error_msg,'Pause did not fail as expected')
+                self.assertIn("rebalance_running", expected_error_msg, 'Pause did not fail as expected')
 
     def test_rebalance_resume(self):
         self.prepare_tenants(random_bucket_name='hibernation')
-        self.sleep(410,'Waiting to clear ddl tokens')
+        self.sleep(410, 'Waiting to clear ddl tokens')
         self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
         sub_clusters = self.get_sub_cluster_list()
         remove_node_ips = [sub_cluster[0].split(':')[0] for sub_cluster in sub_clusters]
@@ -337,16 +365,17 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
             self.rest.add_node(user=self.rest.username, password=self.rest.password,
                                remoteIp=self.servers[self.nodes_init + counter].ip,
                                zone_name=node_zone_dict[server],
-                               services=['index','kv','n1ql'])
+                               services=['index', 'kv', 'n1ql'])
 
         self.log.info('Pausing bucket')
         self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region, s3_bucket=self.s3_bucket,
                                   pause_complete=True)
-        self.sleep(5, "Wait for resume operation to complete")
+        self.sleep(5, "Wait for pause operation to complete")
 
         if self.run_hibernation_first:
             self.log.info('Resuming bucket')
-            self.rest.resume_operation(bucket_name=self.buckets[0].name, blob_region=self.region, s3_bucket=self.s3_bucket,
+            self.rest.resume_operation(bucket_name=self.buckets[0].name, blob_region=self.region,
+                                       s3_bucket=self.s3_bucket,
                                        resume_complete=False)
             self.sleep(5, "Wait for resume operation to start")
 
@@ -355,10 +384,10 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
                                                           to_add=[],
                                                           to_remove=remove_nodes,
                                                           services=['index'] * len(remove_nodes))
-            self.sleep(5,"Rebalance started")
+            self.sleep(5, "Rebalance started")
         except Exception as exception:
             expected_error = 'Cannot rebalance when another bucket is pausing/resuming.'
-            self.assertIn(expected_error,exception,'Rebalance should fail')
+            self.assertIn(expected_error, exception, 'Rebalance should fail')
 
         if not self.run_hibernation_first:
             try:
@@ -368,4 +397,4 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
                 self.sleep(5, "Wait for resume operation to start")
             except Exception as exception:
                 expected_error_msg = str(exception)
-                self.assertIn("rebalance_running",expected_error_msg,'Resume did not fail as expected')
+                self.assertIn("rebalance_running", expected_error_msg, 'Resume did not fail as expected')

@@ -6218,7 +6218,6 @@ class RestConnection(object):
         return status, json_parsed
 
     def resume_bucket(self, blob_region, s3_path, bucket='default', rate_limiter=104857600):
-        s3_path = 's3://' + s3_path
         api = f'{self.baseUrl}controller/resume'
         params_dict = {}
         params_dict['bucket'] = bucket
@@ -6259,12 +6258,12 @@ class RestConnection(object):
         json_parsed = json.loads(content)
         return status, json_parsed
 
-    def wait_bucket_hibernation(self, task, operation, timeout=300):
+    def wait_bucket_hibernation(self, task, operation, timeout=600):
         status = self.get_hibernation_status(operation=task)
         if status == operation:
             return True
         timer = 0
-        while timer <= 600:
+        while timer <= timeout:
             status = self.get_hibernation_status(operation=task)
             if status == 'failed':
                 raise Exception(f"Operation {operation} failed")
