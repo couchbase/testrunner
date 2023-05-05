@@ -146,7 +146,7 @@ class throttling(object):
     def __init__(self, server, username, password):
         self.auth = requests.auth.HTTPBasicAuth(username, password)
         self.url_bucket_throttle = f"https://{server}:{CbServer.ssl_port}/pools/default/buckets"
-        self.url_cluster_throttle = f"https://{server}:{CbServer.ssl_port}/internalSettings"
+        self.url_cluster_throttle = f"https://{server}:{CbServer.ssl_port}/settings/serverless"
         self.url_query_settings = f"https://{server}:{CbServer.ssl_n1ql_port}/admin/settings"
         url = f"https://{server}:{CbServer.ssl_port}/pools/default"
         response = requests.get(url, auth=self.auth, verify=False)
