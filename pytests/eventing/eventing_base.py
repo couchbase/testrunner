@@ -171,7 +171,7 @@ class EventingBaseTest(QueryHelperTests):
                                   timer_worker_pool_size=3, worker_count=3, processing_status=False ,
                                   cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=20,
                                   data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62,
-                                  language_compatibility='7.2.0',hostpath=None,validate_ssl=False,src_binding=False,
+                                  language_compatibility=None,hostpath=None,validate_ssl=False,src_binding=False,
                                   username="Administrator", password="password"):
         body = {}
         body['appname'] = appname
@@ -266,7 +266,8 @@ class EventingBaseTest(QueryHelperTests):
                      "username": self.curl_username, "password": self.curl_password, "allow_cookies": self.cookies,"validate_ssl_certificate": validate_ssl})
             if self.auth_type=="bearer":
                 body['depcfg']['curl'][0]['bearer_key']=self.bearer_key
-        body['settings']['language_compatibility']=language_compatibility
+        if language_compatibility is not None:
+            body['settings']['language_compatibility'] = language_compatibility
         body['function_scope'] = self.function_scope
         content1 = self.rest.create_function(body['appname'], body, self.function_scope, username, password)
         self.log.info("saving function {}".format(content1))
@@ -1158,7 +1159,7 @@ class EventingBaseTest(QueryHelperTests):
                                  dcp_stream_boundary="everything",src_namespace="src_bucket._default._default",
                                         meta_namespace="metadata._default._default",
                                         collection_bindings=["dst_bucket.dst_bucket._default._default.rw"],is_curl=False,
-                                        hostpath=None, validate_ssl=False,worker_count=1,language_compatibility='7.2.0',
+                                        hostpath=None, validate_ssl=False,worker_count=1,language_compatibility=None,
                                         username="Administrator", password="password"):
         src_map=src_namespace.split(".")
         meta_map=meta_namespace.split(".")
@@ -1196,7 +1197,8 @@ class EventingBaseTest(QueryHelperTests):
         body['settings']['deployment_status'] = False
         body['settings']['processing_status'] = False
         body['settings']['worker_count'] = worker_count
-        body['settings']['language_compatibility'] = language_compatibility
+        if language_compatibility is not None:
+            body['settings']['language_compatibility'] = language_compatibility
         body['settings']['log_level'] = self.eventing_log_level
         if is_curl:
             self.is_curl=True
