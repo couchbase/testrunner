@@ -95,7 +95,7 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
         #     self.sleep(5)
     def test_basic_pause_resume(self):
         self.prepare_tenants(random_bucket_name='hibernation', index_creations=False)
-        self.sleep(310,'Waiting to clear ddl tokens')
+        self.sleep(410,'Waiting to clear ddl tokens')
         definition_list = []
         for namespace in self.namespaces:
             prefix = f'idx_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}' \
@@ -126,7 +126,7 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
 
     def test_stop_pause(self):
         self.prepare_tenants(random_bucket_name='hibernation')
-        self.sleep(310, 'Waiting to clear ddl tokens')
+        self.sleep(410,'Waiting to clear ddl tokens')
         self.buckets = self.rest.get_buckets()
         self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
         indexder_metadata_before_pause = self.index_rest.get_indexer_metadata()['status']
@@ -137,7 +137,7 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
         self.log.info(f"Stopping pause on bucket {self.buckets[0].name}")
         self.rest.stop_pause(bucket=self.buckets[0].name)
         self.sleep(10)
-        self.rest.wait_bucket_hibernation(random_bucket_name='pause_bucket', operation='stopped')
+        self.rest.wait_bucket_hibernation(task='pause_bucket', operation='stopped')
         self.sleep(10)
         indexder_metadata_after_resume = self.index_rest.get_indexer_metadata()['status']
         self.log.info(indexder_metadata_after_resume)
@@ -147,7 +147,7 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
 
     def test_stop_resume(self):
         self.prepare_tenants(random_bucket_name='hibernation')
-        self.sleep(310, 'Waiting to clear ddl tokens')
+        self.sleep(410,'Waiting to clear ddl tokens')
         self.buckets = self.rest.get_buckets()
         self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
         self.log.info('Pausing bucket')
@@ -159,14 +159,14 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
 
         self.rest.stop_resume(bucket=self.buckets[0].name)
         self.sleep(10)
-        self.rest.wait_bucket_hibernation(random_bucket_name='resume_bucket', operation='stopped')
+        self.rest.wait_bucket_hibernation(task='resume_bucket', operation='stopped')
         self.sleep(10)
         self.assertEqual([], self.rest.get_buckets(),
                          f"Indexer meta data before pause and after resume not the same.")
 
     def test_pause_with_nodes_failover(self):
         self.prepare_tenants(random_bucket_name='hibernation')
-        self.sleep(310,'Waiting to clear ddl tokens')
+        self.sleep(410,'Waiting to clear ddl tokens')
         self.buckets = self.rest.get_buckets()
         self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
@@ -187,7 +187,7 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
             if error_msg:
                 expected_error = "Failover Node failed :b'Unexpected server error: in_bucket_hibernation' "
                 self.assertEqual(error_msg, expected_error, f"Incorrect exception: {error_msg}")
-                if not self.rest.wait_bucket_hibernation(random_bucket_name='pause_bucket', operation='completed'):
+                if not self.rest.wait_bucket_hibernation(task='pause_bucket', operation='completed'):
                     self.fail('Pause failed post failure of failover')
             else:
                 self.fail("Node failover did not fail as expected")
@@ -213,7 +213,7 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
 
     def test_resume_with_nodes_failover(self):
         self.prepare_tenants(random_bucket_name='hibernation')
-        self.sleep(310,'Waiting to clear ddl tokens')
+        self.sleep(410,'Waiting to clear ddl tokens')
         self.buckets = self.rest.get_buckets()
         self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
@@ -238,7 +238,7 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
                 expected_error = "Unexpected server error: in_bucket_hibernation"
                 error_result = (expected_error in error_msg)
                 self.assertTrue(error_result, f"Unexpected exception: {error_msg}")
-                if not self.rest.wait_bucket_hibernation(random_bucket_name='resume_bucket', operation='completed'):
+                if not self.rest.wait_bucket_hibernation(task='resume_bucket', operation='completed'):
                     self.fail('Resume failed post failure of failover')
             else:
                 self.fail("Node failover did not fail as expected")
@@ -264,7 +264,7 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
 
     def test_rebalance_pause(self):
         self.prepare_tenants(random_bucket_name='hibernation')
-        self.sleep(310, 'Waiting to clear ddl tokens')
+        self.sleep(410,'Waiting to clear ddl tokens')
         self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
         sub_clusters = self.get_sub_cluster_list()
         remove_node_ips = [sub_cluster[0].split(':')[0] for sub_cluster in sub_clusters]
@@ -317,7 +317,7 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
 
     def test_rebalance_resume(self):
         self.prepare_tenants(random_bucket_name='hibernation')
-        self.sleep(310, 'Waiting to clear ddl tokens')
+        self.sleep(410,'Waiting to clear ddl tokens')
         self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
         sub_clusters = self.get_sub_cluster_list()
         remove_node_ips = [sub_cluster[0].split(':')[0] for sub_cluster in sub_clusters]
