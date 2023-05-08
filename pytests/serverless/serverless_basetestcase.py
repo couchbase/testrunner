@@ -111,6 +111,12 @@ class ServerlessBaseTestCase(unittest.TestCase):
         self.task_manager.shutdown(force=True)
 
     def collect_log_on_dataplane_nodes(self):
+        if not self.dataplanes:
+            self.log.info("dataplanes object not populated. Will use the ini file dataplane_id parameter to do this.")
+            self.dataplanes[self.dataplane_id] = ServerlessDataPlane(self.dataplane_id)
+            rest_api_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.dataplane_id)
+            self.log.info(f"Obtaining bypass user credentials to dataplane {self.dataplane_id}")
+            self.dataplanes[self.dataplane_id].populate(rest_api_info)
         for dataplane in self.dataplanes:
             rest_obj = RestConnection(rest_username=self.dataplanes[dataplane].admin_username,
                                       rest_password=self.dataplanes[dataplane].admin_password,
