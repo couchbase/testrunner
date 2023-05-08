@@ -289,7 +289,7 @@ class OnPremBaseTestCase(unittest.TestCase):
             if self.input.param("port", None):
                 self.port = str(self.input.param("port", None))
 
-            if self.enable_dp or self.bucket_storage == "magma":
+            if self.enable_dp:
                 for node in self.servers:
                     print("Enabling DP for %s" % node)
                     cli = CouchbaseCLI(node)

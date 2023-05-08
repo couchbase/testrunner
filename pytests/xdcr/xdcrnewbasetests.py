@@ -2949,11 +2949,6 @@ class XDCRNewBaseTest(unittest.TestCase):
         counter = 1
         for _, nodes in self._input.clusters.items():
             cluster_nodes = copy.deepcopy(nodes)
-            if self.__bucket_storage == "magma":
-                for node in cluster_nodes:
-                    print("Enabling DP for %s" % node)
-                    cli = CouchbaseCLI(node)
-                    cli.enable_dp()
             if len(self.__cb_clusters) == int(self.__chain_length):
                 break
             self.__cb_clusters.append(
