@@ -63,7 +63,7 @@ class SGConfigTests(GatewayConfigBaseTest):
 
     def _create_bucket_params(self, server, replicas=1, size=256, port=11211,
                               password=None,
-                             bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
+                             bucket_type='membase', enable_replica_index=1, eviction_policy='fullEviction',
                              bucket_priority=None, flush_enabled=1, lww=False):
         """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
         Parameters:

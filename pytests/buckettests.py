@@ -388,7 +388,7 @@ class CreateBucketTests(BaseTestCase):
     #
     def test_ephemeral_buckets(self):
         eviction_policy = self.input.param("eviction_policy", 'noEviction')
-        shared_params = self._create_bucket_params(server=self.server, size=256,
+        shared_params = self._create_bucket_params(server=self.server, size=100,
                                                    replicas=self.num_replicas, bucket_type='ephemeral',
                                                    eviction_policy=eviction_policy)
         # just do sasl for now, pending decision on support of non-sasl buckets in 5.0
