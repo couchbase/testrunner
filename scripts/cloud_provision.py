@@ -29,17 +29,21 @@ def install_iptables(host, username="root", password="couchbase"):
     ssh.connect(host,
                 username=username,
                 password=password)
-    
-    commands = ["yum install -y iptables-services ",
-                "systemctl start iptables"]
+    commands = []
+    stdin, stdout, stderr = ssh.exec_command("yum --help")
+    if stdout.channel.recv_exit_status() != 0:
+        commands.append("apt-get install iptables")
+    else:
+        commands.append("yum install -y iptables-services",)
+        commands.append("systemctl start iptables")
 
     for command in commands:
             stdin, stdout, stderr = ssh.exec_command(command)
             if stdout.channel.recv_exit_status() != 0:
-                ssh.close()
                 ssh.exec_command("sudo shutdown")
+                ssh.close()
                 raise Exception("iptables could not be installed on {}".format(host))
-            
+
     ssh.close()
 
 
@@ -49,7 +53,7 @@ def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
         ssh.connect(host,
                     username=username,
                     key_filename=ssh_key_path)
-        
+
         commands = ["echo -e 'couchbase\ncouchbase' | sudo passwd root",
                     "sudo sed -i '/#PermitRootLogin yes/c\PermitRootLogin yes' /etc/ssh/sshd_config",
                     "sudo sed -i '/PermitRootLogin no/c\PermitRootLogin yes' /etc/ssh/sshd_config",
@@ -57,11 +61,11 @@ def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
                     "sudo sed -i '/PermitRootLogin forced-commands-only/c\#PermitRootLogin forced-commands-only' /etc/ssh/sshd_config",
                     "sudo sed -i '/PasswordAuthentication no/c\PasswordAuthentication yes' /etc/ssh/sshd_config",
                     "sudo service sshd restart"]
-        
+
         for command in commands:
             stdin, stdout, stderr = ssh.exec_command(command)
             if stdout.channel.recv_exit_status() != 0:
-                break 
+                break
 
         if check_root_login(host):
             print("root login to host {} successful.".format(host))
@@ -122,7 +126,10 @@ AWS_AMI_MAP = {
             "x86_64": "ami-037d1d9dfa436c7c6"
         },
         "ubuntu20": {
-            "arm64": "ami-0d70a59d7191a8079"
+            "aarch64": "ami-0d70a59d7191a8079"
+        },
+        "ubuntu22": {
+            "aarch64": "ami-05b98dc6de6e09e97"
         }
     },
     "elastic-fts": "ami-0c48f8b3129e57beb",
@@ -133,7 +140,8 @@ AWS_OS_USERNAME_MAP = {
     "amzn2": "ec2-user",
     "ubuntu20": "ubuntu",
     "centos": "centos",
-    "al2023": "ec2-user"
+    "al2023": "ec2-user",
+    "ubuntu22": "ubuntu"
 }
 
 def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
