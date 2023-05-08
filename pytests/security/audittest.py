@@ -110,7 +110,7 @@ class auditTest(BaseTestCase):
         elif (ops in ['update']):
             expectedResults = {'bucket_name': 'TestBucket', 'ram_quota': 268435456, 'num_replicas': 1,
                                'replica_index': False, 'eviction_policy': 'value_only', 'type': 'membase',
-                               "autocompaction": 'false', "purge_interval": "undefined", "flush_enabled": 'true',
+                               "autocompaction": 'false', "purge_interval": "undefined", "flush_enabled": True,
                                "num_threads": 3, "source": source,
                                "user": user, "ip": self.ipAddress, "port": 57457, 'sessionid': '',
                                'storage_mode': self.bucket_storage, 'max_ttl': 400}
