@@ -15,7 +15,6 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_helper.documentgenerator import DocumentGenerator
 from couchbase_helper.stats_tools import StatsCommon
 
-from capella_basetestcase import BaseTestCase as CapellaBaseTestCase
 from lib import global_vars
 from lib.Cb_constants.CBServer import CbServer
 from lib.SystemEventLogLib.Events import EventHelper
@@ -3267,6 +3266,8 @@ class OnPremBaseTestCase(unittest.TestCase):
         self.log.info("done")
         return tasks
 
+
+from capella_basetestcase import BaseTestCase as CapellaBaseTestCase
 
 if TestInputSingleton.input.param("capella_run", False):
     BaseTestCase = CapellaBaseTestCase
