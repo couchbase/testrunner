@@ -6261,6 +6261,10 @@ class RestConnection(object):
         json_parsed = json.loads(content)
         return status, json_parsed
 
+    def stop_resume_operation(self, bucket='default'):
+        result, content = self.stop_resume(bucket=bucket)
+        self.wait_bucket_hibernation(task='resume_bucket', operation='stopped')
+
     def wait_bucket_hibernation(self, task, operation, timeout=600):
         status = self.get_hibernation_status(operation=task)
         if status == operation:

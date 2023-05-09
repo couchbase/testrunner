@@ -13,6 +13,7 @@ import json
 import math
 import random
 import subprocess
+import string
 
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, Bucket
@@ -35,7 +36,7 @@ from lib.SystemEventLogLib.fts_service_events import SearchServiceEvents
 from scripts.collect_server_info import cbcollectRunner
 from couchbase_helper.documentgenerator import *
 from tasks.taskmanager import TaskManager
-
+from collection.collections_rest_client import CollectionsRest
 from couchbase_helper.documentgenerator import JsonDocGenerator
 from lib.membase.api.exception import FTSException
 from .es_base import ElasticSearchBase
@@ -3813,7 +3814,7 @@ class FTSBaseTest(unittest.TestCase):
         self.master = self._input.servers[0]
         first_node = copy.deepcopy(self.master)
         self.cli_client = CollectionsCLI(self.master)
-
+        self.collection_rest = CollectionsRest(self.master)
         self.multiple_ca = self._input.param("multiple_ca", False)
         self._cb_cluster = CouchbaseCluster("C1",
                                             [first_node],
@@ -3891,7 +3892,17 @@ class FTSBaseTest(unittest.TestCase):
             _tasks = self._cb_cluster.async_log_scan(self._input.servers, self.log_scan_file_prefix+"_BEFORE")
             for _task in _tasks:
                 _task.result()
-
+        self.aws_access_key_id = self._input.param("aws_access_key_id")
+        self.aws_secret_access_key = self._input.param("aws_secret_access_key")
+        self.aws_session_token = self._input.param("aws_session_token", None)
+        self.region = self._input.param("region")
+        self.s3_bucket = self._input.param("s3_bucket", "fts-hibernation")
+        if self.aws_access_key_id:
+            from serverless.s3_utils import S3Utils
+        self.s3_utils_obj = S3Utils(aws_access_key_id=self.aws_access_key_id,
+                                    aws_secret_access_key=self.aws_secret_access_key,
+                                    s3_bucket=self.s3_bucket, region=self.region)
+        self.storage_prefix = self._input.param("storage_prefix", None)
 
     def create_capella_config(self):
         services_count = {}
@@ -4136,6 +4147,7 @@ class FTSBaseTest(unittest.TestCase):
     def suite_tearDown(self):
         if self.capella_run:
             self.capella_api.delete_cluster(self.cluster_id)
+
     def tearDown(self):
         """Clusters cleanup"""
         if self.capella_run and self._testMethodName not in ['suite_tearDown', 'suite_setUp']:
@@ -5989,3 +6001,36 @@ class FTSBaseTest(unittest.TestCase):
                 n1ql_query = f"INSERT INTO `{bucket}`.{scope}.{collection} (KEY, VALUE) VALUES (\"{id}\", {{\"{keyname}\":{value}}});"
             self._cb_cluster.run_n1ql_query(n1ql_query, verbose=False)
         self.log.info("Loading Phase Complete!")
+
+    def create_S3_config(self):
+        COUCHBASE_AWS_HOME = '/home/couchbase/.aws'
+        aws_cred_file = ('[default]\n'
+                         f'aws_access_key_id={self.aws_access_key_id}\n'
+                         f'aws_secret_access_key={self.aws_secret_access_key}')
+        aws_conf_file = ('[default]\n'
+                         f'region={self.region}\n'
+                         'output=json')
+        for node in self._input.servers:
+            shell = RemoteMachineShellConnection(node)
+            shell.execute_command(f"rm -rf {COUCHBASE_AWS_HOME}")
+            shell.execute_command(f"mkdir -p {COUCHBASE_AWS_HOME}")
+
+            shell.create_file(remote_path=f'{COUCHBASE_AWS_HOME}/credentials', file_data=aws_cred_file)
+            shell.create_file(remote_path=f'{COUCHBASE_AWS_HOME}/config', file_data=aws_conf_file)
+
+            # adding validation that the file is created and content is available.
+            self.log.info("Printing content of .aws directory")
+            self.log.info(shell.execute_command(f"ls -l {COUCHBASE_AWS_HOME}"))
+            self.log.info("Printing content of config file")
+            self.log.info(shell.execute_command(f"cat {COUCHBASE_AWS_HOME}/config"))
+            self.log.info("Printing content of credentials file")
+            self.log.info(shell.execute_command(f"cat {COUCHBASE_AWS_HOME}/credentials"))
+
+        if self.storage_prefix is None:
+            self.storage_prefix = 'fts_' + ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
+            # checking if folder exist and deleting it
+            result = self.s3_utils_obj.check_s3_folder_exist(folder=self.storage_prefix)
+            if result:
+                self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
+        # create a folder in S3 bucket
+        self.s3_utils_obj.create_s3_folder(folder=self.storage_prefix)
