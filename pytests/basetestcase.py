@@ -559,6 +559,9 @@ class BaseTestCase(unittest.TestCase):
         total_time = end_time - start_time
         self.log.info("Time to execute basesetup : %s" % total_time)
 
+    def suite_setUp(self):
+        pass
+
     def set_alternate_address_all_nodes(self):
         for node in self.servers:
             if node.internal_ip:
