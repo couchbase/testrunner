@@ -49,7 +49,7 @@ class ServerlessGSIVolume(BaseGSIServerless):
         self.hvt_data_load = self.input.param("hvt_data_load", 100000)
         self.svt_data_load = self.input.param("svt_data_load", 0)
         self.num_queries_in_parallel = self.input.param("num_queries_in_parallel", 20)
-        self.test_run_duration = self.input.param("test_run_duration", 24 * 60)  # in mins
+        self.test_run_duration = self.input.param("test_run_duration", 24 * 60 * 60)
         self.stats_dump_timer = self.input.param("stats_dump_timer", 300)
         self.new_tenant_iter = self.input.param("new_tenant_iter", 10)
         self.new_tenants_count = self.input.param("self.new_tenants_count", 3)
@@ -177,8 +177,10 @@ class ServerlessGSIVolume(BaseGSIServerless):
                 end = start + batch_size
                 batch_queries = queries[start:end]
                 tasks = []
+                query_node = random.choice(self.get_all_query_nodes(rest_info=self.dp_obj))
                 for query in batch_queries:
-                    task = executor.submit(self.run_query, database=database, query=query, print_billing_info=False)
+                    task = executor.submit(self.run_query, database=database, query=query,
+                                           print_billing_info=False, query_node=query_node)
                     tasks.append(task)
                     self.query_run_stats_dict[query_type]["total_count"] += 1
                 for task in tasks:
@@ -329,6 +331,45 @@ class ServerlessGSIVolume(BaseGSIServerless):
         self.lvt_ids.update(db_ids[:lvt_weightage])
         self.hvt_ids.update(db_ids[lvt_weightage:lvt_weightage + hvt_weightage])
         self.svt_ids.update(db_ids[lvt_weightage + hvt_weightage: lvt_weightage + hvt_weightage + svt_weightage])
+
+    def add_tenants_during_test_run(self):
+        with ThreadPoolExecutor() as executor:
+            old_db_ids = set(self.databases.keys())
+            self.provision_databases(count=self.new_tenants_count,
+                                     start_num=self.num_of_tenants,
+                                     seed=self.database_prefix)
+            new_db_ids = list(set(self.databases.keys()) - old_db_ids)
+            self.populate_tenant_category(db_ids=new_db_ids, lvt_weightage=1,
+                                          hvt_weightage=1, svt_weightage=1)
+            self.num_of_tenants += self.new_tenants_count
+
+            new_dbs = [self.databases[db_id] for db_id in new_db_ids]
+            lvt_dbs = [new_dbs[0]]
+            self.num_of_scopes_per_db = self.lvt_scopes
+            self.num_of_collections_per_scope = self.lvt_collections
+            self.create_scopes_collections(databases=lvt_dbs)
+
+            # Creating  scopes and collections for HVT DBs
+            hvt_dbs = [new_dbs[1]]
+            self.num_of_scopes_per_db = self.hvt_scopes
+            self.num_of_collections_per_scope = self.hvt_collections
+            self.create_scopes_collections(databases=hvt_dbs)
+
+            # Creating  scopes and collections for SVT DBs
+            svt_dbs = [new_dbs[2]]
+            self.num_of_scopes_per_db = self.svt_scopes
+            self.num_of_collections_per_scope = self.svt_collections
+            self.create_scopes_collections(databases=svt_dbs)
+
+            tasks = []
+            for database in new_dbs:
+                task = executor.submit(self.load_data_new_doc_loader, databases=[database],
+                                       dataset=self.dataset,
+                                       doc_start=0, doc_end=self.initial_doc_count,
+                                       key_prefix=self.doc_prefix)
+                tasks.append(task)
+
+            return tasks
 
     def check_cluster_state(self, timer=5):
         """
@@ -899,7 +940,7 @@ class ServerlessGSIVolume(BaseGSIServerless):
                 # Starting the time for Volume test
                 curr_time = datetime.now()
                 logs_dump_time = datetime.now()
-                end_time = curr_time + timedelta(minutes=self.test_run_duration)
+                end_time = curr_time + timedelta(seconds=self.test_run_duration)
                 iteration_count = 1
 
                 executor.submit(self.create_indexes_for_tenants)
@@ -922,14 +963,9 @@ class ServerlessGSIVolume(BaseGSIServerless):
                         executor.submit(self.create_indexes_for_tenants)
 
                     # add more tenants every time below condition satisfy
+                    add_tenant_tasks = []
                     if iteration_count % self.new_tenant_iter == 0:
-                        old_db_ids = set(self.databases.keys())
-                        self.provision_databases(count=self.new_tenants_count,
-                                                 start_num=self.num_of_tenants,
-                                                 seed=self.database_prefix)
-                        new_db_ids = list(set(self.databases.keys()) - old_db_ids)
-                        self.populate_tenant_category(db_ids=new_db_ids)
-                        self.num_of_tenants += self.new_tenants_count
+                        add_tenant_tasks = executor.submit(self.add_tenants_during_test_run)
 
                     # Populating data load for tenants
                     lvt_task = executor.submit(self.generate_doc_load_for_tenant_category, ops_rate=2000,
@@ -955,20 +991,31 @@ class ServerlessGSIVolume(BaseGSIServerless):
                     except Exception as err:
                         self.log.critical(f"Exception in HVT data load {err}")
 
+                    if iteration_count % self.new_tenant_iter == 0:
+                        try:
+                            for task in add_tenant_tasks:
+                                task.result()
+                        except Exception as err:
+                            self.log.critical(f"Exception while adding new tenants: {err}")
+
                     # Running cbcollect periodically for given time duration
-                    if datetime.now() > logs_dump_time + timedelta(self.cb_collect_duration):
+                    if datetime.now() > logs_dump_time + timedelta(seconds=self.cb_collect_duration):
                         executor.submit(self.collect_log_on_dataplane_nodes)
                         logs_dump_time = datetime.now()
 
+                    curr_time = datetime.now()
                     self.log.info("*" * 50)
                     self.log.info(f"Ending iteration no.: {iteration_count}")
                     self.log.info("*" * 50)
                     iteration_count += 1
 
             except Exception as err:
-                self.log.critical(f"Unsuccessful Test run {err}")
+                raise Exception(f"Unsuccessful Test run {err}")
             finally:
                 self.query_event.clear()
                 self.create_indexes_event.clear()
                 self.stats_dump_event.clear()
                 self.log.info("GSI Volume Test Finished.")
+
+    def test_delete_all_dbs(self):
+        self.delete_all_database(all_db=True, dataplane_id=self.dataplane_id)
