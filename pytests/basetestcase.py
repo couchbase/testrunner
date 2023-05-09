@@ -4,7 +4,6 @@ import logging
 import random
 import string
 import subprocess
-import time
 import traceback
 import unittest
 
@@ -16,6 +15,7 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_helper.documentgenerator import DocumentGenerator
 from couchbase_helper.stats_tools import StatsCommon
 
+from capella_basetestcase import BaseTestCase as CapellaBaseTestCase
 from lib import global_vars
 from lib.Cb_constants.CBServer import CbServer
 from lib.SystemEventLogLib.Events import EventHelper
@@ -47,7 +47,6 @@ from TestInput import TestInputSingleton, TestInputServer
 from scripts.java_sdk_setup import JavaSdkSetup
 from tasks.future import Future
 
-from lib.cluster_config import ClusterConfig
 
 try:
     from pytests.security.x509_multiple_CA_util import x509main as x509main_multiple_ca
@@ -75,7 +74,6 @@ class OnPremBaseTestCase(unittest.TestCase):
         self.buckets = []
         self.bucket_base_params = {'membase': {}}
         self.master = self.servers[0]
-        
 
         self.indexManager = self.servers[0]
         if not hasattr(self, 'cluster'):
@@ -467,6 +465,9 @@ class OnPremBaseTestCase(unittest.TestCase):
         end_time = time.time()
         total_time = end_time - start_time
         self.log.info("Time to execute basesetup : %s" % total_time)
+
+    def suite_setUp(self):
+        pass
 
     def parse_params(self):
         self.log_level = self.input.param("log_level", None)
@@ -3260,7 +3261,6 @@ class OnPremBaseTestCase(unittest.TestCase):
         self.log.info("done")
         return tasks
 
-from capella_basetestcase import BaseTestCase as CapellaBaseTestCase
 
 if TestInputSingleton.input.param("capella_run", False):
     BaseTestCase = CapellaBaseTestCase

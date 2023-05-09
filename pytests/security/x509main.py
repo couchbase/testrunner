@@ -69,15 +69,18 @@ class x509main:
         self.slave_host = x509main.SLAVE_HOST
 
     def getLocalIPAddress(self):
+        """
+        status, ipAddress = commands.getstatusoutput(
+        "ifconfig en0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
+        if '1' not in ipAddress:
+            status, ipAddress = commands.getstatusoutput(
+            "ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*.){3}[0-9]*'
+            | awk '{print $2}'")
+        return ipAddress
+        """
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('couchbase.com', 0))
         return s.getsockname()[0]
-        '''
-        status, ipAddress = commands.getstatusoutput("ifconfig en0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
-        if '1' not in ipAddress:
-            status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
-        return ipAddress
-        '''
 
     def get_data_path(self,node):
         """Gets couchbase log directory, even for cluster_run
@@ -87,7 +90,7 @@ class x509main:
         dir = dir.strip('"')
         return str(dir)
 
-    def _generate_cert(self, servers, root_cn='Root\ Authority', type='go', encryption="", key_length=1024, client_ip=None, alt_names='default', dns=None, uri=None,wildcard_dns=None):
+    def _generate_cert(self, servers, root_cn='Root Authority', type='go', encryption="", key_length=1024, client_ip=None, alt_names='default', dns=None, uri=None,wildcard_dns=None):
         shell = RemoteMachineShellConnection(self.slave_host)
         shell.execute_command("rm -rf " + x509main.CACERTFILEPATH)
         shell.execute_command("mkdir " + x509main.CACERTFILEPATH)
@@ -97,7 +100,7 @@ class x509main:
             cert_file = "./pytests/security/" + x509main.GOCERTGENFILE
             output, error = shell.execute_command("go run " + cert_file + " -store-to=" + x509main.CACERTFILEPATH + "root -common-name=" + root_cn)
             log.info ('Output message is {0} and error message is {1}'.format(output, error))
-            output, error = shell.execute_command("go run " + cert_file + " -store-to=" + x509main.CACERTFILEPATH + "interm -sign-with=" + x509main.CACERTFILEPATH + "root -common-name=Intemediate\ Authority")
+            output, error = shell.execute_command("go run " + cert_file + " -store-to=" + x509main.CACERTFILEPATH + "interm -sign-with=" + x509main.CACERTFILEPATH + "root -common-name=Intemediate Authority")
             log.info ('Output message is {0} and error message is {1}'.format(output, error))
             for server in servers:
                 if "[" in server.ip:
@@ -107,7 +110,7 @@ class x509main:
                 output, error = shell.execute_command("cat " + x509main.CACERTFILEPATH + server.ip + ".crt " + x509main.CACERTFILEPATH + "interm.crt  > " + " " + x509main.CACERTFILEPATH + "long_chain" + server.ip + ".pem")
                 log.info ('Output message is {0} and error message is {1}'.format(output, error))
 
-            shell.execute_command("go run " + cert_file + " -store-to=" + x509main.CACERTFILEPATH + "incorrect_root_cert -common-name=Incorrect\ Authority")
+            shell.execute_command("go run " + cert_file + " -store-to=" + x509main.CACERTFILEPATH + "incorrect_root_cert -common-name=Incorrect Authority")
         elif type == 'openssl':
             files = []
             v3_ca = "./pytests/security/v3_ca.crt"
@@ -119,7 +122,7 @@ class x509main:
             log.info ('Output message is {0} and error message is {1}'.format(output, error))
             output, error = shell.execute_command("openssl req -new -key " + x509main.CACERTFILEPATH + "int.key -out " + x509main.CACERTFILEPATH + "int.csr -subj '/C=UA/O=My Company/CN=My Company Intermediate CA'")
             log.info ('Output message is {0} and error message is {1}'.format(output, error))
-            output, error = shell.execute_command("openssl x509 -req -in " + x509main.CACERTFILEPATH + "int.csr -CA " + x509main.CACERTFILEPATH + "ca.pem -CAkey " + x509main.CACERTFILEPATH + "ca.key -CAcreateserial -CAserial " \
+            output, error = shell.execute_command("openssl x509 -req -in " + x509main.CACERTFILEPATH + "int.csr -CA " + x509main.CACERTFILEPATH + "ca.pem -CAkey " + x509main.CACERTFILEPATH + "ca.key -CAcreateserial -CAserial "
                             + x509main.CACERTFILEPATH + "rootCA.srl -extfile ./pytests/security/v3_ca.ext -out " + x509main.CACERTFILEPATH + "int.pem -days 365 -sha256")
             log.info ('Output message is {0} and error message is {1}'.format(output, error))
 
@@ -155,7 +158,7 @@ class x509main:
                 log.info ('Output message is {0} and error message is {1}'.format(output, error))
                 output, error = shell.execute_command("openssl req -new -key " + x509main.CACERTFILEPATH + server.ip + ".key -out " + x509main.CACERTFILEPATH + server.ip + ".csr -config ./pytests/security/clientconf3.conf")
                 log.info ('Output message is {0} and error message is {1}'.format(output, error))
-                output, error = shell.execute_command("openssl x509 -req -in " + x509main.CACERTFILEPATH + server.ip + ".csr -CA " + x509main.CACERTFILEPATH + "int.pem -CAkey " + \
+                output, error = shell.execute_command("openssl x509 -req -in " + x509main.CACERTFILEPATH + server.ip + ".csr -CA " + x509main.CACERTFILEPATH + "int.pem -CAkey " +
                                 x509main.CACERTFILEPATH + "int.key -CAcreateserial -CAserial " + x509main.CACERTFILEPATH + "intermediateCA.srl -out " + x509main.CACERTFILEPATH + server.ip + ".pem -days 365 -sha256 -extfile ./pytests/security/clientconf3.conf -extensions req_ext")
                 log.info ('Output message is {0} and error message is {1}'.format(output, error))
                 output, error = shell.execute_command("cat " + x509main.CACERTFILEPATH + server.ip + ".pem " + x509main.CACERTFILEPATH + "int.pem " + x509main.CACERTFILEPATH + "ca.pem > " + x509main.CACERTFILEPATH + "long_chain" + server.ip + ".pem")
@@ -199,7 +202,7 @@ class x509main:
             log.info ('Output message is {0} and error message is {1}'.format(output, error))
             output, error = shell.execute_command("openssl req -new -key " + x509main.CACERTFILEPATH + client_ip + ".key -out " + x509main.CACERTFILEPATH + client_ip + ".csr -config ./pytests/security/clientconf2.conf")
             log.info ('Output message is {0} and error message is {1}'.format(output, error))
-            output, error = shell.execute_command("openssl x509 -req -in " + x509main.CACERTFILEPATH + client_ip + ".csr -CA " + x509main.CACERTFILEPATH + "int.pem -CAkey " + \
+            output, error = shell.execute_command("openssl x509 -req -in " + x509main.CACERTFILEPATH + client_ip + ".csr -CA " + x509main.CACERTFILEPATH + "int.pem -CAkey " +
                                 x509main.CACERTFILEPATH + "int.key -CAcreateserial -CAserial " + x509main.CACERTFILEPATH + "intermediateCA.srl -out " + x509main.CACERTFILEPATH + client_ip + ".pem -days 365 -sha256 -extfile ./pytests/security/clientconf2.conf -extensions req_ext")
             log.info ('Output message is {0} and error message is {1}'.format(output, error))
             output, error = shell.execute_command("cat " + x509main.CACERTFILEPATH + client_ip + ".pem " + x509main.CACERTFILEPATH + "int.pem " + x509main.CACERTFILEPATH + "ca.pem > " + x509main.CACERTFILEPATH + "long_chain" + client_ip + ".pem")
@@ -273,7 +276,7 @@ class x509main:
         shell.delete_file(final_path, "chain.pem")
         shell.delete_file(final_path, "pkey.key")
         if os_type == 'windows':
-            final_path = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/inbox'
+            final_path = '/cygdrive/c/Program Files/Couchbase/Server/var/lib/couchbase/inbox'
             shell.execute_command('rm -rf ' + final_path)
         else:
             shell.execute_command('rm -rf ' + final_path)
@@ -476,7 +479,7 @@ class x509main:
         cli_command = 'ssl-manage'
         options = "--set-client-auth "  + dest_cert_file
         remote_client = RemoteMachineShellConnection(self.host)
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                     options=options, cluster_host="localhost", user=user, password=password)
         log.info (" -- Output of command ssl-manage with --set-client-auth is {0} and erorr is {1}".format(output, error))
 

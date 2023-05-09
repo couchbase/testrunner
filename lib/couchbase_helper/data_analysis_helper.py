@@ -902,7 +902,7 @@ class DataCollector(object):
             shards_with_data[bucket.name] = []
             print("---- Collecting data in backup repo")
             if master_key == "random_keys":
-                master_key = ".\{12\}$"
+                master_key = ".{12}$"
             dump_output = []
 
             repository = backupset.name if backupset else "backup"
