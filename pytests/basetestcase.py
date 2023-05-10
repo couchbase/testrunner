@@ -473,6 +473,9 @@ class OnPremBaseTestCase(unittest.TestCase):
     def suite_setUp(self):
         pass
 
+    def suite_tearDown(self):
+        pass
+
     def parse_params(self):
         self.log_level = self.input.param("log_level", None)
         self.use_sdk_client = self.input.param("use_sdk_client", False)
