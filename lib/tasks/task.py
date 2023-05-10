@@ -337,7 +337,8 @@ class BucketCreateTask(Task):
 
         version = rest.get_nodes_self().version
         try:
-            if float(version[:2]) >= 3.0 and self.bucket_priority is not None:
+            if (float(version[:2]) >= 3.0 or float(version[:2]) == 0.0) \
+                    and self.bucket_priority is not None:
                 rest.create_bucket(bucket=self.bucket,
                                    ramQuotaMB=self.size,
                                    replicaNumber=self.replicas,
