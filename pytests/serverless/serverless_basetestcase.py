@@ -90,14 +90,15 @@ class ServerlessBaseTestCase(unittest.TestCase):
                 self.dataplane_id = self.new_dataplane_id
             else:
                 self.fail(f"Timed out waiting for dataplane to be ready, Aborting...")
-        self.dataplanes[self.dataplane_id] = ServerlessDataPlane(self.dataplane_id)
-        self.dp_obj = ServerlessDataPlane(self.dataplane_id)
-        self.rest_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.dataplane_id)
-        self.dp_obj.populate(rest_api_info=self.rest_info)
-        self.dataplanes[self.dataplane_id] = self.dp_obj
-        self.dp_rest = RestConnection(rest_username=self.dp_obj.admin_username,
-                                      rest_password=self.dp_obj.admin_password,
-                                      rest_srv=self.dp_obj.rest_host)
+        if self.dataplane_id:
+            self.dataplanes[self.dataplane_id] = ServerlessDataPlane(self.dataplane_id)
+            self.dp_obj = ServerlessDataPlane(self.dataplane_id)
+            self.rest_info = self.api.get_access_to_serverless_dataplane_nodes(dataplane_id=self.dataplane_id)
+            self.dp_obj.populate(rest_api_info=self.rest_info)
+            self.dataplanes[self.dataplane_id] = self.dp_obj
+            self.dp_rest = RestConnection(rest_username=self.dp_obj.admin_username,
+                                          rest_password=self.dp_obj.admin_password,
+                                          rest_srv=self.dp_obj.rest_host)
         if self.throttling_off:
             throttle = throttling(self.dp_obj.rest_host, self.dp_obj.admin_username, self.dp_obj.admin_password)
             throttle.set_cluster_limit(-1, service='dataThrottleLimit')
