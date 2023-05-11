@@ -340,6 +340,36 @@ class CapellaAPI:
             self.tenant_id, self.project_id, database_id)
         resp.raise_for_status()
 
+    def pause_operation(self, database_id, state, pause_complete=True):
+        status = self.serverless_api.pause_db(database_id=database_id)
+        if status.status_code != 202:
+            raise Exception(str(status.content))
+        if pause_complete:
+            if not self.wait_hibernation(state=state, database_id=database_id):
+                raise Exception(f'pause operation has failed on database {database_id}')
+
+    def resume_operation(self, database_id, state, resume_complete=True):
+        status = self.serverless_api.resume_db(database_id=database_id)
+        if status.status_code != 202:
+            raise Exception(str(status.content))
+        if resume_complete:
+            if not self.wait_hibernation(state=state, database_id=database_id):
+                raise Exception(f'Resume operation has failed on database {database_id}')
+
+    def wait_hibernation(self, state, database_id, timeout=600):
+        status = self.get_database_info(database_id=database_id)
+        retry = 0
+        if status['status']['state'] == state:
+            return True
+        else:
+            while retry <= timeout:
+                status = self.get_database_info(database_id=database_id)
+                if status['status']['state'] == state:
+                    return True
+                time.sleep(1)
+                retry += 1
+        raise Exception(f'Operation {state} failed')
+
     def create_dataplane_wait_for_ready(self, overRide=None):
         if overRide is None:
             config = {
