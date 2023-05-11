@@ -1403,7 +1403,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         else:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
-                            "Expected error message not found")
+                            "Expected error message not found. Expected message: " + str(error_msg) + "   Actual: " + str(stdout))
 
     def testBucketCompact(self):
         username = self.input.param("username", None)
