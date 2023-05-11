@@ -926,8 +926,8 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
         self.stop_queries = True
 
-        self.log.info("Sleeping 50 minutes to observe scale in")
-        time.sleep(3000)
+        self.log.info("Sleeping 60 minutes to observe scale in")
+        time.sleep(3600)
 
         self.stop_monitoring_stats = True
         time.sleep(100)
