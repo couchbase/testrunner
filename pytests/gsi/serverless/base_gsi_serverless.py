@@ -330,7 +330,7 @@ class BaseGSIServerless(QueryBaseServerless):
             node_stats[index_node] = self.get_index_stats(indexer_node=index_node, rest_info=rest_info)
         self.populate_data(doc_template=doc_template)
 
-    def get_all_index_node_usage_stats(self):
+    def get_all_index_node_usage_stats(self, print_stats=True):
         node_wise_stats = {}
         for dataplane in self.dataplanes.values():
             if not dataplane:
@@ -343,7 +343,8 @@ class BaseGSIServerless(QueryBaseServerless):
             for node in index_nodes:
                 nodes[node] = self.get_index_stats(indexer_node=node,
                                                    rest_info=rest_info)
-            self.log.info(f"Index nodes list: {nodes.keys()}")
+            if print_stats:
+                self.log.info(f"Index nodes list: {nodes.keys()}")
             for node in nodes.keys():
                 mem_quota = nodes[node]['memory_quota']
                 memory_used_actual = nodes[node]['memory_used_actual']
@@ -353,13 +354,14 @@ class BaseGSIServerless(QueryBaseServerless):
                 num_indexes = nodes[node]['num_indexes']
                 memory_used_percentage = memory_used_actual / mem_quota * 100
                 units_used_percentage = units_used_actual / units_quota * 100
-                self.log.info(f"Index stats for {node} are memory_quota: {mem_quota}. "
-                              f"Memory used actual {memory_used_actual}."
-                              f"units_quota {units_quota} "
-                              f"units_used_actual {units_used_actual} num of tenants {num_tenants} ")
-                self.log.info(f"Memory used %: {memory_used_percentage} . \n "
-                              f"Units used % : {units_used_percentage} "
-                              f"\n Num. of tenants:{num_tenants}")
+                if print_stats:
+                    self.log.info(f"Index stats for {node} are memory_quota: {mem_quota}. "
+                                  f"Memory used actual {memory_used_actual}."
+                                  f"units_quota {units_quota} "
+                                  f"units_used_actual {units_used_actual} num of tenants {num_tenants} ")
+                    self.log.info(f"Memory used %: {memory_used_percentage} . \n "
+                                  f"Units used % : {units_used_percentage} "
+                                  f"\n Num. of tenants:{num_tenants}")
                 node_wise_stats.update({node: {"memory_quota": mem_quota,
                                                "memory_used_actual": memory_used_actual,
                                                "units_quota": units_quota,

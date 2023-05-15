@@ -29,7 +29,7 @@ class GSIUtils(object):
         self.run_query = query_obj
         self.batch_size = 0
 
-    def generate_magma_doc_loader_index_definition(self, index_name_prefix=None):
+    def generate_magma_doc_loader_index_definition(self, index_name_prefix=None, skip_primary=False):
         definitions_list = []
         if not index_name_prefix:
             index_name_prefix = "docloader" + str(uuid.uuid4()).replace("-", "")
@@ -40,11 +40,12 @@ class GSIUtils(object):
                             query_template=RANGE_SCAN_TEMPLATE.format("*", 'name is not null')))
 
         # Primary Query
-        prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
-        definitions_list.append(
-            QueryDefinition(index_name=prim_index_name, index_fields=[],
-                            query_template=RANGE_SCAN_TEMPLATE.format("*", "attributes.dimensions.height > 40"),
-                            is_primary=True))
+        if not skip_primary:
+            prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
+            definitions_list.append(
+                QueryDefinition(index_name=prim_index_name, index_fields=[],
+                                query_template=RANGE_SCAN_TEMPLATE.format("*", "attributes.dimensions.height > 40"),
+                                is_primary=True))
 
         # GSI index on multiple fields
         definitions_list.append(
@@ -90,7 +91,7 @@ class GSIUtils(object):
         self.batch_size = len(definitions_list)
         return definitions_list
 
-    def generate_employee_data_index_definition(self, index_name_prefix=None):
+    def generate_employee_data_index_definition(self, index_name_prefix=None, skip_primary=False):
         definitions_list = []
         if not index_name_prefix:
             index_name_prefix = "employee" + str(uuid.uuid4()).replace("-", "")
@@ -101,10 +102,11 @@ class GSIUtils(object):
                             query_template=RANGE_SCAN_TEMPLATE.format("*", 'name = "employee-1" ')))
 
         # Primary Query
-        prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
-        definitions_list.append(
-            QueryDefinition(index_name=prim_index_name, index_fields=[],
-                            query_template=RANGE_SCAN_TEMPLATE.format("*", "test_rate > 1"), is_primary=True))
+        if not skip_primary:
+            prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
+            definitions_list.append(
+                QueryDefinition(index_name=prim_index_name, index_fields=[],
+                                query_template=RANGE_SCAN_TEMPLATE.format("*", "test_rate > 1"), is_primary=True))
 
         # GSI index on multiple fields
         definitions_list.append(
@@ -139,7 +141,7 @@ class GSIUtils(object):
         self.batch_size = len(definitions_list)
         return definitions_list
 
-    def generate_hotel_data_index_definition(self, index_name_prefix=None):
+    def generate_hotel_data_index_definition(self, index_name_prefix=None, skip_primary=False):
         definitions_list = []
         if not index_name_prefix:
             index_name_prefix = "hotel" + str(uuid.uuid4()).replace("-", "")
@@ -150,10 +152,11 @@ class GSIUtils(object):
                             query_template=RANGE_SCAN_TEMPLATE.format("*", "age > 0")))
 
         # Primary Query
-        prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
-        definitions_list.append(
-            QueryDefinition(index_name=prim_index_name, index_fields=[],
-                            query_template=RANGE_SCAN_TEMPLATE.format("*", "suffix is not NULL"), is_primary=True))
+        if not skip_primary:
+            prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
+            definitions_list.append(
+                QueryDefinition(index_name=prim_index_name, index_fields=[],
+                                query_template=RANGE_SCAN_TEMPLATE.format("*", "suffix is not NULL"), is_primary=True))
 
         # GSI index on multiple fields
         definitions_list.append(
@@ -173,7 +176,7 @@ class GSIUtils(object):
                                                                       "free_breakfast=True and free_parking=True and "
                                                                       "price is not null and "
                                                                       "array_count(public_likes)>5 and "
-                                                                      "`type`='Hotel' group by country limit 100")))
+                                                                      "`type`='Hotel' group by country")))
 
         # GSI index with Flatten Keys
         definitions_list.append(
@@ -184,8 +187,7 @@ class GSIUtils(object):
                             query_template=RANGE_SCAN_TEMPLATE.format("*",
                                                                       "ANY r IN reviews SATISFIES r.author LIKE 'M%%' "
                                                                       "AND r.ratings.Cleanliness = 3 END AND "
-                                                                      "free_parking = TRUE AND country IS NOT NULL "
-                                                                      "limit 100")))
+                                                                      "free_parking = TRUE AND country IS NOT NULL ")))
 
         # GSI index with missing keys
         definitions_list.append(
@@ -228,12 +230,12 @@ class GSIUtils(object):
                                                                       'country is not null and `type` is not null '
                                                                       'and (any r in reviews satisfies '
                                                                       'r.ratings.`Check in / front desk` '
-                                                                      'is not null end) limit 100')))
+                                                                      'is not null end) ')))
 
         self.batch_size = len(definitions_list)
         return definitions_list
 
-    def generate_person_data_index_definition(self, index_name_prefix=None):
+    def generate_person_data_index_definition(self, index_name_prefix=None, skip_primary=False):
         definitions_list = []
         if not index_name_prefix:
             index_name_prefix = "person" + str(uuid.uuid4()).replace("-", "")
@@ -244,10 +246,11 @@ class GSIUtils(object):
                             query_template=RANGE_SCAN_TEMPLATE.format("*", "age > 0")))
 
         # Primary Query
-        prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
-        definitions_list.append(
-            QueryDefinition(index_name=prim_index_name, index_fields=[],
-                            query_template=RANGE_SCAN_TEMPLATE.format("*", "suffix is not NULL"), is_primary=True))
+        if not skip_primary:
+            prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
+            definitions_list.append(
+                QueryDefinition(index_name=prim_index_name, index_fields=[],
+                                query_template=RANGE_SCAN_TEMPLATE.format("*", "suffix is not NULL"), is_primary=True))
 
         # GSI index on multiple fields
         definitions_list.append(
@@ -286,6 +289,12 @@ class GSIUtils(object):
             create_index_list.append(query)
         return create_index_list
 
+    def get_build_indexes_query(self, definition_list, namespace):
+        index_name_list = [f"`{index_gen.index_name}`" for index_gen in definition_list]
+        build_indexes_string = ", ".join(index_name_list)
+        build_query = f'BUILD INDEX ON {namespace} ({build_indexes_string})'
+        return build_query
+
     def get_drop_index_list(self, definition_list, namespace):
         drop_index_list = []
         for index_gen in definition_list:
@@ -293,10 +302,12 @@ class GSIUtils(object):
             drop_index_list.append(query)
         return drop_index_list
 
-    def get_select_queries(self, definition_list, namespace):
+    def get_select_queries(self, definition_list, namespace, limit=0):
         select_query_list = []
         for index_gen in definition_list:
             query = index_gen.generate_query(bucket=namespace)
+            if limit > 0:
+                query = f'{query} LIMIT {limit}'
             select_query_list.append(query)
         return select_query_list
 
@@ -411,15 +422,19 @@ class GSIUtils(object):
     def cleanup_operations(self):
         pass
 
-    def get_index_definition_list(self, dataset, prefix=None):
+    def get_index_definition_list(self, dataset, prefix=None, skip_primary=False):
         if dataset == 'Person' or dataset == 'default':
-            definition_list = self.generate_person_data_index_definition(index_name_prefix=prefix)
+            definition_list = self.generate_person_data_index_definition(index_name_prefix=prefix,
+                                                                         skip_primary=skip_primary)
         elif dataset == 'Employee':
-            definition_list = self.generate_employee_data_index_definition(index_name_prefix=prefix)
+            definition_list = self.generate_employee_data_index_definition(index_name_prefix=prefix,
+                                                                           skip_primary=skip_primary)
         elif dataset == 'Hotel':
-            definition_list = self.generate_hotel_data_index_definition(index_name_prefix=prefix)
+            definition_list = self.generate_hotel_data_index_definition(index_name_prefix=prefix,
+                                                                        skip_primary=skip_primary)
         elif dataset == 'Magma':
-            definition_list = self.generate_magma_doc_loader_index_definition(index_name_prefix=prefix)
+            definition_list = self.generate_magma_doc_loader_index_definition(index_name_prefix=prefix,
+                                                                              skip_primary=skip_primary)
         else:
             raise Exception("Provide correct dataset. Valid values are Person, Employee, Magma, and Hotel")
         return definition_list

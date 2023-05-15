@@ -8,18 +8,18 @@ __git_user__ = "hrajput89"
 __created_on__ = 29/03/23 1:36 pm
 
 """
+import json
+import math
 import pprint
 import random
-import math
-from datetime import datetime, timedelta
 from collections import deque, defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
 from json import loads
 from string import digits, ascii_letters
-
-from gsi.serverless.base_gsi_serverless import BaseGSIServerless
-from concurrent.futures import ThreadPoolExecutor
 from threading import Event, Lock
 
+from gsi.serverless.base_gsi_serverless import BaseGSIServerless
 from membase.api.serverless_rest_client import ServerlessRestConnection as RestConnection
 from table_view import TableView
 
@@ -48,10 +48,11 @@ class ServerlessGSIVolume(BaseGSIServerless):
         self.lvt_data_load = self.input.param("lvt_data_load", 10000)
         self.hvt_data_load = self.input.param("hvt_data_load", 100000)
         self.svt_data_load = self.input.param("svt_data_load", 0)
-        self.num_queries_in_parallel = self.input.param("num_queries_in_parallel", 20)
+        self.query_result_limit = self.input.param("query_result_limit", 100)
+        self.num_queries_in_parallel = self.input.param("num_queries_in_parallel", 50)
         self.test_run_duration = self.input.param("test_run_duration", 24 * 60 * 60)
         self.stats_dump_timer = self.input.param("stats_dump_timer", 300)
-        self.new_tenant_iter = self.input.param("new_tenant_iter", 10)
+        self.new_tenant_iter = self.input.param("new_tenant_iter", 5)
         self.new_tenants_count = self.input.param("self.new_tenants_count", 3)
         self.cb_collect_duration = self.input.param("cb_collect_duration", 1800)
         self.svt_ids, self.hvt_ids, self.lvt_ids = set(), set(), set()
@@ -61,7 +62,8 @@ class ServerlessGSIVolume(BaseGSIServerless):
         self.overflown_tenants_for_indexes = set()
         self.query_run_stats_dict = {"SELECT": {"failed_count": 0, "total_count": 0, "success_count": 0},
                                      "DROP": {"failed_count": 0, "total_count": 0, "success_count": 0},
-                                     "CREATE": {"failed_count": 0, "total_count": 0, "success_count": 0}}
+                                     "CREATE": {"failed_count": 0, "total_count": 0, "success_count": 0},
+                                     "BUILD": {"failed_count": 0, "total_count": 0, "success_count": 0}}
         self.lock = Lock()
         self.index_scale_up = False
         self.index_scale_down = False
@@ -75,7 +77,7 @@ class ServerlessGSIVolume(BaseGSIServerless):
         self.stats_dump_event.set()
         self.query_load = {'lvt': {}, 'hvt': {}, 'svt': {}}
         self.drop_queries_dict = dict()
-        for _, stats in self.get_all_index_node_usage_stats().items():
+        for _, stats in self.get_all_index_node_usage_stats(print_stats=False).items():
             self.mem_quota = stats["memory_quota"]
             self.units_quota = stats["units_quota"]
             break
@@ -92,45 +94,54 @@ class ServerlessGSIVolume(BaseGSIServerless):
     def suite_setUp(self):
         pass
 
-    def create_indexes_for_tenant(self, database, db_id, weightage):
+    def create_indexes_for_tenant(self, database, db_id, weightage, skip_primary=False):
         """
         @summary: Create Indexes for a given tenant according to weightage passed
         """
         create_queries = []
+        build_queries = []
         for scope in database.collections:
             for collection in database.collections[scope]:
                 namespace = f"`{database.id}`.{scope}.{collection}"
                 for _ in range(weightage):
-                    definition_list = self.gsi_util_obj.get_index_definition_list(dataset=self.dataset)
+                    definition_list = self.gsi_util_obj.get_index_definition_list(dataset=self.dataset,
+                                                                                  skip_primary=skip_primary)
                     queries = self.gsi_util_obj.get_create_index_list(definition_list=definition_list,
-                                                                      namespace=namespace)
+                                                                      namespace=namespace, defer_build=True)
                     drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definition_list,
                                                                          namespace=namespace)
                     if db_id in self.drop_queries_dict:
                         self.drop_queries_dict[db_id].extend(drop_queries)
                     else:
                         self.drop_queries_dict[db_id] = drop_queries
+                    build_query = self.gsi_util_obj.get_build_indexes_query(definition_list=definition_list,
+                                                                            namespace=namespace)
                     create_queries.extend(queries)
+                    build_queries.append(build_query)
 
+                    # Adding select queries
                     if db_id in self.lvt_ids:
                         if db_id not in self.query_load['lvt']:
                             values = self.gsi_util_obj.get_select_queries(definition_list=self.definition_list,
-                                                                          namespace=namespace)
+                                                                          namespace=namespace,
+                                                                          limit=self.query_result_limit)
                             self.query_load['lvt'][db_id] = set(values)
                     elif db_id in self.hvt_ids:
                         if db_id not in self.query_load['hvt']:
                             values = self.gsi_util_obj.get_select_queries(definition_list=self.definition_list,
-                                                                          namespace=namespace)
+                                                                          namespace=namespace,
+                                                                          limit=self.query_result_limit)
                             self.query_load['hvt'][db_id] = set(values)
                     elif db_id in self.svt_ids:
                         if db_id not in self.query_load['svt']:
                             values = self.gsi_util_obj.get_select_queries(definition_list=self.definition_list,
-                                                                          namespace=namespace)
+                                                                          namespace=namespace,
+                                                                          limit=self.query_result_limit)
                             self.query_load['svt'][db_id] = set(values)
-        self.run_bulk_queries(queries=create_queries, database=database, db_id=db_id, batch_size=5,
-                              query_type='CREATE')
+        self.run_bulk_queries(queries=create_queries, database=database, db_id=db_id, batch_size=5, query_type='CREATE')
+        self.run_bulk_queries(queries=build_queries, database=database, db_id=db_id, batch_size=5, query_type='BUILD')
 
-    def create_indexes_for_tenants(self, databases_dict=None, continous_run=True):
+    def create_indexes_for_tenants(self, databases_dict=None, continous_run=True, skip_primary=False):
         """
         @summary: This method generates indexes for tenant based on the defined weightage for tenant category.
         If tenant have any no previous index load then new set of select queries would be populated and then query_load
@@ -152,17 +163,80 @@ class ServerlessGSIVolume(BaseGSIServerless):
                             weightage = self.svt_weightage
                         else:
                             weightage = 1
-                        task = executor.submit(self.create_indexes_for_tenant, database, db_id, weightage)
+                        task = executor.submit(self.create_indexes_for_tenant, database, db_id, weightage, skip_primary)
                         tasks.append(task)
 
                     for task in tasks:
                         task.result()
 
+                    # Monitoring building of indexes
+                    self.monitor_build_indexes_for_tenants()
+
+                    # Re-attempting building of indexes in case of build query failure
+                    index_node = random.choice(self.get_nodes_from_services_map(service='index', rest_info=self.dp_obj))
+                    rest = RestConnection(rest_username=self.dp_obj.admin_username,
+                                          rest_password=self.dp_obj.admin_password, rest_srv=index_node)
+                    index_status = rest.get_indexer_metadata()['status']
+
+                    index_build_dict = {}
+                    for index in index_status:
+                        index_namespace = f"`{index['bucket']}`.{index['scope']}.{index['collection']}"
+                        if index["status"] == 'Created':
+                            if index_namespace in index_build_dict:
+                                index_build_dict[index_namespace].add(f"`{index['indexName']}`")
+                            else:
+                                index_build_dict[index_namespace] = {f"`{index['indexName']}`"}
+                    if index_build_dict:
+                        for index_namespace, name_list in index_build_dict.items():
+                            bucket, _, _ = index_namespace.split('.')
+                            bucket = bucket.strip('`')
+                            build_indexes_string = ', '.join(name_list)
+                            build_query = f'BUILD INDEX ON {index_namespace} ({build_indexes_string})'
+                            self.run_bulk_queries(queries=[build_query], database=self.databases[bucket], db_id=bucket,
+                                                  batch_size=1, query_type="BUILD")
+                        self.monitor_build_indexes_for_tenants()
                     if not continous_run:
                         break
                 except Exception as err:
                     self.create_indexes_event.clear()
-                    raise Exception(err)
+                    self.log.fatal(f"Exception occurred during Index creation - {err}")
+
+    def monitor_build_indexes_for_tenants(self, timeout=1800, num_retry=2):
+        start = datetime.now()
+        if num_retry == 0:
+            self.log.critical("Indexes Building is taking unusually longer time. Check Index logs")
+            return
+
+        while datetime.now() < start + timedelta(seconds=timeout):
+            try:
+                index_node = random.choice(self.get_nodes_from_services_map(service='index', rest_info=self.dp_obj))
+                rest = RestConnection(rest_username=self.dp_obj.admin_username,
+                                      rest_password=self.dp_obj.admin_password, rest_srv=index_node)
+                index_status = rest.get_indexer_metadata()['status']
+
+                state_table = TableView(self.log.info)
+                state_table.set_headers(["Index Name", "Bucket", "Scope", "Collection", "State"])
+                index_state_dict = {index["name"]: index["status"] for index in index_status
+                                    if index["status"] != "Ready"}
+                if index_state_dict:
+                    values = index_state_dict.values()
+                    if all(map(lambda x: x == 'Created', values)):
+                        self.log.info("All Remaining indexes are in Created state")
+                        break
+                    for index in index_status:
+                        if index["name"] in index_state_dict:
+                            state_table.add_row([index["name"], index["bucket"], index["scope"],
+                                                 index["collection"], index["status"]])
+                    state_table.display("Index Building Status")
+                    self.sleep(60 * 4, "Waiting for indexes to be online")
+                else:
+                    self.log.info("All Indexes are UP and READY!!!")
+                    break
+            except Exception as err:
+                self.log.critical(f"Error occurred during Index Building: {err}")
+        else:
+            self.log.info(f"All Indexes didn't build in {timeout} seconds. Running the polling again")
+            self.monitor_build_indexes_for_tenants(timeout=timeout * 2, num_retry=num_retry - 1)
 
     def run_bulk_queries(self, queries, database, db_id, batch_size=20, query_type="SELECT"):
         """
@@ -196,7 +270,6 @@ class ServerlessGSIVolume(BaseGSIServerless):
                             self.overflown_tenants_for_indexes.add(db_id)
                         elif err_msg in str(err):
                             continue
-                        self.log.critical(err)
 
     def drop_indexes_from_overflown_tenants(self):
         """
@@ -339,9 +412,11 @@ class ServerlessGSIVolume(BaseGSIServerless):
                                      start_num=self.num_of_tenants,
                                      seed=self.database_prefix)
             new_db_ids = list(set(self.databases.keys()) - old_db_ids)
+            self.log.info(f"New Tenants Ids - {new_db_ids}")
             self.populate_tenant_category(db_ids=new_db_ids, lvt_weightage=1,
                                           hvt_weightage=1, svt_weightage=1)
             self.num_of_tenants += self.new_tenants_count
+            self.log.info(f"No. of tenants in cluster: {self.num_of_tenants}")
 
             new_dbs = [self.databases[db_id] for db_id in new_db_ids]
             lvt_dbs = [new_dbs[0]]
@@ -369,6 +444,11 @@ class ServerlessGSIVolume(BaseGSIServerless):
                                        key_prefix=self.doc_prefix)
                 tasks.append(task)
 
+            new_db_dict = {db_id: self.databases[db_id] for db_id in new_db_ids}
+            if not self.create_indexes_event.is_set():
+                self.create_indexes_event.set()
+            create_index_tasks = executor.submit(self.create_indexes_for_tenants, database_dict=new_db_dict)
+            tasks.append(create_index_tasks)
             return tasks
 
     def check_cluster_state(self, timer=5):
@@ -404,6 +484,58 @@ class ServerlessGSIVolume(BaseGSIServerless):
                 self.log.critical(err)
             self.sleep(timer)
 
+    def dump_num_indexes_for_each_tenant(self, timer=600):
+        while self.stats_dump_event.is_set():
+            try:
+                index_dict = {}
+                consolidated_dict = {}
+                table = TableView(self.log.info)
+                table.set_headers(["Node", "Bucket", "scope", "collection", "num_of_indexes"])
+                consolidated_table = TableView(self.log.info)
+                consolidated_table.set_headers(["Node", "Bucket", "num_of_indexes"])
+                index_node = random.choice(self.get_nodes_from_services_map(service='index', rest_info=self.dp_obj))
+                rest = RestConnection(rest_username=self.dp_obj.admin_username,
+                                      rest_password=self.dp_obj.admin_password, rest_srv=index_node)
+                index_status = rest.get_indexer_metadata()['status']
+                for index in index_status:
+                    node = index["hosts"][0].split(":")[0]
+                    bucket = index["bucket"]
+                    scope = index["scope"]
+                    collection = index["collection"]
+                    key = f'{bucket}`$`{scope}`$`{collection}`$`{node}'  # used `$` as delimiter
+                    consolidated_key = f'{bucket}`$`{node}'
+                    if key in index_dict:
+                        index_dict[key] += 1
+                    else:
+                        index_dict[key] = 1
+                    if consolidated_key in consolidated_dict:
+                        consolidated_dict[consolidated_key] += 1
+                    else:
+                        consolidated_dict[consolidated_key] = 1
+
+                display_list = []
+                for key, value in index_dict.items():
+                    bucket, scope, collection, node = key.split("`$`")
+                    display_list.append([node, bucket, scope, collection, value])
+                display_list = sorted(display_list, key=lambda x: x[1])
+                for item in display_list:
+                    node, bucket, scope, collection, count = item
+                    table.add_row([node, bucket, scope, collection, count])
+                table.display("Tenant Index count stats")
+
+                consolidated_list = []
+                for key, value in consolidated_dict.items():
+                    bucket, node = key.split("`$`")
+                    consolidated_list.append([node, bucket, value])
+                consolidated_list = sorted(consolidated_list, key=lambda x: x[1])
+                for item in consolidated_list:
+                    node, bucket, total_indexes = item
+                    consolidated_table.add_row([node, bucket, total_indexes])
+                consolidated_table.display("Tenant consolidated Index count stats")
+            except Exception as err:
+                self.log.critical(f"Error occurred during index counting for tenants - {err}")
+            self.sleep(timer, f"Will dump Index stats after {timer}")
+
     def dump_gsi_threshold_stats(self, timer=600):
         """
         @summary: dumping GSI threshold stats after every timer interval
@@ -418,7 +550,7 @@ class ServerlessGSIVolume(BaseGSIServerless):
                                    "num_tenants",
                                    "units_quota",
                                    "units_used_actual"])
-                result = self.get_all_index_node_usage_stats()
+                result = self.get_all_index_node_usage_stats(print_stats=False)
                 for node, value in result.items():
                     table.add_row([node,
                                    value["memory_quota"],
@@ -509,7 +641,7 @@ class ServerlessGSIVolume(BaseGSIServerless):
                                "5 min Avg Mem",
                                "5 min Avg Units"])
             try:
-                indexer_node_stats = self.get_all_index_node_usage_stats()
+                indexer_node_stats = self.get_all_index_node_usage_stats(print_stats=False)
                 for node, value in indexer_node_stats.items():
                     if node not in self.last_5_mins:
                         self.last_5_mins[node] = deque([(value['memory_used_percentage'],
@@ -518,10 +650,10 @@ class ServerlessGSIVolume(BaseGSIServerless):
                     else:
                         self.last_5_mins[node].append((value['memory_used_percentage'],
                                                        value['units_used_percentage']))
-                    avg_mem_used = sum([consumption[0] for consumption in self.last_5_mins[node]]) / len(
-                        self.last_5_mins[node])
-                    avg_units_used = sum([consumption[1] for consumption in self.last_5_mins[node]]) / len(
-                        self.last_5_mins[node])
+                    avg_mem_used = round(sum([consumption[0] for consumption in self.last_5_mins[node]]) /
+                                         len(self.last_5_mins[node]), 2)
+                    avg_units_used = round(sum([consumption[1] for consumption in self.last_5_mins[node]]) /
+                                           len(self.last_5_mins[node]), 2)
                     if avg_mem_used > 70 or avg_units_used > 50:
                         self.nodes_above_HWM += 1
                     elif avg_mem_used > 45 or avg_units_used > 36:
@@ -535,8 +667,8 @@ class ServerlessGSIVolume(BaseGSIServerless):
                         str(indexer_node_stats[node]["num_indexes"]),
                         str(indexer_node_stats[node]["memory_used_actual"]),
                         f'{indexer_node_stats[node]["units_used_actual"]} / {indexer_node_stats[node]["units_quota"]}',
-                        avg_mem_used,
-                        avg_units_used
+                        f'{avg_mem_used}%',
+                        f'{avg_units_used}%'
                     ])
                 table.display("Index Node Stats")
                 self.log.info(f"GSI - Nodes below LWM: {self.nodes_below_LWM}")
@@ -705,23 +837,25 @@ class ServerlessGSIVolume(BaseGSIServerless):
         dataplane_id = dataplane_id or self.dataplane_id
         try:
             self.log.info("Dataplane Jobs:")
-            self.log.info(pprint.pformat(self.api.serverless_api.get_dataplane_job_info(dataplane_id)))
+            resp = json.loads(self.api.serverless_api.get_dataplane_job_info(dataplane_id).content)
+            self.log.info(pprint.pformat(resp))
             self.log.info("Scaling Records:")
-            self.log.info(pprint.pformat(self.api.serverless_api.get_all_scaling_records(dataplane_id).json()))
+            resp = json.loads(self.api.serverless_api.get_all_scaling_records(dataplane_id).content)
+            self.log.info(pprint.pformat(resp))
         except Exception as err:
             self.log.info(f"Scaling records are empty {err}")
         dataplane_state = "healthy"
         try:
-            dataplane_state = self.api.serverless_api.get_serverless_dataplane_info(
-                dataplane_id)["couchbase"]["state"]
+            resp = json.loads(self.api.serverless_api.get_serverless_dataplane_info(dataplane_id).content)
+            dataplane_state = resp["couchbase"]["state"]
         except Exception as err:
             self.log.critical(err)
         scaling_timeout = 5 * 60 * 60
         while dataplane_state == "healthy" and scaling_timeout >= 0:
             dataplane_state = "healthy"
             try:
-                dataplane_state = self.api.serverless_api.get_serverless_dataplane_info(
-                    dataplane_id)["couchbase"]["state"]
+                resp = json.loads(self.api.serverless_api.get_serverless_dataplane_info(dataplane_id).content)
+                dataplane_state = resp["couchbase"]["state"]
             except Exception as err:
                 self.log.critical(err)
             self.log.info(f"Cluster state is: {dataplane_state}. Target: {state} for {service}")
@@ -732,17 +866,20 @@ class ServerlessGSIVolume(BaseGSIServerless):
         while dataplane_state != "healthy" and scaling_timeout >= 0:
             dataplane_state = state
             try:
-                dataplane_state = self.api.serverless_api.get_serverless_dataplane_info(
-                    dataplane_id)["couchbase"]["state"]
+                resp = json.loads(self.api.serverless_api.get_serverless_dataplane_info(dataplane_id).content)
+                dataplane_state = resp["couchbase"]["state"]
             except Exception as err:
                 self.log.critical(err)
             self.log.info(f"Cluster state is: {dataplane_state}. Target: {state} for {service}")
             self.sleep(2)
             scaling_timeout -= 2
+
         self.log.info("Dataplane Jobs:")
-        self.log.info(pprint.pformat(self.api.serverless_api.get_dataplane_job_info(dataplane_id)))
+        resp = json.loads(self.api.serverless_api.get_dataplane_job_info(dataplane_id).content)
+        self.log.info(pprint.pformat(resp))
         self.log.info("Scaling Records:")
-        self.log.info(pprint.pformat(self.api.serverless_api.get_all_scaling_records(dataplane_id)))
+        resp = json.loads(self.api.serverless_api.get_all_scaling_records(dataplane_id).content)
+        self.log.info(pprint.pformat(resp))
         self.sleep(10)
         self.lock.release()
 
@@ -761,7 +898,7 @@ class ServerlessGSIVolume(BaseGSIServerless):
         """
         @summary: Check CP jobs for a given operation for a given service and returns bool
         """
-        jobs = loads(self.api.serverless_api.get_dataplane_job_info(self.dataplane_id))
+        jobs = loads(self.api.serverless_api.get_dataplane_job_info(self.dataplane_id).content)
         for job in jobs["clusterJobs"]:
             if job.get("payload"):
                 if job["payload"].get("tags"):
@@ -827,7 +964,7 @@ class ServerlessGSIVolume(BaseGSIServerless):
                 self.log.info("Step: Test GSI Auto-Scaling due to num of GSI tenants per sub-cluster")
                 self.check_cluster_scaling(service="gsi")
                 curr_gsi_nodes = self.get_nodes_from_services_map(service='index', rest_info=self.dp_obj)
-                if curr_gsi_nodes != prev_gsi_nodes+2:
+                if curr_gsi_nodes != prev_gsi_nodes + 2:
                     self.log.critical("GSI Auto-scaling didn't happen")
 
     def check_index_auto_scaling_rebl(self, timer=60):
@@ -883,6 +1020,7 @@ class ServerlessGSIVolume(BaseGSIServerless):
                 executor.submit(self.dump_cluster_nodes_info, timer=self.stats_dump_timer)
                 executor.submit(self.check_cluster_state, timer=self.stats_dump_timer)
                 executor.submit(self.check_ebs_scaling, timer=self.stats_dump_timer)
+                executor.submit(self.dump_num_indexes_for_each_tenant, timer=self.stats_dump_timer)
                 executor.submit(self.check_memory_management, timer=self.stats_dump_timer)
                 executor.submit(self.check_kv_scaling)
                 executor.submit(self.check_n1ql_scaling)
@@ -943,7 +1081,7 @@ class ServerlessGSIVolume(BaseGSIServerless):
                 end_time = curr_time + timedelta(seconds=self.test_run_duration)
                 iteration_count = 1
 
-                executor.submit(self.create_indexes_for_tenants)
+                executor.submit(self.create_indexes_for_tenants, skip_primary=True)
                 executor.submit(self.run_select_query_load)
                 executor.submit(self.drop_indexes_from_overflown_tenants)
                 # Running continuous query_load
@@ -955,26 +1093,28 @@ class ServerlessGSIVolume(BaseGSIServerless):
                     self.log.info("*" * 50)
                     self.log.info(f"Starting iteration no.: {iteration_count}")
                     self.log.info("*" * 50)
+                    iteration_start_time = datetime.now()
                     if not self.query_event.is_set():
                         self.query_event.set()
                         executor.submit(self.run_select_query_load)
                     if not self.create_indexes_event.is_set():
                         self.create_indexes_event.set()
-                        executor.submit(self.create_indexes_for_tenants)
+                        executor.submit(self.create_indexes_for_tenants, skip_primary=True)
 
                     # add more tenants every time below condition satisfy
                     add_tenant_tasks = []
                     if iteration_count % self.new_tenant_iter == 0:
+                        self.log.info("Adding new tenants to cluster")
                         add_tenant_tasks = executor.submit(self.add_tenants_during_test_run)
 
                     # Populating data load for tenants
-                    lvt_task = executor.submit(self.generate_doc_load_for_tenant_category, ops_rate=2000,
+                    lvt_task = executor.submit(self.generate_doc_load_for_tenant_category, ops_rate=1000,
                                                tenant_type='lvt', load_volume=self.lvt_data_load)
                     if self.svt_data_load > 0:
                         svt_task = executor.submit(self.generate_doc_load_for_tenant_category, ops_rate=100,
                                                    tenant_type='svt', load_volume=self.svt_data_load)
 
-                    hvt_task = executor.submit(self.generate_doc_load_for_tenant_category, ops_rate=10000,
+                    hvt_task = executor.submit(self.generate_doc_load_for_tenant_category, ops_rate=1000,
                                                tenant_type='hvt', load_volume=self.hvt_data_load)
 
                     try:
@@ -1007,7 +1147,11 @@ class ServerlessGSIVolume(BaseGSIServerless):
                     self.log.info("*" * 50)
                     self.log.info(f"Ending iteration no.: {iteration_count}")
                     self.log.info("*" * 50)
+                    iteration_execution_time = (datetime.now() - iteration_start_time).total_seconds()
+                    self.log.info(f"Iteration Execution time : {iteration_execution_time}")
                     iteration_count += 1
+                    if iteration_count % self.new_tenant_iter == 0:
+                        self.sleep(15*60, "Cool Down period for all Tenant")
 
             except Exception as err:
                 raise Exception(f"Unsuccessful Test run {err}")
