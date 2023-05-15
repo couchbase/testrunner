@@ -3793,6 +3793,7 @@ class FTSBaseTest(unittest.TestCase):
         self.enable_dp = self._input.param("enable_dp", False)
         self.use_https = self._input.param("use_https", False)
         self.enforce_tls = self._input.param("enforce_tls", False)
+        self.server_grouping = self._input.param("server_grouping", None)
         if self.use_https:
             CbServer.use_https = True
         self.ipv4_only = self._input.param("ipv4_only", False)
@@ -3956,6 +3957,46 @@ class FTSBaseTest(unittest.TestCase):
         for i, server in enumerate(servers):
             server.services = ",".join(server.services)
             self._input.servers[i] = server
+
+    def _create_server_groups(self):
+        if self.server_grouping:
+            rest = RestConnection(self._cb_cluster.get_master_node())
+            server_groups = self.server_grouping.split(":")
+            self.log.info("server groups : %s", server_groups)
+
+            zones = list(rest.get_zone_names().keys())
+            group_1 = zones[0]
+
+            # Delete Server groups
+            for zone in zones:
+                if zone != "Group 1":
+                    nodes_in_zone = rest.get_nodes_in_zone(zone)
+                    if nodes_in_zone:
+                        rest.shuffle_nodes_in_zones(list(nodes_in_zone.keys()),
+                                                         zone, "Group 1")
+                    rest.delete_zone(zone)
+
+            zones = list(rest.get_zone_names().keys())
+            source_zone = zones[0]
+
+            # Create Server groups
+            for i in range(1, len(server_groups) + 1):
+                server_grp_name = "ServerGroup_" + str(i)
+                if not rest.is_zone_exist(server_grp_name):
+                    rest.add_zone(server_grp_name)
+
+            # Add nodes to Server groups
+            i = 1
+            for server_grp in server_groups:
+                server_list = []
+                server_grp_name = "ServerGroup_" + str(i)
+                i += 1
+                nodes_in_server_group = server_grp.split("-")
+                for node in nodes_in_server_group:
+                    rest.shuffle_nodes_in_zones(
+                        [self._input.servers[int(node)].ip], source_zone,
+                        server_grp_name)
+            rest.delete_zone(group_1)
 
     def set_impossible_params(self):
         """ Skip various params that are impossible if there is no SSH access to the nodes
