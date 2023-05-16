@@ -19,6 +19,7 @@ from TestInput import TestInputSingleton
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, CBAS_QUOTA
 from testconstants import COUCHBASE_FROM_VERSION_4, IS_CONTAINER, CLUSTER_QUOTA_RATIO
 from decorator import decorator
+import pprint
 
 from lib.Cb_constants.CBServer import CbServer
 
@@ -6278,14 +6279,14 @@ class RestConnection(object):
                 return True
         raise Exception(f"Operation {operation} timed out")
 
-    def get_hibernation_status(self, tasktype='hibernation', operation=None):
+    def get_hibernation_status(self, operation, tasktype='hibernation'):
         tasklist = self.ns_server_tasks()
         clustertasks = None
         retry = 0
         try:
             for task in tasklist:
                 if task['type'] == tasktype:
-                    if operation is None or task['op'] != operation:
+                    if task['op'] != operation:
                         retry +=1
                         time.sleep(1)
                         if retry > 300:
@@ -6295,6 +6296,9 @@ class RestConnection(object):
                         break
         except ValueError:
             pass
+        if clustertasks is None:
+            log.error(f"Operation {operation} not found in ns_server task endpoint \n {pprint.PrettyPrinter(width = 20).pprint(tasklist)}")
+            raise Exception("Operation {operation} not found in ns_server task endpoint")
         return clustertasks
 
     def get_user(self, user_id):
