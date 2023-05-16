@@ -3794,6 +3794,7 @@ class FTSBaseTest(unittest.TestCase):
         self.use_https = self._input.param("use_https", False)
         self.enforce_tls = self._input.param("enforce_tls", False)
         self.server_grouping = self._input.param("server_grouping", None)
+        self.delete_server_groups = self._input.param("delete_server_groups", False)
         if self.use_https:
             CbServer.use_https = True
         self.ipv4_only = self._input.param("ipv4_only", False)
@@ -3825,6 +3826,21 @@ class FTSBaseTest(unittest.TestCase):
 
         # workaround for MB-16794
         # self.sleep(30, "working around MB-16794")
+        if self.delete_server_groups:
+            rest = RestConnection(self._cb_cluster.get_master_node())
+            zones = list(rest.get_zone_names().keys())
+
+            if not rest.is_zone_exist("Group 1"):
+                rest.add_zone("Group 1")
+
+            # Delete Server groups
+            for zone in zones:
+                if zone != "Group 1":
+                    nodes_in_zone = rest.get_nodes_in_zone(zone)
+                    if nodes_in_zone:
+                        rest.shuffle_nodes_in_zones(list(nodes_in_zone.keys()),
+                                                         zone, "Group 1")
+                    rest.delete_zone(zone)
 
         self.java_sdk_client = self._input.param("java_sdk_client", False)
         if self.java_sdk_client:
