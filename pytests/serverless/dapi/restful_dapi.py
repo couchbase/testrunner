@@ -1763,32 +1763,64 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                             "Got wrong error message for timeout parametere: {}".format(error_msg))
 
             # test expiry
-            # response = self.rest_dapi.insert_subdoc("key",
-            #                                         [{"type": "insert", "path":"star", "value": 3}],
-            #                                         "_default", "_default", "?expiry=20s&meta=true")
-            # self.log.info("Response code to insert subdoc: {}".format(response.status_code))
-            # self.assertTrue(response.status_code == 200,
-            #                 "Insert subdoc failed with expiry parameter for database: {}".format(database.id))
-            # response = self.rest_dapi.get_subdoc("key",
-            #                                      [{"type": "get", "path": "star"}],
-            #                                      "_default", "_default",
-            #                                      "?meta=true&withExpiry=true")
-            # self.log.info("Response code to get the subdoc with expiry time: {}".format(response.status_code))
-            # self.assertTrue(response.status_code == 200,
-            #                 "Get subdoc with expiry time failed for database: {}".format(database.id))
-            # self.log.info(response.content)
-            # time.sleep(30)
-            # response = self.rest_dapi.get_subdoc("key",
-            #                                      [{"type": "get", "path": "star"}],
-            #                                      "_default", "_default",
-            #                                      "?meta=true&withExpiry=true")
-            # self.log.info("Response code to get the subdoc with expiry time: {}".format(response.status_code))
-            # self.assertTrue(response.status_code == 404,
-            #                 "Still able to find after the expiry time: {}".format(database.id))
+            # inesrt a sub-doc
+            response = self.rest_dapi.insert_subdoc("key",
+                                                    [{"type": "insert", "path":"star", "value": 3}],
+                                                    "_default", "_default", "?expiry=20s&meta=true")
+            self.log.info("Response code to insert subdoc: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200,
+                            "Insert subdoc failed with expiry parameter for database: {}".format(database.id))
+            # check if sub-doc get inserted
+            response = self.rest_dapi.get_subdoc("key",
+                                                 [{"type": "get", "path": "star"}],
+                                                 "_default", "_default",
+                                                 "?meta=true&withExpiry=true")
+            self.log.info("Response code to get the subdoc with expiry time: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200,
+                            "Get subdoc with expiry time failed for database: {}".format(database.id))
+            self.log.info(response.content)
+            time.sleep(30)
+            # get sub-doc after the expiry time, sub-doc should not be present
+            response = self.rest_dapi.get_subdoc("key",
+                                                 [{"type": "get", "path": "star"}],
+                                                 "_default", "_default",
+                                                 "?meta=true&withExpiry=true")
+            self.log.info("Response code to get the subdoc with expiry time: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 404,
+                            "Still able to find after the expiry time: {}".format(database.id))
 
             # implement preserveExpiry query parameter
+            # insert document
+            response = self.rest_dapi.insert_doc("key", doc, "_default", "_default")
+            self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(database.id))
+            # insert sub-document
+            response = self.rest_dapi.insert_subdoc("key",
+                                                    [{"type": "insert", "path":"star", "value": 3}],
+                                                    "_default", "_default", "?expiry=20s&meta=true")
+            self.log.info("Response code to insert subdoc: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200,
+                            "Insert subdoc failed with expiry parameter for database: {}".format(database.id))
+            response = self.rest_dapi.insert_subdoc("key", [{"type": "upsert", "path":"star", "value": 4}],
+                                                     "_default", "_default", "?preserveExpiry=true&meta=true")
+            self.log.info("Response code for insertion of doc: {}".format(response.status_code))
+            time.sleep(20)
+            response = self.rest_dapi.get_subdoc("key",
+                                                 [{"type": "get", "path": "star"}],
+                                                 "_default", "_default",
+                                                 "?meta=true&withExpiry=true")
+            self.log.info("Response code for get sub-doc is: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 404, "Doc is still present after the expiry time")
 
             # test consistency token
+            response = self.rest_dapi.insert_doc("key", doc, "_default", "_default")
+            self.assertTrue(response.status_code == 201, "Insert doc failed for database: {}".format(database.id))
+            response = self.rest_dapi.insert_subdoc("key",
+                                                    [{"type": "insert", "path": "Birthday.time",
+                                                      "value": {"Hours": 12, "minute": 12, "seconds": 12}}]
+                                                    ,"_default", "_default", "?meta=true")
+
+            self.assertTrue(response.status_code == 200,
+                            "Insert subdoc failed for database: {}".format(database.id))
             response = self.rest_dapi.get_subdoc("key",
                                                  [{"type": "get", "path": "Birthday"}],
                                                  "_default", "_default", "?meta=true")
@@ -1807,12 +1839,26 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                                                     [{"type": "upsert", "path": "age", "value": 45}],
                                                     "_default", "_default",
                                                     "?consistencyToken={}".format(prev_consistency_token))
+            self.log.info("Response code for insertion of sub-doc with wrong CAS: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 409, "Insert subdoc with wrong CAS success")
             # should be getting error for wrong CAS
             response = self.rest_dapi.insert_subdoc("key",
                                                     [{"type": "upsert", "path": "age", "value": 45}],
                                                     "_default", "_default",
                                                     "?consistencyToken={}".format(cr_consistency_token))
-            # should be getting correct response after passing correct CAS
+            self.log.info("Response code for insertion of sub-doc with correct CAS: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200, "Insert subdoc with correct access failed")
+
+            # test storesemantics
+            response = self.rest_dapi.insert_subdoc("key",
+                                                    [{"type": "insert", "path":"star", "value": 3}],
+                                                    "_default", "_default", "?expiry=20s&meta=true")
+            self.log.info("Response code to insert subdoc: {}".format(response.status_code))
+            response = self.rest_dapi.insert_subdoc("key",
+                                                    [{"type": "insert", "path":"Birthday.star", "value": 4}],
+                                                    "_default", "_default", "?storeSemantics=upsert&meta=true")
+            self.log.info("Response code for insert subdoc with storesemantic is: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200, "Upsert subdoc with storesemantics failed.")
 
             # durability and storesemantics is still left
 
@@ -1843,21 +1889,39 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                             "Bulk insert doc failed for database: {}".format(database.id))
             query = {"query": "SELECT name, hobby FROM _default limit 10"}
             # test timeout param
-            response = self.rest_dapi.execute_query(query, "_default",
+            response = self.rest_dapi.execute_query(query,
+                                                    "_default",
                                                     "?timeout=0.0001s&meta=true")
             self.assertTrue(response.status_code == 400,
                             "Test timeout param for niql query param"
                             "failed for database: {}".format(database.id))
             # test readonly param
-            response = self.rest_dapi.execute_query(query, "_default", "?readonly=true&meta=true")
+            response = self.rest_dapi.execute_query(query,
+                                                    "_default",
+                                                    "?readonly=true&meta=true")
             self.assertTrue(response.status_code == 200, "Query execution failed for test readonly param")
             # test negative test of readonly
             query = {"query": "UPSERT INTO _default (KEY, VALUE) VALUES ('key-1', { 'type' : 'name', 'name' : 'SaurabhMishra' })"}
             response = self.rest_dapi.execute_query(query, "_default", "?readonly=true&meta=true")
-            self.log.info(response.status_code)
+            self.log.info("response code upsert doc using niql query with readonly query parameter {}".format(response.status_code))
+            self.assertTrue(response.status_code == 400, "Upsert with readonly query parameter success")
 
+            # test perserve expiry query parameter
+            response = self.rest_dapi.upsert_doc("key-1",
+                                                 {"name": "saurabh mishra"},
+                                                 "_default",
+                                                 "_default",
+                                                 "?expiry=20s&meta=true")
+            self.assertTrue(response.status_code == 200,
+                            "Upsert doc failed with expiry query parameter: {}".format(response.status_code))
+            query = {"query": "UPSERT INTO _default (KEY, VALUE) VALUES ('key-1', { 'type' : 'name', 'name' : 'SaurabhMishra' })"}
+            response = self.rest_dapi.execute_query(query, "_default", "?meta=true&preserveExpiry=true")
+            self.assertTrue(response.status_code == 200,
+                            "Execute query failed with preserveExpiry query param: {}".format(response.status_code))
+            time.sleep(30)
             response = self.rest_dapi.get_doc("key-1", "_default", "_default")
-            self.log.info(response.content)
+            self.log.info("Response code of get doc after expiry time: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 404, "Doc is still present after the expiry time in niql query")
 
 
     def test_2thsnd_collection_over_20buckets(self):
