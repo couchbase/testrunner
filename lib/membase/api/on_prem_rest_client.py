@@ -6217,6 +6217,10 @@ class RestConnection(object):
         json_parsed = json.loads(content)
         return status, json_parsed
 
+    def stop_pause_operation(self, bucket='default'):
+        result, content = self.stop_pause(bucket=bucket)
+        self.wait_bucket_hibernation(task="pause_bucket", operation="stopped")
+
     def resume_bucket(self, blob_region, s3_path, bucket='default', rate_limiter=104857600):
         api = f'{self.baseUrl}controller/resume'
         params_dict = {}
