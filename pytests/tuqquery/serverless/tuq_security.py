@@ -156,13 +156,13 @@ class QuerySecurityTests(ServerlessBaseTestCase):
             {'path': 'system:prepareds'}, {'path': 'system:scopes'}]
 
         system_catalog = {
+            'completed_requests':  {'statement': 'SELECT `queryContext`, statement FROM system:completed_requests', 'expected1': [{'queryContext': f'default:{database1.id}', 'statement': 'EXECUTE FUNCTION _default.sleep1(6000)'}], 'expected2': [{'queryContext': f'default:{database2.id}', 'statement': 'EXECUTE FUNCTION _default.sleep2(6000)'}]},
             'active_requests': {'statement': 'SELECT `queryContext` FROM system:active_requests', 'expected1': [{'queryContext': f'default:{database1.id}'}], 'expected2': [{'queryContext': f'default:{database2.id}'}]},
             'all_indexes':  {'statement': 'SELECT DISTINCT name FROM system:all_indexes WHERE name not like "#%"', 'expected1': [{'name': 'ix1'}], 'expected2': [{'name': 'ix2'}]},
             'all_keyspaces':  {'statement': 'SELECT `path` FROM system:all_keyspaces ORDER BY `path`', 'expected1': all_keyspaces_1, 'expected2': all_keyspaces_2},
             'all_keyspaces_info':  {'statement': 'SELECT `path` FROM system:all_keyspaces_info ORDER BY `path`', 'expected1': all_keyspaces_1, 'expected2': all_keyspaces_2},
             'all_scopes':  {'statement': 'SELECT name FROM system:all_scopes ORDER BY name', 'expected1': [{'name': '_default'}, {'name': '_system'}, {'name': 'scope1'}], 'expected2': [{'name': '_default'}, {'name': '_system'}, {'name': 'scope2'}]},
             'buckets':  {'statement': 'SELECT name FROM system:buckets', 'expected1': [{'name': f'{database1.id}'}], 'expected2': [{'name': f'{database2.id}'}]},
-            'completed_requests':  {'statement': 'SELECT `queryContext`, statement FROM system:completed_requests', 'expected1': [{'queryContext': f'default:{database1.id}', 'statement': 'EXECUTE FUNCTION _default.sleep1(6000)'}], 'expected2': [{'queryContext': f'default:{database2.id}', 'statement': 'EXECUTE FUNCTION _default.sleep2(6000)'}]},
             'datastores':  {'statement': 'SELECT * FROM system:datastores', 'expected1': [{'datastores': {'id': 'http://127.0.0.1:8091', 'url': 'http://127.0.0.1:8091'}}], 'expected2': [{'datastores': {'id': 'http://127.0.0.1:8091', 'url': 'http://127.0.0.1:8091'}}]},
             'dual':  {'statement': 'SELECT * FROM system:dual', 'expected1': [{'dual': None}], 'expected2': [{'dual': None}]},
             'functions':  {'statement': 'SELECT identity.name FROM system:functions', 'expected1': [{'name': 'f1'}, {'name': 'sleep1'}], 'expected2': [{'name': 'f2'}, {'name': 'sleep2'}]},
