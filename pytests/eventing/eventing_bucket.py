@@ -15,25 +15,9 @@ log = logging.getLogger()
 class EventingBucket(EventingBaseTest):
     def setUp(self):
         super(EventingBucket, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=1500)
-        if self.create_functions_buckets:
-            self.bucket_size = 256
-            self.metadata_bucket_size = 400
-            log.info(self.bucket_size)
-            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                       replicas=self.num_replicas)
-            bucket_params_meta = self._create_bucket_params(server=self.server, size=self.metadata_bucket_size,
-                                                            replicas=self.num_replicas)
-            self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.src_bucket = RestConnection(self.master).get_buckets()
-            self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params_meta)
-            self.buckets = RestConnection(self.master).get_buckets()
+        self.buckets = self.rest.get_buckets()
+        self.src_bucket = self.rest.get_bucket_by_name(self.src_bucket_name)
         self.gens_load = self.generate_docs(self.docs_per_day)
-        self.expiry = 3
         handler_code = self.input.param('handler_code', 'bucket_op')
         if handler_code == 'bucket_op':
             self.handler_code = "handler_code/ABO/insert.js"
@@ -49,27 +33,8 @@ class EventingBucket(EventingBaseTest):
             self.handler_code = HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS
         else:
             self.handler_code = "handler_code/ABO/insert.js"
-        if self.non_default_collection:
-            self.create_scope_collection(bucket=self.src_bucket_name, scope=self.src_bucket_name,
-                                         collection=self.src_bucket_name)
-            self.create_scope_collection(bucket=self.metadata_bucket_name, scope=self.metadata_bucket_name,
-                                         collection=self.metadata_bucket_name)
-            self.create_scope_collection(bucket=self.dst_bucket_name, scope=self.dst_bucket_name,
-                                         collection=self.dst_bucket_name)
-        # index is required for delete operation through n1ql
-        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
-                                      item_flag=self.item_flag, n1ql_port=self.n1ql_port,
-                                      full_docs_list=self.full_docs_list, log=self.log, input=self.input,
-                                      master=self.master, use_rest=True)
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
 
     def tearDown(self):
-        try:
-            self.undeploy_delete_all_functions()
-        except:
-            # This is just a cleanup API. Ignore the exceptions.
-            pass
         super(EventingBucket, self).tearDown()
 
     def test_eventing_with_ephemeral_buckets_with_lww_enabled(self):
@@ -90,15 +55,10 @@ class EventingBucket(EventingBaseTest):
                                                                        bucket_params=bucket_params))
         for task in tasks:
             task.result()
-        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
-                                 item_flag=self.item_flag, n1ql_port=self.n1ql_port,
-                                 full_docs_list=self.full_docs_list, log=self.log, input=self.input,
-                                 master=self.master, use_rest=True)
         for bucket in self.buckets:
             if bucket.name != "metadata":
                 query = "CREATE PRIMARY INDEX ON %s " % bucket.name
-                n1ql_helper.run_cbq_query(query=query, server=n1ql_node)
+                self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         try:
             # load data
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -540,21 +500,16 @@ class EventingBucket(EventingBaseTest):
         countMap = self.get_buckets_itemCount()
         finalDoc = countMap["metadata"]
         if (initalDoc != finalDoc):
-            n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-            n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
-                                     item_flag=self.item_flag, n1ql_port=self.n1ql_port,
-                                     full_docs_list=self.full_docs_list, log=self.log, input=self.input,
-                                     master=self.master, use_rest=True)
-            n1ql_helper.create_primary_index(using_gsi=True, server=n1ql_node)
+            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_server)
             query1 = "select meta().id from metadata where meta().id not like 'eventing::%::vb::%'" \
                      " and meta().id not like 'eventing::%:rt:%' and meta().id not like 'eventing::%:sp'"
-            result1 = n1ql_helper.run_cbq_query(query=query1, server=n1ql_node)
+            result1 = self.n1ql_helper.run_cbq_query(query=query1, server=self.n1ql_server)
             print(result1)
             query2 = "select meta().id from metadata where meta().id like 'eventing::%:sp' and sta != stp"
-            result2 = n1ql_helper.run_cbq_query(query=query2, server=n1ql_node)
+            result2 = self.n1ql_helper.run_cbq_query(query=query2, server=self.n1ql_server)
             print(result2)
             query3 = "select meta().id from meta where meta().id like 'eventing::%:rt:%'"
-            result3 = n1ql_helper.run_cbq_query(query=query3, server=n1ql_node)
+            result3 = self.n1ql_helper.run_cbq_query(query=query3, server=self.n1ql_server)
             print(result3)
             self.fail(
                 "initial doc in metadata {} is not equals to final doc in metadata {}".format(initalDoc, finalDoc))

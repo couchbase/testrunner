@@ -14,45 +14,13 @@ log = logging.getLogger()
 class EventingSourceMutation(EventingBaseTest):
     def setUp(self):
         super(EventingSourceMutation, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
-        if self.create_functions_buckets:
-            self.replicas = self.input.param("replicas", 0)
-            self.bucket_size = 256
-            self.metadata_bucket_size = 100
-            log.info(self.bucket_size)
-            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                       replicas=self.replicas)
-            bucket_params_meta = self._create_bucket_params(server=self.server, size=self.metadata_bucket_size,
-                                                       replicas=self.replicas)
-            self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.src_bucket = RestConnection(self.master).get_buckets()
-            self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params_meta)
-            self.buckets = RestConnection(self.master).get_buckets()
+        self.src_bucket = self.rest.get_bucket_by_name(self.src_bucket_name)
         self.gens_load = self.generate_docs(self.docs_per_day)
-        self.expiry = 3
         force_disable_new_orchestration = self.input.param('force_disable_new_orchestration', False)
         if force_disable_new_orchestration:
             self.rest.diag_eval("ns_config:set(force_disable_new_orchestration, true).")
-        if self.non_default_collection:
-            self.create_scope_collection(bucket=self.src_bucket_name,scope=self.src_bucket_name,collection=self.src_bucket_name)
-            self.create_scope_collection(bucket=self.metadata_bucket_name,scope=self.metadata_bucket_name,collection=self.metadata_bucket_name)
-            self.create_scope_collection(bucket=self.dst_bucket_name,scope=self.dst_bucket_name,collection=self.dst_bucket_name)
 
     def tearDown(self):
-        try:
-            self.print_go_routine_dump_from_all_eventing_nodes()
-        except:
-            # This is just a go routine dump API. Ignore the exceptions.
-            pass
-        try:
-            self.print_eventing_stats_from_all_eventing_nodes()
-        except:
-            # This is just a stats API. Ignore the exceptions.
-            pass
         super(EventingSourceMutation, self).tearDown()
 
     def test_inter_handler_recursion(self):
@@ -156,12 +124,12 @@ class EventingSourceMutation(EventingBaseTest):
 
     def test_inter_handler_recursion_named_collections(self):
         body = self.create_function_with_collection(self.function_name, HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION,
-                                              src_namespace="src_bucket.src_bucket.src_bucket",
-                                                    collection_bindings=["src_bucket.src_bucket.src_bucket.src_bucket.rw"])
+                                              src_namespace="default.scope0.collection0",
+                                                    collection_bindings=["src_bucket.default.scope0.collection0.rw"])
         self.deploy_function(body)
         body1 = self.create_function_with_collection(self.function_name+"_2", HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION,
-                                                     src_namespace="src_bucket.src_bucket.src_bucket",
-                                                     collection_bindings=["src_bucket.src_bucket.src_bucket.src_bucket.rw"])
+                                                     src_namespace="default.scope0.collection0",
+                                                     collection_bindings=["src_bucket.default.scope0.collection0.rw"])
         try:
             self.deploy_function(body1,wait_for_bootstrap=False)
             raise Exception("Handler deployed even with inter handler recursion")

@@ -18,19 +18,18 @@ from basetestcase import BaseTestCase
 from testconstants import INDEX_QUOTA, MIN_KV_QUOTA, EVENTING_QUOTA
 from pytests.query_tests_helper import QueryHelperTests
 from lib.Cb_constants.CBServer import CbServer
+from collection.collections_stats import CollectionsStats
 
 log = logging.getLogger()
 
 
 class EventingBaseTest(QueryHelperTests):
-    panic_count = 0
-    ## added to ignore error
-    # def suite_setUp(self):
-    #     pass
 
-    # def suite_tearDown(self):
-    #     pass
+    def suite_setUp(self):
+        pass
 
+    def suite_tearDown(self):
+        pass
 
     def setUp(self):
         log.info("==============  EventingBaseTest setup has started ==============")
@@ -46,31 +45,26 @@ class EventingBaseTest(QueryHelperTests):
                     str(self.__class__).find('UpgradeTests')  != -1 or \
                     str(self.__class__).find('MultiNodesUpgradeTests') != -1:
             self.is_upgrade_test = True
-        if not self.is_upgrade_test:
+        self.use_single_bucket = self.input.param('use_single_bucket', False)
+        if not self.use_single_bucket:
             self.input.test_params.update({"default_bucket": False})
         super(EventingBaseTest, self).setUp()
         self.master = self.servers[0]
         self.server = self.master
-        if not self.is_upgrade_test:
-            self.restServer = self.get_nodes_from_services_map(service_type="eventing")
-            if self.restServer:
-                self.rest = RestConnection(self.restServer)
-                self.rest.set_indexer_storage_mode()
-                self.log.info(
-                    "Setting the min possible memory quota so that adding mode nodes to the \
-                     cluster wouldn't be a problem.")
-                self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=330)
-                self.rest.set_service_memoryQuota(service='indexMemoryQuota',
-                                                  memoryQuota=INDEX_QUOTA)
-                self.rest.set_service_memoryQuota(service='eventingMemoryQuota',
-                                                  memoryQuota=EVENTING_QUOTA)
+        self.stat = CollectionsStats(self.master)
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        if self.restServer:
+            self.rest = RestConnection(self.restServer)
+            self.rest.set_indexer_storage_mode()
+            self.rest.set_service_memoryQuota(service='eventingMemoryQuota', memoryQuota=EVENTING_QUOTA)
         self.import_function = self.input.param('import_function', None)
+        self.scope_name = self.input.param('scope_name', 'scope0')
+        self.collection_list = self.input.param('collection_list', ['collection0', 'collection1', 'collection2'])
         self.src_bucket_name = self.input.param('src_bucket_name', 'src_bucket')
-        self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
         self.dst_bucket_name = self.input.param('dst_bucket_name', 'dst_bucket')
         self.dst_bucket_name1 = self.input.param('dst_bucket_name1', 'dst_bucket1')
         self.metadata_bucket_name = self.input.param('metadata_bucket_name', 'metadata')
-        self.create_functions_buckets = self.input.param('create_functions_buckets', True)
+        self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
         self.docs_per_day = self.input.param("doc-per-day", 1)
         self.use_memory_manager = self.input.param('use_memory_manager', True)
         self.print_eventing_handler_code_in_logs = self.input.param('print_eventing_handler_code_in_logs', True)
@@ -81,14 +75,6 @@ class EventingBaseTest(QueryHelperTests):
         self.timer_storage_chan_size = self.input.param('timer_storage_chan_size', 10000)
         self.dcp_gen_chan_size = self.input.param('dcp_gen_chan_size', 10000)
         self.is_sbm=self.input.param('source_bucket_mutation',False)
-        if not self.is_upgrade_test:
-            self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-            self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify,
-                                      buckets=self.buckets,
-                                      item_flag=self.item_flag, n1ql_port=self.n1ql_port,
-                                      full_docs_list=self.full_docs_list, log=self.log,
-                                      input=self.input,
-                                      master=self.master, use_rest=True)
         self.pause_resume = self.input.param('pause_resume', False)
         self.pause_resume_number = self.input.param('pause_resume_number', 1)
         self.is_curl=self.input.param('curl',False)
@@ -114,32 +100,34 @@ class EventingBaseTest(QueryHelperTests):
         self.is_expired=self.input.param('is_expired', False)
         self.print_app_log=self.input.param('print_app_log', False)
         self.print_go_routine=self.input.param('print_go_routine', False)
-        if not self.is_upgrade_test:
-            self.collection_rest = CollectionsRest(self.master)
+        self.collection_rest = CollectionsRest(self.master)
         self.non_default_collection=self.input.param('non_default_collection',False)
         self.global_function_scope = self.input.param('global_function_scope', False)
         if self.global_function_scope:
             self.function_scope = {"bucket": "*", "scope": "*"}
         else:
-            if self.non_default_collection:
-                self.function_scope = {"bucket": self.src_bucket_name, "scope": self.src_bucket_name}
+            if self.use_single_bucket:
+                self.function_scope = {"bucket": self.default_bucket_name, "scope": self.scope_name}
             else:
-                self.function_scope = {"bucket": self.src_bucket_name, "scope": "_default"}
+                if self.non_default_collection:
+                    self.function_scope = {"bucket": self.src_bucket_name, "scope": self.src_bucket_name}
+                else:
+                    self.function_scope = {"bucket": self.src_bucket_name, "scope": "_default"}
         self.num_docs = self.input.param('number_of_documents', 2016)
         self.is_binary = self.input.param('binary_doc', False)
-        self.couchstore_bucket_quota = self.input.param('couchstore_bucket_quota', 200)
-        self.magma_bucket_quota = self.input.param('magma_bucket_quota', 512)
         self.document_size = self.input.param('document_size', 512)
         if self.bucket_storage == "magma":
-            self.bucket_size = self.magma_bucket_quota
             self.rest.update_memcached_settings(
                 num_reader_threads="disk_io_optimized",
                 num_writer_threads="disk_io_optimized")
-        else:
-            self.bucket_size = self.couchstore_bucket_quota
-        self.metadata_bucket_size = 2 * self.bucket_size
         self.multi_collection_function = self.input.param(
             'multi_collection_function', False)
+        self._create_bucket_scope_collections()
+        if self.n1ql_server:
+            self.n1ql_helper = N1QLHelper(shell=self.shell, buckets=self.buckets, n1ql_port=self.n1ql_port,
+                                          full_docs_list=self.full_docs_list, log=self.log, input=self.input,
+                                          master=self.master, use_rest=True)
+            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_server)
         log.info("==============  EventingBaseTest setup has completed ==============")
 
     def tearDown(self):
@@ -147,21 +135,15 @@ class EventingBaseTest(QueryHelperTests):
         # catch panics and print it in the test log
         if not self.capella_run:
             self.check_eventing_logs_for_panic()
-        rest = RestConnection(self.master)
-        buckets = rest.get_buckets()
-        meta_bucket=False
-        for i in range(len(buckets)):
-            if buckets[i].name=="metadata":
-                meta_bucket=True
-        self.hostname = self.input.param('host', 'https://postman-echo.com/')
         if self.hostname == 'local':
             self.teardown_curl()
-        # check metadata bucke is empty
-        if len(buckets) > 0 and meta_bucket and not self.skip_metabucket_check and not self.is_upgrade_test:
-            count_meta = self.get_count("metadata")
-            self.log.info("number of documents in metadata bucket {}".format(count_meta))
-            if count_meta!= 0:
-                raise Exception("metdata bucket is not empty at the end of test")
+        if len(self.buckets) > 0 and not self.skip_metabucket_check and not self.is_upgrade_test:
+            metadata_bucket, metadata_scope, metadata_collection = self._get_metadata_keyspace()
+            metadata_item_count = self.stat.get_collection_item_count_cumulative(metadata_bucket, metadata_scope,
+                                                                                 metadata_collection, self.get_kv_nodes())
+            self.log.info("number of documents in metadata keyspace {}".format(metadata_item_count))
+            if metadata_item_count != 0:
+                raise Exception("metadata keyspace is not empty at the end of test")
         super(EventingBaseTest, self).tearDown()
         log.info("==============  EventingBaseTest tearDown has completed ==============")
 
@@ -184,51 +166,69 @@ class EventingBaseTest(QueryHelperTests):
         fh.close()
         body['depcfg'] = {}
         body['depcfg']['buckets'] = []
-        if self.non_default_collection:
-            if src_binding:
+        if self.use_single_bucket:
+            body['depcfg']['metadata_bucket'] = self.default_bucket_name
+            body['depcfg']['metadata_scope'] = "_default"
+            body['depcfg']['metadata_collection'] = "_default"
+            body['depcfg']['source_bucket'] = self.default_bucket_name
+            body['depcfg']['source_scope'] = self.scope_name
+            body['depcfg']['source_collection'] = self.collection_list[0]
+            body['depcfg']['buckets'].append(
+                {"alias": "dst_bucket", "bucket_name": self.default_bucket_name, "scope_name": self.scope_name,
+                "collection_name": self.collection_list[1], "access": "rw"})
+            body['depcfg']['buckets'].append(
+                {"alias": "dst_bucket1", "bucket_name": self.default_bucket_name, "scope_name": self.scope_name,
+                "collection_name": self.collection_list[2], "access": "rw"})
+            if self.is_sbm or src_binding:
                 body['depcfg']['buckets'].append(
-                    {"alias": "dst_bucket", "bucket_name": self.dst_bucket_name,"scope_name":self.dst_bucket_name,
-                     "collection_name":self.dst_bucket_name,"access": "rw"})
-                body['depcfg']['buckets'].append(
-                    {"alias": "src_bucket", "bucket_name": self.src_bucket_name,"scope_name":self.src_bucket_name,
-                     "collection_name":self.src_bucket_name, "access": "r"})
-            else:
-                body['depcfg']['buckets'].append(
-                    {"alias": "dst_bucket", "bucket_name": self.dst_bucket_name, "scope_name": self.dst_bucket_name,
-                     "collection_name": self.dst_bucket_name, "access": "rw"})
-            body['depcfg']['metadata_bucket'] = self.metadata_bucket_name
-            body['depcfg']['metadata_scope'] = self.metadata_bucket_name
-            body['depcfg']['metadata_collection'] = self.metadata_bucket_name
-            body['depcfg']['source_bucket'] = self.src_bucket_name
-            body['depcfg']['source_scope'] = self.src_bucket_name
-            body['depcfg']['source_collection'] = self.src_bucket_name
-            if self.is_sbm:
-                del body['depcfg']['buckets'][0]
-                if src_binding:
-                    body['depcfg']['buckets'][0]['access'] = "rw"
-                else:
-                    body['depcfg']['buckets'].append(
-                        {"alias": "src_bucket", "bucket_name": self.src_bucket_name, "scope_name": self.src_bucket_name,
-                         "collection_name": self.src_bucket_name, "access": "rw"})
+                    {"alias": "src_bucket", "bucket_name": self.default_bucket_name, "scope_name": self.scope_name,
+                    "collection_name": self.collection_list[0], "access": "rw"})
         else:
-            if src_binding:
-                body['depcfg']['buckets'].append(
-                    {"alias": "dst_bucket", "bucket_name": self.dst_bucket_name, "access": "rw"})
-                body['depcfg']['buckets'].append(
-                    {"alias": "src_bucket", "bucket_name": self.src_bucket_name, "access": "r"})
-            else:
-                body['depcfg']['buckets'].append({"alias": "dst_bucket", "bucket_name": self.dst_bucket_name,"access": "rw"})
-            body['depcfg']['metadata_bucket'] = self.metadata_bucket_name
-            body['depcfg']['source_bucket'] = self.src_bucket_name
-            if self.is_sbm:
-                del body['depcfg']['buckets'][0]
+            if self.non_default_collection:
                 if src_binding:
-                    body['depcfg']['buckets'][0]['access'] = "rw"
+                    body['depcfg']['buckets'].append(
+                        {"alias": "dst_bucket", "bucket_name": self.dst_bucket_name,"scope_name":self.dst_bucket_name,
+                            "collection_name":self.dst_bucket_name,"access": "rw"})
+                    body['depcfg']['buckets'].append(
+                        {"alias": "src_bucket", "bucket_name": self.src_bucket_name,"scope_name":self.src_bucket_name,
+                            "collection_name":self.src_bucket_name, "access": "r"})
                 else:
                     body['depcfg']['buckets'].append(
-                        {"alias": "src_bucket", "bucket_name": self.src_bucket_name, "access": "rw"})
-        if multi_dst_bucket:
-            body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
+                        {"alias": "dst_bucket", "bucket_name": self.dst_bucket_name, "scope_name": self.dst_bucket_name,
+                            "collection_name": self.dst_bucket_name, "access": "rw"})
+                body['depcfg']['metadata_bucket'] = self.metadata_bucket_name
+                body['depcfg']['metadata_scope'] = self.metadata_bucket_name
+                body['depcfg']['metadata_collection'] = self.metadata_bucket_name
+                body['depcfg']['source_bucket'] = self.src_bucket_name
+                body['depcfg']['source_scope'] = self.src_bucket_name
+                body['depcfg']['source_collection'] = self.src_bucket_name
+                if self.is_sbm:
+                    del body['depcfg']['buckets'][0]
+                    if src_binding:
+                        body['depcfg']['buckets'][0]['access'] = "rw"
+                    else:
+                        body['depcfg']['buckets'].append(
+                            {"alias": "src_bucket", "bucket_name": self.src_bucket_name, "scope_name": self.src_bucket_name,
+                                "collection_name": self.src_bucket_name, "access": "rw"})
+            else:
+                if src_binding:
+                    body['depcfg']['buckets'].append(
+                        {"alias": "dst_bucket", "bucket_name": self.dst_bucket_name, "access": "rw"})
+                    body['depcfg']['buckets'].append(
+                        {"alias": "src_bucket", "bucket_name": self.src_bucket_name, "access": "r"})
+                else:
+                    body['depcfg']['buckets'].append({"alias": "dst_bucket", "bucket_name": self.dst_bucket_name,"access": "rw"})
+                body['depcfg']['metadata_bucket'] = self.metadata_bucket_name
+                body['depcfg']['source_bucket'] = self.src_bucket_name
+                if self.is_sbm:
+                    del body['depcfg']['buckets'][0]
+                    if src_binding:
+                        body['depcfg']['buckets'][0]['access'] = "rw"
+                    else:
+                        body['depcfg']['buckets'].append(
+                            {"alias": "src_bucket", "bucket_name": self.src_bucket_name, "access": "rw"})
+            if multi_dst_bucket:
+                        body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
         body['settings'] = {}
         body['settings']['checkpoint_interval'] = checkpoint_interval
         body['settings']['cleanup_timers'] = cleanup_timers
@@ -373,9 +373,9 @@ class EventingBaseTest(QueryHelperTests):
                 log.debug("Full Stats for Node {0} is \n{1} ".format(eventing_node.ip, json.dumps(full_out,
                                                                                                 sort_keys=True,
                                                                                                 indent=4)))
-            if not expected_duplicate:
+            if not expected_duplicate and self.n1ql_server:
                 self.print_document_count_via_index(bucket)
-                self.print_timer_alarm_context()
+                self.print_timer_alarm_context(name)
             if stats_dst["curr_items"] < expected_dcp_mutations:
                 self.skip_metabucket_check=True
                 if self.print_app_log:
@@ -541,12 +541,11 @@ class EventingBaseTest(QueryHelperTests):
                 count = int(count[0])
             else:
                 count = int(count)
-            if count > self.panic_count:
+            if count > 0:
                 log.info("===== PANIC OBSERVED IN EVENTING LOGS ON SERVER {0}=====".format(eventing_node.ip))
                 panic_trace, _ = shell.execute_command("zgrep \"{0}\" {1}".
                                                        format(panic_str, eventing_log))
                 log.info("\n {0}".format(panic_trace))
-                self.panic_count = count
             os_info = shell.extract_remote_info()
             if os_info.type.lower() == "windows":
                 # This is a fixed path in all windows systems inside couchbase
@@ -695,7 +694,7 @@ class EventingBaseTest(QueryHelperTests):
             bucket=self.src_bucket_name
         try:
             query = "create primary index on {}".format(bucket)
-            self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         except Exception as ex:
             log.info("Exception while creating index {}".format(ex))
         num_nodes = self.refresh_rest_server()
@@ -708,7 +707,7 @@ class EventingBaseTest(QueryHelperTests):
                     query="select raw(count(*)) from {} where doc_deleted = 1".format(bucket)
             else:
                 query="select raw(count(*)) from {} where updated_field = 1".format(bucket)
-            result_set=self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+            result_set=self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
             result=result_set["results"][0]
             if deletes:
                 self.log.info("deleted docs:{}  expected doc: {}".format(result, doc_count))
@@ -938,21 +937,22 @@ class EventingBaseTest(QueryHelperTests):
         self.log.info(content)
         self.log.info("================== App logs end ===============================================================")
 
-    def print_timer_alarm_context(self):
-        alarm_query="select RAW count(0) from metadata where meta().id like 'eventing:%:al%'"
-        context_query="select RAW count(0) from metadata where meta().id like 'eventing:%:cx%'"
-        alarm = self.n1ql_helper.run_cbq_query(query=alarm_query, server=self.n1ql_node)
+    def print_timer_alarm_context(self, appname):
+        metadata_keyspace = ".".join(self._get_metadata_keyspace())
+        alarm_query="select RAW count(0) from {} where meta().id like 'eventing:%:al%'".format(metadata_keyspace)
+        context_query="select RAW count(0) from {} where meta().id like 'eventing:%:cx%'".format(metadata_keyspace)
+        alarm = self.n1ql_helper.run_cbq_query(query=alarm_query, server=self.n1ql_server)
         self.log.info("================== alarm documents in metadata ================================================")
         self.log.info(alarm)
         self.log.info("===============================================================================================")
-        context = self.n1ql_helper.run_cbq_query(query=context_query, server=self.n1ql_node)
+        context = self.n1ql_helper.run_cbq_query(query=context_query, server=self.n1ql_server)
         self.log.info("================== context documents in metadata  =============================================")
         self.log.info(context)
         self.log.info("===============================================================================================")
 
     def print_document_count_via_index(self,bucket):
         query="select RAW count(*) from "+bucket
-        result_set = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        result_set = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         self.log.info("================== number of doc in {} via index ===========================".format(bucket))
         self.log.info(result_set['results'])
         self.log.info("===============================================================================================")
@@ -999,33 +999,21 @@ class EventingBaseTest(QueryHelperTests):
     '''
     def verify_doc_count_collections(self,namespace,expected_count,timeout=600,expected_duplicate=False):
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
-        if namespace==None:
-            namespace="dst_bucket.dst_bucket.dst_bucket"
+        keyspace = namespace.split(".")
         count=0
-        try:
-            self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-            self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify,
-                                          buckets=self.buckets,
-                                          item_flag=self.item_flag, n1ql_port=self.n1ql_port,
-                                          full_docs_list=self.full_docs_list, log=self.log,
-                                          input=self.input,
-                                          master=self.master, use_rest=True)
-            query = "create primary index on " + namespace
-            result_set = self.n1ql_helper.run_cbq_query(query, server=self.n1ql_node)
-        except Exception as e:
-            pass
-        actual_count=self.get_count(namespace)
+        actual_count = self.stat.get_collection_item_count_cumulative(keyspace[0], keyspace[1],
+                                                                      keyspace[2], self.get_kv_nodes())
         while actual_count != expected_count and count < 20:
-            message = "Waiting for handler code {2} to complete bucket operations... Current : {0} Expected : {1}".\
-                      format(actual_count, expected_count, namespace)
+            message = ("Waiting for mutation processing to complete, Current count : {0} Expected count : {1}".
+                       format(actual_count, expected_count))
             self.sleep(timeout//20, message=message)
             curr_items=actual_count
-            actual_count = self.get_count(namespace)
             ### compact buckets when mutation count not progressing. Helpful for expiry events
             if count==10:
                 self.rest = RestConnection(self.master)
                 self.bucket_compaction()
-            actual_count = self.get_count(namespace)
+            actual_count = self.stat.get_collection_item_count_cumulative(keyspace[0], keyspace[1],
+                                                                          keyspace[2], self.get_kv_nodes())
             if curr_items == actual_count:
                 count += 1
             else:
@@ -1261,3 +1249,26 @@ class EventingBaseTest(QueryHelperTests):
             count += 1
         if count == iterations:
             raise Exception("Function undeployment and deletion did not occur")
+
+    def _get_metadata_keyspace(self):
+        if self.non_default_collection:
+            metadata_bucket, metadata_scope, metadata_collection = [self.metadata_bucket_name] * 3
+        else:
+            if self.use_single_bucket:
+                metadata_bucket = self.default_bucket_name
+            else:
+                metadata_bucket = self.metadata_bucket_name
+            metadata_scope, metadata_collection = ["_default"] * 2
+        return metadata_bucket, metadata_scope, metadata_collection
+
+    def _create_bucket_scope_collections(self):
+        if self.use_single_bucket:
+            self.collection_rest.create_scope(self.default_bucket_name, self.scope_name)
+            for collection in self.collection_list:
+                self.collection_rest.create_collection(self.default_bucket_name, self.scope_name, collection)
+        else:
+            self._create_buckets(self.master, [self.src_bucket_name, self.metadata_bucket_name, self.dst_bucket_name],
+                                 bucket_size = self.bucket_size)
+            if self.non_default_collection:
+                for bucket in self.rest.get_buckets():
+                    self.create_scope_collection(bucket.name, bucket.name, bucket.name)

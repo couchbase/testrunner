@@ -24,27 +24,14 @@ class EventingMultiHandler(EventingBaseTest):
         self.worker_count=self.input.param('worker_count',1)
         self.handler_code=self.input.param('handler_code','handler_code/ABO/insert.js')
         self.gens_load = self.generate_docs(self.docs_per_day)
-        quota=(self.num_src_buckets+self.num_dst_buckets)*100+300
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=quota)
-        self.metadata_bucket_size = 300
-        bucket_params_meta = self._create_bucket_params(server=self.server, size=self.metadata_bucket_size,
-                                                        replicas=self.num_replicas)
         self.create_n_buckets(self.src_bucket_name,self.num_src_buckets)
-        self.buckets = RestConnection(self.master).get_buckets()
+        self.buckets = self.rest.get_buckets()
         if self.num_dst_buckets > 0:
             self.create_n_buckets(self.dst_bucket_name,self.num_dst_buckets)
-        self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                            bucket_params=bucket_params_meta)
-        self.create_scope_collection(bucket=self.metadata_bucket_name, scope=self.metadata_bucket_name,
-                                     collection=self.metadata_bucket_name)
         self.deploying=[]
         self.pausing=[]
-        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
-                                          item_flag=self.item_flag, n1ql_port=self.n1ql_port,
-                                          full_docs_list=self.full_docs_list, log=self.log, input=self.input,
-                                          master=self.master, use_rest=True)
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        if self.n1ql_server:
+            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_server)
         self.binding_map={}
 
     def create_n_buckets(self,name,number):

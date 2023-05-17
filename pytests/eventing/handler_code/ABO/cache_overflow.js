@@ -6,7 +6,7 @@ function OnUpdate(doc, meta) {
         log(result);
         couchbase.get(dst_bucket, {id: meta.id + i.toString()}, {"cache": true});
     }
-    var query=UPDATE dst_bucket SET overflow = true;
+    var query=UPDATE default.scope0.collection1 SET overflow = true;
     log(query,meta.id);
     var check = false;
     for(var i=1;i<=8;i++)

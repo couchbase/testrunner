@@ -15,20 +15,9 @@ log = logging.getLogger()
 class EventingRebalance(EventingBaseTest):
     def setUp(self):
         super(EventingRebalance, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=2400)
-        if self.create_functions_buckets:
-            log.info(self.bucket_size)
-            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size)
-            self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.src_bucket = RestConnection(self.master).get_buckets()
-            self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.buckets = RestConnection(self.master).get_buckets()
+        self.buckets = self.rest.get_buckets()
+        self.src_bucket = self.rest.get_bucket_by_name(self.src_bucket_name)
         self.gens_load = self.generate_docs(self.docs_per_day)
-        self.expiry = 3
         handler_code = self.input.param('handler_code', 'bucket_op')
         if handler_code == 'bucket_op':
             self.handler_code = "handler_code/ABO/insert_rebalance.js"
@@ -88,35 +77,8 @@ class EventingRebalance(EventingBaseTest):
         if self.is_expired:
             # set expiry pager interval
             ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 60, bucket=self.src_bucket_name)
-        if self.non_default_collection:
-            self.create_scope_collection(bucket=self.src_bucket_name,scope=self.src_bucket_name,collection=self.src_bucket_name)
-            self.create_scope_collection(bucket=self.metadata_bucket_name,scope=self.metadata_bucket_name,collection=self.metadata_bucket_name)
-            self.create_scope_collection(bucket=self.dst_bucket_name,scope=self.dst_bucket_name,collection=self.dst_bucket_name)
-        # index is required for delete operation through n1ql
-        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
-                                      item_flag=self.item_flag, n1ql_port=self.n1ql_port,
-                                      full_docs_list=self.full_docs_list, log=self.log, input=self.input,
-                                      master=self.master, use_rest=True)
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
-
 
     def tearDown(self):
-        try:
-            self.print_go_routine_dump_from_all_eventing_nodes()
-        except:
-            # This is just a go routine dump API. Ignore the exceptions.
-            pass
-        try:
-            self.print_eventing_stats_from_all_eventing_nodes()
-        except:
-            # This is just a stats API. Ignore the exceptions.
-            pass
-        # try:
-        #     self.cleanup_eventing()
-        # except:
-        #     # This is just a cleanup API. Ignore the exceptions.
-        #     pass
         super(EventingRebalance, self).tearDown()
 
     def test_eventing_rebalance_in_when_existing_eventing_node_is_processing_mutations(self):
@@ -1656,7 +1618,7 @@ class EventingRebalance(EventingBaseTest):
                                 meta().id not like 'eventing::%::vb::%' and \
                                 meta().id not like 'eventing::%:rt:%' and \
                                 meta().id not like 'eventing::%:sp'"
-                result1 = self.n1ql_helper.run_cbq_query(query=n1ql_query1, server=self.n1ql_node)
+                result1 = self.n1ql_helper.run_cbq_query(query=n1ql_query1, server=self.n1ql_server)
                 log.info("\n RESULTS for query {1} : count : {2} \n\n{0} \n\n".format(json.dumps(result1["results"],
                                                                                                 sort_keys=True,
                                                                                                 indent=4),
@@ -1665,7 +1627,7 @@ class EventingRebalance(EventingBaseTest):
                 n1ql_query2 = "select meta().id, * from metadata where \
                                 meta().id like 'eventing::%:sp'\
                                 and sta != stp"
-                result2 = self.n1ql_helper.run_cbq_query(query=n1ql_query2, server=self.n1ql_node)
+                result2 = self.n1ql_helper.run_cbq_query(query=n1ql_query2, server=self.n1ql_server)
                 log.info("\n RESULTS for query {1} : count : {2} \n\n{0} \n\n".format(json.dumps(result2["results"],
                                                                                                 sort_keys=True,
                                                                                                 indent=4),
@@ -1673,7 +1635,7 @@ class EventingRebalance(EventingBaseTest):
                                                                                       len(result2["results"])))
                 n1ql_query3 = "select meta().id, * from metadata where\
                                 meta().id like 'eventing::%:rt:%'"
-                result3 = self.n1ql_helper.run_cbq_query(query=n1ql_query3, server=self.n1ql_node)
+                result3 = self.n1ql_helper.run_cbq_query(query=n1ql_query3, server=self.n1ql_server)
                 log.info("\n RESULTS for query {1} : count : {2} \n\n{0} \n\n".format(json.dumps(result3["results"],
                                                                                                 sort_keys=True,
                                                                                                 indent=4),

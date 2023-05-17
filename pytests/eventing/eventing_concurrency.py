@@ -11,36 +11,12 @@ log = logging.getLogger()
 class EventingConcurrency(EventingBaseTest):
     def setUp(self):
         super(EventingConcurrency, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
-        if self.create_functions_buckets:
-            self.replicas = self.input.param("replicas", 0)
-            self.bucket_size = 256
-            # This is needed as we have increased the context size to 93KB. If this is not increased the metadata
-            # bucket goes into heavy DGM
-            self.metadata_bucket_size = 300
-            log.info(self.bucket_size)
-            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                       replicas=self.replicas)
-            bucket_params_meta = self._create_bucket_params(server=self.server, size=self.metadata_bucket_size,
-                                                            replicas=self.replicas)
-            self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.src_bucket = RestConnection(self.master).get_buckets()
-            self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.cluster.create_standard_bucket(name=self.dst_bucket_name1, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params_meta)
-            self.buckets = RestConnection(self.master).get_buckets()
+        self._create_buckets(self.master, [self.dst_bucket_name1], bucket_size = self.bucket_size)
+        self.buckets = self.rest.get_buckets()
+        self.src_bucket = self.rest.get_bucket_by_name(self.src_bucket_name)
         self.gens_load = self.generate_docs(self.docs_per_day)
-        self.expiry = 3
-        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
-                                      item_flag=self.item_flag, n1ql_port=self.n1ql_port,
-                                      full_docs_list=self.full_docs_list, log=self.log, input=self.input,
-                                      master=self.master, use_rest=True)
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        if self.n1ql_server:
+            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_server)
 
     def tearDown(self):
         super(EventingConcurrency, self).tearDown()
@@ -152,7 +128,7 @@ class EventingConcurrency(EventingBaseTest):
             # Wait for eventing to catch up with all the update mutations and verify results
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
             stats_xdcr_dst = rest_dst.get_bucket_stats(self.src_bucket_name)
-            index_bucket_map = self.n1ql_helper.get_index_count_using_primary_index(self.buckets, self.n1ql_node)
+            index_bucket_map = self.n1ql_helper.get_index_count_using_primary_index(self.buckets, self.n1ql_server)
             actual_count = index_bucket_map[self.src_bucket_name]
             log.info("No of docs in xdcr destination bucket : {0}".format(stats_xdcr_dst["curr_items"]))
             log.info("No of docs indexed by primary index: {0}".format(actual_count))
@@ -168,7 +144,7 @@ class EventingConcurrency(EventingBaseTest):
             # Wait for eventing to catch up with all the delete mutations and verify results
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
             stats_xdcr_dst = rest_dst.get_bucket_stats(self.src_bucket_name)
-            index_bucket_map = self.n1ql_helper.get_index_count_using_primary_index(self.buckets, self.n1ql_node)
+            index_bucket_map = self.n1ql_helper.get_index_count_using_primary_index(self.buckets, self.n1ql_server)
             actual_count = index_bucket_map[self.src_bucket_name]
             log.info("No of docs in xdcr destination bucket : {0}".format(stats_xdcr_dst["curr_items"]))
             log.info("No of docs indexed by primary index: {0}".format(actual_count))
@@ -179,5 +155,5 @@ class EventingConcurrency(EventingBaseTest):
                 self.fail("Not all the items were indexed, actual : {0} expected : {1}".format(actual_count, 0))
             self.undeploy_and_delete_function(body)
         finally:
-            self.n1ql_helper.drop_primary_index(using_gsi=True, server=self.n1ql_node)
+            self.n1ql_helper.drop_primary_index(using_gsi=True, server=self.n1ql_server)
             rest_dst.delete_bucket()

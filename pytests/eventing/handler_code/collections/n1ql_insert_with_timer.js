@@ -6,5 +6,5 @@ function OnUpdate(doc,meta) {
     createTimer(timerCallback,  expiry, meta.id, context);
 }
 function timerCallback(context) {
-    var query = INSERT INTO dst_bucket.dst_bucket.dst_bucket ( KEY, VALUE ) VALUES ( UUID() ,'timerCallback');
+    var query = INSERT INTO default.scope0.collection1 ( KEY, VALUE ) VALUES ( UUID() ,'timerCallback');
 }

@@ -15,32 +15,7 @@ log = logging.getLogger()
 class EventingRQG(EventingBaseTest):
     def setUp(self):
         super(EventingRQG, self).setUp()
-        if self.create_functions_buckets:
-            self.bucket_size = 256
-            log.info(self.bucket_size)
-            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                       replicas=self.num_replicas)
-            self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.src_bucket = RestConnection(self.master).get_buckets()
-            self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.buckets = RestConnection(self.master).get_buckets()
         self.gens_load = self.generate_docs(self.docs_per_day)
-        self.expiry = 3
-        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        self.n1ql_helper = N1QLHelper(shell=self.shell,
-                                      max_verify=self.max_verify,
-                                      buckets=self.buckets,
-                                      item_flag=self.item_flag,
-                                      n1ql_port=self.n1ql_port,
-                                      full_docs_list=self.full_docs_list,
-                                      log=self.log, input=self.input,
-                                      master=self.master,
-                                      use_rest=True
-                                      )
         self.number_of_handler = self.input.param('number_of_handler', 5)
         self.number_of_queries = self.input.param('number_of_queries', None)
         self.template_file=self.input.param('template_file', 'b/resources/rqg/simple_table_db/query_tests_using_templates/query_10000_fields.txt.zip')
@@ -66,7 +41,7 @@ class EventingRQG(EventingBaseTest):
             self.template_file)
         with open(test_file_path) as f:
             query_list = f.readlines()
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_server)
         log.info(len(query_list))
         k = self.number_of_handler
         if self.number_of_queries is None:
@@ -87,7 +62,7 @@ class EventingRQG(EventingBaseTest):
                 key = datetime.datetime.now().time()
                 self.sleep(10)
                 query = "insert into src_bucket (KEY, VALUE) VALUES (\"" + str(key) + "\",\"doc created\")"
-                self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+                self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
                 self.sleep(10)
                 self.eventing_stats()
             except Exception as e:
@@ -101,7 +76,7 @@ class EventingRQG(EventingBaseTest):
         test_file_path = self.template_file
         with open(test_file_path) as f:
             query_list = f.readlines()
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_server)
         k = self.number_of_handler
         if self.number_of_queries is None:
             s = len(query_list)
@@ -122,7 +97,7 @@ class EventingRQG(EventingBaseTest):
                 key = datetime.datetime.now().time()
                 query = "insert into src_bucket (KEY, VALUE) VALUES (\""+str(key)+"\",{\"email\":\"a@b.c\"})"
                 self.log.info("insert doc:{}".format(query))
-                self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+                self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
                 self.sleep(10)
                 self.eventing_stats()
                 self.verify_n1ql_stats(s*k)
@@ -219,9 +194,9 @@ class EventingRQG(EventingBaseTest):
 
     def verify_n1ql_stats(self, total_query):
         n1ql_query = "select failed_query from dst_bucket where failed_query is not null"
-        failed = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_node)
+        failed = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_server)
         n1ql_query = "select passed_query from dst_bucket where passed_query is not null"
-        passed = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_node)
+        passed = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_server)
         log.info("passed: {}".format(len(passed["results"])))
         log.info("failed: {}".format(len(failed["results"])))
         assert len(passed["results"]) + len(failed["results"]) == total_query
