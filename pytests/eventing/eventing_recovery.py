@@ -21,25 +21,9 @@ log = logging.getLogger()
 class EventingRecovery(EventingBaseTest):
     def setUp(self):
         super(EventingRecovery, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=1500)
-        if self.create_functions_buckets:
-            self.bucket_size = 200
-            self.metadata_bucket_size = 400
-            log.info(self.bucket_size)
-            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                       replicas=self.num_replicas)
-            bucket_params_meta = self._create_bucket_params(server=self.server, size=self.metadata_bucket_size,
-                                                            replicas=self.num_replicas)
-            self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.src_bucket = RestConnection(self.master).get_buckets()
-            self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params_meta)
-            self.buckets = RestConnection(self.master).get_buckets()
+        self.buckets = self.rest.get_buckets()
+        self.src_bucket = self.rest.get_bucket_by_name(self.src_bucket_name)
         self.gens_load = self.generate_docs(self.docs_per_day)
-        self.expiry = 3
         handler_code = self.input.param('handler_code', 'bucket_op')
         if handler_code == 'bucket_op':
             self.handler_code = "handler_code/ABO/insert_recovery.js"
@@ -75,21 +59,9 @@ class EventingRecovery(EventingBaseTest):
             self.handler_code = HANDLER_CODE.BUCKET_OP_EXPIRED_RECOVERY
         else:
             self.handler_code = "handler_code/ABO/insert_recovery.js"
-        # index is required for delete operation through n1ql
-        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
-                                      item_flag=self.item_flag, n1ql_port=self.n1ql_port,
-                                      full_docs_list=self.full_docs_list, log=self.log, input=self.input,
-                                      master=self.master, use_rest=True)
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         if self.is_expired:
             # set expiry pager interval
             ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 60, bucket=self.src_bucket_name)
-        if self.non_default_collection:
-            self.create_scope_collection(bucket=self.src_bucket_name,scope=self.src_bucket_name,collection=self.src_bucket_name)
-            self.create_scope_collection(bucket=self.metadata_bucket_name,scope=self.metadata_bucket_name,collection=self.metadata_bucket_name)
-            self.create_scope_collection(bucket=self.dst_bucket_name,scope=self.dst_bucket_name,collection=self.dst_bucket_name)
-
 
     def tearDown(self):
         super(EventingRecovery, self).tearDown()

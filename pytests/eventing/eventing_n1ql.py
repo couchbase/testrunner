@@ -14,34 +14,10 @@ import json
 class EventingN1QL(EventingBaseTest):
     def setUp(self):
         super(EventingN1QL, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=1400)
-        if self.create_functions_buckets:
-            self.bucket_size = 100
-            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                       replicas=self.num_replicas)
-            self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.src_bucket = RestConnection(self.master).get_buckets()
-            self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.buckets = RestConnection(self.master).get_buckets()
+        self.buckets = self.rest.get_buckets()
+        self.src_bucket = self.rest.get_bucket_by_name(self.src_bucket_name)
         self.gens_load = self.generate_docs(self.docs_per_day)
-        self.expiry = 3
-        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        self.n1ql_helper = N1QLHelper(shell=self.shell,
-                                      max_verify=self.max_verify,
-                                      buckets=self.buckets,
-                                      item_flag=self.item_flag,
-                                      n1ql_port=self.n1ql_port,
-                                      full_docs_list=self.full_docs_list,
-                                      log=self.log, input=self.input,
-                                      master=self.master,
-                                      use_rest=True
-                                      )
         self.handler_code=self.input.param('handler_code', 'bucket_op')
-
 
     def tearDown(self):
         super(EventingN1QL, self).tearDown()
@@ -49,7 +25,6 @@ class EventingN1QL(EventingBaseTest):
     def test_delete_from_n1ql_from_update(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_DELETE_UPDATE, worker_count=3)
         try:
             self.deploy_function(body)
@@ -60,27 +35,25 @@ class EventingN1QL(EventingBaseTest):
     def test_n1ql_prepare_statement(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         query = "PREPARE test from DELETE from " + self.src_bucket_name + " where mutated=0"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_PREPARE, worker_count=3)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, on_delete=True,skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         query = "drop primary index on " + self.src_bucket_name
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
 
 
     def test_n1ql_DML(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_DML, dcp_stream_boundary="from_now",
                                               execution_timeout=15)
         self.deploy_function(body)
         query = "UPDATE "+self.src_bucket_name+" set mutated=1 where mutated=0 limit 1"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         self.verify_eventing_results(self.function_name, 6, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
@@ -91,9 +64,8 @@ class EventingN1QL(EventingBaseTest):
                                               execution_timeout=15)
         self.deploy_function(body)
         #create a mutation via N1QL
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         query = "UPDATE "+self.src_bucket_name+" set mutated=1 where mutated=0 limit 1"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         #verify deployment should fail
         self.verify_eventing_results(self.function_name, 3, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
@@ -105,9 +77,8 @@ class EventingN1QL(EventingBaseTest):
                                               dcp_stream_boundary="from_now", execution_timeout=15)
         self.deploy_function(body)
         # create a mutation via N1QL
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         query = "UPDATE " + self.src_bucket_name + " set mutated=1 where mutated=0 limit 1"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         # verify deployment should fail
         self.verify_eventing_results(self.function_name, 0)
         self.undeploy_and_delete_function(body)
@@ -119,17 +90,14 @@ class EventingN1QL(EventingBaseTest):
                                               execution_timeout=15)
         self.deploy_function(body)
         #create a mutation via N1QL
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         query = "UPDATE "+self.src_bucket_name+" set mutated=1 where mutated=0 limit 1"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         #verify deployment should fail
         self.verify_eventing_results(self.function_name, 2, skip_stats_validation=True)
         self.verify_user_noroles("cbadminbucket")
         self.undeploy_and_delete_function(body)
 
     def test_n1ql_curl(self):
-        n1ql_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         self.rest.create_whitelist(self.master, {"all_access": True})
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
@@ -138,7 +106,7 @@ class EventingN1QL(EventingBaseTest):
         self.deploy_function(body)
         # create a mutation via N1QL
         query = "UPDATE "+self.src_bucket_name+" set mutated=1 where mutated=0 limit 1"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         self.verify_eventing_results(self.function_name, 1, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
@@ -149,9 +117,8 @@ class EventingN1QL(EventingBaseTest):
                                               )
         self.deploy_function(body)
         #create a mutation via N1QL
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         query = "UPDATE "+self.src_bucket_name+" set mutated=1 where mutated=0 limit 1"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         #verify that n1ql query will fail
         self.verify_eventing_results(self.function_name, 2, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
@@ -163,9 +130,8 @@ class EventingN1QL(EventingBaseTest):
                                               dcp_stream_boundary="from_now")
         self.deploy_function(body)
         # create a mutation via N1QL
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         query = "UPDATE " + self.src_bucket_name + " set mutated=1 where mutated=0 limit 1"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         # verify that n1ql query will fail
         self.verify_eventing_results(self.function_name, 2, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
@@ -220,11 +186,10 @@ class EventingN1QL(EventingBaseTest):
     def test_n1ql_iterator(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_ITERATOR, dcp_stream_boundary="from_now", execution_timeout=15)
         self.deploy_function(body)
         query = "UPDATE "+self.src_bucket_name+" set mutated=1 where mutated=0 limit 1"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
@@ -252,19 +217,6 @@ class EventingN1QL(EventingBaseTest):
         # number of docs is intentionally reduced as handler code runs 1 n1ql queries/mutation
         gen_load_non_json = JSONNonDocGenerator('non_json_docs', values, start=0, end=100)
         gen_load_non_json_del = copy.deepcopy(gen_load_non_json)
-        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        self.n1ql_helper = N1QLHelper(shell=self.shell,
-                                      max_verify=self.max_verify,
-                                      buckets=self.buckets,
-                                      item_flag=self.item_flag,
-                                      n1ql_port=self.n1ql_port,
-                                      full_docs_list=self.full_docs_list,
-                                      log=self.log, input=self.input,
-                                      master=self.master,
-                                      use_rest=True
-                                      )
-        # primary index is required as we run some queries from handler code
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         # load the data
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json, self.buckets[0].kvs[1],
                                    'create', compression=self.sdk_compression)
@@ -280,86 +232,81 @@ class EventingN1QL(EventingBaseTest):
         # undeploy and delete the function
         self.undeploy_and_delete_function(body)
         # delete all the primary indexes
-        self.n1ql_helper.drop_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.n1ql_helper.drop_primary_index(using_gsi=True, server=self.n1ql_server)
 
     def test_n1ql_with_multiple_queries(self):
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         self.load_sample_buckets(self.server,"travel-sample")
         body = self.create_save_function_body(self.function_name,"handler_code/n1ql_op_with_multiple_queries.js",
                                               dcp_stream_boundary="from_now", execution_timeout=15)
         self.deploy_function(body)
         key = datetime.datetime.now().time()
         query = "insert into src_bucket (KEY, VALUE) VALUES (\"" + str(key) + "\",\"doc created\")"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 9, skip_stats_validation=True)
         query = "delete from src_bucket where META().id='"+str(key)+"'"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_n1ql_with_iterator_break_continue(self):
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         self.load_sample_buckets(self.server,"travel-sample")
         body = self.create_save_function_body(self.function_name,"handler_code/n1ql_op_iterator.js",
                                               dcp_stream_boundary="from_now", execution_timeout=15)
         self.deploy_function(body)
         key = datetime.datetime.now().time()
         query = "insert into src_bucket (KEY, VALUE) VALUES (\"" + str(key) + "\",\"doc created\")"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 917, skip_stats_validation=True)
         query = "delete from src_bucket where META().id='"+str(key)+"'"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
 
     def test_n1ql_close_before_complete(self):
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         self.load_sample_buckets(self.server,"travel-sample")
         body = self.create_save_function_body(self.function_name,"handler_code/n1ql_op_close.js",
                                               dcp_stream_boundary="from_now", execution_timeout=15)
         self.deploy_function(body)
         key = datetime.datetime.now().time()
         query = "insert into src_bucket (KEY, VALUE) VALUES (\"" + str(key) + "\",\"doc created\")"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 10, skip_stats_validation=True)
         query = "delete from src_bucket where META().id='"+str(key)+"'"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_n1ql_variable_substitution(self):
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         self.load_sample_buckets(self.server,"travel-sample")
         body = self.create_save_function_body(self.function_name,"handler_code/n1ql_op_with_variable_substitution.js",
                                               dcp_stream_boundary="from_now", execution_timeout=15)
         self.deploy_function(body)
         key = datetime.datetime.now().time()
         query = "insert into src_bucket (KEY, VALUE) VALUES (\"" + str(key) + "\",\"doc created\")"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 9, skip_stats_validation=True)
         query = "delete from src_bucket where META().id='"+str(key)+"'"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_n1ql_timeout(self):
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         self.load_sample_buckets(self.server,"travel-sample")
         body = self.create_save_function_body(self.function_name,"handler_code/n1ql_op_timeout.js",
                                               dcp_stream_boundary="from_now", execution_timeout=10)
         self.deploy_function(body)
         key = datetime.datetime.now().time()
         query = "insert into src_bucket (KEY, VALUE) VALUES (\"" + str(key) + "\",\"doc created\")"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         self.sleep(30)
         stats = self.rest.get_all_eventing_stats()
         log.info("Stats {0}".format(json.dumps(stats, sort_keys=True, indent=4)))
@@ -374,7 +321,6 @@ class EventingN1QL(EventingBaseTest):
 
 
     def test_n1ql_slow_queries(self):
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         self.load_sample_buckets(self.server, "travel-sample")
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
@@ -394,7 +340,7 @@ class EventingN1QL(EventingBaseTest):
                                                    replicas=self.num_replicas)
         self.cluster.create_standard_bucket(name=self.dst_bucket_name1, port=STANDARD_BUCKET_PORT + 1,
                                             bucket_params=bucket_params)
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_server)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, "handler_code/n1ql_op_to_set_expiry.js",
@@ -412,8 +358,7 @@ class EventingN1QL(EventingBaseTest):
         dst_bucket = self.rest.get_bucket(self.dst_bucket_name)
         self.shell.execute_cbepctl(dst_bucket, "", "set flush_param", "exp_pager_stime", 5)
         query = "SELECT COUNT(*) from dst_bucket"
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
-        self.load(self.gens_load, buckets=[self.src_bucket[0], dst_bucket], flag=self.item_flag, verify_data=False,
+        self.load(self.gens_load, buckets=[self.src_bucket_name, dst_bucket], flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
 
         # Deploying eventing function
@@ -426,7 +371,7 @@ class EventingN1QL(EventingBaseTest):
         count = 0
         while count < 20:
             count += 1
-            result = self.n1ql_helper.run_cbq_query(query, server=self.n1ql_node)['results'][0]['$1']
+            result = self.n1ql_helper.run_cbq_query(query, server=self.n1ql_server)['results'][0]['$1']
             if result == 0:
                 self.log.info("Eventing is able to set expiration values in dst_bucket")
                 break
@@ -436,7 +381,6 @@ class EventingN1QL(EventingBaseTest):
 
     #MB-42513
     def test_delete_query(self):
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_DELETE_QUERY_TEST, worker_count=3)
@@ -448,7 +392,6 @@ class EventingN1QL(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_n1ql_gc_rebalance(self):
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         self.load_sample_buckets(self.server, "travel-sample")
         worker_count = self.input.param('worker_count', 12)
         body = self.create_save_function_body(self.function_name, self.handler_code, worker_count=worker_count)

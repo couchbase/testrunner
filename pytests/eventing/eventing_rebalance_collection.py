@@ -15,39 +15,20 @@ log = logging.getLogger()
 class EventingRebalanceCollection(EventingBaseTest):
     def setUp(self):
         super(EventingRebalanceCollection, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=2400)
-        if self.create_functions_buckets:
-            log.info(self.bucket_size)
-            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size)
-            self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.src_bucket = RestConnection(self.master).get_buckets()
-            self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.buckets = RestConnection(self.master).get_buckets()
-            self.hostname="http://qa.sc.couchbase.com/"
-            self.create_n_scope(self.dst_bucket_name,5)
-            self.create_n_scope(self.src_bucket_name,5)
-            self.create_n_collections(self.dst_bucket_name,"scope_1",5)
-            self.create_n_collections(self.src_bucket_name,"scope_1",5)
-            self.handler_code="handler_code/ABO/insert_rebalance.js"
-            force_disable_new_orchestration = self.input.param('force_disable_new_orchestration', False)
-            if force_disable_new_orchestration:
-                self.rest.diag_eval("ns_config:set(force_disable_new_orchestration, true).")
+        self.hostname="http://qa.sc.couchbase.com/"
+        self.create_n_scope(self.dst_bucket_name,5)
+        self.create_n_scope(self.src_bucket_name,5)
+        self.create_n_collections(self.dst_bucket_name,"scope_1",5)
+        self.create_n_collections(self.src_bucket_name,"scope_1",5)
+        self.handler_code="handler_code/ABO/insert_rebalance.js"
+        force_disable_new_orchestration = self.input.param('force_disable_new_orchestration', False)
+        if force_disable_new_orchestration:
+            self.rest.diag_eval("ns_config:set(force_disable_new_orchestration, true).")
+        if self.n1ql_server:
+            query = "create primary index on dst_bucket.scope_1.coll_4"
+            self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
 
     def tearDown(self):
-        try:
-            self.print_go_routine_dump_from_all_eventing_nodes()
-        except:
-            # This is just a go routine dump API. Ignore the exceptions.
-            pass
-        try:
-            self.print_eventing_stats_from_all_eventing_nodes()
-        except:
-            # This is just a stats API. Ignore the exceptions.
-            pass
         super(EventingRebalanceCollection, self).tearDown()
 
     def create_save_handlers(self):

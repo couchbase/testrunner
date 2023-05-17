@@ -1116,7 +1116,7 @@ class RemoteMachineShellConnection(KeepRefs):
                    "        failed to install ntp service.\n"\
                    "===============\n".format(self.ip)
             # CBQE-6470: Continue with install by skipping the process kill in case some issue with ntp setup
-            log.info(mesg)       
+            log.info(mesg)
             # self.stop_current_python_running(mesg)
 
     def download_build(self, build):
@@ -4536,14 +4536,14 @@ class RemoteMachineShellConnection(KeepRefs):
 
         if command != "key" and command != "raw":
             command = "%s %s:11210 %s -u %s -p %s -b %s %s " % (cbstat_command,
-                                                             self.cluster_ip, command,
+                                                             "localhost", command,
                                                              cbadmin_user,
                                                              cbadmin_password,
                                                              bucket.name,
                                                              options)
         else:
             command = "%s %s:11210 %s -u %s -p %s %s %s %s " % (cbstat_command,
-                                                             self.cluster_ip, command,
+                                                             "localhost", command,
                                                              cbadmin_user,
                                                              cbadmin_password,
                                                              keyname, vbid,

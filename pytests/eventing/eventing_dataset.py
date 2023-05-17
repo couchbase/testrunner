@@ -19,39 +19,9 @@ log = logging.getLogger()
 class EventingDataset(EventingBaseTest):
     def setUp(self):
         super(EventingDataset, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
-        if self.create_functions_buckets:
-            self.replicas = self.input.param("replicas", 0)
-            self.bucket_size = 100
-            # This is needed as we have increased the context size to 93KB. If this is not increased the metadata
-            # bucket goes into heavy DGM
-            self.metadata_bucket_size = 400
-            log.info(self.bucket_size)
-            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                       replicas=self.replicas)
-            bucket_params_meta = self._create_bucket_params(server=self.server, size=self.metadata_bucket_size,
-                                                            replicas=self.replicas)
-            self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.src_bucket = RestConnection(self.master).get_buckets()
-            self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params_meta)
-            self.buckets = RestConnection(self.master).get_buckets()
+        self.buckets = self.rest.get_buckets()
+        self.src_bucket = self.rest.get_bucket_by_name(self.src_bucket_name)
         self.gens_load = self.generate_docs(self.docs_per_day)
-        self.expiry = 3
-        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        self.n1ql_helper = N1QLHelper(shell=self.shell,
-                                      max_verify=self.max_verify,
-                                      buckets=self.buckets,
-                                      item_flag=self.item_flag,
-                                      n1ql_port=self.n1ql_port,
-                                      full_docs_list=self.full_docs_list,
-                                      log=self.log, input=self.input,
-                                      master=self.master,
-                                      use_rest=True
-                                      )
         handler_code = self.input.param('handler_code', 'bucket_op')
         if handler_code == 'bucket_op':
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE1
@@ -60,7 +30,6 @@ class EventingDataset(EventingBaseTest):
         elif handler_code == 'bucket_op_with_cron_timers':
             self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMERS
         elif handler_code == 'n1ql_op_with_timers':
-            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
             self.handler_code = HANDLER_CODE.N1QL_OPS_WITH_TIMERS
         else:
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE1
@@ -174,13 +143,13 @@ class EventingDataset(EventingBaseTest):
             "Promise",
             "Proxy"
         ]
-        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=self.src_bucket_name)
+        url = 'couchbases://{ip}/{name}?ssl=no_verify'.format(ip=self.master.ip, name=self.src_bucket_name)
         bucket = Bucket(url, username="cbadminbucket", password="password")
         for key in keys:
             bucket.upsert(key, "Test with different key values")
         # create a doc using n1ql query
         query = "INSERT INTO  " + self.src_bucket_name + " ( KEY, VALUE ) VALUES ('key11111','from N1QL query')"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
@@ -190,23 +159,23 @@ class EventingDataset(EventingBaseTest):
             bucket.remove(key)
         # delete a doc using n1ql query
         try:
-            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_server)
         except Exception as ex:
             if "Primary Index Already present, This looks like a bug" in str(ex):
                 pass
             else:
                 raise ex
         query = "DELETE FROM " + self.src_bucket_name + " where meta().id='key11111'"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
-        self.n1ql_helper.drop_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.n1ql_helper.drop_primary_index(using_gsi=True, server=self.n1ql_server)
 
     def test_eventing_processes_mutations_when_mutated_through_subdoc_api_and_set_expiry_through_sdk(self):
         # set expiry pager interval
         ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 1, bucket=self.src_bucket_name)
-        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=self.src_bucket_name)
+        url = 'couchbases://{ip}/{name}?ssl=no_verify'.format(ip=self.master.ip, name=self.src_bucket_name)
         bucket = Bucket(url, username="cbadminbucket", password="password")
         for docid in ['customer123', 'customer1234', 'customer12345']:
             bucket.insert(docid, {'some': 'value'})
@@ -230,7 +199,7 @@ class EventingDataset(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_eventing_processes_mutation_when_xattrs_is_updated(self):
-        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=self.src_bucket_name)
+        url = 'couchbases://{ip}/{name}?ssl=no_verify'.format(ip=self.master.ip, name=self.src_bucket_name)
         bucket = Bucket(url, username="cbadminbucket", password="password")
         for docid in ['customer123', 'customer1234', 'customer12345']:
             bucket.upsert(docid, {})
@@ -298,7 +267,7 @@ class EventingDataset(EventingBaseTest):
                                               dcp_stream_boundary="from_now")
         # deploy eventing function
         self.deploy_function(body)
-        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=self.src_bucket_name)
+        url = 'couchbases://{ip}/{name}?ssl=no_verify'.format(ip=self.master.ip, name=self.src_bucket_name)
         bucket = Bucket(url, username="cbadminbucket", password="password")
         for docid in ['customer123', 'customer1234', 'customer12345']:
             bucket.upsert(docid, {'a': 1})
@@ -321,7 +290,7 @@ class EventingDataset(EventingBaseTest):
                                               dcp_stream_boundary="from_now")
         # deploy eventing function
         self.deploy_function(body)
-        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=self.src_bucket_name)
+        url = 'couchbases://{ip}/{name}?ssl=no_verify'.format(ip=self.master.ip, name=self.src_bucket_name)
         bucket = Bucket(url, username="cbadminbucket", password="password")
         for docid in ['customer123', 'customer1234', 'customer12345']:
             bucket.upsert(docid, {'a': 1})
@@ -346,7 +315,7 @@ class EventingDataset(EventingBaseTest):
                                               dcp_stream_boundary="from_now")
         # deploy eventing function
         self.deploy_function(body)
-        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=self.src_bucket_name)
+        url = 'couchbases://{ip}/{name}?ssl=no_verify'.format(ip=self.master.ip, name=self.src_bucket_name)
         bucket = Bucket(url, username="cbadminbucket", password="password")
         for docid in ['customer123', 'customer1234', 'customer12345']:
             bucket.upsert(docid, {'a': 1})
@@ -375,7 +344,6 @@ class EventingDataset(EventingBaseTest):
 
 
     def test_read_cas_bucket_op(self):
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, "handler_code/bucket_op_cas.js")
@@ -390,7 +358,6 @@ class EventingDataset(EventingBaseTest):
 
 
     def test_read_expiration_bucket_op(self):
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, "handler_code/bucket_op_exipration.js")
@@ -402,4 +369,3 @@ class EventingDataset(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
-

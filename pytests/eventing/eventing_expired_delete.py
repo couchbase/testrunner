@@ -8,33 +8,11 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 class EventingExpired(EventingBaseTest):
     def setUp(self):
         super(EventingExpired, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
-        if self.create_functions_buckets:
-            self.bucket_size = 200
-            log.info(self.bucket_size)
-            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                       replicas=0)
-            self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.src_bucket = RestConnection(self.master).get_buckets()
-            self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.buckets = RestConnection(self.master).get_buckets()
+        self.src_bucket = self.rest.get_bucket_by_name(self.src_bucket_name)
         self.gens_load = self.generate_docs(self.docs_per_day)
-        self.expiry = 3
-        query = "create primary index on {}".format(self.src_bucket_name)
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
-        if self.non_default_collection:
-            self.collection_rest.create_scope_collection(bucket=self.src_bucket_name,scope=self.src_bucket_name,
-                                                         collection=self.src_bucket_name,params={"maxTTL":20})
-            self.collection_rest.create_scope_collection(bucket=self.metadata_bucket_name,scope=self.metadata_bucket_name,collection=self.metadata_bucket_name)
-            self.collection_rest.create_scope_collection(bucket=self.dst_bucket_name,scope=self.dst_bucket_name,collection=self.dst_bucket_name)
 
     def tearDown(self):
         super(EventingExpired, self).tearDown()
-
 
     def test_expired_mutation_pause_resume(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,

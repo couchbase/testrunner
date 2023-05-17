@@ -9,29 +9,6 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 class EventingCollections(EventingBaseTest):
     def setUp(self):
         super(EventingCollections, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
-        if self.create_functions_buckets:
-            self.bucket_size = 100
-            log.info(self.bucket_size)
-            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                       replicas=0)
-            self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.src_bucket = RestConnection(self.master).get_buckets()
-            self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.buckets = RestConnection(self.master).get_buckets()
-        query = "create primary index on {}".format(self.src_bucket_name)
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
-        query = "create primary index on {}".format(self.dst_bucket_name)
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
-        query = "create primary index on {}".format(self.metadata_bucket_name)
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
-        self.create_scope_collection(bucket=self.src_bucket_name,scope=self.src_bucket_name,collection=self.src_bucket_name)
-        self.create_scope_collection(bucket=self.metadata_bucket_name,scope=self.metadata_bucket_name,collection=self.metadata_bucket_name)
-        self.create_scope_collection(bucket=self.dst_bucket_name,scope=self.dst_bucket_name,collection=self.dst_bucket_name)
 
     def tearDown(self):
         super(EventingCollections, self).tearDown()

@@ -10,53 +10,16 @@ log = logging.getLogger()
 class EventingVolume(EventingBaseTest):
     def setUp(self):
         super(EventingVolume, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=2800)
-        if self.create_functions_buckets:
-            self.bucket_size = 1000
-            self.metadata_bucket_size = 300
-            self.replicas=0
-            bucket_params = self._create_bucket_params(server=self.server, size=1500,
-                                                       replicas=self.replicas)
-            bucket_params_meta = self._create_bucket_params(server=self.server, size=self.metadata_bucket_size,
-                                                            replicas=self.replicas)
-            self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.src_bucket = RestConnection(self.master).get_buckets()
-            bucket_params = self._create_bucket_params(server=self.server, size=1000,
-                                                       replicas=self.replicas)
-            self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params_meta)
-            self.buckets = RestConnection(self.master).get_buckets()
-            self.hostname = "http://qa.sc.couchbase.com/"
-            self.create_n_scope(self.dst_bucket_name, 5)
-            self.create_n_scope(self.src_bucket_name, 5)
-            self.create_n_collections(self.dst_bucket_name, "scope_1", 5)
-            self.create_n_collections(self.src_bucket_name, "scope_1", 5)
-            self.handler_code = "handler_code/ABO/insert_rebalance.js"
-        # index is required for delete operation through n1ql
-        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        self.n1ql_helper = N1QLHelper(shell=self.shell,
-                                      max_verify=self.max_verify,
-                                      buckets=self.buckets,
-                                      item_flag=self.item_flag,
-                                      n1ql_port=self.n1ql_port,
-                                      full_docs_list=self.full_docs_list,
-                                      log=self.log, input=self.input,
-                                      master=self.master,
-                                      use_rest=True
-                                      )
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.buckets = RestConnection(self.master).get_buckets()
+        self.hostname = "http://qa.sc.couchbase.com/"
+        self.create_n_scope(self.dst_bucket_name, 5)
+        self.create_n_scope(self.src_bucket_name, 5)
+        self.create_n_collections(self.dst_bucket_name, "scope_1", 5)
+        self.create_n_collections(self.src_bucket_name, "scope_1", 5)
+        self.handler_code = "handler_code/ABO/insert_rebalance.js"
         self.batch_size=10**4
 
-
     def tearDown(self):
-        try:
-            self.cleanup_eventing()
-        except:
-            # This is just a cleanup API. Ignore the exceptions.
-            pass
         super(EventingVolume, self).tearDown()
 
     def create_save_handlers(self):
