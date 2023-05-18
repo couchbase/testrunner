@@ -166,8 +166,9 @@ class QueryDefinition(object):
 
     def generate_index_drop_query(self, namespace="default", use_gsi_for_secondary=True, use_gsi_for_primary=True,
                                   pre_cc=False):
+
         if "#primary" in self.index_name:
-            query = f"DROP PRIMARY INDEX ON {namespace}"
+            query = f"DROP INDEX `{self.index_name}` ON {namespace}"
         else:
             if pre_cc:
                 query = f"DROP INDEX {namespace}.{self.index_name}"

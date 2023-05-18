@@ -4,6 +4,7 @@ from membase.api.on_prem_rest_client import RestHelper, RestConnection
 from serverless.gsi_utils import GSIUtils
 import random
 import string
+from remote.remote_util import RemoteMachineShellConnection
 
 
 class Pause_Resume_GSI(BaseSecondaryIndexingTests):
@@ -68,15 +69,15 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
                              'No of indexes before pause and after resume do not match')
         select_queries = self.gsi_util_obj.get_select_queries(definition_list=definition_list_before_pause,
                                                               namespace=self.namespaces[0])
-        # TODO
-        # drop_queries = self.gsi_util_obj.get_drop_queries(definition_list=definition_list_before_pause,namespace=self.namespaces[0])
+
+        drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definition_list_before_pause,namespace=self.namespaces[0])
         for query in select_queries:
             self.run_cbq_query(query=query)
             self.sleep(5)
-        # TODO
-        # for query in drop_queries:
-        #     self.run_cbq_query(query=query)
-        #     self.sleep(5)
+
+        for query in drop_queries:
+            self.run_cbq_query(query=query)
+            self.sleep(5)
 
         # Creating new indexes,running select queries and dropping them post resume
         definition_list = []
@@ -88,17 +89,17 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
                                                                   defer_build_mix=False)
             self.log.info(f"Create index list: {create_list}")
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, query_node=self.query_node)
-        select_queries = select_queries = self.gsi_util_obj.get_select_queries(definition_list=definition_list,
+        select_queries = self.gsi_util_obj.get_select_queries(definition_list=definition_list,
                                                                                namespace=self.namespaces[0])
-        # TODO
-        # drop_queries = self.gsi_util_obj.get_drop_queries(definition_list=definition_list_before_pause,namespace=self.namespaces[0])
+
+        drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definition_list_before_pause,namespace=self.namespaces[0])
         for query in select_queries:
             self.run_cbq_query(query=query)
             self.sleep(5)
-        # TODO
-        # for query in drop_queries:
-        #     self.run_cbq_query(query=query)
-        #     self.sleep(5)
+
+        for query in drop_queries:
+            self.run_cbq_query(query=query)
+            self.sleep(5)
 
     def test_basic_pause_resume(self):
         self.prepare_tenants(random_bucket_name='hibernation', index_creations=False)
@@ -398,3 +399,234 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
             except Exception as exception:
                 expected_error_msg = str(exception)
                 self.assertIn("rebalance_running", expected_error_msg, 'Resume did not fail as expected')
+
+    def test_concurrent_pause(self):
+        self.prepare_tenants(random_bucket_name='hibernation')
+        self.buckets = self.rest.get_buckets()
+        for buckets in self.buckets:
+            self.s3_utils_obj.delete_s3_folder(folder=buckets.name)
+        self.sleep(310, 'Waiting to clear ddl tokens')
+        indexder_metadata_before_pause = self.index_rest.get_indexer_metadata()['status']
+        indexder_stats_before_pause = self.index_rest.get_index_official_stats()
+        self.log.info(indexder_metadata_before_pause)
+
+        self.log.info('Pausing bucket')
+        try:
+            for bucket in self.buckets:
+                _, content = self.rest.pause_operation(bucket_name=bucket.name, blob_region=self.region,
+                                          s3_bucket=self.s3_bucket, pause_complete=False)
+        except Exception as e:
+            self.log.info(str(e))
+            self.assertIn('Cannot pause/resume bucket, while another bucket is being paused/resumed', str(e), 'Error msg incorrect')
+            self.assertNotEqual(self.buckets[0].name, self.rest.get_buckets()[0].name,
+                             f'Bucket {self.buckets[0].name} has not paused sucessfully')
+            self.assertNotEqual(len(self.buckets), len(self.rest.get_buckets()), 'Pause failed even for the first bucket')
+            indexder_metadata_post_concurrent_pause_attempt = self.index_rest.get_indexer_metadata()['status']
+            self.assertEqual(len(indexder_metadata_post_concurrent_pause_attempt), 28)
+
+        self.sleep(15, 'Sleep post pause')
+
+    def test_concurrent_resume(self):
+        self.prepare_tenants(random_bucket_name='hibernation')
+        self.buckets = self.rest.get_buckets()
+        for buckets in self.buckets:
+            self.s3_utils_obj.delete_s3_folder(folder=buckets.name)
+        self.sleep(310, 'Waiting to clear ddl tokens')
+        indexder_metadata_before_pause = self.index_rest.get_indexer_metadata()['status']
+        indexder_stats_before_pause = self.index_rest.get_index_official_stats()
+        self.log.info(indexder_metadata_before_pause)
+
+        self.log.info('Pausing bucket')
+        for bucket in self.buckets:
+            self.rest.pause_operation(bucket_name=bucket.name, blob_region=self.region,
+                                                   s3_bucket=self.s3_bucket)
+        self.sleep(30, 'Sleep post sucessful pause of all the buckets')
+        try:
+            for bucket in self.buckets:
+                self.rest.resume_operation(bucket_name=bucket.name, blob_region=self.region, s3_bucket=self.s3_bucket)
+
+        except Exception as e:
+            self.log.info(str(e))
+            self.assertIn('Cannot pause/resume bucket, while another bucket is being paused/resumed', str(e), 'Error msg incorrect')
+            self.assertEqual(self.buckets[0].name, self.rest.get_buckets()[0].name, f'Bucket {self.buckets[0].name} has not resumed sucessfully')
+            self.assertNotEqual(len(self.buckets), len(self.rest.get_buckets()), 'Pause failed even for the first bucket')
+            indexder_metadata_post_concurrent_resume_attempt = self.index_rest.get_indexer_metadata()['status']
+            self.assertEqual(len(indexder_metadata_post_concurrent_resume_attempt), 14)
+
+    def test_kill_indexing_service_during_pause(self):
+        self.prepare_tenants(random_bucket_name='hibernation')
+        self.buckets = self.rest.get_buckets()
+        self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
+        self.sleep(310, 'Waiting to clear ddl tokens')
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        if self.run_hibernation_first:
+            self.log.info('Pausing bucket')
+            self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region,
+                                      s3_bucket=self.s3_bucket,
+                                      pause_complete=False)
+
+            self.sleep(5, 'Time for pause to start')
+
+        remote = RemoteMachineShellConnection(index_nodes[0])
+        if not self.run_hibernation_first:
+            remote.stop_indexer()
+
+        else:
+            remote.terminate_process(process_name="indexer")
+
+        if self.run_hibernation_first:
+            try:
+                self.rest.wait_bucket_hibernation(task='pause_bucket', operation='completed')
+            except Exception as e:
+                error_msg = str(e)
+                self.log.error(str(e))
+                self.assertEqual('Operation completed failed', error_msg, 'Failure did not come')
+            else:
+                self.fail('Pause operation did not fail as expected')
+        if not self.run_hibernation_first:
+            try:
+                self.log.info('Pausing bucket')
+                self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region,
+                                          s3_bucket=self.s3_bucket,
+                                          pause_complete=True)
+
+                #self.sleep(5, 'Time for pause to start')
+            except Exception as e:
+                error_msg = str(e)
+                self.assertEqual(error_msg,'Operation completed failed','Operation did not fail as expected')
+            else:
+                self.fail('Pause operation did not fail as expected')
+
+
+    def test_kill_indexing_service_during_resume(self):
+        self.prepare_tenants(random_bucket_name='hibernation')
+        self.buckets = self.rest.get_buckets()
+        self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
+        self.sleep(310, 'Waiting to clear ddl tokens')
+        self.log.info('Starting the pause operation')
+        self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region,
+                                  s3_bucket=self.s3_bucket,
+                                  pause_complete=True)
+        self.sleep(30, 'Sleeping post sucessful pause')
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        if self.run_hibernation_first:
+            self.log.info('Resuming bucket')
+            self.rest.resume_operation(bucket_name=self.buckets[0].name, blob_region=self.region,
+                                      s3_bucket=self.s3_bucket,
+                                      pause_complete=False)
+
+            self.sleep(5, 'Time for pause to start')
+
+        remote = RemoteMachineShellConnection(index_nodes[0])
+        if not self.run_hibernation_first:
+            remote.stop_indexer()
+
+        else:
+            remote.terminate_process(process_name="indexer")
+
+        if self.run_hibernation_first:
+            try:
+                self.rest.wait_bucket_hibernation(task='resume_bucket', operation='completed')
+            except Exception as e:
+                error_msg = str(e)
+                self.log.error(str(e))
+                self.assertEqual('Operation completed failed', error_msg, 'Failure did not come')
+            else:
+                self.fail('Pause operation did not fail as expected')
+        if not self.run_hibernation_first:
+            try:
+                self.log.info('Pausing bucket')
+                self.rest.resume_operation(bucket_name=self.buckets[0].name, blob_region=self.region,
+                                          s3_bucket=self.s3_bucket,
+                                          pause_complete=True)
+
+                #self.sleep(5, 'Time for pause to start')
+            except Exception as e:
+                error_msg = str(e)
+                self.assertEqual(error_msg, 'Operation completed failed','Operation did not fail as expected')
+            else:
+                self.fail('Resume operation did not fail as expected')
+
+    def test_resume_post_clearing_s3_data(self):
+        self.prepare_tenants(random_bucket_name='hibernation')
+        self.buckets = self.rest.get_buckets()
+        self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
+        self.sleep(310, 'Waiting to clear ddl tokens')
+        self.log.info('Starting the pause operation')
+        self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region,
+                                  s3_bucket=self.s3_bucket,
+                                  pause_complete=True)
+        self.sleep(30, 'Sleeping post sucessful pause')
+        self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
+        try:
+            self.rest.resume_operation(bucket_name=self.buckets[0].name,blob_region=self.region,s3_bucket=self.s3_bucket)
+        except Exception as e:
+            self.log.info(str(e))
+            self.assertIn('s3_get_failure', str(e), "S3 faliure did not occur as expected")
+
+    def test_resume_during_ongoing_pause(self):
+        self.prepare_tenants(random_bucket_name='hibernation')
+        self.buckets = self.rest.get_buckets()
+        self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
+        self.sleep(310, 'Waiting to clear ddl tokens')
+        self.log.info('Starting the pause operation')
+        self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region,
+                                  s3_bucket=self.s3_bucket,
+                                  pause_complete=False)
+        self.sleep(5, 'Sleeping post triggering pause')
+        try:
+            self.rest.resume_operation(bucket_name=self.buckets[0].name, blob_region=self.region,
+                                       s3_bucket=self.s3_bucket,
+                                       resume_complete=True)
+        except Exception as error_msg:
+            self.log.info(str(error_msg))
+            self.assertIn('Cannot pause/resume bucket, while another bucket is being paused/resumed', str(e),
+                          'Error msg incorrect')
+        else:
+            self.fail('Resume did not fail as expected')
+
+
+    def test_resume_during_ongoing_resume(self):
+        self.prepare_tenants(random_bucket_name='hibernation')
+        self.buckets = self.rest.get_buckets()
+        self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
+        self.sleep(310, 'Waiting to clear ddl tokens')
+        self.log.info('Starting the pause operation')
+        self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region,
+                                  s3_bucket=self.s3_bucket,
+                                  pause_complete=True)
+        self.sleep(5, 'Sleeping post triggering pause')
+        self.log.info('Starting resume')
+        self.rest.resume_operation(bucket_name=self.buckets[0].name, blob_region=self.region,
+                                  s3_bucket=self.s3_bucket,
+                                  resume_complete=False)
+        try:
+            self.rest.resume_operation(bucket_name=self.buckets[0].name, blob_region=self.region,
+                                       s3_bucket=self.s3_bucket,
+                                       resume_complete=True)
+        except Exception as e:
+            error_msg = str(e)
+            self.log.info(str(error_msg))
+            self.assertIn('Cannot pause/resume bucket, while another bucket is being paused/resumed', str(error_msg),
+                          'Error msg incorrect')
+            self.rest.wait_bucket_hibernation(task='resume_bucket', operation='completed')
+        else:
+            self.fail('Resume did not fail as expected')
+
+
+    def test_abort_pause_and_pause(self):
+        self.prepare_tenants(random_bucket_name='hibernation')
+        self.buckets = self.rest.get_buckets()
+        self.s3_utils_obj.delete_s3_folder(folder=self.buckets[0].name)
+        self.sleep(310, 'Waiting to clear ddl tokens')
+        self.log.info('Starting the pause operation')
+        self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region,
+                                  s3_bucket=self.s3_bucket,
+                                  pause_complete=False)
+        self.sleep(5, 'Sleeping post triggering pause')
+        self.log.info('Stopping pause')
+        self.rest.stop_pause(bucket=self.buckets[0].name)
+        self.sleep(5, 'Sleeping post stopping pause')
+        self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region,
+                                  s3_bucket=self.s3_bucket,
+                                  pause_complete=True)

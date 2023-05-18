@@ -39,9 +39,10 @@ class S3Utils(object):
             return
         for item in result['Contents']:
             paths_to_delete.append({"Key": item["Key"]})
-        paths_to_delete.append({"Key": folder})
+        #paths_to_delete.append({"Key": folder})
 
         response = self.s3.delete_objects(Bucket=self.s3_bucket, Delete={"Objects": paths_to_delete})
+
         self.log.info(response)
 
     def check_s3_folder_exist(self, folder='indexing'):
