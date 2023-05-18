@@ -1,6 +1,7 @@
 import base64
-import urllib.request, urllib.error, urllib.parse
-import urllib.request, urllib.parse, urllib.error
+import urllib.request
+import urllib.parse
+import urllib.error
 from uuid import uuid4
 import httplib2
 import json
@@ -22,7 +23,6 @@ import capella
 
 # takes an ini template as input, standard out is populated with the server pool
 # need a descriptor as a parameter
-
 # need a timeout param
 
 POLL_INTERVAL = 60
@@ -51,6 +51,7 @@ CLOUD_SERVER_TYPES = [AWS, AZURE, GCP, SERVERLESS_ONCLOUD, PROVISIONED_ONCLOUD]
 DEFAULT_ARCHITECTURE = "x86_64"
 DEFAULT_SERVER_TYPE = VM
 
+
 def getNumberOfServers(iniFile):
     f = open(iniFile)
     contents = f.read()
@@ -67,6 +68,7 @@ def getNumberOfAddpoolServers(iniFile, addPoolId):
     except:
         return 0
 
+
 def get_ssh_username(iniFile):
     f = open(iniFile)
     contents = f.readlines()
@@ -76,6 +78,7 @@ def get_ssh_username(iniFile):
             username = arr[0].rstrip()
             return username
     return ""
+
 
 def get_ssh_password(iniFile):
     f = open(iniFile)
@@ -87,23 +90,27 @@ def get_ssh_password(iniFile):
             return password
     return ""
 
+
 def rreplace(str, pattern, num_replacements):
     return str.rsplit(pattern, num_replacements)[0]
 
-def get_available_servers_count(options=None, is_addl_pool=False, os_version="", pool_id=None):
+
+def get_available_servers_count(options=None, is_addl_pool=False,
+                                os_version="", pool_id=None):
     # this bit is Docker/VM dependent
     getAvailUrl = 'http://' + SERVER_MANAGER + '/getavailablecount/'
 
     if options.serverType == DOCKER:
         # may want to add OS at some point
-        getAvailUrl = getAvailUrl + 'docker?os={0}&poolId={1}'.format(os_version, pool_id)
+        getAvailUrl = getAvailUrl + 'docker?os={0}&poolId={1}'\
+            .format(os_version, pool_id)
     else:
         if is_addl_pool == True:
             SM = ADDL_SERVER_MANAGER
         else:
             SM = SERVER_MANAGER
-        getAvailUrl = 'http://' + SM + '/getavailablecount/' + '{0}?poolId={1}'.format(os_version,
-                                                                                     pool_id)
+        getAvailUrl = 'http://' + SM + '/getavailablecount/' \
+                      + '{0}?poolId={1}'.format(os_version, pool_id)
 
     print("Connecting {}".format(getAvailUrl))
     count = 0
@@ -117,6 +124,7 @@ def get_available_servers_count(options=None, is_addl_pool=False, os_version="",
     else:
         count = int(content)
     return count
+
 
 def get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version, pool_id):
     descriptor = urllib.parse.unquote(descriptor)
@@ -152,10 +160,13 @@ def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool
             SM = SERVER_MANAGER
         getServerURL = 'http://' + SM + '/getservers/{0}?count={1}&expiresin={2}&os={3}&poolId={' \
                         '4}'.format(descriptor, how_many, test['timeLimit'], os_version, pool_id)
-    print(('getServerURL', getServerURL))
 
     response, content = httplib2.Http(timeout=TIMEOUT).request(getServerURL, 'GET')
-    print(('response.status', response, content))
+    print("*" * 75)
+    print('getServerURL: {}'.format(getServerURL))
+    print('response: {}'.format(response))
+    print('content: {}'.format(content))
+    print("*" * 75)
     if response.status == 499:
         time.sleep(POLL_INTERVAL)  # some error checking here at some point
         return json.loads("[]"), None
@@ -167,6 +178,7 @@ def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool
     else:
         return json.loads(content1), None
 
+
 def check_servers_via_ssh(servers=[], test=None):
     alive_servers = []
     bad_servers = []
@@ -176,6 +188,7 @@ def check_servers_via_ssh(servers=[], test=None):
         else:
             bad_servers.append(server)
     return alive_servers, bad_servers
+
 
 def is_vm_alive(server="", ssh_username="", ssh_password=""):
     try:
@@ -204,6 +217,7 @@ def is_vm_alive(server="", ssh_username="", ssh_password=""):
     print("{0} is unreachable. Tried to establish ssh connection {1} times".format(server, num_retries-1))
     return False
 
+
 def main():
     global SERVER_MANAGER
     global ADDL_SERVER_MANAGER
@@ -214,17 +228,20 @@ def main():
     usage = '%prog -s suitefile -v version -o OS'
     parser = OptionParser(usage)
     parser.add_option('-v', '--version', dest='version')
-    parser.add_option('-r', '--run', dest='run')  # run is ambiguous but it means 12 hour or weekly
+    parser.add_option('-r', '--run', dest='run')  # Should be 12 hour or weekly
     parser.add_option('-o', '--os', dest='os')
     parser.add_option('-n', '--noLaunch', action="store_true", dest='noLaunch', default=False)
     parser.add_option('-c', '--component', dest='component', default=None)
     parser.add_option('-p', '--poolId', dest='poolId', default='12hour')
     parser.add_option('-a', '--addPoolId', dest='addPoolId', default=None)
-    parser.add_option('-t', '--test', dest='test', default=False, action='store_true')  # use the test Jenkins
+    # Used the test Jenkins
+    parser.add_option('-t', '--test', dest='test', default=False, action='store_true')
     parser.add_option('-s', '--subcomponent', dest='subcomponent', default=None)
     parser.add_option('--subcomponent_regex', dest='subcomponent_regex', default=None)
     parser.add_option('-e', '--extraParameters', dest='extraParameters', default=None)
-    parser.add_option('-y', '--serverType', dest='serverType', type="choice", default=DEFAULT_SERVER_TYPE, choices=[VM, AWS, DOCKER, GCP, AZURE, CAPELLA_LOCAL, ELIXIR_ONPREM, SERVERLESS_ONCLOUD, PROVISIONED_ONCLOUD])  # or could be Docker
+    parser.add_option('-y', '--serverType', dest='serverType', type="choice",
+                      default=DEFAULT_SERVER_TYPE,
+                      choices=[VM, AWS, DOCKER, GCP, AZURE, CAPELLA_LOCAL, ELIXIR_ONPREM, SERVERLESS_ONCLOUD, PROVISIONED_ONCLOUD])  # or could be Docker
     # override server type passed to executor job e.g. CAPELLA_LOCAL
     parser.add_option('--server_type_name', dest='server_type_name', default=None)
     parser.add_option('-u', '--url', dest='url', default=None)
@@ -256,6 +273,8 @@ def main():
     parser.add_option('--capella_password', dest='capella_password', default=None)
     parser.add_option('--capella_tenant', dest='capella_tenant', default=None)
     parser.add_option('--capella_token', dest='capella_token', default=None)
+    parser.add_option('--build_url', dest='build_url', default=None)
+    parser.add_option('--job_url', dest='job_url', default=None)
 
     # set of parameters for testing purposes.
     # TODO: delete them after successful testing
@@ -272,19 +291,20 @@ def main():
           Run..................{}
           Version..............{}
           Release version......{}
-          nolaunch.............{}
-          os...................{}
-          url..................{}
+          Branch...............{}
+          OS...................{}
+          URL..................{}
           cherry-pick..........{}
           reportedParameters...{}
           rerun params.........{}
           Server manager.......{}
           Timeout..............{}
+          nolaunch.............{}
           """.format(options.run, options.version, releaseVersion,
-                     options.noLaunch, options.os, options.url,
+                     options.branch, options.os, options.url,
                      options.cherrypick, options.dashboardReportedParameters,
                      options.rerun_params, options.SERVER_MANAGER,
-                     options.TIMEOUT))
+                     options.TIMEOUT, options.noLaunch))
 
     if options.SERVER_MANAGER:
         SERVER_MANAGER = options.SERVER_MANAGER
@@ -317,11 +337,6 @@ def main():
             runTimeTestRunnerParameters = options.extraParameters + ',' + options.dashboardReportedParameters
 
     testsToLaunch = []
-    # for d in data:
-    #  fields = d.split()
-    #  testsToLaunch.append( {'descriptor':fields[0],'confFile':fields[1],'iniFile':fields[2],
-    #                         'serverCount':int(fields[3]), 'timeLimit':int(fields[4]),
-    #                          'parameters':fields[5]})
     auth = ClusterOptions(PasswordAuthenticator(SERVER_MANAGER_USER_NAME,
                                                 SERVER_MANAGER_PASSWORD))
     cluster = Cluster('couchbase://{}'.format(TEST_SUITE_DB), auth)
@@ -349,7 +364,6 @@ def main():
 
         elif options.subcomponent_regex is None or options.subcomponent_regex == "None":
             # have a subcomponent, assume only 1 component
-
             splitSubcomponents = options.subcomponent.split(',')
             subcomponentString = ''
             for i in range(len(splitSubcomponents)):
@@ -372,7 +386,7 @@ def main():
             queryString = "select * from `QE-Test-Suites`.`_default`.`_default` where {0} and component in [{1}] and subcomponent like \"{2}\";". \
                 format(suiteString, componentString, options.subcomponent_regex)
 
-    print('the query is', queryString)
+    print("Query: '{}'".format(queryString))
     results = cluster.query(queryString)
 
     for row in results.rows():
@@ -433,6 +447,10 @@ def main():
                                 subprocess.run(["git", "checkout", "origin/" + options.branch, "--", data['config']], check=True)
                             except Exception:
                                 print('Git error: Did not find {} in {} branch'.format(data['config'], options.branch))
+                        try:
+                            subprocess.run(["git", "pull"], check=True)
+                        except Exception:
+                            print("Git pull failed !!!")
 
                         addPoolId = options.addPoolId
 
@@ -491,7 +509,7 @@ def main():
             i['serverCount'] = 0
         total_req_servercount = total_req_servercount + i['serverCount']
         total_req_addservercount = total_req_addservercount + i['addPoolServerCount']
-    print('\n-->Test jobs to launch: {} and required serverCount={}, addPoolServerCount={}'.format(
+    print('\nJobs to launch: {} and required serverCount={}, addPoolServerCount={}'.format(
         len(testsToLaunch), total_req_servercount, total_req_addservercount))
     print('#component, subcomponent, serverCount, '
           'addPoolServerCount --> framework')
@@ -501,9 +519,6 @@ def main():
     print('\n\n')
 
     launchStringBase = str(options.jenkins_server_url) + '/job/' + str(options.launch_job)
-
-
-
 
     # this are VM/Docker dependent - or maybe not
     launchString = '/buildWithParameters?token=test_dispatcher&' + \
@@ -529,12 +544,15 @@ def main():
     if options.serverType != DEFAULT_SERVER_TYPE or options.server_type_name is not None:
         server_type = options.serverType if options.server_type_name is None else options.server_type_name
         launchString = launchString + '&server_type=' + server_type
-    currentDispatcherJobUrl = OS.getenv("BUILD_URL")
-    currentExecutorParams = get_jenkins_params.get_params(
-        currentDispatcherJobUrl)
+    b_url = options.build_url
+    if b_url is None:
+        b_url = OS.getenv("BUILD_URL")
+    currentExecutorParams = get_jenkins_params.get_params(b_url)
     if currentExecutorParams is None:
         currentExecutorParams = {}
-    if OS.environ.get('JOB_URL') is not None:
+    if options.job_url is not None:
+        currentExecutorParams['dispatcher_url'] = options.job_url
+    elif OS.getenv('JOB_URL') is not None:
         currentExecutorParams['dispatcher_url'] = OS.getenv('JOB_URL')
     currentExecutorParams = json.dumps(currentExecutorParams)
     print(currentExecutorParams)
@@ -887,11 +905,9 @@ def main():
                     time.sleep(240)     # this is due to the docker port allocation race
                 else:
                     time.sleep(30)
-
             else:
                 print('not enough servers at this time')
                 time.sleep(POLL_INTERVAL)
-
         except Exception as e:
             print('have an exception')
             print((traceback.format_exc()))
@@ -915,8 +931,8 @@ def main():
                           total_addl_servers_being_used ))
     else:
         print("\n Done!")
-
     return
+
 
 def update_url_with_job_params(url, job_params):
     dict = {}
@@ -951,6 +967,7 @@ def update_url_with_job_params(url, job_params):
             newurl += '&' + key + "=" + dict[key]
     return newurl
 
+
 def release_servers_cloud(options, descriptor):
     if options.serverType == AWS:
         cloud_provision.aws_terminate(descriptor)
@@ -963,6 +980,7 @@ def release_servers_cloud(options, descriptor):
     elif options.serverType == PROVISIONED_ONCLOUD:
         print("PROVISIONED: nothing to release")
 
+
 def release_servers(options, descriptor):
     if options.serverType in CLOUD_SERVER_TYPES:
         descriptor = urllib.parse.unquote(descriptor)
@@ -972,6 +990,7 @@ def release_servers(options, descriptor):
         print('Release URL: {} '.format(release_url))
         response, content = httplib2.Http(timeout=TIMEOUT).request(release_url, 'GET')
         print('the release response', response, content)
+
 
 if __name__ == "__main__":
     main()
