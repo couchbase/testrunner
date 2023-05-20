@@ -1319,6 +1319,17 @@ class RemoteMachineShellConnection(KeepRefs):
             # figure out what version , check if /tmp/ has the
             # binary and then return True if binary is installed
 
+    def get_all_files(self, remotepath, todir):
+        sftp = self._ssh_client.open_sftp()
+        try:
+            filenames = sftp.listdir(remotepath)
+            for name in filenames:
+                log.info("found the file {0}/{1}".format(remotepath, name))
+                sftp.get('{0}/{1}'.format(remotepath, name), '{0}/{1}'.format(todir, name))
+            sftp.close()
+            return True
+        except IOError:
+            return False
 
     def get_file(self, remotepath, filename, todir):
         if self.file_exists(remotepath, filename):
@@ -1327,8 +1338,9 @@ class RemoteMachineShellConnection(KeepRefs):
                 try:
                     filenames = sftp.listdir(remotepath)
                     for name in filenames:
-                        if name == filename:
-                            sftp.get('{0}/{1}'.format(remotepath, filename), todir)
+                        if filename in name:
+                            log.info("found the file {0}/{1}".format(remotepath, name))
+                            sftp.get('{0}/{1}'.format(remotepath, name), todir)
                             sftp.close()
                             return True
                     sftp.close()

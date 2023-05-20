@@ -2,10 +2,13 @@
 Base class for FTS/CBFT/Couchbase Full Text Search
 """
 import ast
-import os
+import os, datetime
 import unittest
 import time
 import copy
+
+from boto3 import s3
+
 import logger
 import logging
 import re
@@ -14,6 +17,7 @@ import math
 import random
 import subprocess
 import string
+import boto3
 
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, Bucket
@@ -3739,6 +3743,28 @@ class CouchbaseCluster:
     def restart_couchbase_on_all_nodes(self):
         for node in self.__nodes:
             NodeHelper.do_a_warm_up(node)
+    def upload_coveragefiles_s3(self, s3_bucket_cc_name_prefix, aws_access_key_id, aws_secret_access_key):
+        for node in self.__nodes:
+            coverage_dir = os.path.join("/tmp", f"coverage_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
+            os.makedirs(coverage_dir)
+            shell = RemoteMachineShellConnection(node)
+            shell.stop_couchbase()
+            time.sleep(5)
+            try:
+                shell.get_all_files("/tmp/coverage", coverage_dir)
+                s3_client = boto3.client('s3', region_name='ap-southeast-1',
+                                         aws_access_key_id=aws_access_key_id,
+                                         aws_secret_access_key=aws_secret_access_key)
+                dest_bucket = "qebucket"
+                for path, subdirs, files in os.walk(coverage_dir):
+                    for file in files:
+                        self.__log.info(f"Found file : {os.path.join(path, file)}")
+                        s3_client.upload_file(Filename=os.path.join(path, file), Bucket=dest_bucket, Key=f"{s3_bucket_cc_name_prefix}_{node.ip}/{file}")
+            except Exception as e:
+                self.__log.info("Failed to upload file")
+            shell.start_couchbase()
+            time.sleep(10)
+            shell.disconnect()
 
     def wait_for_flusher_empty(self, timeout=60):
         """Wait for disk queue to completely flush.
@@ -3781,6 +3807,8 @@ class FTSBaseTest(unittest.TestCase):
         self.field_name = self._input.param("field_name", None)
         self.field_type = self._input.param("field_type", None)
         self.field_alias = self._input.param("field_alias", None)
+        self.measure_code_coverage = self._input.param("measure_code_coverage", False)
+        self.s3_bucket_cc_name = self._input.param("s3_bucket_cc_name", None)
         self.enable_secrets = self._input.param("enable_secrets", False)
         self.secret_password = self._input.param("secret_password", 'p@ssw0rd')
         self.container_type = TestInputSingleton.input.param("container_type", "bucket")
@@ -4148,6 +4176,11 @@ class FTSBaseTest(unittest.TestCase):
         if self.capella_run:
             self.capella_api.delete_cluster(self.cluster_id)
 
+        if self.measure_code_coverage:
+            self.log.info("In suite tearDown")
+            test_cc_prefix = f"{self.s3_bucket_cc_name}/{self.__case_number}_{self._testMethodName}"
+            self._cb_cluster.upload_coveragefiles_s3(test_cc_prefix, self.aws_access_key_id, self.aws_secret_access_key)
+
     def tearDown(self):
         """Clusters cleanup"""
         if self.capella_run and self._testMethodName not in ['suite_tearDown', 'suite_setUp']:
@@ -4238,6 +4271,10 @@ class FTSBaseTest(unittest.TestCase):
                 "====  FTSbasetests cleanup is finished for test #{0} {1} ==="
                     .format(self.__case_number, self._testMethodName))
         finally:
+            #if self.measure_code_coverage:
+                #test_cc_prefix = f"{self.s3_bucket_cc_name}/{self.__case_number}_{self._testMethodName}"
+                #self._cb_cluster.upload_coveragefiles_s3(test_cc_prefix, self.aws_access_key_id, self.aws_secret_access_key)
+
             self.log.info("closing all ssh connections")
             for ins in RemoteMachineShellConnection.get_instances():
                 #self.log.info(str(ins))
