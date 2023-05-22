@@ -1,4 +1,5 @@
 import base64
+import logging
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -20,6 +21,7 @@ import find_rerun_job
 
 import cloud_provision
 import capella
+from table_view import TableView
 
 # takes an ini template as input, standard out is populated with the server pool
 # need a descriptor as a parameter
@@ -50,6 +52,7 @@ CLOUD_SERVER_TYPES = [AWS, AZURE, GCP, SERVERLESS_ONCLOUD, PROVISIONED_ONCLOUD]
 
 DEFAULT_ARCHITECTURE = "x86_64"
 DEFAULT_SERVER_TYPE = VM
+log = logging.getLogger()
 
 
 def getNumberOfServers(iniFile):
@@ -494,13 +497,11 @@ def main():
                     print((data['component'], data['subcomponent'], ' is not supported in this release'))
             else:
                 print(('OS does not apply to', data['component'], data['subcomponent']))
-
         except Exception as e:
             print('exception in querying tests, possible bad record')
             print((traceback.format_exc()))
             print(data)
 
-    print("DONE")
     total_req_servercount = 0
     total_req_addservercount = 0
     for i in testsToLaunch:
@@ -509,14 +510,21 @@ def main():
             i['serverCount'] = 0
         total_req_servercount = total_req_servercount + i['serverCount']
         total_req_addservercount = total_req_addservercount + i['addPoolServerCount']
-    print('\nJobs to launch: {} and required serverCount={}, addPoolServerCount={}'.format(
-        len(testsToLaunch), total_req_servercount, total_req_addservercount))
-    print('#component, subcomponent, serverCount, '
-          'addPoolServerCount --> framework')
-    for i in testsToLaunch: print('{}, {}, {}, {} --> {}'.format(i['component'],
-                                  i['subcomponent'], i['serverCount'],
-                                  i['addPoolServerCount'], i['framework']))
-    print('\n\n')
+    table_view = TableView(log.critical)
+    table_view.add_row(["Jobs to launch", len(testsToLaunch)])
+    table_view.add_row(["Req. serverCount", total_req_servercount])
+    table_view.add_row(["addPoolServerCount", total_req_addservercount])
+    table_view.display("Total overview:")
+
+    table_view.rows = list()
+    table_view.set_headers(["component", "subcomponent", "serverCount",
+                            "addPoolServerCount", "framework"])
+    for i in testsToLaunch:
+        table_view.add_row([i['component'], i['subcomponent'],
+                            i['serverCount'], i['addPoolServerCount'],
+                            i['framework']])
+    table_view.display("Tests to launch:")
+    print('\n')
 
     launchStringBase = str(options.jenkins_server_url) + '/job/' + str(options.launch_job)
 
