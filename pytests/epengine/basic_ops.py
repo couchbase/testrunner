@@ -1,19 +1,18 @@
+import json
 import time
-import logger
 
 from basetestcase import BaseTestCase
-from memcacheConstants import ERR_NOT_FOUND
-from castest.cas_base import CasBaseTest
+from cb_tools.cbstats import Cbstats
 from couchbase_helper.documentgenerator import BlobGenerator
 from mc_bin_client import MemcachedError
 
-from membase.api.rest_client import RestConnection, RestHelper
-from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
+from membase.api.rest_client import RestConnection
+from memcached.helper.data_helper import VBucketAwareMemcached
 from ep_mc_bin_client import MemcachedClient, MemcachedError
-import json
 from lib.couchbase_helper.tuq_generators import JsonGenerator
 
 from remote.remote_util import RemoteMachineShellConnection
+from sdk_client import SDKSmartClient
 
 
 """
@@ -26,11 +25,7 @@ This is small now but we will reactively add things
 These may be parameterized by:
    - full and value eviction
    - DGM and non-DGM
-
-
-
 """
-
 
 
 class basic_ops(BaseTestCase):
@@ -57,15 +52,10 @@ class basic_ops(BaseTestCase):
         rc = mcd.incr(KEY_NAME, 1)
         print('rc for incr', rc)
 
-
-
         # MB-17289 del with meta
-
-
         rc = mcd.set(KEY_NAME, 0, 0, json.dumps({'value':'value2'}))
         print('set is', rc)
         cas = rc[1]
-
 
         # wait for it to persist
         persisted = 0
@@ -75,19 +65,14 @@ class basic_ops(BaseTestCase):
         time.sleep(10)
         try:
             rc = mcd.evict_key(KEY_NAME)
-
         except MemcachedError as exp:
             self.fail("Exception with evict meta - {0}".format(exp) )
 
         CAS = 0xabcd
         # key, value, exp, flags, seqno, remote_cas
-
         try:
-            #key, exp, flags, seqno, cas
+            # key, exp, flags, seqno, cas
             rc = mcd.del_with_meta(KEY_NAME2, 0, 0, 2, CAS)
-
-
-
         except MemcachedError as exp:
             self.fail("Exception with del_with meta - {0}".format(exp) )
 
@@ -182,6 +167,87 @@ class basic_ops(BaseTestCase):
             except MemcachedError as exp:
                 self.fail("Exception with del_with meta - {0}".format(exp))
 
+    def test_delWithMeta_on_non_existent_item(self):
+        """
+        Ref: MB-56970
+        """
+        try:
+            from sdk_client import SDKClient
+        except:
+            from sdk_client3 import SDKClient
+        import couchbase.subdocument as SD
+
+        # Keys for vbucket-0
+        keys = ["test_doc-691", "test_doc-701"]
+        bucket_name = "default"
+        sdk_client = SDKClient(scheme='couchbase', hosts=[self.master.ip],
+                               bucket=bucket_name)
+        rest = RestConnection(self.master)
+        client = VBucketAwareMemcached(rest, bucket_name)
+        mcd = client.memcached(keys[0])
+
+        key = keys[0]
+        self.log.info("Creating sys_xattr for key '%s'" % key)
+        _ = mcd.set(key, 0, 0, json.dumps({}))
+        sdk_client.mutate_in(key, SD.upsert("_sys", "temp_val", xattr=True,
+                                            create_parents=True))
+        self.log.info("Deleting key '%s'" % key)
+        cas = mcd.delete(key)[1]
+
+        self.log.info("Wait for mutations to get persisted")
+        self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
+
+        self.log.info("getMeta for '%s'" % key)
+        mcd.getMeta(key)
+
+        self.log.info("Storing unrelatable key '%s' on same vb-0" % keys[1])
+        _ = mcd.set(keys[1], 0, 0, json.dumps({"key_1": "dummy_val"}))
+
+        self.log.info("Triggering compaction on vb-0 using cbepctl")
+        shell = RemoteMachineShellConnection(self.master)
+        cbstat = Cbstats(shell)
+        shell.execute_command(
+            "/opt/couchbase/bin/cbepctl %s:11210 -u Administrator -p password "
+            "-b %s compact 0 0 0 1" % (self.master.ip, bucket_name))
+
+        self.log.info("Triggering delWithMeta for key '%s'" % key)
+        mcd.del_with_meta(key, 0, 0, 5, cas, 0)
+
+        self.log.info("Validating cbstats")
+        stats = cbstat.all_stats(bucket_name)
+        shell.disconnect()
+        self.assertEqual(int(stats["ep_bg_fetched"]), 1, "bg_fetched != 1")
+        self.assertEqual(int(stats["ep_bg_fetched_compaction"]), 0,
+                         "bg_fetched_compaction != 0")
+
+    def test_eviction_of_temp_deleted_items(self):
+        """
+        Ref: MB-57064
+        """
+        b_name = "default"
+        client = VBucketAwareMemcached(RestConnection(self.master), b_name)
+        mcd = client.memcached_for_vbucket(0)
+        for i in range(1, 11):
+            for j in range(1000):
+                key = "key_{}".format((i * 1000) + j)
+                mcd.set(key, 0, 0, "value")
+                mcd.delete(key)
+            for j in range(1000):
+                key = "key_{}".format((i * 1000) + j)
+                mcd.getMeta(key)
+
+        self.log.info("Setting exp_pager time=10s")
+        self.expire_pager([self.master], 10)
+
+        self.sleep(15, "Wait for exp_pager to kick-in. Validate via cbstats")
+        shell = RemoteMachineShellConnection(self.master)
+        cbstat = Cbstats(shell)
+        stats = cbstat.all_stats(b_name)
+        shell.disconnect()
+        # Cbstat validation
+        for field in ["curr_items", "curr_items_tot", "curr_temp_items"]:
+            self.assertEqual(int(stats[field]), 0, "%s != 0" % field)
+
     # Reproduce test case for MB-28078
     def do_setWithMeta_twice(self):
 
@@ -232,7 +298,6 @@ class basic_ops(BaseTestCase):
         mc.bucket_select('default')
         stats = mc.stats()
         self.assertEqual(int(stats['curr_items']), 250)
-
 
     def test_large_doc_size_2MB(self):
         # bucket size =256MB, when Bucket gets filled 236MB then the test starts failing
@@ -394,4 +459,3 @@ class basic_ops(BaseTestCase):
                                                            error.message))
             if count % 1000 == 0:
                 self.log.info('The number of iteration is {}'.format(count))
-
