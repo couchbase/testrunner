@@ -311,8 +311,9 @@ class FTSElixirSanity(ServerlessBaseTestCase):
     def delete_some_database_check_index_delete(self):
         self.provision_databases(self.num_databases)
         indexes_arr = []
-        database_random_indexes = random.sample(range(0, self.num_databases - 1),
-                                                random.randint(1, self.num_databases))
+        random_database_list = [0] if list(range(0, self.num_databases - 1)) == [] else list(range(0, self.num_databases - 1))
+        random_variable = 1 if len(random_database_list) == 1 else random.randint(1, len(random_database_list) - 1)
+        database_random_indexes = random.sample(random_database_list, random_variable)
         print(database_random_indexes, "Random databases chosen for deletion")
         for counter, database in enumerate(self.databases.values()):
             self.cleanup_database(database_obj=database)
