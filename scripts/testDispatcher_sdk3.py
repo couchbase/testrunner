@@ -392,6 +392,7 @@ def main():
     print("Query: '{}'".format(queryString))
     results = cluster.query(queryString)
 
+    repo_pulled = False
     for row in results.rows():
         try:
             data = row['QE-Test-Suites']
@@ -443,17 +444,17 @@ def main():
                         else:
                             framework = 'testrunner'
 
-                        # checkout the ini file at the specified branch
-                        # raises an exception if the ini file does not exist on that branch
-                        if options.branch != "master":
+                        if not repo_pulled:
+                            if options.branch != "master":
+                                try:
+                                    subprocess.run(["git", "checkout", "origin/" + options.branch, "--", data['config']], check=True)
+                                except Exception:
+                                    print('Git error: Did not find {} in {} branch'.format(data['config'], options.branch))
                             try:
-                                subprocess.run(["git", "checkout", "origin/" + options.branch, "--", data['config']], check=True)
+                                subprocess.run(["git", "pull"], check=True)
                             except Exception:
-                                print('Git error: Did not find {} in {} branch'.format(data['config'], options.branch))
-                        try:
-                            subprocess.run(["git", "pull"], check=True)
-                        except Exception:
-                            print("Git pull failed !!!")
+                                print("Git pull failed !!!")
+                            repo_pulled = True
 
                         addPoolId = options.addPoolId
 
@@ -808,7 +809,6 @@ def main():
                 url = url + '&dispatcher_params=' + \
                                 urllib.parse.urlencode({"parameters":
                                                 currentExecutorParams})
-
 
                 if options.serverType != DOCKER:
                     servers_str = json.dumps(servers).replace(' ','').replace('[','', 1)
