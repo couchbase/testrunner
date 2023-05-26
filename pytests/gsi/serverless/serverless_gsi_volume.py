@@ -55,7 +55,8 @@ class ServerlessGSIVolume(BaseGSIServerless):
         self.new_tenant_iter = self.input.param("new_tenant_iter", 5)
         self.new_tenants_count = self.input.param("self.new_tenants_count", 3)
         self.cb_collect_duration = self.input.param("cb_collect_duration", 1800)
-        self.svt_ids, self.hvt_ids, self.lvt_ids = set(), set(), set()
+        self.pause_iter = self.input.param("pause_iter", 10)
+        self.svt_ids, self.hvt_ids, self.lvt_ids, self.paused_ids = set(), set(), set(), set()
         self.query_event = Event()
         self.create_indexes_event = Event()
         self.stats_dump_event = Event()
@@ -309,7 +310,6 @@ class ServerlessGSIVolume(BaseGSIServerless):
         svt_tenant_weightage = math.ceil(self.num_queries_in_parallel * self.svt_weightage /
                                          total_weightage / len(self.svt_ids))
         select_queries = {}
-        start_time = datetime.now()
         while self.query_event.is_set():
             try:
                 for db_id, db_queries in self.query_load['lvt'].items():
@@ -334,6 +334,8 @@ class ServerlessGSIVolume(BaseGSIServerless):
                         queries = random.sample(db_queries, k=svt_tenant_weightage)
                     select_queries[db_id] = queries
 
+                start_time = datetime.now()
+                total_queries = 0
                 with ThreadPoolExecutor() as executor:
                     tasks = []
                     for db_id, queries in select_queries.items():
@@ -341,8 +343,11 @@ class ServerlessGSIVolume(BaseGSIServerless):
                         task = executor.submit(self.run_bulk_queries, queries, database,
                                                db_id, self.num_queries_in_parallel)
                         tasks.append(task)
+                        total_queries += len(queries)
                     for task in tasks:
                         task.result()
+                execution_time = (datetime.now() - start_time).total_seconds()
+                self.log.info(f"Total execution time for {len(total_queries)} Select Queries: {execution_time} ")
 
                 if run_time > 0:
                     curr_time = datetime.now()
@@ -1009,6 +1014,36 @@ class ServerlessGSIVolume(BaseGSIServerless):
                 self.log.critical(err)
             self.sleep(timer)
 
+    def running_pause_on_tenants(self):
+        self.log.info("Pausing one of the Stale tenant")
+        if not self.svt_ids:
+            self.log.info("No Stale Tenants to Pause")
+            return
+        pause_tenant_db = self.svt_ids.pop()
+        self.log.info(f"Pausing tenant: {pause_tenant_db}")
+        try:
+            self.api.pause_operation(database_id=pause_tenant_db, state='paused')
+            self.paused_ids = pause_tenant_db
+        except Exception as err:
+            self.svt_ids.add(pause_tenant_db)
+            self.log.fatal(f"Exception occurred during Pausing tenant: {pause_tenant_db}")
+            self.log.error(err)
+
+    def running_resume_on_tenants(self):
+        self.log.info("Resume on the Paused tenant")
+        if not self.paused_ids:
+            self.log.info("No Tenants to Resume")
+            return
+        resume_tenant_db = self.paused_ids.pop()
+        self.log.info(f"Resuming tenant: {resume_tenant_db}")
+        try:
+            self.api.resume_operation(database_id=resume_tenant_db, state="healthy")
+            self.svt_ids.add(resume_tenant_db)
+        except Exception as err:
+            self.paused_ids.add(resume_tenant_db)
+            self.log.fatal(f"Exception occurred during Resuming tenant: {resume_tenant_db}")
+            self.log.error(err)
+
     def volume_test(self):
         with ThreadPoolExecutor() as executor:
             try:
@@ -1102,10 +1137,10 @@ class ServerlessGSIVolume(BaseGSIServerless):
                         executor.submit(self.create_indexes_for_tenants, skip_primary=True)
 
                     # add more tenants every time below condition satisfy
-                    add_tenant_tasks = []
+                    add_tenant_task = None
                     if iteration_count % self.new_tenant_iter == 0:
                         self.log.info("Adding new tenants to cluster")
-                        add_tenant_tasks = executor.submit(self.add_tenants_during_test_run)
+                        add_tenant_task = executor.submit(self.add_tenants_during_test_run)
 
                     # Populating data load for tenants
                     lvt_task = executor.submit(self.generate_doc_load_for_tenant_category, ops_rate=1000,
@@ -1133,8 +1168,7 @@ class ServerlessGSIVolume(BaseGSIServerless):
 
                     if iteration_count % self.new_tenant_iter == 0:
                         try:
-                            for task in add_tenant_tasks:
-                                task.result()
+                            add_tenant_task.result()
                         except Exception as err:
                             self.log.critical(f"Exception while adding new tenants: {err}")
 
@@ -1143,15 +1177,21 @@ class ServerlessGSIVolume(BaseGSIServerless):
                         executor.submit(self.collect_log_on_dataplane_nodes)
                         logs_dump_time = datetime.now()
 
+                    if iteration_count % self.pause_iter == 0:
+                        self.running_pause_on_tenants()
+
+                    if iteration_count % (self.pause_iter + 2) == 0:
+                        self.running_resume_on_tenants()
+
                     curr_time = datetime.now()
                     self.log.info("*" * 50)
                     self.log.info(f"Ending iteration no.: {iteration_count}")
                     self.log.info("*" * 50)
                     iteration_execution_time = (datetime.now() - iteration_start_time).total_seconds()
                     self.log.info(f"Iteration Execution time : {iteration_execution_time}")
-                    iteration_count += 1
                     if iteration_count % self.new_tenant_iter == 0:
                         self.sleep(15*60, "Cool Down period for all Tenant")
+                    iteration_count += 1
 
             except Exception as err:
                 raise Exception(f"Unsuccessful Test run {err}")
