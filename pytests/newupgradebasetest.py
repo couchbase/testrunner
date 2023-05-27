@@ -6,7 +6,6 @@ import sys
 import traceback
 import queue
 from threading import Thread
-from basetestcase import BaseTestCase
 from mc_bin_client import MemcachedError
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -21,22 +20,16 @@ from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from eventing.eventing_base import EventingBaseTest
 from pytests.eventing.eventing_constants import HANDLER_CODE
-from random import randrange, randint
-from fts.fts_base import FTSIndex, FTSBaseTest
+from random import randint
+from fts.fts_base import FTSBaseTest
 from pytests.fts.fts_callable import FTSCallable
-from cbas.cbas_base import CBASBaseTest
 from pprint import pprint
 from testconstants import CB_REPO
 from testconstants import MV_LATESTBUILD_REPO
-from testconstants import SHERLOCK_BUILD_REPO
-from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3
 from testconstants import COUCHBASE_VERSIONS
-from testconstants import SHERLOCK_VERSION
 from testconstants import CB_VERSION_NAME
-from testconstants import COUCHBASE_MP_VERSION
-from testconstants import CE_EE_ON_SAME_FOLDER
 from testconstants import STANDARD_BUCKET_PORT, IPV4_REGEX
+
 
 class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
     def setUp(self):
@@ -304,8 +297,6 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
         if version[:5] in COUCHBASE_VERSIONS:
             if version[:3] in CB_VERSION_NAME:
                 build_repo = CB_REPO + CB_VERSION_NAME[version[:3]] + "/"
-            elif version[:5] in COUCHBASE_MP_VERSION:
-                build_repo = MV_LATESTBUILD_REPO
 
         if self.upgrade_build_type == "community":
             edition_type = "couchbase-server-community"
@@ -627,56 +618,10 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
                             "%s vbuckets seem to be suffled" % vb_type)
 
     def monitor_dcp_rebalance(self):
-        if self.input.param('initial_version', '')[:5] in COUCHBASE_VERSION_2 and \
-           (self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3 or \
-            self.input.param('upgrade_version', '')[:5] in SHERLOCK_VERSION):
-            if int(self.initial_vbuckets) >= 256:
-                if self.master.ip != self.rest.ip or \
-                   self.master.ip == self.rest.ip and \
-                   str(self.master.port) != str(self.rest.port):
-                    if self.port:
-                        self.master.port = self.port
-                    self.rest = RestConnection(self.master)
-                    self.rest_helper = RestHelper(self.rest)
-                if self.rest._rebalance_progress_status() == 'running':
-                    self.log.info("Start monitoring DCP upgrade from {0} to {1}"\
-                           .format(self.input.param('initial_version', '')[:5], \
-                                    self.input.param('upgrade_version', '')[:5]))
-                    status = self.rest.monitorRebalance()
-                    if status:
-                        self.log.info("Done DCP rebalance upgrade!")
-                    else:
-                        self.fail("Failed DCP rebalance upgrade")
-                elif self.sleep(5) is None and any ("DCP upgrade completed successfully." \
-                                    in list(d.values()) for d in self.rest.get_logs(10)):
-                    self.log.info("DCP upgrade is completed")
-                else:
-                    self.fail("DCP reabalance upgrade is not running")
-            else:
-                self.fail("Need vbuckets setting >= 256 for upgrade from 2.x.x to 3+")
-        else:
-            if self.master.ip != self.rest.ip:
-                self.rest = RestConnection(self.master)
-                self.rest_helper = RestHelper(self.rest)
-            self.log.info("No need to do DCP rebalance upgrade")
-
-    def dcp_rebalance_in_offline_upgrade_from_version2(self):
-        if self.input.param('initial_version', '')[:5] in COUCHBASE_VERSION_2 and \
-           (self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3 or \
-            self.input.param('upgrade_version', '')[:5] in SHERLOCK_VERSION) and \
-            self.input.param('num_stoped_nodes', self.nodes_init) >= self.nodes_init:
-            otpNodes = []
-            nodes = self.rest.node_statuses()
-            for node in nodes:
-                otpNodes.append(node.id)
-            self.log.info("Start DCP rebalance after complete offline upgrade from {0} to {1}"\
-                           .format(self.input.param('initial_version', '')[:5], \
-                                   self.input.param('upgrade_version', '')[:5]))
-            self.rest.rebalance(otpNodes, [])
-            """ verify DCP upgrade in 3.0.0 version """
-            self.monitor_dcp_rebalance()
-        else:
-            self.log.info("No need to do DCP rebalance upgrade")
+        if self.master.ip != self.rest.ip:
+            self.rest = RestConnection(self.master)
+            self.rest_helper = RestHelper(self.rest)
+        self.log.info("No need to do DCP rebalance upgrade")
 
     def pre_upgrade(self, servers):
         if self.rest is None:

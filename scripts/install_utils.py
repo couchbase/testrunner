@@ -125,7 +125,7 @@ class NodeHelper:
                 '''WINDOWS UNINSTALL'''
                 self.shell.terminate_processes(self.info, [s for s in testconstants.WIN_PROCESSES_KILLED])
                 self.shell.terminate_processes(self.info,
-                                               [s + "-*" for s in testconstants.COUCHBASE_FROM_VERSION_3])
+                                               [s + "-*" for s in testconstants.CB_RELEASE_BUILDS.keys()])
                 installed_version, _ = self.shell.execute_command(
                     "cat " + install_constants.DEFAULT_INSTALL_DIR["WINDOWS_SERVER"] + "/VERSION.txt")
                 if len(installed_version) == 1:

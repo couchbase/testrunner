@@ -10,7 +10,7 @@ import stat
 import json
 import signal
 from decorator import decorator
-from typing import Callable, Dict, Iterator, List
+from typing import Callable
 
 import TestInput
 from subprocess import Popen, PIPE
@@ -20,22 +20,15 @@ from builds.build_query import BuildQuery
 import testconstants
 from testconstants import VERSION_FILE
 from testconstants import WIN_REGISTER_ID
-from testconstants import MEMBASE_VERSIONS
-from testconstants import COUCHBASE_VERSIONS
 from testconstants import MISSING_UBUNTU_LIB
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import COUCHBASE_VERSIONS
-from testconstants import WIN_CB_VERSION_3
-from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3
-from testconstants import COUCHBASE_FROM_VERSION_3,\
-                          COUCHBASE_FROM_SPOCK, SYSTEMD_SERVER
-from testconstants import COUCHBASE_RELEASE_VERSIONS_3, CB_RELEASE_BUILDS
-from testconstants import SHERLOCK_VERSION, WIN_PROCESSES_KILLED
+from testconstants import SYSTEMD_SERVER
+from testconstants import CB_RELEASE_BUILDS
+from testconstants import WIN_PROCESSES_KILLED
 from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON,\
-                          COUCHBASE_FROM_SPOCK,\
-                          COUCHBASE_FROM_CHESHIRE_CAT
+                          COUCHBASE_FROM_SPOCK
 from testconstants import RPM_DIS_NAME
 from testconstants import LINUX_DISTRIBUTION_NAME, LINUX_CB_PATH, \
                           LINUX_COUCHBASE_BIN_PATH
@@ -69,6 +62,7 @@ except ImportError:
     log.warning("{0} {1} {2}".format("Warning: proceeding without importing",
                                   "paramiko due to import error.",
                                   "ssh connections to remote machines will fail!\n"))
+
 
 class RemoteMachineInfo(object):
     def __init__(self):
@@ -1212,7 +1206,7 @@ class RemoteMachineShellConnection(KeepRefs):
         if self.info.type.lower() == 'windows':
             self.terminate_processes(self.info, [s for s in WIN_PROCESSES_KILLED])
             self.terminate_processes(self.info,
-                                     [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
+                                     [s + "-*" for s in CB_RELEASE_BUILDS.keys()])
             self.disable_firewall()
             remove_words = ["-rel", ".exe"]
             for word in remove_words:
@@ -1552,8 +1546,8 @@ class RemoteMachineShellConnection(KeepRefs):
 
     def download_binary_in_win(self, url, version, msi_install=False):
         self.terminate_processes(self.info, [s for s in WIN_PROCESSES_KILLED])
-        self.terminate_processes(self.info, \
-                                 [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
+        self.terminate_processes(self.info,
+                                 [s + "-*" for s in CB_RELEASE_BUILDS.keys()])
         self.disable_firewall()
         deliverable_type = "msi"
         exist = self.file_exists('/cygdrive/c/tmp/', version)
@@ -1818,10 +1812,7 @@ class RemoteMachineShellConnection(KeepRefs):
         capture_iss_file = ""
 
         product_version = ""
-        if version[:5] in MEMBASE_VERSIONS:
-            product_version = version[:5]
-            name = "mb"
-        elif version[:5] in COUCHBASE_VERSIONS:
+        if version[:5] in COUCHBASE_VERSIONS:
             product_version = version[:5]
             name = "cb"
         else:
@@ -2164,8 +2155,8 @@ class RemoteMachineShellConnection(KeepRefs):
         if self.info.type.lower() == 'windows':
             log.info('***** Doing the windows install')
             self.terminate_processes(self.info, [s for s in WIN_PROCESSES_KILLED])
-            self.terminate_processes(self.info, \
-                                     [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
+            self.terminate_processes(self.info,
+                                     [s + "-*" for s in CB_RELEASE_BUILDS.keys()])
             # to prevent getting full disk let's delete some large files
             self.remove_win_backup_dir()
             self.remove_win_collect_tmp()
@@ -2681,8 +2672,8 @@ class RemoteMachineShellConnection(KeepRefs):
             capture_iss_file = ""
             log.info("kill any in/uninstall process from version 3 in node %s"
                                                                         % self.ip)
-            self.terminate_processes(self.info, \
-                                     [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
+            self.terminate_processes(self.info,
+                                     [s + "-*" for s in CB_RELEASE_BUILDS.keys()])
             exist = self.file_exists(version_path, VERSION_FILE)
             log.info("Is VERSION file existed on {0}? {1}".format(self.ip, exist))
             if exist:
@@ -2712,8 +2703,7 @@ class RemoteMachineShellConnection(KeepRefs):
                     self.stop_current_python_running(mesg)
 
                 build_repo = MV_LATESTBUILD_REPO
-                if full_version[:5] not in COUCHBASE_VERSION_2 and \
-                   full_version[:5] not in COUCHBASE_VERSION_3:
+                if full_version[:5]:
                     if full_version[:3] in CB_VERSION_NAME:
                         build_repo = CB_REPO + CB_VERSION_NAME[full_version[:3]] + "/"
                     else:
@@ -2736,13 +2726,6 @@ class RemoteMachineShellConnection(KeepRefs):
                                                                      short_version,
                                                                   is_amazon=False,
                                  os_version=self.info.distribution_version.lower())
-                    elif short_version in COUCHBASE_RELEASE_VERSIONS_3:
-                        build = query.find_membase_release_build(product_name,
-                                                   self.info.deliverable_type,
-                                                  self.info.architecture_type,
-                                                                short_version,
-                                                              is_amazon=False,
-                            os_version=self.info.distribution_version.lower())
                     else:
                         builds, changes = query.get_all_builds(version=full_version,
                                       deliverable_type=self.info.deliverable_type,

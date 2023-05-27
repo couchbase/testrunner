@@ -2055,8 +2055,7 @@ class OnPremBaseTestCase(unittest.TestCase):
         versions = RestConnection(self.master).get_nodes_versions()
         for group in nodes:
             for node in nodes[group]:
-                if versions[0][:5] in testconstants.COUCHBASE_VERSION_3 or \
-                        versions[0][:5] in testconstants.COUCHBASE_FROM_VERSION_4:
+                if versions[0][:5] in testconstants.COUCHBASE_FROM_VERSION_4:
                     command = "dcp"
                     if not info == 'windows':
                         commands = "%s %s:11210 %s -b %s -p \"%s\" | grep :replication:ns_1@%s |  grep vb_uuid | \

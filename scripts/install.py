@@ -4,7 +4,6 @@
 
 import getopt
 import copy, re
-import logging
 import os
 import sys
 from threading import Thread
@@ -23,12 +22,8 @@ from membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper, RemoteMachineHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from testconstants import MV_LATESTBUILD_REPO
-from testconstants import SHERLOCK_BUILD_REPO
-from testconstants import COUCHBASE_REPO
 from testconstants import CB_REPO, CB_DOWNLOAD_SERVER, CB_DOWNLOAD_SERVER_FQDN
-from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_WATSON,\
-                          COUCHBASE_FROM_SPOCK
+from testconstants import COUCHBASE_FROM_SPOCK
 from testconstants import CB_VERSION_NAME, COUCHBASE_FROM_VERSION_4,\
                           CB_RELEASE_BUILDS, COUCHBASE_VERSIONS
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, CBAS_QUOTA, CLUSTER_QUOTA_RATIO
@@ -41,6 +36,7 @@ import TestInput
 
 logging.config.fileConfig("scripts.logging.conf")
 log = logging.getLogger()
+
 
 def usage(err=None):
     print("""\
@@ -302,8 +298,7 @@ class Installer(object):
                 build_repo = CB_REPO
             elif "server-analytics" in names:
                 build_repo = CB_REPO.replace("couchbase-server", "server-analytics") + CB_VERSION_NAME[version[:3]] + "/"
-            elif version[:5] not in COUCHBASE_VERSION_2 and \
-                 version[:5] not in COUCHBASE_VERSION_3:
+            else:
                 if version[:3] in CB_VERSION_NAME:
                     build_repo = CB_REPO + CB_VERSION_NAME[version[:3]] + "/"
                 else:

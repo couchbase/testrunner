@@ -11,14 +11,10 @@ import testconstants
 import logger
 import traceback
 import sys
-from testconstants import WIN_CB_VERSION_3
+from testconstants import CB_RELEASE_BUILDS
 from testconstants import SHERLOCK_VERSION
-from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3
-from testconstants import COUCHBASE_VERSION_2_WITH_REL
-from testconstants import COUCHBASE_RELEASE_FROM_VERSION_3,\
-                          COUCHBASE_RELEASE_FROM_SPOCK
-from testconstants import COUCHBASE_FROM_VERSION_3, COUCHBASE_FROM_SPOCK,\
+from testconstants import COUCHBASE_RELEASE_FROM_SPOCK
+from testconstants import COUCHBASE_FROM_SPOCK,\
                           COUCHBASE_FROM_MAD_HATTER, COUCHBASE_FROM_601, \
                           COUCHBASE_FROM_662, \
                           COUCHBASE_FROM_CHESHIRE_CAT
@@ -94,11 +90,6 @@ class BuildQuery(object):
                        and build.toy == toy:
                         return build
         elif direct_build_url != "":
-            if "exe" in builds.deliverable_type:
-                if "rel" in version and version[:5] in WIN_CB_VERSION_3:
-                    version = version.replace("-rel", "")
-            """ direct url only need one build """
-
             """ if the job trigger with url, no need to check version.
                 remove builds.product_version.find(version) != -1 """
             if product == builds.product and builds.architecture_type == arch:
@@ -135,12 +126,6 @@ class BuildQuery(object):
     def find_membase_release_build(self, product, deliverable_type, os_architecture,
                                     build_version, is_amazon=False, os_version=""):
         build_details = build_version
-        if build_version[:5] in COUCHBASE_VERSION_2_WITH_REL:
-            if build_version[-4:] != "-rel":
-                build_details = build_details + "-rel"
-        elif build_version.startswith("1.8.0"):
-            build_details = "1.8.0r-55-g80f24f2"
-            product = "couchbase-server-enterprise"
         build = MembaseBuild()
         build.deliverable_type = deliverable_type
         build.time = '0'
@@ -155,37 +140,20 @@ class BuildQuery(object):
         if deliverable_type == "exe":
             """ /3.0.1/couchbase-server-enterprise_3.0.1-windows_amd64.exe """
             if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
-                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
-                    arch_type = "amd64"
-                    if "x86_64" not in os_architecture:
-                        arch_type = "x86"
-                    build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
-                        .format(build_version[:build_version.find('-')],
-                        product, arch_type, deliverable_type, build_details[:5],
-                        CB_RELEASE_REPO)
-                else:
-                    if "2.5.2" in build_details[:5]:
-                        build.url = "{5}{0}/{1}_{4}_{2}.setup.{3}"\
-                            .format(build_version[:build_version.find('-')],
-                            product, os_architecture, deliverable_type,
-                            build_details[:5], CB_RELEASE_REPO)
-                    else:
-                        build.url = "{5}{0}/{1}_{2}_{4}.setup.{3}"\
-                            .format(build_version[:build_version.find('-')],
-                            product, os_architecture, deliverable_type,
-                            build_details, CB_RELEASE_REPO)
+                arch_type = "amd64"
+                if "x86_64" not in os_architecture:
+                    arch_type = "x86"
+                build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
+                    .format(build_version[:build_version.find('-')],
+                    product, arch_type, deliverable_type, build_details[:5],
+                    CB_RELEASE_REPO)
             else:
-                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
-                    arch_type = "amd64"
-                    if "x86_64" not in os_architecture:
-                        arch_type = "x86"
-                    build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
-                        .format(build_version, product, arch_type,
-                        deliverable_type, build_details[:5], CB_RELEASE_REPO)
-                else:
-                    build.url = "{5}{0}/{1}_{2}_{4}.setup.{3}"\
-                        .format(build_version, product, os_architecture,
-                        deliverable_type, build_details, CB_RELEASE_REPO)
+                arch_type = "amd64"
+                if "x86_64" not in os_architecture:
+                    arch_type = "x86"
+                build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
+                    .format(build_version, product, arch_type,
+                    deliverable_type, build_details[:5], CB_RELEASE_REPO)
             build.url_latest_build = "{4}{0}_{1}_{3}.setup.{2}"\
                              .format(product, os_architecture, deliverable_type,
                                             build_details, CB_LATESTBUILDS_REPO)
@@ -202,65 +170,48 @@ class BuildQuery(object):
                                http://builds.hq.northscale.net/latestbuilds/
                                   couchbase-server-enterprise_x86_64_3.0.1-1444.rpm
                 """
-                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
-                    if "rpm" in deliverable_type:
-                        build.url = "{5}{0}/{1}-{4}-centos6.{2}.{3}"\
-                                .format(build_version[:build_version.find('-')],
-                                product, os_architecture, deliverable_type,
-                                        build_details[:5], CB_RELEASE_REPO)
-                    elif "deb" in deliverable_type:
-                        os_architecture = "amd64"
-                        os_name = "ubuntu12.04"
-                        if  "ubuntu 20.04" in os_version:
-                            if build_version[:5] in COUCHBASE_FROM_662:
-                                os_name = "ubuntu20.04"
-                            else:
-                                self.fail("ubuntu 20.04 doesn't support version %s "
-                                                                % build_version[:5])
-                        elif "ubuntu 16.04" in os_version:
-                            os_name = "ubuntu16.04"
-                        build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
-                                .format(build_version[:build_version.find('-')],
-                                 product, os_architecture, deliverable_type,
-                                 build_details[:5], os_name, CB_RELEASE_REPO)
-                else:
-                    if "2.5.2" in build_details[:5]:
-                        build.url = "{5}{0}/{1}_{4}_{2}.{3}"\
+                if "rpm" in deliverable_type:
+                    build.url = "{5}{0}/{1}-{4}-centos6.{2}.{3}"\
                             .format(build_version[:build_version.find('-')],
                             product, os_architecture, deliverable_type,
                                     build_details[:5], CB_RELEASE_REPO)
-                    else:
-                        build.url = "{5}{0}/{1}_{2}_{4}.{3}"\
+                elif "deb" in deliverable_type:
+                    os_architecture = "amd64"
+                    os_name = "ubuntu12.04"
+                    if  "ubuntu 20.04" in os_version:
+                        if build_version[:5] in COUCHBASE_FROM_662:
+                            os_name = "ubuntu20.04"
+                        else:
+                            self.fail("ubuntu 20.04 doesn't support version %s "
+                                                            % build_version[:5])
+                    elif "ubuntu 16.04" in os_version:
+                        os_name = "ubuntu16.04"
+                    build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                             .format(build_version[:build_version.find('-')],
-                            product, os_architecture, deliverable_type,
-                                        build_details, CB_RELEASE_REPO)
+                             product, os_architecture, deliverable_type,
+                             build_details[:5], os_name, CB_RELEASE_REPO)
             else:
-                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
-                    if "rpm" in deliverable_type:
-                        build.url = "{5}{0}/{1}-{4}-centos6.{2}.{3}"\
-                            .format(build_version, product, os_architecture,
-                            deliverable_type, build_details[:5], CB_RELEASE_REPO)
-                    elif "deb" in deliverable_type:
-                        os_architecture = "amd64"
-                        os_name = "ubuntu12.04"
-                        if  "ubuntu 20.04" in os_version:
-                            if build_version[:5] in COUCHBASE_FROM_662:
-                                os_name = "ubuntu20.04"
-                            else:
-                                self.fail("ubuntu 20.04 doesn't support version %s "
-                                                                % build_version[:5])
-                        elif "ubuntu 16.04" in os_version:
-                            os_name = "ubuntu16.04"
-                        build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
-                            .format(build_version, product, os_architecture,
-                            deliverable_type, build_details[:5], os_name,
-                                                         CB_RELEASE_REPO)
-                        """ http://builds.hq.northscale.net/releases/3.0.1/
-                        couchbase-server-enterprise_3.0.1-ubuntu12.04_amd64.deb """
-                else:
-                    build.url = "{5}{0}/{1}_{2}_{4}.{3}"\
+                if "rpm" in deliverable_type:
+                    build.url = "{5}{0}/{1}-{4}-centos6.{2}.{3}"\
                         .format(build_version, product, os_architecture,
-                        deliverable_type, build_details, CB_RELEASE_REPO)
+                        deliverable_type, build_details[:5], CB_RELEASE_REPO)
+                elif "deb" in deliverable_type:
+                    os_architecture = "amd64"
+                    os_name = "ubuntu12.04"
+                    if  "ubuntu 20.04" in os_version:
+                        if build_version[:5] in COUCHBASE_FROM_662:
+                            os_name = "ubuntu20.04"
+                        else:
+                            self.fail("ubuntu 20.04 doesn't support version %s "
+                                                            % build_version[:5])
+                    elif "ubuntu 16.04" in os_version:
+                        os_name = "ubuntu16.04"
+                    build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
+                        .format(build_version, product, os_architecture,
+                        deliverable_type, build_details[:5], os_name,
+                                                     CB_RELEASE_REPO)
+                    """ http://builds.hq.northscale.net/releases/3.0.1/
+                    couchbase-server-enterprise_3.0.1-ubuntu12.04_amd64.deb """
             build.url_latest_build = "{4}{0}_{1}_{3}.{2}"\
                       .format(product, os_architecture, deliverable_type,
                                build_details, CB_LATESTBUILDS_REPO)
@@ -276,9 +227,6 @@ class BuildQuery(object):
                                     build_version, is_amazon=False, os_version="",
                                     direct_build_url=None):
         build_details = build_version
-        if build_version[:5] in COUCHBASE_VERSION_2_WITH_REL:
-            if build_version[-4:] != "-rel":
-                build_details = build_details + "-rel"
         build = MembaseBuild()
         build.deliverable_type = deliverable_type
         build.time = '0'
@@ -293,37 +241,20 @@ class BuildQuery(object):
         if deliverable_type == "exe":
             """ /3.0.1/couchbase-server-enterprise_3.0.1-windows_amd64.exe """
             if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
-                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
-                    arch_type = "amd64"
-                    if "x86_64" not in os_architecture:
-                        arch_type = "x86"
-                    build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
-                            .format(build_version[:build_version.find('-')],
-                            product, arch_type, deliverable_type, build_details[:5],
-                            CB_RELEASE_REPO)
-                else:
-                    if "2.5.2" in build_details[:5]:
-                        build.url = "{5}/{0}/{1}_{4}_{2}.setup.{3}"\
-                            .format(build_version[:build_version.find('-')],
-                            product, os_architecture, deliverable_type,
-                            build_details[:5], CB_RELEASE_REPO)
-                    else:
-                        build.url = "{5}{0}/{1}_{2}_{4}.setup.{3}"\
-                            .format(build_version[:build_version.find('-')],
-                            product, os_architecture, deliverable_type,
-                            build_details, CB_RELEASE_REPO)
+                arch_type = "amd64"
+                if "x86_64" not in os_architecture:
+                    arch_type = "x86"
+                build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
+                        .format(build_version[:build_version.find('-')],
+                        product, arch_type, deliverable_type, build_details[:5],
+                        CB_RELEASE_REPO)
             else:
-                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
-                    arch_type = "amd64"
-                    if "x86_64" not in os_architecture:
-                        arch_type = "x86"
-                    build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
-                        .format(build_version, product, arch_type,
-                         deliverable_type, build_details[:5], CB_RELEASE_REPO)
-                else:
-                    build.url = "{5}{0}/{1}_{2}_{4}.setup.{3}"\
-                        .format(build_version, product, os_architecture,
-                        deliverable_type, build_details, CB_RELEASE_REPO)
+                arch_type = "amd64"
+                if "x86_64" not in os_architecture:
+                    arch_type = "x86"
+                build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
+                    .format(build_version, product, arch_type,
+                     deliverable_type, build_details[:5], CB_RELEASE_REPO)
             build.url_latest_build = "{4}{0}_{1}_{3}.setup.{2}"\
                              .format(product, os_architecture,
                              deliverable_type, build_details, CB_LATESTBUILDS_REPO)
@@ -347,12 +278,11 @@ class BuildQuery(object):
                          deliverable_type, build_details[:5], CB_RELEASE_REPO)
         elif deliverable_type == "dmg":
             if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
-                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
-                    os_name = "macos"
-                    build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
-                                .format(build_version[:build_version.find('-')],
-                                product, os_architecture, deliverable_type,
-                                build_details[:5],os_name, CB_RELEASE_REPO)
+                os_name = "macos"
+                build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
+                            .format(build_version[:build_version.find('-')],
+                            product, os_architecture, deliverable_type,
+                            build_details[:5],os_name, CB_RELEASE_REPO)
         else:
             """ check match full version x.x.x-xxxx """
             if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
@@ -366,127 +296,116 @@ class BuildQuery(object):
                                http://builds.hq.northscale.net/latestbuilds/
                                   couchbase-server-enterprise_x86_64_3.0.1-1444.rpm
                 """
-                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
-                    if "rpm" in deliverable_type:
-                        if "centos" in os_version.lower():
-                            if "centos 7" in os_version.lower():
-                                os_name = "centos7"
-                            else:
-                                os_name = "centos6"
-                        elif "suse" in os_version.lower():
-                            if "11" in os_version.lower():
-                                os_name = "suse11"
-                            elif "12" in os_version.lower():
-                                os_name = "suse12"
-                            elif "15" in os_version.lower():
-                                os_name = "suse15"
-                        elif "oracle linux" in os_version.lower():
-                            os_name = "oel6"
-                        elif "amazon linux 2" in os_version.lower():
-                            if build_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
-                                            build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
-                                            build_version[:5] in COUCHBASE_FROM_601:
-                                os_name = "amzn2"
-                            else:
-                                self.fail("Amazon Linux 2 doesn't support version %s "
-                                                                % build_version[:5])
-                        elif "red hat" in os_version.lower():
-                            if "8.0" in os_version.lower():
-                                os_name = "rhel8"
-                            elif "9.0" in os_version.lower():
-                                os_name = "rhel9"
+                if "rpm" in deliverable_type:
+                    if "centos" in os_version.lower():
+                        if "centos 7" in os_version.lower():
+                            os_name = "centos7"
                         else:
                             os_name = "centos6"
-                        build.url = "{6}{0}/{1}-{4}-{5}.{2}.{3}"\
-                                .format(build_version[:build_version.find('-')],
-                                product, os_architecture, deliverable_type,
-                                build_details[:5], os_name, CB_RELEASE_REPO)
-                    elif "deb" in deliverable_type:
-                        os_architecture = "amd64"
-                        os_name = "ubuntu12.04"
-                        if  "ubuntu 20.04" in os_version.lower():
-                            if build_version[:5] in COUCHBASE_FROM_662:
-                                os_name = "ubuntu20.04"
-                            else:
-                                self.fail("ubuntu 20.04 doesn't support version %s "
-                                                                % build_version[:5])
-                        elif "ubuntu 16.04" in os_version.lower():
-                            os_name = "ubuntu16.04"
-                        elif "ubuntu 18.04" in os_version.lower():
-                            if build_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
-                                build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
-                                build_version[:5] in COUCHBASE_FROM_601:
-                                os_name = "ubuntu18.04"
-                            else:
-                                self.fail("ubuntu 18.04 doesn't support version %s "
-                                                                % build_version[:5])
-                        build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
-                                .format(build_version[:build_version.find('-')],
-                                 product, os_architecture, deliverable_type,
-                                 build_details[:5], os_name, CB_RELEASE_REPO)
-                else:
-                    build.url = "{5}{0}/{1}_{2}_{4}.{3}"\
-                        .format(build_version[:build_version.find('-')],
-                        product, os_architecture, deliverable_type,
-                        build_details, CB_RELEASE_REPO)
+                    elif "suse" in os_version.lower():
+                        if "11" in os_version.lower():
+                            os_name = "suse11"
+                        elif "12" in os_version.lower():
+                            os_name = "suse12"
+                        elif "15" in os_version.lower():
+                            os_name = "suse15"
+                    elif "oracle linux" in os_version.lower():
+                        os_name = "oel6"
+                    elif "amazon linux 2" in os_version.lower():
+                        if build_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
+                                        build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                                        build_version[:5] in COUCHBASE_FROM_601:
+                            os_name = "amzn2"
+                        else:
+                            self.fail("Amazon Linux 2 doesn't support version %s "
+                                                            % build_version[:5])
+                    elif "red hat" in os_version.lower():
+                        if "8.0" in os_version.lower():
+                            os_name = "rhel8"
+                        elif "9.0" in os_version.lower():
+                            os_name = "rhel9"
+                    else:
+                        os_name = "centos6"
+                    build.url = "{6}{0}/{1}-{4}-{5}.{2}.{3}"\
+                            .format(build_version[:build_version.find('-')],
+                            product, os_architecture, deliverable_type,
+                            build_details[:5], os_name, CB_RELEASE_REPO)
+                elif "deb" in deliverable_type:
+                    os_architecture = "amd64"
+                    os_name = "ubuntu12.04"
+                    if  "ubuntu 20.04" in os_version.lower():
+                        if build_version[:5] in COUCHBASE_FROM_662:
+                            os_name = "ubuntu20.04"
+                        else:
+                            self.fail("ubuntu 20.04 doesn't support version %s "
+                                                            % build_version[:5])
+                    elif "ubuntu 16.04" in os_version.lower():
+                        os_name = "ubuntu16.04"
+                    elif "ubuntu 18.04" in os_version.lower():
+                        if build_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
+                            build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                            build_version[:5] in COUCHBASE_FROM_601:
+                            os_name = "ubuntu18.04"
+                        else:
+                            self.fail("ubuntu 18.04 doesn't support version %s "
+                                                            % build_version[:5])
+                    build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
+                            .format(build_version[:build_version.find('-')],
+                             product, os_architecture, deliverable_type,
+                             build_details[:5], os_name, CB_RELEASE_REPO)
             else:
-                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
-                    if "rpm" in deliverable_type:
-                        if "centos" in os_version.lower():
-                            if "centos 7" in os_version.lower():
-                                os_name = "centos7"
-                            else:
-                                os_name = "centos6"
-                        elif "suse" in os_version.lower():
-                            if "11" in os_version.lower():
-                                os_name = "suse11"
-                            elif "12" in os_version.lower():
-                                os_name = "suse12"
-                            elif "15" in os_version.lower():
-                                os_name = "suse15"
-                        elif "oracle linux" in os_version.lower():
-                            os_name = "oel6"
-                        elif "amazon linux 2" in os_version.lower():
-                            if build_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
-                               build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
-                                            build_version[:5] in COUCHBASE_FROM_601:
-                                os_name = "amzn2"
-                            else:
-                                self.fail("Amazon Linux 2 doesn't support version %s "
-                                                                % build_version[:5])
+                if "rpm" in deliverable_type:
+                    if "centos" in os_version.lower():
+                        if "centos 7" in os_version.lower():
+                            os_name = "centos7"
                         else:
                             os_name = "centos6"
-                        build.url = "{6}{0}/{1}-{4}-{5}.{2}.{3}"\
-                                .format(build_version[:build_version.find('-')],
-                                product, os_architecture, deliverable_type,
-                                build_details[:5], os_name, CB_RELEASE_REPO)
-                    elif "deb" in deliverable_type:
-                        os_architecture = "amd64"
-                        os_name = "ubuntu12.04"
-                        if  "ubuntu 20.04" in os_version.lower():
-                            if build_version[:5] in COUCHBASE_FROM_662:
-                                os_name = "ubuntu20.04"
-                            else:
-                                self.fail("ubuntu 20.04 doesn't support version %s "
-                                                                % build_version[:5])
-                        elif "ubuntu 16.04" in os_version.lower():
-                            os_name = "ubuntu16.04"
-                        elif "ubuntu 18.04" in os_version.lower():
-                            if build_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
-                                build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
-                                build_version[:5] in COUCHBASE_FROM_601:
-                                os_name = "ubuntu18.04"
-                            else:
-                                self.fail("ubuntu 18.04 doesn't support version %s "
-                                                                % build_version[:5])
-                        build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
-                            .format(build_version, product, os_architecture,
-                            deliverable_type, build_details[:5], os_name,
-                            CB_RELEASE_REPO)
-                else:
-                    build.url = "{5}{0}/{1}_{2}_{4}.{3}".format(build_version,
-                                product, os_architecture, deliverable_type,
-                                build_details, CB_RELEASE_REPO)
+                    elif "suse" in os_version.lower():
+                        if "11" in os_version.lower():
+                            os_name = "suse11"
+                        elif "12" in os_version.lower():
+                            os_name = "suse12"
+                        elif "15" in os_version.lower():
+                            os_name = "suse15"
+                    elif "oracle linux" in os_version.lower():
+                        os_name = "oel6"
+                    elif "amazon linux 2" in os_version.lower():
+                        if build_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
+                           build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                                        build_version[:5] in COUCHBASE_FROM_601:
+                            os_name = "amzn2"
+                        else:
+                            self.fail("Amazon Linux 2 doesn't support version %s "
+                                                            % build_version[:5])
+                    else:
+                        os_name = "centos6"
+                    build.url = "{6}{0}/{1}-{4}-{5}.{2}.{3}"\
+                            .format(build_version[:build_version.find('-')],
+                            product, os_architecture, deliverable_type,
+                            build_details[:5], os_name, CB_RELEASE_REPO)
+                elif "deb" in deliverable_type:
+                    os_architecture = "amd64"
+                    os_name = "ubuntu12.04"
+                    if  "ubuntu 20.04" in os_version.lower():
+                        if build_version[:5] in COUCHBASE_FROM_662:
+                            os_name = "ubuntu20.04"
+                        else:
+                            self.fail("ubuntu 20.04 doesn't support version %s "
+                                                            % build_version[:5])
+                    elif "ubuntu 16.04" in os_version.lower():
+                        os_name = "ubuntu16.04"
+                    elif "ubuntu 18.04" in os_version.lower():
+                        if build_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
+                            build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                            build_version[:5] in COUCHBASE_FROM_601:
+                            os_name = "ubuntu18.04"
+                        else:
+                            self.fail("ubuntu 18.04 doesn't support version %s "
+                                                            % build_version[:5])
+                    build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
+                        .format(build_version, product, os_architecture,
+                        deliverable_type, build_details[:5], os_name,
+                        CB_RELEASE_REPO)
             build.url_latest_build = "{4}{0}_{1}_{3}.{2}".format(product,
                         os_architecture, deliverable_type, build_details,
                         CB_LATESTBUILDS_REPO)
@@ -661,7 +580,7 @@ class BuildQuery(object):
                     couchbase_server-enterprise-windows-amd64-3.5.0-926.exe
                     couchbase-server-enterprise_3.5.0-952-windows_amd64.exe"""
 
-            if any( x + "-" in build_info for x in COUCHBASE_FROM_VERSION_3):
+            if any(x + "-" in build_info for x in CB_RELEASE_BUILDS.keys()):
                 deb_words = ["debian7", "debian8", "ubuntu12.04", "ubuntu14.04",
                              "ubuntu16.04", "ubuntu18.04", "ubuntu20.04", "windows", "macos"]
                 if "centos" not in build_info and "suse" not in build_info:
@@ -773,8 +692,7 @@ class BuildQuery(object):
 
         unix_deliverable_type = ["deb", "rpm", "dmg"]
         if deliverable_type in unix_deliverable_type:
-            if toy == "" and version[:5] not in COUCHBASE_VERSION_2 and \
-                                   version[:5] not in COUCHBASE_VERSION_3:
+            if toy == "":
                 if "rel" not in version and toy == "":
                     build.product_version = version
                 elif "-rel" in version:
@@ -787,23 +705,15 @@ class BuildQuery(object):
                 else:
                     build.product_version = version
         if deliverable_type in ["exe", "msi"]:
-            if version[:5] in COUCHBASE_VERSION_2:
-                setup = "setup."
-            else:
-                os_name= "windows-"
-            if "rel" in version and version[:5] not in COUCHBASE_VERSION_2:
+            os_name = "windows-"
+            if "rel" in version:
                 build.product_version = version.replace("-rel", "")
-            elif "rel" not in version and version[:5] in COUCHBASE_VERSION_2:
-                build.product_version = version + "-rel"
             else:
                 build.product_version = version
-            if "couchbase-server" in edition_type and version[:5] in WIN_CB_VERSION_3:
-                edition_type = edition_type.replace("couchbase-", "couchbase_")
-            if version[:5] not in COUCHBASE_VERSION_2:
-                if "x86_64" in architecture_type:
-                    build.architecture_type = "amd64"
-                elif "x86" in architecture_type:
-                    build.architecture_type = "x86"
+            if "x86_64" in architecture_type:
+                build.architecture_type = "amd64"
+            elif "x86" in architecture_type:
+                build.architecture_type = "x86"
             """
                     In spock from build 2924 and later release, we only support
                     msi installation method on windows
@@ -819,11 +729,10 @@ class BuildQuery(object):
         version_join_char = "_"
         if toy is not "":
             joint_char = "-"
-        if "exe" in deliverable_type and version[:5] not in COUCHBASE_VERSION_2:
+        if "exe" in deliverable_type:
             joint_char = "-"
             version_join_char = "-"
-        if toy == "" and version[:5] not in COUCHBASE_VERSION_2 and \
-                                   version[:5] not in COUCHBASE_VERSION_3:
+        if toy == "":
             """ format for sherlock build name
             /684/couchbase-server-enterprise-3.5.0-684-centos6.x86_64.rpm
             /1154/couchbase-server-enterprise-3.5.0-1154-centos7.x86_64.rpm
@@ -1139,4 +1048,3 @@ class BuildQuery(object):
 #builds = q.get_membase_latest_builds()
 #for build in builds:
 #    print build.product,' ',build.time ,' ',build.deliverable_type,' ',build.product_version ,'',build.size,'',build.architecture_type
-

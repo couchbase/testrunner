@@ -27,23 +27,14 @@ from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from query_tests_helper import QueryHelperTests
 from couchbase_helper.tuq_generators import JsonGenerator
-from fts.fts_base import FTSIndex, FTSBaseTest
+from fts.fts_base import FTSIndex
 from pytests.fts.fts_callable import FTSCallable
 from pprint import pprint
 from testconstants import CB_REPO
 from testconstants import MV_LATESTBUILD_REPO
-from testconstants import SHERLOCK_BUILD_REPO
-from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3
 from testconstants import COUCHBASE_VERSIONS
-from testconstants import SHERLOCK_VERSION
 from testconstants import CB_VERSION_NAME
-from testconstants import COUCHBASE_FROM_VERSION_3, FUTURE_BUILD_NUMBER
-from testconstants import COUCHBASE_MP_VERSION
-from testconstants import CE_EE_ON_SAME_FOLDER
-from collection.collections_cli_client import CollectionsCLI
-from collection.collections_rest_client import CollectionsRest
-from collection.collections_stats import CollectionsStats
+from testconstants import FUTURE_BUILD_NUMBER
 from pytests.fts.fts_backup_restore import FTSIndexBackupClient
 from pytests.security.rbac_base import RbacBase
 from pytests.tuqquery.n1ql_callable import N1QLCallable
@@ -429,8 +420,6 @@ class NewUpgradeBaseTest(BaseTestCase):
         if version[:5] in COUCHBASE_VERSIONS:
             if version[:3] in CB_VERSION_NAME:
                 build_repo = CB_REPO + CB_VERSION_NAME[version[:3]] + "/"
-            elif version[:5] in COUCHBASE_MP_VERSION:
-                build_repo = MV_LATESTBUILD_REPO
         builds, changes = BuildQuery().get_all_builds(version=version, timeout=self.wait_timeout * 5, \
                                                       deliverable_type=info.deliverable_type,
                                                       architecture_type=info.architecture_type, \
@@ -759,43 +748,10 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def monitor_dcp_rebalance(self):
         """ released_upgrade_version """
-        upgrade_version = ""
-        if self.input.param('released_upgrade_version', None) is not None:
-            upgrade_version = self.input.param('released_upgrade_version', None)[:5]
-        else:
-            upgrade_version = self.input.param('upgrade_version', '')[:5]
-        if self.input.param('initial_version', '')[:5] in COUCHBASE_VERSION_2 and \
-                (upgrade_version in COUCHBASE_VERSION_3 or \
-                 upgrade_version in SHERLOCK_VERSION):
-            if int(self.initial_vbuckets) >= 512:
-                if self.master.ip != self.rest.ip or \
-                        self.master.ip == self.rest.ip and \
-                        str(self.master.port) != str(self.rest.port):
-                    if self.port:
-                        self.master.port = self.port
-                    self.rest = RestConnection(self.master)
-                    self.rest_helper = RestHelper(self.rest)
-                if self.rest._rebalance_progress_status() == 'running':
-                    self.log.info("Start monitoring DCP upgrade from {0} to {1}" \
-                                  .format(self.input.param('initial_version', '')[:5], \
-                                          upgrade_version))
-                    status = self.rest.monitorRebalance()
-                    if status:
-                        self.log.info("Done DCP rebalance upgrade!")
-                    else:
-                        self.fail("Failed DCP rebalance upgrade")
-                elif any("DCP upgrade completed successfully.\n" \
-                         in list(d.values()) for d in self.rest.get_logs(10)):
-                    self.log.info("DCP upgrade is completed")
-                else:
-                    self.fail("DCP reabalance upgrade is not running")
-            else:
-                self.fail("Need vbuckets setting >= 256 for upgrade from 2.x.x to 3+")
-        else:
-            if self.master.ip != self.rest.ip:
-                self.rest = RestConnection(self.master)
-                self.rest_helper = RestHelper(self.rest)
-            self.log.info("No need to do DCP rebalance upgrade")
+        if self.master.ip != self.rest.ip:
+            self.rest = RestConnection(self.master)
+            self.rest_helper = RestHelper(self.rest)
+        self.log.info("No need to do DCP rebalance upgrade")
 
     def _offline_upgrade(self, skip_init=False, nodes_to_upgrade=None):
         try:
@@ -821,7 +777,6 @@ class NewUpgradeBaseTest(BaseTestCase):
                     success_upgrade &= self.queue.get()
                 if not success_upgrade:
                     self.fail("Upgrade failed!")
-                self.dcp_rebalance_in_offline_upgrade_from_version2()
             """ set install cb version to upgrade version after done upgrade """
             self.initial_version = self.upgrade_versions[0]
         except Exception as ex:
@@ -852,24 +807,6 @@ class NewUpgradeBaseTest(BaseTestCase):
         except Exception as ex:
             self.log.info(ex)
             raise
-
-    def dcp_rebalance_in_offline_upgrade_from_version2(self):
-        if self.input.param('initial_version', '')[:5] in COUCHBASE_VERSION_2 and \
-                (self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3 or \
-                 self.input.param('upgrade_version', '')[:5] in SHERLOCK_VERSION) and \
-                self.input.param('num_stoped_nodes', self.nodes_init) >= self.nodes_init:
-            otpNodes = []
-            nodes = self.rest.node_statuses()
-            for node in nodes:
-                otpNodes.append(node.id)
-            self.log.info("Start DCP rebalance after complete offline upgrade from {0} to {1}" \
-                          .format(self.input.param('initial_version', '')[:5], \
-                                  self.input.param('upgrade_version', '')[:5]))
-            self.rest.rebalance(otpNodes, [])
-            """ verify DCP upgrade in 3.0.0 version """
-            self.monitor_dcp_rebalance()
-        else:
-            self.log.info("No need to do DCP rebalance upgrade")
 
     def generate_map_nodes_out_dist_upgrade(self, nodes_out_dist):
         self.nodes_out_dist = nodes_out_dist

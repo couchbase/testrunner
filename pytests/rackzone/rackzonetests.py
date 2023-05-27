@@ -1,22 +1,13 @@
-import json
 import time
-import unittest
-import testconstants
-from TestInput import TestInputSingleton
 
 from rackzone.rackzone_base import RackzoneBaseTest
-from memcached.helper.data_helper import  MemcachedClientHelper
 from membase.api.rest_client import RestConnection, Bucket
-from membase.helper.rebalance_helper import RebalanceHelper
 from membase.api.exception import RebalanceFailedException
-from couchbase_helper.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from scripts.install import InstallerJob
-from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_FROM_VERSION_3
-
+from testconstants import CB_RELEASE_BUILDS
 
 
 class RackzoneTests(RackzoneBaseTest):
@@ -32,7 +23,6 @@ class RackzoneTests(RackzoneBaseTest):
         self.do_verify = self.input.param("do-verify", True)
         self.num_node = self.input.param("num_node", 4)
         self.timeout = 6000
-
 
     def tearDown(self):
         super(RackzoneTests, self).tearDown()
@@ -387,20 +377,11 @@ class RackzoneTests(RackzoneBaseTest):
         for group in nodes:
             for node in nodes[group]:
                 buckets = RestConnection(self.servers[0]).get_buckets()
-                if versions[0][:5] in COUCHBASE_VERSION_2:
-                    command = "tap"
-                    cmd  = "%s %s:11210 %s -b %s -p '%s' "\
-                            % (self.cbstat_command, node, command, buckets[0].name, saslPassword)
-                    cmd += "| grep :vb_filter: "\
-                           "| gawk '{print $1}' "\
-                           "| sed 's/eq_tapq:replication_ns_1@//g' "\
-                           "| sed 's/:vb_filter://g' "
-                    output, error = shell.execute_command(cmd)
-                elif versions[0][:5] in COUCHBASE_FROM_VERSION_3:
+                if versions[0][:5] in CB_RELEASE_BUILDS.keys():
                     command = "dcp"
                     if 5 <= int(float(versions[0][:2])):
                         saslPassword = self.master.rest_password
-                    cmd  = "%s %s:11210 %s -b %s -u Administrator -p '%s' "\
+                    cmd = "%s %s:11210 %s -b %s -u Administrator -p '%s' "\
                             % (self.cbstat_command, node, command, buckets[0].name, saslPassword)
                     cmd += "| grep :replication:ns_1@%s |  grep vb_uuid "\
                            "| gawk '{print $1}' "\
@@ -435,4 +416,3 @@ class RackzoneTests(RackzoneBaseTest):
             else:
                 raise Exception("{%s keys in bucket %s does not match with \
                                  loaded %s keys" % (stats["curr_items"], bucket, loaded_keys))
-

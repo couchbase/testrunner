@@ -1,5 +1,5 @@
 import queue
-import copy, json
+import copy
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from couchbase_helper.documentgenerator import BlobGenerator
@@ -7,14 +7,9 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.kvstore import KVStore
-from fts.stable_topology_fts import StableTopFTS
-from pytests.fts.fts_callable import FTSCallable
-from cbas.cbas_functional_tests import CBASFunctionalTests
-# from gsi.indexscans_gsi import SecondaryIndexingScanTests
-from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_VERSION_3
-from testconstants import SHERLOCK_VERSION, COUCHBASE_FROM_SHERLOCK,\
-                          COUCHBASE_FROM_SPOCK, COUCHBASE_FROM_WATSON,\
+from testconstants import CB_RELEASE_BUILDS
+from testconstants import SHERLOCK_VERSION, \
+                          COUCHBASE_FROM_SPOCK, \
                           COUCHBASE_FROM_VULCAN, COUCHBASE_FROM_CHESHIRE_CAT
 from couchbase.cluster import Cluster, PasswordAuthenticator
 from couchbase.exceptions import CouchbaseError, CouchbaseNetworkError, CouchbaseTransientError
@@ -184,10 +179,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
                     rem = [server for server in self.servers[:self.nodes_init]
                            if self.failover_node.ip == server.ip and str(self.failover_node.port) == server.port]
-                    self.dcp_rebalance_in_offline_upgrade_from_version2()
                     self.verification(list(set(self.servers[:self.nodes_init]) - set(rem)))
                     return
-            self.dcp_rebalance_in_offline_upgrade_from_version2()
             self._create_ephemeral_buckets()
             self.verification(self.servers[:self.nodes_init])
             if self.input.param('check_seqno', True):
@@ -219,7 +212,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 success_upgrade &= self.queue.get()
             if not success_upgrade:
                 self.fail("Upgrade failed!")
-            self.dcp_rebalance_in_offline_upgrade_from_version2()
             self.add_built_in_server_user()
             for server in stoped_nodes:
                 remote = RemoteMachineShellConnection(server)
@@ -266,7 +258,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 self.fail("Upgrade failed!")
             ClusterOperationHelper.wait_for_ns_servers_or_assert(stoped_nodes, self)
             self.cluster.rebalance(self.servers[:self.nodes_init], [], servs_out)
-            self.dcp_rebalance_in_offline_upgrade_from_version2()
             self._create_ephemeral_buckets()
             self.verification(list(set(self.servers[:self.nodes_init] + servs_in) - set(servs_out)))
 
@@ -319,7 +310,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     success_upgrade &= self.queue.get()
                 if not success_upgrade:
                     self.fail("Upgrade failed!")
-                self.dcp_rebalance_in_offline_upgrade_from_version2()
                 self.add_built_in_server_user()
                 self.sleep(self.expire_time)
                 for server in servers_with_not_default:
@@ -381,7 +371,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 success_upgrade &= self.queue.get()
             if not success_upgrade:
                 self.fail("Upgrade failed!")
-            self.dcp_rebalance_in_offline_upgrade_from_version2()
             self._create_ephemeral_buckets()
             self.verification(self.servers[:self.nodes_init])
 
@@ -453,7 +442,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.add_built_in_server_user()
         self.sleep(10)
 
-        if self.input.param('initial_version', '')[:5] in COUCHBASE_FROM_VERSION_3:
+        if self.input.param('initial_version', '')[:5] in CB_RELEASE_BUILDS.keys():
             self.master = self.servers[self.nodes_init: self.num_servers][0]
         """ verify DCP upgrade in 3.0.0 version """
         self.monitor_dcp_rebalance()
@@ -590,11 +579,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 self.log.info("%s node %s becomes the master" \
                               % (self.input.param("upgrade_version", ""), new_server.ip))
                 break
-        if self.input.param("initial_version", "")[:5] in COUCHBASE_VERSION_2 \
-                and not FIND_MASTER and not self.is_downgrade:
-            raise Exception( \
-                "After rebalance in {0} nodes, {0} node doesn't become master" \
-                    .format(self.input.param("upgrade_version", "")))
 
     def online_upgrade_swap_rebalance(self):
         self._install(self.servers[:self.nodes_init])
@@ -642,15 +626,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     self._new_master(new_server)
                     FIND_MASTER = True
                     self.log.info("3.0 Node %s becomes the master" % (new_server.ip))
-            if not FIND_MASTER and not self.is_downgrade:
-                if self.input.param("initial_version", "")[:5] in COUCHBASE_VERSION_3 \
-                        and self.input.param("upgrade_version", "")[:5] in SHERLOCK_VERSION:
-                    raise Exception("After rebalance in {0} nodes, {0} node doesn't become" \
-                                    " the master ".format(self.input.param("upgrade_version", "")[:5]))
-                elif self.input.param("initial_version", "")[:5] in COUCHBASE_VERSION_2 \
-                        and self.input.param("upgrade_version", "")[:5] in COUCHBASE_VERSION_3:
-                    raise Exception("After rebalance in {0} nodes, {0} node doesn't become" \
-                                    " the master ".format(self.input.param("upgrade_version", "")[:5]))
 
         """ verify DCP upgrade in 3.0.0 version """
         self.monitor_dcp_rebalance()
@@ -1210,7 +1185,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if not success_upgrade:
                 self.fail("Upgrade failed. See logs above!")
             self.sleep(self.expire_time)
-        self.dcp_rebalance_in_offline_upgrade_from_version2()
         self.n1ql_server = self.get_nodes_from_services_map(
             service_type="n1ql")
         # Run the post_upgrade operations
@@ -1314,7 +1288,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if not success_upgrade:
                 self.fail("Upgrade failed. See logs above!")
             self.sleep(self.expire_time)
-        self.dcp_rebalance_in_offline_upgrade_from_version2()
         # Run the post_upgrade operations
         self._create_ephemeral_buckets()
         self.post_upgrade(self.servers[:3])
@@ -1415,7 +1388,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if not success_upgrade:
                 self.fail("Upgrade failed. See logs above!")
             self.sleep(self.expire_time)
-        self.dcp_rebalance_in_offline_upgrade_from_version2()
         # Run the post_upgrade operations
         self._create_ephemeral_buckets()
         self.post_upgrade(self.servers[:3])
@@ -1515,7 +1487,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if not success_upgrade:
                 self.fail("Upgrade failed. See logs above!")
             self.sleep(self.expire_time)
-        self.dcp_rebalance_in_offline_upgrade_from_version2()
         # Run the post_upgrade operations
         self._create_ephemeral_buckets()
         self.post_upgrade(self.servers[:3])
@@ -1615,7 +1586,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if not success_upgrade:
                 self.fail("Upgrade failed. See logs above!")
             self.sleep(self.expire_time)
-        self.dcp_rebalance_in_offline_upgrade_from_version2()
         # Run the post_upgrade operations
         self._create_ephemeral_buckets()
         self.post_upgrade(self.servers[:3])
@@ -1715,7 +1685,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if not success_upgrade:
                 self.fail("Upgrade failed. See logs above!")
             self.sleep(self.expire_time)
-        self.dcp_rebalance_in_offline_upgrade_from_version2()
         # Run the post_upgrade operations
         self._create_ephemeral_buckets()
         self.post_upgrade(self.servers[:3])
@@ -1815,7 +1784,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if not success_upgrade:
                 self.fail("Upgrade failed. See logs above!")
             self.sleep(self.expire_time)
-        self.dcp_rebalance_in_offline_upgrade_from_version2()
         # Run the post_upgrade operations
         self._create_ephemeral_buckets()
         self.post_upgrade(self.servers[:3])
@@ -1920,7 +1888,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if not success_upgrade:
                 self.fail("Upgrade failed. See logs above!")
             self.sleep(self.expire_time)
-        self.dcp_rebalance_in_offline_upgrade_from_version2()
         # Run the post_upgrade operations
         self._create_ephemeral_buckets()
         self.post_upgrade(self.servers[:6])
@@ -2040,7 +2007,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if not success_upgrade:
                 self.fail("Upgrade failed. See logs above!")
             self.sleep(self.expire_time)
-        self.dcp_rebalance_in_offline_upgrade_from_version2()
         # Run the post_upgrade operations
         self._create_ephemeral_buckets()
         self.post_upgrade(self.servers[:6])
@@ -2157,7 +2123,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if not success_upgrade:
                 self.fail("Upgrade failed. See logs above!")
             self.sleep(self.expire_time)
-        self.dcp_rebalance_in_offline_upgrade_from_version2()
         # Run the post_upgrade operations
         self._create_ephemeral_buckets()
         self.post_upgrade(self.servers[:6])
@@ -2272,7 +2237,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if not success_upgrade:
                 self.fail("Upgrade failed. See logs above!")
             self.sleep(self.expire_time)
-        self.dcp_rebalance_in_offline_upgrade_from_version2()
         # Add new services after the upgrade
         self.log.info("Indexer node : {}".format(self.index_server))
         for upgrade_version in self.upgrade_versions:
@@ -2499,7 +2463,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 if not success_upgrade:
                     self.fail("Upgrade failed. See logs above!")
             self.sleep(self.expire_time)
-        self.dcp_rebalance_in_offline_upgrade_from_version2()
         # Run the post_upgrade operations
         self._create_ephemeral_buckets()
         self.post_upgrade(self.servers[:nodes_init])

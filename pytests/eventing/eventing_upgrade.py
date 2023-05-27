@@ -1,17 +1,12 @@
 import queue
-import copy
 
-from TestInput import TestInputSingleton
 from couchbase_helper.tuq_helper import N1QLHelper
 from eventing.eventing_base import EventingBaseTest
 from membase.api.rest_client import RestHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from pytests.basetestcase import BaseTestCase
 from lib.testconstants import STANDARD_BUCKET_PORT
 from lib.membase.api.rest_client import RestConnection
 import logging
-from pytests.eventing.eventing_constants import HANDLER_CODE, EXPORTED_FUNCTION
-from testconstants import COUCHBASE_VERSION_2
 from pytests.security.ntonencryptionBase import ntonencryptionBase
 from lib.Cb_constants.CBServer import CbServer
 import os
@@ -603,11 +598,6 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
                               % (self.input.param("upgrade_version", ""), new_server.ip))
                 self.master=new_server
                 break
-        if self.input.param("initial_version", "")[:5] in COUCHBASE_VERSION_2 \
-                and not FIND_MASTER and not self.is_downgrade:
-            raise Exception( \
-                "After rebalance in {0} nodes, {0} node doesn't become master" \
-                    .format(self.input.param("upgrade_version", "")))
 
     def online_upgrade_swap_rebalance(self, services=None):
         servers_in = self.servers[self.nodes_init:self.num_servers]
@@ -644,11 +634,6 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
                 self.log.info("%s node %s becomes the master" \
                               % (self.input.param("upgrade_version", ""), new_server.ip))
                 break
-        if self.input.param("initial_version", "")[:5] in COUCHBASE_VERSION_2 \
-                and not FIND_MASTER:
-            raise Exception( \
-                "After rebalance in {0} nodes, {0} node doesn't become master" \
-                    .format(self.input.param("upgrade_version", "")))
         servers_out = self.servers[:self.nodes_init]
         self._new_master(self.servers[self.nodes_init])
         log.info("failover and rebalance nodes")
