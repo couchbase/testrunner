@@ -64,10 +64,10 @@ class GSIMeter(ServerlessBaseTestCase):
             meter = metering(database.rest_host, database.admin_username, database.admin_password)
             result = self.run_query(database, f'INSERT INTO {self.collection} (key k, value v) select uuid() as k , {{"name": "San Francisco"}} as v from array_range(0,{self.doc_count}) d')
 
-            before_ix_ru, before_ix_wu = meter.get_index_rwu(database.id)
+            before_ix_ru, before_ix_wu = meter.get_index_rwu(database.id, "build")
             result = self.run_query(database, f'CREATE INDEX idx_name on {self.collection}(name)')
             self.check_index_online(database, 'idx_name')
-            after_ix_ru, after_ix_wu = meter.get_index_rwu(database.id)
+            after_ix_ru, after_ix_wu = meter.get_index_rwu(database.id, "build")
 
             self.assertTrue('billingUnits' not in result)
             self.assertEqual(after_ix_wu - before_ix_wu, self.doc_count)
@@ -81,9 +81,9 @@ class GSIMeter(ServerlessBaseTestCase):
             result = self.run_query(database, f'CREATE INDEX idx_name on {self.collection}(name)')
             self.check_index_online(database, 'idx_name')
 
-            before_ix_ru, before_ix_wu = meter.get_index_rwu(database.id)
+            before_ix_ru, before_ix_wu = meter.get_index_rwu(database.id, "build")
             result = self.run_query(database, f'SELECT name FROM {self.collection} WHERE name is not null')
-            after_ix_ru, after_ix_wu = meter.get_index_rwu(database.id)
+            after_ix_ru, after_ix_wu = meter.get_index_rwu(database.id, "build")
 
             index_ru = math.ceil(self.doc_count * (36 + len('San Francisco')) / self.index_ru * 1.1)
             self.assertEqual(result['billingUnits'], {'ru': {'index': index_ru}})
@@ -99,11 +99,11 @@ class GSIMeter(ServerlessBaseTestCase):
             self.run_query(database, f'DROP INDEX idx_name IF EXISTS on {self.collection}')
             self.run_query(database, insert_query)
 
-            before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
+            before_index_ru, before_index_wu = meter.get_index_rwu(database.id, "build")
             before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
             self.run_query(database, f'CREATE INDEX idx_name on {self.collection}(name)')
             self.check_index_online(database, 'idx_name')
-            after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
+            after_index_ru, after_index_wu = meter.get_index_rwu(database.id, "build")
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
             expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu)
@@ -121,11 +121,11 @@ class GSIMeter(ServerlessBaseTestCase):
             self.run_query(database, f'DROP INDEX idx_name IF EXISTS on {self.collection}')
             self.run_query(database, insert_query)
 
-            before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
+            before_index_ru, before_index_wu = meter.get_index_rwu(database.id, "build")
             before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
             self.run_query(database, f'CREATE INDEX idx_name on {self.collection}(name) WITH {{"defer_build":true}}')
             time.sleep(30)
-            after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
+            after_index_ru, after_index_wu = meter.get_index_rwu(database.id, "build")
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
             expected_index_wu = 0
@@ -136,7 +136,7 @@ class GSIMeter(ServerlessBaseTestCase):
 
             self.run_query(database, f'BUILD INDEX ON {self.collection}(idx_name)')
             self.check_index_online(database, 'idx_name')
-            after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
+            after_index_ru, after_index_wu = meter.get_index_rwu(database.id, "build")
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
             expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu)
@@ -158,11 +158,11 @@ class GSIMeter(ServerlessBaseTestCase):
             self.run_query(database,f'DROP INDEX idx_name IF EXISTS on {self.collection}')
             self.run_query(database,insert_query)
 
-            before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
+            before_index_ru, before_index_wu = meter.get_index_rwu(database.id, "build")
             before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
             self.run_query(database,f'CREATE INDEX idx_name on {self.collection}(fname,lname)')
             self.check_index_online(database, 'idx_name')
-            after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
+            after_index_ru, after_index_wu = meter.get_index_rwu(database.id, "build")
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
             expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.composite_index_key_size) / self.index_wu)
@@ -192,11 +192,11 @@ class GSIMeter(ServerlessBaseTestCase):
             self.run_query(database,insert_query2)
             self.run_query(database,insert_query3)
 
-            before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
+            before_index_ru, before_index_wu = meter.get_index_rwu(database.id, "build")
             before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
             self.run_query(database,f'CREATE INDEX idx_name on {self.collection}(name,type)')
             self.check_index_online(database, 'idx_name')
-            after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
+            after_index_ru, after_index_wu = meter.get_index_rwu(database.id, "build")
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
             expected_index_wu = 5 * math.ceil((doc_size1 + self.index_key_size) / self.index_wu) + 5 * math.ceil((doc_size2 + self.index_key_size) / self.index_wu) + 5 * math.ceil((doc_size3 + self.index_key_size) / self.index_wu)
@@ -217,11 +217,11 @@ class GSIMeter(ServerlessBaseTestCase):
             self.run_query(database,insert_query2)
 
             name = self.doc_value
-            before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
+            before_index_ru, before_index_wu = meter.get_index_rwu(database.id, "build")
             before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
             self.run_query(database,f'CREATE INDEX idx_name on {self.collection}(name) where name = "{name}"')
             self.check_index_online(database, 'idx_name')
-            after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
+            after_index_ru, after_index_wu = meter.get_index_rwu(database.id, "build")
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
             expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu)
@@ -247,11 +247,11 @@ class GSIMeter(ServerlessBaseTestCase):
             self.run_query(database,insert_query2)
 
 
-            before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
+            before_index_ru, before_index_wu = meter.get_index_rwu(database.id, "build")
             before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
             self.run_query(database,f'CREATE INDEX idx_name on {self.collection}(name INCLUDE MISSING)')
             self.check_index_online(database, 'idx_name')
-            after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
+            after_index_ru, after_index_wu = meter.get_index_rwu(database.id, "build")
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
             expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu) + 4 * math.ceil((doc_size2 + index_key_size2) / self.index_wu)
@@ -269,11 +269,11 @@ class GSIMeter(ServerlessBaseTestCase):
             self.run_query(database,f'DROP PRIMARY INDEX IF EXISTS on {self.collection}')
             self.run_query(database,insert_query)
 
-            before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
+            before_index_ru, before_index_wu = meter.get_index_rwu(database.id, "build")
             before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
             self.run_query(database,f'CREATE PRIMARY INDEX ON {self.collection}')
             self.check_index_online(database, '#primary')
-            after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
+            after_index_ru, after_index_wu = meter.get_index_rwu(database.id, "build")
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
             expected_index_wu = self.doc_count * math.ceil((self.doc_key_size) / self.index_wu)
@@ -291,14 +291,14 @@ class GSIMeter(ServerlessBaseTestCase):
             self.run_query(database,f'DROP INDEX idx_name IF EXISTS on {self.collection}')
             self.run_query(database,insert_query)
 
-            before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
+            before_index_ru, before_index_wu = meter.get_index_rwu(database.id, "build")
             before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
             self.run_query(database,f'CREATE INDEX idx_name on {self.collection}(name)')
             self.run_query(database,f'CREATE INDEX idx_name2 on {self.collection}(name)')
             self.check_index_online(database, 'idx_name')
             self.check_index_online(database, 'idx_name2')
 
-            after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
+            after_index_ru, after_index_wu = meter.get_index_rwu(database.id, "build")
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
             expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu) * 2
@@ -325,11 +325,11 @@ class GSIMeter(ServerlessBaseTestCase):
             self.run_query(database,insert_query2)
             self.run_query(database,insert_query3)
 
-            before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
+            before_index_ru, before_index_wu = meter.get_index_rwu(database.id, "build")
             before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
             self.run_query(database,f'CREATE INDEX idx_name on {self.collection}(name) where name = "hotel"')
             self.check_index_online(database, 'idx_name')
-            after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
+            after_index_ru, after_index_wu = meter.get_index_rwu(database.id, "build")
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
             expected_index_wu = 4 * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu)
@@ -359,11 +359,11 @@ class GSIMeter(ServerlessBaseTestCase):
             self.run_query(database,insert_query2)
             self.run_query(database,insert_query3)
 
-            before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
+            before_index_ru, before_index_wu = meter.get_index_rwu(database.id, "build")
             before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
             self.run_query(database,f'CREATE INDEX idx_name on {self.collection}(name)')
             self.check_index_online(database, 'idx_name')
-            after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
+            after_index_ru, after_index_wu = meter.get_index_rwu(database.id, "build")
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
             expected_index_wu = 4 * math.ceil((doc_size1 + self.index_key_size) / self.index_wu) + 4 * math.ceil((doc_size2 + self.index_key_size) / self.index_wu)
@@ -393,11 +393,11 @@ class GSIMeter(ServerlessBaseTestCase):
             self.run_query(database,insert_query2)
             self.run_query(database,insert_query3)
 
-            before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
+            before_index_ru, before_index_wu = meter.get_index_rwu(database.id, "build")
             before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
             self.run_query(database,f'CREATE INDEX idx_name on {self.collection}(name INCLUDE MISSING)')
             self.check_index_online(database, 'idx_name')
-            after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
+            after_index_ru, after_index_wu = meter.get_index_rwu(database.id, "build")
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
             expected_index_wu = 4 * math.ceil((doc_size1 + self.index_key_size) / self.index_wu) + 4 * math.ceil((doc_size2 + self.index_key_size) / self.index_wu) + 4 * math.ceil((doc_size3 + self.index_key_size) / self.index_wu)
@@ -415,14 +415,14 @@ class GSIMeter(ServerlessBaseTestCase):
             self.run_query(database,f'DROP INDEX idx_names IF EXISTS on {self.collection}')
             self.run_query(database,insert_query)
 
-            before_index_ru, before_index_wu = meter.get_index_rwu(database.id)
+            before_index_ru, before_index_wu = meter.get_index_rwu(database.id, "build")
             before_kv_ru, before_kv_wu = meter.get_kv_rwu(database.id)
             if self.create_distinct:
                 self.run_query(database,f'CREATE INDEX idx_names on {self.collection}(DISTINCT ARRAY x.fname for x in names END)')
             else:
                 self.run_query(database,f'CREATE INDEX idx_names on {self.collection}(ALL ARRAY x.fname for x in names END)')
             self.check_index_online(database, 'idx_names')
-            after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
+            after_index_ru, after_index_wu = meter.get_index_rwu(database.id, "build")
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
             expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.distinct_array_index_key_size) / self.index_wu)
@@ -606,7 +606,11 @@ class GSIMeter(ServerlessBaseTestCase):
             insert_query = f'INSERT INTO {self.collection} (key k, value v) SELECT uuid() as k , {self.doc} as v FROM array_range(0,{self.doc_count}) d'
             self.run_query(database,insert_query)
             time.sleep(30)
-            after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
+            # three different write units to look for but only one read unit to look for
+            after_index_ru, after_index_wu = meter.get_index_rwu(database.id, "build")
+            after_index_ru_update_insert, after_index_wu_update_insert = meter.get_index_rwu(database.id, "updateinsertonly")
+            after_index_ru_update, after_index_wu_update = meter.get_index_rwu(database.id, "update")
+            after_index_wu = after_index_wu + after_index_wu_update_insert + after_index_wu_update
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
             expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu)
@@ -631,7 +635,10 @@ class GSIMeter(ServerlessBaseTestCase):
             update_query = f'UPDATE {self.collection} SET name = {self.doc_value2}'
             self.run_query(database,update_query)
             time.sleep(30)
-            after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
+            after_index_ru, after_index_wu = meter.get_index_rwu(database.id, "build")
+            after_index_ru_update_insert, after_index_wu_update_insert = meter.get_index_rwu(database.id, "updateinsertonly")
+            after_index_ru_update, after_index_wu_update = meter.get_index_rwu(database.id, "update")
+            after_index_wu = after_index_wu + after_index_wu_update_insert + after_index_wu_update
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
             result = self.run_query(database,f'SELECT meta().id FROM {self.collection}')
@@ -662,7 +669,11 @@ class GSIMeter(ServerlessBaseTestCase):
             delete_query = f'DELETE FROM {self.collection}'
             self.run_query(database,delete_query)
             time.sleep(30)
-            after_index_ru, after_index_wu = meter.get_index_rwu(database.id)
+            after_index_ru, after_index_wu = meter.get_index_rwu(database.id, "build")
+            after_index_ru_update_insert, after_index_wu_update_insert = meter.get_index_rwu(database.id,
+                                                                                             "updateinsertonly")
+            after_index_ru_update, after_index_wu_update = meter.get_index_rwu(database.id, "update")
+            after_index_wu = after_index_wu + after_index_wu_update_insert + after_index_wu_update
             after_kv_ru, after_kv_wu = meter.get_kv_rwu(database.id)
 
             expected_index_wu = self.doc_count * math.ceil((self.doc_key_size + self.index_key_size) / self.index_wu)
