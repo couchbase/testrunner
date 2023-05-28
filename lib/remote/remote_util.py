@@ -19,7 +19,6 @@ import logger
 from builds.build_query import BuildQuery
 import testconstants
 from testconstants import VERSION_FILE
-from testconstants import WIN_REGISTER_ID
 from testconstants import MISSING_UBUNTU_LIB
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import SHERLOCK_BUILD_REPO
@@ -1726,8 +1725,6 @@ class RemoteMachineShellConnection(KeepRefs):
         des_path = "/cygdrive/c/automation"
 
         # remove dot in version (like 2.0.0 ==> 200)
-        reg_version = version[0:5:2]
-        reg_id = WIN_REGISTER_ID[reg_version]
         uuid_name = uuid.uuid4()
 
         if task == "install":
@@ -1746,12 +1743,7 @@ class RemoteMachineShellConnection(KeepRefs):
 
         f1 = open(full_src_path_template, 'r')
         f2 = open(full_src_path, 'w')
-        """ replace ####### with reg ID to install/uninstall """
-        if "2.2.0-837" in version:
-            reg_id = "2B630EB8-BBC7-6FE4-C9B8-D8843EB1EFFA"
-        log.info("register ID: {0}".format(reg_id))
         for line in f1:
-            line = line.replace("#######", reg_id)
             if product == "mb" and task == "install":
                 line = line.replace("Couchbase", "Membase")
             f2.write(line)
