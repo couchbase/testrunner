@@ -24,9 +24,7 @@ from random import randint
 from fts.fts_base import FTSBaseTest
 from pytests.fts.fts_callable import FTSCallable
 from pprint import pprint
-from testconstants import CB_REPO
-from testconstants import MV_LATESTBUILD_REPO
-from testconstants import COUCHBASE_VERSIONS
+from testconstants import CB_REPO, CB_RELEASE_BUILDS
 from testconstants import CB_VERSION_NAME
 from testconstants import STANDARD_BUCKET_PORT, IPV4_REGEX
 
@@ -294,7 +292,7 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
         if info is None:
             info = remote.extract_remote_info()
         build_repo = CB_REPO
-        if version[:5] in COUCHBASE_VERSIONS:
+        if version[:5] in CB_RELEASE_BUILDS.keys():
             if version[:3] in CB_VERSION_NAME:
                 build_repo = CB_REPO + CB_VERSION_NAME[version[:3]] + "/"
 

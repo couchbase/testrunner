@@ -30,9 +30,8 @@ from couchbase_helper.tuq_generators import JsonGenerator
 from fts.fts_base import FTSIndex
 from pytests.fts.fts_callable import FTSCallable
 from pprint import pprint
-from testconstants import CB_REPO
+from testconstants import CB_REPO, CB_RELEASE_BUILDS
 from testconstants import MV_LATESTBUILD_REPO
-from testconstants import COUCHBASE_VERSIONS
 from testconstants import CB_VERSION_NAME
 from testconstants import FUTURE_BUILD_NUMBER
 from pytests.fts.fts_backup_restore import FTSIndexBackupClient
@@ -417,9 +416,8 @@ class NewUpgradeBaseTest(BaseTestCase):
         if info is None:
             info = remote.extract_remote_info()
         build_repo = CB_REPO
-        if version[:5] in COUCHBASE_VERSIONS:
-            if version[:3] in CB_VERSION_NAME:
-                build_repo = CB_REPO + CB_VERSION_NAME[version[:3]] + "/"
+        if version[:5] in CB_RELEASE_BUILDS.keys():
+            build_repo = CB_REPO + CB_VERSION_NAME[version[:3]] + "/"
         builds, changes = BuildQuery().get_all_builds(version=version, timeout=self.wait_timeout * 5, \
                                                       deliverable_type=info.deliverable_type,
                                                       architecture_type=info.architecture_type, \

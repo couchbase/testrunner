@@ -23,7 +23,6 @@ from testconstants import WIN_REGISTER_ID
 from testconstants import MISSING_UBUNTU_LIB
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import SHERLOCK_BUILD_REPO
-from testconstants import COUCHBASE_VERSIONS
 from testconstants import SYSTEMD_SERVER
 from testconstants import CB_RELEASE_BUILDS
 from testconstants import WIN_PROCESSES_KILLED
@@ -1801,8 +1800,7 @@ class RemoteMachineShellConnection(KeepRefs):
         sftp = self._ssh_client.open_sftp()
         capture_iss_file = ""
 
-        product_version = ""
-        if version[:5] in COUCHBASE_VERSIONS:
+        if version[:5] in CB_RELEASE_BUILDS.keys():
             product_version = version[:5]
             name = "cb"
         else:
@@ -5088,7 +5086,7 @@ class RemoteMachineShellConnection(KeepRefs):
         if output:
             for x in output:
                 x = x.strip()
-                if x and x[:5] in COUCHBASE_VERSIONS and "-" in x:
+                if x and x[:5] in CB_RELEASE_BUILDS.keys() and "-" in x:
                     fv = x
                     tmp = x.split("-")
                     sv = tmp[0]

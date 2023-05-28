@@ -23,8 +23,7 @@ from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper, R
 from membase.helper.cluster_helper import ClusterOperationHelper
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import CB_REPO, CB_DOWNLOAD_SERVER, CB_DOWNLOAD_SERVER_FQDN
-from testconstants import CB_VERSION_NAME, \
-                          CB_RELEASE_BUILDS, COUCHBASE_VERSIONS
+from testconstants import CB_VERSION_NAME, CB_RELEASE_BUILDS
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, CBAS_QUOTA, CLUSTER_QUOTA_RATIO
 from testconstants import LINUX_COUCHBASE_PORT_CONFIG_PATH, LINUX_COUCHBASE_OLD_CONFIG_PATH
 from testconstants import WIN_COUCHBASE_PORT_CONFIG_PATH, WIN_COUCHBASE_OLD_CONFIG_PATH,\
@@ -1183,7 +1182,7 @@ def main():
         if "version" in input.test_params:
             build_version = input.test_params["version"]
             build_pattern = re.compile("\d\d?\.\d\.\d-\d{3,4}$")
-            if input.test_params["version"][:5] in COUCHBASE_VERSIONS and \
+            if input.test_params["version"][:5] in CB_RELEASE_BUILDS.keys() and \
                 bool(build_pattern.match(build_version)):
                 correct_build_format = True
         use_direct_url = False

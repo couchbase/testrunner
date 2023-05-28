@@ -542,7 +542,7 @@ class BuildQuery(object):
                 else:
                     product_version = build_info.split("-")
                     product_version = product_version[3] + "-" + product_version[4]
-                if product_version[:5] in testconstants.COUCHBASE_VERSIONS:
+                if product_version[:5] in testconstants.CB_RELEASE_BUILDS.keys():
                     build.product_version = product_version
                     if "centos" not in build_info and "suse" not in build_info:
                         build_info = build_info.replace("_" + product_version, "")
@@ -573,7 +573,7 @@ class BuildQuery(object):
                 return build
             product_version = build_info.split("_")
             product_version = product_version[len(product_version)-1]
-            if product_version[:5] in testconstants.COUCHBASE_VERSIONS:
+            if product_version[:5] in testconstants.CB_RELEASE_BUILDS.keys():
                 build.product_version = product_version
                 build_info = build_info.replace("_" + product_version, "")
             else:
