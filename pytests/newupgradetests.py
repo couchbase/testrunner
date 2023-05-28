@@ -8,7 +8,6 @@ from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.kvstore import KVStore
 from testconstants import CB_RELEASE_BUILDS
-from testconstants import COUCHBASE_FROM_CHESHIRE_CAT
 from couchbase.cluster import Cluster, PasswordAuthenticator
 from couchbase.exceptions import CouchbaseError, CouchbaseNetworkError, CouchbaseTransientError
 from security.rbac_base import RbacBase
@@ -2511,7 +2510,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                         break
                 items_travel_sample = 63182
                 cb_version = RestConnection(self.master).get_nodes_version()
-                if cb_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT:
+                # Toy build or Greater than CC build
+                if cb_version[:3] == "0.0" or cb_version[:3] >= 7.0:
                     items_travel_sample = 63288
                 self.load_sample_buckets(servers=self.servers[:nodes_init],
                                          bucketName="travel-sample",

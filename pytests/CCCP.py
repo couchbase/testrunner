@@ -5,7 +5,6 @@ from basetestcase import BaseTestCase
 from couchbase_helper.document import View
 from couchbase_helper.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
-from testconstants import COUCHBASE_FROM_MAD_HATTER
 
 
 class CCCP(BaseTestCase):
@@ -111,13 +110,8 @@ class CCCP(BaseTestCase):
         for node in config_json["nodes"]:
             self.assertTrue("couchApiBase" in node and "hostname" in node,
                             "No hostname name in config")
-            if self.cb_version[:5] in COUCHBASE_FROM_MAD_HATTER:
-                self.assertTrue(node["ports"]["direct"] == 11210,
-                            "ports are incorrect: %s" % node)
-            else:
-                self.assertTrue(node["ports"]["proxy"] == 11211 and \
-                            node["ports"]["direct"] == 11210,
-                            "ports are incorrect: %s" % node)
+            self.assertTrue(node["ports"]["direct"] == 11210,
+                        "ports are incorrect: %s" % node)
         self.assertTrue(config_json["ddocs"]["uri"] == \
                        ("/pools/default/buckets/%s/ddocs" % bucket.name),
                         "Ddocs uri is incorrect: %s "

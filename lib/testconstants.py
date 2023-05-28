@@ -3,7 +3,16 @@ STANDARD_BUCKET_PORT = 11217
 COUCHBASE_SINGLE_DEFAULT_INI_PATH = "/opt/couchbase/etc/couchdb/default.ini"
 MEMBASE_DATA_PATH = "/opt/membase/var/lib/membase/data/"
 COUCHBASE_DATA_PATH = "/opt/couchbase/var/lib/couchbase/data/"
-# remember update WIN_REGISTER_ID also when update COUCHBASE_VERSION
+
+CB_VERSION_NAME = {"0.0": "master",
+                   "6.0": "alice",
+                   "6.5": "mad-hatter", "6.6": "mad-hatter",
+                   "7.0": "cheshire-cat",
+                   "7.1": "neo", "7.2": "neo",
+                   "7.5": "elixir",
+                   "7.6": "trinity",
+                   "8.0": "morpheus"}
+
 COUCHBASE_VERSIONS = ["0.0.0",
                       "6.0.0", "6.0.1", "6.0.2", "6.0.3", "6.0.4", "6.0.5",
                       "6.5.0", "6.5.1", "6.5.2",
@@ -14,6 +23,7 @@ COUCHBASE_VERSIONS = ["0.0.0",
                       "7.5.0",
                       "7.6.0",
                       "8.0.0"]
+
 CB_RELEASE_BUILDS = {"0.0.0": "0000",
                      "6.0.0": "1693", "6.0.1": "2037", "6.0.2": "2413",
                      "6.0.3": "2895", "6.0.4": "3082", "6.0.5": "3340",
@@ -29,34 +39,6 @@ CB_RELEASE_BUILDS = {"0.0.0": "0000",
                      "7.6.0": "0000",
                      "8.0.0": "0000"}
 
-COUCHBASE_FROM_ALICE = ["0.0.0", "6.0.0", "6.0.1", "6.0.2", "6.0.3", "6.0.4", "6.0.5", "6.5.0", "6.5.1",
-                        "6.5.2", "6.6.0", "6.6.1", "6.6.2", "6.6.3", "6.6.4", "6.6.5", "7.0.0", "7.0.1", "7.0.2", "7.0.3",
-                        "7.0.4", "7.1.0", "7.1.1", "7.1.2", "7.2.0", "7.5.0", "7.6.0", "8.0.0"]
-COUCHBASE_FROM_601 = ["0.0.0", "6.0.1", "6.0.2", "6.0.3", "6.0.4", "6.0.5", "6.5.0", "6.5.1", "6.5.2",
-                      "6.6.0", "6.6.1", "6.6.2", "6.6.3", "6.6.4", "6.6.5", "7.0.0", "7.0.1", "7.0.2", "7.0.3",
-                      "7.0.4", "7.1.0", "7.1.1", "7.1.2", "7.2.0", "7.5.0", "7.6.0", "8.0.0"]
-# Ubuntu 20.04 support from 6.6.2
-COUCHBASE_FROM_662 = ["0.0.0", "6.6.2", "6.6.3", "6.6.4", "6.6.5", "7.0.0", "7.0.1", "7.0.2", "7.0.3", "7.0.4", "7.1.0", "7.1.1",
-                      "7.1.2", "7.2.0", "7.5.0", "7.6.0", "8.0.0"]
-COUCHBASE_FROM_MAD_HATTER = ["0.0.0", "6.5.0", "6.5.1", "6.5.2", "6.6.0", "6.6.1", "6.6.2", "6.6.3",
-                             "6.6.4", "6.6.5", "7.0.0", "7.0.1", "7.0.2", "7.0.3", "7.0.4", "7.1.0",
-                             "7.1.1", "7.1.2", "7.2.0", "7.5.0", "7.6.0", "8.0.0"]
-# Update release build here for upgrade tests
-COUCHBASE_FROM_CHESHIRE_CAT = ["0.0.0", "7.0.0", "7.0.1", "7.0.2", "7.0.3", "7.0.4", "7.1.0", "7.1.1", "7.1.2",
-                               "7.2.0", "7.5.0", "7.6.0", "8.0.0"]
-COUCHBASE_FROM_NEO = ["0.0.0", "7.1.0", "7.1.1", "7.1.2", "7.2.0", "7.5.0", "7.6.0", "8.0.0"]
-COUCHBASE_FROM_ELIXIR = ["0.0.0", "7.5.0", "7.6.0", "8.0.0"]
-COUCHBASE_FROM_MORPHEUS = ["0.0.0", "7.6.0", "8.0.0"]
-
-CB_VERSION_NAME = {"0.0": "master",
-                   "6.0": "alice",
-                   "6.5": "mad-hatter", "6.6": "mad-hatter",
-                   "7.0": "cheshire-cat",
-                   "7.1": "neo", "7.2": "neo",
-                   "7.5": "elixir",
-                   "7.6": "trinity",
-                   "8.0": "morpheus"}
-
 MACOS_NAME = {"10.10": "Yosemite", "10.11": "El Capitan", "10.12": "Sierra",
               "10.13": "High Sierra", "10.14": "Mojave", "10.15": "Catalina",
               "12.3": "Monterey"}
@@ -69,6 +51,7 @@ SYSTEMD_SERVER = ["centos 8", "centos 7",
                   "oel 7", "oel 8", "oel 9",
                   "amazon linux release 2 (karoo)",
                   "amazon linux release 2023 (amazon linux)"]
+
 WIN_NUM_ERLANG_PROCESS = 4
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
 WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
@@ -83,6 +66,7 @@ WIN_PROCESSES_SPAWNED = ["backup.exe", "cbas.exe", "cbft.exe", "cbq-engine.exe",
                          "goxdcr.exe", "indexer.exe", "java.exe", "memcached.exe", "projector.exe" "prometheus.exe",
                          "saslauthd-port.exe", "eventing-consumer.exe"]
 LINUX_CB_PATH = "/opt/couchbase/"
+# remember update WIN_REGISTER_ID also when update COUCHBASE_VERSION
 WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F",
                    "170":"AF3F80E5-2CA3-409C-B59B-6E0DC805BC3F",
                    "171":"73C5B189-9720-4719-8577-04B72C9DC5A2",

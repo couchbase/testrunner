@@ -10,7 +10,6 @@ from testconstants import LINUX_COUCHBASE_BIN_PATH
 from testconstants import LINUX_COUCHBASE_SAMPLE_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_SAMPLE_PATH_C
-from testconstants import COUCHBASE_FROM_CHESHIRE_CAT
 from scripts.install import InstallerJob
 from ep_mc_bin_client import MemcachedClient, MemcachedError
 
@@ -30,7 +29,8 @@ class CreateBucketTests(BaseTestCase):
         self.rest = RestConnection(self.server)
         self.node_version = self.rest.get_nodes_version()
         self.total_items_travel_sample = 31569
-        if self.node_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT:
+        # Toy build or Greater than CC build
+        if self.node_version[:3] == "0.0" or self.node_version[:3] >= 7.0:
             self.total_items_travel_sample = 63288
         else:
             self.total_items_travel_sample = 63182

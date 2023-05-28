@@ -6,7 +6,6 @@ from community.community_base import CommunityBaseTest
 from community.community_base import CommunityXDCRBaseTest
 from membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection
-from testconstants import COUCHBASE_FROM_MAD_HATTER
 from testconstants import WIN_BACKUP_PATH, WIN_BACKUP_C_PATH, WIN_COUCHBASE_BIN_PATH
 from testconstants import LINUX_COUCHBASE_BIN_PATH
 from testconstants import CLUSTER_QUOTA_RATIO, INDEX_QUOTA, FTS_QUOTA
@@ -690,9 +689,6 @@ class CommunityTests(CommunityBaseTest):
         """
            LDAP Groups feature is not available in CE
         """
-        if self.cb_version[:5] not in COUCHBASE_FROM_MAD_HATTER:
-            self.log.info("This test is only for MH and later")
-            return
         cmd = 'curl -X POST -u Administrator:password \
                                     http://{0}:8091/settings/rbac/groups/admins \
                                  -d roles=admin \
@@ -721,9 +717,6 @@ class CommunityTests(CommunityBaseTest):
         """
            LDAP Cert feature is not available in CE
         """
-        if self.cb_version[:5] not in COUCHBASE_FROM_MAD_HATTER:
-            self.log.info("This test is only for MH and later")
-            return
         cmd = 'curl -X POST -u Administrator:password http://{0}:8091/settings/ldap \
                                  -d hosts={1} \
                                  -d port=389 \
@@ -761,9 +754,6 @@ class CommunityTests(CommunityBaseTest):
         """
            Encrypted network access is not available in CE
         """
-        if self.cb_version[:5] not in COUCHBASE_FROM_MAD_HATTER:
-            self.log.info("This test is only for MH and later")
-            return
         cmd = 'curl  -u Administrator:password -v -X POST \
                     http://{0}:8091/settings/security \
                     -d disableUIOverHttp=true \
@@ -783,9 +773,6 @@ class CommunityTests(CommunityBaseTest):
         """
            Encrypted network access is not available in CE
         """
-        if self.cb_version[:5] not in COUCHBASE_FROM_MAD_HATTER:
-            self.log.info("This test is only for MH and later")
-            return
         cmd = '/opt/couchbase/bin/couchbase-cli node-to-node-encryption \
                 -c http://{0}:8091 \
                 -u Administrator \
@@ -804,9 +791,6 @@ class CommunityTests(CommunityBaseTest):
         """
             Log redaction feature is not available in CE
         """
-        if self.cb_version[:5] not in COUCHBASE_FROM_MAD_HATTER:
-            self.log.info("This test is only for MH and later")
-            return
         cmd = 'curl -X POST -u Administrator:password \
                                             http://{0}:8091/controller/startLogsCollection \
                                          -d nodes="*" \

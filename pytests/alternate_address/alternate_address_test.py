@@ -1,22 +1,16 @@
-import copy
-import json, ast, filecmp, itertools
-import os, shutil, ast
+import json
 from pathlib import Path
-from threading import Thread
-from subprocess import Popen, PIPE, check_output, STDOUT, CalledProcessError
+from subprocess import check_output, STDOUT, CalledProcessError
 
-from TestInput import TestInputSingleton, TestInputServer
+from TestInput import TestInputSingleton
 from alternate_address.alternate_address_base import AltAddrBaseTest
 from membase.api.rest_client import RestConnection, RestHelper
 from couchbase_helper.cluster import Cluster
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from couchbase_helper.documentgenerator import BlobGenerator, JsonDocGenerator
-from pprint import pprint
-from testconstants import CLI_COMMANDS, LINUX_COUCHBASE_BIN_PATH,\
-                          WIN_COUCHBASE_BIN_PATH, COUCHBASE_FROM_MAD_HATTER,\
-                          WIN_TMP_PATH_RAW
+from couchbase_helper.documentgenerator import JsonDocGenerator
+from testconstants import WIN_TMP_PATH_RAW
 
 
 class AlternateAddressTests(AltAddrBaseTest):

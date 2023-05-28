@@ -28,8 +28,7 @@ from testconstants import LINUX_COUCHBASE_BIN_PATH, \
     WIN_COUCHBASE_BIN_PATH_RAW, WIN_COUCHBASE_BIN_PATH, WIN_TMP_PATH_RAW, \
     MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH, \
     WIN_TMP_PATH, STANDARD_BUCKET_PORT, WIN_CYGWIN_BIN_PATH
-from testconstants import INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_MAD_HATTER, \
-    CLUSTER_QUOTA_RATIO
+from testconstants import INDEX_QUOTA, FTS_QUOTA, CLUSTER_QUOTA_RATIO
 from security.rbac_base import RbacBase
 from couchbase.bucket import Bucket
 
@@ -888,8 +887,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             remote_client.log_command_output(output, error)
 
         for bucket in self.buckets:
-            if self.cbbkmgr_version[:5] in COUCHBASE_FROM_MAD_HATTER:
-                self.bk_printout.append('Backed up bucket "{0}" succeeded'.format(bucket.name))
+            self.bk_printout.append('Backed up bucket "{0}" succeeded'.format(bucket.name))
         for bucket in self.buckets:
             if error or not self._check_output(self.bk_printout, output):
                 self.log.error("Failed to backup bucket {0}".format(bucket.name))

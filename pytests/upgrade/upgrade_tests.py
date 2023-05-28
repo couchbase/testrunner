@@ -12,8 +12,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from .newupgradebasetest import NewUpgradeBaseTest
 from couchbase_helper.documentgenerator import BlobGenerator
-from testconstants import COUCHBASE_FROM_CHESHIRE_CAT,\
-                          FUTURE_BUILD_NUMBER
+from testconstants import FUTURE_BUILD_NUMBER
 
 
 class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
@@ -890,7 +889,8 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                     del kv_nodes[i]
             self.cbas_node = cbas_node
             items_travel_sample = 63182
-            if cb_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT:
+            # Toy build or Greater than CC build
+            if cb_version[:3] == "0.0" or cb_version[:3] >= 7.0:
                 items_travel_sample = 63288
             self.load_sample_buckets(servers=kv_nodes, bucketName="travel-sample",
                                                   total_items=items_travel_sample,

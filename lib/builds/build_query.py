@@ -12,9 +12,6 @@ import logger
 import traceback
 import sys
 from testconstants import CB_RELEASE_BUILDS
-from testconstants import COUCHBASE_FROM_MAD_HATTER, COUCHBASE_FROM_601, \
-                          COUCHBASE_FROM_662, \
-                          COUCHBASE_FROM_CHESHIRE_CAT
 from testconstants import CB_RELEASE_REPO
 from testconstants import CB_LATESTBUILDS_REPO
 
@@ -176,11 +173,7 @@ class BuildQuery(object):
                     os_architecture = "amd64"
                     os_name = "ubuntu12.04"
                     if "ubuntu 20.04" in os_version:
-                        if build_version[:5] in COUCHBASE_FROM_662:
-                            os_name = "ubuntu20.04"
-                        else:
-                            self.fail("ubuntu 20.04 doesn't support version %s "
-                                                            % build_version[:5])
+                        os_name = "ubuntu20.04"
                     elif "ubuntu 16.04" in os_version:
                         os_name = "ubuntu16.04"
                     build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
@@ -195,12 +188,8 @@ class BuildQuery(object):
                 elif "deb" in deliverable_type:
                     os_architecture = "amd64"
                     os_name = "ubuntu12.04"
-                    if  "ubuntu 20.04" in os_version:
-                        if build_version[:5] in COUCHBASE_FROM_662:
-                            os_name = "ubuntu20.04"
-                        else:
-                            self.fail("ubuntu 20.04 doesn't support version %s "
-                                                            % build_version[:5])
+                    if "ubuntu 20.04" in os_version:
+                        os_name = "ubuntu20.04"
                     elif "ubuntu 16.04" in os_version:
                         os_name = "ubuntu16.04"
                     build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
@@ -307,13 +296,7 @@ class BuildQuery(object):
                     elif "oracle linux" in os_version.lower():
                         os_name = "oel6"
                     elif "amazon linux 2" in os_version.lower():
-                        if build_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
-                                        build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
-                                        build_version[:5] in COUCHBASE_FROM_601:
-                            os_name = "amzn2"
-                        else:
-                            self.fail("Amazon Linux 2 doesn't support version %s "
-                                                            % build_version[:5])
+                        os_name = "amzn2"
                     elif "red hat" in os_version.lower():
                         if "8.0" in os_version.lower():
                             os_name = "rhel8"
@@ -328,22 +311,12 @@ class BuildQuery(object):
                 elif "deb" in deliverable_type:
                     os_architecture = "amd64"
                     os_name = "ubuntu12.04"
-                    if  "ubuntu 20.04" in os_version.lower():
-                        if build_version[:5] in COUCHBASE_FROM_662:
-                            os_name = "ubuntu20.04"
-                        else:
-                            self.fail("ubuntu 20.04 doesn't support version %s "
-                                                            % build_version[:5])
+                    if "ubuntu 20.04" in os_version.lower():
+                        os_name = "ubuntu20.04"
                     elif "ubuntu 16.04" in os_version.lower():
                         os_name = "ubuntu16.04"
                     elif "ubuntu 18.04" in os_version.lower():
-                        if build_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
-                            build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
-                            build_version[:5] in COUCHBASE_FROM_601:
-                            os_name = "ubuntu18.04"
-                        else:
-                            self.fail("ubuntu 18.04 doesn't support version %s "
-                                                            % build_version[:5])
+                        os_name = "ubuntu18.04"
                     build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                             .format(build_version[:build_version.find('-')],
                              product, os_architecture, deliverable_type,
@@ -365,13 +338,7 @@ class BuildQuery(object):
                     elif "oracle linux" in os_version.lower():
                         os_name = "oel6"
                     elif "amazon linux 2" in os_version.lower():
-                        if build_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
-                           build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
-                                        build_version[:5] in COUCHBASE_FROM_601:
-                            os_name = "amzn2"
-                        else:
-                            self.fail("Amazon Linux 2 doesn't support version %s "
-                                                            % build_version[:5])
+                        os_name = "amzn2"
                     else:
                         os_name = "centos6"
                     build.url = "{6}{0}/{1}-{4}-{5}.{2}.{3}"\
@@ -381,22 +348,12 @@ class BuildQuery(object):
                 elif "deb" in deliverable_type:
                     os_architecture = "amd64"
                     os_name = "ubuntu12.04"
-                    if  "ubuntu 20.04" in os_version.lower():
-                        if build_version[:5] in COUCHBASE_FROM_662:
-                            os_name = "ubuntu20.04"
-                        else:
-                            self.fail("ubuntu 20.04 doesn't support version %s "
-                                                            % build_version[:5])
+                    if "ubuntu 20.04" in os_version.lower():
+                        os_name = "ubuntu20.04"
                     elif "ubuntu 16.04" in os_version.lower():
                         os_name = "ubuntu16.04"
                     elif "ubuntu 18.04" in os_version.lower():
-                        if build_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
-                            build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
-                            build_version[:5] in COUCHBASE_FROM_601:
-                            os_name = "ubuntu18.04"
-                        else:
-                            self.fail("ubuntu 18.04 doesn't support version %s "
-                                                            % build_version[:5])
+                        os_name = "ubuntu18.04"
                     build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                         .format(build_version, product, os_architecture,
                         deliverable_type, build_details[:5], os_name,
@@ -763,15 +720,10 @@ class BuildQuery(object):
                     suse_version = "suse12"
                     build.distribution_version = "suse12"
                 elif "suse 15" in distribution_version:
-                    if version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
-                       version[:5] in COUCHBASE_FROM_MAD_HATTER:
-                        suse_version="suse15"
-                        build.distribution_version = "suse15"
-                    else:
-                        self.fail("suse 15 does not support on this version %s "
-                                                                  % version[:5])
+                    suse_version = "suse15"
+                    build.distribution_version = "suse15"
                 else:
-                    suse_version="suse11"
+                    suse_version = "suse11"
                     build.distribution_version = "suse11"
                 build.name = edition_type + "-" + build.product_version + \
                    "-" + suse_version + "." + build.architecture_type + \
@@ -783,41 +735,25 @@ class BuildQuery(object):
                    "-" + os_name + "." + build.architecture_type + \
                    "." + build.deliverable_type
             elif "amazon linux release 2" in distribution_version:
-                if version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
-                   version[:5] in COUCHBASE_FROM_MAD_HATTER or \
-                                version[:5] in COUCHBASE_FROM_601:
-                    build.distribution_version = "amazon linux 2"
-                    os_name = "amzn2"
-                    build.name = edition_type + "-" + build.product_version + \
-                     "-" + os_name + "." + build.architecture_type + \
-                        "." + build.deliverable_type
-                else:
-                    self.fail("Amazon Linux 2 doesn't support version %s "
-                              % version[:5])
+                build.distribution_version = "amazon linux 2"
+                os_name = "amzn2"
+                build.name = edition_type + "-" + build.product_version + \
+                    "-" + os_name + "." + build.architecture_type + \
+                    "." + build.deliverable_type
             else:
                 os_name = ""
                 joint_char = "-"
 
                 """ sherlock build in unix only support 64-bit """
                 build.architecture_type = "amd64"
-                if  "ubuntu 20.04" in distribution_version:
-                    if version[:5] in COUCHBASE_FROM_662:
-                        os_name = "ubuntu20.04"
-                    else:
-                        self.fail("ubuntu 20.04 doesn't support version %s "
-                                                              % version[:5])
+                if "ubuntu 20.04" in distribution_version:
+                    os_name = "ubuntu20.04"
                 elif "ubuntu 14.04" in distribution_version:
                     os_name = "ubuntu14.04"
                 elif "ubuntu 16.04" in distribution_version:
                     os_name = "ubuntu16.04"
                 elif "ubuntu 18.04" in distribution_version.lower():
-                    if version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
-                       version[:5] in COUCHBASE_FROM_MAD_HATTER or \
-                        version[:5] in COUCHBASE_FROM_601:
-                        os_name = "ubuntu18.04"
-                    else:
-                        self.fail("ubuntu 18.04 doesn't support version %s "
-                                                              % version[:5])
+                    os_name = "ubuntu18.04"
                 elif "debian gnu/linux 7" in distribution_version:
                     build.distribution_version = "debian7"
                     os_name = "debian7"
@@ -856,7 +792,7 @@ class BuildQuery(object):
             elif "centos release 6" in distribution_version:
                 build.distribution_version = "centos6"
                 os_name = "centos6_"
-            elif  "ubuntu 12.04" in distribution_version:
+            elif "ubuntu 12.04" in distribution_version:
                 os_name = "ubuntu_1204_"
             elif "debian gnu/linux 7" in distribution_version:
                 build.distribution_version = "debian7"
