@@ -1,25 +1,19 @@
-import copy, json, os, random
-import string, re, time, sys
+import os
 
-from ep_mc_bin_client import MemcachedClient, MemcachedError
 from remote.remote_util import RemoteMachineShellConnection
 from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
 from membase.api.rest_client import RestConnection, RestHelper
 from testconstants import LOG_FILE_NAMES
 from couchbase_helper.document import View
-from testconstants import COUCHBASE_FROM_SPOCK, COUCHBASE_FROM_4DOT6
 from security.rbac_base import RbacBase
 from collection.collections_stats import CollectionsStats
 
 
-
 class CouchbaseCliTestWithCollections(CliBaseTest):
-
     def setUp(self):
         #TestInputSingleton.input.test_params["default_bucket"] = False
         super(CouchbaseCliTestWithCollections, self).setUp()
-
 
     def tearDown(self):
         super(CouchbaseCliTestWithCollections, self).tearDown()
@@ -492,22 +486,21 @@ class XdcrCLITest(CliBaseTest):
             self.cluster.async_rebalance(self.dest_nodes, self.dest_nodes[1:],
                                                                  []).result()
 
-        if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-            XdcrCLITest.XDCR_SETUP_SUCCESS = {
-                          "create": "SUCCESS: Cluster reference created",
-                          "edit": "SUCCESS: Cluster reference edited",
-                          "delete": "SUCCESS: Cluster reference deleted"
-            }
-            XdcrCLITest.XDCR_REPLICATE_SUCCESS = {
-                          "create": "SUCCESS: XDCR replication created",
-                          "delete": "SUCCESS: XDCR replication deleted",
-                          "pause": "SUCCESS: XDCR replication paused",
-                          "resume": "SUCCESS: XDCR replication resume"
-            }
-            XdcrCLITest.SSL_MANAGE_SUCCESS = \
-                          {'retrieve': "SUCCESS: retrieve certificate to \'PATH\'",
-                           'regenerate': 'SUCCESS: Certificate regenerate and copied to `PATH`'
-                          }
+        XdcrCLITest.XDCR_SETUP_SUCCESS = {
+                      "create": "SUCCESS: Cluster reference created",
+                      "edit": "SUCCESS: Cluster reference edited",
+                      "delete": "SUCCESS: Cluster reference deleted"
+        }
+        XdcrCLITest.XDCR_REPLICATE_SUCCESS = {
+                      "create": "SUCCESS: XDCR replication created",
+                      "delete": "SUCCESS: XDCR replication deleted",
+                      "pause": "SUCCESS: XDCR replication paused",
+                      "resume": "SUCCESS: XDCR replication resume"
+        }
+        XdcrCLITest.SSL_MANAGE_SUCCESS = \
+                      {'retrieve': "SUCCESS: retrieve certificate to \'PATH\'",
+                       'regenerate': 'SUCCESS: Certificate regenerate and copied to `PATH`'
+                      }
 
     def tearDown(self):
         for server in self.servers:
@@ -554,25 +547,16 @@ class XdcrCLITest(CliBaseTest):
                 cluster_host = "localhost"
             else:
                 cluster_host = self.dest_master.ip
-            cert_info = "--retrieve-cert"
-            if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-                cert_info = " --regenerate-cert cert.pem "
-                output, _ = self.__execute_cli(cli_command="ssl-manage", options="{0} "\
-                                         .format(cert_info), cluster_host=cluster_host)
-                self.shell.copy_file_local_to_remote("cert.pem",
-                                                self.root_path + "cert.pem")
-                os.system("rm -f cert.pem")
-            else:
-                output, _ = self.__execute_cli(cli_command="ssl-manage", options="{0}={1}"\
-                              .format(cert_info, xdcr_cert), cluster_host=cluster_host)
+            cert_info = " --regenerate-cert cert.pem "
+            output, _ = self.__execute_cli(cli_command="ssl-manage", options="{0} "\
+                                     .format(cert_info), cluster_host=cluster_host)
+            self.shell.copy_file_local_to_remote("cert.pem",
+                                            self.root_path + "cert.pem")
+            os.system("rm -f cert.pem")
             options += (" --xdcr-certificate={0}".format(xdcr_cert),\
                                                "")[xdcr_cert is None]
-            if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-                msgs_check = ["-----END CERTIFICATE-----", "Certificate regenerate and copied"]
-                self.assertTrue(self._check_output(msgs_check, output))
-            else:
-                self.assertNotEqual(output[-1].find("SUCCESS"), -1,\
-                     "ssl-manage CLI failed to retrieve certificate")
+            msgs_check = ["-----END CERTIFICATE-----", "Certificate regenerate and copied"]
+            self.assertTrue(self._check_output(msgs_check, output))
 
         output, error = self.__execute_cli(cli_command=cli_command, options=options)
         return output, error, xdcr_cluster_name, xdcr_hostname, cli_command, options
@@ -618,7 +602,7 @@ class XdcrCLITest(CliBaseTest):
                 elif "Error: hostname (ip) is missing" in element:
                     self.log.info("match {0}".format(element))
                     return True
-                elif self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
+                else:
                     if "ERROR: _ - Error checking if target cluster supports SANs in cerificates." \
                             in element:
                         self.log.info("match {0}".format(element))
@@ -671,20 +655,11 @@ class XdcrCLITest(CliBaseTest):
             if output_error.find("HOSTNAME") != -1:
                 output_error = output_error.replace("HOSTNAME", \
                           (self.servers[xdcr_hostname].ip, "")[xdcr_hostname is None])
-            if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-                expect_error = ("['ERROR: unable to delete xdcr remote site localhost "
-                                  "(404) Object Not Found', 'unknown remote cluster']")
-                if output_error == expect_error:
-                    output_error = "ERROR: _ - unknown remote cluster"
-                self.assertTrue(self._check_output(output_error, output))
-            else:
-                if output_error == \
-                      "['ERROR: unable to delete xdcr remote site localhost (404) Object Not Found',"\
-                      " 'unknown remote cluster']" and  self.cb_version[:3] == "4.6":
-                    output_error = \
-                      "['ERROR: unable to delete xdcr remote site localhost (400) Bad Request',\
-                                                             '{\"_\":\"unknown remote cluster\"}']"
-                self.assertEqual(output, eval(output_error))
+            expect_error = ("['ERROR: unable to delete xdcr remote site localhost "
+                              "(404) Object Not Found', 'unknown remote cluster']")
+            if output_error == expect_error:
+                output_error = "ERROR: _ - unknown remote cluster"
+            self.assertTrue(self._check_output(output_error, output))
             return
 
     def testXdcrReplication(self):

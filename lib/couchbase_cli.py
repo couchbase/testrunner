@@ -1,5 +1,4 @@
 from remote.remote_util import RemoteMachineShellConnection
-from testconstants import COUCHBASE_FROM_4DOT6
 
 
 class CouchbaseCLI:

@@ -1,6 +1,5 @@
 from clitest.cli_base import CliBaseTest
 from membase.api.rest_client import RestConnection
-from testconstants import COUCHBASE_FROM_WATSON
 
 
 class epctlTests(CliBaseTest):
@@ -27,12 +26,11 @@ class epctlTests(CliBaseTest):
                            \nthis test will be skipped in 6.5.0 ********\n")
             return
         for bucket in self.buckets:
-            if self.cb_version[:5] in COUCHBASE_FROM_WATSON:
-                if self.param == "item_num_based_new_chk":
-                    self.param_value = "true"
-                """ from Watson, there is not tap_throttle_threshold param """
-                if self.param == "tap_throttle_threshold":
-                    self.param = "replication_throttle_threshold"
+            if self.param == "item_num_based_new_chk":
+                self.param_value = "true"
+            """ from Watson, there is not tap_throttle_threshold param """
+            if self.param == "tap_throttle_threshold":
+                self.param = "replication_throttle_threshold"
             if self.persistence == "start":
                 output, error = self.shell.execute_cbepctl(bucket, "stop",
                                                           self.param_type,
@@ -68,4 +66,3 @@ class epctlTests(CliBaseTest):
             if output[1].find(self.param) == -1 or \
                output[1].find(str(self.param_value)) == -1:
                 raise Exception("set %s failed" % self.param)
-

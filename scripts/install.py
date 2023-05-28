@@ -23,8 +23,7 @@ from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper, R
 from membase.helper.cluster_helper import ClusterOperationHelper
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import CB_REPO, CB_DOWNLOAD_SERVER, CB_DOWNLOAD_SERVER_FQDN
-from testconstants import COUCHBASE_FROM_SPOCK
-from testconstants import CB_VERSION_NAME, COUCHBASE_FROM_VERSION_4,\
+from testconstants import CB_VERSION_NAME, \
                           CB_RELEASE_BUILDS, COUCHBASE_VERSIONS
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, CBAS_QUOTA, CLUSTER_QUOTA_RATIO
 from testconstants import LINUX_COUCHBASE_PORT_CONFIG_PATH, LINUX_COUCHBASE_OLD_CONFIG_PATH
@@ -256,30 +255,12 @@ class Installer(object):
 
         print(("\n*** OS version of this server {0} is {1} ***"\
                             .format(remote_client.ip, server_os_type)))
-        if info.distribution_version.lower() == "suse 12":
-            if version[:5] not in COUCHBASE_FROM_SPOCK:
-                mesg = "%s does not support cb version %s \n" % \
-                         (info.distribution_version, version[:5])
-                remote_client.stop_current_python_running(mesg)
         if info.type.lower() == "windows":
             if "-" in version:
-                msi_build = version.split("-")
-                """
-                    In spock from build 2924 and later release, we only support
-                    msi installation method on windows
-                """
+                # From Spock build 4.7.0-2924, we only support msi installation
+                info.deliverable_type = "msi"
                 if "2k8" in info.windows_name:
                     info.windows_name = 2008
-                if msi_build[0] in COUCHBASE_FROM_SPOCK:
-                    info.deliverable_type = "msi"
-                elif "5" > msi_build[0] and info.windows_name == 2016:
-                    log.info("\n========\n"
-                        "         Build version %s does not support on\n"
-                        "         Windows Server 2016\n"
-                        "========"  % msi_build[0])
-                    os.system("ps aux | grep python | grep %d " % os.getpid())
-                    time.sleep(5)
-                    os.system('kill %d' % os.getpid())
             else:
                 print("Incorrect version format")
                 sys.exit()
@@ -576,35 +557,33 @@ class CouchbaseServerInstaller(Installer):
                                 but need to make it works even RAM of vm is
                                 smaller than 2 GB """
 
-                    if cb_version in COUCHBASE_FROM_VERSION_4:
-                        if "index" in set_services:
-                            log.info("quota for index service will be %s MB" % (INDEX_QUOTA))
-                            kv_quota -= INDEX_QUOTA
-                            log.info("set index quota to node %s " % server.ip)
-                            rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=INDEX_QUOTA)
-                        if "fts" in set_services:
-                            log.info("quota for fts service will be %s MB" % (fts_quota))
-                            kv_quota -= fts_quota
-                            log.info("set both index and fts quota at node %s "% server.ip)
-                            rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=fts_quota)
-                        if "cbas" in set_services:
-                            log.info("quota for cbas service will be %s MB" % (CBAS_QUOTA))
-                            kv_quota -= CBAS_QUOTA
-                            rest.set_service_memoryQuota(service = "cbasMemoryQuota", memoryQuota=CBAS_QUOTA)
-                        if kv_quota < MIN_KV_QUOTA:
-                                raise Exception("KV RAM needs to be more than %s MB"
-                                        " at node  %s"  % (MIN_KV_QUOTA, server.ip))
+                    if "index" in set_services:
+                        log.info("quota for index service will be %s MB" % (INDEX_QUOTA))
+                        kv_quota -= INDEX_QUOTA
+                        log.info("set index quota to node %s " % server.ip)
+                        rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=INDEX_QUOTA)
+                    if "fts" in set_services:
+                        log.info("quota for fts service will be %s MB" % (fts_quota))
+                        kv_quota -= fts_quota
+                        log.info("set both index and fts quota at node %s "% server.ip)
+                        rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=fts_quota)
+                    if "cbas" in set_services:
+                        log.info("quota for cbas service will be %s MB" % (CBAS_QUOTA))
+                        kv_quota -= CBAS_QUOTA
+                        rest.set_service_memoryQuota(service = "cbasMemoryQuota", memoryQuota=CBAS_QUOTA)
+                    if kv_quota < MIN_KV_QUOTA:
+                            raise Exception("KV RAM needs to be more than %s MB"
+                                    " at node  %s"  % (MIN_KV_QUOTA, server.ip))
                     """ set kv quota smaller than 1 MB so that it will satify
                         the condition smaller than allow quota """
                     kv_quota -= 1
                     log.info("quota for kv: %s MB" % kv_quota)
-                    rest.init_cluster_memoryQuota(server.rest_username, \
-                                                       server.rest_password, \
-                                                                     kv_quota)
-                    if params["version"][:5] in COUCHBASE_FROM_VERSION_4:
-                        rest.init_node_services(username=server.rest_username,
-                                                password=server.rest_password,
-                                                        services=set_services)
+                    rest.init_cluster_memoryQuota(server.rest_username,
+                                                  server.rest_password,
+                                                  kv_quota)
+                    rest.init_node_services(username=server.rest_username,
+                                            password=server.rest_password,
+                                            services=set_services)
                     if "index" in set_services:
                         if "storage_mode" in params:
                             storageMode = params["storage_mode"]
@@ -751,8 +730,7 @@ class CouchbaseServerInstaller(Installer):
                     In spock from build 2924 and later release, we only support
                     msi installation method on windows
                 """
-                if "-" in params["version"] and \
-                    params["version"].split("-")[0] in COUCHBASE_FROM_SPOCK:
+                if "-" in params["version"]:
                     self.msi = True
                     os_type = "msi"
                 remote_client.download_binary_in_win(build.url, params["version"],

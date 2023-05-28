@@ -1,31 +1,12 @@
-import re, copy, json, subprocess
-from random import randrange, randint, choice
-from threading import Thread
-
-from collection.collections_cli_client import CollectionsCLI
-from collection.collections_rest_client import CollectionsRest
-from collection.collections_n1ql_client import CollectionsN1QL
-from lib.couchbase_helper.documentgenerator import SDKDataLoader
+import json
+from random import randrange, choice
 
 from couchbase_helper.cluster import Cluster
-from membase.helper.rebalance_helper import RebalanceHelper
-from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from ent_backup_restore.enterprise_bkrs_collection_base import EnterpriseBackupRestoreCollectionBase
-from membase.api.rest_client import RestConnection, RestHelper, Bucket
+from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
-from pytests.query_tests_helper import QueryHelperTests
-from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
-from security.auditmain import audit
-from security.rbac_base import RbacBase
+from remote.remote_util import RemoteMachineShellConnection
 from upgrade.newupgradebasetest import NewUpgradeBaseTest
-from couchbase.bucket import Bucket
-from couchbase_helper.document import View
-from eventing.eventing_base import EventingBaseTest
-from tasks.future import Future, TimeoutError
-from xdcr.xdcrnewbasetests import NodeHelper
-from couchbase_helper.stats_tools import StatsCommon
-from testconstants import COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH, \
-                          COUCHBASE_FROM_4DOT6, ENT_BKRS, ENT_BKRS_FTS
 
 AUDITBACKUPID = 20480
 AUDITRESTOREID = 20485

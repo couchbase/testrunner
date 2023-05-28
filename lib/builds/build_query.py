@@ -12,10 +12,7 @@ import logger
 import traceback
 import sys
 from testconstants import CB_RELEASE_BUILDS
-from testconstants import SHERLOCK_VERSION
-from testconstants import COUCHBASE_RELEASE_FROM_SPOCK
-from testconstants import COUCHBASE_FROM_SPOCK,\
-                          COUCHBASE_FROM_MAD_HATTER, COUCHBASE_FROM_601, \
+from testconstants import COUCHBASE_FROM_MAD_HATTER, COUCHBASE_FROM_601, \
                           COUCHBASE_FROM_662, \
                           COUCHBASE_FROM_CHESHIRE_CAT
 from testconstants import CB_RELEASE_REPO
@@ -178,7 +175,7 @@ class BuildQuery(object):
                 elif "deb" in deliverable_type:
                     os_architecture = "amd64"
                     os_name = "ubuntu12.04"
-                    if  "ubuntu 20.04" in os_version:
+                    if "ubuntu 20.04" in os_version:
                         if build_version[:5] in COUCHBASE_FROM_662:
                             os_name = "ubuntu20.04"
                         else:
@@ -260,22 +257,20 @@ class BuildQuery(object):
                              deliverable_type, build_details, CB_LATESTBUILDS_REPO)
         elif deliverable_type == "msi":
             if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
-                if build_version[:5] in COUCHBASE_RELEASE_FROM_SPOCK:
-                    arch_type = "amd64"
-                    if "x86_64" not in os_architecture:
-                        arch_type = "x86"
-                    build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
-                            .format(build_version[:build_version.find('-')],
-                            product, arch_type, deliverable_type, build_details[:5],
-                            CB_RELEASE_REPO)
+                arch_type = "amd64"
+                if "x86_64" not in os_architecture:
+                    arch_type = "x86"
+                build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
+                        .format(build_version[:build_version.find('-')],
+                        product, arch_type, deliverable_type, build_details[:5],
+                        CB_RELEASE_REPO)
             else:
-                if build_version[:5] in COUCHBASE_RELEASE_FROM_SPOCK:
-                    arch_type = "amd64"
-                    if "x86_64" not in os_architecture:
-                        arch_type = "x86"
-                    build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
-                        .format(build_version, product, arch_type,
-                         deliverable_type, build_details[:5], CB_RELEASE_REPO)
+                arch_type = "amd64"
+                if "x86_64" not in os_architecture:
+                    arch_type = "x86"
+                build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
+                    .format(build_version, product, arch_type,
+                     deliverable_type, build_details[:5], CB_RELEASE_REPO)
         elif deliverable_type == "dmg":
             if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
                 os_name = "macos"
@@ -562,8 +557,7 @@ class BuildQuery(object):
                 windows build name: couchbase_server-enterprise-windows-amd64-3.0.0-892 """
 
             """ Remove the code below when cb name is standardlized (MB-11372) """
-            if "windows" in direct_build_url and build.deliverable_type == "exe" \
-                and build_info not in SHERLOCK_VERSION:
+            if "windows" in direct_build_url and build.deliverable_type == "exe":
                 build_info = build_info.replace("-windows-amd64-", "_x86_64_")
                 build_info = build_info.replace("couchbase_server", "couchbase-server")
             """ End remove here """
@@ -718,7 +712,7 @@ class BuildQuery(object):
                     In spock from build 2924 and later release, we only support
                     msi installation method on windows
             """
-            if "-" in version and version.split("-")[0] in COUCHBASE_FROM_SPOCK:
+            if "-" in version:
                 deliverable_type = "msi"
 
         if "deb" in deliverable_type and "centos6" in edition_type:
@@ -766,12 +760,8 @@ class BuildQuery(object):
                    "." + build.deliverable_type
             elif "suse" in distribution_version:
                 if "suse 12" in distribution_version:
-                    if version[:5] in COUCHBASE_FROM_SPOCK:
-                        suse_version="suse12"
-                        build.distribution_version = "suse12"
-                    else:
-                        self.fail("suse 12 does not support on this version %s "
-                                                                  % version[:5])
+                    suse_version = "suse12"
+                    build.distribution_version = "suse12"
                 elif "suse 15" in distribution_version:
                     if version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
                        version[:5] in COUCHBASE_FROM_MAD_HATTER:

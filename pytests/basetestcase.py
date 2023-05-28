@@ -2055,29 +2055,28 @@ class OnPremBaseTestCase(unittest.TestCase):
         versions = RestConnection(self.master).get_nodes_versions()
         for group in nodes:
             for node in nodes[group]:
-                if versions[0][:5] in testconstants.COUCHBASE_FROM_VERSION_4:
-                    command = "dcp"
-                    if not info == 'windows':
-                        commands = "%s %s:11210 %s -b %s -p \"%s\" | grep :replication:ns_1@%s |  grep vb_uuid | \
-                                    awk '{print $1}' | sed 's/eq_dcpq:replication:ns_1@%s->ns_1@//g' | \
-                                    sed 's/:.*//g' | sort -u | xargs \
-                                   " % (cbstat_command, node, command, "default", saslpassword, node, node)
-                        output, error = shell.execute_command(commands)
-                    else:
-                        commands = "%s %s:11210 %s -b %s -p \"%s\" | grep.exe :replication:ns_1@%s |  grep vb_uuid | \
-                                    gawk.exe '{print $1}' | sed.exe 's/eq_dcpq:replication:ns_1@%s->ns_1@//g' | \
-                                    sed.exe 's/:.*//g' \
-                                   " % (cbstat_command, node, command, "default", saslpassword, node, node)
-                        output, error = shell.execute_command(commands)
-                        output = sorted(set(output))
-                    shell.log_command_output(output, error)
-                    output = output[0].split(" ")
-                    if node not in output:
-                        self.log.info("{0}".format(nodes))
-                        self.log.info("replicas of node {0} are in nodes {1}".format(node, output))
-                        self.log.info("replicas of node {0} are not in its zone {1}".format(node, group))
-                    else:
-                        raise Exception("replica of node {0} are on its own zone {1}".format(node, group))
+                command = "dcp"
+                if not info == 'windows':
+                    commands = "%s %s:11210 %s -b %s -p \"%s\" | grep :replication:ns_1@%s |  grep vb_uuid | \
+                                awk '{print $1}' | sed 's/eq_dcpq:replication:ns_1@%s->ns_1@//g' | \
+                                sed 's/:.*//g' | sort -u | xargs \
+                               " % (cbstat_command, node, command, "default", saslpassword, node, node)
+                    output, error = shell.execute_command(commands)
+                else:
+                    commands = "%s %s:11210 %s -b %s -p \"%s\" | grep.exe :replication:ns_1@%s |  grep vb_uuid | \
+                                gawk.exe '{print $1}' | sed.exe 's/eq_dcpq:replication:ns_1@%s->ns_1@//g' | \
+                                sed.exe 's/:.*//g' \
+                               " % (cbstat_command, node, command, "default", saslpassword, node, node)
+                    output, error = shell.execute_command(commands)
+                    output = sorted(set(output))
+                shell.log_command_output(output, error)
+                output = output[0].split(" ")
+                if node not in output:
+                    self.log.info("{0}".format(nodes))
+                    self.log.info("replicas of node {0} are in nodes {1}".format(node, output))
+                    self.log.info("replicas of node {0} are not in its zone {1}".format(node, group))
+                else:
+                    raise Exception("replica of node {0} are on its own zone {1}".format(node, group))
         shell.disconnect()
 
     def vb_distribution_analysis(self, servers=[], buckets=[], total_vbuckets=0, std=1.0, type="rebalance",

@@ -5,7 +5,7 @@ from basetestcase import BaseTestCase
 from couchbase_helper.document import View
 from couchbase_helper.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
-from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_MAD_HATTER
+from testconstants import COUCHBASE_FROM_MAD_HATTER
 
 
 class CCCP(BaseTestCase):
@@ -105,14 +105,9 @@ class CCCP(BaseTestCase):
             self.assertTrue(param in config_json, "No %s in config" % param)
         self.assertTrue("name" in config_json and config_json["name"] == bucket.name,
                         "No bucket name in config")
-        if self.cb_version[:5] in COUCHBASE_FROM_VERSION_4:
-            self.assertTrue(len(config_json["nodesExt"]) == self.nodes_init,
-                        "Number of nodes expected %s, actual %s" % (
-                                        self.nodes_init, len(config_json["nodesExt"])))
-        else:
-            self.assertTrue(len(config_json["nodes"]) == self.nodes_init,
-                        "Number of nodes expected %s, actual %s" % (
-                                        self.nodes_init, len(config_json["nodes"])))
+        self.assertTrue(len(config_json["nodesExt"]) == self.nodes_init,
+                    "Number of nodes expected %s, actual %s" % (
+                                    self.nodes_init, len(config_json["nodesExt"])))
         for node in config_json["nodes"]:
             self.assertTrue("couchApiBase" in node and "hostname" in node,
                             "No hostname name in config")
@@ -167,4 +162,3 @@ class CCCP(BaseTestCase):
                 shell.disconnect()
             self.sleep(5, "Server %s is starting..." % servers_to_choose[0].ip)
         return tasks
-        

@@ -1,15 +1,11 @@
 from clitest.cli_base import CliBaseTest
 from membase.api.rest_client import RestConnection
-import testconstants
 import json
-from testconstants import COUCHBASE_FROM_WATSON,\
-                          COUCHBASE_FROM_SPOCK,\
-                          LINUX_CB_PATH,\
-                          MAC_CB_PATH
+from testconstants import MAC_CB_PATH
 from membase.helper.bucket_helper import BucketOperationHelper
 
-class docloaderTests(CliBaseTest):
 
+class docloaderTests(CliBaseTest):
     def setUp(self):
         super(docloaderTests, self).setUp()
         self.load_filename = self.input.param("filename", "gamesim-sample")
@@ -33,23 +29,15 @@ class docloaderTests(CliBaseTest):
         cluster. We verify by compare the number of items in cluster with number of
         doc files in zipped sample file package"""
 
-        if self.short_v not in COUCHBASE_FROM_WATSON:
-            for bucket in self.buckets:
-                output, error = self.shell.execute_cbdocloader(self.couchbase_usrname,
-                                                              self.couchbase_password,
-                                                                          bucket.name,
-                                                                    self.memory_quota,
-                                                                   self.load_filename)
-        elif self.short_v in COUCHBASE_FROM_WATSON:
-            self.log.info("cluster version: %s " % self.short_v)
-            self.log.info("delete all buckets to create new bucket")
-            BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
-            self.sleep(15)
-            output, error = self.shell.execute_cbdocloader(self.couchbase_usrname,
-                                                              self.couchbase_password,
-                                                                   self.load_filename,
-                                                                    self.memory_quota,
-                                                                   self.load_filename)
+        self.log.info("cluster version: %s " % self.short_v)
+        self.log.info("delete all buckets to create new bucket")
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+        self.sleep(15)
+        output, error = self.shell.execute_cbdocloader(self.couchbase_usrname,
+                                                       self.couchbase_password,
+                                                       self.load_filename,
+                                                       self.memory_quota,
+                                                       self.load_filename)
 
         self.buckets = RestConnection(self.master).get_buckets()
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
@@ -73,36 +61,35 @@ class docloaderTests(CliBaseTest):
     def test_docloader_from_file(self):
         """ copy doc zip file to /tmp, unzip it and use docloader to load doc
            from this directory """
-        if self.short_v in COUCHBASE_FROM_SPOCK:
-            self.shell.execute_command("cp %stravel-sample.zip %s" \
-                                    % (self.sample_files_path, self.tmp_path))
-            self.shell.execute_command("cd %s; unzip travel-sample.zip; cd %s"\
-                                        % (self.tmp_path, self.root_path))
-            self.shell.execute_command("%scbdocloader -n localhost:8091 "
-                                       "-u Administrator -p password "
-                                       "-b travel-sample %stravel-sample" \
-                                       % (self.cli_command_path, self.tmp_path))
-            """ check all indexes are completed """
-            index_name = []
-            result = self.rest.index_tool_stats()
-            end_time_i = time.time() + 60
-            for map in result:
-                if result["indexes"]:
-                    for x in result["indexes"]:
-                        if x["bucket"] == "travel-sample":
-                            if x["progress"] == 100 and x["index"] not in index_name:
-                                index_name.append(x["index"])
-                else:
-                    self.fail("indexing failed to build")
-            if len(index_name) < 10:
-                self.log.info("index list {0}".format(index_name))
-                self.fail("some indexing may not complete")
-            elif len(index_name) == 10:
-                self.log.info("travel-sample bucket is created and complete indexing")
-                self.log.info("index list in travel-sample bucket: {0}"
-                                           .format(index_name))
-            self.shell.execute_command("rm -rf %stravel-sample* " % self.tmp_path)
-            self.shell.disconnect()
+        self.shell.execute_command("cp %stravel-sample.zip %s" \
+                                % (self.sample_files_path, self.tmp_path))
+        self.shell.execute_command("cd %s; unzip travel-sample.zip; cd %s"\
+                                    % (self.tmp_path, self.root_path))
+        self.shell.execute_command("%scbdocloader -n localhost:8091 "
+                                   "-u Administrator -p password "
+                                   "-b travel-sample %stravel-sample" \
+                                   % (self.cli_command_path, self.tmp_path))
+        """ check all indexes are completed """
+        index_name = []
+        result = self.rest.index_tool_stats()
+        end_time_i = time.time() + 60
+        for map in result:
+            if result["indexes"]:
+                for x in result["indexes"]:
+                    if x["bucket"] == "travel-sample":
+                        if x["progress"] == 100 and x["index"] not in index_name:
+                            index_name.append(x["index"])
+            else:
+                self.fail("indexing failed to build")
+        if len(index_name) < 10:
+            self.log.info("index list {0}".format(index_name))
+            self.fail("some indexing may not complete")
+        elif len(index_name) == 10:
+            self.log.info("travel-sample bucket is created and complete indexing")
+            self.log.info("index list in travel-sample bucket: {0}"
+                                       .format(index_name))
+        self.shell.execute_command("rm -rf %stravel-sample* " % self.tmp_path)
+        self.shell.disconnect()
 
     def verify_results(self, file):
         stats_tasks = []
@@ -183,8 +170,7 @@ class docloaderTests(CliBaseTest):
         self.shell.log_command_output(output, error)
 
         for line in output:
-            if self.short_v in COUCHBASE_FROM_WATSON:
-                if "indexes" in line.split(".")[0]:
-                    continue
+            if "indexes" in line.split(".")[0]:
+                continue
             ddoc_names.append(line.split(".")[0])
         return ddoc_names

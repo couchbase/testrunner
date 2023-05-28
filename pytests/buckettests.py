@@ -1,7 +1,7 @@
 import time
 from basetestcase import BaseTestCase
 from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection, Bucket, RestHelper
+from membase.api.rest_client import RestConnection, Bucket
 from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
 from couchbase_helper.documentgenerator import BlobGenerator
@@ -10,11 +10,10 @@ from testconstants import LINUX_COUCHBASE_BIN_PATH
 from testconstants import LINUX_COUCHBASE_SAMPLE_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_SAMPLE_PATH_C
-from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_4DOT6,\
-                          COUCHBASE_FROM_SPOCK, COUCHBASE_FROM_VULCAN,\
-                          COUCHBASE_FROM_CHESHIRE_CAT
+from testconstants import COUCHBASE_FROM_CHESHIRE_CAT
 from scripts.install import InstallerJob
 from ep_mc_bin_client import MemcachedClient, MemcachedError
+
 
 class CreateBucketTests(BaseTestCase):
     def setUp(self):
@@ -31,11 +30,10 @@ class CreateBucketTests(BaseTestCase):
         self.rest = RestConnection(self.server)
         self.node_version = self.rest.get_nodes_version()
         self.total_items_travel_sample = 31569
-        if self.node_version[:5] in COUCHBASE_FROM_WATSON:
-            if self.node_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT:
-                self.total_items_travel_sample = 63288
-            else:
-                self.total_items_travel_sample = 63182
+        if self.node_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT:
+            self.total_items_travel_sample = 63288
+        else:
+            self.total_items_travel_sample = 63182
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
@@ -157,8 +155,7 @@ class CreateBucketTests(BaseTestCase):
             self.log.info("Add new user after reset node! ")
             self.add_built_in_server_user(node=self.master)
             if status:
-                if self.node_version[:5] in COUCHBASE_FROM_WATSON:
-                    self.rest.set_indexer_storage_mode(storageMode="memory_optimized")
+                self.rest.set_indexer_storage_mode(storageMode="memory_optimized")
         shell = RemoteMachineShellConnection(self.master)
         shell.execute_command("""curl -g -v -u Administrator:password \
                      -X POST http://{0}:8091/sampleBuckets/install \
@@ -183,9 +180,7 @@ class CreateBucketTests(BaseTestCase):
 
         """ check all indexes are completed """
         index_name = []
-        index_count = 8
-        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
-            index_count = 10
+        index_count = 10
         result = self.rest.index_tool_stats(False)
 
         self.log.info("check if all %s indexes built." % index_count)
@@ -226,32 +221,22 @@ class CreateBucketTests(BaseTestCase):
         shell = RemoteMachineShellConnection(self.master)
         if self.input.param('enable_ipv6', False):
             self.reset_and_enable_ipv6(self.master)
-        set_index_storage_type = ""
-        if self.node_version[:5] in COUCHBASE_FROM_WATSON:
-            set_index_storage_type = " --index-storage-setting=memopt "
+        set_index_storage_type = " --index-storage-setting=memopt "
         options = ' --cluster-port=8091 \
                     --cluster-ramsize=1000 \
                     --cluster-index-ramsize=300 \
                     --services=data,index,query,fts %s ' % set_index_storage_type
         o, e = shell.execute_couchbase_cli(cli_command="cluster-init", options=options)
-        if self.node_version[:5] in COUCHBASE_FROM_SPOCK:
-            self.assertTrue(self._check_output("SUCCESS: Cluster initialized", o),
-                                               "Failed to initialize cluster")
-        else:
-            self.assertTrue(self._check_output("SUCCESS: init/edit localhost", o),
-                                               "Failed to init/edit localhost")
+        self.assertTrue(self._check_output("SUCCESS: Cluster initialized", o),
+                                           "Failed to initialize cluster")
         self.sleep(7, "wait for services up completely")
 
         self.log.info("Add new user after reset node! ")
         self.add_built_in_server_user(node=self.master)
         shell = RemoteMachineShellConnection(self.master)
-        cluster_flag = "-n"
-        bucket_quota_flag = "-s"
-        data_set_location_flag = " "
-        if self.node_version[:5] in COUCHBASE_FROM_SPOCK:
-            cluster_flag = "-c"
-            bucket_quota_flag = "-m"
-            data_set_location_flag = "-d"
+        cluster_flag = "-c"
+        bucket_quota_flag = "-m"
+        data_set_location_flag = "-d"
         shell.execute_command("{0}cbdocloader -u Administrator -p password \
                       {3} {1}:{6} -b travel-sample {4} 200 {5} {2}travel-sample.zip" \
                                                       .format(self.bin_path,
@@ -282,9 +267,7 @@ class CreateBucketTests(BaseTestCase):
 
         """ check all indexes are completed """
         index_name = []
-        index_count = 8
-        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
-            index_count = 10
+        index_count = 10
         result = self.rest.index_tool_stats(False)
         """ check all indexes are completed """
 
@@ -315,74 +298,71 @@ class CreateBucketTests(BaseTestCase):
     def test_cli_bucket_maxttl_setting(self):
         """ couchbase-cli does not have option to reset the node yet
             use rest to reset node to set services correctly: index,kv,n1ql """
-        if self.node_version[:5] in COUCHBASE_FROM_VULCAN:
-            self.rest.force_eject_node()
+        self.rest.force_eject_node()
 
-            shell = RemoteMachineShellConnection(self.master)
-            if self.input.param('enable_ipv6', False):
-                self.reset_and_enable_ipv6(self.master)
-            set_index_storage_type = " --index-storage-setting=memopt "
-            options = ' --cluster-port=8091 \
-                        --cluster-ramsize=300 \
-                        --cluster-index-ramsize=300 \
-                        --services=data,index,query %s ' \
-                      % set_index_storage_type
-            o, e = shell.execute_couchbase_cli(cli_command="cluster-init",
-                                               options=options)
-            self.assertEqual(o[0], 'SUCCESS: Cluster initialized')
+        shell = RemoteMachineShellConnection(self.master)
+        if self.input.param('enable_ipv6', False):
+            self.reset_and_enable_ipv6(self.master)
+        set_index_storage_type = " --index-storage-setting=memopt "
+        options = ' --cluster-port=8091 \
+                    --cluster-ramsize=300 \
+                    --cluster-index-ramsize=300 \
+                    --services=data,index,query %s ' \
+                  % set_index_storage_type
+        o, e = shell.execute_couchbase_cli(cli_command="cluster-init",
+                                           options=options)
+        self.assertEqual(o[0], 'SUCCESS: Cluster initialized')
 
-            self.log.info("Add new user after reset node! ")
-            self.add_built_in_server_user(node=self.master)
-            bucket_type = self.input.param("bucket_type", "couchbase")
-            options = ' --bucket=default \
-                        --bucket-type={0} \
-                        --bucket-ramsize=200 \
-                        --max-ttl=400 \
-                        --wait '.format(bucket_type)
-            o, e = shell.execute_couchbase_cli(cli_command="bucket-create",
-                                               options=options)
-            self.assertEqual(o[0], 'SUCCESS: Bucket created')
+        self.log.info("Add new user after reset node! ")
+        self.add_built_in_server_user(node=self.master)
+        bucket_type = self.input.param("bucket_type", "couchbase")
+        options = ' --bucket=default \
+                    --bucket-type={0} \
+                    --bucket-ramsize=200 \
+                    --max-ttl=400 \
+                    --wait '.format(bucket_type)
+        o, e = shell.execute_couchbase_cli(cli_command="bucket-create",
+                                           options=options)
+        self.assertEqual(o[0], 'SUCCESS: Bucket created')
 
-            self.sleep(30, "Sleep before loading doc using cbdocloader")
+        self.sleep(30, "Sleep before loading doc using cbdocloader")
 
-            cluster_flag = "-c"
-            bucket_quota_flag = "-m"
-            data_set_location_flag = "-d"
-            shell.execute_command(
-                "{0}cbdocloader -u Administrator -p password "
-                "{3} {1} -b default {4} 100 {5} {2}travel-sample.zip"
-                .format(self.bin_path, self.master.ip, self.sample_path,
-                        cluster_flag, bucket_quota_flag,
-                        data_set_location_flag))
-            shell.disconnect()
+        cluster_flag = "-c"
+        bucket_quota_flag = "-m"
+        data_set_location_flag = "-d"
+        shell.execute_command(
+            "{0}cbdocloader -u Administrator -p password "
+            "{3} {1} -b default {4} 100 {5} {2}travel-sample.zip"
+            .format(self.bin_path, self.master.ip, self.sample_path,
+                    cluster_flag, bucket_quota_flag,
+                    data_set_location_flag))
+        shell.disconnect()
 
-            buckets = RestConnection(self.master).get_buckets()
-            for bucket in buckets:
-                if bucket.name != "default":
-                    self.fail("default bucket did not get created")
+        buckets = RestConnection(self.master).get_buckets()
+        for bucket in buckets:
+            if bucket.name != "default":
+                self.fail("default bucket did not get created")
 
-            """ check for load data into travel-sample bucket """
-            end_time = time.time() + 120
-            num_actual = 0
-            while time.time() < end_time:
-                self.sleep(10)
-                num_actual = self.get_item_count(self.master, "default")
-                if int(num_actual) == self.total_items_travel_sample:
-                    break
-            self.assertTrue(int(num_actual) == self.total_items_travel_sample,
-                            "Items number expected %s, actual %s"
-                            % (self.total_items_travel_sample, num_actual))
-            self.log.info("Total items %s " % num_actual)
-            self.sleep(400, "Waiting for docs to expire as per maxttl")
-            self.expire_pager([self.master])
-            self.sleep(20, "Wait for expiry_purger to run")
+        """ check for load data into travel-sample bucket """
+        end_time = time.time() + 120
+        num_actual = 0
+        while time.time() < end_time:
+            self.sleep(10)
             num_actual = self.get_item_count(self.master, "default")
-            if int(num_actual) != 0:
-                self.fail("Item count is not 0 after maxttl has elapsed")
-            else:
-                self.log.info("SUCCESS: Item count is 0 after maxttl has elapsed")
+            if int(num_actual) == self.total_items_travel_sample:
+                break
+        self.assertTrue(int(num_actual) == self.total_items_travel_sample,
+                        "Items number expected %s, actual %s"
+                        % (self.total_items_travel_sample, num_actual))
+        self.log.info("Total items %s " % num_actual)
+        self.sleep(400, "Waiting for docs to expire as per maxttl")
+        self.expire_pager([self.master])
+        self.sleep(20, "Wait for expiry_purger to run")
+        num_actual = self.get_item_count(self.master, "default")
+        if int(num_actual) != 0:
+            self.fail("Item count is not 0 after maxttl has elapsed")
         else:
-            self.log.info("This test is not designed to run in pre-vulcan(5.5.0) versions")
+            self.log.info("SUCCESS: Item count is 0 after maxttl has elapsed")
 
     # Start of tests for ephemeral buckets
     #

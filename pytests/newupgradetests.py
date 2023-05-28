@@ -8,9 +8,7 @@ from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.kvstore import KVStore
 from testconstants import CB_RELEASE_BUILDS
-from testconstants import SHERLOCK_VERSION, \
-                          COUCHBASE_FROM_SPOCK, \
-                          COUCHBASE_FROM_VULCAN, COUCHBASE_FROM_CHESHIRE_CAT
+from testconstants import COUCHBASE_FROM_CHESHIRE_CAT
 from couchbase.cluster import Cluster, PasswordAuthenticator
 from couchbase.exceptions import CouchbaseError, CouchbaseNetworkError, CouchbaseTransientError
 from security.rbac_base import RbacBase
@@ -2358,8 +2356,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.n1ql_server = self.get_nodes_from_services_map(
             service_type="n1ql")
         # Run the pre upgrade operations, typically creating index
-        if self.initial_version[:5] in COUCHBASE_FROM_SPOCK:
-            fts_obj = self.create_fts_index_query_compare()
+        fts_obj = self.create_fts_index_query_compare()
 
         self.buckets = RestConnection(self.master).get_buckets()
         if 5 <= int(self.initial_version[:1]) and 5.5 > float(self.initial_version[:3]):
@@ -2496,8 +2493,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         if self.is_replica_index_in_pre_upgrade:
             self.log.info("verify replica index after upgrade")
             self.verify_index_with_replica_and_query()
-        if self.upgrade_versions[0][:5] in COUCHBASE_FROM_VULCAN and \
-                 after_upgrade_services_in:
+        if after_upgrade_services_in:
             if "eventing" in after_upgrade_services_in:
                 self.dataset = self.input.param("dataset", "default")
                 self.create_eventing_services()
@@ -3027,15 +3023,12 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
     def load_using_cbc_pillowfight(self, server, items, batch=1000, docsize=100):
         self.rate_limit = self.input.param('rate_limit', '100000')
         import subprocess
-        from lib.testconstants import COUCHBASE_FROM_SPOCK
-        rest = RestConnection(server)
         import multiprocessing
         num_cores = multiprocessing.cpu_count()
         cmd = "cbc-pillowfight -U couchbase://{0}/default -I {1} -m {4} -M {4} -B {2} --json  " \
               "-t {4} --rate-limit={5} --populate-only".format(server.ip, items, batch, docsize, num_cores // 2,
                                                                self.rate_limit)
-        if rest.get_nodes_version()[:5] in COUCHBASE_FROM_SPOCK:
-            cmd += " -u Administrator -P password"
+        cmd += " -u Administrator -P password"
         self.log.info("Executing '{0}'...".format(cmd))
         rc = subprocess.call(cmd, shell=True)
         if rc != 0:

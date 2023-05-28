@@ -1,9 +1,7 @@
-from .newupgradebasetest import NewUpgradeBaseTest
 import queue
 import copy
 import threading
 from random import randint
-from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.tuq_helper import N1QLHelper
 from pytests.eventing.eventing_helper import EventingHelper
 from eventing.eventing_base import EventingBaseTest
@@ -11,14 +9,11 @@ from lib.testconstants import STANDARD_BUCKET_PORT
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from pytests.eventing.eventing_constants import HANDLER_CODE
 from remote.remote_util import RemoteMachineShellConnection
 from .newupgradebasetest import NewUpgradeBaseTest
-from rebalance.rebalance_base import RebalanceBaseTest
 from couchbase_helper.documentgenerator import BlobGenerator
-from testconstants import COUCHBASE_FROM_SPOCK, COUCHBASE_FROM_CHESHIRE_CAT,\
+from testconstants import COUCHBASE_FROM_CHESHIRE_CAT,\
                           FUTURE_BUILD_NUMBER
-
 
 
 class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):

@@ -10,7 +10,6 @@ from ent_backup_restore.backup_service_upgrade import BackupServiceHook
 from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
 from pytests.query_tests_helper import QueryHelperTests
-#from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from security.auditmain import audit
 from security.rbac_base import RbacBase
@@ -22,7 +21,7 @@ from tasks.future import Future, TimeoutError
 from xdcr.xdcrnewbasetests import NodeHelper
 from couchbase_helper.stats_tools import StatsCommon
 from testconstants import COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH, \
-                          COUCHBASE_FROM_4DOT6, ENT_BKRS, ENT_BKRS_FTS
+                          ENT_BKRS, ENT_BKRS_FTS
 
 AUDITBACKUPID = 20480
 AUDITRESTOREID = 20485

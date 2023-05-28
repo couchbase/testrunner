@@ -1,11 +1,8 @@
 import copy
-import json, filecmp, itertools
+import json, itertools
 import os, shutil, ast
-from threading import Thread
 
 from membase.api.rest_client import RestConnection, RestHelper
-from memcached.helper.data_helper import MemcachedClientHelper
-from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
 from couchbase_helper.stats_tools import StatsCommon
 from couchbase_helper.cluster import Cluster
@@ -13,13 +10,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase_helper.documentgenerator import BlobGenerator, JsonDocGenerator
-from couchbase_helper.data_analysis_helper import DataCollector
-from couchbase_cli import CouchbaseCLI
 from security.rbac_base import RbacBase
-from pprint import pprint
-from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON,\
-                          COUCHBASE_FROM_SPOCK, LINUX_COUCHBASE_BIN_PATH,\
-                          WIN_COUCHBASE_BIN_PATH, COUCHBASE_FROM_SHERLOCK
 
 
 class ImportExportTests(CliBaseTest):

@@ -804,16 +804,12 @@ class RebalanceWithPillowFight(BaseTestCase):
 
     def load(self, server, items, batch=1000):
         import subprocess
-        from lib.testconstants import COUCHBASE_FROM_SPOCK
-        rest = RestConnection(server)
         cmd = "cbc version"
         rc = subprocess.call(cmd, shell=True)
         if rc != 0:
             self.fail("Exception running cbc-version: subprocess module returned non-zero response!")
-        cmd = "cbc-pillowfight -U couchbase://{0}/default -I {1} -M 50 -B 1000 --populate-only --json" \
+        cmd = "cbc-pillowfight -U couchbase://{0}/default -u Administrator -P password -I {1} -M 50 -B 1000 --populate-only --json" \
             .format(server.ip, items, batch)
-        if rest.get_nodes_version()[:5] in COUCHBASE_FROM_SPOCK:
-            cmd += " -u Administrator -P password"
         self.log.info("Executing '{0}'...".format(cmd))
         rc = subprocess.call(cmd, shell=True)
         if rc != 0:
@@ -876,4 +872,3 @@ class RebalanceWithPillowFight(BaseTestCase):
         if self.num_items != rest.get_active_key_count(bucket):
             self.fail("FATAL: Data loss detected!! Docs loaded : {0}, docs present: {1}".
                           format(self.num_items, rest.get_active_key_count(bucket) ))
-

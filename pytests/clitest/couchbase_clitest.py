@@ -11,14 +11,11 @@ from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
 from couchbase_cli import CouchbaseCLI
 from upgrade.newupgradebasetest import NewUpgradeBaseTest
-from security.rbacmain import rbacmain
 from security.rbac_base import RbacBase
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
-from testconstants import CLI_COMMANDS, COUCHBASE_FROM_VULCAN, COUCHBASE_FROM_SPOCK, \
-                          COUCHBASE_FROM_WATSON, COUCHBASE_FROM_SHERLOCK,\
-                          COUCHBASE_FROM_4DOT6
+from testconstants import CLI_COMMANDS
 from couchbase_helper.documentgenerator import BlobGenerator
 
 
@@ -2392,70 +2389,67 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             In the bug, when update password of admin, read only account is removed.
             This test is to maker sure read only account stay after update password
             of Administrator. """
-        if self.cb_version[:5] in COUCHBASE_FROM_SHERLOCK:
-            readonly_user = "readonlyuser_1"
-            curr_passwd = "password"
-            update_passwd = "password_1"
-            try:
-                self.log.info("remove any readonly user in cluster ")
-                output, error = self.shell.execute_command("%scouchbase-cli "
-                                             "user-manage --list -c %s:8091 "
-                                             "-u Administrator -p %s "
-                           % (self.cli_command_path, self.shell.ip, curr_passwd))
-                self.log.info("read only user in this cluster %s" % output)
-                if output:
-                    for user in output:
-                        output, error = self.shell.execute_command("%scouchbase-cli "
-                                                    "user-manage --delete -c %s:8091 "
-                                                    "--ro-username=%s "
-                                                    "-u Administrator -p %s "
-                               % (self.cli_command_path, self.shell.ip, user,
-                                                                curr_passwd))
-                        self.log.info("%s" % output)
-                self.log.info("create a read only user account")
-                output, error = self.shell.execute_command("%scouchbase-cli "
-                                              "user-manage -c %s:8091 --set "
-                                              "--ro-username=%s "
-                                            "--ro-password=readonlypassword "
-                                              "-u Administrator -p %s "
-                                      % (self.cli_command_path, self.shell.ip,
-                                                  readonly_user, curr_passwd))
-                self.log.info("%s" % output)
-                output, error = self.shell.execute_command("%scouchbase-cli "
-                                             "user-manage --list -c %s:8091 "
-                                              "-u Administrator -p %s "
-                                                    % (self.cli_command_path,
-                                                 self.shell.ip, curr_passwd))
-                self.log.info("readonly user craeted in this cluster %s" % output)
-                self.log.info("start update Administrator password")
-                output, error = self.shell.execute_command("%scouchbase-cli "
-                                                   "cluster-edit -c %s:8091 "
-                                                    "-u Administrator -p %s "
-                                              "--cluster-username=Administrator "
-                                              "--cluster-password=%s"
-                                         % (self.cli_command_path, self.shell.ip,
-                                                     curr_passwd, update_passwd))
-                self.log.info("%s" % output)
-                self.log.info("verify if readonly user: %s still exist "
-                                                                 % readonly_user )
-                output, error = self.shell.execute_command("%scouchbase-cli "
-                                             "user-manage --list -c %s:8091 "
-                                              "-u Administrator -p %s "
-                                         % (self.cli_command_path, self.shell.ip,
-                                                                  update_passwd))
-                self.log.info(" current readonly user in cluster: %s" % output)
-                self.assertTrue(self._check_output("%s" % readonly_user, output))
-            finally:
-                self.log.info("reset password back to original in case test failed")
-                output, error = self.shell.execute_command("%scouchbase-cli "
-                                                   "cluster-edit -c %s:8091 "
-                                                    "-u Administrator -p %s "
-                                              "--cluster-username=Administrator "
-                                              "--cluster-password=%s"
-                                         % (self.cli_command_path, self.shell.ip,
-                                                     update_passwd, curr_passwd))
-        else:
-            self.log.info("readonly account does not support on this version")
+        readonly_user = "readonlyuser_1"
+        curr_passwd = "password"
+        update_passwd = "password_1"
+        try:
+            self.log.info("remove any readonly user in cluster ")
+            output, error = self.shell.execute_command("%scouchbase-cli "
+                                         "user-manage --list -c %s:8091 "
+                                         "-u Administrator -p %s "
+                       % (self.cli_command_path, self.shell.ip, curr_passwd))
+            self.log.info("read only user in this cluster %s" % output)
+            if output:
+                for user in output:
+                    output, error = self.shell.execute_command("%scouchbase-cli "
+                                                "user-manage --delete -c %s:8091 "
+                                                "--ro-username=%s "
+                                                "-u Administrator -p %s "
+                           % (self.cli_command_path, self.shell.ip, user,
+                                                            curr_passwd))
+                    self.log.info("%s" % output)
+            self.log.info("create a read only user account")
+            output, error = self.shell.execute_command("%scouchbase-cli "
+                                          "user-manage -c %s:8091 --set "
+                                          "--ro-username=%s "
+                                        "--ro-password=readonlypassword "
+                                          "-u Administrator -p %s "
+                                  % (self.cli_command_path, self.shell.ip,
+                                              readonly_user, curr_passwd))
+            self.log.info("%s" % output)
+            output, error = self.shell.execute_command("%scouchbase-cli "
+                                         "user-manage --list -c %s:8091 "
+                                          "-u Administrator -p %s "
+                                                % (self.cli_command_path,
+                                             self.shell.ip, curr_passwd))
+            self.log.info("readonly user craeted in this cluster %s" % output)
+            self.log.info("start update Administrator password")
+            output, error = self.shell.execute_command("%scouchbase-cli "
+                                               "cluster-edit -c %s:8091 "
+                                                "-u Administrator -p %s "
+                                          "--cluster-username=Administrator "
+                                          "--cluster-password=%s"
+                                     % (self.cli_command_path, self.shell.ip,
+                                                 curr_passwd, update_passwd))
+            self.log.info("%s" % output)
+            self.log.info("verify if readonly user: %s still exist "
+                                                             % readonly_user )
+            output, error = self.shell.execute_command("%scouchbase-cli "
+                                         "user-manage --list -c %s:8091 "
+                                          "-u Administrator -p %s "
+                                     % (self.cli_command_path, self.shell.ip,
+                                                              update_passwd))
+            self.log.info(" current readonly user in cluster: %s" % output)
+            self.assertTrue(self._check_output("%s" % readonly_user, output))
+        finally:
+            self.log.info("reset password back to original in case test failed")
+            output, error = self.shell.execute_command("%scouchbase-cli "
+                                               "cluster-edit -c %s:8091 "
+                                                "-u Administrator -p %s "
+                                          "--cluster-username=Administrator "
+                                          "--cluster-password=%s"
+                                     % (self.cli_command_path, self.shell.ip,
+                                        update_passwd, curr_passwd))
 
     def test_directory_backup_structure(self):
         """ directory of backup stuctrure should be like
@@ -2495,154 +2489,103 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         dir_start_with = output[0] + "-"
         backup_all_buckets = True
         partial_backup_buckets = []
-        if self.cb_version[:5] not in COUCHBASE_FROM_SPOCK and \
-                                       backup_cmd == "cbbackup":
-            if num_backup_bucket == "all":
-                self.shell.execute_cluster_backup()
-            else:
-                if str(num_backup_bucket).isdigit() and \
-                       int(num_sasl_buckets) >= int(num_backup_bucket):
-                    backup_all_buckets = False
-                    for i in range(int(num_backup_bucket)):
-                        partial_backup_buckets.append("bucket" + str(i))
-                        option = "-b " + "bucket%s " % str(i)
-                        self.shell.execute_cluster_backup(command_options=option,
-                                                             delete_backup=False)
-            output, error = self.shell.execute_command("ls %sbackup " % self.tmp_path)
-            if output and len(output) == 1:
-                if output[0].startswith(dir_start_with):
-                    self.log.info("first level of backup dir is correct %s" % output[0])
-                else:
-                    self.fail("Incorrect directory name %s.  It should start with %s"
-                                                       % (output[0], dir_start_with))
-            elif output and len(output) > 1:
-                self.fail("first backup dir level should only have one directory")
-            elif not output:
-                self.fail("backup command did not run.  Empty directory %s" % output)
-            output, error = self.shell.execute_command("ls %sbackup/* " % self.tmp_path)
-            if output and len(output) == 1:
-                if output[0].startswith(dir_start_with):
-                    self.log.info("second level of backup dir is correct %s" % output[0])
-                else:
-                    self.fail("Incorrect directory name %s.  It should start with %s"
-                                                       % (output[0], dir_start_with))
-            elif output and len(output) > 1:
-                self.fail("second backup level should only have 1 directory at this run")
-            elif not output:
-                self.fail("backup command did not run.  Empty directory %s" % output)
-            output, error = self.shell.execute_command("ls %sbackup/*/* " % self.tmp_path)
-            self.log.info("backuped buckets: %s" % output)
 
-            """ check total buckets backup """
-            if backup_all_buckets:
-                for bucket in self.buckets:
-                    if "bucket-" + bucket.name in output:
-                        self.log.info("bucket %s was backuped " % bucket.name)
-                    else:
-                        self.fail("failed to backup bucket %s " % bucket.name)
-            else:
-                for bucket in partial_backup_buckets:
-                    if "bucket-%s" % bucket in output:
-                        self.log.info("bucket %s was backuped " % bucket)
-                    else:
-                        self.fail("failed to backup bucket %s " % bucket)
-        elif self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-            if backup_cmd == "cbbackupmgr":
-                backup_repo = "backup-test"
-                node_credential = "--username Administrator --password password "
-                self.log.info("Create backup repo : %s" % backup_repo)
-                """ format of setting backup repo
-                    ./cbbackupmgr config --archive /tmp/backup --repo backup-test """
-                self.shell.execute_command("%s%s%s config --archive %s --repo %s"
+        if backup_cmd == "cbbackupmgr":
+            backup_repo = "backup-test"
+            node_credential = "--username Administrator --password password "
+            self.log.info("Create backup repo : %s" % backup_repo)
+            """ format of setting backup repo
+                ./cbbackupmgr config --archive /tmp/backup --repo backup-test """
+            self.shell.execute_command("%s%s%s config --archive %s --repo %s"
+                                       % (self.cli_command_path, backup_cmd,
+                                          self.cmd_ext, self.cmd_backup_path,
+                                          backup_repo))
+            output, error = self.shell.execute_command("ls %s" % self.backup_path)
+            result = output
+            if result and backup_repo in result:
+                self.log.info("repo %s successful created " % backup_repo)
+                output, error = self.shell.execute_command("ls %s%s"
+                                            % (self.backup_path, backup_repo))
+                if output and "backup-meta.json" in output:
+                    self.log.info("backup-meta.json successful created ")
+                elif output:
+                    self.fail("fail to create backup-meta.json file")
+            if result and "logs" in result:
+                self.log.info("logs dir successful created ")
+                output, error = self.shell.execute_command("ls %slogs"
+                                                    % self.backup_path)
+                if output and "backup-0.log" in output:
+                    self.log.info("backup.log file successful created ")
+                else:
+                    self.fail("fail to create backup.log file")
+            """ start backup bucket
+                command format:
+                cbbackupmgr backup --archive /tmp/backup --repo backup-test
+                                   --host ip_addr
+                                   --username Administrator
+                                   --password password """
+            if num_backup_bucket == "all":
+                self.shell.execute_command("%s%s%s backup --archive %s "
+                                           " --repo %s --host %s:8091 %s"
                                            % (self.cli_command_path, backup_cmd,
                                               self.cmd_ext, self.cmd_backup_path,
-                                              backup_repo))
-                output, error = self.shell.execute_command("ls %s" % self.backup_path)
-                result = output
-                if result and backup_repo in result:
-                    self.log.info("repo %s successful created " % backup_repo)
-                    output, error = self.shell.execute_command("ls %s%s"
-                                                % (self.backup_path, backup_repo))
-                    if output and "backup-meta.json" in output:
-                        self.log.info("backup-meta.json successful created ")
-                    elif output:
-                        self.fail("fail to create backup-meta.json file")
-                if result and "logs" in result:
-                    self.log.info("logs dir successful created ")
-                    output, error = self.shell.execute_command("ls %slogs"
-                                                        % self.backup_path)
-                    if output and "backup-0.log" in output:
-                        self.log.info("backup.log file successful created ")
+                                              backup_repo, self.shell.ip,
+                                              node_credential))
+                out, err = self.shell.execute_command("ls %s%s"
+                                            % (self.backup_path, backup_repo))
+                if out and len(out) > 1:
+                    """ Since in this dir, there is a dir start with a number
+                        and a file.  So the dir will list first.
+                        Example of this dir: 2016-08-.. backup-meta.json """
+                    if out[0].startswith(dir_start_with):
+                        self.log.info("First level of backup dir is correct %s"
+                                                                      % out[0])
                     else:
-                        self.fail("fail to create backup.log file")
-                """ start backup bucket
-                    command format:
-                    cbbackupmgr backup --archive /tmp/backup --repo backup-test
-                                       --host ip_addr
-                                       --username Administrator
-                                       --password password """
-                if num_backup_bucket == "all":
-                    self.shell.execute_command("%s%s%s backup --archive %s "
-                                               " --repo %s --host %s:8091 %s"
-                                               % (self.cli_command_path, backup_cmd,
-                                                  self.cmd_ext, self.cmd_backup_path,
-                                                  backup_repo, self.shell.ip,
-                                                  node_credential))
-                    out, err = self.shell.execute_command("ls %s%s"
-                                                % (self.backup_path, backup_repo))
-                    if out and len(out) > 1:
-                        """ Since in this dir, there is a dir start with a number
-                            and a file.  So the dir will list first.
-                            Example of this dir: 2016-08-.. backup-meta.json """
-                        if out[0].startswith(dir_start_with):
-                            self.log.info("First level of backup dir is correct %s"
-                                                                          % out[0])
-                        else:
-                            self.fail("Incorrect directory name %s.  "
-                                             "It should start with %s"
-                                           % (out[0], dir_start_with))
-                    elif out:
-                        self.fail("backup did not run correctly %s" % out)
-                out, err = self.shell.execute_command("ls %s%s/%s*"
-                                                % (self.backup_path, backup_repo,
-                                                                 dir_start_with))
-                """ get buckets in directory """
-                if out and len(out) >=1:
-                    if "plan.json" in out:
-                        out.remove("plan.json")
-                    else:
-                        self.fail("Missing plan.json file in this dir")
-                    out = [w.split("-", 1)[0] for w in out]
-                if backup_all_buckets:
-                    for bucket in self.buckets:
-                        if bucket.name in out:
-                            self.log.info("Bucket %s was backuped "
-                                                     % bucket.name)
-                        else:
-                            self.fail("failed to backup bucket %s "
-                                                     % bucket.name)
-                """ Check content of backup bucket.
-                      Total dir and files:
-                        bucket-config.json  data  full-text.json  gsi.json
-                        range.json views.json """
-                backup_folder_content = ["bucket-config.json", "data",
-                                         "full-text.json", "gsi.json", "gsi.metadata.json",
-                                          "range.json", "views.json",
-                                          "query.json", "query.metadata.json",
-                                          "ranges"]
+                        self.fail("Incorrect directory name %s.  "
+                                         "It should start with %s"
+                                       % (out[0], dir_start_with))
+                elif out:
+                    self.fail("backup did not run correctly %s" % out)
+            out, err = self.shell.execute_command("ls %s%s/%s*"
+                                            % (self.backup_path, backup_repo,
+                                                             dir_start_with))
+            """ get buckets in directory """
+            if out and len(out) >=1:
+                if "plan.json" in out:
+                    out.remove("plan.json")
+                else:
+                    self.fail("Missing plan.json file in this dir")
+                out = [w.split("-", 1)[0] for w in out]
+            if backup_all_buckets:
                 for bucket in self.buckets:
-                    out, err = self.shell.execute_command("ls %s%s/%s*/%s-*"
-                                                % (self.backup_path, backup_repo,
-                                                    dir_start_with, bucket.name))
-                    if out and len(out) > 1:
-                        self.log.info("Check content of backup dir of bucket %s: %s"
-                                                               % (bucket.name, out))
-                        for ele in out:
-                            if ele not in backup_folder_content:
-                                self.fail("Extra file/folder in backup repo: %s" % ele)
+                    if bucket.name in out:
+                        self.log.info("Bucket %s was backuped "
+                                                 % bucket.name)
                     else:
-                        self.fail("Missing backup dir or files in backup bucket %s"
-                                                                     % bucket.name)
+                        self.fail("failed to backup bucket %s "
+                                                 % bucket.name)
+            """ Check content of backup bucket.
+                  Total dir and files:
+                    bucket-config.json  data  full-text.json  gsi.json
+                    range.json views.json """
+            backup_folder_content = ["bucket-config.json", "data",
+                                     "full-text.json", "gsi.json", "gsi.metadata.json",
+                                      "range.json", "views.json",
+                                      "query.json", "query.metadata.json",
+                                      "ranges"]
+            for bucket in self.buckets:
+                out, err = self.shell.execute_command("ls %s%s/%s*/%s-*"
+                                            % (self.backup_path, backup_repo,
+                                                dir_start_with, bucket.name))
+                if out and len(out) > 1:
+                    self.log.info("Check content of backup dir of bucket %s: %s"
+                                                           % (bucket.name, out))
+                    for ele in out:
+                        if ele not in backup_folder_content:
+                            self.fail("Extra file/folder in backup repo: %s" % ele)
+                else:
+                    self.fail("Missing backup dir or files in backup bucket %s"
+                                                                 % bucket.name)
         self.log.info("Remove backup directory at the end of test")
         self.shell.execute_command("rm -rf %sbackup" % self.tmp_path)
         self.shell.disconnect()
@@ -2833,15 +2776,6 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         ops_during_upgrade = self.input.param("ops-during-upgrade", False)
         ops_after_upgrade = self.input.param("ops-after-upgrade", False)
 
-        self.log.info("Check OS if it is supported in old cb version")
-        if "centos 7" in self.os_version:
-            if self.initial_version[:5] not in COUCHBASE_FROM_SHERLOCK:
-                print("\n%s is not supported in %s\n"\
-                      "you need to get server with os supported!\n"\
-                                                 % (self.initial_version,
-                                                    self.os_version))
-                raise Exception("Not support OS")
-
         """
             Start install old version with param initial_version
         """
@@ -2886,9 +2820,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                     self.shell.execute_command(cmd)
                 rest = RestConnection(self.master)
                 cb_version = rest.get_nodes_version()
-                if cb_version[:5] in COUCHBASE_FROM_WATSON:
-                    if self.debug_logs:
-                        print("output from exe command  ", output)
+                if self.debug_logs:
+                    print("output from exe command  ", output)
             except Exception as e:
                 if e:
                     print("Exception error:   ", e)
@@ -3045,22 +2978,21 @@ class XdcrCLITest(CliBaseTest):
             self.cluster.async_rebalance(self.dest_nodes, self.dest_nodes[1:],
                                                                  []).result()
 
-        if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-            XdcrCLITest.XDCR_SETUP_SUCCESS = {
-                          "create": "SUCCESS: Cluster reference created",
-                          "edit": "SUCCESS: Cluster reference edited",
-                          "delete": "SUCCESS: Cluster reference deleted"
-            }
-            XdcrCLITest.XDCR_REPLICATE_SUCCESS = {
-                          "create": "SUCCESS: XDCR replication created",
-                          "delete": "SUCCESS: XDCR replication deleted",
-                          "pause": "SUCCESS: XDCR replication paused",
-                          "resume": "SUCCESS: XDCR replication resume"
-            }
-            XdcrCLITest.SSL_MANAGE_SUCCESS = \
-                          {'retrieve': "SUCCESS: retrieve certificate to \'PATH\'",
-                           'regenerate': 'SUCCESS: Certificate regenerate and copied to `PATH`'
-                          }
+        XdcrCLITest.XDCR_SETUP_SUCCESS = {
+                      "create": "SUCCESS: Cluster reference created",
+                      "edit": "SUCCESS: Cluster reference edited",
+                      "delete": "SUCCESS: Cluster reference deleted"
+        }
+        XdcrCLITest.XDCR_REPLICATE_SUCCESS = {
+                      "create": "SUCCESS: XDCR replication created",
+                      "delete": "SUCCESS: XDCR replication deleted",
+                      "pause": "SUCCESS: XDCR replication paused",
+                      "resume": "SUCCESS: XDCR replication resume"
+        }
+        XdcrCLITest.SSL_MANAGE_SUCCESS = \
+                      {'retrieve': "SUCCESS: retrieve certificate to \'PATH\'",
+                       'regenerate': 'SUCCESS: Certificate regenerate and copied to `PATH`'
+                      }
 
     def tearDown(self):
         for server in self.servers:
@@ -3103,31 +3035,20 @@ class XdcrCLITest(CliBaseTest):
                 cluster_host = "localhost"
             else:
                 cluster_host = self.dest_master.ip
-            cert_info = "--retrieve-cert"
-            if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-                cert_info = " --regenerate-cert cert.pem"
-                output, _ = self.__execute_cli(cli_command="ssl-manage", options="{0} "\
-                                         .format(cert_info), cluster_host=cluster_host)
-                self.shell.copy_file_local_to_remote("cert.pem",
-                                                self.root_path + "cert.pem")
-                os.system("rm -f cert.pem")
-            else:
-                output, _ = self.__execute_cli(cli_command="ssl-manage", options="{0}={1}"\
-                              .format(cert_info, xdcr_cert), cluster_host=cluster_host)
-                if output[0][:4] == "\x1b[6n":
-                    output[0] = output[0][4:]
+            cert_info = " --regenerate-cert cert.pem"
+            output, _ = self.__execute_cli(cli_command="ssl-manage", options="{0} "\
+                                     .format(cert_info), cluster_host=cluster_host)
+            self.shell.copy_file_local_to_remote("cert.pem",
+                                            self.root_path + "cert.pem")
+            os.system("rm -f cert.pem")
             options += (" --xdcr-certificate={0}".format(xdcr_cert),\
                                                "")[xdcr_cert is None]
-            if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-                if "enterprise" in self.cb_version:
-                    msgs_check = ["-----END CERTIFICATE-----", "Certificate regenerate and copied"]
-                    self.assertTrue(self._check_output(msgs_check, output))
-                else:
-                    self.assertTrue(self._check_output("ERROR: This http API"\
-                                " endpoint requires enterprise edition", output))
+            if "enterprise" in self.cb_version:
+                msgs_check = ["-----END CERTIFICATE-----", "Certificate regenerate and copied"]
+                self.assertTrue(self._check_output(msgs_check, output))
             else:
-                self.assertNotEqual(output[-1].find("SUCCESS"), -1,\
-                     "ssl-manage CLI failed to retrieve certificate")
+                self.assertTrue(self._check_output("ERROR: This http API"\
+                            " endpoint requires enterprise edition", output))
 
         output, error = self.__execute_cli(cli_command=cli_command, options=options)
         return output, error, xdcr_cluster_name, xdcr_hostname, cli_command, options
@@ -3237,7 +3158,7 @@ class XdcrCLITest(CliBaseTest):
                 elif "Error: hostname (ip) is missing" in element:
                     self.log.info("match {0}".format(element))
                     return True
-                elif self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
+                else:
                     if "Error checking if target cluster supports SANs in cerificates." \
                             in element:
                         self.log.info("match {0}".format(element))
@@ -3405,24 +3326,15 @@ class XdcrCLITest(CliBaseTest):
         else:
             self.fail("need params xdcr-certificate to run")
         cli_command = "ssl-manage"
-        cert_info = "--retrieve-cert"
-        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
-            cert_info = " --regenerate-cert cert.pem "
-            output, error = self.__execute_cli(cli_command=cli_command,
-                                                           options=cert_info)
-            self.shell.copy_file_local_to_remote(xdcr_cert,
-                                            self.root_path + xdcr_cert)
-            os.system("rm -f %s " % xdcr_cert)
-        else:
-            options = "{0}={1}".format(cert_info, xdcr_cert)
-            output, error = self.__execute_cli(cli_command=cli_command, options=options)
+        cert_info = " --regenerate-cert cert.pem "
+        output, error = self.__execute_cli(cli_command=cli_command,
+                                                       options=cert_info)
+        self.shell.copy_file_local_to_remote(xdcr_cert,
+                                        self.root_path + xdcr_cert)
+        os.system("rm -f %s " % xdcr_cert)
         self.assertFalse(error, "Error thrown during CLI execution %s" % error)
-        if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-            msgs_check = ["-----END CERTIFICATE-----", "Certificate regenerate and copied"]
-            self.assertTrue(self._check_output(msgs_check, output))
-        else:
-           self.assertIn(XdcrCLITest.SSL_MANAGE_SUCCESS["retrieve"]\
-                                          .replace("PATH", xdcr_cert), output[0])
+        msgs_check = ["-----END CERTIFICATE-----", "Certificate regenerate and copied"]
+        self.assertTrue(self._check_output(msgs_check, output))
         self.shell.execute_command("rm {0}".format(xdcr_cert))
 
         options = "--regenerate-cert={0}".format(xdcr_cert)
@@ -3458,4 +3370,3 @@ class XdcrCLITest(CliBaseTest):
            From 7.1, only allow secure connection to add node """
         url_server = "https://{0}:1{1}".format(server.ip, server.port)
         return url_server
-

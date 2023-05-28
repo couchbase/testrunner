@@ -1,11 +1,7 @@
-import os
-
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
 from basetestcase import BaseTestCase
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
-from scripts.memcachetest_runner import MemcachetestRunner
-from testconstants import COUCHBASE_FROM_SPOCK
 
 
 class ConnectionTests(BaseTestCase):

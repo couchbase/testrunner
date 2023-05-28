@@ -43,7 +43,7 @@ from memcached.helper.data_helper import MemcachedClientHelper
 from memcached.helper.kvstore import KVStore
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from tasks.future import Future
-from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6, \
+from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, \
     THROUGHPUT_CONCURRENCY, ALLOW_HTP, CBAS_QUOTA, CLUSTER_QUOTA_RATIO
 
 from TestInput import TestInputServer, TestInputSingleton
@@ -198,9 +198,6 @@ class NodeInitializeTask(Task):
             set_services = copy.deepcopy(self.services)
             if set_services is None:
                 set_services = ["kv"]
-            #             info = rest.get_nodes_self()
-            #             cb_version = info.version[:5]
-            #             if cb_version in COUCHBASE_FROM_VERSION_4:
             if "index" in set_services:
                 self.log.info("quota for index service will be %s MB" % (index_quota))
                 kv_quota -= index_quota
@@ -5197,13 +5194,10 @@ class EnterpriseBackupTask(Task):
         self.no_progress_bar = no_progress_bar
         self.cli_command_location = cli_command_location
         self.cb_version = cb_version
-        self.cluster_flag = "--host"
+        self.cluster_flag = "--cluster"
         self.num_shards = num_shards
-        """ from couchbase version 4.6.x, --host flag is not supported """
         if self.cb_version is None:
             raise Exception("Need to pass Couchbase version to run correctly bk/rt ")
-        elif self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
-            self.cluster_flag = "--cluster"
         self.output = []
         self.error = []
         try:
@@ -5267,12 +5261,10 @@ class EnterpriseRestoreTask(Task):
         self.no_progress_bar = no_progress_bar
         self.cli_command_location = cli_command_location
         self.cb_version = cb_version
-        self.cluster_flag = "--host"
+        self.cluster_flag = "--cluster"
         """ from couchbase version 4.6.x, --host flag is not supported """
         if self.cb_version is None:
             raise Exception("Need to pass Couchbase version to run correctly bk/rt ")
-        elif self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
-            self.cluster_flag = "--cluster"
         self.output = []
         self.error = []
         self.backups = backups

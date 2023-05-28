@@ -183,14 +183,13 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
 
     def load(self, server, items, batch=1000, docsize=100, rate_limit=100000,
              start_at=0, custom_cmd=None):
-        from lib.testconstants import COUCHBASE_FROM_SPOCK
         rest = RestConnection(server)
         import multiprocessing
 
         num_threads = multiprocessing.cpu_count() // 2
         num_cycles = int(items / batch * 1.5 / num_threads)
 
-        cmd = "cbc-pillowfight -U couchbase://{0}/default -I {1} -m {3} -M {3} -B {2} -c {5} --sequential --json -t {4} " \
+        cmd = "cbc-pillowfight -U couchbase://{0}/default -u Administrator -P password -I {1} -m {3} -M {3} -B {2} -c {5} --sequential --json -t {4} " \
               "--rate-limit={6} --start-at={7}" \
             .format(server.ip, items, batch, docsize, num_threads, num_cycles,
                     rate_limit, start_at)
@@ -199,8 +198,6 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
 
         if self.num_replicas > 0 and self.use_replica_to:
             cmd += " --replicate-to=1"
-        if rest.get_nodes_version()[:5] in COUCHBASE_FROM_SPOCK:
-            cmd += " -u Administrator -P password"
         self.log.info("Executing '{0}'...".format(cmd))
         rc = subprocess.call(cmd, shell=True)
         if rc != 0:

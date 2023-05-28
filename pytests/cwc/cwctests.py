@@ -1,15 +1,10 @@
 import time
-import unittest
 import urllib.request, urllib.parse, urllib.error
 import random, copy
-import testconstants
-from TestInput import TestInputSingleton
 
 from cwc.cwc_base import CWCBaseTest
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
-from testconstants import COUCHBASE_FROM_WATSON
-
 
 
 class CWCTests(CWCBaseTest):
@@ -94,8 +89,7 @@ class CWCTests(CWCBaseTest):
             if e:
                 print(e)
         if status:
-            if self.cb_version[:5] in COUCHBASE_FROM_WATSON:
-                add_node_rest.set_indexer_storage_mode(storageMode="memory_optimized")
+            add_node_rest.set_indexer_storage_mode(storageMode="memory_optimized")
 
     def _monitor_collecting_log(self, rest, timeout):
         start_time = time.time()

@@ -17,7 +17,7 @@ from copy import deepcopy
 from threading import Thread
 from TestInput import TestInputSingleton
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, CBAS_QUOTA
-from testconstants import COUCHBASE_FROM_VERSION_4, IS_CONTAINER, CLUSTER_QUOTA_RATIO
+from testconstants import IS_CONTAINER, CLUSTER_QUOTA_RATIO
 from decorator import decorator
 import pprint
 
@@ -1221,31 +1221,29 @@ class RestConnection(object):
         kv_quota = int(info.mcdMemoryReserved * CLUSTER_QUOTA_RATIO)
 
         cb_version = info.version[:5]
-        if cb_version in COUCHBASE_FROM_VERSION_4:
-            if "index" in self.node_services:
-                log.info("quota for index service will be %s MB" % (INDEX_QUOTA))
-                kv_quota -= INDEX_QUOTA
-                log.info("set index quota to node %s " % self.ip)
-                self.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=INDEX_QUOTA)
-            if "fts" in self.node_services:
-                log.info("quota for fts service will be %s MB" % (FTS_QUOTA))
-                kv_quota -= FTS_QUOTA
-                log.info("set both index and fts quota at node %s "% self.ip)
-                self.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=FTS_QUOTA)
-            if "cbas" in self.node_services:
-                log.info("quota for cbas service will be %s MB" % (CBAS_QUOTA))
-                kv_quota -= CBAS_QUOTA
-                self.set_service_memoryQuota(service = "cbasMemoryQuota", memoryQuota=CBAS_QUOTA)
-            kv_quota -= 1
-            if kv_quota < MIN_KV_QUOTA:
-                raise Exception("KV RAM needs to be more than %s MB"
-                                " at node  %s"  % (MIN_KV_QUOTA, self.ip))
+        if "index" in self.node_services:
+            log.info("quota for index service will be %s MB" % (INDEX_QUOTA))
+            kv_quota -= INDEX_QUOTA
+            log.info("set index quota to node %s " % self.ip)
+            self.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=INDEX_QUOTA)
+        if "fts" in self.node_services:
+            log.info("quota for fts service will be %s MB" % (FTS_QUOTA))
+            kv_quota -= FTS_QUOTA
+            log.info("set both index and fts quota at node %s "% self.ip)
+            self.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=FTS_QUOTA)
+        if "cbas" in self.node_services:
+            log.info("quota for cbas service will be %s MB" % (CBAS_QUOTA))
+            kv_quota -= CBAS_QUOTA
+            self.set_service_memoryQuota(service = "cbasMemoryQuota", memoryQuota=CBAS_QUOTA)
+        kv_quota -= 1
+        if kv_quota < MIN_KV_QUOTA:
+            raise Exception("KV RAM needs to be more than %s MB"
+                            " at node  %s"  % (MIN_KV_QUOTA, self.ip))
 
         log.info("quota for kv: %s MB" % kv_quota)
         self.init_cluster_memoryQuota(self.username, self.password, kv_quota)
-        if cb_version in COUCHBASE_FROM_VERSION_4:
-            self.init_node_services(username=self.username, password=self.password,
-                                    services=self.node_services)
+        self.init_node_services(username=self.username, password=self.password,
+                                services=self.node_services)
         self.init_cluster(username=self.username, password=self.password)
         return kv_quota
 

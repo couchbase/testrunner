@@ -33,12 +33,9 @@ class VolumeTests(BaseTestCase):
 
     def load(self, server, items, bucket,start_at=0,batch=1000):
         import subprocess
-        from lib.testconstants import COUCHBASE_FROM_SPOCK
-        rest = RestConnection(server)
-        num_cycles = int((items // batch )) // 5
-        cmd = "cbc-pillowfight -U couchbase://{0}/{3} -I {1} -m 10 -M 100 -B {2} --populate-only --start-at {4} --json".format(server.ip, items, batch, bucket, start_at)
-        if rest.get_nodes_version()[:5] in COUCHBASE_FROM_SPOCK:
-            cmd += " -u Administrator -P password"
+        cmd = "cbc-pillowfight -U couchbase://{0}/{3} -u Administrator -P password " \
+              "-I {1} -m 10 -M 100 -B {2} --populate-only --start-at {4} --json" \
+            .format(server.ip, items, batch, bucket, start_at)
         self.log.info("Executing '{0}'...".format(cmd))
         rc = subprocess.call(cmd, shell=True)
         if rc != 0:
@@ -49,12 +46,8 @@ class VolumeTests(BaseTestCase):
         from couchbase.exceptions import NotFoundError, CouchbaseError
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
         self.log.info("########## validating data for bucket : {} ###########".format(bucket))
-        cb_version= cb_version = RestConnection(server).get_nodes_version()[:3]
-        if cb_version < "5":
-            bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name), timeout=5000)
-        else:
-            bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name), username=server.rest_username,
-                         password=server.rest_password, timeout=5000)
+        bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name), username=server.rest_username,
+                     password=server.rest_password, timeout=5000)
         rest = RestConnection(self.master)
         VBucketAware = VBucketAwareMemcached(rest, bucket.name)
         _, _, _ = VBucketAware.request_map(rest, bucket.name)

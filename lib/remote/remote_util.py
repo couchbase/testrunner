@@ -27,8 +27,6 @@ from testconstants import COUCHBASE_VERSIONS
 from testconstants import SYSTEMD_SERVER
 from testconstants import CB_RELEASE_BUILDS
 from testconstants import WIN_PROCESSES_KILLED
-from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON,\
-                          COUCHBASE_FROM_SPOCK
 from testconstants import RPM_DIS_NAME
 from testconstants import LINUX_DISTRIBUTION_NAME, LINUX_CB_PATH, \
                           LINUX_COUCHBASE_BIN_PATH
@@ -504,8 +502,7 @@ class RemoteMachineShellConnection(KeepRefs):
                     self.log_command_output(o, r)
                 else:
                     fv, sv, bn = self.get_cbversion("linux")
-                    if self.info.distribution_version.lower() in SYSTEMD_SERVER \
-                                                 and sv in COUCHBASE_FROM_WATSON:
+                    if self.info.distribution_version.lower() in SYSTEMD_SERVER:
                         """from watson, systemd is used in centos 7, suse 12 """
                         log.info("Running systemd start command on this server")
                         o, r = self.execute_command("systemctl start couchbase-server.service")
@@ -536,8 +533,7 @@ class RemoteMachineShellConnection(KeepRefs):
                     self.log_command_output(o, r)
                 else:
                     fv, sv, bn = self.get_cbversion("linux")
-                    if self.info.distribution_version.lower() in SYSTEMD_SERVER \
-                                                 and sv in COUCHBASE_FROM_WATSON:
+                    if self.info.distribution_version.lower() in SYSTEMD_SERVER:
                         """from watson, systemd is used in centos 7, suse 12 """
                         log.info("Running systemd stop command on this server")
                         o, r = self.execute_command("systemctl stop couchbase-server.service")
@@ -661,8 +657,7 @@ class RemoteMachineShellConnection(KeepRefs):
             self.log_command_output(o, r)
         if self.info.type.lower() == "linux":
             fv, sv, bn = self.get_cbversion("linux")
-            if self.info.distribution_version.lower() in SYSTEMD_SERVER \
-                    and sv in COUCHBASE_FROM_WATSON:
+            if self.info.distribution_version.lower() in SYSTEMD_SERVER:
                 """from watson, systemd is used in centos 7 """
                 log.info("this node is centos 7.x")
                 o, r = self.execute_command("service couchbase-server restart")
@@ -1220,14 +1215,9 @@ class RemoteMachineShellConnection(KeepRefs):
                     filename_version = filename[28:33]
                 elif "community" in filename:
                     filename_version = filename[27:32]
-            if filename_version in COUCHBASE_FROM_VERSION_4:
-                log.info("This version is {0}".format(filename_version))
-                tmp = filename.split("_")
-                version = tmp[1].replace("-windows", "")
-            else:
-                tmp = filename.split("-")
-                tmp.reverse()
-                version = tmp[1] + "-" + tmp[0]
+            log.info("This version is {0}".format(filename_version))
+            tmp = filename.split("_")
+            version = tmp[1].replace("-windows", "")
 
             exist = self.file_exists('/cygdrive/c/tmp/', version)
             command = "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe "\
@@ -2691,10 +2681,9 @@ class RemoteMachineShellConnection(KeepRefs):
                        In spock from build 2924 and later release, we only support
                        msi installation method on windows
                     """
-                    if msi_build[0] in COUCHBASE_FROM_SPOCK:
-                        os_type = "msi"
-                        windows_msi = True
-                        self.info.deliverable_type = "msi"
+                    os_type = "msi"
+                    windows_msi = True
+                    self.info.deliverable_type = "msi"
                 else:
                     mesg = " ***** ERROR: ***** \n" \
                            " Couchbase Server version format is not correct. \n" \
@@ -2847,21 +2836,17 @@ class RemoteMachineShellConnection(KeepRefs):
                         sys.exit(1)
                     self.stop_server()
                 else:
-                    if sv in COUCHBASE_FROM_VERSION_4:
-                        if self.is_enterprise(type):
-                            if product is not None and product == "cbas":
-                                uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
-                                        .format("couchbase-server-analytics", "couchbase-server-analytics")
-                            else:
-                                uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
-                                        .format("couchbase-server", "couchbase-server")
+                    if self.is_enterprise(type):
+                        if product is not None and product == "cbas":
+                            uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
+                                    .format("couchbase-server-analytics", "couchbase-server-analytics")
                         else:
                             uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
-                                         .format("couchbase-server-community",
-                                                  "couchbase-server-community")
+                                    .format("couchbase-server", "couchbase-server")
                     else:
                         uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
-                                     .format("couchbase-server", "couchbase-server")
+                                     .format("couchbase-server-community",
+                                              "couchbase-server-community")
                     output, error = self.execute_command(uninstall_cmd)
                     self.log_command_output(output, error)
             elif type in RPM_DIS_NAME:
@@ -2881,17 +2866,14 @@ class RemoteMachineShellConnection(KeepRefs):
                     self.log_command_output(output, error)
                     output, error = self.execute_command("rm -f /var/lib/rpm/.rpm.lock")
                     self.log_command_output(output, error)
-                    if sv in COUCHBASE_FROM_VERSION_4:
-                        if self.is_enterprise(type):
-                            if product is not None and product == "cbas":
-                                uninstall_cmd = 'rpm -e {0}'.format("couchbase-server-analytics")
-                            else:
-                                uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
+                    if self.is_enterprise(type):
+                        if product is not None and product == "cbas":
+                            uninstall_cmd = 'rpm -e {0}'.format("couchbase-server-analytics")
                         else:
-                            uninstall_cmd = 'rpm -e {0}' \
-                                          .format("couchbase-server-community")
+                            uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
                     else:
-                        uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
+                        uninstall_cmd = 'rpm -e {0}' \
+                                      .format("couchbase-server-community")
                     log.info('running rpm -e to remove couchbase-server')
                     output, error = self.execute_command(uninstall_cmd)
                     if output:
@@ -3920,8 +3902,7 @@ class RemoteMachineShellConnection(KeepRefs):
                 self.log_command_output(o, r)
             else:
                 fv, sv, bn = self.get_cbversion("linux")
-                if self.info.distribution_version.lower() in SYSTEMD_SERVER \
-                                             and sv in COUCHBASE_FROM_WATSON:
+                if self.info.distribution_version.lower() in SYSTEMD_SERVER:
                     """from watson, systemd is used in centos 7, suse 12 """
                     log.info("Running systemd command on this server")
                     o, r = self.execute_command("systemctl stop couchbase-server.service")
@@ -3961,8 +3942,7 @@ class RemoteMachineShellConnection(KeepRefs):
                     retry = retry + 1
                 else:
                     fv, sv, bn = self.get_cbversion("linux")
-                    if self.info.distribution_version.lower() in SYSTEMD_SERVER \
-                           and sv in COUCHBASE_FROM_WATSON:
+                    if self.info.distribution_version.lower() in SYSTEMD_SERVER:
                         """from watson, systemd is used in centos 7, suse 12 """
                         log.info("Running systemd command on this server")
                         o, r = self.execute_command("systemctl start couchbase-server.service")
@@ -4116,12 +4096,8 @@ class RemoteMachineShellConnection(KeepRefs):
         prefix = "\\n    "
         shell = self._ssh_client.invoke_shell()
         _, sv, _ = self.get_cbversion("linux")
-        if sv in COUCHBASE_FROM_SPOCK:
-            init_file = "couchbase-server"
-            file_path = "/opt/couchbase/bin/"
-        else:
-            init_file = "couchbase_init.d"
-            file_path = "/opt/couchbase/etc/"
+        init_file = "couchbase-server"
+        file_path = "/opt/couchbase/bin/"
         environmentVariables = ""
         self.extract_remote_info()
         if self.info.type.lower() == "windows":
@@ -4139,11 +4115,10 @@ class RemoteMachineShellConnection(KeepRefs):
         for key in list(dict.keys()):
             o, r = self.execute_command("sed -i 's/{1}.*//' {0}".format(sourceFile, key))
             self.log_command_output(o, r)
-            if sv in COUCHBASE_FROM_SPOCK:
-                o, r = self.execute_command("sed -i 's/export ERL_FULLSWEEP_AFTER/export ERL_FULLSWEEP_AFTER\\n{1}="
-                                            "{2}\\nexport {1}/' {0}".
-                                            format(sourceFile, key, dict[key]))
-                self.log_command_output(o, r)
+            o, r = self.execute_command("sed -i 's/export ERL_FULLSWEEP_AFTER/export ERL_FULLSWEEP_AFTER\\n{1}="
+                                        "{2}\\nexport {1}/' {0}".
+                                        format(sourceFile, key, dict[key]))
+            self.log_command_output(o, r)
         if self.info.type.lower() == "windows":
             command = "sed -i 's/{0}/{0}".format("set NS_ERTS=%NS_ROOT%\erts-5.8.5.cb1\bin")
 
@@ -4181,12 +4156,8 @@ class RemoteMachineShellConnection(KeepRefs):
            From spock, the file to edit is in /opt/couchbase/bin/couchbase-server
         """
         _, sv, _ = self.get_cbversion("linux")
-        if sv in COUCHBASE_FROM_SPOCK:
-            init_file = "couchbase-server"
-            file_path = "/opt/couchbase/bin/"
-        else:
-            init_file = "couchbase_init.d"
-            file_path = "/opt/couchbase/etc/"
+        init_file = "couchbase-server"
+        file_path = "/opt/couchbase/bin/"
         if self.info.type.lower() == "windows":
             init_file = "service_start.bat"
             file_path = "/cygdrive/c/Program\ Files/Couchbase/Server/bin/"
@@ -4426,13 +4397,9 @@ class RemoteMachineShellConnection(KeepRefs):
     def execute_cbdocloader(self, username, password, bucket, memory_quota, file):
         f, s, b = self.get_cbversion(self.info.type.lower())
         cbdocloader_command = "%scbdocloader" % (LINUX_COUCHBASE_BIN_PATH)
-        cluster_flag = "-n"
-        bucket_quota_flag = "-s"
-        data_set_location_flag = " "
-        if f[:5] in COUCHBASE_FROM_SPOCK:
-            cluster_flag = "-c"
-            bucket_quota_flag = "-m"
-            data_set_location_flag = "-d"
+        cluster_flag = "-c"
+        bucket_quota_flag = "-m"
+        data_set_location_flag = "-d"
         linux_couchbase_path = LINUX_CB_PATH
         if self.nonroot:
             cbdocloader_command = "%scbdocloader" % (LINUX_NONROOT_CB_BIN_PATH)
@@ -4676,7 +4643,7 @@ class RemoteMachineShellConnection(KeepRefs):
 
         user_param = (" -u {0}".format(user), "")[user is None]
         passwd_param = (" -p {0}".format(password), "")[password is None]
-        if f[:5] in COUCHBASE_FROM_SPOCK and cli_command == "cluster-init":
+        if cli_command == "cluster-init":
             user_param = (" --cluster-username {0}".format(user), "")[user is None]
             passwd_param = (" --cluster-password {0}".format(password), "")[password is None]
         # now we can run command in format where all parameters are optional
@@ -5138,43 +5105,42 @@ class RemoteMachineShellConnection(KeepRefs):
         else:
             sys.exit("*****  Node %s failed to up in 5 mins **** " % server.ip)
 
-        if version[:5] in COUCHBASE_FROM_WATSON:
-            try:
-                if self.input.membase_settings.rest_username:
-                    rest_username = self.input.membase_settings.rest_username
-                else:
-                    log.info("*** You need to set rest username at ini file ***")
-                    rest_username = "Administrator"
-                if self.input.membase_settings.rest_password:
-                    rest_password = self.input.membase_settings.rest_password
-                else:
-                    log.info("*** You need to set rest password at ini file ***")
-                    rest_password = "password"
-            except Exception as ex:
-                if ex:
-                    print(ex)
-                pass
-            self.extract_remote_info()
-            if self.info.type.lower() != 'windows':
-                log.info("***** set NS_SERVER_CBAUTH env in linux *****")
-                #self.execute_command("/etc/init.d/couchbase-server stop")
-                #self.sleep(15)
-                self.execute_command('export NS_SERVER_CBAUTH_URL='
-                                    '"http://{0}:8091/_cbauth"'.format(server.ip),
-                                                                      debug=False)
-                self.execute_command('export NS_SERVER_CBAUTH_USER="{0}"'\
-                                                        .format(rest_username),
-                                                                debug=False)
-                self.execute_command('export NS_SERVER_CBAUTH_PWD="{0}"'\
-                                                    .format(rest_password),
-                                                               debug=False)
-                self.execute_command('export NS_SERVER_CBAUTH_RPC_URL='
-                                '"http://{0}:8091/cbauth-demo"'.format(server.ip),
-                                                                      debug=False)
-                self.execute_command('export CBAUTH_REVRPC_URL='
-                                     '"http://{0}:{1}@{2}:8091/query"'\
-                                  .format(rest_username, rest_password, server.ip),
-                                                                      debug=False)
+        try:
+            if self.input.membase_settings.rest_username:
+                rest_username = self.input.membase_settings.rest_username
+            else:
+                log.info("*** You need to set rest username at ini file ***")
+                rest_username = "Administrator"
+            if self.input.membase_settings.rest_password:
+                rest_password = self.input.membase_settings.rest_password
+            else:
+                log.info("*** You need to set rest password at ini file ***")
+                rest_password = "password"
+        except Exception as ex:
+            if ex:
+                print(ex)
+            pass
+        self.extract_remote_info()
+        if self.info.type.lower() != 'windows':
+            log.info("***** set NS_SERVER_CBAUTH env in linux *****")
+            #self.execute_command("/etc/init.d/couchbase-server stop")
+            #self.sleep(15)
+            self.execute_command('export NS_SERVER_CBAUTH_URL='
+                                '"http://{0}:8091/_cbauth"'.format(server.ip),
+                                                                  debug=False)
+            self.execute_command('export NS_SERVER_CBAUTH_USER="{0}"'\
+                                                    .format(rest_username),
+                                                            debug=False)
+            self.execute_command('export NS_SERVER_CBAUTH_PWD="{0}"'\
+                                                .format(rest_password),
+                                                           debug=False)
+            self.execute_command('export NS_SERVER_CBAUTH_RPC_URL='
+                            '"http://{0}:8091/cbauth-demo"'.format(server.ip),
+                                                                  debug=False)
+            self.execute_command('export CBAUTH_REVRPC_URL='
+                                 '"http://{0}:{1}@{2}:8091/query"'\
+                              .format(rest_username, rest_password, server.ip),
+                                                                  debug=False)
 
     def change_system_time(self, time_change_in_seconds):
 

@@ -1,28 +1,15 @@
 import json
 import time
-import unittest
 import urllib.request, urllib.parse, urllib.error
-import testconstants
-from TestInput import TestInputSingleton
 
 from community.community_base import CommunityBaseTest
 from community.community_base import CommunityXDCRBaseTest
-from memcached.helper.data_helper import  MemcachedClientHelper
-from membase.api.rest_client import RestConnection, Bucket, RestHelper
-from membase.helper.rebalance_helper import RebalanceHelper
-from membase.api.exception import RebalanceFailedException
-from couchbase_helper.documentgenerator import BlobGenerator
+from membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection
-from membase.helper.cluster_helper import ClusterOperationHelper
-from scripts.install import InstallerJob
-from testconstants import SHERLOCK_VERSION
-from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_SPOCK,\
-                          COUCHBASE_FROM_VULCAN, COUCHBASE_FROM_MAD_HATTER
+from testconstants import COUCHBASE_FROM_MAD_HATTER
 from testconstants import WIN_BACKUP_PATH, WIN_BACKUP_C_PATH, WIN_COUCHBASE_BIN_PATH
 from testconstants import LINUX_COUCHBASE_BIN_PATH
 from testconstants import CLUSTER_QUOTA_RATIO, INDEX_QUOTA, FTS_QUOTA
-
-
 
 
 class CommunityTests(CommunityBaseTest):
@@ -133,8 +120,8 @@ class CommunityTests(CommunityBaseTest):
                                                            .format(self.services))
             else:
                 self.fail("Failed to set kv, index and query services on CE")
-        elif self.version[:5] in COUCHBASE_FROM_WATSON:
-            if self.version[:5] in COUCHBASE_FROM_VULCAN and "eventing" in self.services:
+        else:
+            if "eventing" in self.services:
                 if status:
                     self.fail("CE does not support eventing in vulcan")
                 else:
@@ -161,8 +148,6 @@ class CommunityTests(CommunityBaseTest):
                 else:
                     self.fail("Failed to set "
                               "fts, index, kv, and query services on CE")
-        else:
-            self.fail("some services don't support")
 
     def check_set_services_when_add_node(self):
         self.rest.force_eject_node()
@@ -190,11 +175,7 @@ class CommunityTests(CommunityBaseTest):
             if e:
                 print(e)
         if not status:
-            if self.version not in COUCHBASE_FROM_WATSON and \
-                         self.start_node_services not in sherlock_services_in_ce:
-                self.log.info("initial services setting enforced in Sherlock CE")
-            elif self.version in COUCHBASE_FROM_WATSON and \
-                         self.start_node_services not in watson_services_in_ce:
+            if self.start_node_services not in watson_services_in_ce:
                 self.log.info("initial services setting enforced in Watson CE")
 
         elif status:
@@ -221,24 +202,15 @@ class CommunityTests(CommunityBaseTest):
                         .format(map[self.master.ip], self.start_node_services, \
                          map[self.servers[1].ip], self.add_node_services))
             else:
-                if self.version not in COUCHBASE_FROM_WATSON:
-                    if self.start_node_services in ["kv", "index,kv,n1ql"] and \
-                          self.add_node_services not in ["kv", "index,kv,n1ql"]:
-                        self.log.info("services are enforced in CE")
-                    elif self.start_node_services not in ["kv", "index,kv,n1ql"]:
-                        self.log.info("services are enforced in CE")
-                    else:
-                        self.fail("maybe bug in add node")
-                elif self.version in COUCHBASE_FROM_WATSON:
-                    if self.start_node_services in ["kv", "index,kv,n1ql",
-                         "fts,index,kv,n1ql"] and self.add_node_services not in \
-                                    ["kv", "index,kv,n1ql", "fts,index,kv,n1ql"]:
-                        self.log.info("services are enforced in CE")
-                    elif self.start_node_services not in ["kv", "index,kv,n1ql",
-                                                            "fts,index,kv,n1ql"]:
-                        self.log.info("services are enforced in CE")
-                    else:
-                        self.fail("maybe bug in add node")
+                if self.start_node_services in ["kv", "index,kv,n1ql",
+                     "fts,index,kv,n1ql"] and self.add_node_services not in \
+                                ["kv", "index,kv,n1ql", "fts,index,kv,n1ql"]:
+                    self.log.info("services are enforced in CE")
+                elif self.start_node_services not in ["kv", "index,kv,n1ql",
+                                                        "fts,index,kv,n1ql"]:
+                    self.log.info("services are enforced in CE")
+                else:
+                    self.fail("maybe bug in add node")
         else:
             self.fail("maybe bug in node initialization")
 
@@ -564,14 +536,13 @@ class CommunityTests(CommunityBaseTest):
     """ Check new features from spock start here """
     def check_cbbackupmgr(self):
         """ cbbackupmgr should not available in CE from spock """
-        if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-            file_name = "cbbackupmgr" + self.file_extension
-            self.log.info("check if cbbackupmgr in bin dir in CE")
-            result = self.remote.file_exists(self.bin_path, file_name)
-            if result:
-                self.fail("cbbackupmgr should not in bin dir of CE")
-            else:
-                self.log.info("cbbackupmgr is enforced in CE")
+        file_name = "cbbackupmgr" + self.file_extension
+        self.log.info("check if cbbackupmgr in bin dir in CE")
+        result = self.remote.file_exists(self.bin_path, file_name)
+        if result:
+            self.fail("cbbackupmgr should not in bin dir of CE")
+        else:
+            self.log.info("cbbackupmgr is enforced in CE")
         self.remote.disconnect()
 
     def test_max_ttl_bucket(self):
@@ -580,9 +551,6 @@ class CommunityTests(CommunityBaseTest):
             This test is make sure CE could not create bucket with option --max-ttl
             This test must pass default_bucket=False
         """
-        if self.cb_version[:5] not in COUCHBASE_FROM_VULCAN:
-            self.log.info("This test only for vulcan and later")
-            return
         cmd = 'curl -X POST -u Administrator:password \
                                     http://{0}:8091/pools/default/buckets \
                                  -d name=bucket0 \
@@ -615,9 +583,6 @@ class CommunityTests(CommunityBaseTest):
         """
            CE does not allow to set audit from vulcan 5.5.0
         """
-        if self.cb_version[:5] not in COUCHBASE_FROM_VULCAN:
-            self.log.info("This test only for vulcan and later")
-            return
         cmd = 'curl -X POST -u Administrator:password \
               http://{0}:8091/settings/audit \
               -d auditdEnabled=true '.format(self.master.ip)
@@ -640,9 +605,6 @@ class CommunityTests(CommunityBaseTest):
            CE does not allow set auto failover if disk has issue
            and failover group from vulcan 5.5.0
         """
-        if self.cb_version[:5] not in COUCHBASE_FROM_VULCAN:
-            self.log.info("This test only for vulcan and later")
-            return
         self.failover_disk_period = self.input.param("failover_disk_period", False)
         self.failover_server_group = self.input.param("failover_server_group", False)
 
@@ -699,9 +661,6 @@ class CommunityTests(CommunityBaseTest):
            from vulcan 5.5.0.   Mode compression: off,active,passive
            Note: must set defaultbucket=False for this test
         """
-        if self.cb_version[:5] not in COUCHBASE_FROM_VULCAN:
-            self.log.info("This test only for vulcan and later")
-            return
         self.compression_mode = self.input.param("compression_mode", "off")
         cmd = 'curl -X POST -u Administrator:password \
                                     http://{0}:8091/pools/default/buckets \
@@ -955,9 +914,6 @@ class CommunityXDCRTests(CommunityXDCRBaseTest):
            flag --enable-compression should not work in CE from vulcan
         """
         self.compression_mode = self._input.param("compression_mode", "Auto")
-        if self.cb_version[:5] not in COUCHBASE_FROM_VULCAN:
-            self.log.info("This test only for vulcan and later")
-            return
         self.log.info("Remove any existing replican")
         RestConnection(self.src_master).remove_all_replications()
         conn = RemoteMachineShellConnection(self.src_master)
