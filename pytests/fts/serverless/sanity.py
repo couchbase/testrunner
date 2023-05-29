@@ -682,6 +682,12 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
         return False
 
+    def exempt_index_rejection_due_to_failed_stats(self, stats):
+        for stat in stats:
+            if stat['utilization:memoryBytes'] == 0 or stat['utilization:cpuPercent'] == 0:
+                return True
+        return False
+
     def generate_summary(self, summary, fts_stats, fts_nodes, variables, name="Default", time_taken=0):
         """
              Generates tabulated report for autoscaling test
@@ -822,6 +828,7 @@ class FTSElixirSanity(ServerlessBaseTestCase):
 
     def create_fts_indexes_for_autoscaling(self, all_info, index_no, db_no, index_arr):
         fts_stats, fts_nodes = self.get_fts_stats(print_stats=False)
+        index = None
         try:
             plan_params = self.construct_plan_params()
             index = all_info[db_no]['fts_callable'].create_fts_index(f"counter_{db_no + 1}_idx_{index_no + 1}", source_type='couchbase',
@@ -836,13 +843,17 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                 query_thread = threading.Thread(target=self.start_query_workload, kwargs={'fts_callable': all_info[db_no]['fts_callable'], 'index': index, 'num_queries': self.num_queries})
                 query_thread.start()
 
-            with self.subTest("Verifying Index Rejection for HWM"):
-                if self.verify_HWM_index_rejection(fts_stats):
-                    fts_stats_2, _ = self.get_fts_stats(print_stats=False)
-                    if self.verify_HWM_index_rejection(fts_stats_2):
-                        self.log.critical(f"Index {index.name} created even though HWM had been satisfied")
-                        self.prettyPrintStats(fts_stats, fts_nodes, f"Index {index.name} created even though HWM had been satisfied")
-                        self.fail(f"BUG : Index {index.name} created even though HWM had been satisfied")
+            if not self.exempt_index_rejection_due_to_failed_stats(fts_stats):
+                with self.subTest("Verifying Index Rejection for HWM"):
+                    if self.verify_HWM_index_rejection(fts_stats):
+                        fts_stats_2, _ = self.get_fts_stats(print_stats=False)
+                        if self.verify_HWM_index_rejection(fts_stats_2):
+                            self.log.critical(f"Index {index.name} created even though HWM had been satisfied")
+                            self.prettyPrintStats(fts_stats, fts_nodes, f"STATS before Index {index.name} creation (index created even though HWM had been satisfied)")
+                            self.prettyPrintRunningAverage(f"Running stats before Index {index.name} creation (index created even though HWM had been satisfied)")
+                            self.prettyPrintStats(fts_stats_2, fts_nodes, f"STATS after Index {index.name} creation (index created even though HWM had been satisfied)")
+                            self.prettyPrintRunningAverage(f"Running stats after Index {index.name} creation (index created even though HWM had been satisfied))")
+                            self.fail(f"BUG : Index {index.name} created even though HWM had been satisfied")
         except Exception as e:
             if str(e).find("limiting/throttling: the request has been rejected according to regulator") != -1:
                 self.log.info("Index creation reject exempted due to limiting/throttling")
@@ -860,10 +871,15 @@ class FTSElixirSanity(ServerlessBaseTestCase):
                             index_check = True
                             break
                     if not index_check:
-                        self.log.critical(f"Index Creation Failed : {str(e)}")
-                        self.prettyPrintStats(fts_stats, fts_nodes,"Index Creation Failed ")
-                        self.fail("BUG : Index Creation Failed")
-    def autoscaling_concurrent(self):
+                        self.log.critical(f"Index Creation Failed - for index {index.name} \n ERROR : {str(e)}")
+                        self.prettyPrintStats(fts_stats, fts_nodes,"Index Creation Failed")
+                        self.prettyPrintStats(fts_stats, fts_nodes, f"STATS before Index {index.name} creation failed")
+                        self.prettyPrintRunningAverage(f"Running stats before Index {index.name} creation failed")
+                        self.prettyPrintStats(fts_stats_2, fts_nodes, f"STATS after Index {index.name} creation failed")
+                        self.prettyPrintRunningAverage(f"Running stats after Index {index.name} creation failed")
+                        self.fail(f"BUG : Index {index.name} Creation Failed")
+
+    def test_fts_autoscaling(self):
         self.provision_databases(self.num_databases, None, self.new_dataplane_id)
 
         for counter, database in enumerate(self.databases.values()):
