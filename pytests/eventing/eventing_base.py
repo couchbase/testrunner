@@ -117,17 +117,18 @@ class EventingBaseTest(QueryHelperTests):
         self.is_binary = self.input.param('binary_doc', False)
         self.document_size = self.input.param('document_size', 512)
         if self.bucket_storage == "magma":
-            self.rest.update_memcached_settings(
+            RestConnection(self.master).update_memcached_settings(
                 num_reader_threads="disk_io_optimized",
                 num_writer_threads="disk_io_optimized")
         self.multi_collection_function = self.input.param(
             'multi_collection_function', False)
-        self._create_bucket_scope_collections()
-        if self.n1ql_server:
-            self.n1ql_helper = N1QLHelper(shell=self.shell, buckets=self.buckets, n1ql_port=self.n1ql_port,
-                                          full_docs_list=self.full_docs_list, log=self.log, input=self.input,
-                                          master=self.master, use_rest=True)
-            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_server)
+        if not self.upgrade_test:
+            self._create_bucket_scope_collections()
+            if self.n1ql_server:
+                self.n1ql_helper = N1QLHelper(shell=self.shell, buckets=self.buckets, n1ql_port=self.n1ql_port,
+                                              full_docs_list=self.full_docs_list, log=self.log, input=self.input,
+                                              master=self.master, use_rest=True)
+                self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_server)
         log.info("==============  EventingBaseTest setup has completed ==============")
 
     def tearDown(self):
