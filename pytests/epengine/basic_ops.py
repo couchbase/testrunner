@@ -245,7 +245,8 @@ class basic_ops(BaseTestCase):
         stats = cbstat.all_stats(b_name)
         shell.disconnect()
         # Cbstat validation
-        for field in ["curr_items", "curr_items_tot", "curr_temp_items"]:
+        for field in ["curr_items", "curr_items_tot", "curr_temp_items",
+                      "ep_expired_pager", "vb_active_expired"]:
             self.assertEqual(int(stats[field]), 0, "%s != 0" % field)
 
     # Reproduce test case for MB-28078
