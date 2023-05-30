@@ -66,7 +66,7 @@ class metering(object):
 
     def get_index_rwu(self, bucket='default', unbilled = '', variant = ''):
         ru, wu = 0, 0
-        idx_ru_pattern = re.compile(metering.__meter_pattern('ru', bucket, 'index', unbilled, variant))
+        idx_ru_pattern = re.compile(metering.__meter_pattern('ru', bucket, 'index'))
         idx_wu_pattern = re.compile(metering.__meter_pattern('wu', bucket, 'index', unbilled, variant))
         for node in self.nodes:
             if 'index' in node['services']:
