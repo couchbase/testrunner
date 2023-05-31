@@ -3899,9 +3899,9 @@ class FTSBaseTest(unittest.TestCase):
         self.s3_bucket = self._input.param("s3_bucket", "fts-hibernation")
         if self.aws_access_key_id:
             from serverless.s3_utils import S3Utils
-        self.s3_utils_obj = S3Utils(aws_access_key_id=self.aws_access_key_id,
-                                    aws_secret_access_key=self.aws_secret_access_key,
-                                    s3_bucket=self.s3_bucket, region=self.region)
+            self.s3_utils_obj = S3Utils(aws_access_key_id=self.aws_access_key_id,
+                                        aws_secret_access_key=self.aws_secret_access_key,
+                                        s3_bucket=self.s3_bucket, region=self.region)
         self.storage_prefix = self._input.param("storage_prefix", None)
 
     def create_capella_config(self):
