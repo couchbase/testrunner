@@ -3895,7 +3895,7 @@ class FTSBaseTest(unittest.TestCase):
         self.aws_access_key_id = self._input.param("aws_access_key_id", None)
         self.aws_secret_access_key = self._input.param("aws_secret_access_key", None)
         self.aws_session_token = self._input.param("aws_session_token", None)
-        self.region = self._input.param("region")
+        self.region = self._input.param("region", None)
         self.s3_bucket = self._input.param("s3_bucket", "fts-hibernation")
         if self.aws_access_key_id:
             from serverless.s3_utils import S3Utils
