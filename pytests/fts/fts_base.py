@@ -3892,8 +3892,8 @@ class FTSBaseTest(unittest.TestCase):
             _tasks = self._cb_cluster.async_log_scan(self._input.servers, self.log_scan_file_prefix+"_BEFORE")
             for _task in _tasks:
                 _task.result()
-        self.aws_access_key_id = self._input.param("aws_access_key_id")
-        self.aws_secret_access_key = self._input.param("aws_secret_access_key")
+        self.aws_access_key_id = self._input.param("aws_access_key_id", None)
+        self.aws_secret_access_key = self._input.param("aws_secret_access_key", None)
         self.aws_session_token = self._input.param("aws_session_token", None)
         self.region = self._input.param("region")
         self.s3_bucket = self._input.param("s3_bucket", "fts-hibernation")
