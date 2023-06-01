@@ -340,9 +340,11 @@ class ServerlessBaseTestCase(unittest.TestCase):
             else:
                 auth = (username, password)
             query_params["statement"] = query
+            if "timeout" not in query_params:
+                query_params['timeout'] = '300s'
             self.log.info(f'EXECUTE QUERY against {api}: Query: {query} using creds: {auth}')
             self.log.debug(f"Run Query statement payload {query_params}")
-            resp = requests.post(api, params=query_params, auth=auth, timeout=120, verify=verify)
+            resp = requests.post(api, params=query_params, auth=auth, timeout=300, verify=verify)
             resp.raise_for_status()
             try:
                 if print_billing_info:
