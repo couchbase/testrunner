@@ -303,7 +303,7 @@ class BuildQuery(object):
                         elif "9.0" in os_version.lower():
                             os_name = "rhel9"
                     else:
-                        os_name = "centos6"
+                        print("!!! Unsupported OS. Please add if required !!!")
                     build.url = "{6}{0}/{1}-{4}-{5}.{2}.{3}"\
                             .format(build_version[:build_version.find('-')],
                             product, os_architecture, deliverable_type,
@@ -317,6 +317,8 @@ class BuildQuery(object):
                         os_name = "ubuntu16.04"
                     elif "ubuntu 18.04" in os_version.lower():
                         os_name = "ubuntu18.04"
+                    elif "debian 10" in os_version.lower():
+                        os_name = "debian10"
                     build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                             .format(build_version[:build_version.find('-')],
                              product, os_architecture, deliverable_type,
@@ -354,6 +356,8 @@ class BuildQuery(object):
                         os_name = "ubuntu16.04"
                     elif "ubuntu 18.04" in os_version.lower():
                         os_name = "ubuntu18.04"
+                    elif "debian 10" in os_version.lower():
+                        os_name = "debian10"
                     build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                         .format(build_version, product, os_architecture,
                         deliverable_type, build_details[:5], os_name,
