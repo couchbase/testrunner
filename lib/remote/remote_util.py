@@ -2246,7 +2246,6 @@ class RemoteMachineShellConnection(KeepRefs):
                                                                % (self.nr_home_path,
                                                                   LINUX_COUCHBASE_BIN_PATH))
                 else:
-                    self.install_missing_lib()
                     if force:
                         output, error = self.execute_command('{0}dpkg --force-all -i /tmp/{1}'\
                                                  .format(environment, build.name),
@@ -5009,22 +5008,6 @@ class RemoteMachineShellConnection(KeepRefs):
                 log.info("man page does not install man page on vm %s"
                               " Let do install it now" % self.ip)
                 self.execute_command("yum install -y man")
-
-    def install_missing_lib(self):
-        if self.info.deliverable_type == "deb":
-            for lib_name in MISSING_UBUNTU_LIB:
-                if lib_name != "":
-                    if lib_name == "libcurl3" and \
-                        self.info.distribution_version.lower() == "ubuntu 18.04":
-                        lib_name = "libcurl4"
-                    log.info("prepare install library {0}".format(lib_name))
-                    o, r = self.execute_command("apt-get install -y {0}".format(lib_name))
-                    self.log_command_output(o, r)
-                    o, r = self.execute_command("dpkg --get-selections | grep {0}"
-                                                                 .format(lib_name))
-                    self.log_command_output(o, r)
-                    log.info("lib {0} should appear around this line"
-                                                                 .format(lib_name))
 
     def is_enterprise(self, os_name):
         enterprise = False

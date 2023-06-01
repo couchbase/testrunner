@@ -369,10 +369,7 @@ class BuildQuery(object):
                 if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
                     if "rpm" in deliverable_type:
                         if "centos" in os_version.lower():
-                            if "centos 7" in os_version.lower():
-                                os_name = "centos7"
-                            else:
-                                os_name = "centos6"
+                            os_name = "centos7"
                         elif "suse" in os_version.lower():
                             if "11" in os_version.lower():
                                 os_name = "suse11"
@@ -387,9 +384,6 @@ class BuildQuery(object):
                                             build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
                                             build_version[:5] in COUCHBASE_FROM_601:
                                 os_name = "amzn2"
-                            else:
-                                self.fail("Amazon Linux 2 doesn't support version %s "
-                                                                % build_version[:5])
                         elif "red hat" in os_version.lower():
                             if "8.0" in os_version.lower():
                                 os_name = "rhel8"
@@ -402,12 +396,9 @@ class BuildQuery(object):
                     elif "deb" in deliverable_type:
                         os_architecture = "amd64"
                         os_name = "ubuntu12.04"
-                        if  "ubuntu 20.04" in os_version.lower():
+                        if "ubuntu 20.04" in os_version.lower():
                             if build_version[:5] in COUCHBASE_FROM_662:
                                 os_name = "ubuntu20.04"
-                            else:
-                                self.fail("ubuntu 20.04 doesn't support version %s "
-                                                                % build_version[:5])
                         elif "ubuntu 16.04" in os_version.lower():
                             os_name = "ubuntu16.04"
                         elif "ubuntu 18.04" in os_version.lower():
@@ -415,9 +406,8 @@ class BuildQuery(object):
                                 build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
                                 build_version[:5] in COUCHBASE_FROM_601:
                                 os_name = "ubuntu18.04"
-                            else:
-                                self.fail("ubuntu 18.04 doesn't support version %s "
-                                                                % build_version[:5])
+                        elif "debian 10" in os_version.lower():
+                            os_name = "debian10"
                         build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                                 .format(build_version[:build_version.find('-')],
                                  product, os_architecture, deliverable_type,
@@ -461,12 +451,8 @@ class BuildQuery(object):
                     elif "deb" in deliverable_type:
                         os_architecture = "amd64"
                         os_name = "ubuntu12.04"
-                        if  "ubuntu 20.04" in os_version.lower():
-                            if build_version[:5] in COUCHBASE_FROM_662:
-                                os_name = "ubuntu20.04"
-                            else:
-                                self.fail("ubuntu 20.04 doesn't support version %s "
-                                                                % build_version[:5])
+                        if "ubuntu 20.04" in os_version.lower():
+                            os_name = "ubuntu20.04"
                         elif "ubuntu 16.04" in os_version.lower():
                             os_name = "ubuntu16.04"
                         elif "ubuntu 18.04" in os_version.lower():
@@ -474,9 +460,8 @@ class BuildQuery(object):
                                 build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
                                 build_version[:5] in COUCHBASE_FROM_601:
                                 os_name = "ubuntu18.04"
-                            else:
-                                self.fail("ubuntu 18.04 doesn't support version %s "
-                                                                % build_version[:5])
+                        elif "debian 10" in os_version.lower():
+                            os_name = "debian10"
                         build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                             .format(build_version, product, os_architecture,
                             deliverable_type, build_details[:5], os_name,
@@ -1135,4 +1120,3 @@ class BuildQuery(object):
 #builds = q.get_membase_latest_builds()
 #for build in builds:
 #    print build.product,' ',build.time ,' ',build.deliverable_type,' ',build.product_version ,'',build.size,'',build.architecture_type
-
