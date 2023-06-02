@@ -1803,7 +1803,7 @@ class RestfulDAPITest(ServerlessBaseTestCase):
             response = self.rest_dapi.insert_subdoc("key", [{"type": "upsert", "path":"star", "value": 4}],
                                                      "_default", "_default", "?preserveExpiry=true&meta=true")
             self.log.info("Response code for insertion of doc: {}".format(response.status_code))
-            time.sleep(20)
+            time.sleep(30)
             response = self.rest_dapi.get_subdoc("key",
                                                  [{"type": "get", "path": "star"}],
                                                  "_default", "_default",
