@@ -102,6 +102,7 @@ class TestSSLTests(BaseTestCase):
         """
         Scanning the ports to test vulnerabilities
         """
+        vulnerability_list = []
         for node in self.servers:
             self.log.info("Testing node {0}".format(node.ip))
             ports_to_scan = self.get_service_ports(node)
@@ -131,19 +132,22 @@ class TestSSLTests(BaseTestCase):
                     elif "SSLv2  " in line or "SSLv3  " in line:
                         scan_count = scan_count + 1
                         if "offered (NOT ok)" in line:
-                            self.fail("SSLvx is offered on port {0}".format(node_port))
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
 
                     # Testing Cipher Categories
                     elif "LOW: 64 Bit + DES, RC[2,4]" in line:
                         scan_count = scan_count + 1
                         if "offered (NOT ok)" in line:
-                            self.fail("Cipher is not ok on port {0}".format(node_port))
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
 
                     # Testing Server's Cipher Preferences
                     elif "Has server cipher order?" in line:
                         scan_count = scan_count + 1
                         if "no" in line:
-                            self.fail("Server cipher ordering not set".format(node_port))
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
 
                     # Testing Server Defaults
                     elif "Certificate Validity" in line:
@@ -154,50 +158,63 @@ class TestSSLTests(BaseTestCase):
                     # Testing Vulnerabilities
                     elif "Heartbleed (CVE-2014-0160)" in line:
                         scan_count = scan_count + 1
-                        if "VULNERABLE (NOT ok)" in line:
-                            self.fail("Heartbleed vulnerability on port {0}".format(node_port))
+                        if "VULNERABLE" in line:
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
                     elif "ROBOT" in line:
                         scan_count = scan_count + 1
-                        if "VULNERABLE (NOT ok)" in line:
-                            self.fail("Robot vulnerability on port {0}".format(node_port))
+                        if "VULNERABLE" in line:
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
                     elif "Secure Client-Initiated Renegotiation" in line:
                         scan_count = scan_count + 1
-                        if "VULNERABLE (NOT ok)" in line:
-                            self.fail("Renegotiation vulnerability on port {0}"
-                                      .format(node_port))
+                        if "VULNERABLE" in line:
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
                     elif "CRIME, TLS" in line:
                         scan_count = scan_count + 1
-                        if "VULNERABLE (NOT ok)" in line:
-                            self.fail("Crime vulnerability on port {0}".format(node_port))
+                        if "VULNERABLE" in line:
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
                     elif "POODLE, SSL (CVE-2014-3566)" in line:
                         scan_count = scan_count + 1
-                        if "VULNERABLE (NOT ok)" in line:
-                            self.fail("Poodle vulnerability on port {0}".format(node_port))
+                        if "VULNERABLE" in line:
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
                     elif "SWEET32" in line:
                         scan_count = scan_count + 1
-                        if "VULNERABLE (NOT ok)" in line:
-                            self.fail("Sweet32 vulnerability on port {0}".format(node_port))
+                        if "VULNERABLE" in line:
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
                     elif "LOGJAM (CVE-2015-4000)" in line:
                         scan_count = scan_count + 1
-                        if "VULNERABLE (NOT ok)" in line:
-                            self.fail("LogJam vulnerability on port {0}".format(node_port))
+                        if "VULNERABLE" in line:
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
                     elif "LUCKY13 (CVE-2013-0169)" in line:
                         scan_count = scan_count + 1
-                        if "potentially VULNERABLE" in line:
-                            self.fail("Lucky13 vulnerability on port {0}".format(node_port))
+                        if "VULNERABLE" in line:
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
                     elif "RC4 (CVE-2013-2566, CVE-2015-2808)" in line:
                         scan_count = scan_count + 1
-                        if "VULNERABLE (NOT ok)" in line:
-                            self.fail("RC4 ciphers detected on port {0}".format(node_port))
+                        if "VULNERABLE" in line:
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
 
                     elif "Medium grade encryption" in line:
                         scan_count = scan_count + 1
                         if "not offered (OK)" not in line:
-                            self.fail("Medium grade encryption is offered on port {0}"
-                                      .format(node_port))
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
                 self.assertTrue(scan_count == 14,
                                 msg="Test didn't complete all the scans for port {0}"
                                 .format(node_port))
+        if len(vulnerability_list) != 0:
+            self.log.info("The following vulnerabilities are detected:")
+            for vulnerability in vulnerability_list:
+                self.log.info(vulnerability)
+            self.fail("Vulnerabilities detected! Check logs for more details")
 
     def test_port_security_with_encryption(self):
         """
