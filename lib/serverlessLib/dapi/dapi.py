@@ -113,11 +113,11 @@ class RestfulDAPI:
         return self._urllib_request(url)
 
     def get_document_list(self, scope="_default", collection="_default", query_param=""):
-        authorization = base64.b64encode('{}:{}'.format(self.username, self.password).encode()).decode()
-        header = {'Authorization': 'Basic %s' % authorization,
-                  'Accept': '*/*'}
+        # authorization = base64.b64encode('{}:{}'.format(self.username, self.password).encode()).decode()
+        # header = {'Authorization': 'Basic %s' % authorization,
+        #           'Accept': '*/*'}
         url = self.endpoint_v1 + "/scopes/" + scope + "/collections/" + collection + "/docs" + query_param
-        return self._urllib_request(url, headers=header)
+        return self._urllib_request(url)
 
     def get_subdoc(self, doc_id, doc_content, scope, collection, query_param=""):
         params = doc_content

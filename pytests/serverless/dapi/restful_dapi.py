@@ -305,6 +305,16 @@ class RestfulDAPITest(ServerlessBaseTestCase):
 
             self.log.info("Get list of all documents within a collection in database {}".format(dapi_info["database_id"]))
             self.log.info(dapi_info["dapi_endpoint"])
+            # create scope
+            scope, collection = "saurabh-1", "mishra-1"
+            response = self.rest_dapi.create_scope({"scopeName": scope})
+            self.log.info("Response code for creation of scope: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200, "Create scope failed in get document list tests")
+
+            # create collection
+            response = self.rest_dapi.create_collection("saurabh-1", {"name": collection})
+            self.log.info("Response code for creation of collection: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200, "Create collection failed in get document list tests")
 
             length_of_list, key, content = 20, "key", "content"
             keys_inserted = list()
@@ -316,11 +326,11 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                 key = "key" + str(key_value)
                 content = "content" + str(content_value)
                 keys_inserted.append(key)
-                response = self.rest_dapi.insert_doc(key, {"content": content}, "_default", "_default")
+                response = self.rest_dapi.insert_doc(key, {"content": content}, scope, collection)
                 self.assertTrue(response.status_code == 201,
                                 "Insertion failed for database {}".format(dapi_info["database_id"]))
 
-            response = self.rest_dapi.get_document_list("_default", "_default")
+            response = self.rest_dapi.get_document_list(scope, collection)
             self.assertTrue(response.status_code == 200,
                             "Getting list of documents failed for database {}".format(dapi_info["database_id"]))
 
