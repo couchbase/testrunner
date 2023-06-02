@@ -312,7 +312,7 @@ class RestfulDAPITest(ServerlessBaseTestCase):
             self.assertTrue(response.status_code == 200, "Create scope failed in get document list tests")
 
             # create collection
-            response = self.rest_dapi.create_collection("saurabh-1", {"name": collection})
+            response = self.rest_dapi.create_collection(scope, {"name": collection})
             self.log.info("Response code for creation of collection: {}".format(response.status_code))
             self.assertTrue(response.status_code == 200, "Create collection failed in get document list tests")
 
@@ -1969,3 +1969,59 @@ class RestfulDAPITest(ServerlessBaseTestCase):
             collection_thread.join()
 
         self.assertTrue(self.result == True, "Create two thousand collection over 20 bucket failed")
+
+    def test_replicas_query_parameter(self):
+        for database in self.databases.values():
+            self.rest_dapi = RestfulDAPI({"dapi_endpoint": database.data_api,
+                                        "access_token": database.access_key,
+                                        "access_secret": database.secret_key})
+
+            # create scope
+            scope, collection = "Scope-1_1", "Collection-1_1"
+            response = self.rest_dapi.create_scope({"scopeName": scope})
+            self.log.info("Response code for creation of scope: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200, "Create scope failed with response: {}".format(response.text))
+
+            # create collection
+            response = self.rest_dapi.create_collection(scope, {"name": collection})
+            self.log.info("Response code for creation of collection: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200, "Create collection failed with response: {}".format(response.text))
+
+            # create a document
+            key = "key-1"
+            doc = {
+                "name" : "Saurabh",
+                "age" : 23,
+                "hobby" : ["cycling", "Football", "chess", "guitar", "flute"],
+                "Birthday" : {
+                    "day": 16,
+                    "month": "December",
+                    "Year" : 1999
+                    }
+            }
+            response = self.rest_dapi.insert_doc(key, doc, scope, collection)
+            self.log.info("Response code for creation of scope: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 201, "Insert doc failed with response: {}".format(response.text))
+
+            # get doc with replicas query param - any
+            response = self.rest_dapi.get_doc(key, scope, collection, "?replicas=any")
+            self.log.info("Response code for get doc with replicas query param: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200,
+                            "Get doc failed with replicas query param with response: {}".format(response.text))
+
+            # get doc with replicas query param - all
+            response = self.rest_dapi.get_doc(key, scope, collection, "?replicas=all")
+            self.log.info("Response code for get doc with replicas query param: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200,
+                            "Get doc failed with replicas query param with response: {}".format(response.text))
+
+            # get doc with replicas query param for doc not exists
+            response = self.rest_dapi.get_doc("asdfa", scope, collection, "?replicas=all")
+            self.log.info("Response code for get doc with replicas query param for doc not exists: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 404,
+                            "Get doc failed with replicas query param for doc does not exists with response: {}".format(response.text))
+
+            response = self.rest_dapi.get_doc("adsfasdf", scope, collection, "?replicas=any")
+            self.log.info("Response code for get doc with replicas query param for doc not exists: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 404,
+                            "Get doc failed with replicas query param for doc does not exists with response: {}".format(response.text))
