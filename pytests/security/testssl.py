@@ -161,7 +161,22 @@ class TestSSLTests(BaseTestCase):
                         if "VULNERABLE" in line:
                             vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
                                                       format(line, node_port, node.ip))
+                    elif "CCS (CVE-2014-0224)" in line:
+                        scan_count = scan_count + 1
+                        if "VULNERABLE" in line:
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
+                    elif "Ticketbleed (CVE-2016-9244)" in line:
+                        scan_count = scan_count + 1
+                        if "VULNERABLE" in line:
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
                     elif "ROBOT" in line:
+                        scan_count = scan_count + 1
+                        if "VULNERABLE" in line:
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
+                    elif "Secure Renegotiation (RFC 5746)" in line:
                         scan_count = scan_count + 1
                         if "VULNERABLE" in line:
                             vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
@@ -176,7 +191,17 @@ class TestSSLTests(BaseTestCase):
                         if "VULNERABLE" in line:
                             vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
                                                       format(line, node_port, node.ip))
+                    elif "BREACH " in line:
+                        scan_count = scan_count + 1
+                        if "VULNERABLE" in line:
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
                     elif "POODLE, SSL (CVE-2014-3566)" in line:
+                        scan_count = scan_count + 1
+                        if "VULNERABLE" in line:
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
+                    elif "TLS_FALLBACK_SCSV" in line:
                         scan_count = scan_count + 1
                         if "VULNERABLE" in line:
                             vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
@@ -186,12 +211,32 @@ class TestSSLTests(BaseTestCase):
                         if "VULNERABLE" in line:
                             vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
                                                       format(line, node_port, node.ip))
+                    elif "FREAK" in line:
+                        scan_count = scan_count + 1
+                        if "VULNERABLE" in line:
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
+                    elif "DROWN" in line:
+                        scan_count = scan_count + 1
+                        if "VULNERABLE" in line:
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
                     elif "LOGJAM (CVE-2015-4000)" in line:
                         scan_count = scan_count + 1
                         if "VULNERABLE" in line:
                             vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
                                                       format(line, node_port, node.ip))
+                    elif "BEAST" in line:
+                        scan_count = scan_count + 1
+                        if "VULNERABLE" in line:
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
                     elif "LUCKY13 (CVE-2013-0169)" in line:
+                        scan_count = scan_count + 1
+                        if "VULNERABLE" in line:
+                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                      format(line, node_port, node.ip))
+                    elif "Winshock" in line:
                         scan_count = scan_count + 1
                         if "VULNERABLE" in line:
                             vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
@@ -207,9 +252,14 @@ class TestSSLTests(BaseTestCase):
                         if "not offered (OK)" not in line:
                             vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
                                                       format(line, node_port, node.ip))
-                self.assertTrue(scan_count == 14,
-                                msg="Test didn't complete all the scans for port {0}"
-                                .format(node_port))
+                if node_port == 11207:
+                    self.assertTrue(scan_count == 22,
+                                    msg="Test didn't complete all the scans for port {0}"
+                                    .format(node_port))
+                else:
+                    self.assertTrue(scan_count == 23,
+                                    msg="Test didn't complete all the scans for port {0}"
+                                    .format(node_port))
         if len(vulnerability_list) != 0:
             self.log.info("The following vulnerabilities are detected:")
             for vulnerability in vulnerability_list:
