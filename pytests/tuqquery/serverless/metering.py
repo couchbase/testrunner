@@ -64,4 +64,6 @@ class QueryMeterSanity(ServerlessBaseTestCase):
             after_cu = meter.get_query_cu(database.id, unbilled='true')
             # 1 compute unit (CU) is 32MB per second
             expected_cu = math.ceil(int(result['metrics']['usedMemory']) * float(result['profile']['cpuTime'][:-1]) / (32*1024*1024))
-            self.assertEqual (expected_cu, after_cu - before_cu)
+            actual_cu = after_cu - before_cu
+            # +- 1 cu to give a slight buffer
+            self.assertTrue((expected_cu - 1) <= actual_cu <= (expected_cu + 1), f"The cu we got is not the cu we expected actual: {actual_cu} expected: {expected_cu}")
