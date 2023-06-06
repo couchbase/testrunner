@@ -589,20 +589,20 @@ class RestfulDAPITest(ServerlessBaseTestCase):
 
             # negative tests - create scopes with pre-existing scope name
             response = self.rest_dapi.create_scope({"scopeName": "_default"})
-            self.log.info(response.status_code)
+            self.log.info("Respones code for creation of scope with name which already exists: {}".format(response.status_code))
             self.assertTrue(response.status_code == 500, "Scope got created with pre-existing scope name")
             # negative tests - get scope detail for not existing scope
             response = self.rest_dapi.get_scope_detail("_asdfljasdf")
-            self.log.info(response.status_code)
+            self.log.info("Response code for to get scope details with name which does not exsts: {}".format(response.status_code))
             self.assertTrue(response.status_code == 404, "Get datail of unexisting scope is successful")
             # negative with bad scope name
             response = self.rest_dapi.create_scope({"scopeName": ".......'..,,**&&&^!@#~~@!#~~!@*:::"})
-            self.log.info(response.status_code)
-            self.assertTrue(response.status_code == 500, "Scope got created with pre-existing scope name")
+            self.log.info("Reseponse code to create scope with illegal characters: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 500, "Scope got created with illegal characters scope name")
             # negative test with malformed request syntax
             response = self.rest_dapi.create_scope({"asdfasdf": "/Saurabh"})
-            self.log.info(response.status_code)
-            self.assertTrue(response.status_code == 500, "Scope got created with pre-existing scope name")
+            self.log.info("Response code to create Scope with slash infront of scopename scope name: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 500, "Scope got created with slash infront of scopename scope name")
 
             scope_name, scope_suffix = "scope", 0
             scope_name_list = ["_default", "_system"]
@@ -1976,6 +1976,8 @@ class RestfulDAPITest(ServerlessBaseTestCase):
                                         "access_token": database.access_key,
                                         "access_secret": database.secret_key})
 
+            self.log.info("Test replicas query parameter running...... in bucket: {}".format(database.id))
+
             # create scope
             scope, collection = "Scope-1_1", "Collection-1_1"
             response = self.rest_dapi.create_scope({"scopeName": scope})
@@ -2025,3 +2027,76 @@ class RestfulDAPITest(ServerlessBaseTestCase):
             self.log.info("Response code for get doc with replicas query param for doc not exists: {}".format(response.status_code))
             self.assertTrue(response.status_code == 404,
                             "Get doc failed with replicas query param for doc does not exists with response: {}".format(response.text))
+
+    def test_durability_query_parameter(self):
+        for database in self.databases.values():
+            self.rest_dapi = RestfulDAPI({"dapi_endpoint": database.data_api,
+                                        "access_token": database.access_key,
+                                        "access_secret": database.secret_key})
+
+            self.log.info("Test durability query parameter running...... in bucket: {}".format(database.id))
+
+            # create scope
+            scope, collection = "Scope-1_1", "Collection-1_1"
+            response = self.rest_dapi.create_scope({"scopeName": scope})
+            self.log.info("Response code for creation of scope: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200, "Create scope failed with response: {}".format(response.text))
+
+            # create collection
+            response = self.rest_dapi.create_collection(scope, {"name": collection})
+            self.log.info("Response code for creation of collection: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200, "Create collection failed with response: {}".format(response.text))
+            # create a document
+            key1, key2, key3 = "key-1", "key-2", "key-3"
+
+            doc = {
+                "name" : "Saurabh",
+                "age" : 23,
+                "hobby" : ["cycling", "Football", "chess", "guitar", "flute"],
+                "Birthday" : {
+                    "day": 16,
+                    "month": "December",
+                    "Year" : 1999
+                    }
+            }
+
+            response = self.rest_dapi.insert_doc(key1, doc, scope, collection, "?durability=majority")
+            self.log.info("Response code for insertion of doc with durability query param: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 201, "Insert doc with durability query param failed with response: {}".format(response.text))
+
+            response = self.rest_dapi.insert_doc(key2, doc, scope, collection, "?durability=majorityPersistActive")
+            self.log.info("Response code for insertion of doc with durability query param: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 201, "Insert doc with durability query param failed with response: {}".format(response.text))
+
+            response = self.rest_dapi.insert_doc(key3, doc, scope, collection, "?durability=persistMajority")
+            self.log.info("Response code for insertion of doc with durability query param: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 201, "Insert doc with durability query param failed with response: {}".format(response.text))
+
+            doc['upserted-1'] = True
+            response = self.rest_dapi.upsert_doc(key1, doc, scope, collection, "?durability=majority")
+            self.log.info("Response code for upsertion of doc with durability query param: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200, "Insert doc with durability query param failed with response: {}".format(response.text))
+
+            doc["upserted-2"] = True
+            response = self.rest_dapi.upsert_doc(key2, doc, scope, collection, "?durability=majorityPersistActive")
+            self.log.info("Response code for upsertion of doc with durability query param: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200, "Insert doc with durability query param failed with response: {}".format(response.text))
+
+            doc['upserted-3'] = True
+            response = self.rest_dapi.upsert_doc(key3, doc, scope, collection, "?durability=persistMajority")
+            self.log.info("Response code for upsertion of doc with durability query param: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200, "Insert doc with durability query param failed with response: {}".format(response.text))
+
+            response = self.rest_dapi.delete_doc(key1, scope, collection, "?durability=majority")
+            self.log.info("Response code for deletion of doc with durability query param: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200, "Insert doc with durability query param failed with response: {}".format(response.text))
+
+            doc["upserted-2"] = True
+            response = self.rest_dapi.delete_doc(key2, scope, collection, "?durability=majorityPersistActive")
+            self.log.info("Response code for deletion of doc with durability query param: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200, "Insert doc with durability query param failed with response: {}".format(response.text))
+
+            doc['upserted-3'] = True
+            response = self.rest_dapi.delete_doc(key3, scope, collection, "?durability=persistMajority")
+            self.log.info("Response code for deletion of doc with durability query param: {}".format(response.status_code))
+            self.assertTrue(response.status_code == 200, "Insert doc with durability query param failed with response: {}".format(response.text))
