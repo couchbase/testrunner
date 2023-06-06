@@ -169,7 +169,7 @@ class QuerySecurityTests(ServerlessBaseTestCase):
             'keyspaces_info':  {'statement': 'SELECT `path` FROM system:keyspaces_info', 'expected1': [{'path': f'default:{database1.id}'}], 'expected2': [{'path': f'default:{database2.id}'}]},
             'my_user_info':  {'statement': 'SELECT id FROM system:my_user_info', 'expected1': [{'id': f'{database1.access_key}'}], 'expected2': [{'id': f'{database2.access_key}'}]},
             'namespaces':  {'statement': 'SELECT * FROM system:namespaces', 'expected1': [{'namespaces': {'datastore_id': 'http://127.0.0.1:8091', 'id': 'default', 'name': 'default'}}], 'expected2': [{'namespaces': {'datastore_id': 'http://127.0.0.1:8091', 'id': 'default', 'name': 'default'}}]}, 
-            'prepareds':  {'statement': 'SELECT DISTINCT name FROM system:prepareds WHERE name like "p%"', 'expected1': [{'name': f'p1(default:{database1.id})'}, {'name': 'p1'}], 'expected2': [{'name': f'p2(default:{database2.id})'}, {'name': 'p2'}]},
+            'prepareds':  {'statement': 'SELECT DISTINCT name FROM system:prepareds WHERE name like "p%"', 'expected1': [{'name': f'p1(default:{database1.id})'}], 'expected2': [{'name': f'p2(default:{database2.id})'}]},
             'scopes':  {'statement': 'SELECT name FROM system:scopes', 'expected1': [{'name': 'scope1'}], 'expected2': [{'name': 'scope2'}]}
         }
 
