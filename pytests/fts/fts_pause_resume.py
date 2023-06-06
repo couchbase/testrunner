@@ -174,6 +174,8 @@ class PauseResume(FTSBaseTest):
         self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region, s3_bucket=self.s3_bucket)
         self.verify_fts_functionality(paused_indexes=[index1], active_indexes=[index2])
 
+        self.sleep(10, "Sleeping 10 seconds for bucket hibernation to complete")
+
         # resume the bucket
         self.rest.resume_operation(bucket_name=self.buckets[0].name, blob_region=self.region, s3_bucket=self.s3_bucket)
         self.verify_fts_functionality(active_indexes=[index2], resumed_indexes=[index1])
@@ -261,6 +263,8 @@ class PauseResume(FTSBaseTest):
 
         self.verify_fts_functionality(paused_indexes=index_arr, active_indexes=index2)
 
+        self.sleep(10, "Sleeping 10 seconds for bucket hibernation to complete")
+
         # resume the bucket
         self.rest.resume_operation(bucket_name="bucket1", blob_region=self.region, s3_bucket=self.s3_bucket)
 
@@ -314,6 +318,8 @@ class PauseResume(FTSBaseTest):
             active_index = index1
 
         self.verify_fts_functionality(paused_indexes=[paused_index], active_indexes=[active_index])
+
+        self.sleep(10, "Sleeping 10 seconds for bucket hibernation to complete")
 
         # resume the bucket
         self.rest.resume_operation(bucket_name=paused_bucket, blob_region=self.region, s3_bucket=self.s3_bucket)
@@ -379,6 +385,8 @@ class PauseResume(FTSBaseTest):
 
         self.verify_fts_functionality(paused_indexes=[index1, index2])
 
+        self.sleep(10, "Sleeping 10 seconds for bucket hibernation to complete")
+
         # resume the buckets
         self.log.info('Resuming buckets')
         self.rest.resume_operation(bucket_name="bucket1", blob_region=self.region, s3_bucket=self.s3_bucket)
@@ -415,6 +423,8 @@ class PauseResume(FTSBaseTest):
 
         self.verify_fts_functionality(paused_indexes=[index1], active_indexes=[index2])
 
+        self.sleep(10, "Sleeping 10 seconds for bucket hibernation to complete")
+
         # resume the buckets
         self.log.info('Resuming buckets')
         self.rest.resume_operation(bucket_name="bucket1", blob_region=self.region, s3_bucket=self.s3_bucket,
@@ -446,7 +456,7 @@ class PauseResume(FTSBaseTest):
         self.log.info('Pausing bucket')
         self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region, s3_bucket=self.s3_bucket)
         self.verify_fts_functionality(paused_indexes=[index1], active_indexes=[index2])
-
+        self.sleep(10, "Sleeping 10 seconds for bucket hibernation to complete")
         # resume the bucket
         self.rest.resume_operation(bucket_name=self.buckets[0].name, blob_region=self.region, s3_bucket=self.s3_bucket,
                                    resume_complete=False)
@@ -510,6 +520,8 @@ class PauseResume(FTSBaseTest):
         self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region, s3_bucket=self.s3_bucket)
         self.verify_fts_functionality(paused_indexes=[index1], active_indexes=[index2])
 
+        self.sleep(10, "Sleeping 10 seconds for bucket hibernation to complete")
+
         # resume the bucket
         self.rest.resume_operation(bucket_name=self.buckets[0].name, blob_region=self.region, s3_bucket=self.s3_bucket,
                                    resume_complete=False)
@@ -538,6 +550,8 @@ class PauseResume(FTSBaseTest):
         self.log.info('Pausing bucket')
         self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region, s3_bucket=self.s3_bucket)
         self.verify_fts_functionality(paused_indexes=[index1], active_indexes=[index2])
+
+        self.sleep(10, "Sleeping 10 seconds for bucket hibernation to complete")
 
         # resume the bucket
         self.rest.resume_operation(bucket_name=self.buckets[0].name, blob_region=self.region, s3_bucket=self.s3_bucket,
@@ -579,6 +593,8 @@ class PauseResume(FTSBaseTest):
         self.rest.pause_operation(bucket_name="bucket2", blob_region=self.region, s3_bucket=self.s3_bucket)
 
         self.verify_fts_functionality(paused_indexes=[index1, index2])
+
+        self.sleep(10, "Sleeping 10 seconds for bucket hibernation to complete")
 
         # resume buckets concurrently
         self.log.info('Resuming buckets')
@@ -632,7 +648,7 @@ class PauseResume(FTSBaseTest):
         self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region, s3_bucket=self.s3_bucket)
 
         self.verify_fts_functionality(paused_indexes=index1, active_indexes=index2)
-
+        self.sleep(10, "Sleeping 10 seconds for bucket hibernation to complete")
         self.rest.resume_operation(bucket_name=self.buckets[0].name, blob_region=self.region, s3_bucket=self.s3_bucket,
                                    resume_complete=False)
 
@@ -728,7 +744,7 @@ class PauseResume(FTSBaseTest):
         self.rest.pause_operation(bucket_name=self.buckets[0].name, blob_region=self.region, s3_bucket=self.s3_bucket,
                                       pause_complete=False)
         self.verify_fts_functionality(paused_indexes=[index1], active_indexes=[index2])
-
+        self.sleep(10, "Sleeping 10 seconds for bucket hibernation to complete")
         self.log.info("Initiating node failover")
         self._cb_cluster.failover()
         try:
