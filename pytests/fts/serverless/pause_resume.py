@@ -185,7 +185,7 @@ class FTSPauseResume(ServerlessBaseTestCase):
             if counter < self.num_tenant_to_pause and counter < len(self.databases):
                 self.log.info(f"Starting pause operation for database : {database.id}")
                 self.paused_indexes.append(self.all_fts_data[counter]['indexes'])
-                self.api.pause_operation(database_id=database.id, state='paused', timeout=300)
+                self.api.pause_operation(database_id=database.id, state='paused')
             else:
                 self.active_indexes.append(self.all_fts_data[counter]['indexes'])
 
