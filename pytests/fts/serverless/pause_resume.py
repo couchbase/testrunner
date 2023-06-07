@@ -168,7 +168,7 @@ class FTSPauseResume(ServerlessBaseTestCase):
             plan_params = self.construct_plan_params()
             all_indexes = []
             for i in range(self.num_indexes):
-                fts_idx = fts_callable.create_fts_index("idx", source_type='couchbase',
+                fts_idx = fts_callable.create_fts_index(f"idx_{i}", source_type='couchbase',
                                                         source_name=database.id, index_type='fulltext-index',
                                                         index_params=None, plan_params=plan_params,
                                                         source_params=None, source_uuid=None, collection_index=True,
