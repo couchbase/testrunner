@@ -163,5 +163,5 @@ class QuerySanity(ServerlessBaseTestCase):
                 self.assertEqual(explain['results'][0]['plan']['~children'][0]['scan']['index'], 'index_arr')
                 result = self.run_query(database, f'SELECT * FROM {self.scope}.{self.collection} s WHERE ANY f IN s.fruits SATISFIES f = "{fruit}" END')
                 doc_count = result['metrics']['resultCount']
-                index_ru = math.ceil(doc_count * (36 + 5) / 256)
+                index_ru = math.ceil(doc_count * (36 + len(fruit)) / 256)
                 self.assertEqual(result['billingUnits'], {'ru': {'index': index_ru, 'kv': doc_count}} )
