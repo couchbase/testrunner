@@ -6,6 +6,7 @@ function OnUpdate(doc, meta) {
         log(result);
         couchbase.get(dst_bucket, {id: meta.id + i.toString()}, {"cache": true});
     }
+    CREATE PRIMARY INDEX ON default.scope0.collection1;
     var query=UPDATE default.scope0.collection1 SET overflow = true;
     log(query,meta.id);
     var check = false;
