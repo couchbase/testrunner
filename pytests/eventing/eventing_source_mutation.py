@@ -124,12 +124,12 @@ class EventingSourceMutation(EventingBaseTest):
 
     def test_inter_handler_recursion_named_collections(self):
         body = self.create_function_with_collection(self.function_name, HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION,
-                                              src_namespace="default.scope0.collection0",
-                                                    collection_bindings=["src_bucket.default.scope0.collection0.rw"])
+                                              src_namespace="src_bucket.src_bucket.src_bucket",
+                                                    collection_bindings=["src_bucket.src_bucket.src_bucket.src_bucket.rw"])
         self.deploy_function(body)
         body1 = self.create_function_with_collection(self.function_name+"_2", HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION,
-                                                     src_namespace="default.scope0.collection0",
-                                                     collection_bindings=["src_bucket.default.scope0.collection0.rw"])
+                                                     src_namespace="src_bucket.src_bucket.src_bucket",
+                                                     collection_bindings=["src_bucket.src_bucket.src_bucket.src_bucket.rw"])
         try:
             self.deploy_function(body1,wait_for_bootstrap=False)
             raise Exception("Handler deployed even with inter handler recursion")
