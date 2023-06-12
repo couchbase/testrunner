@@ -101,14 +101,14 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
 
     def test_log_rotation(self):
         self.load_sample_buckets(self.server, "travel-sample")
-        self.default_bucket_name="travel-sample"
-        self.function_scope = {"bucket": self.default_bucket_name, "scope": "_default"}
+        self.src_bucket_name="travel-sample"
+        self.function_scope = {"bucket": self.src_bucket_name, "scope": "_default"}
         body = self.create_save_function_body(self.function_name, "handler_code/logger.js")
         body['settings']['app_log_max_size']=3768300
         self.rest.create_function(body['appname'], body, self.function_scope)
         # deploy a function without any alias
         self.deploy_function(body)
-        self.verify_doc_count_collections("default.scope0.collection0", 31591)
+        self.verify_doc_count_collections("dst_bucket._default._default", 31591)
         number=self.check_number_of_files()
         if number ==1:
             raise Exception("Files not rotated")
@@ -126,7 +126,7 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
         self.deploy_function(body)
-        self.verify_doc_count_collections("default.scope0.collection0", self.docs_per_day * self.num_docs)
+        self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         shell = RemoteMachineShellConnection(eventing_node)
         # audit event for authentication failure

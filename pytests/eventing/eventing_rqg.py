@@ -41,7 +41,6 @@ class EventingRQG(EventingBaseTest):
             self.template_file)
         with open(test_file_path) as f:
             query_list = f.readlines()
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_server)
         log.info(len(query_list))
         k = self.number_of_handler
         if self.number_of_queries is None:
@@ -76,7 +75,6 @@ class EventingRQG(EventingBaseTest):
         test_file_path = self.template_file
         with open(test_file_path) as f:
             query_list = f.readlines()
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_server)
         k = self.number_of_handler
         if self.number_of_queries is None:
             s = len(query_list)

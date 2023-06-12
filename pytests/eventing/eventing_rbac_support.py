@@ -29,6 +29,30 @@ class EventingRBACSupport(EventingBaseTest):
         handler_code = self.input.param('handler_code', 'bucket_op')
         if handler_code == 'bucket_op':
             self.handler_code = "handler_code/ABO/insert_rebalance.js"
+        elif handler_code == 'bucket_op_with_timers':
+            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS
+        elif handler_code == 'bucket_op_with_cron_timers':
+            self.handler_code = "handler_code/ABO/insert_timer.js"
+        elif handler_code == 'n1ql_op_with_timers':
+            self.handler_code = HANDLER_CODE.N1QL_OPS_WITH_TIMERS
+        elif handler_code == 'n1ql_op_without_timers':
+            self.handler_code = HANDLER_CODE.N1QL_OPS_WITHOUT_TIMERS
+        elif handler_code == 'source_bucket_mutation':
+            self.handler_code = "handler_code/ABO/insert_sbm.js"
+        elif handler_code == 'source_bucket_mutation_delete':
+            self.handler_code = HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE
+        elif handler_code == 'bucket_op_curl_get':
+            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_GET
+        elif handler_code == 'bucket_op_curl_post':
+            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_POST
+        elif handler_code == 'bucket_op_curl_put':
+            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_PUT
+        elif handler_code == 'bucket_op_curl_delete':
+            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_DELETE
+        elif handler_code == 'cancel_timer':
+            self.handler_code = HANDLER_CODE.CANCEL_TIMER_REBALANCE
+        elif handler_code == 'bucket_op_expired':
+            self.handler_code = HANDLER_CODE.BUCKET_OP_EXPIRED
         elif handler_code == 'advance_bucket_op_auth_failure':
             self.handler_code = "handler_code/ABO/advance_bucket_op_auth_failure.js"
         elif handler_code == 'n1ql_op_auth_failure':
