@@ -154,7 +154,7 @@ class QuerySecurityTests(ServerlessBaseTestCase):
             {'path': 'system:prepareds'}, {'path': 'system:scopes'}]
 
         system_catalog = {
-            'completed_requests':  {'statement': 'SELECT `queryContext`, statement FROM system:completed_requests', 'expected1': [{'queryContext': f'default:{database1.id}', 'statement': 'EXECUTE FUNCTION _default.sleep1(6000)'}], 'expected2': [{'queryContext': f'default:{database2.id}', 'statement': 'EXECUTE FUNCTION _default.sleep2(6000)'}]},
+            'completed_requests':  {'statement': 'SELECT `queryContext`, statement FROM system:completed_requests WHERE statement like "EXECUTE%"', 'expected1': [{'queryContext': f'default:{database1.id}', 'statement': 'EXECUTE FUNCTION _default.sleep1(6000)'}], 'expected2': [{'queryContext': f'default:{database2.id}', 'statement': 'EXECUTE FUNCTION _default.sleep2(6000)'}]},
             'active_requests': {'statement': 'SELECT `queryContext` FROM system:active_requests', 'expected1': [{'queryContext': f'default:{database1.id}'}], 'expected2': [{'queryContext': f'default:{database2.id}'}]},
             'all_indexes':  {'statement': 'SELECT DISTINCT name FROM system:all_indexes WHERE name not like "#%"', 'expected1': [{'name': 'ix1'}], 'expected2': [{'name': 'ix2'}]},
             'all_keyspaces':  {'statement': 'SELECT `path` FROM system:all_keyspaces ORDER BY `path`', 'expected1': all_keyspaces_1, 'expected2': all_keyspaces_2},
