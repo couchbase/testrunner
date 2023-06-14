@@ -3441,6 +3441,7 @@ class RestConnection(object):
         cmd = 'ns_config:set(ensure_full_commit_enabled, {0}).'.format(value)
         return self.diag_eval(cmd)
 
+    @not_for_capella
     def update_memcached_settings(self, num_reader_threads="default",
                                   num_writer_threads="default",
                                   num_storage_threads="default"):
@@ -4943,7 +4944,7 @@ class RestConnection(object):
 
     '''MadHatter LDAP Group Support'''
 
-    ''' 
+    '''
         Assign group roles
     '''
 
@@ -5409,7 +5410,7 @@ class RestConnection(object):
 
     # Applicable to eventing service
     '''
-           Eventing lifecycle operation 
+           Eventing lifecycle operation
     '''
 
     def lifecycle_operation(self, name, operation, function_scope=None, username=None, password=None):
@@ -5493,7 +5494,7 @@ class RestConnection(object):
         return content
 
     '''
-            deploy the Function 
+            deploy the Function
     '''
 
     def deploy_function_by_name(self, name, function_scope=None, username="Administrator", password="password"):
@@ -5512,7 +5513,7 @@ class RestConnection(object):
         return content
 
     '''
-               pause the Function 
+               pause the Function
     '''
 
     def pause_function_by_name(self, name, function_scope=None, username="Administrator", password="password"):
@@ -5531,7 +5532,7 @@ class RestConnection(object):
         return content
 
     '''
-        undeploy the Function 
+        undeploy the Function
     '''
     def undeploy_function(self, name, function_scope=None, username="Administrator", password="password"):
         authorization = self.get_authorization(username, password)
@@ -5549,7 +5550,7 @@ class RestConnection(object):
         return content
 
     '''
-        Delete all the functions 
+        Delete all the functions
     '''
     def delete_all_function(self, username="Administrator", password="password"):
         authorization = self.get_authorization(username, password)
@@ -5820,7 +5821,7 @@ class RestConnection(object):
         return json.loads(content)
 
     '''
-            Cleanup eventing 
+            Cleanup eventing
     '''
     def cleanup_eventing(self):
         authorization = self.get_authorization(self.username, self.password)
