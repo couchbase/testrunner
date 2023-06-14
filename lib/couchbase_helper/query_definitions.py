@@ -207,10 +207,10 @@ class QueryDefinition(object):
 
     def generate_build_query(self, namespace):
         if not self.index_name or self.index_name == '#primary':
-            self.index_name = '`#primary`'
+            self.index_name = '#primary'
         else:
             self.index_name = self.get_index_name()
-        query = f'BUILD INDEX ON {namespace} ({self.index_name}) USING GSI'
+        query = f'BUILD INDEX ON {namespace} (`{self.index_name}`) USING GSI'
         return query
 
 
