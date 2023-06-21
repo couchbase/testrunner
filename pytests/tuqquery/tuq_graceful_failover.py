@@ -61,10 +61,12 @@ class QueryGracefulFailoverTests(QueryTests):
                 response = self.run_cbq_query(query=query,server=server,txnid=txid)
                 commit = self.run_cbq_query(query="COMMIT",server=server,txnid=txid)
                 try:
-                    # We expect the query to fail here with error: "Service shut down"
-                    # as we expect to still be in middle of the failover at this point
-                    fail = self.run_cbq_query(query="select 10",server=server)
-                    self.log.fail("Query should have failed with error code 1180/1181")
+                    # Prior to MB-56314 We expect the query to fail here with error: "Service shut down"
+                    # as we expect to still be in middle of the failover at this point.
+                    ten = self.run_cbq_query(query="select 10",server=server)
+                    # but after MB-56314 query started post failover can be accepted and completed with grace period
+                    # self.log.fail("Query should have failed with error code 1180/1181")
+                    self.log.info(f'Result: {ten}')
                 except CBQError as ex:
                     error = self.process_CBQE(ex)
                     self.assertTrue(error['code'] == 1180 or error['code'] == 1181)
