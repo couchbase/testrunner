@@ -132,6 +132,12 @@ AWS_AMI_MAP = {
         },
         "ubuntu22": {
             "aarch64": "ami-05b98dc6de6e09e97"
+        },
+        "oel8" : {
+            "x86_64" : "ami-0b5aaeac901e41860"
+        },
+        "rhel8" : {
+            "x86_64" : "ami-07f5ef252bd61130b"
         }
     },
     "elastic-fts": "ami-0c48f8b3129e57beb",
@@ -143,7 +149,9 @@ AWS_OS_USERNAME_MAP = {
     "ubuntu20": "ubuntu",
     "centos": "centos",
     "al2023": "ec2-user",
-    "ubuntu22": "ubuntu"
+    "ubuntu22": "ubuntu",
+    "oel8": "ec2-user",
+    "rhel8": "ec2-user"
 }
 
 def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
