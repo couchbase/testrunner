@@ -787,21 +787,20 @@ def __get_build_url(node, build_binary):
         if node.shell.is_url_live(ipv6_url, exit_if_not_live=False):
             return ipv6_url
     else:
-        if cb_version.split('-')[0] in testconstants.CB_RELEASE_BUILDS.keys():
-            release_url = "{0}{1}/{2}".format(
-                testconstants.CB_RELEASE_REPO,
-                cb_version.split('-')[0],
-                build_binary)
-            if node.shell.is_url_live(release_url, exit_if_not_live=False):
-                return release_url
-        else:
-            latestbuilds_url = "{0}{1}/{2}/{3}".format(
-                testconstants.CB_REPO,
-                testconstants.CB_VERSION_NAME[cb_version.split('-')[0][:-2]],
-                cb_version.split('-')[1],
-                build_binary)
-            if node.shell.is_url_live(latestbuilds_url, exit_if_not_live=False):
-                return latestbuilds_url
+        latestbuilds_url = "{0}{1}/{2}/{3}".format(
+            testconstants.CB_REPO,
+            testconstants.CB_VERSION_NAME[cb_version.split('-')[0][:-2]],
+            cb_version.split('-')[1],
+            build_binary)
+        release_url = "{0}{1}/{2}/{3}".format(
+            testconstants.CB_RELEASE_REPO,
+            testconstants.CB_VERSION_NAME[cb_version.split('-')[0][:-2]],
+            cb_version.split('-')[1],
+            build_binary)
+        if node.shell.is_url_live(latestbuilds_url, exit_if_not_live=False):
+            return latestbuilds_url
+        elif node.shell.is_url_live(release_url, exit_if_not_live=False):
+            return release_url
     return None
 
 def __get_tools_url(node, tools_package):
@@ -1085,8 +1084,6 @@ def __get_build_binary_name(node):
                                                 "arm64",
                                                 node.info.deliverable_type)
         if float(cb_version[:3]) < 7.1 :
-            if cb_version.split('-')[0] in testconstants.CB_RELEASE_BUILDS.keys():
-                cb_version = cb_version[:5]
             return "{0}_{1}-{2}_{3}.{4}".format(params["cb_edition"],
                                             cb_version,
                                             node.get_os(),
