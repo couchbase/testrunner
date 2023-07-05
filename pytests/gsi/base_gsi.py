@@ -127,6 +127,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.gsi_thread = Cluster()
         self.defer_build = self.defer_build and self.use_gsi_for_secondary
         self.num_index_replicas = self.input.param("num_index_replica", 0)
+        self.redistribute_nodes = self.input.param("redistribute_nodes", False)
         if self.capella_run:
             if self.num_index_replicas == 0:
                 self.num_index_replicas = 1
@@ -946,14 +947,15 @@ class BaseSecondaryIndexingTests(QueryTests):
         Compares Items indexed count is sample
         as items in the bucket.
         """
+
         index_map = self.get_index_stats()
-        for bucket_name in list(index_map.keys()):
-            self.log.info("Bucket: {0}".format(bucket_name))
-            for index_name, index_val in index_map[bucket_name].items():
-                self.log.info("Index: {0}".format(index_name))
-                self.log.info("number of docs pending: {0}".format(index_val["num_docs_pending"]))
-                self.log.info("number of docs queued: {0}".format(index_val["num_docs_queued"]))
-                if index_val["num_docs_pending"] and index_val["num_docs_queued"]:
+        self.log.info(index_map)
+        self.log.info("************************")
+        self.log.info(list(index_map.keys()))
+        for key, value in index_map.items():
+            if 'num_docs_pending' in key or 'num_docs_queued' in key:
+                self.log.info(f"{key}:{value}")
+                if value:
                     return False
         return True
 

@@ -1,4 +1,5 @@
 import copy
+import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -18,7 +19,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
-
+import string
 log = logging.getLogger(__name__)
 QUERY_TEMPLATE = "SELECT {0} FROM %s "
 
@@ -43,6 +44,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.load_query_definitions = []
         self.initial_index_number = self.input.param("initial_index_number", 1)
         self.run_mixed_mode_tests = self.input.param("run_mixed_mode_tests", False)
+        self.run_continous_query = False
+        self.query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
+
         if self.enable_dgm:
             if self.gsi_type == 'memory_optimized':
                 self.skipTest("DGM can be achieved only for plasma")
@@ -464,6 +468,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             self.validate_smart_batching_during_rebalance(rebalance_task)
 
     def test_online_upgrade(self):
+        if self.upgrade_to >= "7.2.1":
+            redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
+            self.index_rest.set_index_settings(redistribute)
         services_in = []
         before_tasks = self.async_run_operations(buckets=self.buckets, phase="before")
         server_out = self.nodes_out_list
@@ -488,6 +495,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  self.nodes_out_list, [],
                                                  services=services_in)
+
+        self.validate_indexing_rebalance_master()
         rebalance.result()
         self._run_tasks([kv_ops, in_between_tasks])
         self.sleep(60)
@@ -517,6 +526,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  self.nodes_in_list,
                                                  self.nodes_out_list)
+
+        self.validate_indexing_rebalance_master()
         rebalance.result()
         log.info("===== Nodes Swapped with Upgraded versions =====")
         self.upgrade_servers = self.nodes_in_list
@@ -565,6 +576,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             rebalance = self.cluster.async_rebalance(active_nodes,
                                                      [self.nodes_in_list[i]], [],
                                                      services=node_services)
+
+            self.validate_indexing_rebalance_master()
             rebalance.result()
             log.info("===== Node Rebalanced In with Upgraded version =====")
             self._run_tasks([kv_ops, in_between_tasks])
@@ -588,6 +601,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                      [self.nodes_in_list[0]], [],
                                                      services=["index"])
+            self.validate_indexing_rebalance_master()
             rebalance.result()
         for i in range(len(self.nodes_out_list)):
             if self.rebalance_empty_node:
@@ -818,6 +832,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  index_nodes, [],
                                                  services=services_in)
+
+        self.validate_indexing_rebalance_master()
         rebalance.result()
         self.sleep(60)
         if self.set_circular_compaction:
@@ -906,6 +922,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 rebalance = self.cluster.async_rebalance(active_nodes,
                                                          [node], [],
                                                          services=node_services)
+
+                self.validate_indexing_rebalance_master()
                 rebalance.result()
                 # self.sleep(100)
                 node_version = RestConnection(node).get_nodes_versions()
@@ -963,6 +981,145 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self._post_upgrade_task(task='system_event')
         self._post_upgrade_task(task='free_tier')
 
+    def test_master_node_upgrade_swap_rebalance(self):
+        if self.redistribute_nodes:
+            redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
+            self.index_rest.set_index_settings(redistribute)
+        self.prepare_tenants()
+        for namespace in self.namespaces:
+            prefix = f'idx_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}' \
+                     f'_batch_1_'
+            definition_list = self.gsi_util_obj.get_index_definition_list(dataset='Person', prefix=prefix)
+            create_list = self.gsi_util_obj.get_create_index_list(definition_list=definition_list, namespace=namespace,
+                                                                  defer_build_mix=False)
+            select_queries = self.gsi_util_obj.get_select_queries(definition_list=definition_list,
+                                                 namespace=namespace,
+                                                 limit=100)
+            self.log.info(f"Create index list: {create_list}")
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, query_node=self.query_node)
+        services_in = ['index']
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        self.log.info(f'nodes out list : {self.nodes_out_list}')
+        for idx, index_node in enumerate(index_nodes):
+            out_node = index_node
+            in_node = self.servers[self.nodes_init+idx]
+            self._install([in_node], version=self.upgrade_to)
+            self.run_continous_query = True
+            thread = Thread(target=self._run_queries_continously, args=[select_queries])
+            thread.start()
+            log.info("Upgrading servers to {0}...".format(self.upgrade_to))
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [in_node],
+                                                     [out_node], services=services_in)
+            index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+            index_rest_1 = RestConnection(index_node)
+            self.sleep(35)
+            status = RestHelper(self.rest).rebalance_reached(percentage=10)
+            if status:
+                count = 0
+                while count < 120:
+                    c = index_rest_1.list_indexer_rebalance_tokens(server=index_node)
+                    self.sleep(1, 'waiting for tokens')
+                    if c is None or 'rebalancetoken' not in c:
+                        count = count+1
+                    else:
+                        log.info(f'info on meta data {c}')
+                        break
+                if count >= 120:
+                    self.fail('Did not get the params rebalance token')
+            log.info(f'info on meta data {c}')
+            parsed_output = json.loads(c)
+            rebalance.result()
+            self.run_continous_query = False
+
+            updated_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            for node in updated_index_nodes:
+                if node.ip == parsed_output['rebalancetoken']['MasterIP']:
+                    new_master_node = node
+                    break
+            self.assertEqual(new_master_node.ip, parsed_output['rebalancetoken']['MasterIP'], 'ip not the same')
+
+            cb_version = RestConnection(new_master_node).get_nodes_version()[:5]
+            log.info(f'CB version is {cb_version}')
+            log.info(cb_version == self.upgrade_to[:5])
+            self.assertEqual(cb_version, self.upgrade_to[:5],
+                             'Index master node is updated to latest version as expected')
+
+    def test_master_node_upgrade_rebalance_in(self):
+        if self.redistribute_nodes:
+            redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
+            self.index_rest.set_index_settings(redistribute)
+        self.prepare_tenants()
+        for namespace in self.namespaces:
+            prefix = f'idx_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}' \
+                     f'_batch_1_'
+            definition_list = self.gsi_util_obj.get_index_definition_list(dataset='Person', prefix=prefix)
+            create_list = self.gsi_util_obj.get_create_index_list(definition_list=definition_list, namespace=namespace,
+                                                                  defer_build_mix=False)
+            select_queries = self.gsi_util_obj.get_select_queries(definition_list=definition_list,
+                                                 namespace=namespace,
+                                                 limit=100)
+            self.log.info(f"Create index list: {create_list}")
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list, query_node=self.query_node)
+        services_in = ['index']
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        self.log.info(f'nodes out list : {self.nodes_out_list}')
+        for idx, index_node in enumerate(index_nodes):
+            out_node = index_node
+            in_node = self.servers[self.nodes_init+idx]
+            self._install([in_node], version=self.upgrade_to)
+            self.run_continous_query = True
+            thread = Thread(target=self._run_queries_continously, args=[select_queries])
+            thread.start()
+            log.info("Upgrading servers to {0}...".format(self.upgrade_to))
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [in_node], [],
+                                                     services=services_in)
+
+            index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+            if not self.redistribute_nodes:
+                self.sleep(15)
+                status = RestHelper(self.rest).rebalance_reached(percentage=10)
+            else:
+                self.sleep(35)
+                status = RestHelper(self.rest).rebalance_reached(percentage=20)
+            index_rest_1 = RestConnection(index_node)
+            if status:
+                count = 0
+                while count < 120:
+                    c = index_rest_1.list_indexer_rebalance_tokens(server=index_node)
+                    self.sleep(1, 'waiting for tokens')
+                    if c is None or 'rebalancetoken' not in c:
+                        count = count+1
+                    else:
+                        log.info(f'info on meta data {c}')
+                        break
+                if count >= 120:
+                    self.fail('Did not get the params rebalance token')
+            log.info(f'info on meta data {c}')
+            parsed_output = json.loads(c)
+            rebalance.result()
+            self.run_continous_query = False
+
+            updated_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            for node in updated_index_nodes:
+                if node.ip == parsed_output['rebalancetoken']['MasterIP']:
+                    new_master_node = node
+                    break
+            self.assertEqual(new_master_node.ip, parsed_output['rebalancetoken']['MasterIP'], 'ip not the same')
+
+            cb_version = RestConnection(new_master_node).get_nodes_version()[:5]
+            log.info(f'CB version is {cb_version}')
+            log.info(cb_version == self.upgrade_to[:5])
+            self.assertEqual(cb_version, self.upgrade_to[:5],
+                             'Index master node is updated to latest version as expected')
+            self.run_continous_query = True
+            thread = Thread(target=self._run_queries_continously, args=[select_queries])
+            thread.start()
+            log.info("Removing old servers")
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [out_node],
+                                                     services=services_in)
+            rebalance.result()
+            self.run_continous_query = False
+
     def kv_mutations(self, docs=None):
         if not docs:
             docs = self.docs_per_day
@@ -983,10 +1140,51 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             self.log.error(stats)
             return False
 
+    def validate_indexing_rebalance_master(self):
+        if self.upgrade_to < "7.2.1":
+            return
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        index_rest_1 = RestConnection(index_node)
+        status = True
+        if status:
+            count = 0
+            while count < 120:
+                c = index_rest_1.list_indexer_rebalance_tokens(server=index_node)
+                self.sleep(1, 'waiting for tokens')
+                if c is None or 'rebalancetoken' not in c:
+                    count = count + 1
+                else:
+                    log.info(f'info on meta data {c}')
+                    break
+            if count >= 120:
+                self.fail('Did not get the params rebalance token')
+        log.info(f'info on meta data {c}')
+        parsed_output = json.loads(c)
+        updated_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in updated_index_nodes:
+            if node.ip == parsed_output['rebalancetoken']['MasterIP']:
+                new_master_node = node
+                break
+        self.assertEqual(new_master_node.ip, parsed_output['rebalancetoken']['MasterIP'], 'ip not the same')
+
+        cb_version = RestConnection(new_master_node).get_nodes_version()[:5]
+        log.info(f'CB version is {cb_version}')
+        log.info(cb_version == self.upgrade_to[:5])
+        self.assertEqual(cb_version, self.upgrade_to[:5],
+                         'Index master node is updated to latest version as expected')
+
     def _run_tasks(self, tasks_list):
         for tasks in tasks_list:
             for task in tasks:
                 task.result()
+
+    def _run_queries_continously(self, select_queries):
+        while self.run_continous_query:
+            tasks_list = self.gsi_util_obj.aysnc_run_select_queries(select_queries=select_queries,
+                                                                    query_node=self.query_node)
+            for tasks in tasks_list:
+                for task in tasks:
+                    task.result()
 
     def _verify_create_index_api(self, keyspace='default'):
         """

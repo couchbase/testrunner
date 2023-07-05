@@ -351,6 +351,17 @@ class GSIUtils(object):
             except Exception as err:
                 print(err)
 
+    def aysnc_run_select_queries(self, select_queries, database=None, capella_run=False, query_node=False):
+        with ThreadPoolExecutor() as executor:
+            tasks = []
+            for query in select_queries:
+                if capella_run:
+                    task = executor.submit(self.run_query, database=database, query=query)
+                else:
+                    task = executor.submit(self.run_query, query=query, server=query_node)
+                tasks.append(task)
+        return tasks
+
     def range_unequal_distribution(self, number=4, factor=1.2, total=100000):
         """
         This method divides a range into unequal parts of given number
