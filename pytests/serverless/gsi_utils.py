@@ -280,12 +280,14 @@ class GSIUtils(object):
         self.batch_size = len(definitions_list)
         return definitions_list
 
-    def get_create_index_list(self, definition_list, namespace, defer_build_mix=False, defer_build=False):
+    def get_create_index_list(self, definition_list, namespace, defer_build_mix=False,
+                              defer_build=False, num_replica=None):
         create_index_list = []
         for index_gen in definition_list:
             if defer_build_mix:
                 defer_build = random.choice([True, False])
-            query = index_gen.generate_index_create_query(namespace=namespace, defer_build=defer_build)
+            query = index_gen.generate_index_create_query(namespace=namespace, defer_build=defer_build,
+                                                          num_replica=num_replica)
             create_index_list.append(query)
         return create_index_list
 

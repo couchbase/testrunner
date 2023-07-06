@@ -6571,11 +6571,12 @@ class MagmaDocLoader(Task):
     def execute(self, task_manager):
         command = f"java -jar magma_loader/DocLoader/target/magmadocloader/magmadocloader.jar -n {self.server.ip} " \
                   f"-user {self.sdk_docloader.username} -pwd {self.sdk_docloader.password} -b {self.bucket} " \
-                  f"-p 11207 -create_s {self.sdk_docloader.start_seq_num} -create_e {self.sdk_docloader.end+1} " \
+                  f"-p 11207 -create_s {self.sdk_docloader.start_seq_num} -create_e {self.sdk_docloader.end+2} " \
                   f"-cr {self.sdk_docloader.percent_create} -up {self.sdk_docloader.percent_delete} -rd 0" \
                   f" -docSize {self.sdk_docloader.doc_size} -keyPrefix {self.sdk_docloader.key_prefix} " \
                   f"-scope {self.sdk_docloader.scope} -collection {self.sdk_docloader.collection} " \
-                  f"-ops {self.sdk_docloader.ops_rate}  -workers {self.sdk_docloader.workers} -maxTTL 1800'"
+                  f"-valueType {self.sdk_docloader.json_template} " \
+                  f"-ops {self.sdk_docloader.ops_rate}  -workers {self.sdk_docloader.workers} -maxTTL 1800"
 
         self.log.info(command)
         try:
@@ -6594,7 +6595,6 @@ class MagmaDocLoader(Task):
         self.state = FINISHED
         self.set_result(True)
         self.check(task_manager)
-        os.chdir(curr_dir)
         time.sleep(30)
 
     def check(self, task_manager):

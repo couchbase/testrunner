@@ -177,11 +177,8 @@ class Cluster(object):
                                                 scope=scope, collection=collection)
         # Load using java sdk client
         elif not generator.isGenerator():
-            if dataset == 'Magma':
-                curr_dir = os.getcwd()
-                os.chdir(os.path.join(curr_dir, 'magma_loader/DocLoader/'))
+            if dataset == 'Magma' or dataset == 'Hotel':
                 _task = MagmaDocLoader(server, bucket, generator)
-                os.chdir(curr_dir)
             else:
                 generator.doc_expiry = exp
                 _task = SDKLoadDocumentsTask(server, bucket, generator)

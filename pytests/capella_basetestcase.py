@@ -76,7 +76,8 @@ class BaseTestCase(OnPremBaseTestCase):
             if self.java_sdk_client:
                 self.log.info("Building docker image with java sdk client")
                 JavaSdkSetup()
-        except Exception:
+        except Exception as err:
+            self.log.error(err)
             self.tearDown()
             raise
 

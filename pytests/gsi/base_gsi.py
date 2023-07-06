@@ -26,6 +26,7 @@ from tasks.task import ConcurrentIndexCreateTask
 from .newtuq import QueryTests
 from tasks.task import SDKLoadDocumentsTask
 from deepdiff import DeepDiff
+from serverless.gsi_utils import GSIUtils
 
 log = logging.getLogger(__name__)
 
@@ -117,6 +118,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.index_loglevel = self.input.param("index_loglevel", None)
         self.namespaces = []
+
+        self.gsi_util_obj = GSIUtils(self.run_cbq_query)
         if self.index_loglevel:
             self.set_indexer_logLevel(self.index_loglevel)
         if self.dgm_run and hasattr(self, "gens_load"):
@@ -1798,7 +1801,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def prepare_collection_for_indexing(self, num_scopes=1, num_collections=1, num_of_docs_per_collection=1000,
                                         indexes_before_load=False, json_template="Person", batch_size=10**4,
-                                        bucket_name=None):
+                                        bucket_name=None, key_prefix='doc_'):
         if not bucket_name:
             bucket_name = self.test_bucket
         pre_load_idx_pri = None
@@ -1822,14 +1825,21 @@ class BaseSecondaryIndexingTests(QueryTests):
                         self.run_cbq_query(query=query)
                         query = pre_load_idx_gsi.generate_index_create_query(namespace=self.namespaces[0])
                         self.run_cbq_query(query=query)
+
                     self.gen_create = SDKDataLoader(num_ops=num_of_docs_per_collection, percent_create=100,
                                                     percent_update=0, percent_delete=0, scope=s_item,
                                                     collection=c_item, json_template=json_template,
-                                                    output=True,username=self.username, password=self.password)
-                    tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
-                                                                    batch_size=batch_size)
-                    for task in tasks:
+                                                    output=True, username=self.username, password=self.password)
+                    if self.use_magma_loader:
+                        task = self.cluster.async_load_gen_docs(self.master, bucket=bucket_name,
+                                                                generator=self.gen_create, pause_secs=1,
+                                                                timeout_secs=300, dataset=json_template)
                         task.result()
+                    else:
+                        tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
+                                                                        batch_size=batch_size, dataset=json_template)
+                        for task in tasks:
+                            task.result()
                     if self.dgm_run:
                         self._load_doc_data_all_buckets(gen_load=self.gen_create)
         return pre_load_idx_pri, pre_load_idx_gsi

@@ -1230,7 +1230,7 @@ class OnPremBaseTestCase(unittest.TestCase):
 
         return tasks
 
-    def data_ops_javasdk_loader_in_batches(self, sdk_data_loader, batch_size):
+    def data_ops_javasdk_loader_in_batches(self, sdk_data_loader, batch_size, dataset='Person'):
         start_document = sdk_data_loader.get_start_seq_num()
         tot_num_items_in_collection = sdk_data_loader.get_num_ops()
         batches = []
@@ -1252,7 +1252,7 @@ class OnPremBaseTestCase(unittest.TestCase):
         for bucket in self.buckets:
             for batch in batches:
                 tasks.append(self.cluster.async_load_gen_docs(self.master, bucket, batch, pause_secs=1,
-                                                              timeout_secs=300))
+                                                              timeout_secs=300, dataset=dataset))
 
         self.log.info("done")
         return tasks
