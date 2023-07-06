@@ -23,6 +23,7 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
     def setUp(self):
         super(EventingTools, self).setUp()
         self.buckets = self.rest.get_buckets()
+        self.src_bucket = self.rest.get_bucket_by_name(self.src_bucket_name)
         self.gens_load = self.generate_docs(self.docs_per_day)
         handler_code = self.input.param('handler_code', 'bucket_op')
         if handler_code == 'bucket_op':

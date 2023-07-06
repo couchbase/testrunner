@@ -15,8 +15,6 @@ class EventingConcurrency(EventingBaseTest):
         self.buckets = self.rest.get_buckets()
         self.src_bucket = self.rest.get_bucket_by_name(self.src_bucket_name)
         self.gens_load = self.generate_docs(self.docs_per_day)
-        if self.n1ql_server:
-            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_server)
 
     def tearDown(self):
         super(EventingConcurrency, self).tearDown()
