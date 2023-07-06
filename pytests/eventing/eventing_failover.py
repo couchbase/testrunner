@@ -161,7 +161,7 @@ class EventingFailover(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_lifecycle_and_failover(self):
-        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size, replicas=self.replicas)
+        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size, replicas=self.num_replicas)
         self.cluster.create_standard_bucket(name=self.dst_bucket_name1, port=STANDARD_BUCKET_PORT + 1,
                                             bucket_params=bucket_params)
         eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
@@ -289,7 +289,7 @@ class EventingFailover(EventingBaseTest):
 
 
     def test_failover_with_multiple_handlers(self):
-        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size, replicas=self.replicas)
+        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size, replicas=self.num_replicas)
         self.cluster.create_standard_bucket(name=self.dst_bucket_name1, port=STANDARD_BUCKET_PORT + 1,
                                             bucket_params=bucket_params)
         eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
@@ -382,7 +382,7 @@ class EventingFailover(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_failover_with_multiple_handlers_pause(self):
-        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size, replicas=self.replicas)
+        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size, replicas=self.num_replicas)
         self.cluster.create_standard_bucket(name=self.dst_bucket_name1, port=STANDARD_BUCKET_PORT + 1,
                                             bucket_params=bucket_params)
         eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
