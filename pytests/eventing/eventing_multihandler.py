@@ -24,10 +24,14 @@ class EventingMultiHandler(EventingBaseTest):
         self.worker_count=self.input.param('worker_count',1)
         self.handler_code=self.input.param('handler_code','handler_code/ABO/insert.js')
         self.gens_load = self.generate_docs(self.docs_per_day)
+        memory_quota = (self.num_src_buckets+self.num_dst_buckets+3) * self.bucket_size
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=memory_quota)
         self.create_n_buckets(self.src_bucket_name,self.num_src_buckets)
         self.buckets = self.rest.get_buckets()
         if self.num_dst_buckets > 0:
             self.create_n_buckets(self.dst_bucket_name,self.num_dst_buckets)
+        self.create_scope_collection(bucket=self.metadata_bucket_name, scope=self.metadata_bucket_name,
+                                     collection=self.metadata_bucket_name)
         self.deploying=[]
         self.pausing=[]
         if self.n1ql_server:
@@ -184,7 +188,7 @@ class EventingMultiHandler(EventingBaseTest):
         buckets = RestConnection(self.master).get_buckets()
         task=[]
         for bucket in buckets:
-            if "src_bucket" in bucket.name:
+            if "src_bucket_" in bucket.name:
                 task.append(self.load_data_to_collection(self.docs_per_day * self.num_docs, bucket.name+".scope_0.coll_0"
                                                          ,is_delete=is_delete,wait_for_loading=False))
         for tk in task:
