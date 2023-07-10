@@ -138,7 +138,6 @@ class EventingBaseTest(QueryHelperTests):
             self.check_eventing_logs_for_panic()
         if self.hostname == 'local':
             self.teardown_curl()
-        self.buckets = RestConnection(self.master).get_buckets()
         if len(self.buckets) > 0 and not self.skip_metabucket_check and not self.is_upgrade_test:
             metadata_bucket, metadata_scope, metadata_collection = self._get_metadata_keyspace()
             metadata_item_count = self.stat.get_collection_item_count_cumulative(metadata_bucket, metadata_scope,
