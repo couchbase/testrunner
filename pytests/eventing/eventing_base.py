@@ -138,7 +138,6 @@ class EventingBaseTest(QueryHelperTests):
         self.rest = RestConnection(self.master)
         if self.hostname == 'local':
             self.teardown_curl()
-        self.buckets = RestConnection(self.master).get_buckets()
         if len(self.buckets) > 0 and not self.skip_metabucket_check and not self.is_upgrade_test:
             metadata_bucket_name, metadata_scope, metadata_collection = self._get_metadata_keyspace()
             metadata_bucket = self.rest.get_bucket(metadata_bucket_name)
