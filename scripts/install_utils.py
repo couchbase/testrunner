@@ -17,6 +17,8 @@ import logging.config
 import os.path
 import urllib.request
 
+from testconstants import CB_RELEASE_BUILDS
+
 logging.config.fileConfig("scripts.logging.conf")
 log = logging.getLogger()
 
@@ -715,9 +717,10 @@ def pre_install_steps():
                 print_result_and_exit("URL {0} is not live. Exiting.".format(params["url"]))
         else:
             install_debug_info = params["install_debug_info"]
+            is_release_build = check_for_release_or_latest_build()
             for node in NodeHelpers:
-                build_binary = __get_build_binary_name(node)
-                debug_binary = __get_debug_binary_name(node) if \
+                build_binary = __get_build_binary_name(node, is_release_build)
+                debug_binary = __get_debug_binary_name(node, is_release_build) if \
                     install_debug_info else None
                 build_url = __get_build_url(node, build_binary)
                 debug_url = __get_build_url(node, debug_binary) if \
@@ -738,6 +741,15 @@ def pre_install_steps():
                                    debug_name=debug_binary,
                                    debug_url=debug_url,
                                    debug_path=filepath_debug)
+
+def check_for_release_or_latest_build():
+    cb_version = params["version"].split('-')[0]
+    cb_build = params["version"].split('-')[1]
+    if cb_version in CB_RELEASE_BUILDS \
+         and CB_RELEASE_BUILDS[cb_version] == cb_build:
+            return True
+    else:
+        return False
 
 
 def _execute_local(command, timeout):
@@ -792,10 +804,9 @@ def __get_build_url(node, build_binary):
             testconstants.CB_VERSION_NAME[cb_version.split('-')[0][:-2]],
             cb_version.split('-')[1],
             build_binary)
-        release_url = "{0}{1}/{2}/{3}".format(
+        release_url = "{0}{1}/{2}".format(
             testconstants.CB_RELEASE_REPO,
-            testconstants.CB_VERSION_NAME[cb_version.split('-')[0][:-2]],
-            cb_version.split('-')[1],
+            cb_version.split('-')[0],
             build_binary)
         if node.shell.is_url_live(latestbuilds_url, exit_if_not_live=False):
             return latestbuilds_url
@@ -1047,14 +1058,18 @@ def __get_download_dir(node):
         return install_constants.DOWNLOAD_DIR["WINDOWS_SERVER"]
 
 
-def __get_build_binary_name(node):
+def __get_build_binary_name(node, is_release_build=False):
     # couchbase-server-enterprise-6.5.0-4557-centos7.x86_64.rpm
     # couchbase-server-enterprise-6.5.0-4557-suse15.x86_64.rpm
     # couchbase-server-enterprise-6.5.0-4557-rhel8.x86_64.rpm
     # couchbase-server-enterprise-6.5.0-4557-oel7.x86_64.rpm
     # couchbase-server-enterprise-6.5.0-4557-amzn2.x86_64.rpm
     #All the above ones replaced by couchbase-server-enterprise-6.5.0-4557-linux.x86_64.rpm for 7.1 and above
+
     cb_version = params["version"]
+    if is_release_build:
+        cb_version = cb_version.split("-")[0]
+
     if params["bkrs_client"]:
         if node.ip != params["bkrs_client"].ip:
             cb_version = params["cluster_version"]
@@ -1179,7 +1194,7 @@ def init_clusters(timeout=60, retries=3):
                 time.sleep(5)
                 retries -= 1
 
-def __get_debug_binary_name(node):
+def __get_debug_binary_name(node, is_release_build=False):
     # couchbase-server-enterprise-debuginfo-6.5.0-4557-centos7.x86_64.rpm
     # couchbase-server-enterprise-debuginfo-6.5.0-4557-suse15.x86_64.rpm
     # couchbase-server-enterprise-debuginfo-6.5.0-4557-rhel8.x86_64.rpm
@@ -1187,11 +1202,15 @@ def __get_debug_binary_name(node):
     # couchbase-server-enterprise-debuginfo-6.5.0-4557-amzn2.x86_64.rpm
     #All the above ones replaced by couchbase-server-enterprise-debuginfo-6.5.0-4557-linux.x86_64.rpm in 7.1 and above
 
+    version = params["version"]
+    if is_release_build:
+        version = version.split("-")[0]
+
     if node.get_os() in install_constants.X86:
         if float(params["cb_edition"][:3]) < 7.1 :
             return "{0}-{1}-{2}.{3}.{4}".format(
                 params["cb_edition"] + "-debuginfo",
-                params["version"],
+                version,
                 node.get_os(),
                 node.info.architecture_type,
                 node.info.deliverable_type)
@@ -1209,13 +1228,13 @@ def __get_debug_binary_name(node):
         if float(params["cb_edition"][:3]) < 7.1 :
             return "{0}_{1}-{2}_{3}.{4}".format(
                 params["cb_edition"] + "-dbg",
-                params["version"],
+                version,
                 node.get_os(),
                 node.info.architecture_type,
                 node.info.deliverable_type)
         return "{0}_{1}-{2}_{3}.{4}".format(
             params["cb_edition"] + "-dbg",
-            params["version"],
+            version,
             "linux",
             node.info.architecture_type,
             node.info.deliverable_type)
@@ -1225,7 +1244,7 @@ def __get_debug_binary_name(node):
         node.info.deliverable_type = "msi"
         return "{0}_{1}-{2}_{3}.{4}".format(
             params["cb_edition"] + "-dbg",
-            params["version"],
+            version,
             node.get_os(),
             "amd64",
             node.info.deliverable_type)
