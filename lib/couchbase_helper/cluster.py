@@ -169,15 +169,16 @@ class Cluster(object):
 
     def async_load_gen_docs(self, server, bucket, generator, kv_store=None, op_type=None, exp=0, flag=0,
                             only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=5, proxy_client=None,
-                            compression=True, scope=None, collection=None, dataset=None):
-
+                            compression=True, scope=None, collection=None, dataset=None, use_magma_loader=False):
+        if dataset == 'Magma':
+            use_magma_loader = True
         if isinstance(generator, list):
             _task = LoadDocumentsGeneratorsTask(server, bucket, generator, kv_store, op_type, exp, flag,
                                                 only_store_hash, batch_size, compression=compression,
                                                 scope=scope, collection=collection)
         # Load using java sdk client
         elif not generator.isGenerator():
-            if dataset == 'Magma' or dataset == 'Hotel':
+            if use_magma_loader:
                 _task = MagmaDocLoader(server, bucket, generator)
             else:
                 generator.doc_expiry = exp

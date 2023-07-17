@@ -1835,7 +1835,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                     if self.use_magma_loader:
                         task = self.cluster.async_load_gen_docs(self.master, bucket=bucket_name,
                                                                 generator=self.gen_create, pause_secs=1,
-                                                                timeout_secs=300, dataset=json_template)
+                                                                timeout_secs=300, use_magma_loader=True)
                         task.result()
                     else:
                         tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
