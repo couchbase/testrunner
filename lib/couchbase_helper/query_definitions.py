@@ -60,7 +60,8 @@ class QueryDefinition(object):
 
     def generate_index_create_query(self, namespace="default", use_gsi_for_secondary=True,
                                     deploy_node_info=None, defer_build=None, index_where_clause=None, gsi_type=None,
-                                    num_replica=None, desc=None, partition_by_fields=None, num_partition=8):
+                                    num_replica=None, desc=None, partition_by_fields=None, num_partition=8,
+                                    missing_indexes=False, missing_field_desc=False):
 
         if partition_by_fields:
             self.partition_by_fields = partition_by_fields
@@ -71,7 +72,20 @@ class QueryDefinition(object):
             namespace = self.keyspace
         deployment_plan = {}
         if desc is None:
-            query = "CREATE INDEX `{0}` ON {1}({2})".format(self.index_name, namespace, ",".join(self.index_fields))
+            if missing_indexes:
+                field_list = []
+                for idx, field in enumerate(self.index_fields):
+                    if idx == 0:
+                        if missing_field_desc:
+                            field_list.append(f'{field} INCLUDE MISSING DESC')
+                        else:
+                            field_list.append(f'{field} INCLUDE MISSING ASC')
+                    else:
+                        field_list.append(field)
+
+                query = "CREATE INDEX `{0}` ON {1}({2})".format(self.index_name, namespace, ",".join(field_list))
+            else:
+                query = "CREATE INDEX `{0}` ON {1}({2})".format(self.index_name, namespace, ",".join(self.index_fields))
         else:
             collations = ""
             for x, y in zip(self.index_fields, desc):

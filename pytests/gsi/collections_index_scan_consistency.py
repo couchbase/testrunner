@@ -8,11 +8,7 @@ __created_on__ = "07/08/20 10:51 am"
 
 """
 
-import subprocess
-import re
 from concurrent.futures import ThreadPoolExecutor
-
-import testconstants
 from couchbase_helper.documentgenerator import SDKDataLoader
 from couchbase_helper.query_definitions import QueryDefinition
 from deepdiff import DeepDiff
@@ -44,24 +40,6 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
 
     def suite_setUp(self):
         pass
-
-    def _get_mutation_vectors(self):
-        self.log.info("Grepping for 'MutationResult' in java_sdk_loader.log")
-        out = subprocess.check_output(['wc', '-l', 'java_sdk_loader.log'], universal_newlines=True).strip().split()[0]
-        if eval(out) != 0:
-            out = subprocess.check_output(['grep', 'MutationResult', 'java_sdk_loader.log'],
-                                          universal_newlines=True).strip().split('\n')
-            return set(out)
-        else:
-            return set()
-
-    def _convert_mutation_vector_to_scan_vector(self, mvectors):
-        vectors = re.findall(r'.*?vbID=(.*?), vbUUID=(.*?), seqno=(.*?),', str(mvectors))
-        scan_vector = {}
-        for vector in vectors:
-            vector = list(vector)
-            scan_vector[str(vector[0])] = [int(vector[2]), str(vector[1])]
-        return scan_vector
 
     def test_request_plus_index_consistency(self):
         """
@@ -138,7 +116,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
 
         meta_id_result_before_new_inserts = self.run_cbq_query(query=select_meta_id_query,
                                                                query_context=named_collection_query_context)['results']
-        scan_vectors_before_mutations = self._get_mutation_vectors()
+        scan_vectors_before_mutations = self.get_mutation_vectors()
         new_insert_docs_num = 2
         gen_create = SDKDataLoader(num_ops=new_insert_docs_num, percent_create=100, json_template="Hotel",
                                    percent_update=0, percent_delete=0, scope=scope,
@@ -149,9 +127,9 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
             self.log.info(out)
 
         self.sleep(15, "Waiting some time before checking for mutation vectors")
-        scan_vectors_after_mutations = self._get_mutation_vectors()
+        scan_vectors_after_mutations = self.get_mutation_vectors()
         new_scan_vectors = scan_vectors_after_mutations - scan_vectors_before_mutations
-        scan_vector = self._convert_mutation_vector_to_scan_vector(new_scan_vectors)
+        scan_vector = self.convert_mutation_vector_to_scan_vector(new_scan_vectors)
 
         result = self.run_cbq_query(query=count_query)['results'][0]['$1']
         self.assertEqual(result, num_of_docs + new_insert_docs_num)
@@ -178,7 +156,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
             result2 = \
             self.run_cbq_query(query=f'Select * from {collection_namespace} where meta().id = "doc_1002"')['results'][
                 0][collection]
-            scan_vectors_before_mutations = self._get_mutation_vectors()
+            scan_vectors_before_mutations = self.get_mutation_vectors()
             gen_create = SDKDataLoader(num_ops=new_insert_docs_num, percent_create=0, json_template="Hotel",
                                        percent_update=100, percent_delete=0, scope=scope, fields_to_update=["price"],
                                        collection=collection, output=True, start_seq_num=num_of_docs + 1,
@@ -188,9 +166,9 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
                 out = task.result()
                 self.log.info(out)
             self.sleep(15, "Waiting some time before checking for mutation vectors")
-            scan_vectors_after_mutations = self._get_mutation_vectors()
+            scan_vectors_after_mutations = self.get_mutation_vectors()
             new_scan_vectors = scan_vectors_after_mutations - scan_vectors_before_mutations
-            scan_vector = self._convert_mutation_vector_to_scan_vector(new_scan_vectors)
+            scan_vector = self.convert_mutation_vector_to_scan_vector(new_scan_vectors)
 
             with ThreadPoolExecutor() as executor:
                 select_task = executor.submit(self.run_cbq_query, query=select_query, scan_consistency='at_plus',
@@ -231,7 +209,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
                 self.fail("Unexpected Mutation found for doc_1002")
 
             # Test with Delete mutation on named collection
-            scan_vectors_before_mutations = self._get_mutation_vectors()
+            scan_vectors_before_mutations = self.get_mutation_vectors()
             gen_create = SDKDataLoader(num_ops=new_insert_docs_num, percent_create=0, json_template="Hotel",
                                        percent_update=0, percent_delete=100, scope=scope,
                                        collection=collection, output=True, start_seq_num=num_of_docs + 1)
@@ -240,9 +218,9 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
                 out = task.result()
                 self.log.info(out)
             self.sleep(30, "Waiting some time before checking for mutation vectors")
-            scan_vectors_after_mutations = self._get_mutation_vectors()
+            scan_vectors_after_mutations = self.get_mutation_vectors()
             new_scan_vectors = scan_vectors_after_mutations - scan_vectors_before_mutations
-            scan_vector = self._convert_mutation_vector_to_scan_vector(new_scan_vectors)
+            scan_vector = self.convert_mutation_vector_to_scan_vector(new_scan_vectors)
 
             with ThreadPoolExecutor() as executor:
                 select_task = executor.submit(self.run_cbq_query, query=select_query, scan_consistency='at_plus',
@@ -265,7 +243,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
             select_meta_id_query = f'Select meta().id,* from {bucket} where meta().id like "doc_100%";'
             count_query = f'Select count(*) from {bucket} where price >= 0;'
             named_collection_query_context = f'default:'
-            scan_vectors_before_mutations = self._get_mutation_vectors()
+            scan_vectors_before_mutations = self.get_mutation_vectors()
             gen_create = SDKDataLoader(num_ops=10 ** 3, percent_create=100, json_template="Hotel",
                                        percent_update=0, percent_delete=0, scope='_default',
                                        collection='_default', output=True)
@@ -274,9 +252,9 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
                 out = task.result()
                 self.log.info(out)
 
-            scan_vectors_after_mutations = self._get_mutation_vectors()
+            scan_vectors_after_mutations = self.get_mutation_vectors()
             new_scan_vectors = scan_vectors_after_mutations - scan_vectors_before_mutations
-            scan_vector = self._convert_mutation_vector_to_scan_vector(new_scan_vectors)
+            scan_vector = self.convert_mutation_vector_to_scan_vector(new_scan_vectors)
 
             default_index_gen = QueryDefinition(index_name='default_idx', index_fields=['price', 'country', 'city'])
             default_meta_index_gen = QueryDefinition(index_name='default_meta_idx', index_fields=['meta().id'])
@@ -355,7 +333,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
                                                             query_context=named_collection_query_context1)['results']
         meta_id_result_before_inserts2 = self.run_cbq_query(query=select_meta_id_query,
                                                             query_context=named_collection_query_context2)['results']
-        scan_vectors_before_mutations = self._get_mutation_vectors()
+        scan_vectors_before_mutations = self.get_mutation_vectors()
         new_insert_docs_num = 2
         gen_create = SDKDataLoader(num_ops=new_insert_docs_num, percent_create=100, json_template="Hotel",
                                    percent_update=0, percent_delete=0, scope='test_scope_0',
@@ -365,19 +343,19 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
         out = task.result()
         self.log.info(out)
         self.sleep(15, "Waiting some time before checking for mutation vectors")
-        scan_vectors_after_mutations = self._get_mutation_vectors()
+        scan_vectors_after_mutations = self.get_mutation_vectors()
         new_scan_vectors = scan_vectors_after_mutations - scan_vectors_before_mutations
-        scan_vector = self._convert_mutation_vector_to_scan_vector(new_scan_vectors)
+        scan_vector = self.convert_mutation_vector_to_scan_vector(new_scan_vectors)
         scan_vectors[bucket_1] = scan_vector
 
-        scan_vectors_before_mutations = self._get_mutation_vectors()
+        scan_vectors_before_mutations = self.get_mutation_vectors()
         task = self.cluster.async_load_gen_docs(self.master, bucket_2, gen_create)
         out = task.result()
         self.log.info(out)
         self.sleep(15, "Waiting some time before checking for mutation vectors")
-        scan_vectors_after_mutations = self._get_mutation_vectors()
+        scan_vectors_after_mutations = self.get_mutation_vectors()
         new_scan_vectors = scan_vectors_after_mutations - scan_vectors_before_mutations
-        scan_vector = self._convert_mutation_vector_to_scan_vector(new_scan_vectors)
+        scan_vector = self.convert_mutation_vector_to_scan_vector(new_scan_vectors)
         scan_vectors[bucket_2] = scan_vector
 
         result = self.run_cbq_query(query=count_query1)['results'][0]['$1']
@@ -415,7 +393,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
 
     def test_at_plus_scans_with_catching_up_indexer(self):
         num_of_docs = self.num_of_docs_per_collection
-        scan_vectors_before_mutations = self._get_mutation_vectors()
+        scan_vectors_before_mutations = self.get_mutation_vectors()
         self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs, json_template="Hotel")
         collection_namespace = self.namespaces[0]
         _, keyspace = collection_namespace.split(':')
@@ -429,9 +407,9 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
         query = meta_index_gen.generate_index_create_query(namespace=collection_namespace, num_replica=1,
                                                            defer_build=True)
         self.run_cbq_query(query=query)
-        scan_vectors_after_mutations = self._get_mutation_vectors()
+        scan_vectors_after_mutations = self.get_mutation_vectors()
         new_scan_vectors = sorted(list(scan_vectors_after_mutations - scan_vectors_before_mutations))
-        scan_vector = self._convert_mutation_vector_to_scan_vector(new_scan_vectors)
+        scan_vector = self.convert_mutation_vector_to_scan_vector(new_scan_vectors)
 
         select_query = f'Select * from {collection_namespace} where price >= 0;'
         select_meta_id_query = f'Select meta().id,* from {collection} where meta().id like "doc_100%";'
@@ -497,7 +475,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
                 if index['status'] == 'Paused':
                     is_paused = True
 
-        scan_vectors_before_mutations = self._get_mutation_vectors()
+        scan_vectors_before_mutations = self.get_mutation_vectors()
         # Adding more data so that indexer has to catchup after increasing indexer quota
         for i in range(5):
             gen_create = SDKDataLoader(num_ops=new_inserts, percent_create=100, json_template="Hotel",
@@ -508,9 +486,9 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
             # Updating the doc counts
             num_of_docs = num_of_docs + new_inserts
 
-        scan_vectors_after_mutations = self._get_mutation_vectors()
+        scan_vectors_after_mutations = self.get_mutation_vectors()
         new_scan_vectors = sorted(list(scan_vectors_after_mutations - scan_vectors_before_mutations))
-        scan_vector = self._convert_mutation_vector_to_scan_vector(new_scan_vectors)
+        scan_vector = self.convert_mutation_vector_to_scan_vector(new_scan_vectors)
         self.rest.set_service_memoryQuota(service='indexMemoryQuota',
                                           memoryQuota=int(curr_index_quota/1024/1024) + 100)
         self.sleep(60)
