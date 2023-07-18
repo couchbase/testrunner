@@ -401,6 +401,7 @@ class unidirectional(XDCRNewBaseTest):
             self.load_with_ops()
             self.shell.execute_cbcollect_info(zip_file)
             if self.shell.extract_remote_info().type.lower() != "windows":
+                self.execute_command("apt-get install unzip")
                 command = "unzip %s" % (zip_file)
                 output, error = self.shell.execute_command(command)
                 self.shell.log_command_output(output, error)
