@@ -12,7 +12,7 @@
 		"metadata_bucket": "metadata",
 		"source_bucket": "src_bucket"
 	},
-	"version": "evt-6.6.0-7737-ee",
+	"version": "evt-6.6.0-7909-ee",
 	"appname": "cancel_timer",
 	"settings": {
 		"dcp_stream_boundary": "from_now",

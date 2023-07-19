@@ -22,7 +22,7 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
         super(FTSServerGroups, self).tearDown()
 
     def test_mixed_cluster(self):
-        self.initial_version = self._input.param('kv_build', '6.6.3-9700')
+        self.initial_version = self._input.param('kv_build', '6.6.3-9808')
 
         self.product = self._input.param('product', 'couchbase-server')
         self.initial_vbuckets = 1024

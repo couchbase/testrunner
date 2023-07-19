@@ -228,7 +228,7 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def tearDown(self):
         self.product = self.input.param('product', 'couchbase-server')
-        self.initial_version = self.input.param('initial_version', '6.6.2-9596')
+        self.initial_version = self.input.param('initial_version', '6.6.2-9600')
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
         self.upgrade_versions = self.input.param('upgrade_version', '7.0.0-5075')
         self.debug_logs = self.input.param("debug_logs", False)
