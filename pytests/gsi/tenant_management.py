@@ -32,7 +32,6 @@ class TenantManagement(BaseSecondaryIndexingTests):
         self.batch_size = self.input.param("batch_size", 1000)
         self.node_to_swap = self.input.param("node_to_swap", 1)
         self.recover_failed_over_node = self.input.param("recover_failed_over_node", False)
-        self.cancel_rebalance = self.input.param("cancel_rebalance", False)
         self.gsi_util_obj = GSIUtils(self.run_cbq_query)
         self.namespaces = []
         self._create_server_groups()

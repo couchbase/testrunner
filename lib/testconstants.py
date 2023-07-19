@@ -188,6 +188,32 @@ FILTER_TEST_FIELDS = ['logs_folder', 'conf_file', 'cluster_name',
                       'last_case_fail', 'teardown_run', 'is_container',
                       'total_testcases']
 
+# AWS compute combination
+CAPELLA_AWS_COMPUTES_ORDER = ['m5.xlarge', 'r5.xlarge', 'c5.2xlarge', 'm5.2xlarge', 'r5.2xlarge', 'c5.4xlarge',
+                              'm5.4xlarge', 'r5.4xlarge', 'm5.8xlarge', 'r5.8xlarge', 'c5.9xlarge', 'c5.12xlarge',
+                              'm5.12xlarge', 'r5.12xlarge', 'm5.16xlarge', 'r5.16xlarge', 'c5.18xlarge',
+                              'c5.24xlarge', 'm5.24xlarge', 'r5.24xlarge']
+CAPELLA_AWS_COMPUTES = {'m5.xlarge': {'cpu': 4, 'mem': 16},
+                        'r5.xlarge': {'cpu': 4, 'mem': 32},
+                        'c5.2xlarge': {'cpu': 8, 'mem': 16},
+                        'm5.2xlarge': {'cpu': 8, 'mem': 32},
+                        'r5.2xlarge': {'cpu': 8, 'mem': 64},
+                        'c5.4xlarge': {'cpu': 16, 'mem': 32},
+                        'm5.4xlarge': {'cpu': 16, 'mem': 64},
+                        'r5.4xlarge': {'cpu': 16, 'mem': 128},
+                        'm5.8xlarge': {'cpu': 32, 'mem': 128},
+                        'r5.8xlarge': {'cpu': 32, 'mem': 256},
+                        'c5.9xlarge': {'cpu': 36, 'mem': 72},
+                        'c5.12xlarge': {'cpu': 48, 'mem': 96},
+                        'm5.12xlarge': {'cpu': 48, 'mem': 192},
+                        'r5.12xlarge': {'cpu': 48, 'mem': 384},
+                        'm5.16xlarge': {'cpu': 64, 'mem': 256},
+                        'r5.16xlarge': {'cpu': 64, 'mem': 512},
+                        'c5.18xlarge': {'cpu': 72, 'mem': 144},
+                        'c5.24xlarge': {'cpu': 96, 'mem': 192},
+                        'm5.24xlarge': {'cpu': 96, 'mem': 384},
+                        'r5.24xlarge': {'cpu': 96, 'mem': 768}}
+
 
 # ELIXIR Tenant Management Constants
 INDEX_MAX_CAP_PER_TENANT = 200

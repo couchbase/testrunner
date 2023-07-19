@@ -1,11 +1,14 @@
 import uuid
-from TestInput import TestInputServer
+from TestInput import TestInputServer, TestInputSingleton
 from capellaAPI.capella.dedicated.CapellaAPI import CapellaAPI as CapellaAPIDedicated
 from capellaAPI.capella.serverless.CapellaAPI import CapellaAPI as CapellaAPIServerless
 import time
 import base64
 import random
 import urllib3
+from requests.auth import HTTPBasicAuth
+from testconstants import CAPELLA_AWS_COMPUTES_ORDER
+
 urllib3.disable_warnings()
 import logger
 import requests, base64
@@ -119,7 +122,7 @@ class CapellaAPI:
         self.tenant_id = credentials.tenant_id
         self.project_id = credentials.project_id
         self.dataplane_id = credentials.dataplane_id
-        self.api = CapellaAPIDedicated(credentials.pod, credentials.secret_key, credentials.access_key, credentials.capella_user, credentials.capella_pwd)
+        self.api = CapellaAPIDedicated(credentials.pod, credentials.secret_key, credentials.access_key, credentials.capella_user, credentials.capella_pwd, credentials.token_for_internal_support)
         self.serverless_api = CapellaAPIServerless(credentials.pod, credentials.capella_user, credentials.capella_pwd, credentials.token_for_internal_support)
         self.log = logger.Logger.get_logger()
 
@@ -191,6 +194,27 @@ class CapellaAPI:
         resp = resp.json()
         return [server["data"] for server in resp["data"]]
 
+    # use this method only with cloud admin credentials
+    def set_capella_index_settings(self, node, setting, username, password):
+        url = f"https://{node}:19102/settings"
+        auth = HTTPBasicAuth(username, password)
+        payload = json.dumps(setting)
+        headers = {'Content-Type': 'application/json'}
+        response = requests.request("POST", url, headers=headers, data=payload, auth=auth, verify=False)
+        response.raise_for_status()
+        out = response.text
+        return out
+
+    # use this method only with cloud admin credentials
+    def set_capella_index_internal_settings(self, node, setting, username, password):
+        url = f"https://{node}:19102/internal/settings"
+        auth = HTTPBasicAuth(username, password)
+        payload = json.dumps(setting)
+        headers = {'Content-Type': 'application/json'}
+        response = requests.request("POST", url, headers=headers, data=payload, auth=auth)
+        response.raise_for_status()
+        return response.json()
+
     def delete_cluster(self, cluster_id):
         resp = self.api.delete_cluster(cluster_id)
         resp.raise_for_status()
@@ -207,6 +231,12 @@ class CapellaAPI:
         resp = resp.json()
         return [job["data"] for job in resp["data"]]
 
+    def deployment_jobs(self, cluster_id):
+        resp = self.api.deployement_jobs(cluster_id)
+        resp.raise_for_status()
+        resp = resp.json()
+        return resp
+
     def wait_for_cluster_step(self, cluster_id, msg=""):
         jobs = self.jobs(cluster_id)
         state = self.get_cluster_state(cluster_id)
@@ -219,14 +249,14 @@ class CapellaAPI:
         else:
             return True
 
-    def wait_for_cluster(self, cluster_id, msg="", timeout=1800):
+    def wait_for_cluster(self, cluster_id, msg="", timeout=1800, sleep_timer=2):
         end_time = time.time() + timeout
         while time.time() < end_time:
             complete = self.wait_for_cluster_step(cluster_id, msg)
             if complete:
                 return
             else:
-                time.sleep(2)
+                time.sleep(sleep_timer)
         raise Exception("Timeout waiting for cluster to be healthy")
 
     def get_nodes_formatted(self, cluster_id, username=None, password=None):
@@ -269,8 +299,104 @@ class CapellaAPI:
         resp.raise_for_status()
 
     def update_specs(self, cluster_id, specs):
+        self.log.info(f"Updating cluster specs to: {specs}")
         resp = self.api.update_specs(self.tenant_id, self.project_id, cluster_id, specs)
         resp.raise_for_status()
+
+    def get_cluster_specs(self, cluster_id):
+        resp = self.api.get_cluster_specs(self.tenant_id, self.project_id, cluster_id)
+        resp.raise_for_status()
+        resp = resp.json()
+        specs = resp['data']['specs']
+        new_specs = []
+        for spec in specs:
+            new_spec = {'count': spec['count'], 'compute': {'type': spec['compute']},
+                        'services': [], 'disk': spec['disk'], 'diskAutoScaling': spec['diskAutoScaling']}
+            del new_spec['disk']['modificationLimited']
+            del new_spec['disk']['options']
+            for service in sorted(spec['services']):
+                new_spec['services'].append({'type': service})
+            new_specs.append(new_spec)
+        return new_specs
+
+    def generate_nodes_spec(self, services, count, compute=None, disk_type=None, disk_size=None, disk_iops=None):
+        test_input = TestInputSingleton.input
+        _, _, d_compute, d_disk_type, d_disk_iops, d_disk_size, _ = spec_options_from_input(test_input)
+        if compute is None:
+            compute = d_compute
+        if disk_type is None:
+            disk_type = d_disk_type
+        if disk_size is None:
+            disk_size = d_disk_size
+        if disk_iops is None:
+            disk_iops = d_disk_iops
+        spec = {'count': count, 'compute': {'type': compute}, 'services': [], "diskAutoScaling": {"enabled": True},
+                'disk': {'iops': disk_iops, 'sizeInGb': disk_size, 'type': disk_type}}
+        for service in services:
+            spec['services'].append({'type': service})
+        return spec
+
+    def add_nodes_to_capella_cluster(self, services, cluster_id, nodes_count=1, wait_for_healthy_cluster=False):
+        self.log.info(f"Adding new nodes for {services}")
+        cluster_specs = self.get_cluster_specs(cluster_id)
+        for spec in cluster_specs:
+            nodes_services = [service['type'] for service in spec['services']]
+            if nodes_services == sorted(services):
+                spec['count'] += nodes_count
+                break
+        else:
+            new_node_spec = self.generate_nodes_spec(services=services, count=nodes_count)
+            cluster_specs.append(new_node_spec)
+        new_specs = {'specs': cluster_specs}
+        self.update_specs(cluster_id=cluster_id, specs=new_specs)
+        if wait_for_healthy_cluster:
+            time.sleep(5)
+            self.wait_for_cluster(cluster_id=cluster_id)
+
+    def remove_nodes_from_capella_cluster(self, services, cluster_id, nodes_count=1, wait_for_healthy_cluster=False):
+        self.log.info(f"Removing capella Nodes for {services}")
+        cluster_specs = self.get_cluster_specs(cluster_id)
+        for spec in cluster_specs:
+            nodes_services = [service['type'] for service in spec['services']]
+            if nodes_services == sorted(services):
+                spec['count'] -= nodes_count
+                break
+        else:
+            raise Exception("No node with the given services in the cluster to scale down")
+        new_specs = {'specs': cluster_specs}
+        self.update_specs(cluster_id=cluster_id, specs=new_specs)
+        if wait_for_healthy_cluster:
+            time.sleep(5)
+            self.wait_for_cluster(cluster_id=cluster_id)
+
+    def scale_up_capella_nodes(self, services, cluster_id, compute=None, disk_size=None,
+                               disk_iops=None, disk_type=None, next_scale=True, wait_for_healthy_cluster=False):
+        self.log.info(f"Scaling Up capella Nodes for {services}")
+        cluster_specs = self.get_cluster_specs(cluster_id)
+        if compute:
+            next_scale = False
+        for spec in cluster_specs:
+            nodes_services = [service['type'] for service in spec['services']]
+            if nodes_services == sorted(services):
+                if next_scale:
+                    compute_idx = CAPELLA_AWS_COMPUTES_ORDER.index(spec['compute']['type']) + 1
+                    compute = CAPELLA_AWS_COMPUTES_ORDER[compute_idx]
+                if compute:
+                    spec['compute']['type'] = compute
+                if disk_size:
+                    spec['disk'] = {'sizeInGb': disk_size}
+                if disk_type:
+                    spec['disk'] = {'type': disk_type}
+                if disk_iops:
+                    spec['disk'] = {'iops': disk_iops}
+                break
+        else:
+            raise Exception("No node with the given services in the cluster to scale up")
+        scale_up_specs = {'specs': cluster_specs}
+        self.update_specs(cluster_id=cluster_id, specs=scale_up_specs)
+        if wait_for_healthy_cluster:
+            time.sleep(5)
+            self.wait_for_cluster(cluster_id=cluster_id)
 
     def create_serverless_database(self, config) -> str:
         if 'overRide' in config:

@@ -17,12 +17,13 @@ class BaseTestCase(OnPremBaseTestCase):
             self.input = TestInputSingleton.input
             self.parse_params()
             self.nodes_init = self.input.param("nodes_init", 3)
+            cluster_id = self.input.param('cluster_id', None)
             self.force_deploy_cluster = self.input.param("force_deploy_cluster", False)
 
             self.log = logger.Logger.get_logger()
             if self.log_level:
                 self.log.setLevel(level=self.log_level)
-        
+
             self.use_https = True
             CbServer.use_https = True
             if not hasattr(self, 'cluster'):
@@ -39,10 +40,13 @@ class BaseTestCase(OnPremBaseTestCase):
             capella_credentials = CapellaCredentials(self.input.capella)
             CbServer.capella_credentials = capella_credentials
             self.capella_api = CapellaAPI(capella_credentials)
-
+            if cluster_id:
+                CbServer.capella_cluster_id = cluster_id
+                self.log.info(f"Cluster Id is provided. Hence using already proisioned cluster with id {cluster_id}")
             if CbServer.capella_cluster_id is None or self.force_deploy_cluster:
                 cluster_details = self.create_capella_config()
                 cluster_id = self.capella_api.create_cluster_and_wait(cluster_details)
+                self.cluster_specs = cluster_details
                 CbServer.capella_cluster_id = cluster_id
                 self.capella_api.create_db_user(cluster_id, self.input.membase_settings.rest_username, self.input.membase_settings.rest_password)
                 self.cluster_id = CbServer.capella_cluster_id
@@ -70,6 +74,7 @@ class BaseTestCase(OnPremBaseTestCase):
                 self._bucket_creation()
             else:
                 self.cluster_id = CbServer.capella_cluster_id
+                self.cluster_specs = self.capella_api.get_cluster_specs(self.cluster_id)
                 servers = self.capella_api.get_nodes_formatted(self.cluster_id, self.input.membase_settings.rest_username, self.input.membase_settings.rest_password)
                 self.cluster_config = ClusterConfig(self.input.membase_settings.rest_username, self.input.membase_settings.rest_password, self.create_input_servers())
                 self.cluster_config.update_servers(servers)
@@ -83,6 +88,8 @@ class BaseTestCase(OnPremBaseTestCase):
 
     def tearDown(self):
         # cluster was created during setup so destroy it
+        if self.input.param("skip_cluster_teardown", False):
+            return
         if hasattr(self, 'cluster_id'):
             CbServer.capella_cluster_id = None
             self.capella_api.delete_cluster(self.cluster_id)

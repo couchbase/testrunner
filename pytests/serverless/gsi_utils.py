@@ -1,5 +1,5 @@
 """
-gsi_utils.py: "This file contains methods for gsi index creation, drop, build and other utils
+gsi_utils.py: This file contains methods for gsi index creation, drop, build and other utils
 
 __author__ = "Hemant Rajput"
 __maintainer = "Hemant Rajput"
@@ -11,7 +11,10 @@ __created_on__ = 04/10/22 11:53 am
 import datetime
 import random
 import string
+import time
 import uuid
+from threading import Event
+
 import logger
 from functools import reduce
 from concurrent.futures import ThreadPoolExecutor
@@ -28,6 +31,7 @@ class GSIUtils(object):
         self.definition_list = []
         self.run_query = query_obj
         self.batch_size = 0
+        self.query_event = Event()
 
     def generate_magma_doc_loader_index_definition(self, index_name_prefix=None, skip_primary=False):
         definitions_list = []
@@ -149,7 +153,7 @@ class GSIUtils(object):
         # Single field GSI Query
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'price', index_fields=['price'],
-                            query_template=RANGE_SCAN_TEMPLATE.format("*", "age > 0")))
+                            query_template=RANGE_SCAN_TEMPLATE.format("*", "price > 0")))
 
         # Primary Query
         if not skip_primary:
@@ -351,25 +355,41 @@ class GSIUtils(object):
             except Exception as err:
                 print(err)
 
-    def aysnc_run_select_queries(self, select_queries, database=None, capella_run=False, query_node=False):
+
+    def aysnc_run_select_queries(self, select_queries, database=None, capella_run=False, query_node=False,
+                                 scan_consistency=None):
         with ThreadPoolExecutor() as executor:
             tasks = []
             for query in select_queries:
                 if capella_run:
-                    task = executor.submit(self.run_query, database=database, query=query)
+                    task = executor.submit(self.run_query, database=database, query=query,
+                                           scan_consistency=scan_consistency)
                 else:
-                    task = executor.submit(self.run_query, query=query, server=query_node)
+                    task = executor.submit(self.run_query, query=query, server=query_node,
+                                           scan_consistency=scan_consistency)
                 tasks.append(task)
         return tasks
+
+    def run_continous_query_load(self, select_queries, database=None, capella_run=False,
+                                 query_node=False, sleep_timer=30):
+        while self.query_event.is_set():
+            try:
+                tasks = self.aysnc_run_select_queries(select_queries=select_queries, database=database,
+                                                      capella_run=capella_run, query_node=query_node)
+                for task in tasks:
+                    task.result()
+            except Exception as err:
+                self.log.error(f"Error occurred during query load: {err}")
+            time.sleep(sleep_timer)
 
     def range_unequal_distribution(self, number=4, factor=1.2, total=100000):
         """
         This method divides a range into unequal parts of given number
         """
-        x = total * (1 - 1 / factor) / (factor ** number - 1)
+        z = total * (1 - 1 / factor) / (factor ** number - 1)
         distribution_list = []
         for i in range(number):
-            part = round(x * factor ** i)
+            part = round(z * factor ** i)
             distribution_list.append(part)
         distribution_list[number - 1] = total - reduce(lambda x, y: x + y, distribution_list[:number - 1])
         return distribution_list
@@ -395,8 +415,7 @@ class GSIUtils(object):
         for item in range(num_of_batches):
             for namespace in namespaces:
                 counter = batch_offset + item
-                prefix = f'idx_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}' \
-                         f'_batch_{counter}_'
+                prefix = f'idx_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}_batch_{counter}_'
                 self.definition_list = self.get_index_definition_list(dataset=dataset, prefix=prefix)
                 create_list = self.get_create_index_list(definition_list=self.definition_list, namespace=namespace,
                                                          defer_build_mix=defer_build_mix)
@@ -451,3 +470,7 @@ class GSIUtils(object):
         else:
             raise Exception("Provide correct dataset. Valid values are Person, Employee, Magma, and Hotel")
         return definition_list
+
+    def get_indexes_name(self, query_definitions):
+        indexes_name = [q_d.index_name for q_d in query_definitions]
+        return indexes_name

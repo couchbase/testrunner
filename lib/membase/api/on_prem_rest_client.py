@@ -2502,6 +2502,13 @@ class RestConnection(object):
             parsed = json_parsed
         return parsed
 
+    def get_orchestrator(self, timeout=30):
+        api = self.baseUrl + 'pools/default/terseClusterInfo'
+        status, content, header = self._http_request(api, timeout=timeout)
+        json_parsed = json.loads(content)
+        orchestrator = json_parsed['orchestrator'].split('@')[-1]
+        return orchestrator
+
     def get_cluster_stats(self):
         """
         Reads cluster nodes statistics using `pools/default` rest GET method
