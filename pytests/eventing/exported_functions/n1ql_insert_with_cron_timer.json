@@ -8,7 +8,7 @@
 		"metadata_bucket": "metadata",
 		"source_bucket": "src_bucket"
 	},
-	"version": "evt-6.0.0-1529-ee",
+	"version": "evt-6.0.0-1693-ee",
 	"handleruuid": 3733102106,
 	"id": 0,
 	"appname": "test_import_function",

@@ -64,7 +64,7 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
         log.info("==============  Multiple CA Upgrade setup has started ==============")
         super(MultipleCAUpgrade, self).setUp()
 
-        self.initial_version = self.input.param("initial_version", '6.6.3-9799')
+        self.initial_version = self.input.param("initial_version", '6.6.3-9808')
         self.upgrade_version = self.input.param("upgrade_version", "7.1.0-1745")
         self.enc_key_mixed_mode = self.input.param("enc_key_mixed_mode", False)
         self.skip_rbac_internal_users_setup = self.input.param("skip_rbac_internal_users_setup",

@@ -80,7 +80,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         if not hasattr(self, 'rest'):
             self.rest = RestConnection(self.master)
         self.upgrade_servers = self.servers
-        if hasattr(self, 'upgrade_versions') and self.initial_version is '6.5.1-6296':
+        if hasattr(self, 'upgrade_versions') and self.initial_version is '6.5.1-6299':
             self.log.info("checking upgrade version")
             upgrade_major = self.upgrade_versions[0][0]
             self.log.info("upgrade major version: " + str(upgrade_major))
