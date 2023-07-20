@@ -507,6 +507,9 @@ def create_specs(provider, services_count, compute, disk_type, disk_iops, disk_s
     for service_group, count in services_count.items():
         spec = {
             "count": count,
+            "diskAutoScaling": {
+                "enabled": True
+            },
             "compute": {
                 "type": compute,
                 "cpu": 0,
