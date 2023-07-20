@@ -909,7 +909,7 @@ class BuildQuery(object):
                 elif "debian gnu/linux 9" in distribution_version:
                     build.distribution_version = "debian9"
                     os_name = "debian9"
-                elif "debian gnu/linux 10" in distribution_version:
+                elif "debian 10" in distribution_version:
                     build.distribution_version = "debian10"
                     os_name = "debian10"
                 elif "windows" in distribution_version:
