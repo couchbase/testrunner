@@ -128,9 +128,11 @@ AWS_AMI_MAP = {
             "x86_64": "ami-037d1d9dfa436c7c6"
         },
         "ubuntu20": {
+            "x86_64" : "ami-09168ff916a2e8ed3",
             "aarch64": "ami-0d70a59d7191a8079"
         },
         "ubuntu22": {
+            "x86_64" : "ami-09c0393bac9d9b6ed",
             "aarch64": "ami-05b98dc6de6e09e97"
         },
         "oel8" : {
@@ -138,6 +140,12 @@ AWS_AMI_MAP = {
         },
         "rhel8" : {
             "x86_64" : "ami-07f5ef252bd61130b"
+        },
+        "suse15" : {
+            "x86_64" : "ami-059c3ca86322facbe"
+        },
+        "suse12":{
+            "x86_64" : "ami-023f4e041769c362b"
         }
     },
     "elastic-fts": "ami-0c48f8b3129e57beb",
@@ -151,7 +159,9 @@ AWS_OS_USERNAME_MAP = {
     "al2023": "ec2-user",
     "ubuntu22": "ubuntu",
     "oel8": "ec2-user",
-    "rhel8": "ec2-user"
+    "rhel8": "ec2-user",
+    "suse15": "ec2-user",
+    "suse12": "ec2-user"
 }
 
 def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
@@ -210,7 +220,8 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
     print("EC2 Instances : ", ips)
     for ip in ips:
         post_provisioner(ip, ssh_username, ssh_key_path)
-        install_iptables(ip)
+        if "suse" not in os:
+            install_iptables(ip)
 
     return ips
 
