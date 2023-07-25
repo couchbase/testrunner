@@ -467,6 +467,27 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                           to_remove=[], services=services)
             self.validate_smart_batching_during_rebalance(rebalance_task)
 
+    def scans_post_upgrade_new(self, select_queries):
+        for namespace in self.namespaces:
+            prefix = f'idx_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}' \
+                     f'_batch_1_'
+            definition_list = self.gsi_util_obj.get_index_definition_list(dataset='Person', prefix=prefix)
+            create_list_post_upgrade = self.gsi_util_obj.get_create_index_list(definition_list=definition_list,
+                                                                               namespace=namespace,
+                                                                               defer_build_mix=False)
+            select_queries_post_upgrade = self.gsi_util_obj.get_select_queries(definition_list=definition_list,
+                                                                               namespace=namespace,
+                                                                               limit=100)
+            self.log.info(f"Create index list: {create_list_post_upgrade}")
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list_post_upgrade,
+                                                 query_node=self.query_node)
+        for query in select_queries:
+            self.run_cbq_query(query=query)
+            self.sleep(1)
+        for query in select_queries_post_upgrade:
+            self.run_cbq_query(query=query)
+            self.sleep(1)
+
     def test_online_upgrade(self):
         if self.upgrade_to >= "7.2.1":
             redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
@@ -1043,6 +1064,13 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             log.info(cb_version == self.upgrade_to[:5])
             self.assertEqual(cb_version, self.upgrade_to[:5],
                              'Index master node is updated to latest version as expected')
+            self.scans_post_upgrade_new(select_queries=select_queries)
+
+
+
+
+
+
 
     def test_master_node_upgrade_rebalance_in(self):
         if self.redistribute_nodes:
@@ -1119,6 +1147,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                      services=services_in)
             rebalance.result()
             self.run_continous_query = False
+            self.scans_post_upgrade_new(select_queries=select_queries)
+
 
     def kv_mutations(self, docs=None):
         if not docs:
