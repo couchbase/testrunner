@@ -2,6 +2,7 @@ from membase.api.rest_client import RestConnection
 import json
 from security.rbacRoles import rbacRoles
 import logger
+
 log = logger.Logger.get_logger()
 import base64
 from security.rbacPermissionList import rbacPermissionList
@@ -10,22 +11,23 @@ import subprocess
 import urllib.request, urllib.parse, urllib.error
 import time
 
+
 class rbacmain:
-    AUDIT_ROLE_ASSIGN=8232
-    AUDIT_ROLE_UPDATE=8232
-    AUDIT_REMOVE_ROLE=8194
+    AUDIT_ROLE_ASSIGN = 8232
+    AUDIT_ROLE_UPDATE = 8232
+    AUDIT_REMOVE_ROLE = 8194
     PATH_SASLAUTHD = '/etc/sysconfig/'
     FILE_SASLAUTHD = 'saslauthd'
     PATH_SASLAUTHD_LOCAL = '/tmp/'
     FILE_SASLAUTHD_LOCAL = 'saslauth'
 
     def __init__(self,
-                master_ip=None,
-                auth_type=None,
-                bucket_name=None,
-                servers=None,
-                cluster=None
-            ):
+                 master_ip=None,
+                 auth_type=None,
+                 bucket_name=None,
+                 servers=None,
+                 cluster=None
+                 ):
 
         self.master_ip = master_ip
         self.bucket_name = bucket_name
@@ -42,14 +44,13 @@ class rbacmain:
     def tearDown(self):
         super(rbacmain, self).tearDown()
 
-
-    def _retrive_all_user_role(self, user_list=None ):
+    def _retrive_all_user_role(self, user_list=None):
         server = self.master_ip
         rest = RestConnection(server)
         url = "/settings/rbac/roles"
         api = rest.baseUrl + url
         status, content, header = rest._http_request(api, 'GET')
-        #log.info(" Retrieve all User roles - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
+        # log.info(" Retrieve all User roles - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
         return status, content, header
 
     def _retrieve_user_roles(self):
@@ -57,7 +58,7 @@ class rbacmain:
         url = "/settings/rbac/users"
         api = rest.baseUrl + url
         status, content, header = rest._http_request(api, 'GET')
-        #log.info(" Retrieve User Roles - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
+        # log.info(" Retrieve User Roles - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
         return status, content, header
 
     def _retrieve_user_details(self, user):
@@ -80,7 +81,9 @@ class rbacmain:
             url = "settings/rbac/users/local/" + user_name
         api = rest.baseUrl + url
         status, content, header = rest._http_request(api, 'PUT', params=payload)
-        log.info(" Set User Roles - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
+        log.info(" Set User Roles - Status - {0} -- Content - {1} -- Header - {2}".format(status,
+                                                                                          content,
+                                                                                          header))
         return status, content, header
 
     def _delete_user(self, user_name):
@@ -91,7 +94,9 @@ class rbacmain:
             url = "settings/rbac/users/local/" + user_name
         api = rest.baseUrl + url
         status, content, header = rest._http_request(api, 'DELETE')
-        log.info (" Deleting User - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
+        log.info(
+            " Deleting User - Status - {0} -- Content - {1} -- Header - {2}".format(status, content,
+                                                                                    header))
         return status, content, header
 
     def _check_user_permission(self, username, password, permission_set):
@@ -100,9 +105,9 @@ class rbacmain:
         param = permission_set
         api = rest.baseUrl + url
         authorization = base64.encodebytes(('%s:%s' % (username, password)).encode()).decode()
-        header =  {'Content-Type': 'application/x-www-form-urlencoded',
-                'Authorization': 'Basic %s' % authorization,
-                'Accept': '*/*'}
+        header = {'Content-Type': 'application/x-www-form-urlencoded',
+                  'Authorization': 'Basic %s' % authorization,
+                  'Accept': '*/*'}
         time.sleep(10)
         status, content, header = rest._http_request(api, 'POST', params=param, headers=header)
         return status, content, header
@@ -127,22 +132,35 @@ class rbacmain:
             elif self.auth_type == "builtin":
                 response = rest.delete_builtin_user(temp['id'])
 
-
-    def _check_role_permission_validate_multiple(self,user_id,user_role,bucket_name,final_user_role,no_bucket_access=None,no_access_bucket_name=None):
+    def _check_role_permission_validate_multiple(self, user_id, user_role, bucket_name,
+                                                 final_user_role, no_bucket_access=None,
+                                                 no_access_bucket_name=None):
         failure_list = []
         result = True
         user_details = user_id.split(":")
+        param = {
+            'hosts': '{0}'.format("172.23.120.205"),
+            'port': '{0}'.format("389"),
+            'encryption': '{0}'.format("None"),
+            'bindDN': '{0}'.format("cn=Manager,dc=couchbase,dc=com"),
+            'bindPass': '{0}'.format("p@ssword"),
+            'authenticationEnabled': '{0}'.format("true"),
+            'userDNMapping': '{0}'.format('{"template":"cn=%u,ou=Users,dc=couchbase,dc=com"}')
+        }
+        rest = RestConnection(self.master_ip)
+        rest.setup_ldap(param, '')
         final_roles = self._return_roles(user_role)
         payload = "name=" + user_details[0] + "&roles=" + final_roles
-        rbacmain(self.master_ip, self.auth_type)._set_user_roles(user_name=user_details[0], payload=payload)
+        rbacmain(self.master_ip, self.auth_type)._set_user_roles(user_name=user_details[0],
+                                                                 payload=payload)
 
-        master, expected, expected_neg = rbacRoles()._return_permission_set(final_user_role)        
+        master, expected, expected_neg = rbacRoles()._return_permission_set(final_user_role)
 
         if no_bucket_access:
-            temp_dict =  expected_neg['permissionSet']
+            temp_dict = expected_neg['permissionSet']
             bucket_name = no_access_bucket_name
         else:
-            temp_dict =  expected['permissionSet']
+            temp_dict = expected['permissionSet']
 
         for permission in list(temp_dict.keys()):
             if "[<bucket_name>]" in permission:
@@ -154,12 +172,20 @@ class rbacmain:
                 permission = permission.replace("<bucket_name>", bucket_name)
                 permission_set[idx] = permission
         permission_str = ','.join(permission_set)
-        status, content, header = rbacmain(self.master_ip)._check_user_permission(user_details[0], user_details[1], permission_str)
-        content = json.loads(content)   
-        log.info ("Value of content is {0}".format(content))
+        status, content, header = rbacmain(self.master_ip)._check_user_permission(user_details[0],
+                                                                                  user_details[1],
+                                                                                  permission_str)
+        log.info(content)
+        content = json.loads(content)
+        log.info("Value of content is {0}".format(content))
         for item in temp_dict.keys():
             if temp_dict[item] != content[item]:
-                log.info ("Item is {0} -- Expected Value is - {1} and Actual Value is {2}".format(item, temp_dict[item], content[item]))
+                log.info(
+                    "Item is {0} -- Expected Value is - {1} and Actual Value is {2}".format(item,
+                                                                                            temp_dict[
+                                                                                                item],
+                                                                                            content[
+                                                                                                item]))
                 result = False
         return result
 
@@ -182,14 +208,14 @@ class rbacmain:
         role_return = self._convert_user_roles_format(roles)
         result = False
         for user in response:
-            if  user['id'] == user_id:
+            if user['id'] == user_id:
                 if [item for item in user['roles'] if item in role_return]:
                     result = True
                 try:
                     if user['name'] == user_name:
                         result = True
                 except:
-                    log.info ("This might be an upgrade, There is not username is response")
+                    log.info("This might be an upgrade, There is not username is response")
                 return result
 
     def _convert_user_roles_format(self, roles):
@@ -197,58 +223,59 @@ class rbacmain:
         temp_roles = roles.split(":")
         for temp in temp_roles:
             if temp in self.roles_admin:
-                role_return.append({'role':temp})
+                role_return.append({'role': temp})
             else:
                 temp1 = temp.split('[')
-                role_return.append({'role':temp1[0],'bucket_name':(temp1[1])[:-1]})
+                role_return.append({'role': temp1[0], 'bucket_name': (temp1[1])[:-1]})
         return role_return
 
     def returnUserList(self, Admin):
         Admin = (items.split(':') for items in Admin.split("?"))
         return list(Admin)
 
-
     def get_role_permission(self, permission_set):
         permission_fun_map = {
-        'cluster.admin.diag!read':"cluster_admin_diag_read",
-        'cluster.admin.diag!write':'cluster_admin_diag_write',
-        'cluster.admin.setup!write':'cluster_admin_setup_write',
-        'cluster.admin.security!read':'cluster_admin_security_read',
-        'cluster.admin.security!write':'cluster_admin_security_write',
-        'cluster.admin.logs!read':'cluster_logs_read',
-        'cluster.pools!read':"cluster_pools_read",
-        'cluster.pools!write':'get_cluster_pools_write',
-        'cluster.nodes!read':'cluster_nodes_read',
-        'cluster.nodes!write':'cluster_nodes_write',
-            'cluster.samples!read':'cluster_samples_read',
-            'cluster.settings!read':'cluster_settings_read',
-            'cluster.settings!write':'get_cluster_settings_write',
-            'cluster.tasks!read':'get_cluster_tasks_read',
-            'cluster.stats!read':'cluster_stats_read',
-            'cluster.server_groups!read':'cluster_server_groups_read',
-            'cluster.server_groups!write':'cluster_server_groups_write',
-            'cluster.indexes!read':'cluster_indexes_read',
-            'cluster.indexes!write':'cluster_indexes_write',
-            'cluster.xdcr.settings!read':'cluster_xdcr_settings_read',
-            'cluster.xdcr.settings!write':'cluster_xdcr_settings_write',
-            'cluster.xdcr.remote_clusters!read':'cluster_xdcr_remote_clusters_read',
-            'cluster.xdcr.remote_clusters!write':'cluster_xdcr_remote_clusters_write',
-            'cluster.bucket[<bucket_name>]!create':'cluster_bucket_all_create',
-            'cluster.bucket[<bucket_name>]!delete':'cluster_bucket_delete',
-            'cluster.bucket[<bucket_name>]!compact':'cluster_bucket_compact',
-            'cluster.bucket[<bucket_name>].settings!read':'cluster_bucket_settings_read',
-            'cluster.bucket[<bucket_name>].settings!write':'cluster_bucket_settings_write',
-            'cluster.bucket[<bucket_name>].password!read':'cluster_bucket_password_read', #Need to fix this"
-            'cluster.bucket[<bucket_name>].data!read':'cluster_bucket_data_read', #Need to fix this"
-            'cluster.bucket[<bucket_name>].data!write':'cluster_bucket_data_write',
-            'cluster.bucket[<bucket_name>].recovery!read':'cluster_bucket_recovery_read',
-            'cluster.bucket[<bucket_name>].recovery!write':'cluster_bucket_recovery_write',
-            'cluster.bucket[<bucket_name>].views!read':'cluster_bucket_views_read',
-            'cluster.bucket[<bucket_name>].views!write':'cluster_bucket_views_write',
-            'cluster.bucket[<bucket_name>].xdcr!read':'cluster_bucket_xdcr_read',
-            'cluster.bucket[<bucket_name>].xdcr!write':'cluster_bucket_xdcr_write',
-            'cluster.bucket[<bucket_name>].xdcr!execute':'cluster_bucket_xdcr_execute',
-            'cluster.admin.internal!all':'cluster_admin_internal_all'
+            'cluster.admin.diag!read': "cluster_admin_diag_read",
+            'cluster.admin.diag!write': 'cluster_admin_diag_write',
+            'cluster.admin.setup!write': 'cluster_admin_setup_write',
+            'cluster.admin.security!read': 'cluster_admin_security_read',
+            'cluster.admin.security!write': 'cluster_admin_security_write',
+            'cluster.admin.logs!read': 'cluster_logs_read',
+            'cluster.pools!read': "cluster_pools_read",
+            'cluster.pools!write': 'get_cluster_pools_write',
+            'cluster.nodes!read': 'cluster_nodes_read',
+            'cluster.nodes!write': 'cluster_nodes_write',
+            'cluster.samples!read': 'cluster_samples_read',
+            'cluster.settings!read': 'cluster_settings_read',
+            'cluster.settings!write': 'get_cluster_settings_write',
+            'cluster.tasks!read': 'get_cluster_tasks_read',
+            'cluster.stats!read': 'cluster_stats_read',
+            'cluster.server_groups!read': 'cluster_server_groups_read',
+            'cluster.server_groups!write': 'cluster_server_groups_write',
+            'cluster.indexes!read': 'cluster_indexes_read',
+            'cluster.indexes!write': 'cluster_indexes_write',
+            'cluster.xdcr.settings!read': 'cluster_xdcr_settings_read',
+            'cluster.xdcr.settings!write': 'cluster_xdcr_settings_write',
+            'cluster.xdcr.remote_clusters!read': 'cluster_xdcr_remote_clusters_read',
+            'cluster.xdcr.remote_clusters!write': 'cluster_xdcr_remote_clusters_write',
+            'cluster.bucket[<bucket_name>]!create': 'cluster_bucket_all_create',
+            'cluster.bucket[<bucket_name>]!delete': 'cluster_bucket_delete',
+            'cluster.bucket[<bucket_name>]!compact': 'cluster_bucket_compact',
+            'cluster.bucket[<bucket_name>].settings!read': 'cluster_bucket_settings_read',
+            'cluster.bucket[<bucket_name>].settings!write': 'cluster_bucket_settings_write',
+            'cluster.bucket[<bucket_name>].password!read': 'cluster_bucket_password_read',
+            # Need to fix this"
+            'cluster.bucket[<bucket_name>].data!read': 'cluster_bucket_data_read',
+            # Need to fix this"
+            'cluster.bucket[<bucket_name>].data!write': 'cluster_bucket_data_write',
+            'cluster.bucket[<bucket_name>].recovery!read': 'cluster_bucket_recovery_read',
+            'cluster.bucket[<bucket_name>].recovery!write': 'cluster_bucket_recovery_write',
+            'cluster.bucket[<bucket_name>].views!read': 'cluster_bucket_views_read',
+            'cluster.bucket[<bucket_name>].views!write': 'cluster_bucket_views_write',
+            'cluster.bucket[<bucket_name>].xdcr!read': 'cluster_bucket_xdcr_read',
+            'cluster.bucket[<bucket_name>].xdcr!write': 'cluster_bucket_xdcr_write',
+            'cluster.bucket[<bucket_name>].xdcr!execute': 'cluster_bucket_xdcr_execute',
+            'cluster.admin.internal!all': 'cluster_admin_internal_all'
         }
         permission = permission_set.split(":")
         perm_fun_map = permission_fun_map[permission[0]]
@@ -265,25 +292,27 @@ class rbacmain:
             rest.create_bucket(bucket='default', ramQuotaMB=100)
         except:
             log.info("Default Bucket already exists")
-        final_func = "rbacPermissionList()."+ func_name + "('" + user + "','" + password + "',host=self.master_ip,servers=self.servers,cluster=self.cluster,httpCode=" + str(http_code) +",user_role="+"'" + str(user_role)+"'" + ")"
+        final_func = "rbacPermissionList()." + func_name + "('" + user + "','" + password + "',host=self.master_ip,servers=self.servers,cluster=self.cluster,httpCode=" + str(
+            http_code) + ",user_role=" + "'" + str(user_role) + "'" + ")"
         flag = eval(final_func)
         return flag
 
-
-    def _check_role_permission_validate_multiple_rest_api(self,user_id,user_role,bucket_name,final_user_role,no_bucket_access=None,no_access_bucket_name=None):
+    def _check_role_permission_validate_multiple_rest_api(self, user_id, user_role, bucket_name,
+                                                          final_user_role, no_bucket_access=None,
+                                                          no_access_bucket_name=None):
         final_result = True
         user_details = user_id.split(":")
         final_roles = self._return_roles(user_role)
         payload = "name=" + user_details[0] + "&roles=" + final_roles
-        status, content, header =  rbacmain(self.master_ip, self.auth_type)._set_user_roles(user_name=user_details[0], payload=payload)
+        status, content, header = rbacmain(self.master_ip, self.auth_type)._set_user_roles(
+            user_name=user_details[0], payload=payload)
         master, expected, expected_neg = rbacRoles()._return_permission_set(final_user_role)
 
-
         if no_bucket_access:
-            temp_dict =  expected_neg['permissionSet']
+            temp_dict = expected_neg['permissionSet']
             bucket_name = no_access_bucket_name
         else:
-            temp_dict =  expected['permissionSet']
+            temp_dict = expected['permissionSet']
 
         f = open(user_role, 'w')
         f.close()
@@ -308,7 +337,6 @@ class rbacmain:
 
         return final_result
 
-
     def getRemoteFile(self, host):
         subprocess.getstatusoutput(' rm -rf ' + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD)
         shell = RemoteMachineShellConnection(host)
@@ -319,16 +347,16 @@ class rbacmain:
             sftp.get('{0}'.format(tempfile), '{0}'.format(tmpfile))
             sftp.close()
         except Exception as e:
-            log.info (" Value of e is {0}".format(e))
+            log.info(" Value of e is {0}".format(e))
         finally:
             shell.disconnect()
-
 
     def writeFile(self, host):
         shell = RemoteMachineShellConnection(host)
         try:
-            result = shell.copy_file_local_to_remote(self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD, \
-                                                     self.PATH_SASLAUTHD + self.FILE_SASLAUTHD)
+            result = shell.copy_file_local_to_remote(
+                self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD, \
+                self.PATH_SASLAUTHD + self.FILE_SASLAUTHD)
         finally:
             shell.disconnect()
 
@@ -341,17 +369,18 @@ class rbacmain:
     Returns - None
     '''
 
-    def update_file_inline(self,mech_value='ldap'):
-        subprocess.getstatusoutput(' rm -rf ' + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD_LOCAL)
-        f1 = open (self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD, 'r')
-        f2 = open (self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD_LOCAL, 'w')
+    def update_file_inline(self, mech_value='ldap'):
+        subprocess.getstatusoutput(
+            ' rm -rf ' + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD_LOCAL)
+        f1 = open(self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD, 'r')
+        f2 = open(self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD_LOCAL, 'w')
         for line in f1:
             line = line.rstrip('\n')
-            if line=='MECH=ldap' and mech_value == 'pam':
+            if line == 'MECH=ldap' and mech_value == 'pam':
                 f2.write(line.replace('MECH=ldap', 'MECH=pam'))
                 f2.write("\n")
                 f2.write("\n")
-            elif line=='MECH=pam' and mech_value == 'ldap':
+            elif line == 'MECH=pam' and mech_value == 'ldap':
                 f2.write(line.replace('MECH=pam', 'MECH=ldap'))
                 f2.write("\n")
                 f2.write("\n")
@@ -359,8 +388,8 @@ class rbacmain:
                 f2.write(line + "\n")
         f1.close()
         f2.close()
-        subprocess.getstatusoutput("mv " + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD_LOCAL + " " + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD)
-
+        subprocess.getstatusoutput(
+            "mv " + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD_LOCAL + " " + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD)
 
     def restart_saslauth(self, host):
         shell = RemoteMachineShellConnection(host)
@@ -377,6 +406,7 @@ class rbacmain:
 
     Returns - status, content and header of the rest command executed for saslauthd
     '''
+
     def setup_auth_mechanism(self, servers, type, rest):
         for server in servers:
             self.getRemoteFile(server)
@@ -396,6 +426,7 @@ class rbacmain:
 
     Returns - None
     '''
+
     def add_remove_local_user(self, servers, user_list, operation):
         for server in servers:
             shell = RemoteMachineShellConnection(server)
