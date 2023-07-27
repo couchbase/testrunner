@@ -202,7 +202,8 @@ def is_vm_alive(server="", ssh_username="", ssh_password=""):
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             #ssh.auth_password()
-            ssh.connect(hostname=server, username=ssh_username, password=ssh_password)
+            ssh.connect(hostname=server, username=ssh_username,
+                        password=ssh_password, timeout=20)
             print("Successfully established test ssh connection to {0}. VM is recognized as valid.".format(server))
             return True
         except Exception as e:
@@ -253,6 +254,8 @@ def main():
     parser.add_option('-i','--retries', dest='retries', default='1')
     parser.add_option('-q', '--fresh_run', dest='fresh_run',
                       default=True, action='store_false')
+    parser.add_option('--rerun_condition', dest="rerun_condition",
+                      default="all")
     parser.add_option('-k','--include_tests', dest='include_tests', default=None)
     parser.add_option('-x','--server_manager', dest='SERVER_MANAGER',
                       default='172.23.104.162:8081')
@@ -713,12 +716,32 @@ def main():
                         else:
                             parameters = testsToLaunch[i][
                                              'parameters'] + ',' + runTimeTestRunnerParameters
+                    rerun_condition = options.rerun_condition
+                    only_failed = False
+                    only_pending = False
+                    only_unstable = False
+                    if rerun_condition == "FAILED":
+                        only_failed = True
+                    elif rerun_condition == "UNSTABLE":
+                        only_unstable = True
+                    elif rerun_condition == "PENDING":
+                        only_pending = True
                     dispatch_job = \
                         find_rerun_job.should_dispatch_job(
                             options.os, testsToLaunch[i][
                                 'component'], dashboardDescriptor
-                            , options.version, parameters)
-
+                            , options.version, parameters,
+                            only_pending, only_failed, only_unstable)
+                    if not dispatch_job:
+                        print("Not dispatching job. Job didn't "
+                              "satisfy run condition")
+                        print("{0}_{1}_{2}".format(options.os,
+                                                   testsToLaunch[i][
+                                                       'component'],
+                                                   testsToLaunch[i]['subcomponent']))
+                        job_index += 1
+                        testsToLaunch.pop(i)
+                        continue
                 # and this is the Jenkins descriptor
                 descriptor = testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] + '-' + time.strftime('%b-%d-%X') + '-' + options.version
 

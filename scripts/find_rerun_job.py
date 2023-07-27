@@ -16,6 +16,7 @@ except ImportError:
     import requests
 import argparse
 import get_jenkins_params as jenkins_api
+import traceback
 
 
 host = '172.23.121.84'
@@ -178,7 +179,9 @@ def find_rerun_job(args):
 
 
 def should_dispatch_job(os, component, sub_component, version,
-                        parameters):
+                        parameters, only_pending_jobs=False,
+                        only_failed_jobs=False,
+                        only_unstable_jobs=False):
     """
     Finds if a job has to be dispatched for a particular os, component,
     subcomponent and version. The method finds if the job had run
@@ -196,37 +199,151 @@ def should_dispatch_job(os, component, sub_component, version,
     :return: Boolean on whether to dispatch the job or not
     :rtype: bool
     """
-    bucket_type, gsi_type = get_bucket_gsi_types(parameters)
-    doc_id = "{0}_{1}_{2}".format(os, component, sub_component)
-    if bucket_type:
-        doc_id = "{0}_{1}".format(doc_id, bucket_type)
-    if gsi_type:
-        doc_id = "{0}_{1}".format(doc_id, gsi_type)
-    doc_id = "{0}_{1}".format(doc_id, version)
-    cluster = get_cluster()
-    rerun_jobs = get_bucket(cluster, bucket_name)
-    user_name = "{0}-{1}%{2}".format(component, sub_component, version)
-    query = "select * from `QE-server-pool` where username like " \
-            "'{0}' and state = 'booked' and os = '{1}'".format(user_name, os)
-    qe_server_pool = get_bucket(cluster, "QE-server-pool")
-    n1ql_result = run_query(qe_server_pool, query)
-    if list(n1ql_result):
-        print("Tests are already running. Not dispatching another job")
-        return False
-    run_document = rerun_jobs.get(doc_id, quiet=True)
-    if not run_document.success:
+    try:
+        bucket_type, gsi_type = get_bucket_gsi_types(parameters)
+        doc_id = "{0}_{1}_{2}".format(os, component, sub_component)
+        if bucket_type:
+            doc_id = "{0}_{1}".format(doc_id, bucket_type)
+        if gsi_type:
+            doc_id = "{0}_{1}".format(doc_id, gsi_type)
+        doc_id = "{0}_{1}".format(doc_id, version)
+        cluster = get_cluster()
+        rerun_jobs = get_bucket(cluster, bucket_name)
+        rerun_jobs.timeout = 60
+        user_name = "{0}-{1}%{2}".format(component, sub_component, version)
+        query = "select * from `QE-server-pool` where username like " \
+                "'{0}' and state = 'booked' and os = '{1}'".format(user_name, os)
+        qe_server_pool = get_bucket(cluster, "QE-server-pool")
+        rerun_jobs.timeout = 60
+        n1ql_result = run_query(qe_server_pool, query)
+        if list(n1ql_result):
+            print("Tests are already running. Not dispatching another job")
+            return False
+        pending = False
+        failed = False
+        unstable = False
+        successful = False
+        run_document = rerun_jobs.get(doc_id, quiet=True)
+        if not run_document.success:
+            # No run for this job has occured yet.
+            if only_failed_jobs or only_unstable_jobs:
+                pending = True
+            else:
+                # Run job since it's not been run yet
+                pending = True
+        # Check if the collected jobs had required results to run the job
+        greenboard = get_bucket(cluster, "greenboard")
+        greenboard.timeout = 60
+        job_doc_id = "{0}_server".format(version)
+        jobs_doc = greenboard.get(job_doc_id, quiet=True)
+        if not jobs_doc.success and pending:
+            # No jobs were run or collected for this build yet. Run the job
+            print("No jobs were run or collected for this build yet. Run the job")
+            return True
+        jobs_doc = jobs_doc.value
+        jobs_name = "{0}-{1}_{2}".format(os, component, sub_component)
+        last_job_url = ""
+        # Change all windows versions to windows as os param to search
+        # through greenboard document
+        if "windows" in os:
+            os = "win"
+        if "os" in jobs_doc:
+            if os.upper() in jobs_doc["os"]:
+                job_found = False
+                if not bucket_type:
+                    bucket_type = "COUCHSTORE"
+                if not gsi_type:
+                    gsi_type = "UNDEFINED"
+                jobs_name = "{0}bucket_storage={1}GSI_type={" \
+                            "2}".format(jobs_name,
+                                        bucket_type.upper(),
+                                        gsi_type.upper())
+                # Search for job in all components
+                for comp in jobs_doc["os"][os.upper()].keys():
+                    if jobs_name in jobs_doc["os"][os.upper()][comp]:
+                        jobs = jobs_doc["os"][os.upper()][comp][jobs_name]
+                        job_found = True
+                        pending = False
+                        for job in jobs:
+                            job_result = job["result"]
+                            last_job_url = "{0}{1}".format(job["url"],
+                                                           job[
+                                                               "build_id"])
+                            if job_result == "FAILURE":
+                                failed = True
+                            elif job_result == "UNSTABLE":
+                                unstable = True
+                            elif job_result == "ABORTED":
+                                unstable = True
+                            elif job_result == "SUCCESS":
+                                successful = True
+                        break
+                if not job_found:
+                    pending = True
+                else:
+                    print("Found the job run in greenboard records")
+            else:
+                pending = True
+        else:
+            pending = True
+        if pending and run_document.success:
+            # Job was run previously but has not been collected yet.
+            # Check the last run job directly instead.
+            run_document = run_document.value
+            last_job = run_document['jobs'][-1]
+            last_job_url = last_job['job_url'].rstrip('/')
+            result = jenkins_api.get_js(last_job_url, "tree=result")
+            if result and "result" in result:
+                pending = False
+                job_result = result["result"]
+                if job_result == "UNSTABLE":
+                    unstable = True
+                if job_result == "FAILURE":
+                    failed = True
+                if job_result == "ABORTED":
+                    unstable = True
+                if job_result == "SUCCESS":
+                    successful = True
+        if successful:
+            # there was a successful run for this job. Don't dispatch
+            # further jobs
+            print("Job had run successfully previously.")
+            print("{} is the successful job.".format(last_job_url))
+            return False
+        if only_failed_jobs:
+            if (not successful and not unstable) and failed and not pending:
+                # Run only if the job had failed
+                print("Job had failed previously. Running only failed jobs")
+                return True
+            else:
+                print("Job has run previously without Failure. Or is "
+                      "still pending")
+                return False
+        if only_unstable_jobs:
+            if (not successful) and unstable and not pending:
+                # Run only if previous jobs were unstable
+                print("Previous jobs were unstable. Running only unstable jobs")
+                return True
+            else:
+                print("Job has run previously successfully. Or they are "
+                      "still pending. ")
+                return False
+        if only_pending_jobs:
+            if pending:
+                # Run only if the job wasn't run previously
+                print("Running pending jobs")
+                return True
+            else:
+                print("Job were run previously")
+                return False
+        print("None of the rerun conditions were met. Running the job")
         return True
-    run_document = run_document.value
-    last_job = run_document['jobs'][-1]
-    last_job_url = last_job['job_url'].rstrip('/')
-    result = jenkins_api.get_js(last_job_url, "tree=result")
-    if not result or 'result' not in result:
+    except Exception as e:
+        print("Exception occured while finding if job has to be "
+              "dispatched")
+        traceback.print_exc()
         return True
-    if result['result'] == "SUCCESS":
-        print("Job had run successfully previously.")
-        print("{} is the successful job.".format(last_job_url))
-        return False
-    return True
+
 
 def get_bucket_gsi_types(parameters):
     """
@@ -247,6 +364,20 @@ def get_bucket_gsi_types(parameters):
     return bucket_type, gsi_type
 
 if __name__ == "__main__":
-    args = parse_args()
-    rerun, document = find_rerun_job(args)
-    print(rerun.__str__())
+    #args = parse_args()
+    #rerun, document = find_rerun_job(args)
+    os = sys.argv[1]
+    component = sys.argv[2]
+    subcomponent = sys.argv[3]
+    version = sys.argv[4]
+    parameters = sys.argv[5]
+    failed = sys.argv[6] == "true"
+    unstable = sys.argv[7] == "true"
+    pending = sys.argv[8] == "true"
+    #print(rerun.__str__())
+    output = should_dispatch_job(os, component, subcomponent,
+                                 version, parameters,
+                                 only_pending_jobs=pending,
+                                 only_failed_jobs=failed,
+                                 only_unstable_jobs=unstable)
+    print(output)
