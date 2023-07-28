@@ -57,8 +57,6 @@ class auditTest(BaseTestCase):
     def tearDown(self):
         super(auditTest, self).tearDown()
 
-    
-
     def setupLDAPSettings (self, rest):
         api = rest.baseUrl + 'settings/saslauthdAuth'
         params = urllib.parse.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
@@ -481,10 +479,20 @@ class auditTest(BaseTestCase):
             expectedResults = {'real_userid':username, 'password':password,
                                'ip':self.ipAddress, "port":123456,'source': 'rejected','user':username}
 
-        #User must be pre-created in LDAP in advance
-        elif (ops in ['ldapLogin']):
+        # User must be pre-created in LDAP in advance
+        elif ops in ['ldapLogin']:
             rest = RestConnection(self.master)
             self.set_user_role(rest, username)
+            param = {
+                'hosts': '{0}'.format("172.23.120.205"),
+                'port': '{0}'.format("389"),
+                'encryption': '{0}'.format("None"),
+                'bindDN': '{0}'.format("cn=Manager,dc=couchbase,dc=com"),
+                'bindPass': '{0}'.format("p@ssword"),
+                'authenticationEnabled': '{0}'.format("true"),
+                'userDNMapping': '{0}'.format('{"template":"cn=%u,ou=Users,dc=couchbase,dc=com"}')
+            }
+            rest.setup_ldap(param, '')
             status, content = rest.validateLogin(username, password, True, getContent=True)
             sessionID = (((status['set-cookie']).split("="))[1]).split(";")[0]
             expectedResults = {'source':'external', 'user':username, 'password':password, 'roles':roles, 'ip':self.ipAddress, "port":123456, 'sessionid':sessionID}
