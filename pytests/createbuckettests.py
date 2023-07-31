@@ -16,6 +16,12 @@ class CreateMembaseBucketsTests(unittest.TestCase):
     input = TestInput
     log = None
 
+    def suite_tearDown(self):
+        pass
+
+    def suite_setUp(self):
+        pass
+
     #as part of the setup let's delete all the existing buckets
     def setUp(self):
         self.log = logger.Logger.get_logger()
