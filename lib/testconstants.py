@@ -38,6 +38,7 @@ SYSTEMD_SERVER = ["centos 8", "centos 7",
                   "debian 8", "debian 9", "debian 10",  "debian 11",
                   "rhel 8", "rhel 9",
                   "oel 7", "oel 8", "oel 9",
+                  "alma 9"
                   "amazon linux release 2 (karoo)",
                   "amazon linux release 2023 (amazon linux)"]
 

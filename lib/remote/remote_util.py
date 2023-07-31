@@ -1153,7 +1153,7 @@ class RemoteMachineShellConnection(KeepRefs):
                    "        failed to install ntp service.\n"\
                    "===============\n".format(self.ip)
             # CBQE-6470: Continue with install by skipping the process kill in case some issue with ntp setup
-            log.info(mesg)       
+            log.info(mesg)
             # self.stop_current_python_running(mesg)
 
     def download_build(self, build):
@@ -3472,10 +3472,12 @@ class RemoteMachineShellConnection(KeepRefs):
 
                     os_distro_dict = {'ubuntu': 'Ubuntu', 'debian': 'Ubuntu', 'mint': 'Ubuntu',
                         'amazon linux ami': 'CentOS', 'centos': 'CentOS', 'opensuse': 'openSUSE',
-                        'red': 'Red Hat', 'suse': 'SUSE', 'oracle': 'Oracle Linux', 'openshift' : 'CentOS'}
+                        'red': 'Red Hat', 'suse': 'SUSE', 'oracle': 'Oracle Linux', 'openshift' : 'CentOS',
+                        'almalinux': 'AlmaLinux OS'}
                     os_shortname_dict = {'ubuntu': 'ubuntu', 'debian': 'debian', 'mint': 'ubuntu',
                         'amazon linux ami': 'amzn2', 'centos': 'centos', 'opensuse': 'suse',
-                        'red': 'rhel', 'suse': 'suse', 'oracle': 'oel', 'openshift' : 'centos'}
+                        'red': 'rhel', 'suse': 'suse', 'oracle': 'oel', 'openshift' : 'centos',
+                        'almalinux': 'alma'}
                     log.debug("os_pretty_name:" + os_pretty_name)
                     if os_pretty_name and "Amazon Linux 2" not in os_pretty_name:
                         os_name = os_pretty_name.split(' ')[0].lower()
@@ -3619,15 +3621,16 @@ class RemoteMachineShellConnection(KeepRefs):
                 except AttributeError:
                     os_arch += str(line)
                 # at this point we should know if its a linux or windows ditro
-            ext = { 'Ubuntu' : "deb",
-                   'CentOS'  : "rpm",
-                   'Red Hat' : "rpm",
-                   "Mac"     : "dmg",
-                   "Debian"  : "deb",
-                   "openSUSE": "rpm",
-                   "SUSE"    : "rpm",
-                   "Oracle Linux": "rpm",
-                    "Amazon Linux 2": "rpm"}.get(os_distro, '')
+            ext = {'Ubuntu'         : 'deb',
+                   'CentOS'         : 'rpm',
+                   'Red Hat'        : 'rpm',
+                   'Mac'            : 'dmg',
+                   'Debian'         : 'deb',
+                   'openSUSE'       : 'rpm',
+                   'SUSE'           : 'rpm',
+                   'Oracle Linux'   : 'rpm',
+                   'Amazon Linux 2' : 'rpm',
+                   'AlmaLinux OS'   : 'rpm'}.get(os_distro, '')
             arch = {'i686': "x86",
                     'i386': "x86"}.get(os_arch, os_arch)
 
