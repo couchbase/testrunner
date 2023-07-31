@@ -4,7 +4,6 @@ import threading
 from random import randint
 from couchbase_helper.tuq_helper import N1QLHelper
 from pytests.eventing.eventing_helper import EventingHelper
-from eventing.eventing_base import EventingBaseTest
 from lib.testconstants import STANDARD_BUCKET_PORT
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -15,7 +14,7 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from testconstants import FUTURE_BUILD_NUMBER
 
 
-class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
+class UpgradeTests(NewUpgradeBaseTest):
 
     def setUp(self):
         super(UpgradeTests, self).setUp()
@@ -856,7 +855,6 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
             event.deploy_sbm_function()
             event.verify_documents_in_destination_bucket('bucket_op_sbm', 1, 'source_bucket_mutation')
             event.undeploy_sbm_function()
-            self.undeploy_and_delete_function(body)
         except Exception as e:
             self.log.info(e)
 
@@ -1365,5 +1363,5 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
         return server_set
 
 
-class UpgradeEventTests(UpgradeTests, EventingBaseTest):
+class UpgradeEventTests(UpgradeTests):
     pass
