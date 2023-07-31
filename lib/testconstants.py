@@ -175,6 +175,7 @@ SYSTEMD_SERVER = ["centos 8", "centos 7",
                   "debian 8", "debian 9", "debian 10",  "debian 11",
                   "rhel 8", "rhel 9",
                   "oel 7", "oel 8", "oel 9",
+                  "alma 9"
                   "amazon linux release 2 (karoo)","amazon linux release 2023 (amazon linux)"]
 WIN_NUM_ERLANG_PROCESS = 4
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
