@@ -64,6 +64,17 @@ class rbacclitests(BaseTestCase):
                 self.setupLDAPSettings(rest)
                 #rest.ldapUserRestOperation(True, [[self.ldapUser]], exclude=None)
                 self.set_user_role(rest, self.ldapUser, user_role=self.role)
+        rest = RestConnection(self.master)
+        param = {
+            'hosts': '{0}'.format("172.23.120.205"),
+            'port': '{0}'.format("389"),
+            'encryption': '{0}'.format("None"),
+            'bindDN': '{0}'.format("cn=Manager,dc=couchbase,dc=com"),
+            'bindPass': '{0}'.format("p@ssword"),
+            'authenticationEnabled': '{0}'.format("true"),
+            'userDNMapping': '{0}'.format('{"template":"cn=%u,ou=Users,dc=couchbase,dc=com"}')
+        }
+        rest.setup_ldap(param, '')
 
 
     def tearDown(self):
