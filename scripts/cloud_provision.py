@@ -146,6 +146,9 @@ AWS_AMI_MAP = {
         },
         "suse12":{
             "x86_64" : "ami-023f4e041769c362b"
+        },
+         "centos7": {
+            "x86_64" : "ami-0599a9ff8a4ca809c"
         }
     },
     "elastic-fts": "ami-0c48f8b3129e57beb",
@@ -155,7 +158,7 @@ AWS_AMI_MAP = {
 AWS_OS_USERNAME_MAP = {
     "amzn2": "ec2-user",
     "ubuntu20": "ubuntu",
-    "centos": "centos",
+    "centos7": "centos",
     "al2023": "ec2-user",
     "ubuntu22": "ubuntu",
     "oel8": "ec2-user",
