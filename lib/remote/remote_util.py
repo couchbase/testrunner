@@ -3473,11 +3473,11 @@ class RemoteMachineShellConnection(KeepRefs):
                     os_distro_dict = {'ubuntu': 'Ubuntu', 'debian': 'Ubuntu', 'mint': 'Ubuntu',
                         'amazon linux ami': 'CentOS', 'centos': 'CentOS', 'opensuse': 'openSUSE',
                         'red': 'Red Hat', 'suse': 'SUSE', 'oracle': 'Oracle Linux', 'openshift' : 'CentOS',
-                        'almalinux': 'AlmaLinux OS'}
+                        'almalinux': 'AlmaLinux OS', 'rocky': 'Rocky Linux'}
                     os_shortname_dict = {'ubuntu': 'ubuntu', 'debian': 'debian', 'mint': 'ubuntu',
                         'amazon linux ami': 'amzn2', 'centos': 'centos', 'opensuse': 'suse',
                         'red': 'rhel', 'suse': 'suse', 'oracle': 'oel', 'openshift' : 'centos',
-                        'almalinux': 'alma'}
+                        'almalinux': 'alma', 'rocky': 'rocky'}
                     log.debug("os_pretty_name:" + os_pretty_name)
                     if os_pretty_name and "Amazon Linux 2" not in os_pretty_name:
                         os_name = os_pretty_name.split(' ')[0].lower()
@@ -3630,7 +3630,8 @@ class RemoteMachineShellConnection(KeepRefs):
                    'SUSE'           : 'rpm',
                    'Oracle Linux'   : 'rpm',
                    'Amazon Linux 2' : 'rpm',
-                   'AlmaLinux OS'   : 'rpm'}.get(os_distro, '')
+                   'AlmaLinux OS'   : 'rpm',
+                   'Rocky Linux'    : 'rpm'}.get(os_distro, '')
             arch = {'i686': "x86",
                     'i386': "x86"}.get(os_arch, os_arch)
 
