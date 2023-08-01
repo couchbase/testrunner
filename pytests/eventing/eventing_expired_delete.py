@@ -66,6 +66,8 @@ class EventingExpired(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_collection_TTL(self):
+        self.collection_rest.delete_collection(self.src_bucket_name, self.src_bucket_name, self.src_bucket_name)
+        self.collection_rest.create_collection(self.src_bucket_name, self.src_bucket_name, self.src_bucket_name, params={"maxTTL":20})
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
         body = self.create_save_function_body(self.function_name, "handler_code/ABO/insert_exp_delete_only.js")
         self.deploy_function(body)

@@ -340,6 +340,7 @@ class EventingN1QL(EventingBaseTest):
                                                    replicas=self.num_replicas)
         self.cluster.create_standard_bucket(name=self.dst_bucket_name1, port=STANDARD_BUCKET_PORT + 1,
                                             bucket_params=bucket_params)
+        self.n1ql_helper.drop_primary_index(using_gsi=True, server=self.n1ql_server)
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_server)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
@@ -358,7 +359,7 @@ class EventingN1QL(EventingBaseTest):
         dst_bucket = self.rest.get_bucket(self.dst_bucket_name)
         self.shell.execute_cbepctl(dst_bucket, "", "set flush_param", "exp_pager_stime", 5)
         query = "SELECT COUNT(*) from dst_bucket"
-        self.load(self.gens_load, buckets=[self.src_bucket_name, dst_bucket], flag=self.item_flag, verify_data=False,
+        self.load(self.gens_load, buckets=[self.src_bucket_name, self.dst_bucket_name], flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
 
         # Deploying eventing function
