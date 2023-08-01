@@ -33,22 +33,8 @@ class EventingBaseTest(QueryHelperTests):
 
     def setUp(self):
         log.info("==============  EventingBaseTest setup has started ==============")
-        if self._testMethodDoc:
-            log.info("\n\nStarting Test: %s \n%s" % (self._testMethodName, self._testMethodDoc))
-        else:
-            log.info("\n\nStarting Test: %s" % (self._testMethodName))
-        self.input = TestInputSingleton.input
-        self.is_upgrade_test = self.input.param("is_upgrade_test", False)
-        if str(self.__class__).find('newupgradetests') != -1 or \
-                    str(self.__class__).find('upgradeXDCR') != -1 or \
-                    str(self.__class__).find('Upgrade_EpTests') != -1 or \
-                    str(self.__class__).find('UpgradeTests')  != -1 or \
-                    str(self.__class__).find('MultiNodesUpgradeTests') != -1:
-            self.is_upgrade_test = True
-        self.use_single_bucket = self.input.param('use_single_bucket', False)
-        if not self.use_single_bucket:
-            self.input.test_params.update({"default_bucket": False})
         super(EventingBaseTest, self).setUp()
+        self._init_params()
         self.master = self.servers[0]
         self.server = self.master
         self.stat = CollectionsStats(self.master)
@@ -57,6 +43,63 @@ class EventingBaseTest(QueryHelperTests):
             self.rest = RestConnection(self.restServer)
             self.rest.set_indexer_storage_mode()
             self.rest.set_service_memoryQuota(service='eventingMemoryQuota', memoryQuota=EVENTING_QUOTA)
+        random.seed(datetime.datetime.now())
+        function_name = "Function_{0}_{1}".format(random.randint(1, 1000000000), self._testMethodName)
+        # See MB-28447, From now function name can only be max of 100 chars
+        self.function_name = function_name[0:90]
+        if self.hostname=='local':
+            ##self.insall_dependencies()
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            self.hostname= "http://"+ip+":1080/"
+            self.log.info("local ip address:{}".format(self.hostname))
+            self.setup_curl()
+        self.skip_metabucket_check=False
+        if self.global_function_scope:
+            self.function_scope = {"bucket": "*", "scope": "*"}
+        else:
+            if self.use_single_bucket:
+                self.function_scope = {"bucket": self.default_bucket_name, "scope": self.scope_name}
+            else:
+                if self.non_default_collection:
+                    self.function_scope = {"bucket": self.src_bucket_name, "scope": self.src_bucket_name}
+                else:
+                    self.function_scope = {"bucket": self.src_bucket_name, "scope": "_default"}
+        if self.bucket_storage == "magma":
+            RestConnection(self.master).update_memcached_settings(
+                num_reader_threads="disk_io_optimized",
+                num_writer_threads="disk_io_optimized")
+        self._create_bucket_scope_collections()
+        if self.n1ql_server:
+            self.n1ql_helper = N1QLHelper(shell=self.shell, buckets=self.buckets, n1ql_port=self.n1ql_port,
+                                            full_docs_list=self.full_docs_list, log=self.log, input=self.input,
+                                            master=self.master, use_rest=True)
+            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_server)
+        log.info("==============  EventingBaseTest setup has completed ==============")
+
+    def tearDown(self):
+        log.info("==============  EventingBaseTest tearDown has started ==============")
+        # catch panics and print it in the test log
+        self._init_params()
+        self.check_eventing_logs_for_panic()
+        if self.hostname == 'local':
+            self.teardown_curl()
+        metadata_bucket_name, metadata_scope, metadata_collection = self._get_metadata_keyspace()
+        metadata_bucket = RestConnection(self.master).get_bucket(metadata_bucket_name)
+        if metadata_bucket is not None and not self.skip_metabucket_check:
+            metadata_item_count = CollectionsStats(self.master).\
+                get_collection_item_count_cumulative(metadata_bucket, metadata_scope,
+                                                     metadata_collection, self.get_kv_nodes())
+            self.log.info("number of documents in metadata keyspace {}".format(metadata_item_count))
+            if metadata_item_count != 0:
+                raise Exception("metadata keyspace is not empty at the end of test")
+        super(EventingBaseTest, self).tearDown()
+        log.info("==============  EventingBaseTest tearDown has completed ==============")
+
+    def _init_params(self):
+        self.use_single_bucket = self.input.param('use_single_bucket', False)
         self.import_function = self.input.param('import_function', None)
         self.scope_name = self.input.param('scope_name', 'scope0')
         self.collection_list = self.input.param('collection_list', ['collection0', 'collection1', 'collection2'])
@@ -68,86 +111,31 @@ class EventingBaseTest(QueryHelperTests):
         self.docs_per_day = self.input.param("doc-per-day", 1)
         self.use_memory_manager = self.input.param('use_memory_manager', True)
         self.print_eventing_handler_code_in_logs = self.input.param('print_eventing_handler_code_in_logs', True)
-        random.seed(datetime.datetime.now())
-        function_name = "Function_{0}_{1}".format(random.randint(1, 1000000000), self._testMethodName)
-        # See MB-28447, From now function name can only be max of 100 chars
-        self.function_name = function_name[0:90]
         self.timer_storage_chan_size = self.input.param('timer_storage_chan_size', 10000)
         self.dcp_gen_chan_size = self.input.param('dcp_gen_chan_size', 10000)
-        self.is_sbm=self.input.param('source_bucket_mutation',False)
+        self.is_sbm = self.input.param('source_bucket_mutation',False)
         self.pause_resume = self.input.param('pause_resume', False)
         self.pause_resume_number = self.input.param('pause_resume_number', 1)
-        self.is_curl=self.input.param('curl',False)
+        self.is_curl = self.input.param('curl',False)
         self.hostname = self.input.param('host', 'https://postman-echo.com/')
         self.curl_username = self.input.param('curl_user', None)
         self.curl_password = self.input.param('curl_password', None)
         self.auth_type = self.input.param('auth_type', 'no-auth')
-        self.bearer_key=self.input.param('bearer_key',None)
+        self.bearer_key = self.input.param('bearer_key',None)
         self.url = self.input.param('path', None)
         self.cookies = self.input.param('cookies',False)
         self.bearer_key = self.input.param('bearer_key','')
-        if self.hostname=='local' and not self.is_upgrade_test:
-            ##self.insall_dependencies()
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
-            self.hostname= "http://"+ip+":1080/"
-            self.log.info("local ip address:{}".format(self.hostname))
-            self.setup_curl()
-        self.skip_metabucket_check=False
-        self.cancel_timer=self.input.param('cancel_timer', False)
-        self.is_expired=self.input.param('is_expired', False)
-        self.print_app_log=self.input.param('print_app_log', False)
-        self.print_go_routine=self.input.param('print_go_routine', False)
+        self.cancel_timer = self.input.param('cancel_timer', False)
+        self.is_expired = self.input.param('is_expired', False)
+        self.print_app_log = self.input.param('print_app_log', False)
+        self.print_go_routine = self.input.param('print_go_routine', False)
         self.collection_rest = CollectionsRest(self.master)
-        self.non_default_collection=self.input.param('non_default_collection',False)
+        self.non_default_collection = self.input.param('non_default_collection',False)
         self.global_function_scope = self.input.param('global_function_scope', False)
-        if self.global_function_scope:
-            self.function_scope = {"bucket": "*", "scope": "*"}
-        else:
-            if self.use_single_bucket:
-                self.function_scope = {"bucket": self.default_bucket_name, "scope": self.scope_name}
-            else:
-                if self.non_default_collection:
-                    self.function_scope = {"bucket": self.src_bucket_name, "scope": self.src_bucket_name}
-                else:
-                    self.function_scope = {"bucket": self.src_bucket_name, "scope": "_default"}
         self.num_docs = self.input.param('number_of_documents', 2016)
         self.is_binary = self.input.param('binary_doc', False)
         self.document_size = self.input.param('document_size', 512)
-        if self.bucket_storage == "magma":
-            RestConnection(self.master).update_memcached_settings(
-                num_reader_threads="disk_io_optimized",
-                num_writer_threads="disk_io_optimized")
-        self.multi_collection_function = self.input.param(
-            'multi_collection_function', False)
-        if not self.upgrade_test:
-            self._create_bucket_scope_collections()
-            if self.n1ql_server:
-                self.n1ql_helper = N1QLHelper(shell=self.shell, buckets=self.buckets, n1ql_port=self.n1ql_port,
-                                              full_docs_list=self.full_docs_list, log=self.log, input=self.input,
-                                              master=self.master, use_rest=True)
-                self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_server)
-        log.info("==============  EventingBaseTest setup has completed ==============")
-
-    def tearDown(self):
-        log.info("==============  EventingBaseTest tearDown has started ==============")
-        # catch panics and print it in the test log
-        self.check_eventing_logs_for_panic()
-        self.rest = RestConnection(self.master)
-        if self.hostname == 'local':
-            self.teardown_curl()
-        if len(self.buckets) > 0 and not self.skip_metabucket_check and not self.is_upgrade_test:
-            metadata_bucket_name, metadata_scope, metadata_collection = self._get_metadata_keyspace()
-            metadata_bucket = self.rest.get_bucket(metadata_bucket_name)
-            metadata_item_count = self.stat.get_collection_item_count_cumulative(metadata_bucket, metadata_scope,
-                                                                                 metadata_collection, self.get_kv_nodes())
-            self.log.info("number of documents in metadata keyspace {}".format(metadata_item_count))
-            if metadata_item_count != 0:
-                raise Exception("metadata keyspace is not empty at the end of test")
-        super(EventingBaseTest, self).tearDown()
-        log.info("==============  EventingBaseTest tearDown has completed ==============")
+        self.multi_collection_function = self.input.param('multi_collection_function', False)
 
     def create_save_function_body(self, appname, appcode, description="Sample Description",
                                   checkpoint_interval=20000, cleanup_timers=False,

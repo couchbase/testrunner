@@ -35,6 +35,7 @@ class EventingMultiHandler(EventingBaseTest):
         self.deploying=[]
         self.pausing=[]
         if self.n1ql_server:
+            self.n1ql_helper.drop_primary_index(using_gsi=True, server=self.n1ql_server)
             self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_server)
         self.binding_map={}
 
@@ -156,16 +157,14 @@ class EventingMultiHandler(EventingBaseTest):
 
     def test_multiple_handle_multiple_create_only(self):
         # load data
-        self.load(self.gens_load, buckets=self.buckets, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        self.load_data_to_all_source_collections()
         self.create_n_handler(self.num_handlers,self.num_src_buckets,self.num_dst_buckets,self.handler_code)
         self.print_handlers_state()
         self.undeploy_delete_all_handler()
 
     def test_mix_handlers(self):
         # load data
-        self.load(self.gens_load, buckets=self.buckets, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        self.load_data_to_all_source_collections()
         self.create_n_handler(self.num_handlers, self.num_src_buckets, self.num_dst_buckets, "handler_code/no_op.js")
         #self.deploy_n_handler(self.deploy_handler, sequential=self.sequential)
         self.reset_param()
