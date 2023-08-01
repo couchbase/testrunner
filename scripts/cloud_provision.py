@@ -152,6 +152,9 @@ AWS_AMI_MAP = {
         },
         "centos7": {
             "x86_64" : "ami-0599a9ff8a4ca809c"
+        },
+        "rocky9": {
+            "x86_64" : "ami-0441302605ba7fdb4"
         }
     },
     "elastic-fts": "ami-0c48f8b3129e57beb",
@@ -168,7 +171,8 @@ AWS_OS_USERNAME_MAP = {
     "rhel8": "ec2-user",
     "suse15": "ec2-user",
     "suse12": "ec2-user",
-    "alma9": "ec2-user"
+    "alma9": "ec2-user",
+    "rocky9": "rocky"
 }
 
 def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
