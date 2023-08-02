@@ -5392,9 +5392,11 @@ class RemoteUtilHelper(object):
             else:
                 log.error("erlang process failed to suspend")
         else:
+            o, r = shell.execute_command(
+                "ip -br l | awk '$1 !~ \"lo|vir|wl\" { print $1}'")
             copy_server = copy.deepcopy(server)
-            command_1 = "/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:65535 -j REJECT"
-            command_2 = "/sbin/iptables -A OUTPUT -p tcp -o eth0 --sport 1000:65535 -j REJECT"
+            command_1 = "/sbin/iptables -A INPUT -p tcp -i " + o[0] + " --dport 1000:65535 -j REJECT"
+            command_2 = "/sbin/iptables -A OUTPUT -p tcp -o " + o[0] + " --sport 1000:65535 -j REJECT"
             command_3 = "/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT"
             if shell.info.distribution_type.lower() in LINUX_DISTRIBUTION_NAME \
                              and server.ssh_username != "root":
