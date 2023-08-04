@@ -181,6 +181,20 @@ class CapellaAPI:
         resp = self.api.create_bucket(self.tenant_id, self.project_id, cluster_id, bucket_params)
         resp.raise_for_status()
 
+    def get_bucket_id(self, cluster_id, bucket_name):
+        resp = self.api.get_buckets(self.tenant_id, self.project_id, cluster_id)
+        if resp.status_code != 200:
+            raise Exception("Response when trying to fetch buckets.")
+        buckets = json.loads(resp.content)['buckets']['data']
+        for bucket in buckets:
+            if bucket['data']['name'] == bucket_name:
+                return bucket['data']['id']
+
+    def flush_bucket(self, cluster_id, bucket_id):
+        resp = self.api.flush_bucket(self.tenant_id, self.project_id, cluster_id, bucket_id)
+        # resp.raise_for_status()
+        return resp
+
     def allow_my_ip(self, cluster_id):
         resp = self.api.allow_my_ip(self.tenant_id, self.project_id, cluster_id)
         resp.raise_for_status()
