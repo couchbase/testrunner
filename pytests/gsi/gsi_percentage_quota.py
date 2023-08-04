@@ -15,7 +15,6 @@ import requests
 from concurrent.futures import ThreadPoolExecutor
 from couchbase_helper.documentgenerator import SDKDataLoader
 from membase.api.rest_client import RestConnection
-from string import ascii_letters, digits
 from table_view import TableView
 
 from .base_gsi import BaseSecondaryIndexingTests
@@ -91,36 +90,6 @@ class GSIPercentageQuota(BaseSecondaryIndexingTests):
         # self.assertEqual(expected_swap_indexes, actual_swap_indexes, "Swap indexes data not matching")
         # self.assertEqual(expected_pt_swap_indexes, actual_pt_swap_indexes, "Swap indexes data not matching")
 
-    def dataload_till_rr(self, namespaces, rr=100, json_template='Hotel', batch_size=10000):
-        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-
-        def is_rr_achived():
-            resident_ratios = []
-            for index_node in index_nodes:
-                rest = RestConnection(index_node)
-                resident_ratios.append(rest.get_indexer_stats()['avg_resident_percent'])
-            value = any(rr <= x for x in resident_ratios)
-            return value
-
-        while not is_rr_achived():
-            for namespace in namespaces:
-                _, keyspace = namespace.split(':')
-                bucket, scope, collection = keyspace.split('.')
-                key_prefix = ''.join(random.choices(ascii_letters + digits, k=10))
-                gen_create = SDKDataLoader(num_ops=100000, percent_create=100, key_prefix=key_prefix,
-                                           percent_update=0, percent_delete=0, scope=scope,
-                                           collection=collection, json_template=json_template,
-                                           output=True, username=self.username, password=self.password)
-                if self.use_magma_loader:
-                    task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
-                                                            generator=gen_create, pause_secs=1,
-                                                            timeout_secs=300, use_magma_loader=True)
-                    task.result()
-                else:
-                    tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
-                                                                    batch_size=batch_size, dataset=json_template)
-                    for task in tasks:
-                        task.result()
 
     def stats_validation_in_heterogenous_cluster(self):
         stats_dict = {}

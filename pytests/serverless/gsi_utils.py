@@ -355,7 +355,6 @@ class GSIUtils(object):
             except Exception as err:
                 print(err)
 
-
     def aysnc_run_select_queries(self, select_queries, database=None, capella_run=False, query_node=False,
                                  scan_consistency=None):
         with ThreadPoolExecutor() as executor:

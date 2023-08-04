@@ -1,4 +1,5 @@
 import copy
+import datetime
 import logging
 import math
 import os
@@ -10,7 +11,7 @@ import threading
 import time
 import json
 
-
+from string import ascii_letters, digits
 from couchbase_helper.cluster import Cluster
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from couchbase_helper.tuq_generators import TuqGenerators
@@ -1394,6 +1395,46 @@ class BaseSecondaryIndexingTests(QueryTests):
             server_index_count.update(rest.get_indexes_count())
 
         return server_index_count
+
+    def dataload_till_rr(self, namespaces, rr=100, json_template='Hotel', batch_size=10000, timeout=1800):
+        """
+        Run this method only when no Index scans are being served, otherwise reaching to desired rr won't be possible
+        """
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+
+        def is_rr_achived():
+            resident_ratios = []
+            for index_node in index_nodes:
+                rest = RestConnection(index_node)
+                resident_ratios.append(rest.get_indexer_stats()['avg_resident_percent'])
+            self.log.info(f"Current Resident Ratios of Index nodes - {resident_ratios}")
+            value = any(rr >= x for x in resident_ratios)
+            return value
+
+        start_time = time.time()
+        while not is_rr_achived():
+            for namespace in namespaces:
+                _, keyspace = namespace.split(':')
+                bucket, scope, collection = keyspace.split('.')
+                key_prefix = ''.join(random.choices(ascii_letters + digits, k=10))
+                gen_create = SDKDataLoader(num_ops=100000, percent_create=100, key_prefix=key_prefix,
+                                           percent_update=0, percent_delete=0, scope=scope,
+                                           collection=collection, json_template=json_template,
+                                           output=True, username=self.username, password=self.password)
+                if self.use_magma_loader:
+                    task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
+                                                            generator=gen_create, pause_secs=1,
+                                                            timeout_secs=300, use_magma_loader=True)
+                    task.result()
+                else:
+                    tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
+                                                                    batch_size=batch_size, dataset=json_template)
+                    for task in tasks:
+                        task.result()
+            if time.time() - start_time < timeout:
+                self.sleep(30, "Giving some time to Resident Ratio to settle down")
+            else:
+                self.log.info(f"Can't reach desired Resident Ratio in {timeout} secs.")
 
     def wait_until_indexes_online(self, timeout=600, defer_build=False, check_paused_index=False, schedule_index=False):
         rest = RestConnection(self.master)
