@@ -230,7 +230,7 @@ class GSIPercentageQuota(BaseSecondaryIndexingTests):
             index_setting = "excludeNode="
             rest.set_index_planner_settings(index_setting)
 
-    def monitor_scale_up(self, verify_swap_rebalance=True):
+    def monitor_scale_up(self, verify_swap_rebalance=True, select_queries=None, query_node=None):
         out_order = self.get_index_replacement_order(cluster_id=self.cluster_id)
 
         # checking if there is a delay in deployment job initiation
@@ -253,7 +253,9 @@ class GSIPercentageQuota(BaseSecondaryIndexingTests):
             while self.rest._rebalance_progress_status() != 'running':
                 continue
             self.log.info("Rebalance started...")
-
+            if select_queries:
+                select_tasks = self.gsi_util_obj.aysnc_run_select_queries(select_queries=select_queries,
+                                                                         query_node=query_node)
             # cancel Rebalance Not working
             self.sleep(5)
             if self.cancel_rebalance:
@@ -265,6 +267,9 @@ class GSIPercentageQuota(BaseSecondaryIndexingTests):
                 continue
             self.log.info("Rebalance finished...")
             self.sleep(5)
+            if select_queries:
+                for task in select_tasks:
+                    task.result()
             metadata_aft_reb = rest.get_indexer_metadata()['status']
 
             servers = self.capella_api.get_nodes_formatted(cluster_id=self.cluster_id, username=self.username,
@@ -459,3 +464,78 @@ class GSIPercentageQuota(BaseSecondaryIndexingTests):
                              "Indexer metadata not matching")
             if idx_name_list - new_idx_name_list:
                 self.fail(f"Some index/es is/are missing after Scale up: {idx_name_list - new_idx_name_list}")
+
+    def test_continous_scaling(self):
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template)
+        select_queries = set()
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        for _ in range(self.initial_index_batches):
+            query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+            for namespace in self.namespaces:
+                select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
+                                                                           namespace=namespace))
+                queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                  namespace=namespace,
+                                                                  num_replica=self.num_index_replicas)
+                self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+        self.wait_until_indexes_online()
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for next_compute in CAPELLA_AWS_COMPUTES_ORDER[1:]:
+            if 'm5' not in next_compute:
+                continue
+
+            self.dataload_till_rr(namespaces=self.namespaces, rr=self.resident_ratio, json_template=self.json_template)
+
+            # Todo: Temporary; to be removed after CP changes
+            percentage_quota_setting = {"indexer.settings.percentage_memory_quota": 80}
+            ddl_during_scale_up_enabled = {"indexer.allowDDLDuringScaleUp": True}
+            index_node = index_nodes[0]
+            index_rest = RestConnection(index_node)
+            self.capella_api.set_capella_index_settings(node=index_node.ip, setting=percentage_quota_setting,
+                                                        username=index_node.rest_username,
+                                                        password=index_node.rest_password)
+            self.capella_api.set_capella_index_settings(node=index_node.ip, setting=ddl_during_scale_up_enabled,
+                                                        username=index_node.rest_username,
+                                                        password=index_node.rest_password)
+            metadata_before_scale_up = index_rest.get_indexer_metadata()['status']
+            idx_name_list = {idx['name'] for idx in metadata_before_scale_up}
+
+            self.capella_api.scale_up_capella_nodes(services=self.scale_up_services, cluster_id=self.cluster_id)
+            self.sleep(5)
+            with ThreadPoolExecutor() as executor:
+                monitor_task = executor.submit(self.monitor_scale_up, select_queries=select_queries,
+                                               query_node=query_node)
+                task = executor.submit(self.capella_api.wait_for_cluster, cluster_id=self.cluster_id, sleep_timer=60)
+                # Wait for cluster to stable
+                task.result()
+
+                # Todo: Temporary; to be removed after CP changes
+                percentage_quota_setting = {"indexer.settings.percentage_memory_quota": 0}
+                ddl_during_scale_up_disabled = {"indexer.allowDDLDuringScaleUp": False}
+                index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                index_rest = RestConnection(index_nodes[0])
+                self.capella_api.set_capella_index_settings(node=index_nodes[0].ip, setting=percentage_quota_setting,
+                                                            username=index_nodes[0].rest_username,
+                                                            password=index_nodes[0].rest_password)
+                self.capella_api.set_capella_index_settings(node=index_nodes[0].ip, setting=ddl_during_scale_up_disabled,
+                                                            username=index_nodes[0].rest_username,
+                                                            password=index_nodes[0].rest_password)
+
+                monitor_task.result()
+
+                self.log.info(f"New Indexer nodes: {index_nodes}")
+                metadata_after_scale_up = index_rest.get_indexer_metadata()['status']
+                new_idx_name_list = {idx['name'] for idx in metadata_after_scale_up}
+                self.assertEqual(len(metadata_before_scale_up), len(metadata_after_scale_up),
+                                 "Indexer metadata not matching")
+                if idx_name_list - new_idx_name_list:
+                    self.fail(f"Some index/es is/are missing after Scale up: {idx_name_list - new_idx_name_list}")
