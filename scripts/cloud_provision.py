@@ -159,6 +159,7 @@ AWS_OS_USERNAME_MAP = {
     "amzn2": "ec2-user",
     "ubuntu20": "ubuntu",
     "centos7": "centos",
+    "centos": "centos",
     "al2023": "ec2-user",
     "ubuntu22": "ubuntu",
     "oel8": "ec2-user",
