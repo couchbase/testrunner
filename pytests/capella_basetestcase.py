@@ -18,8 +18,8 @@ class BaseTestCase(OnPremBaseTestCase):
             self.parse_params()
             self.nodes_init = self.input.param("nodes_init", 3)
             cluster_id = self.input.param('cluster_id', None)
+            self.upgrade_ami = self.input.param("upgrade_ami", None)
             self.force_deploy_cluster = self.input.param("force_deploy_cluster", False)
-
             self.log = logger.Logger.get_logger()
             if self.log_level:
                 self.log.setLevel(level=self.log_level)

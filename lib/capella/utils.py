@@ -15,6 +15,7 @@ import requests, base64
 import json
 import subprocess
 import time
+import re
 
 class CapellaCredentials:
     def __init__(self, config):
@@ -26,6 +27,7 @@ class CapellaCredentials:
         self.secret_key = config.get("secret_key")
         self.project_id = config["project_id"]
         self.token_for_internal_support = config.get("token_for_internal_support")
+        self.override_token = config.get("override_token")
         self.dataplane_id = config["dataplane_id"]
 
 class ServerlessDatabase:
@@ -125,6 +127,7 @@ class CapellaAPI:
         self.api = CapellaAPIDedicated(credentials.pod, credentials.secret_key, credentials.access_key, credentials.capella_user, credentials.capella_pwd, credentials.token_for_internal_support)
         self.serverless_api = CapellaAPIServerless(credentials.pod, credentials.capella_user, credentials.capella_pwd, credentials.token_for_internal_support)
         self.log = logger.Logger.get_logger()
+        self.override_token = credentials.override_token
 
     def get_cluster_info(self, cluster_id):
         resp = self.api.get_cluster_info(cluster_id)
@@ -313,7 +316,6 @@ class CapellaAPI:
             new_spec = {'count': spec['count'], 'compute': {'type': spec['compute']},
                         'services': [], 'disk': spec['disk'], 'diskAutoScaling': spec['diskAutoScaling']}
             del new_spec['disk']['modificationLimited']
-            del new_spec['disk']['options']
             for service in sorted(spec['services']):
                 new_spec['services'].append({'type': service})
             new_specs.append(new_spec)
@@ -583,6 +585,38 @@ class CapellaAPI:
         resp = self.serverless_api.modify_cluster_specs(dataplane_id=dataplane_id,
                                                         specs=specs)
         resp.raise_for_status()
+
+    def get_replacement_order(self, cluster_id):
+        result = self.deployment_jobs(cluster_id)[0]
+        order = []
+        replace = result['plan']['plan']['replace']
+        if replace:
+            for node_info in replace:
+                node = node_info['existing']['config']['hostname']
+                order.append(node)
+        return order
+
+    def upgrade_cluster(self, cluster_id, ami_version, release_id=None, wait_for_healthy_cluster=True):
+        # Sample AMI string couchbase-cloud-server-7.1.4-3639-v1.0.17"
+        server_version = re.search('[0-9].[0-9].[0-9]', ami_version).group(0)
+        server_version.replace("-", ".")
+        if not release_id:
+            release_id = re.search('v[0-9].[0-9].[0-9]+', ami_version).group(0)
+            release_id = release_id.lstrip("v")
+        self.log.debug("Server version used for upgrade call {}. Release ID used: {}")
+        config = {
+            "token": self.override_token,
+            "image": ami_version,
+            "server": server_version,
+            "releaseID": release_id
+        }
+        self.log.info(f"Config used for upgrade {config}")
+        resp = self.api.upgrade_cluster(tenant_id=self.tenant_id, project_id=self.project_id,
+                                        cluster_id=cluster_id, config=config)
+        resp.raise_for_status()
+        if wait_for_healthy_cluster:
+            self.wait_for_cluster(cluster_id, "Upgrading cluster",)
+
 
 def format_nodes(nodes, username=None, password=None):
     servers = list()

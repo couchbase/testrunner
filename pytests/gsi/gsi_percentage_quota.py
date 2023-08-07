@@ -49,20 +49,6 @@ class GSIPercentageQuota(BaseSecondaryIndexingTests):
         self.log.info("==============  GSIPercentageQuota suite_setup has started ==============")
         self.log.info("==============  GSIPercentageQuota suite_setup has completed ==============")
 
-    def update_master_node(self):
-        for server in self.servers:
-            try:
-                rest = RestConnection(server)
-                master = rest.get_orchestrator()
-                break
-            except Exception as err:
-                pass
-        for server in self.servers:
-            if server.ip == master:
-                self.master = server
-                break
-        return server
-
     def gen_node_wise_indexes_dict(self, index_metatdata):
         node_wise_non_partitoned_indexes = {}
         node_wise_partitioned_indexes = {}
@@ -135,16 +121,6 @@ class GSIPercentageQuota(BaseSecondaryIndexingTests):
                                                                     batch_size=batch_size, dataset=json_template)
                     for task in tasks:
                         task.result()
-
-    def get_index_replacement_order(self, cluster_id):
-        result = self.capella_api.deployment_jobs(cluster_id)[0]
-        order = []
-        replace = result['plan']['plan']['replace']
-        if replace:
-            for node_info in replace:
-                node = node_info['existing']['config']['hostname']
-                order.append(node)
-        return order
 
     def stats_validation_in_heterogenous_cluster(self):
         stats_dict = {}
@@ -231,11 +207,11 @@ class GSIPercentageQuota(BaseSecondaryIndexingTests):
             rest.set_index_planner_settings(index_setting)
 
     def monitor_scale_up(self, verify_swap_rebalance=True, select_queries=None, query_node=None):
-        out_order = self.get_index_replacement_order(cluster_id=self.cluster_id)
+        out_order = self.capella_api.get_replacement_order(cluster_id=self.cluster_id)
 
         # checking if there is a delay in deployment job initiation
         if not out_order:
-            out_order = self.get_index_replacement_order(cluster_id=self.cluster_id)
+            out_order = self.capella_api.get_replacement_order(cluster_id=self.cluster_id)
         for node in out_order:
             self.master = self.update_master_node()
             self.rest = RestConnection(self.master)

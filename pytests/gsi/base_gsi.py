@@ -1876,6 +1876,20 @@ class BaseSecondaryIndexingTests(QueryTests):
         content = rest.cluster_status()
         return int(content['indexMemoryQuota'])
 
+    def update_master_node(self):
+        for server in self.servers:
+            try:
+                rest = RestConnection(server)
+                master = rest.get_orchestrator()
+                break
+            except Exception as err:
+                pass
+        for server in self.servers:
+            if server.ip == master:
+                self.master = server
+                break
+        return server
+
     def get_nodes_uuids(self):
         if self.use_https:
             port = '18091'
