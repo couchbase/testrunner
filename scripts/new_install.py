@@ -116,7 +116,6 @@ def validate_install(params):
                                                                                     node['version'],
                                                                                     node['afamily'],
                                                                                     node['services']))
-
     install_utils.print_result_and_exit()
 
 def do_install(params):
@@ -190,11 +189,17 @@ def main():
         # builds.
         do_uninstall(params)
         params['install_tasks'].remove('uninstall')
+
+    # Checking node stats before installation
+    install_utils.check_nodes_statuses()
+
     if 'install' in params['install_tasks']:
         install_utils.download_build()
     if 'tools' in params['install_tasks']:
         install_utils.install_tools()
     do_install(params)
+
+
 
 
 if __name__ == "__main__":
