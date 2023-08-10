@@ -100,6 +100,20 @@ class NodeHelper:
                 log.warning("{0} unreachable, {1}, retrying..".format(self.ip, e))
                 time.sleep(20)
 
+    def print_node_stats(self, display_process_info=False):
+        if self.get_os() in install_constants.LINUX_DISTROS:
+            commands=["df -hl", "free -h"]
+            if display_process_info:
+                commands = commands + ["top -n1", "ps -aef"]
+            for cmd in commands:
+                out, _ =  self.shell.execute_command(cmd, get_pty=True)
+                log.info("-" * 100)
+                log.info("$ {}".format(cmd))
+                for line in out:
+                    log.info(line)
+                log.info("-" * 100)
+
+
     def get_os(self):
         os = self.info.distribution_version.lower()
         to_be_replaced = ['\n', ' ', 'gnu/linux']
@@ -503,6 +517,12 @@ def get_node_helper(ip):
             return node_helper
     return None
 
+def check_nodes_statuses(display_process_info=False): 
+    for server in params["servers"]:
+        node = get_node_helper(server.ip)
+        node.check_node_reachable()
+        if node.connect_ok:
+            node.print_node_stats(display_process_info=display_process_info)
 
 def print_result_and_exit(err=None):
     if err:
@@ -517,9 +537,13 @@ def print_result_and_exit(err=None):
                 fail.append(server.ip)
             else:
                 install_not_started.append(server.ip)
-
         elif node.install_success:
             success.append(server.ip)
+
+    # Print node status if install failed or not started
+    if len(fail) > 0 or len(install_not_started) > 0:
+        check_nodes_statuses(display_process_info=True)
+
     log.info("-" * 100)
     for _ in install_not_started:
         log.error("INSTALL NOT STARTED ON: \t{0}".format(_))

@@ -3299,7 +3299,7 @@ class RemoteMachineShellConnection(KeepRefs):
         output = re.sub('\s+', '', output)
         return (output)
 
-    def execute_command(self, command, info=None, debug=True, use_channel=False, timeout=600, get_exit_code=False):
+    def execute_command(self, command, info=None, debug=True, use_channel=False, timeout=600, get_exit_code=False, get_pty=False):
         if getattr(self, "info", None) is None and info is not None :
             self.info = info
         else:
@@ -3311,7 +3311,7 @@ class RemoteMachineShellConnection(KeepRefs):
         if self.use_sudo:
             command = "sudo " + command
 
-        return self.execute_command_raw(command, debug=debug, use_channel=use_channel, timeout=timeout, get_exit_code=get_exit_code)
+        return self.execute_command_raw(command, debug=debug, use_channel=use_channel, timeout=timeout, get_exit_code=get_exit_code, get_pty=get_pty)
 
     def reconnect_if_inactive(self):
         """
@@ -3322,7 +3322,7 @@ class RemoteMachineShellConnection(KeepRefs):
             log.warning("SSH connection to {} inactive, reconnecting...".format(self.ip))
             self.ssh_connect_with_retries(self.ip, self.username, self.password, self.ssh_key)
 
-    def execute_command_raw(self, command, debug=True, use_channel=False, timeout=600, get_exit_code=False):
+    def execute_command_raw(self, command, debug=True, use_channel=False, timeout=600, get_exit_code=False, get_pty=False):
         if debug:
             log.info("running command.raw on {0}: {1}".format(self.ip, command))
         self.reconnect_if_inactive()
@@ -3345,7 +3345,7 @@ class RemoteMachineShellConnection(KeepRefs):
             channel.close()
             stdin.close()
         elif self.remote:
-            stdin, stdout, stderro = self._ssh_client.exec_command(command, timeout=timeout)
+            stdin, stdout, stderro = self._ssh_client.exec_command(command, timeout=timeout, get_pty=get_pty)
             stdin.close()
 
         if not self.remote:
