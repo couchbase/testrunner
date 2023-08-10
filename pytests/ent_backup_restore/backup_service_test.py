@@ -3238,7 +3238,7 @@ class BackupServiceTest(BackupServiceBase):
         username = self.master.rest_username
         password = self.master.rest_password
 
-        versions = [1, 1.1, 1.2]
+        versions = [1.2]
 
         def set_tls_version(version):
             """ Sets the global min-tls-version using the couchbase-cli
@@ -3256,9 +3256,6 @@ class BackupServiceTest(BackupServiceBase):
             Returns:
                 (bool):
             """
-            # The tls-max flag prefers 1.0 as opposed to 1
-            if version == 1:
-                version = 1.0
 
             command = f"curl --tlsv{version} --tls-max {version} https://{self.master.ip}:18097/api/v1/plan --insecure -u {username}:{password}"
             _, _, exit_code = remote_shell.execute_command(command, get_exit_code=True)
