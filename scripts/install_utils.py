@@ -28,6 +28,7 @@ params = {
     "version": None,
     "install_tasks": install_constants.DEFAULT_INSTALL_TASKS,
     "url": None,
+    "cb_non_package_installer_url":None,
     "debug_logs": False,
     "cb_edition": install_constants.CB_ENTERPRISE,
     "timeout": install_constants.INSTALL_TIMEOUT,
@@ -613,6 +614,11 @@ def _parse_user_input():
                 params["url"] = value
             else:
                 log.warning('URL:{0} is not valid, will use version to locate build'.format(value))
+        if key == "cb_non_package_installer_url":
+            if value.startswith("http"):
+                params["cb_non_package_installer_url"] = value
+            else:
+                log.warning('URL:{0} is not valid, will use default url to locate installer'.format(value))
         if key == "type" or key == "edition":
             if "community" in value.lower():
                 params["cb_edition"] = install_constants.CB_COMMUNITY
@@ -924,12 +930,13 @@ def download_cb_non_package_installer():
     for node in NodeHelpers:
         cmd_master = install_constants.DOWNLOAD_CMD[node.info.deliverable_type]
         download_dir =  __get_download_dir(node)
+        url = params["cb_non_package_installer_url"] if params["cb_non_package_installer_url"] else install_constants.CB_NON_PACKAGE_INSTALLER_URL
         if "curl" in cmd_master:
-            cmd = cmd_master.format(install_constants.CB_NON_PACKAGE_INSTALLER_URL,
+            cmd = cmd_master.format(url,
                                     node.build.path)
         elif "wget" in cmd_master:
             cmd = cmd_master.format(download_dir,
-                                    install_constants.CB_NON_PACKAGE_INSTALLER_URL)
+                                    url)
         if cmd:
             node.shell.execute_command(cmd, debug=True)
         node.shell.execute_command("chmod a+x {0}{1}".format(download_dir,
