@@ -36,7 +36,7 @@ OR = "or"
 class QueryDefinition(object):
     def __init__(self, index_name="Random", index_fields=None,
                  index_creation_template=INDEX_CREATION_TEMPLATE,
-                 index_drop_template=INDEX_DROP_TEMPLATE,
+                 index_drop_template=INDEX_DROP_TEMPLATE, nodes=None,
                  query_template="", query_use_index_template="", groups=None,
                  index_where_clause=None, gsi_type=None, partition_by_fields=None, keyspace=None,
                  missing_indexes=False, missing_field_desc=False, capella_run=False, is_primary=False):
@@ -62,6 +62,7 @@ class QueryDefinition(object):
         self.missing_field_desc = missing_field_desc
         self.capella_run = capella_run
         self.is_primary = is_primary
+        self.nodes = nodes
 
     def generate_index_create_query(self, namespace="default", use_gsi_for_secondary=True,
                                     deploy_node_info=None, defer_build=None, index_where_clause=None, gsi_type=None,
@@ -131,7 +132,7 @@ class QueryDefinition(object):
         return query
 
     def generate_primary_index_create_query(self, namespace="default", deploy_node_info=None, defer_build=None,
-                                            num_replica=None):
+                                            num_replica=None, nodes=None):
 
         deployment_plan = {}
         if self.keyspace:
@@ -143,6 +144,8 @@ class QueryDefinition(object):
             deployment_plan["defer_build"] = defer_build
         if num_replica:
             deployment_plan["num_replica"] = num_replica
+        if nodes:
+            deployment_plan["nodes"] = nodes
         if len(deployment_plan) > 0:
             query += " WITH " + str(deployment_plan)
         return query

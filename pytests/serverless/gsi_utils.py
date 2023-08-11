@@ -285,13 +285,13 @@ class GSIUtils(object):
         return definitions_list
 
     def get_create_index_list(self, definition_list, namespace, defer_build_mix=False,
-                              defer_build=False, num_replica=None):
+                              defer_build=False, num_replica=None, deploy_node_info=None):
         create_index_list = []
         for index_gen in definition_list:
             if defer_build_mix:
                 defer_build = random.choice([True, False])
             query = index_gen.generate_index_create_query(namespace=namespace, defer_build=defer_build,
-                                                          num_replica=num_replica)
+                                                          num_replica=num_replica, deploy_node_info=deploy_node_info)
             create_index_list.append(query)
         return create_index_list
 

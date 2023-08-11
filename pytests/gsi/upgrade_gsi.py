@@ -7,7 +7,7 @@ import random
 from threading import Thread
 
 import global_vars
-
+from string import digits
 from SystemEventLogLib.Events import EventHelper
 from SystemEventLogLib.gsi_events import IndexingServiceEvents
 from failover.AutoFailoverBaseTest import AutoFailoverBaseTest
@@ -46,6 +46,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.run_mixed_mode_tests = self.input.param("run_mixed_mode_tests", False)
         self.run_continous_query = False
         self.query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
+        self.index_scans_batch = self.input.param("index_scans_batch", 10)
+        self.no_mutation_docs = self.input.param("no_mutation_docs", 75000)
+
 
         if self.enable_dgm:
             if self.gsi_type == 'memory_optimized':
@@ -68,6 +71,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.skip_metabucket_check = True
         if self.enable_dgm:
             self.assertTrue(self._is_dgm_reached())
+        self.rest.delete_all_buckets()
 
     def tearDown(self):
         self.upgrade_servers = self.servers
@@ -466,6 +470,18 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                                           to_remove=[], services=services)
             self.validate_smart_batching_during_rebalance(rebalance_task)
+
+    def validate_scans_on_nodes(self, node):
+        index_rest_out = RestConnection(node)
+        stat_data_out = index_rest_out.get_index_stats()
+        num_scans = {key: value for key, value in stat_data_out.items() if key.lower().endswith('num_requests')}
+        no_index_scan_count = 0
+        for index, num_requests in num_scans.items():
+            if num_requests > 0:
+                self.log.info(f'index : {index} num scans : {num_requests}')
+                no_index_scan_count += 1
+        if no_index_scan_count == 0:
+            self.fail(f'Node {node} is serving scans when its getting rebalanced in')
 
     def scans_post_upgrade_new(self, select_queries):
         for namespace in self.namespaces:
@@ -1066,12 +1082,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                              'Index master node is updated to latest version as expected')
             self.scans_post_upgrade_new(select_queries=select_queries)
 
-
-
-
-
-
-
     def test_master_node_upgrade_rebalance_in(self):
         if self.redistribute_nodes:
             redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
@@ -1149,6 +1159,161 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             self.run_continous_query = False
             self.scans_post_upgrade_new(select_queries=select_queries)
 
+    def test_zstd_plasma_disk_size(self):
+        self.rest.update_autofailover_settings(True, 300)
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        index_node_A, index_node_B = index_nodes
+        nodes = [f'{index_node_A.ip}:{index_node_A.port}']
+        self.prepare_tenants(index_creations=False)
+        for namespace in self.namespaces:
+            prefix = f'idx_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}' \
+                     f'_batch_1_'
+            definition_list_before_upgrade = self.gsi_util_obj.get_index_definition_list(dataset='Hotel', prefix=prefix)
+            create_list_before_upgrade = self.gsi_util_obj.get_create_index_list(definition_list=definition_list_before_upgrade, namespace=namespace,
+                                                                  defer_build_mix=False, deploy_node_info=nodes)
+            select_queries_before_upgrade = self.gsi_util_obj.get_select_queries(definition_list=definition_list_before_upgrade,
+                                                                  namespace=namespace,
+                                                                  limit=10)
+            self.log.info(f"Create index list: {create_list_before_upgrade}")
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list_before_upgrade, query_node=self.query_node)
+        self.wait_until_indexes_online()
+        self.log.info("indexes created on node A")
+        del select_queries_before_upgrade[3]
+        query_rows_before_upgrade = []
+        for query in select_queries_before_upgrade:
+            row = self.run_cbq_query(query=query)
+            query_rows_before_upgrade.append(row['results'])
+
+        remote = RemoteMachineShellConnection(index_node_B)
+        remote.stop_server()
+        remote.disconnect()
+        self.upgrade_servers.append(index_node_B)
+        upgrade_threads = self._async_update(self.upgrade_to, [index_node_B])
+        for upgrade_thread in upgrade_threads:
+            upgrade_thread.join()
+        self.sleep(60)
+        self.log.info("node B upgraded")
+        #building indexes on node B only
+        nodes = [f'{index_node_B.ip}:{index_node_B.port}']
+        for namespace in self.namespaces:
+            prefix = f'idx_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}' \
+                     f'_batch_1_'
+            definition_list_after_upgrade = self.gsi_util_obj.get_index_definition_list(dataset='Hotel', prefix=prefix)
+            create_list_after_upgrade = self.gsi_util_obj.get_create_index_list(definition_list=definition_list_after_upgrade, namespace=namespace,
+                                                                  defer_build_mix=False, deploy_node_info=nodes)
+            self.log.info(f"Create index list: {create_list_after_upgrade}")
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_list_after_upgrade, query_node=self.query_node)
+        self.wait_until_indexes_online()
+        self.log.info("indexes created on node B")
+        # for batches in range(self.index_scans_batch):
+        #     self.gsi_util_obj.aysnc_run_select_queries(select_queries=select_queries_before_upgrade,
+        #                                                query_node=self.query_node)
+        # for node in [index_node_A, index_node_B]:
+        #     self.validate_scans_on_nodes(node=node)
+        #upgrading node A
+        remote = RemoteMachineShellConnection(index_node_A)
+        remote.stop_server()
+        remote.disconnect()
+        self.upgrade_servers.append(index_node_A)
+        upgrade_threads = self._async_update(self.upgrade_to, [index_node_A])
+        for upgrade_thread in upgrade_threads:
+            upgrade_thread.join()
+        self.sleep(30)
+        self.log.info("node A upgraded")
+        self.gsi_util_obj.aysnc_run_select_queries(select_queries=select_queries_before_upgrade, query_node=self.query_node)
+        self.log.info("scans run post node A upgrade")
+        node_A_disk_size = self.get_indexes_storage_stats(node=index_node_A, stat='lss_data_size')
+        node_A_compression_ratio = self.get_indexes_storage_stats(node=index_node_A, stat='compression_ratio')
+        self.log.info('node A storage stats')
+        self.log.info(f'lss data size node A : {node_A_disk_size}')
+        self.log.info(f'compression ratio node A : {node_A_compression_ratio}')
+        self.log.info("node B storage stats")
+        node_B_disk_size = self.get_indexes_storage_stats(node=index_node_B, stat='lss_data_size')
+        node_B_compression_ratio = self.get_indexes_storage_stats(node=index_node_B, stat='compression_ratio')
+        self.log.info(f'lss data size node B : {node_B_disk_size}')
+        self.log.info(f'compression ratio node B : {node_B_compression_ratio}')
+        self.validate_index_compression_ratio(storage_stats_A=node_A_compression_ratio, storage_stats_B=node_B_compression_ratio)
+        self.validate_index_disk_size(storage_stats_A=node_A_disk_size, storage_stats_B=node_B_disk_size)
+
+    def test_zstd_compression(self):
+        self.rest.update_autofailover_settings(True, 300)
+        index_node_A = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        self.prepare_tenants(index_creations=False)
+        namespace = self.namespaces[0]
+        _, keyspace = namespace.split(':')
+        bucket, scope, collection = keyspace.split('.')
+        primary_index = f"CREATE PRIMARY INDEX `#primary` ON `{bucket}`.`{scope}`.`{collection}`;"
+        create_query = f"CREATE INDEX name on {bucket}.{scope}.{collection}(name);"
+        for query in [primary_index, create_query]:
+            self.run_cbq_query(query=query)
+        self.wait_until_indexes_online()
+        self.log.info("indexes created on node A")
+        name = "\"Uttam Puli\""
+        update_query = f"UPDATE {bucket}.{scope}.{collection} SET name = {name};"
+        self.run_cbq_query(query=update_query)
+        self.sleep(60)
+        index_scan_query = f"select name from {bucket}.{scope}.{collection} where name = {name};"
+        index_mutation_scan_query = f"select * from {bucket}.{scope}.{collection} where name = {name};"
+        initial_no_indexed_fields = len(self.run_cbq_query(query=index_scan_query, scan_consistency='request_plus')['results'])
+        self.assertEqual(initial_no_indexed_fields, self.num_of_docs_per_collection, f"name field has not been updated actual count : {initial_no_indexed_fields} expected : {self.num_of_docs_per_collection}")
+
+        remote = RemoteMachineShellConnection(index_node_A)
+        remote.stop_server()
+        remote.disconnect()
+        self.upgrade_servers.append(index_node_A)
+        upgrade_threads = self._async_update(self.upgrade_to, [index_node_A])
+        for upgrade_thread in upgrade_threads:
+            upgrade_thread.join()
+        self.sleep(60)
+        self.log.info("node A upgraded")
+        index_rest_A = RestConnection(index_node_A)
+        storage_stats_before_mutation = index_rest_A.get_index_storage_stats()
+        self.log.info(storage_stats_before_mutation)
+
+        no_indexed_fields_post_upgrade = len(self.run_cbq_query(query=index_mutation_scan_query, scan_consistency='request_plus')['results'])
+        self.assertEqual(initial_no_indexed_fields, no_indexed_fields_post_upgrade, f"name field has not been updated actual count : {no_indexed_fields_post_upgrade} expected : {initial_no_indexed_fields}")
+
+        mutation_query = f"update {bucket}.{scope}.{collection} use keys (select raw meta().id from {bucket}.{scope}.{collection} limit {self.no_mutation_docs}) set name = \"joe apple\" ;"
+        self.run_cbq_query(query=mutation_query, scan_consistency='request_plus')
+        self.sleep(30, "sleep post doc mutations")
+
+        storage_stats_after_mutation = index_rest_A.get_index_storage_stats()
+        self.log.info(storage_stats_after_mutation)
+
+        expected_no_indexed_fields_post_mutations = no_indexed_fields_post_upgrade - self.no_mutation_docs
+        actual_no_indexed_fields_post_mutations = len(self.run_cbq_query(query=index_mutation_scan_query, scan_consistency='request_plus')['results'])
+
+        self.assertEqual(actual_no_indexed_fields_post_mutations, expected_no_indexed_fields_post_mutations, f"name field has not been updated actual count : {actual_no_indexed_fields_post_mutations} expected : {expected_no_indexed_fields_post_mutations}")
+
+        # performing compaction and eviction of indexes on node B to change the compression from snappy to zstd
+        self.log.info("performing compaction and eviction of indexes on node B")
+        index_rest_A.trigger_compaction()
+        self.sleep(10)
+        index_rest_A.trigger_eviction()
+        self.sleep(60)
+
+        actual_no_indexed_fields_post_compaction_eviction = len(self.run_cbq_query(query=index_mutation_scan_query,scan_consistency='request_plus')['results'])
+        self.assertEqual(actual_no_indexed_fields_post_compaction_eviction, expected_no_indexed_fields_post_mutations, f"name field has not been updated actual count : {actual_no_indexed_fields_post_compaction_eviction} expected : {expected_no_indexed_fields_post_mutations}")
+
+
+    def kv_mutations_new(self, num_of_docs_per_collection=1000, key_prefix=None):
+        task_list = []
+        for namespace in self.namespaces:
+            _, keyspace = namespace.split(':')
+            bucket, scope, collection = keyspace.split('.')
+            if key_prefix is None:
+                key_prefix = 'doc_' + "".join(random.choices(digits, k=2))
+            self.gen_create = SDKDataLoader(num_ops=num_of_docs_per_collection, percent_create=100,
+                                            percent_update=0, percent_delete=0, scope=scope,
+                                            collection=collection, json_template='Hotel', key_prefix=key_prefix,
+                                            output=True)
+            task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
+                                                    generator=self.gen_create, pause_secs=1,
+                                                    timeout_secs=300, use_magma_loader=False)
+            task_list.append(task)
+
+        for task in task_list:
+            task.result()
 
     def kv_mutations(self, docs=None):
         if not docs:
@@ -1156,6 +1321,28 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         gens_load = self.generate_docs(docs)
         tasks = self.async_load(generators_load=gens_load, batch_size=self.batch_size)
         return tasks
+
+    def validate_index_compression_ratio(self, storage_stats_A, storage_stats_B):
+        sorted_stats_A, sorted_stats_B = {}, {}
+        for stat in sorted(list(storage_stats_A.keys())):
+            sorted_stats_A[stat] = storage_stats_A[stat]
+        for stat in sorted(list(storage_stats_B.keys())):
+            sorted_stats_B[stat] = storage_stats_B[stat]
+        for stat_A, stat_B in zip(sorted_stats_A, sorted_stats_B):
+            self.log.info(f'A : {sorted_stats_A[stat_A]}')
+            self.log.info(f'B : {sorted_stats_B[stat_B]}')
+            self.assertLess(sorted_stats_A[stat_A], sorted_stats_B[stat_B], 'Compression not working as expected')
+
+    def validate_index_disk_size(self, storage_stats_A, storage_stats_B):
+        sorted_stats_A, sorted_stats_B = {}, {}
+        for stat in sorted(list(storage_stats_A.keys())):
+            sorted_stats_A[stat] = storage_stats_A[stat]
+        for stat in sorted(list(storage_stats_B.keys())):
+            sorted_stats_B[stat] = storage_stats_B[stat]
+        for stat_A, stat_B in zip(sorted_stats_A, sorted_stats_B):
+            self.log.info(f'A : {sorted_stats_A[stat_A]}')
+            self.log.info(f'B : {sorted_stats_B[stat_B]}')
+            self.assertLess(sorted_stats_B[stat_B], sorted_stats_A[stat_A], 'Compression not working as expected')
 
     def _is_dgm_reached(self):
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
@@ -1207,6 +1394,15 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         for tasks in tasks_list:
             for task in tasks:
                 task.result()
+
+    def get_indexes_storage_stats(self, node, stat):
+        index_rest = RestConnection(node)
+        index_map = index_rest.get_index_storage_stats()
+        indexes_disk_size = {}
+        for bucket, indexes in index_map.items():
+            for index, stats in indexes.items():
+                indexes_disk_size[index] = stats["MainStore"][f"{stat}"]
+        return indexes_disk_size
 
     def _run_queries_continously(self, select_queries):
         while self.run_continous_query:

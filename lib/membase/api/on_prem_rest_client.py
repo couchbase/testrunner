@@ -2329,6 +2329,23 @@ class RestConnection(object):
             except ValueError:
                 pass
 
+    def trigger_eviction(self, timeout=120):
+        api = self.index_baseUrl + 'plasmaDiag'
+        command = {'Cmd': 'listDBs'}
+        status, content, header = self._http_request(api, 'POST', json.dumps(command), timeout=timeout)
+        for l in list(iter(str(content, 'utf-8').splitlines())):
+            try:
+                x, id = l.split(" : ")
+                if id:
+                    log.info(f'Triggering eviction for instance id {id}')
+                    compact_command = {'Cmd': 'evictAll', 'Args': [id]}
+                    status, content, header = self._http_request(api, 'POST', json.dumps(compact_command))
+                    if not status:
+                        log.error(f'Failed to trigger eviction : {content}')
+            except ValueError:
+                pass
+
+
     def get_index_status(self, timeout=120, index_map=None):
         api = self.baseUrl + 'indexStatus'
         index_map = {}
