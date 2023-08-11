@@ -9,49 +9,75 @@ class LogScanner(object):
         self.skip_security_scan = skip_security_scan
         self.service_log_security_map = {
             "all": {
-                "all": [
-                        # Authorization/password/key
-                        "Basic\s[a-zA-Z]\{10,\}==",
-                        "Menelaus-Auth-User:\[",
-                        "BEGIN RSA PRIVATE KEY",
-                        "(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}",
-                        # tasklist /v
-                        ".*\\(([^\\)}]|\\n)*[.*[\\\" '\\`\\(]+tasklist[\\\" '\\`\\)]+([^\\)}]|\\n)*/v.*\\)",
-                        # ps -o command
-                        ".*\\(([^\\)}]|\\n)*[.*[\\\" '\\`\\(]+ps[\\\" '\\`]+([^\\)}]|\\n)*command([^\\)}]|\\n)*\\)",
+                "all": {
+                        "keywords": [
+                            # Authorization/password/key
+                            "Basic\s[a-zA-Z]\{10,\}==",
+                            "Menelaus-Auth-User:\[",
+                            "BEGIN RSA PRIVATE KEY",
+                            "(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}",
+                            # tasklist /v
+                            ".*\\(([^\\)}]|\\n)*[.*[\\\" '\\`\\(]+tasklist[\\\" '\\`\\)]+([^\\)}]|\\n)*/v.*\\)",
+                            # ps -o command
+                            ".*\\(([^\\)}]|\\n)*[.*[\\\" '\\`\\(]+ps[\\\" '\\`]+([^\\)}]|\\n)*command([^\\)}]|\\n)*\\)",
                         ]
+                }
             }
         }
 
+        # Structure of the map = {service:{logfile:{"keywords":[],"ignore_keywords":[]}}}
         self.service_log_keywords_map = {
             "all": {
-                "babysitter.log": ["exception occurred in runloop", "failover exited with reason"],
-                "memcached.log": ["CRITICAL", "Invalid packet header detected"],
-                "sanitizers.log.*": ['^'],
-                "all": []
+                "babysitter.log": {
+                    "keywords" : ["exception occurred in runloop", "failover exited with reason"],
+                },
+                "memcached.log": {
+                    "keywords" : ["CRITICAL", "ERROR"],
+                    "ignore_keywords" : ["XERROR"]
+                },
+                "sanitizers.log.*": {
+                    "keywords" : ['^'],
+                },
+                "all": {
+                    "keywords" : [],
+                },
             },
             "cbas": {
-                "analytics_error": ["Analytics Service is temporarily unavailable",
-                                    "Failed during startup task", "ASX", "IllegalStateException"]
+                "analytics_error": {
+                    "keywords" : ["Analytics Service is temporarily unavailable",
+                                  "Failed during startup task", "ASX", "IllegalStateException"]
+                }
             },
             "eventing": {
-                "eventing.log": ["panic"]
+                "eventing.log": {
+                    "keywords" : ["panic"]
+                }
             },
             "fts": {
-                "fts.log": ["panic"]
+                "fts.log": {
+                    "keywords" : ["panic"]
+                    }
             },
             "index": {
-                "indexer.log": ["panic in", "panic:", "Error parsing XATTR",
-                                "corruption"]
+                "indexer.log": {
+                    "keywords" : ["panic in", "panic:", "Error parsing XATTR",
+                                  "corruption"]
+                }
             },
             "kv": {
-                "projector.log": ["panic", "Error parsing XATTR"],
-                "*xdcr*.log": ["panic", "non-recoverable error from xmem client. response status=KEY_ENOENT",
-                               "Execution timed out",
-                               "initConnection error"],
+                "projector.log": {
+                    "keywords" : ["panic", "Error parsing XATTR"]
+                },
+                "*xdcr*.log": {
+                    "keywords" : ["panic", "non-recoverable error from xmem client. response status=KEY_ENOENT",
+                                  "Execution timed out",
+                                  "initConnection error"]
+                },
             },
             "n1ql": {
-                "query.log": ["panic"]
+                "query.log": {
+                    "keywords" : ["panic","FATAL","SEVERE","ERROR","Fatal","Error","Severe"]
+                }
             }
         }
 
@@ -69,24 +95,33 @@ class LogScanner(object):
                 self.services.append(service)
 
     def scan(self):
-        # log_matches_map = {log: {keyword: num matches}}
         log_matches_map = {}
         try:
             for service in self.services:
                 for log in self.service_log_keywords_map[service].keys():
-                    keywords = self.service_log_keywords_map[service][log]
+                    keywords = self.service_log_keywords_map[service][log]["keywords"]
+                    ignore_keywords = self.service_log_keywords_map[service][log]["ignore_keywords"] \
+                        if "ignore_keywords" in self.service_log_keywords_map[service][log] \
+                            else []
                     if not self.skip_security_scan:
                         if service in self.service_log_security_map.keys():
                             if log in self.service_log_security_map[service].keys():
-                                keywords += self.service_log_security_map[service][log]
+                                keywords += self.service_log_security_map[service][log]["keywords"]
+                                ignore_keywords += self.service_log_security_map[service][log]["ignore_keywords"] \
+                                    if "ignore_keywords" in self.service_log_security_map[service][log] \
+                                        else []
+                    if self.exclude_keywords:
+                        ignore_keywords += self.exclude_keywords
+                    if ignore_keywords:
+                        ignore_keywords_joined = "|".join(ignore_keywords)
                     for keyword in keywords:
                         cmd = self.cmd
                         if log == "all":
                             cmd += "\"{0}\" {1}{2}".format(keyword, self.log_path, '*')
                         else:
                             cmd += "\"{0}\" {1}{2}".format(keyword, self.log_path, log + '*')
-                        if self.exclude_keywords:
-                            cmd = f'{cmd} | {self.cmd} -Ev \"{self.exclude_keywords}\"'
+                        if ignore_keywords:
+                            cmd = f'{cmd} | {self.cmd} -Ev \"{ignore_keywords_joined}\"'
                         matches, err = self.shell.execute_command(cmd, debug=False)
                         if len(matches):
                             print("Number of matches : " + str(len(matches)) + "\nmatches : " + str(matches))
