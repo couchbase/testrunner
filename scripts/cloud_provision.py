@@ -47,6 +47,26 @@ def install_iptables(host, username="root", password="couchbase"):
 
     ssh.close()
 
+def create_non_root_user(host, username="root", password="couchbase"):
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(host,
+                username=username,
+                password=password)
+    commands = ["useradd -m nonroot",
+                "echo -e 'couchbase\ncouchbase' | sudo passwd nonroot"]
+
+    for command in commands:
+        stdin, stdout, stderr = ssh.exec_command(command)
+        if stdout.channel.recv_exit_status() != 0:
+            break
+
+    if check_root_login(host):
+        print("nonroot login to host {} successful.".format(host))
+    else:
+        print("nonroot login to host {} failed. Terminating the EC2 instance".format(host))
+        ssh.exec_command("sudo shutdown")
+        time.sleep(10)
 
 def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
         ssh = paramiko.SSHClient()
@@ -135,6 +155,10 @@ AWS_AMI_MAP = {
             "x86_64" : "ami-09c0393bac9d9b6ed",
             "aarch64": "ami-05b98dc6de6e09e97"
         },
+        "ubuntu22nonroot" : {
+            "x86_64" : "ami-09c0393bac9d9b6ed",
+            "aarch64": "ami-05b98dc6de6e09e97"
+        },
         "oel8" : {
             "x86_64" : "ami-0b5aaeac901e41860"
         },
@@ -162,6 +186,7 @@ AWS_OS_USERNAME_MAP = {
     "centos": "centos",
     "al2023": "ec2-user",
     "ubuntu22": "ubuntu",
+    "ubuntu22nonroot": "ubuntu",
     "oel8": "ec2-user",
     "rhel8": "ec2-user",
     "suse15": "ec2-user",
@@ -226,7 +251,9 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
         post_provisioner(ip, ssh_username, ssh_key_path)
         if "suse" not in os:
             install_iptables(ip)
-
+        if "nonroot" in os:
+            create_non_root_user(ip)
+            check_root_login(ip,username="nonroot",password="couchbase")
     return ips
 
 ZONE = "us-central1-a"
