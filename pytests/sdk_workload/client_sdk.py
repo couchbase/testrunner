@@ -6,10 +6,12 @@ import traceback
 from couchbase.auth import PasswordAuthenticator
 from couchbase.cluster import Cluster
 from couchbase.durability import ServerDurability, Durability
-from couchbase.options import ClusterOptions, InsertMultiOptions, UpsertMultiOptions, GetMultiOptions
+from couchbase.options import ClusterOptions, UpsertMultiOptions, GetMultiOptions, RemoveMultiOptions
 from couchbase.options import TLSVerifyMode
 from datetime import timedelta
-from couchbase.exceptions import CouchbaseException, BucketNotFoundException, ScopeNotFoundException, CollectionNotFoundException,  AmbiguousTimeoutException, UnAmbiguousTimeoutException
+from couchbase.exceptions import CouchbaseException, BucketNotFoundException, ScopeNotFoundException, CollectionNotFoundException,  AmbiguousTimeoutException, UnAmbiguousTimeoutException, RequestCanceledException
+# from couchbase import enable_protocol_logger_to_save_network_traffic_to_file
+# enable_protocol_logger_to_save_network_traffic_to_file('pytests/sdk_workload/sdk_logs.log')
 
 CREATE, UPDATE, READ, DELETE = "create", "delete", "read", "update"
 
@@ -61,7 +63,7 @@ class SDKClient(object):
 
     def sdk_client_pool(self, cluster_srv, user_name, password):
         auth = PasswordAuthenticator(user_name, password)
-        options = ClusterOptions(auth, tls_verify=TLSVerifyMode.NONE, log_redaction=True)
+        options = ClusterOptions(auth, tls_verify=TLSVerifyMode.NONE, log_redaction=True, dump_configuration=True)
         endpoint = cluster_srv
         logging.info("endpoint is : {}".format(endpoint))
         retries = 5
@@ -98,64 +100,75 @@ class SDKClient(object):
             return CollectionNotFoundException.error_code
         return collection
 
-    def insert_multi(self, collection, counter_obj, batch, logger):
-        key_doc_dict = batch
-        retries = 5
+    def delete_multi(self, collection, counter_obj, batch, number_of_retries, delay_time):
+        retries = number_of_retries
+        key_list = list(batch.keys())
         while retries > 0:
-            retries_batch = dict()
-            result = collection.insert_multi(key_doc_dict, InsertMultiOptions(timeout=timedelta(seconds=60)))
-            if not result.all_ok:
-                logger.error(traceback.format_exc())
+            retries_keys = list()
+            result = collection.remove_multi(key_list, RemoveMultiOptions(timeout=timedelta(seconds=60)))
             for key in result.exceptions.keys():
                 exception = result.exceptions[key]
-                if exception == AmbiguousTimeoutException or exception == UnAmbiguousTimeoutException:
-                    retries_batch[key] = key_doc_dict[key]
+                if exception.error_code == 2 or exception.error_code == 14 or exception.error_code == 15:
+                    retries_keys.append(key)
                 else:
-                    counter_obj.increment(CREATE)
-                    logging.critical("Create document failed with exception: {}".format(exception))
-            key_doc_dict = retries_batch
-            if len(key_doc_dict.keys()) == 0:
+                    counter_obj.increment(READ)
+                    logging.critical("Delete document failed with exception: {}".format(exception))
+            key_list = retries_keys
+            retries = retries - 1
+            if len(key_list) == 0:
+                logging.info("Delete operation gets success after {} retries".format(number_of_retries - retries))
                 break
-            logging.info("Retries insert doc due ambiguous timeout failures......")
-        return True
+            if retries == 0:
+                counter_obj.increment(DELETE)
+                logging.critical("Delete document failed with exception: {} after {} retries".format(result.exceptions, number_of_retries))
+            time.sleep(delay_time)
+            logging.info("Retries Delete doc due timeout failures......")
 
-    def upsert_multi(self, collection, counter_obj, batch, logger):
+    def upsert_multi(self, collection, counter_obj, batch, number_of_retries, delay_time):
         key_doc_dict = batch
-        retries = 5
+        retries = number_of_retries
         while retries > 0:
             retries_batch = dict()
             result = collection.upsert_multi(key_doc_dict, UpsertMultiOptions(timeout=timedelta(seconds=60)),
                                              durability=ServerDurability(Durability.PERSIST_TO_MAJORITY.value))
-            if not result.all_ok:
-                logger.error(traceback.format_exc())
             for key in result.exceptions.keys():
                 exception = result.exceptions[key]
-                if exception == AmbiguousTimeoutException or exception == UnAmbiguousTimeoutException:
+                if exception.error_code == 2 or exception.error_code == 14  or exception.error_code == 15:
                     retries_batch[key] = key_doc_dict[key]
                 else:
                     counter_obj.increment(UPDATE)
                     logging.critical("Update document failed with exception: {}".format(exception))
             key_doc_dict = retries_batch
+            retries = retries - 1
             if len(key_doc_dict.keys()) == 0:
+                logging.info("Upsert operation gets success after {} retries".format(number_of_retries - retries))
                 break
-            logging.info("Retries upsert doc due ambiguous timeout failures......")
+            if retries == 0:
+                counter_obj.increment(UPDATE)
+                logging.critical("Update document failed with exception: {} after {} retries".format(result.exceptions, number_of_retries))
+            time.sleep(delay_time)
+            logging.info("Retries upsert doc due timeout failures......")
 
-    def read_multi(self, collection, counter_obj, batch, logger):
-        retries = 5
+    def read_multi(self, collection, counter_obj, batch, number_of_retries, delay_time):
+        retries = number_of_retries
         key_list = list(batch.keys())
         while retries > 0:
             retries_keys = list()
             result = collection.get_multi(key_list, GetMultiOptions(timeout=timedelta(seconds=60)))
-            if not result.all_ok:
-                logger.error(traceback.format_exc())
             for key in result.exceptions.keys():
                 exception = result.exceptions[key]
-                if exception == AmbiguousTimeoutException or exception == UnAmbiguousTimeoutException:
+                if exception.error_code == 2 or exception.error_code == 14  or exception.error_code == 15:
                     retries_keys.append(key)
                 else:
                     counter_obj.increment(READ)
                     logging.critical("Read document failed with exception: {}".format(exception))
             key_list = retries_keys
+            retries = retries - 1
             if len(key_list) == 0:
+                logging.info("Read operation gets success after {} retries".format(number_of_retries-retries))
                 break
-            logging.info("Retries read doc due ambiguous timeout failures......")
+            if retries == 0:
+                counter_obj.increment(READ)
+                logging.critical("Read document failed with exception: {} after retries {}".format(result.exceptions, number_of_retries))
+            time.sleep(delay_time)
+            logging.info("Retries read doc due timeout failures......")

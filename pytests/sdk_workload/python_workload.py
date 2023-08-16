@@ -18,37 +18,46 @@ failed_with_errors = dict()
 CREATE, UPDATE, READ, DELETE = "create", "delete", "read", "update"
 
 
-def crud_thread(collection, key_prefix, number_of_docs, run, counter_obj, logger):
+def crud_thread(collection, key_prefix, number_of_docs, run, counter_obj, number_of_retries, duration, delay_time):
     doc_gen = doc_generator(key_prefix, 12, 1024, number_of_docs)
-    batched_gen_obj = BatchedDocumentGenerator(doc_gen,1000)
     sdk_client = SDKClient()
-    # logging.info("key_prefix: {}, run: {} for collection: {}".format(key_prefix, run, collection.name))
+    t_end = time.time() + int(duration)
+    revert_value = True
+    while time.time() < t_end:
+        batched_gen_obj = BatchedDocumentGenerator(doc_gen, 1000)
+        while batched_gen_obj.has_next():
+            current_batch = batched_gen_obj.next_batch()
+            key_doc_dict = dict()
+            for key in current_batch:
+                doc = current_batch[key]
+                new_doc = json.loads(doc)
+                new_doc['upsert'] = revert_value
+                revert_value != revert_value
+                key_doc_dict[key] = new_doc
+
+            logging.info("Upserting {} in collection: {}".format(number_of_docs, collection.name))
+            sdk_client.upsert_multi(collection, counter_obj, key_doc_dict, number_of_retries, delay_time)
+            logging.info("Reading {} in collection: {}".format(number_of_docs, collection.name))
+            sdk_client.read_multi(collection, counter_obj, key_doc_dict, number_of_retries, delay_time)
+        doc_gen.reset()
+
+    doc_gen.reset()
+    batched_gen_obj = BatchedDocumentGenerator(doc_gen, 1000)
     while batched_gen_obj.has_next():
         current_batch = batched_gen_obj.next_batch()
-        logging.info("Inserting {} in collection: {}".format(number_of_docs, collection.name))
-        key_doc_dict = dict()
-        for key in current_batch:
-            doc = current_batch[key]
-            new_doc = json.loads(doc)
-            new_doc['upsert'] = True
-            key_doc_dict[key] = new_doc
-        result = sdk_client.insert_multi(collection, counter_obj, key_doc_dict, logger)
-        if result:
-            logging.info("Upserting {} in collection: {}".format(number_of_docs, collection.name))
-            sdk_client.upsert_multi(collection, counter_obj, current_batch, logger)
-            logging.info("Reading {} in collection: {}".format(number_of_docs, collection.name))
-            sdk_client.read_multi(collection, counter_obj, current_batch, logger)
+        logging.info("Deleting {} in collection: {}".format(number_of_docs, collection.name))
+        sdk_client.delete_multi(collection, counter_obj, current_batch, number_of_retries, delay_time)
 
 
-def mutate_doc_thread(collection, counter_obj, logger, number_of_docs):
-    num_of_docs_per_thread, number_of_threads = number_of_docs, 10
+def mutate_doc_thread(collection, counter_obj, number_of_docs, number_of_threads, number_of_retries, duration, delay_time):
+    num_of_docs_per_thread = number_of_docs
     threading_list,key = list(), "key"
     run = 0
     for i in range(number_of_threads):
         key = time.time()
         key = int(key)
         key = str(key)
-        thread = threading.Thread(target=crud_thread, args=(collection, key, num_of_docs_per_thread, run, counter_obj, logger))
+        thread = threading.Thread(target=crud_thread, args=(collection, key, num_of_docs_per_thread, run, counter_obj, number_of_retries, duration, delay_time))
         threading_list.append(thread)
         time.sleep(1)
         run = run + 1
@@ -60,14 +69,14 @@ def mutate_doc_thread(collection, counter_obj, logger, number_of_docs):
         thread.join()
 
 
-def start_workload(collection_obj_list, logger, number_of_dos):
+def start_workload(collection_obj_list, number_of_dos, number_of_threads, number_of_retries, duration, delay_time):
     thread_list = list()
     counter_obj = SDKCounter()
     logging.info("Starting {} number of threads to start the workload".format(len(collection_obj_list)))
 
     logging.info("Running SDK Workload")
     for collection in collection_obj_list:
-        thread = threading.Thread(target=mutate_doc_thread, args=(collection,counter_obj, logger, number_of_dos))
+        thread = threading.Thread(target=mutate_doc_thread, args=(collection, counter_obj, number_of_dos, number_of_threads, number_of_retries, duration, delay_time))
         thread_list.append(thread)
 
     for thread in thread_list:
@@ -95,14 +104,17 @@ class PythonSdkWorkload(unittest.TestCase):
         self.user_pass = self.input.param("password", "RunWorkloadUser@123")
         self.duration = self.input.capella.get("duration", 3600)
         self.bucket_list = json.loads(self.bucket_list)
+        self.number_of_threads = self.input.param("number_of_threads", 10)
+        self.number_of_retries = self.input.param("number_of_retries", 100)
         self.log_level = self.input.param("log_level", None)
         self.sdk_logger = self.get_sdk_logger()
         self.number_of_docs_per_collection = self.input.param("num_of_docs_per_coll", 10000)
+        self.delay_time = self.input.param("delay_time", 0.1)
         self.sdk_client = SDKClient()
 
     def allow_current_ip(self):
         try:
-            _ = self.capella_api.allow_my_ip(self.cluster_id,self.user_name,self.user_pass)
+            _ = self.capella_api.allow_my_ip(self.cluster_id)
         except Exception as e:
             logging.info("Exception while allow current IP: {}".format(e))
 
@@ -170,9 +182,5 @@ class PythonSdkWorkload(unittest.TestCase):
                             else:
                                 collection_obj_list.append(collection)
 
-        start_workload(collection_obj_list, self.sdk_logger, self.number_of_docs_per_collection)
-        logging.info("Step-5----------------Flush buckets".format(self.duration))
-        for bucket_name in self.bucket_list.keys():
-            resp = self.flush_bucket(bucket_name)
-            if resp.status_code != 200:
-                raise Exception("Response: {} when trying to flush bucket: {}".format(resp.status_code, bucket_name))
+        start_workload(collection_obj_list, self.number_of_docs_per_collection,
+                       self.number_of_threads, self.number_of_retries, self.duration, self.delay_time)
