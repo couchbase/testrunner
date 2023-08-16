@@ -54,7 +54,9 @@ def create_non_root_user(host, username="root", password="couchbase"):
                 username=username,
                 password=password)
     commands = ["useradd -m nonroot",
-                "echo -e 'couchbase\ncouchbase' | sudo passwd nonroot"]
+                "echo -e 'couchbase\ncouchbase' | sudo passwd nonroot",
+                "echo \"nonroot       soft  nofile         200000\" >> /etc/security/limits.conf",
+                "echo \"nonroot       hard  nofile         200000\" >> /etc/security/limits.conf"]
 
     for command in commands:
         stdin, stdout, stderr = ssh.exec_command(command)

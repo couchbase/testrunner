@@ -197,9 +197,9 @@ NON_ROOT_CMDS = {
         "install":
             "mkdir " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb;"
             "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; "
-            "./cb-non-package-installer --install --package buildpath --install-location " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/",
+            "./{} --install --package buildpath --install-location " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/",
         "post_install":
-            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "/cb/opt/couchbase/; "
+            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/opt/couchbase/; "
             "./bin/couchbase-server --start",
         "post_install_retry": "./bin/couchbase-server --start",
         "init": None,
@@ -262,7 +262,7 @@ NON_ROOT_CMDS = {
         "suse_install":
             "mkdir " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb;"
             "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; "
-            "./cb-non-package-installer --install --package buildpath --install-location " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/",
+            "./{} --install --package buildpath --install-location " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/",
         "post_install": NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/opt/couchbase/bin/couchbase-server --start",
         "post_install_retry": None,
         "init": None,
