@@ -236,6 +236,14 @@ class NodeHelper:
                 cmd_d = self.actions_dict[self.info.deliverable_type][
                     "install"]
                 cmd_debug = None
+            if self.nonroot:
+                cb_non_package_installer_name = params["cb_non_package_installer_url"].split("/")[-1] \
+                    if params["cb_non_package_installer_url"] \
+                        else install_constants.CB_NON_PACKAGE_INSTALLER_NAME
+                cmd = self.actions_dict[self.info.deliverable_type]["install"].format(cb_non_package_installer_name)
+                cmd_d = self.actions_dict[self.info.deliverable_type]["install"].format(cb_non_package_installer_name)
+                cmd_debug = None
+
             cmd = cmd.replace("buildbinary", self.build.name)
             cmd = cmd.replace("buildpath", self.build.path)
             cmd = cmd.replace("mountpoint", "/tmp/couchbase-server-" + params["version"])
@@ -518,7 +526,7 @@ def get_node_helper(ip):
             return node_helper
     return None
 
-def check_nodes_statuses(display_process_info=False): 
+def check_nodes_statuses(display_process_info=False):
     for server in params["servers"]:
         node = get_node_helper(server.ip)
         node.check_node_reachable()
@@ -801,13 +809,16 @@ def _copy_to_nodes(debug=False):
     copy_threads = []
     for node in NodeHelpers:
         if debug:
-            path = node.build.debug_path
+            src_path = node.build.debug_path
         else:
-            path = node.build.path
+            src_path = node.build.path
+        dst_path = __get_download_dir(node, disregard_skip_local_download=True) \
+                   + node.build.name
+        node.build.path = dst_path
         # don't copy if the file already exists and size matches
         if check_file_size(node, debug):
             continue
-        copy_to_node = threading.Thread(target=__copy_thread, args=(path, path, node))
+        copy_to_node = threading.Thread(target=__copy_thread, args=(src_path, dst_path, node))
         copy_threads.append(copy_to_node)
         copy_to_node.start()
 
@@ -924,23 +935,29 @@ def download_build():
                                                 node.build.debug_path
                                                 , debug_build=True)
     log.debug("Done downloading build binary")
+    for node in NodeHelpers:
+        if node.shell.nonroot:
+            download_cb_non_package_installer()
 
 def download_cb_non_package_installer():
     log.debug("Downloading install script now")
     for node in NodeHelpers:
         cmd_master = install_constants.DOWNLOAD_CMD[node.info.deliverable_type]
-        download_dir =  __get_download_dir(node)
+        download_dir =  __get_download_dir(node, disregard_skip_local_download=True)
         url = params["cb_non_package_installer_url"] if params["cb_non_package_installer_url"] else install_constants.CB_NON_PACKAGE_INSTALLER_URL
         if "curl" in cmd_master:
             cmd = cmd_master.format(url,
-                                    node.build.path)
+                                    download_dir)
         elif "wget" in cmd_master:
             cmd = cmd_master.format(download_dir,
                                     url)
         if cmd:
             node.shell.execute_command(cmd, debug=True)
+        cb_non_package_installer_name = params["cb_non_package_installer_url"].split("/")[-1] \
+                    if params["cb_non_package_installer_url"] \
+                        else install_constants.CB_NON_PACKAGE_INSTALLER_NAME
         node.shell.execute_command("chmod a+x {0}{1}".format(download_dir,
-                                                             install_constants.CB_NON_PACKAGE_INSTALLER_NAME))
+                                                             cb_non_package_installer_name))
 
 def install_tools():
     log.debug("Downloading the tools package now")
@@ -975,7 +992,8 @@ def check_and_retry_download_binary_local(node):
             node.build.debug_path))
     duration, event, timeout = install_constants.WAIT_TIMES[node.info.deliverable_type][
         "download_binary"]
-    cmd = install_constants.WGET_CMD.format(__get_download_dir(node), node.build.url)
+    cmd = install_constants.WGET_CMD.format(__get_download_dir(node),
+                                            node.build.url)
     cmd_debug = None
     if node.build.debug_build_present:
         cmd_debug = install_constants.WGET_CMD.format(
@@ -983,6 +1001,7 @@ def check_and_retry_download_binary_local(node):
     start_time = time.time()
     while time.time() < start_time + timeout:
         try:
+            log.info("Executing cmd on local : {}".format(cmd))
             exit_code = _execute_local(cmd, timeout)
             if exit_code == 0 and os.path.exists(node.build.path):
                 break
@@ -1040,7 +1059,8 @@ def get_local_build_size(node, debug_build=False):
         binary_name = node.build.name
     output, _ = node.shell.execute_command(
         install_constants.LOCAL_BUILD_SIZE_CMD.format(
-            __get_download_dir(node), binary_name))
+            __get_download_dir(node, disregard_skip_local_download=True),
+            binary_name))
     local_build_size = int(output[0].strip().split(" ")[0])
     return local_build_size
 
@@ -1057,8 +1077,6 @@ def check_file_size(node, debug_build=False):
 def check_and_retry_download_binary(cmd, node, path, debug_build=False):
     if "amazonaws" in cmd:
         cmd += " --no-check-certificate "
-    if node.shell.nonroot:
-        download_cb_non_package_installer()
     duration, event, timeout = install_constants.WAIT_TIMES[node.info.deliverable_type]["download_binary"]
     start_time = time.time()
     while time.time() < start_time + timeout:
@@ -1076,10 +1094,11 @@ def check_and_retry_download_binary(cmd, node, path, debug_build=False):
         print_result_and_exit("Unable to download build in {0}s on {1}, exiting".format(timeout, node.ip))
 
 
-def __get_download_dir(node):
+def __get_download_dir(node, disregard_skip_local_download=False):
     os = node.get_os()
     if os in install_constants.LINUX_DISTROS:
-        if node.shell.nonroot:
+        if node.shell.nonroot and \
+            (params["skip_local_download"] or disregard_skip_local_download):
             return install_constants.NON_ROOT_DOWNLOAD_DIR['LINUX_DISTROS']
         else:
             return install_constants.DOWNLOAD_DIR["LINUX_DISTROS"]
