@@ -28,6 +28,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
         self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
                                             bucket_params=self.bucket_params)
         self.buckets = self.rest.get_buckets()
+        self._create_server_groups()
         self.log.info("==============  CollectionsIndexBasics setup has completed ==============")
 
     def tearDown(self):
@@ -305,7 +306,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
                     self.sleep(10)
                     gen_create = SDKDataLoader(num_ops=num_of_docs, percent_create=100,
                                                percent_update=0, percent_delete=0, scope=scope,
-                                               collection=collection, json_template='Hotel')
+                                               collection=collection, json_template='Hotel', output=True)
                     task = self.cluster.async_load_gen_docs(self.master, bucket, gen_create, timeout_secs=300)
                     data_load_tasks.append(task)
                     collection_namespaces.append(f'default:{bucket}.{scope}.{collection}')
