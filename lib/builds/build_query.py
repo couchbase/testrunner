@@ -319,6 +319,8 @@ class BuildQuery(object):
                         os_name = "ubuntu18.04"
                     elif "debian 10" in os_version.lower():
                         os_name = "debian10"
+                    elif "debian 11" in os_version.lower():
+                        os_name = "debian11"
                     build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                             .format(build_version[:build_version.find('-')],
                              product, os_architecture, deliverable_type,
@@ -358,6 +360,8 @@ class BuildQuery(object):
                         os_name = "ubuntu18.04"
                     elif "debian 10" in os_version.lower():
                         os_name = "debian10"
+                    elif "debian 11" in os_version.lower():
+                        os_name = "debian11"
                     build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                         .format(build_version, product, os_architecture,
                         deliverable_type, build_details[:5], os_name,
@@ -770,6 +774,9 @@ class BuildQuery(object):
                 elif "debian 10" in distribution_version:
                     build.distribution_version = "debian10"
                     os_name = "debian10"
+                elif "debian 11" in distribution_version:
+                    build.distribution_version = "debian11"
+                    os_name = "debian11"
                 elif "windows" in distribution_version:
                     os_name = "windows"
                     if "x86_64" not in architecture_type:
