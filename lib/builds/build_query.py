@@ -11,6 +11,8 @@ import testconstants
 import logger
 import traceback
 import sys
+
+import scripts.install_constants as install_constants
 from testconstants import WIN_CB_VERSION_3
 from testconstants import SHERLOCK_VERSION
 from testconstants import COUCHBASE_VERSION_2
@@ -355,7 +357,30 @@ class BuildQuery(object):
                                 build_details[:5],os_name, CB_RELEASE_REPO)
         else:
             """ check match full version x.x.x-xxxx """
-            if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
+            os_name = "".join(os_version.lower().split(" "))
+            if not re.match(r'[1-9].[0-9].[0-9]$', build_version) and float(build_version[:3]) >= 7.1\
+                and os_name in install_constants.LINUX_DISTROS:
+                if os_name in install_constants.LINUX_AMD64:
+                    os_architecture = "amd64"
+                    build.name = "{0}_{1}-{2}_{3}.{4}"\
+                                 .format(product,
+                                         build_details[:5],
+                                         "linux",
+                                         os_architecture,
+                                         deliverable_type)
+                elif os_name in install_constants.X86:
+                    os_architecture = "x86_64"
+                    build.name = "{0}-{1}-{2}.{3}.{4}"\
+                                 .format(product,
+                                         build_details[:5],
+                                         "linux",
+                                         os_architecture,
+                                         deliverable_type)
+                build.url = "{0}{1}/{2}"\
+                            .format(CB_RELEASE_REPO,
+                                    build_version[:build_version.find('-')],
+                                    build.name)
+            elif not re.match(r'[1-9].[0-9].[0-9]$', build_version):
                 """  in release folder
                         /3.0.1/couchbase-server-enterprise-3.0.1-centos6.x86_64.rpm
                         /3.0.1/couchbase-server-enterprise_3.0.1-ubuntu12.04_amd64.deb
@@ -809,7 +834,22 @@ class BuildQuery(object):
         if "exe" in deliverable_type and version[:5] not in COUCHBASE_VERSION_2:
             joint_char = "-"
             version_join_char = "-"
-        if toy == "" and version[:5] not in COUCHBASE_VERSION_2 and \
+        os_name = "".join(distribution_version.split(" "))
+        if toy == "" and float(build.product_version[:3]) >= 7.1 \
+                and os_name in install_constants.LINUX_DISTROS:
+                if os_name in install_constants.LINUX_AMD64:
+                    build.architecture_type = "amd64"
+                    build.name = edition_type + "_" + build.product_version + \
+                                 "-" + "linux" + "_" + build.architecture_type + \
+                                 "." + build.deliverable_type
+                elif os_name in install_constants.X86:
+                    build.architecture_type = "x86_64"
+                    build.name = edition_type + "-" + build.product_version + \
+                                 "-" + "linux" + "." + build.architecture_type + \
+                                 "." + build.deliverable_type
+                build_number = build.product_version.replace(version[:6],"")
+                build.url = repo + build_number + "/" + build.name
+        elif toy == "" and version[:5] not in COUCHBASE_VERSION_2 and \
                                    version[:5] not in COUCHBASE_VERSION_3:
             """ format for sherlock build name
             /684/couchbase-server-enterprise-3.5.0-684-centos6.x86_64.rpm
