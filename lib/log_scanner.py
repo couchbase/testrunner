@@ -29,11 +29,23 @@ class LogScanner(object):
         self.service_log_keywords_map = {
             "all": {
                 "babysitter.log": {
-                    "keywords" : ["exception occurred in runloop", "failover exited with reason"],
+                    "keywords" : [" CRITICAL ", "exception occurred in runloop", "failover exited with reason"],
+                    "ignore_keywords" : ["Rollback point not found", "No space left on device", "Permission denied",
+                                         "write traffic will be disabled for this node", "Status:DiskFull", "Status:ReadOnly",
+                                         "Error occured during memtable flush (D", "WriteDocs cannot be invoked in read only mode",
+                                         "status:ReadOnly: Rollback unsupported in read only mode", "Unable to open file err=No space left on device",
+                                         "Error occured during memtable flush", "msg:Unable to open file  error:No such file or directory. Closest non-empty parent directory:/"]
                 },
                 "memcached.log": {
-                    "keywords" : ["CRITICAL"],
-                    "ignore_keywords" : ["XERROR"]
+                    "keywords" : [" CRITICAL ", " ERROR ",
+                                  "exception occurred in runloop", "Stream request failed because the snap start seqno"],
+                    "ignore_keywords" : ["Rollback point not found", "No space left on device",
+                                         "Permission denied", "write traffic will be disabled for this node",
+                                         "Status:DiskFull", "Status:ReadOnly", "Error occured during memtable flush (D",
+                                         "WriteDocs cannot be invoked in read only mode", "status:ReadOnly: Rollback unsupported in read only mode",
+                                         "Unable to open file err=No space left on device", "Invalid packet header detected",
+                                         "Error occured during memtable flush", "msg:Unable to open file  error:No such file or directory. Closest non-empty parent directory:/",
+                                         "XERROR", "compaction failed for vb", ]
                 },
                 "sanitizers.log.*": {
                     "keywords" : ['^'],
