@@ -4793,6 +4793,7 @@ class FTSBaseTest(unittest.TestCase):
             _, defn = index.get_index_defn()
 
         for pindex in defn['planPIndexes']:
+            node = None
             for node, attr in list(pindex['nodes'].items()):
                 if attr['priority'] == 0:
                     break
