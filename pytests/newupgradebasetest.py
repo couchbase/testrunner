@@ -17,9 +17,9 @@ from couchbase_helper.document import DesignDocument, View
 from couchbase_helper.documentgenerator import BlobGenerator
 from query_tests_helper import QueryHelperTests
 from couchbase_helper.tuq_helper import N1QLHelper
+from pytests.eventing.eventing_helper import EventingHelper
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
-from eventing.eventing_base import EventingBaseTest
 from pytests.eventing.eventing_constants import HANDLER_CODE
 from random import randrange, randint
 from fts.fts_base import FTSIndex, FTSBaseTest
@@ -38,7 +38,7 @@ from testconstants import COUCHBASE_MP_VERSION
 from testconstants import CE_EE_ON_SAME_FOLDER
 from testconstants import STANDARD_BUCKET_PORT, IPV4_REGEX
 
-class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
+class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
     def setUp(self):
         super(NewUpgradeBaseTest, self).setUp()
         self.released_versions = ["2.0.0-1976-rel", "2.0.1", "2.5.0", "2.5.1",
@@ -893,17 +893,15 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
                   batch_size=self.batch_size)
             function_name = "Function_{0}_{1}".format(randint(1, 1000000000), self._testMethodName)
             self.function_name = function_name[0:90]
-            body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
+            event = EventingHelper(servers=self.servers,master=self.master)
             bk_events_created = False
             rs_events_created = False
             try:
-                self.deploy_function(body)
-                bk_events_created = True
-                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+                event.deploy_bucket_op_function()
+                event.verify_documents_in_destination_bucket('test_import_function_1', 1, 'dst_bucket')
+                event.undeploy_bucket_op_function()
             except Exception as e:
                 self.log.error(e)
-            finally:
-                self.undeploy_and_delete_function(body)
         except Exception as e:
             self.log.info(e)
 
