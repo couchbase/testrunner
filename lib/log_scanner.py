@@ -32,7 +32,7 @@ class LogScanner(object):
                     "keywords" : ["exception occurred in runloop", "failover exited with reason"],
                 },
                 "memcached.log": {
-                    "keywords" : ["CRITICAL", "ERROR"],
+                    "keywords" : ["CRITICAL"],
                     "ignore_keywords" : ["XERROR"]
                 },
                 "sanitizers.log.*": {
@@ -76,7 +76,7 @@ class LogScanner(object):
             },
             "n1ql": {
                 "query.log": {
-                    "keywords" : ["panic","FATAL","SEVERE","ERROR","Fatal","Error","Severe"],
+                    "keywords" : ["panic","FATAL","SEVERE","Fatal","Severe"],
                     "ignore_keywords" : ["not available"]
                 }
             }
