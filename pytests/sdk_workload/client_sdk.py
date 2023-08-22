@@ -108,7 +108,7 @@ class SDKClient(object):
             result = collection.remove_multi(key_list, RemoveMultiOptions(timeout=timedelta(seconds=60)))
             for key in result.exceptions.keys():
                 exception = result.exceptions[key]
-                if exception.error_code == 2 or exception.error_code == 14 or exception.error_code == 15:
+                if exception.error_code == 2 or exception.error_code == 14 or exception.error_code == 13:
                     retries_keys.append(key)
                 else:
                     counter_obj.increment(READ)
@@ -133,7 +133,7 @@ class SDKClient(object):
                                              durability=ServerDurability(Durability.PERSIST_TO_MAJORITY.value))
             for key in result.exceptions.keys():
                 exception = result.exceptions[key]
-                if exception.error_code == 2 or exception.error_code == 14  or exception.error_code == 15:
+                if exception.error_code == 2 or exception.error_code == 14  or exception.error_code == 13:
                     retries_batch[key] = key_doc_dict[key]
                 else:
                     counter_obj.increment(UPDATE)
@@ -157,7 +157,7 @@ class SDKClient(object):
             result = collection.get_multi(key_list, GetMultiOptions(timeout=timedelta(seconds=60)))
             for key in result.exceptions.keys():
                 exception = result.exceptions[key]
-                if exception.error_code == 2 or exception.error_code == 14  or exception.error_code == 15:
+                if exception.error_code == 2 or exception.error_code == 14  or exception.error_code == 13:
                     retries_keys.append(key)
                 else:
                     counter_obj.increment(READ)
