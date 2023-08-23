@@ -1517,7 +1517,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
         expected_err_msg = "invalid index specified"
         if self.alter_index:
-            expected_err_msg = "not supported"
+            expected_err_msg = "Index Not Found"
 
         if expected_err_msg not in str(error):
             self.fail(
