@@ -526,8 +526,8 @@ def get_node_helper(ip):
             return node_helper
     return None
 
-def check_nodes_statuses(display_process_info=False):
-    for server in params["servers"]:
+def check_nodes_statuses(servers, display_process_info=False):
+    for server in servers:
         node = get_node_helper(server.ip)
         node.check_node_reachable()
         if node.connect_ok:
@@ -543,25 +543,26 @@ def print_result_and_exit(err=None):
         node = get_node_helper(server.ip)
         if not node or not node.install_success:
             if node.install_success is False:
-                fail.append(server.ip)
+                fail.append(server)
             else:
-                install_not_started.append(server.ip)
+                install_not_started.append(server)
         elif node.install_success:
-            success.append(server.ip)
+            success.append(server)
 
     # Print node status if install failed or not started
     if len(fail) > 0 or len(install_not_started) > 0:
-        check_nodes_statuses(display_process_info=True)
+        check_nodes_statuses(fail + install_not_started,
+                             display_process_info=True)
 
     log.info("-" * 100)
-    for _ in install_not_started:
-        log.error("INSTALL NOT STARTED ON: \t{0}".format(_))
+    for server in install_not_started:
+        log.error("INSTALL NOT STARTED ON: \t{0}".format(server.ip))
     log.info("-" * 100)
-    for _ in fail:
-        log.error("INSTALL FAILED ON: \t{0}".format(_))
+    for server in fail:
+        log.error("INSTALL FAILED ON: \t{0}".format(server.ip))
     log.info("-" * 100)
-    for _ in success:
-        log.info("INSTALL COMPLETED ON: \t{0}".format(_))
+    for server in success:
+        log.info("INSTALL COMPLETED ON: \t{0}".format(server.ip))
     log.info("-" * 100)
     if len(fail) > 0 or len(install_not_started) > 0:
         sys.exit(1)
