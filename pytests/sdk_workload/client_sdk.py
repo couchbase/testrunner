@@ -6,14 +6,14 @@ import traceback
 from couchbase.auth import PasswordAuthenticator
 from couchbase.cluster import Cluster
 from couchbase.durability import ServerDurability, Durability
-from couchbase.options import ClusterOptions, UpsertMultiOptions, GetMultiOptions, RemoveMultiOptions
+from couchbase.options import ClusterOptions, UpsertMultiOptions, GetMultiOptions, RemoveMultiOptions, QueryOptions
 from couchbase.options import TLSVerifyMode
 from datetime import timedelta
 from couchbase.exceptions import CouchbaseException, BucketNotFoundException, ScopeNotFoundException, CollectionNotFoundException,  AmbiguousTimeoutException, UnAmbiguousTimeoutException, RequestCanceledException
 # from couchbase import enable_protocol_logger_to_save_network_traffic_to_file
 # enable_protocol_logger_to_save_network_traffic_to_file('pytests/sdk_workload/sdk_logs.log')
 
-CREATE, UPDATE, READ, DELETE = "create", "delete", "read", "update"
+CREATE, UPDATE, READ, DELETE, QUERY = "create", "delete", "read", "update", "query"
 
 class SDKCounter(object):
     def __init__(self, initval=0):
@@ -21,6 +21,7 @@ class SDKCounter(object):
         self.read_failure = multiprocessing.RawValue('i', initval)
         self.delete_failure = multiprocessing.RawValue('i', initval)
         self.update_failure = multiprocessing.RawValue('i', initval)
+        self.query_failure = multiprocessing.RawValue('i', initval)
         self.lock = multiprocessing.Lock()
 
     def increment(self, method):
@@ -42,6 +43,10 @@ class SDKCounter(object):
             with self.lock:
                 self.update_failure.value += 1
 
+        if method == QUERY:
+            with self.lock:
+                self.query_failure.value += 1
+
     def value(self, method):
         """ value gives current value of counter for methods like - like create, delete, read, update"""
         if method == CREATE:
@@ -55,6 +60,9 @@ class SDKCounter(object):
 
         if method == UPDATE:
             return self.update_failure.value
+
+        if method == QUERY:
+            return self.query_failure.value
 
 
 class SDKClient(object):
@@ -172,3 +180,12 @@ class SDKClient(object):
                 logging.critical("Read document failed with exception: {} after retries {}".format(result.exceptions, number_of_retries))
             time.sleep(delay_time)
             logging.info("Retries read doc due timeout failures......")
+
+    def run_query(self, cluster, query, counter_obj):
+        try:
+            cluster.query(query, QueryOptions(metrics=True))
+        except CouchbaseException as e:
+            counter_obj.increment(QUERY)
+            logging.critical("Query failed with exception: {}".format(e.message))
+            import traceback
+            traceback.print_exc()

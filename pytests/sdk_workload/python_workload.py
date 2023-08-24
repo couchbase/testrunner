@@ -13,9 +13,10 @@ from lib.couchbase_helper.documentgenerator import BatchedDocumentGenerator
 from pytests.serverless.dapi.dapi_helper import doc_generator
 from pytests.sdk_workload.client_sdk import SDKClient
 from pytests.sdk_workload.client_sdk import SDKCounter
+from pytests.sdk_workload.query_workload import RunQueryWorkload
 
 failed_with_errors = dict()
-CREATE, UPDATE, READ, DELETE = "create", "delete", "read", "update"
+CREATE, UPDATE, READ, DELETE, QUERY = "create", "delete", "read", "update", "query"
 
 
 def crud_thread(collection, key_prefix, number_of_docs, run, counter_obj, number_of_retries, duration, delay_time):
@@ -69,15 +70,31 @@ def mutate_doc_thread(collection, counter_obj, number_of_docs, number_of_threads
         thread.join()
 
 
-def start_workload(collection_obj_list, number_of_dos, number_of_threads, number_of_retries, duration, delay_time):
+def run_query_thread(cluster, bucket_name, scope_name, collection_name, duration, counter_obj):
+    logging.info("Running Query workload on {}-{}-{}".format(bucket_name, scope_name, collection_name))
+    t_end = time.time() + int(duration)
+    query_workload_obj = RunQueryWorkload()
+    query_workload_obj.build_indexes(cluster, bucket_name, scope_name, collection_name, counter_obj)
+    while time.time() < t_end:
+        query_workload_obj.run_query(cluster, bucket_name, scope_name, collection_name, counter_obj)
+
+
+def start_workload(workload_type, collection_obj_list, query_run_list, number_of_dos, number_of_threads, number_of_retries,
+                   duration, delay_time):
     thread_list = list()
     counter_obj = SDKCounter()
     logging.info("Starting {} number of threads to start the workload".format(len(collection_obj_list)))
 
     logging.info("Running SDK Workload")
-    for collection in collection_obj_list:
-        thread = threading.Thread(target=mutate_doc_thread, args=(collection, counter_obj, number_of_dos, number_of_threads, number_of_retries, duration, delay_time))
-        thread_list.append(thread)
+    for i in range(len(collection_obj_list)):
+        if 'kv' in workload_type:
+            collection = collection_obj_list[i]
+            thread1 = threading.Thread(target=mutate_doc_thread, args=(collection, counter_obj, number_of_dos, number_of_threads, number_of_retries, duration, delay_time))
+            thread_list.append(thread1)
+        if 'query' in workload_type:
+            param_dict = query_run_list[i]
+            thread2 = threading.Thread(target=run_query_thread, args=(param_dict['cluster'], param_dict['bucket'], param_dict['scope'], param_dict['collection'], duration, counter_obj))
+            thread_list.append(thread2)
 
     for thread in thread_list:
         thread.start()
@@ -85,10 +102,13 @@ def start_workload(collection_obj_list, number_of_dos, number_of_threads, number
     for thread in thread_list:
         thread.join()
 
-    print("Create failures: {}".format(counter_obj.value(CREATE)))
-    print("Upsert failures: {}".format(counter_obj.value(UPDATE)))
-    print("Read failures: {}".format(counter_obj.value(READ)))
-    print("Delete failures: {}".format(counter_obj.value(DELETE)))
+    if 'kv' in workload_type:
+        logging.info("Create failures: {}".format(counter_obj.value(CREATE)))
+        logging.info("Upsert failures: {}".format(counter_obj.value(UPDATE)))
+        logging.info("Read failures: {}".format(counter_obj.value(READ)))
+        logging.info("Delete failures: {}".format(counter_obj.value(DELETE)))
+    if 'query' in workload_type:
+        logging.info("Query failures: {}".format(counter_obj.value(QUERY)))
 
 
 class PythonSdkWorkload(unittest.TestCase):
@@ -110,6 +130,7 @@ class PythonSdkWorkload(unittest.TestCase):
         self.sdk_logger = self.get_sdk_logger()
         self.number_of_docs_per_collection = self.input.param("num_of_docs_per_coll", 10000)
         self.delay_time = self.input.param("delay_time", 0.1)
+        self.workload_type = self.input.param("workload_type", ['kv'])
         self.sdk_client = SDKClient()
 
     def allow_current_ip(self):
@@ -149,6 +170,7 @@ class PythonSdkWorkload(unittest.TestCase):
         return resp
 
     def run_workload(self):
+        query_run_list = list()
         logging.info("Step-1----------------Creating DB user")
         self.create_db_user()
         logging.info("Step-2----------------Allowing current IP")
@@ -174,13 +196,16 @@ class PythonSdkWorkload(unittest.TestCase):
                     else:
                         collection_list = scope_dict[scope_name]
                         for collection_name in collection_list:
-                            logging.info("bucket: {}, scope: {}, collection: {}".format(bucket_name, scope_name, collection_name))
                             collection = self.sdk_client.get_collection(scope, collection_name)
+                            collection.insert_multi
                             if collection == CollectionNotFoundException.error_code:
                                 logging.critical("Collection does exists")
                                 break
                             else:
                                 collection_obj_list.append(collection)
+                                query_run_list.append({'cluster': self.cluster,
+                                                       'bucket': bucket_name, 'scope': scope_name,
+                                                       'collection': collection_name})
 
-        start_workload(collection_obj_list, self.number_of_docs_per_collection,
+        start_workload(self.workload_type, collection_obj_list, query_run_list, self.number_of_docs_per_collection,
                        self.number_of_threads, self.number_of_retries, self.duration, self.delay_time)
