@@ -894,6 +894,7 @@ class QueryExpirationTests(QueryTests):
             if results[0]['$1'] == result_count - 10:
                 break
             count += 1
+            self.sleep(1, "Retrying check count of bucket")
         self.assertEqual(results[0]['$1'], result_count - 10, "DELETE failed to delete docs")
         result =self._is_expected_index_count(bucket_name=self.sample_bucket, idx_name=self.exp_index,
                                               stat_name=self.index_stat, max_try=50, expected_stat_value=result_count - 10)
