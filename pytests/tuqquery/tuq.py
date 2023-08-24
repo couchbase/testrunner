@@ -939,7 +939,6 @@ class QueryTests(BaseTestCase):
                         field_list[i] = new_tuple
                     i += 1
                 desired_index = (index_name, bucket_name, frozenset([field for field in field_list]), status, using)
-                desired_index = (index_name, bucket_name, frozenset([field for field in fields_set]), status, using)
                 current_indexes = [(i['indexes']['name'],
                                     i['indexes']['keyspace_id'],
                                     frozenset([(
