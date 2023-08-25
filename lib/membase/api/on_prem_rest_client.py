@@ -2174,21 +2174,13 @@ class RestConnection(object):
         r.raise_for_status()
         return r
 
-    def get_index_stats(self, timeout=120, index_map=None):
+    def get_index_stats(self, timeout=120, index_map=None, return_system_query_scope=False):
         api = self.index_baseUrl + 'stats'
         status, content, header = self._http_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
-            return json_parsed
-        else:
-            raise Exception("Check API endpoint. Didn't get any result")
-
-    def get_index_stats_collections(self, timeout=120, index_map=None):
-        api = self.index_baseUrl + 'stats'
-        status, content, header = self._http_request(api, timeout=timeout)
-        if status:
-            json_parsed = json.loads(content)
-            index_map = RestParser().parse_index_stats_response_collections(json_parsed, index_map=index_map)
+            index_map = RestParser().parse_index_stats_response(json_parsed, index_map=index_map,
+                                                                return_system_query_scope=return_system_query_scope)
         return index_map
 
     def get_all_index_stats(self, timeout=120, inst_id_filter=[], consumer_filter=None, text=False):
@@ -2285,7 +2277,7 @@ class RestConnection(object):
                     index_map[tokens[0]][tokens[1]][tokens[2]] = val
         return index_map
 
-    def get_indexer_metadata(self, timeout=120, index_map=None):
+    def get_indexer_metadata(self, timeout=120, index_map=None, return_system_query_scope=False):
         api = self.index_baseUrl + 'getIndexStatus'
         index_map = {}
         status, content, header = self.urllib_request(api, timeout=timeout)
@@ -2297,7 +2289,14 @@ class RestConnection(object):
                 if len(tokens) == 1:
                     field = tokens[0]
                     index_map[field] = val
-        return index_map
+        if not return_system_query_scope:
+            index_map_new = {'code': index_map['code'], 'status': []}
+            for item in index_map['status']:
+                if item['scope'] != '_system' and item['collection'] != '_query':
+                    index_map_new['status'].append(item)
+            return index_map_new
+        else:
+            return index_map
 
     def get_indexer_internal_stats(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'settings?internal=ok'
@@ -2346,13 +2345,14 @@ class RestConnection(object):
                 pass
 
 
-    def get_index_status(self, timeout=120, index_map=None):
+    def get_index_status(self, timeout=120, index_map=None, return_system_query_scope=False):
         api = self.baseUrl + 'indexStatus'
         index_map = {}
         status, content, header = self.urllib_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
-            index_map = RestParser().parse_index_status_response(json_parsed)
+            index_map = RestParser().parse_index_status_response(json_parsed,
+                                                                 return_system_query_scope=return_system_query_scope)
         return index_map
 
     def get_index_id_map(self, timeout=120):
@@ -6729,17 +6729,20 @@ class vBucket(object):
         self.id = -1
 
 class RestParser(object):
-    def parse_index_status_response(self, parsed):
+    def parse_index_status_response(self, parsed, return_system_query_scope=False):
         index_map = {}
         for map in parsed["indexes"]:
             bucket_name = map['bucket']
             if bucket_name not in list(index_map.keys()):
                 index_map[bucket_name] = {}
+            if not return_system_query_scope and "_system._query" in map['definition']:
+                continue
             index_name = map['index']
             index_map[bucket_name][index_name] = {}
             index_map[bucket_name][index_name]['status'] = map['status']
             index_map[bucket_name][index_name]['progress'] = str(map['progress'])
             index_map[bucket_name][index_name]['definition'] = map['definition']
+            index_map[bucket_name][index_name]['partitioned'] = map['partitioned']
             if len(map['hosts']) == 1:
                 index_map[bucket_name][index_name]['hosts'] = map['hosts'][0]
             else:
@@ -6747,24 +6750,7 @@ class RestParser(object):
             index_map[bucket_name][index_name]['id'] = map['id']
         return index_map
 
-    def parse_index_stats_response(self, parsed, index_map=None):
-        if index_map == None:
-            index_map = {}
-        for key in list(parsed.keys()):
-            tokens = key.split(":")
-            val = parsed[key]
-            if len(tokens) == 3 and 'MAINT_STREAM' not in tokens[0] and 'INIT_STREAM' not in tokens[0]:
-                bucket = tokens[0]
-                index_name = tokens[1]
-                stats_name = tokens[2]
-                if bucket not in list(index_map.keys()):
-                    index_map[bucket] = {}
-                if index_name not in list(index_map[bucket].keys()):
-                    index_map[bucket][index_name] = {}
-                index_map[bucket][index_name][stats_name] = val
-        return index_map
-
-    def parse_index_stats_response_collections(self, parsed, index_map=None):
+    def parse_index_stats_response(self, parsed, index_map=None, return_system_query_scope=False):
         if index_map == None:
             index_map = {}
         for key in list(parsed.keys()):
@@ -6785,6 +6771,8 @@ class RestParser(object):
                 collection_name = tokens[2]
                 index_name = tokens[3]
                 stats_name = tokens[4]
+                if not return_system_query_scope and "_system" == scope_name and "_query" ==collection_name:
+                    continue
                 keyspace = f'default:{bucket}.{scope_name}.{collection_name}'
                 if keyspace not in list(index_map.keys()):
                     index_map[keyspace] = {}

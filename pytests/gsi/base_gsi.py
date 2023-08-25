@@ -94,6 +94,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.password = self.input.membase_settings.rest_password
         self.username = self.input.membase_settings.rest_username
         self.cancel_rebalance = self.input.param("cancel_rebalance", False)
+        self.use_shard_based_rebalance = self.input.param("use_shard_based_rebalance", True)
         if self.aws_access_key_id:
             from serverless.s3_utils import S3Utils
             self.s3_utils_obj = S3Utils(aws_access_key_id=self.aws_access_key_id,
@@ -143,6 +144,8 @@ class BaseSecondaryIndexingTests(QueryTests):
             # New settings for schedule Indexes
             self.index_rest.set_index_settings({"queryport.client.waitForScheduledIndex": self.wait_for_scheduled_index})
             self.index_rest.set_index_settings({"indexer.allowScheduleCreateRebal": self.scheduled_index_create_rebal})
+            if self.use_shard_based_rebalance:
+                self.index_rest.set_index_settings({"indexer.settings.enableShardAffinity": True})
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
@@ -967,7 +970,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         as items in the bucket.
         """
         index_rest = RestConnection(index_node)
-        index_map = index_rest.get_index_stats_collections()
+        index_map = index_rest.get_index_stats()
         for keyspace in list(index_map.keys()):
             self.log.info("Keyspace: {0}".format(keyspace))
             for index_name, index_val in index_map[keyspace].items():
@@ -984,7 +987,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         Returns the number of persistent snapshots for a MOI index for a specific node
         """
         index_rest = RestConnection(index_node)
-        index_map = index_rest.get_index_stats_collections()
+        index_map = index_rest.get_index_stats()
         for keyspace in list(index_map.keys()):
             self.log.info("Keyspace: {0}".format(keyspace))
             for idx_name, idx_val in index_map[keyspace].items():
@@ -999,7 +1002,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         """
         try:
             index_rest = RestConnection(index_node)
-            index_map = index_rest.get_index_stats_collections()
+            index_map = index_rest.get_index_stats()
             item_count = index_map[keyspace][index_name]["items_count"]
         except Exception as e:
             self.log.info(e)
@@ -1013,7 +1016,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         """
         try:
             index_rest = RestConnection(index_node)
-            index_map = index_rest.get_index_stats_collections()
+            index_map = index_rest.get_index_stats()
         except Exception as e:
             self.log.info(e)
             index_map = None
@@ -1845,7 +1848,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def prepare_collection_for_indexing(self, num_scopes=1, num_collections=1, num_of_docs_per_collection=1000,
                                         indexes_before_load=False, json_template="Person", batch_size=10**4,
-                                        bucket_name=None, key_prefix='doc_'):
+                                        bucket_name=None, key_prefix='doc_', load_default_coll=False):
         if not bucket_name:
             bucket_name = self.test_bucket
         pre_load_idx_pri = None
@@ -1856,10 +1859,14 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                            bucket=bucket_name)
         scopes = [f'{self.scope_prefix}_{scope_num + 1}' for scope_num in range(num_scopes)]
         self.sleep(10, "Allowing time after collection creation")
-
+        if load_default_coll:
+            scopes.append("_default")
         if num_of_docs_per_collection > 0:
             for s_item in scopes:
-                collections = [f'{self.collection_prefix}_{coll_num + 1}' for coll_num in range(num_collections)]
+                if load_default_coll and s_item == '_default':
+                    collections = ['_default']
+                else:
+                    collections = [f'{self.collection_prefix}_{coll_num + 1}' for coll_num in range(num_collections)]
                 for c_item in collections:
                     self.namespaces.append(f'default:{bucket_name}.{s_item}.{c_item}')
                     if indexes_before_load:
@@ -1999,6 +2006,152 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.log.info(result)
         rebalance_status = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+
+    def validate_shard_affinity(self):
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        rest = RestConnection(indexer_nodes[0])
+        indexer_metadata = rest.get_indexer_metadata()['status']
+        for index_metadata in indexer_metadata:
+            # alternate shard ID not null validation
+            if index_metadata['alternateShardIds'] is None:
+                raise Exception(f"Alternate shard ID value None for index {index_metadata['name']} with definition {index_metadata['definition']}")
+            # 2nd field of alternate shard ID should be the replica ID validation
+            for host in index_metadata['alternateShardIds']:
+                for partition in index_metadata['alternateShardIds'][host]:
+                    shard_list = index_metadata['alternateShardIds'][host][partition]
+                    for shard in shard_list:
+                        shard_replica_id = int(shard.split("-")[1])
+                        replica_id = int(index_metadata['replicaId'])
+                        if shard_replica_id != replica_id:
+                            raise Exception(f"Alternate shard ID and replica ID mismatch for index "
+                                            f"{index_metadata['name']} with definition {index_metadata['definition']}. Alt shard ID {shard}.")
+            # only one alternate shard ID for primary index validation
+            if 'isPrimary' in index_metadata:
+                for host in index_metadata['alternateShardIds']:
+                    for partition in index_metadata['alternateShardIds'][host]:
+                        if len(index_metadata['alternateShardIds'][host][partition]) != 1:
+                            raise Exception(f"There are more than 1 instances of alternate shard ID for primary index "
+                                            f"{index_metadata['name']} with definition {index_metadata['definition']}")
+            # only 2 alternate shard IDs for secondary index validation
+            else:
+                for host in index_metadata['alternateShardIds']:
+                    for partition in index_metadata['alternateShardIds'][host]:
+                        if len(index_metadata['alternateShardIds'][host][partition]) != 2:
+                            raise Exception(f"There are more than 1 instances of alternate shard ID for primary index "
+                                            f"{index_metadata['name']} with definition {index_metadata['definition']}")
+        self.log.info("All indexes have 2 alternate shard IDs and all primary indexes have 1 alt shard ID.")
+        # replicas sharing slot IDs and instance IDs validation
+        self.validate_replica_indexes(index_map=indexer_metadata)
+        self.log.info("All replicas share slot IDs")
+        # shard IDs unique to host validation
+        self.validate_shard_unique_to_host(index_map=indexer_metadata)
+        self.log.info("Shards unique to host validation successful")
+
+    def fetch_shard_id_list(self):
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        rest = RestConnection(indexer_nodes[0])
+        index_map = rest.get_indexer_metadata(return_system_query_scope=True)['status']
+        shards_list_all = []
+        for index_metadata in index_map:
+            for host in index_metadata['alternateShardIds']:
+                for partition in index_metadata['alternateShardIds'][host]:
+                    shard_list = index_metadata['alternateShardIds'][host][partition]
+                    for shard in shard_list:
+                        if shard not in shards_list_all:
+                            shards_list_all.append(shard)
+        return sorted(shards_list_all)
+
+    def validate_shard_unique_to_host(self, index_map):
+        shard_host_map = {}
+        for index_metadata in index_map:
+            for host in index_metadata['alternateShardIds']:
+                for partition in index_metadata['alternateShardIds'][host]:
+                    shard_list = index_metadata['alternateShardIds'][host][partition]
+                    host_ip = host
+                    for shard in shard_list:
+                        shard_entry = shard + "-partition-" + partition
+                        if shard in shard_host_map and shard_host_map[shard] != host_ip:
+                            raise Exception(f"Shard {shard} is shared between {shard_host_map[shard]} and {host_ip}")
+                        else:
+                            shard_host_map[shard_entry] = host_ip
+
+    def validate_replica_indexes(self, index_map):
+        replicas_dict = {}
+        for index in index_map:
+            if index['numReplica'] > 0:
+                if index['defnId'] in replicas_dict:
+                    replicas_dict[index['defnId']].append(index)
+                else:
+                    replicas_dict[index['defnId']] = [index]
+        # Replicas share shard ID validation
+        for replica_num, replica in enumerate(replicas_dict):
+            replica_shards_dict = {}
+            for index, index_metadata in enumerate(replicas_dict[replica]):
+                replica_shards_dict[replicas_dict[replica][index]['replicaId']] = set()
+                for item in replicas_dict[replica][index]['alternateShardIds']:
+                    for shard_items_list in replicas_dict[replica][index]['alternateShardIds'][item].values():
+                        for shard_id in shard_items_list:
+                            if shard_id.split("-")[0] not in replica_shards_dict[replicas_dict[replica][index]['replicaId']]:
+                                replica_shards_dict[replicas_dict[replica][index]['replicaId']].add(shard_id.split("-")[0])
+            self.log.debug(f"Replicas shard dict is {replica_shards_dict}\n\n for defn ID {replicas_dict[replica]} \n")
+            len_max = -1
+            for item in replica_shards_dict:
+                if len(replica_shards_dict[item]) > len_max:
+                    len_max = len(replica_shards_dict[item])
+                    all_possible_shards_replica_id = item
+            for item in replica_shards_dict:
+                if item != all_possible_shards_replica_id:
+                    for shard in replica_shards_dict[item]:
+                        if shard not in replica_shards_dict[all_possible_shards_replica_id]:
+                            raise Exception(f"Replicas don't share slot ID for replica ID {replica_shards_dict}")
+        # Replicas reside on different hosts validation
+        for replica in replicas_dict:
+            for index, index_metadata in enumerate(replicas_dict[replica]):
+                host_ip = index_metadata['hosts']
+                for index_metadata_2 in replicas_dict[replica][index+1:]:
+                    if index_metadata_2['numPartition'] == 1:
+                        if index_metadata_2['hosts'] == host_ip:
+                            self.log.error(f"Index_metadata {index_metadata} being compared against index_metadata_2 {index_metadata_2}")
+                            raise Exception("Replicas reside on the same host.")
+                    else:
+                        for host in index_metadata['partitionMap']:
+                            for partition in index_metadata['partitionMap'][host]:
+                                if host in index_metadata_2['partitionMap']:
+                                    if partition in index_metadata_2['partitionMap'][host]:
+                                        raise AssertionError(
+                                            f"Partition replicas reside on the same host. Metadata 1 {index_metadata} Metadata 2 {index_metadata_2}")
+
+    def check_gsi_logs_for_shard_transfer(self):
+        """ Checks if file transfer based rebalance is triggered.
+        """
+        count = 0
+        log_string = "ShardTransferToken(v2) generated token.*BuildSource: Peer"
+        log_validated = False
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        if not indexer_nodes:
+            return None
+        for server in indexer_nodes:
+            shell = RemoteMachineShellConnection(server)
+            _, dir = RestConnection(server).diag_eval(
+                'filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
+            indexer_log = str(dir) + '/indexer.log*'
+            count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
+                                               format(log_string, indexer_log))
+            if isinstance(count, list):
+                count = int(count[0])
+            else:
+                count = int(count)
+            shell.disconnect()
+            if count > 0:
+                self.log.info(f"===== File transfer based rebalance triggered "
+                              f"as validated from the log on {server.ip}=====")
+                log_validated = True
+                break
+        if not log_validated:
+            self.log.error(f"===== File transfer based rebalance not triggered."
+                           f"No log lines matching string {log_string} seen on any of the indexer nodes")
+            raise Exception("Log validation failure")
+        return count
 
 class ConCurIndexOps():
     def __init__(self):

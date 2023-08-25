@@ -479,7 +479,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                         self.fail(err)
         self.wait_until_indexes_online()
         index_meta_info = self.rest.get_indexer_metadata()['status']
-        self.assertEqual(len(index_meta_info), len(index_field_list) * (self.num_replicas + 1))
+        self.assertEqual(len(index_meta_info), len(index_field_list) * (self.num_replicas + 1), f"Mismatch. Metadata {index_meta_info}")
 
         self.log.info('Starting Rebalance In process')
         add_nodes = [self.servers[2]]
@@ -569,6 +569,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                 break
             self.sleep(10)
         if not all_items_indexed_flag:
+            self.log.error(f"Index metadata info from getIndexStatus endpoint {index_meta_info}")
             self.fail("Failed to index all the items in the bucket.")
         self.log.info('Starting Rebalance out process')
         remove_nodes = [self.servers[2]]
@@ -658,6 +659,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                 break
             self.sleep(10)
         if not all_items_indexed_flag:
+            self.log.error(f"Index metadata info from getIndexStatus endpoint {index_meta_info}")
             self.fail("Failed to index all the items in the bucket.")
         self.log.info('Starting Rebalance Swap process')
         add_nodes = [self.servers[2]]
@@ -917,7 +919,6 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
 
         self.wait_until_indexes_online()
         index_meta_info = self.rest.get_indexer_metadata()['status']
-        
         self.assertEqual(len(index_meta_info), 10 * (self.num_replicas + 1))
 
     def test_rebalance_indexer_nodes_with_multiple_BSC(self):

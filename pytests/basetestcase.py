@@ -61,7 +61,7 @@ class OnPremBaseTestCase(unittest.TestCase):
         self.input = TestInputSingleton.input
         self.parse_params()
         self.primary_index_created = False
-       
+
         if self.log_level:
             self.log.setLevel(level=0)
             for hd in self.log.handlers:
@@ -113,18 +113,18 @@ class OnPremBaseTestCase(unittest.TestCase):
             if self.skip_standard_buckets:
                 self.standard_buckets = 0
                 BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers, test_case=self)
-            
+
             self.port = None
-            
+
             # for ephemeral bucket is can be noEviction or nruEviction
             if self.bucket_type == 'ephemeral' and self.eviction_policy == 'valueOnly':
                 # use the ephemeral bucket default
                 self.eviction_policy = 'noEviction'
 
             self.sasl_bucket_name = "bucket"
-            
+
             self.skip_metabucket_check = False
-            
+
             if self.use_https:
                 CbServer.use_https = True
 
@@ -817,8 +817,32 @@ class OnPremBaseTestCase(unittest.TestCase):
             self._log_finish(self)
             TestInputSingleton.input.test_params['teardown_run'] = str(True)
 
-    def get_index_map(self):
-        return RestConnection(self.master).get_index_status()
+    def get_index_map(self, return_system_query_scope=False):
+        return RestConnection(self.master).get_index_status(return_system_query_scope=return_system_query_scope)
+
+    def get_index_map_from_index_endpoint(self, return_system_query_scope=False):
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        index_map_parsed = RestConnection(index_node).get_indexer_metadata(return_system_query_scope=
+                                                                           return_system_query_scope)
+        index_map = {}
+        for index in index_map_parsed['status']:
+            bucket_name = index['bucket']
+            if bucket_name not in list(index_map.keys()):
+                index_map[bucket_name] = {}
+            if not return_system_query_scope and "_system._query" in index['definition']:
+                continue
+            index_name = index['name']
+            index_map[bucket_name][index_name] = {}
+            index_map[bucket_name][index_name]['status'] = index['status']
+            index_map[bucket_name][index_name]['progress'] = str(index['progress'])
+            index_map[bucket_name][index_name]['definition'] = index['definition']
+            index_map[bucket_name][index_name]['partitioned'] = index['partitioned']
+            if len(index['hosts']) == 1:
+                index_map[bucket_name][index_name]['hosts'] = index['hosts'][0]
+            else:
+                index_map[bucket_name][index_name]['hosts'] = index['hosts']
+            index_map[bucket_name][index_name]['id'] = index['instId']
+        return index_map
 
     @staticmethod
     def change_max_buckets(self, total_buckets):
@@ -2594,7 +2618,7 @@ class OnPremBaseTestCase(unittest.TestCase):
         server = self.get_nodes_from_services_map(service_type="kv")
         return RestConnection(server).get_buckets_itemCount()
 
-    def get_index_stats(self, perNode=False):
+    def get_index_stats(self, perNode=False, return_system_query_scope=False):
         servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         index_map = None
         for server in servers:
@@ -2604,9 +2628,11 @@ class OnPremBaseTestCase(unittest.TestCase):
             if perNode:
                 if index_map == None:
                     index_map = {}
-                index_map[key] = RestConnection(server).get_index_stats(index_map=None)
+                index_map[key] = RestConnection(server).get_index_stats(index_map=None,
+                                                                        return_system_query_scope=return_system_query_scope)
             else:
-                index_map = RestConnection(server).get_index_stats(index_map=index_map)
+                index_map = RestConnection(server).get_index_stats(index_map=index_map,
+                                                                   return_system_query_scope=return_system_query_scope)
         return index_map
 
     def get_nodes_from_services_map(self, service_type="n1ql", get_all_nodes=False,

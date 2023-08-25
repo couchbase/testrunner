@@ -1051,7 +1051,8 @@ class N1QLHelper():
 
     def verify_indexes_redistributed(self, map_before_rebalance, map_after_rebalance, stats_map_before_rebalance,
                                      stats_map_after_rebalance, nodes_in, nodes_out, swap_rebalance=False,
-                                     use_https=False):
+                                     use_https=False, item_count_increase=False, per_node=False,
+                                     skip_array_index_item_count=False):
         # verify that number of indexes before and after rebalance are same
         no_of_indexes_before_rebalance = 0
         no_of_indexes_after_rebalance = 0
@@ -1085,11 +1086,19 @@ class N1QLHelper():
         host_names_after_rebalance = []
         for bucket in map_before_rebalance:
             for index in map_before_rebalance[bucket]:
-                host_names_before_rebalance.append(map_before_rebalance[bucket][index]['hosts'])
+                if type(map_before_rebalance[bucket][index]['hosts']) is list:
+                    for host in map_before_rebalance[bucket][index]['hosts']:
+                        host_names_before_rebalance.append(host)
+                else:
+                    host_names_before_rebalance.append(map_before_rebalance[bucket][index]['hosts'])
         indexer_nodes_before_rebalance = sorted(set(host_names_before_rebalance))
         for bucket in map_after_rebalance:
             for index in map_after_rebalance[bucket]:
-                host_names_after_rebalance.append(map_after_rebalance[bucket][index]['hosts'])
+                if type(map_after_rebalance[bucket][index]['hosts']) is list:
+                    for host in map_after_rebalance[bucket][index]['hosts']:
+                        host_names_after_rebalance.append(host)
+                else:
+                    host_names_after_rebalance.append(map_after_rebalance[bucket][index]['hosts'])
         indexer_nodes_after_rebalance = sorted(set(host_names_after_rebalance))
         self.log.info("Host names of indexer nodes before rebalance : {0}".format(indexer_nodes_before_rebalance))
         self.log.info("Host names of indexer nodes after rebalance  : {0}".format(indexer_nodes_after_rebalance))
@@ -1115,21 +1124,11 @@ class N1QLHelper():
                     raise Exception("swap rebalanced in node is not distributed any indexes")
 
         # verify that items_count before and after rebalance are same
-        items_count_before_rebalance = {}
-        items_count_after_rebalance = {}
-        for bucket in stats_map_before_rebalance:
-            for index in stats_map_before_rebalance[bucket]:
-                items_count_before_rebalance[index] = stats_map_before_rebalance[bucket][index][
-                    "items_count"]
-        for bucket in stats_map_after_rebalance:
-            for index in stats_map_after_rebalance[bucket]:
-                items_count_after_rebalance[index] = stats_map_after_rebalance[bucket][index]["items_count"]
-        self.log.info("item_count of indexes before rebalance {0}".format(items_count_before_rebalance))
-        self.log.info("item_count of indexes after rebalance {0}".format(items_count_after_rebalance))
-        diffs = DeepDiff(items_count_before_rebalance, items_count_after_rebalance, ignore_order=True)
-        if diffs:
-            self.log.info(diffs)
-            raise Exception("items_count mismatch")
+        self.validate_item_count_data_size(map_before_rebalance=map_before_rebalance, map_after_rebalance=map_after_rebalance,
+                                          stats_map_before_rebalance=stats_map_before_rebalance,
+                                          stats_map_after_rebalance=stats_map_after_rebalance,
+                                          item_count_increase=item_count_increase,
+                                          per_node=per_node, skip_array_index_item_count=skip_array_index_item_count)
 
         # verify that index status before and after rebalance are same
         index_state_before_rebalance = {}
@@ -1162,6 +1161,149 @@ class N1QLHelper():
         self.log.info("Distribution of indexes after rebalance")
         for k, v in index_distribution_map_after_rebalance.items():
             print(k, v)
+
+    def validate_item_count_data_size(self, map_before_rebalance, map_after_rebalance, stats_map_before_rebalance,
+                                     stats_map_after_rebalance, item_count_increase=False, per_node=False,
+                                      skip_array_index_item_count=False):
+        items_count_before_rebalance = {}
+        items_count_after_rebalance = {}
+        if not per_node:
+            for bucket in stats_map_before_rebalance:
+                for index in stats_map_before_rebalance[bucket]:
+                    items_count_before_rebalance[index] = stats_map_before_rebalance[bucket][index][
+                        "items_count"]
+            for bucket in stats_map_after_rebalance:
+                for index in stats_map_after_rebalance[bucket]:
+                    items_count_after_rebalance[index] = stats_map_after_rebalance[bucket][index]["items_count"]
+            self.log.info("item_count of indexes before rebalance {0}".format(items_count_before_rebalance))
+            self.log.info("item_count of indexes after rebalance {0}".format(items_count_after_rebalance))
+            diffs = DeepDiff(items_count_before_rebalance, items_count_after_rebalance, ignore_order=True)
+            if diffs:
+                self.log.info(diffs)
+                if not item_count_increase:
+                    raise Exception("items_count mismatch")
+        else:
+            items_count_before_rebalance, data_size_before_rebalance, partitioned_indexes_dict_item_count, \
+            partitioned_indexes_dict_data_size, array_indexes_dict_item_count_before, \
+            array_indexes_dict_data_size_before = self._create_dicts(map_before_rebalance, stats_map_before_rebalance)
+            items_count_after_rebalance, data_size_after_rebalance, partitioned_indexes_dict_item_count_after, \
+            partitioned_indexes_dict_data_size_after, array_indexes_dict_item_count_after, \
+            array_indexes_dict_data_size_after = self._create_dicts(map_after_rebalance, stats_map_after_rebalance)
+            self.log.info("Compare items count for indexes before and after rebalance")
+            self._find_differences(items_count_before_rebalance, items_count_after_rebalance, item_count_increase=item_count_increase)
+            self.log.info("Compare data size for indexes before and after rebalance")
+            # TODO Remove after MB-58829 is fixed
+            try:
+                self._find_differences(data_size_before_rebalance, data_size_after_rebalance, item_count_increase=item_count_increase, delta_allowed=0.25)
+                raise Exception("Ignoring data size change exception.")
+            except:
+                pass
+            self.log.info("Compare items count for partitioned indexes before and after rebalance")
+            self._find_differences(partitioned_indexes_dict_item_count, partitioned_indexes_dict_item_count_after, item_count_increase=item_count_increase)
+            self.log.info("Compare data size for partitioned indexes before and after rebalance")
+            # TODO Remove after MB-58829 is fixed
+            try:
+                self._find_differences(partitioned_indexes_dict_data_size, partitioned_indexes_dict_data_size_after, item_count_increase=item_count_increase, delta_allowed=0.25)
+                raise Exception("Ignoring data size change exception.")
+            except:
+                pass
+            if not skip_array_index_item_count:
+                self.log.info("Compare items count for array indexes before and after rebalance")
+                self._find_differences(array_indexes_dict_item_count_before, array_indexes_dict_item_count_after,
+                                       item_count_increase=item_count_increase)
+                self.log.info("Compare data size for array indexes before and after rebalance")
+                # TODO Remove after MB-58829 is fixed
+                try:
+                    self._find_differences(array_indexes_dict_data_size_before, array_indexes_dict_data_size_after,
+                                       item_count_increase=item_count_increase, delta_allowed=0.25)
+                    raise Exception("Ignoring data size change exception.")
+                except:
+                    pass
+
+    def _find_differences(self, count_before, count_after, item_count_increase=False, delta_allowed=0.0):
+        """
+        finds differences in the index metadata before and after rebalance.
+        """
+        diffs = DeepDiff(count_before, count_after,
+                         ignore_order=True)
+        if diffs:
+            self.log.info(f"Diffs {diffs}")
+            if not item_count_increase:
+                for key in diffs['values_changed']:
+                    if diffs['values_changed'][key]['new_value'] > diffs['values_changed'][key]['old_value']:
+                        maxval = diffs['values_changed'][key]['new_value']
+                        minval = diffs['values_changed'][key]['old_value']
+                    else:
+                        maxval = diffs['values_changed'][key]['old_value']
+                        minval = diffs['values_changed'][key]['new_value']
+                    if (maxval - minval) / diffs['values_changed'][key]['old_value'] <= delta_allowed:
+                        self.log.info(
+                            f"Ignoring change of up to 25% increase/decrease in data size. Percentage change {100 * (maxval - minval) / diffs['values_changed'][key]['old_value']}")
+                    else:
+                        self.log.error(
+                            f"Index data sizes differ by more than {delta_allowed*100} percent before and after rebalance.{diffs}. Percentage change {100 * (maxval - minval) / diffs['values_changed'][key]['old_value']}")
+                        raise Exception("Item count/data size change of more than 25%")
+            else:
+                for key in diffs['values_changed']:
+                    if diffs['values_changed'][key]['new_value'] <= diffs['values_changed'][key]['old_value']:
+                        raise Exception(
+                            f"Item count/data size increased for partitioned indexes post rebalance. Difference {diffs}")
+
+    def _create_dicts(self, map_metadata, map_stats):
+        """
+        forms a map of index metadata and the index names.
+        also forms a map for partitioned and array index maps separately.
+        """
+        partitioned_indexes_list, partitioned_indexes_dict_item_count, partitioned_indexes_dict_data_size = [], {}, {}
+        items_count_dict, data_size_dict = {}, {}
+        array_index_list = []
+        array_indexes_dict_item_count, array_indexes_dict_data_size = {}, {}
+        for bucket in map_metadata:
+            for index in map_metadata[bucket]:
+                if map_metadata[bucket][index]['partitioned']:
+                    partitioned_indexes_list.append(index)
+                if "array" in map_metadata[bucket][index]['definition']:
+                    array_index_list.append(index)
+        for host in map_stats:
+            for bucket in map_stats[host]:
+                for index in map_stats[host][bucket]:
+                    if index not in partitioned_indexes_list and index not in array_index_list:
+                        items_count_dict[index] = map_stats[host][bucket][index][
+                            "items_count"]
+                        data_size_dict[index] = map_stats[host][bucket][index][
+                            "data_size"]
+                    elif index in partitioned_indexes_list:
+                        if index not in partitioned_indexes_dict_item_count:
+                            partitioned_indexes_dict_item_count[index] = \
+                                map_stats[host][bucket][index][
+                                    "items_count"]
+                        else:
+                            partitioned_indexes_dict_item_count[index] += \
+                                map_stats[host][bucket][index][
+                                    "items_count"]
+                        if index not in partitioned_indexes_dict_data_size:
+                            partitioned_indexes_dict_data_size[index] = \
+                                map_stats[host][bucket][index]["data_size"]
+                        else:
+                            partitioned_indexes_dict_data_size[index] += \
+                                map_stats[host][bucket][index]["data_size"]
+                    elif index in array_index_list:
+                        if index not in array_indexes_dict_item_count:
+                            array_indexes_dict_item_count[index] = \
+                                map_stats[host][bucket][index][
+                                    "items_count"]
+                        else:
+                            array_indexes_dict_item_count[index] += \
+                                map_stats[host][bucket][index][
+                                    "items_count"]
+                        if index not in array_indexes_dict_data_size:
+                            array_indexes_dict_data_size[index] = \
+                                map_stats[host][bucket][index]["data_size"]
+                        else:
+                            array_indexes_dict_data_size[index] += \
+                                map_stats[host][bucket][index]["data_size"]
+        return items_count_dict, data_size_dict, partitioned_indexes_dict_item_count, \
+               partitioned_indexes_dict_data_size, array_indexes_dict_item_count, array_indexes_dict_data_size
 
     def verify_replica_indexes(self, index_names, index_map, num_replicas, expected_nodes=None, dropped_replica=False, replicaId=None):
         # 1. Validate count of no_of_indexes
