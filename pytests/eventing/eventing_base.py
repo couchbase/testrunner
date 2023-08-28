@@ -298,6 +298,8 @@ class EventingBaseTest(QueryHelperTests):
             bucket=self.dst_bucket_name
         if self.is_sbm:
             bucket=self.src_bucket_name
+        # temp workaround to avoid doc mismatch due to additional docs in _system scope
+        expected_dcp_mutations += self.stat.get_scope_item_count(bucket, CbServer.system_scope)
         if not skip_stats_validation:
             # we can't rely on dcp_mutation stats when doc timers events are set.
             # TODO : add this back when getEventProcessingStats works reliably for doc timer events as well

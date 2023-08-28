@@ -47,6 +47,8 @@ class CbServer(object):
     default_scope = "_default"
     default_collection = "_default"
 
+    system_scope = "_system"
+
     total_vbuckets = 1024
 
     # Name length limits
