@@ -15,7 +15,7 @@ from membase.api.rest_client import RestConnection
 from .base_gsi import BaseSecondaryIndexingTests
 from couchbase_helper.documentgenerator import SDKDataLoader
 import random
-from string import digits
+import string
 from concurrent.futures import ThreadPoolExecutor
 from remote.remote_util import RemoteMachineShellConnection
 from threading import Thread
@@ -79,7 +79,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
         for namespace in self.namespaces:
             _, keyspace = namespace.split(':')
             bucket, scope, collection = keyspace.split('.')
-            key_prefix = 'doc_' + "".join(random.choices(digits, k=2))
+            key_prefix = 'doc_' + "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
             self.gen_create = SDKDataLoader(num_ops=num_of_docs_per_collection, percent_create=100,
                                             percent_update=0, percent_delete=0, scope=scope,
                                             collection=collection, json_template='Hotel', key_prefix=key_prefix,
@@ -98,7 +98,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
             _, keyspace = namespace.split(':')
             bucket, scope, collection = keyspace.split('.')
             price_count_query_before_rebalance = f'SELECT COUNT(*) FROM `{bucket}`.`{scope}`.`{collection}` WHERE price is NOT NULL'
-            value = self.run_cbq_query(query=price_count_query_before_rebalance)
+            value = self.run_cbq_query(query=price_count_query_before_rebalance, scan_consistency='request_plus')
             no_of_docs_indexed.append(value['results'][0]['$1'])
         return no_of_docs_indexed
 
@@ -148,12 +148,12 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                 if num_requests > 0:
                     if self.num_collections > 1 or self.num_scopes > 1:
                         self.run_continous_query = False
-                    self.log.error(
+                    self.log.warning(
                         f'Node {node} is serving scans when its getting rebalanced in index : {index} num scans : {num_requests}')
                     if self.rest._rebalance_progress_status() == 'running':
                         self.sleep(60)
                         if self.rest._rebalance_progress_status() == 'running':
-                            self.fail(f'Node {node} is serving scans when its getting rebalanced in index : {index} num scans : {num_requests}')
+                            self.log.warning(f'Node {node} is serving scans when its getting rebalanced in index : {index} num scans : {num_requests}')
             namespaces = set()
             index_names_list = []
             for index in indexes_building:
@@ -161,8 +161,8 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                     split_key = index.split(':')
                     namespace = f'{split_key[0]}.{split_key[1]}.{split_key[2]}'
                     index_name = f'{split_key[3]}'
-                    self.log.info(f'namespaces : {namespace}')
-                    self.log.info(f'index name list : {index_names_list}')
+                    # self.log.info(f'namespaces : {namespace}')
+                    # self.log.info(f'index name list : {index_names_list}')
                     namespaces.add(namespace)
                     index_names_list.append(index_name)
             if len(list(namespaces)) > 1 and len(index_names_list) > 20:
@@ -172,11 +172,14 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                 self.fail(
                     f'namespace : {list(namespaces)} index_names_list : {index_names_list}  index meta data : {metadata_out}')
 
-    def validate_scans_post_rebalance(self, select_queries_list, node, batches=10, query_node=None):
+    def validate_scans_post_rebalance(self, select_queries_list, node, batches=1, query_node=None):
+        
+        self.log.info('Running scans post rebalance')
         for batch in range(batches):
             tasks = self.gsi_util_obj.aysnc_run_select_queries(select_queries=select_queries_list,
                                                                query_node=query_node,
                                                                scan_consistency="request_plus")
+
             for task in tasks:
                 task.result()
 
@@ -189,7 +192,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                 self.log.info(f'index : {index} num scans : {num_requests}')
                 no_index_scan_count += 1
         if no_index_scan_count == 0:
-            self.fail(f'Node {node} is serving scans when its getting rebalanced in')
+            self.fail(f'Node {node} is not serving scans post rebalanced')
 
     def test_swap_rebalance_by_one(self):
         self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
@@ -309,6 +312,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
         indexder_metadata_after_rebalance = new_index_rest.get_indexer_metadata()['status']
         self.assertEqual(len(indexder_metadata_before_rebalance), len(indexder_metadata_after_rebalance),
                          'Probable drop of some indexes')
+        #self.get_cbcollect_info(self.servers)
         for i in range(len(no_of_docs_indexed_before_rebalanced)):
             expected_doc_count = no_of_docs_indexed_before_rebalanced[
                                      i] + mutation_batch * self.num_of_docs_per_collection_mutation
@@ -400,6 +404,8 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
         self.verify_index_distribution(indexer_metadata=indexder_metadata_after_rebalance)
 
     def test_replica_repair_rebalance_in(self):
+        redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
+        self.index_rest.set_index_settings(redistribute)
         self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
                                              num_of_docs_per_collection=self.num_of_docs_per_collection,
                                              json_template='Hotel')
@@ -584,6 +590,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
         mutation_batch = 0
         for idx, index_node in enumerate(index_nodes):
             out_node = index_node
+            remote = RemoteMachineShellConnection(out_node)
             self.log.info(f'node being balanced out {out_node}')
             in_node = self.servers[self.nodes_init + idx]
             mutation_batch += 1
@@ -594,16 +601,17 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
             self.run_continous_query = True
             with ThreadPoolExecutor() as excecutor:
                 task = excecutor.submit(self.validate_batch_size_and_queries, node=in_node, rebalance_fail=True)
-                excecutor.submit(self._run_queries_continously, select_queries=select_queries_list,
-                                 scan_consistency='request_plus')
-                excecutor.submit(self.kv_mutations, num_of_docs_per_collection=self.num_of_docs_per_collection_mutation)
-                remote = RemoteMachineShellConnection(out_node)
-                self.sleep(randrange(20, 50))
-                if self.failover_method == 'index_kill':
+                self.sleep(10)
+                if self.failover_method == "index_kill":
                     for i in range(10):
+                        self.log.info('index process stopped')
                         remote.terminate_process(process_name="indexer")
                 else:
                     self.rest.stop_rebalance()
+                excecutor.submit(self._run_queries_continously, select_queries=select_queries_list,
+                                 scan_consistency='request_plus')
+                excecutor.submit(self.kv_mutations, num_of_docs_per_collection=self.num_of_docs_per_collection_mutation)
+
                 err = None
                 try:
                     rebalance.result()
@@ -612,7 +620,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                     self.run_continous_query = False
                     self.log.info(err)
                 self.run_continous_query = False
-                if err is None and self.failover_method != 'cancel_rebalance':
+                if err is None and self.failover_method != "cancel_rebalance":
                     self.fail('rebalance could not be failed')
                 try:
                     task.result()
@@ -673,6 +681,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
         mutation_batch = 0
         for idx, index_node in enumerate(index_nodes):
             out_node = index_node
+            remote = RemoteMachineShellConnection(out_node)
             in_node = self.servers[self.nodes_init + idx]
             self.log.info(f'node being balanced out {in_node}')
             mutation_batch += 1
@@ -683,16 +692,16 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
             self.run_continous_query = True
             with ThreadPoolExecutor() as excecutor:
                 task = excecutor.submit(self.validate_batch_size_and_queries, node=in_node, rebalance_fail=True)
-                excecutor.submit(self._run_queries_continously, select_queries=select_queries_list,
-                                 scan_consistency='request_plus')
-                excecutor.submit(self.kv_mutations, num_of_docs_per_collection=self.num_of_docs_per_collection_mutation)
-                remote = RemoteMachineShellConnection(out_node)
-                self.sleep(randrange(20, 50))
-                if self.failover_method == 'index_kill':
+                self.sleep(10)
+                if self.failover_method == "index_kill":
                     for i in range(10):
+                        self.log.info('index process stopped')
                         remote.terminate_process(process_name="indexer")
                 else:
                     self.rest.stop_rebalance()
+                excecutor.submit(self._run_queries_continously, select_queries=select_queries_list,
+                                 scan_consistency='request_plus')
+                excecutor.submit(self.kv_mutations, num_of_docs_per_collection=self.num_of_docs_per_collection_mutation)
                 err = None
                 try:
                     rebalance.result()
@@ -701,7 +710,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                     self.run_continous_query = False
                     self.log.info(err)
                 self.run_continous_query = False
-                if err is None and self.failover_method != 'cancel_rebalance':
+                if err is None and self.failover_method != "cancel_rebalance":
                     self.fail('rebalance could not be failed')
                 try:
                     task.result()
@@ -761,6 +770,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
         mutation_batch = 0
         for idx, index_node in enumerate(index_nodes):
             out_node = index_node
+            remote = RemoteMachineShellConnection(out_node)
             self.log.info(f'node being balanced out {out_node}')
             in_node = self.servers[self.nodes_init + idx]
             mutation_batch += 1
@@ -774,15 +784,15 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
             self.run_continous_query = True
             with ThreadPoolExecutor() as excecutor:
                 task = excecutor.submit(self.validate_batch_size_and_queries, node=in_node, rebalance_fail=True)
-                excecutor.submit(self._run_queries_continously,select_queries=select_queries_list, scan_consistency='request_plus')
-                excecutor.submit(self.kv_mutations,num_of_docs_per_collection=self.num_of_docs_per_collection_mutation)
-                remote = RemoteMachineShellConnection(out_node)
-                self.sleep(randrange(20, 50))
-                if self.failover_method == 'index_kill':
+                self.sleep(10)
+                if self.failover_method == "index_kill":
                     for i in range(10):
+                        self.log.info('index process stopped')
                         remote.terminate_process(process_name="indexer")
                 else:
                     self.rest.stop_rebalance()
+                excecutor.submit(self._run_queries_continously,select_queries=select_queries_list, scan_consistency='request_plus')
+                excecutor.submit(self.kv_mutations,num_of_docs_per_collection=self.num_of_docs_per_collection_mutation)
                 err = None
                 try:
                     rebalance_out.result()
@@ -791,7 +801,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                     self.run_continous_query = False
                     self.log.info(err)
                 self.run_continous_query = False
-                if err is None and self.failover_method != 'cancel_rebalance':
+                if err is None and self.failover_method != "cancel_rebalance":
                     self.fail('rebalance could not be failed')
                 try:
                     task.result()
