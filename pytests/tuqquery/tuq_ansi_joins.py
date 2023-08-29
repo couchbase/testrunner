@@ -193,7 +193,7 @@ class QueryANSIJOINSTests(QueryTests):
         idx_list.append((idx, (self.default_query_bucket, "name")))
 
         query_1 = "select * from {0} d INNER JOIN (select * from {0} d1 where d1.name == 'ajay') d2 ON " \
-                  "(d.name = d2.name)".format(self.default_query_bucket)
+                  "(d.name = d2.d1.name)".format(self.default_query_bucket)
         # With subquery support this join should be a hash join
         explain_query = "EXPLAIN " + query_1
         explain_plan = self.run_cbq_query(explain_query)
@@ -202,10 +202,9 @@ class QueryANSIJOINSTests(QueryTests):
         queries_to_run.append((query_1, 0))
 
         query_2 = "select * from {0} d INNER JOIN (select * from {0} d1 inner join {0} d3 on " \
-                  "d1.name == d3.name LIMIT 100) d2 ON (d.name = d2.name) LIMIT 100".format(self.default_query_bucket)
+                  "d1.name == d3.name LIMIT 100) d2 ON (d.name = d2.d1.name) LIMIT 100".format(self.default_query_bucket)
 
         queries_to_run.append((query_2, 100))
-
         self.run_common_body(index_list=idx_list, queries_to_run=queries_to_run)
 
         try:
@@ -343,7 +342,7 @@ class QueryANSIJOINSTests(QueryTests):
         idx_list.append((idx, (self.default_query_bucket, "name")))
 
         query_1 = "select * from {0} d INNER JOIN (select * from {0} d1 where d1.name == 'ajay') d2 USE HASH(build) " \
-                  "ON (d.name = d2.name)".format(self.default_query_bucket)
+                  "ON (d.name = d2.d1.name)".format(self.default_query_bucket)
         # With subquery support this join should be a hash join
         explain_query = "EXPLAIN " + query_1
         explain_plan = self.run_cbq_query(explain_query)
@@ -354,7 +353,7 @@ class QueryANSIJOINSTests(QueryTests):
         queries_to_run.append((query_1, 0))
 
         query_2 = "select * from {0} d INNER JOIN (select * from {0} d1 inner join {0} d3 on " \
-                  "d1.name == d3.name LIMIT 100) d2 USE HASH(build) ON (d.name = d2.name) " \
+                  "d1.name == d3.name LIMIT 100) d2 USE HASH(build) ON (d.name = d2.d1.name) " \
                   "LIMIT 100".format(self.default_query_bucket)
 
         queries_to_run.append((query_2, 100))
