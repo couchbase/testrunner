@@ -50,7 +50,9 @@ def crud_thread(collection, key_prefix, number_of_docs, run, counter_obj, number
         sdk_client.delete_multi(collection, counter_obj, current_batch, number_of_retries, delay_time)
 
 
-def mutate_doc_thread(collection, counter_obj, number_of_docs, number_of_threads, number_of_retries, duration, delay_time):
+def mutate_doc_thread(collection, counter_obj, number_of_docs, number_of_threads, number_of_retries,
+                      duration, delay_time):
+    logging.info("Starting KV workload on collection: {}".format(collection.name))
     num_of_docs_per_thread = number_of_docs
     threading_list,key = list(), "key"
     run = 0
@@ -70,36 +72,60 @@ def mutate_doc_thread(collection, counter_obj, number_of_docs, number_of_threads
         thread.join()
 
 
-def run_query_thread(cluster, bucket_name, scope_name, collection_name, duration, counter_obj):
-    logging.info("Running Query workload on {}-{}-{}".format(bucket_name, scope_name, collection_name))
-    t_end = time.time() + int(duration)
+def run_query_thread(cluster, bucket_name, scope_name, collection_name, number_of_threads,
+                     number_of_retries, duration, counter_obj):
+    logging.info("Starting Query workload on collection : {},".format(collection_name))
     query_workload_obj = RunQueryWorkload()
-    query_workload_obj.build_indexes(cluster, bucket_name, scope_name, collection_name, counter_obj)
-    while time.time() < t_end:
-        query_workload_obj.run_query(cluster, bucket_name, scope_name, collection_name, counter_obj)
+    query_workload_obj.build_indexes(cluster, bucket_name, scope_name, collection_name, counter_obj, number_of_retries)
+    thread_list = list()
+    for _ in range(number_of_threads):
+        thread = threading.Thread(target=query_workload_obj.run_query, args=(cluster, bucket_name, scope_name,
+                                                                             collection_name, duration, counter_obj,
+                                                                             number_of_retries))
+        thread_list.append(thread)
+
+    for thread in thread_list:
+        thread.start()
+        time.sleep(1)
+
+    for thread in thread_list:
+        thread.join()
 
 
 def start_workload(workload_type, collection_obj_list, query_run_list, number_of_dos, number_of_threads, number_of_retries,
                    duration, delay_time):
-    thread_list = list()
+    kv_thread_list, query_thread_list = list(), list()
     counter_obj = SDKCounter()
-    logging.info("Starting {} number of threads to start the workload".format(len(collection_obj_list)))
 
-    logging.info("Running SDK Workload")
     for i in range(len(collection_obj_list)):
         if 'kv' in workload_type:
             collection = collection_obj_list[i]
-            thread1 = threading.Thread(target=mutate_doc_thread, args=(collection, counter_obj, number_of_dos, number_of_threads, number_of_retries, duration, delay_time))
-            thread_list.append(thread1)
+            thread1 = threading.Thread(target=mutate_doc_thread, args=(collection, counter_obj,
+                                                                       number_of_dos,
+                                                                       number_of_threads,
+                                                                       number_of_retries,
+                                                                       duration, delay_time))
+            kv_thread_list.append(thread1)
         if 'query' in workload_type:
             param_dict = query_run_list[i]
-            thread2 = threading.Thread(target=run_query_thread, args=(param_dict['cluster'], param_dict['bucket'], param_dict['scope'], param_dict['collection'], duration, counter_obj))
-            thread_list.append(thread2)
+            thread2 = threading.Thread(target=run_query_thread, args=(param_dict['cluster'], param_dict['bucket'],
+                                                                      param_dict['scope'], param_dict['collection'],
+                                                                      number_of_threads, number_of_retries,
+                                                                      duration, counter_obj))
+            query_thread_list.append(thread2)
 
-    for thread in thread_list:
+    for thread in kv_thread_list:
         thread.start()
 
-    for thread in thread_list:
+    time.sleep(5)
+
+    for thread in query_thread_list:
+        thread.start()
+
+    for thread in kv_thread_list:
+        thread.join()
+
+    for thread in query_thread_list:
         thread.join()
 
     if 'kv' in workload_type:
@@ -119,7 +145,8 @@ class PythonSdkWorkload(unittest.TestCase):
         self.capella_api = CapellaAPI(capella_credentials)
         self.cluster_id = self.input.capella.get('cluster_id', None)
         self.bucket_list = self.input.capella.get("bucket_list",
-                                                  '{"bucket-1":{"saurabh": ["col-1", "col-2", "col-3", "col-4", "col-5"]},"bucket-2": {"saurabh": ["col-1", "col-2", "col-3", "col-4", "col-5"]}}')
+                                                  '{"bucket-1":{"saurabh": ["col-1", "col-2", "col-3", "col-4", "col-5"]},'
+                                                  '"bucket-2": {"saurabh": ["col-1", "col-2", "col-3", "col-4", "col-5"]}}')
         self.user_name = self.input.param("username", "RunWorkloadUser-1")
         self.user_pass = self.input.param("password", "RunWorkloadUser@123")
         self.duration = self.input.capella.get("duration", 3600)

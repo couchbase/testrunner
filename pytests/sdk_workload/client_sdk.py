@@ -181,11 +181,16 @@ class SDKClient(object):
             time.sleep(delay_time)
             logging.info("Retries read doc due timeout failures......")
 
-    def run_query(self, cluster, query, counter_obj):
-        try:
-            cluster.query(query, QueryOptions(metrics=True))
-        except CouchbaseException as e:
-            counter_obj.increment(QUERY)
-            logging.critical("Query failed with exception: {}".format(e.message))
-            import traceback
-            traceback.print_exc()
+    def run_query(self, cluster, query, counter_obj, retries):
+        temp_retries = retries
+        while retries > 0:
+            try:
+                cluster.query(query, QueryOptions(metrics=True))
+                return True
+            except CouchbaseException as e:
+                retries = retries - 1
+                logging.info("Retrying the query run - {}".format(temp_retries-retries))
+                if retries <= 0:
+                    logging.critical("Query failed with exception: {}".format(e.message))
+                    counter_obj.increment(QUERY)
+                    return False
