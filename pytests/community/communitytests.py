@@ -778,13 +778,13 @@ class CommunityTests(CommunityBaseTest):
                                  --data-urlencode groupsQuery="ou=groups,dc=example,dc=com??one?(member=%D)"'\
                                 .format(self.master.ip, self.master.ip)
         if self.cli_test:
-            cmd = '{0}couchbase-cli setting-ldap -c {1}:8091 --username Administrator \
-                --password password  \
+            cmd = '{0}couchbase-cli setting-ldap -c couchbases://{1}:8091 \
                 --authentication-enabled 1 \
                 --authorization-enabled 1 \
                 --hosts {2} \
                 --encryption startTLS \
                 --client-cert root.crt \
+                --client-key root.key \
                 --bind-dn "cn=admin,dc=example,dc=com" \
                 --bind-password password \
                 --group-query "ou=groups,dc=example,dc=com??one?(member=%D)"'.format(self.bin_path, self.master.ip, self.master.ip)
@@ -827,6 +827,11 @@ class CommunityTests(CommunityBaseTest):
         if self.cb_version[:5] not in COUCHBASE_FROM_MAD_HATTER:
             self.log.info("This test is only for MH and later")
             return
+
+        # Turn of auto failover
+        self.rest = RestConnection(self.servers[0])
+        self.rest.update_autofailover_settings(False, 120)
+
         cmd = '/opt/couchbase/bin/couchbase-cli node-to-node-encryption \
                 -c http://{0}:8091 \
                 -u Administrator \
@@ -836,7 +841,7 @@ class CommunityTests(CommunityBaseTest):
         conn = RemoteMachineShellConnection(self.master)
         output, error = conn.execute_command(cmd)
         conn.log_command_output(output, error)
-        mesg = "not supported in community edition"
+        mesg = "nodeEncryption - Supported in enterprise edition only"
         if output and mesg not in str(output[0]):
             self.fail("Encrypted network access should not be in CE")
         conn.disconnect()
