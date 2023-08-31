@@ -126,6 +126,8 @@ class NodeHelper:
             os = major_version[0] + '.' + major_version[1]
         if self.info.distribution_type == "Amazon Linux 2":
             os = "amzn2"
+        if self.info.distribution_type == "Amazon Linux 2023":
+            os = "al2023"
         return os
 
     def uninstall_cb(self):

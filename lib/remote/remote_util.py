@@ -3471,15 +3471,14 @@ class RemoteMachineShellConnection(KeepRefs):
                         line = file.readline()
 
                     os_distro_dict = {'ubuntu': 'Ubuntu', 'debian': 'Ubuntu', 'mint': 'Ubuntu',
-                        'amazon linux ami': 'CentOS', 'centos': 'CentOS', 'opensuse': 'openSUSE',
-                        'red': 'Red Hat', 'suse': 'SUSE', 'oracle': 'Oracle Linux', 'openshift' : 'CentOS',
-                        'almalinux': 'AlmaLinux OS', 'rocky': 'Rocky Linux'}
+                        'amazon linux 2023': 'CentOS', 'amazon linux 2': 'CentOS', 'centos': 'CentOS',
+                        'opensuse': 'openSUSE', 'red': 'Red Hat', 'suse': 'SUSE', 'oracle': 'Oracle Linux',
+                        'openshift' : 'CentOS', 'almalinux': 'AlmaLinux OS', 'rocky': 'Rocky Linux'}
                     os_shortname_dict = {'ubuntu': 'ubuntu', 'debian': 'debian', 'mint': 'ubuntu',
-                        'amazon linux ami': 'amzn2', 'centos': 'centos', 'opensuse': 'suse',
+                        'amazon linux 2023': 'al2023', 'amazon linux 2': 'amzn2', 'centos': 'centos', 'opensuse': 'suse',
                         'red': 'rhel', 'suse': 'suse', 'oracle': 'oel', 'openshift' : 'centos',
                         'almalinux': 'alma', 'rocky': 'rocky'}
-                    log.debug("os_pretty_name:" + os_pretty_name)
-                    if os_pretty_name and "Amazon Linux 2" not in os_pretty_name:
+                    if os_pretty_name and "Amazon Linux" not in os_pretty_name:
                         os_name = os_pretty_name.split(' ')[0].lower()
                         os_distro = os_distro_dict[os_name]
                         if os_name != 'ubuntu':
@@ -3488,8 +3487,8 @@ class RemoteMachineShellConnection(KeepRefs):
                             os_version = os_shortname_dict[os_name] + " " + os_version
                         if os_distro:
                             is_linux_distro = True
-                    log.info("os_distro: " + os_distro + ", os_version: " + os_version +
-                             ", is_linux_distro: " + str(is_linux_distro))
+                        log.info("os_distro: " + os_distro + ", os_version: " + os_version +
+                                 ", is_linux_distro: " + str(is_linux_distro))
                     file.close()
                     # now remove this file
                     os.remove(filename)
@@ -3529,14 +3528,19 @@ class RemoteMachineShellConnection(KeepRefs):
                         break
                     elif etc_issue.lower().find('amazon linux 2') != -1 or \
                          etc_issue.lower().find('amazon linux release 2') != -1:
+                        if etc_issue.lower().find('amazon linux release 2023') != -1:
+                            os_distro = 'Amazon Linux 2023'
+                        else:
+                            os_distro = 'Amazon Linux 2'
                         etc_issue = etc_issue.rstrip('\n').rstrip(' ').rstrip('\\l').rstrip(' ').rstrip('\\n').rstrip(
                             ' ')
-                        os_distro = 'Amazon Linux 2'
                         os_version = etc_issue
                         is_linux_distro = True
                         file.close()
                         # now remove this file
                         os.remove(filename)
+                        log.info("os_distro: " + os_distro + ", os_version: " + os_version +
+                                 ", is_linux_distro: " + str(is_linux_distro))
                         break
             """ for centos 7 or rhel8 """
             for name in filenames:
@@ -3621,17 +3625,18 @@ class RemoteMachineShellConnection(KeepRefs):
                 except AttributeError:
                     os_arch += str(line)
                 # at this point we should know if its a linux or windows ditro
-            ext = {'Ubuntu'         : 'deb',
-                   'CentOS'         : 'rpm',
-                   'Red Hat'        : 'rpm',
-                   'Mac'            : 'dmg',
-                   'Debian'         : 'deb',
-                   'openSUSE'       : 'rpm',
-                   'SUSE'           : 'rpm',
-                   'Oracle Linux'   : 'rpm',
-                   'Amazon Linux 2' : 'rpm',
-                   'AlmaLinux OS'   : 'rpm',
-                   'Rocky Linux'    : 'rpm'}.get(os_distro, '')
+            ext = {'Ubuntu'             : 'deb',
+                   'CentOS'             : 'rpm',
+                   'Red Hat'            : 'rpm',
+                   'Mac'                : 'dmg',
+                   'Debian'             : 'deb',
+                   'openSUSE'           : 'rpm',
+                   'SUSE'               : 'rpm',
+                   'Oracle Linux'       : 'rpm',
+                   'Amazon Linux 2023'  : 'rpm',
+                   'Amazon Linux 2'     : 'rpm',
+                   'AlmaLinux OS'       : 'rpm',
+                   'Rocky Linux'        : 'rpm'}.get(os_distro, '')
             arch = {'i686': "x86",
                     'i386': "x86"}.get(os_arch, os_arch)
 
