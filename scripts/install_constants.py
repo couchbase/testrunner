@@ -22,7 +22,7 @@ USAGE = """\
             """
 DEFAULT_INSTALL_TASKS = ["uninstall", "install", "init", "cleanup"]
 SUPPORTED_PRODUCTS = ["couchbase", "couchbase-server", "cb"]
-AMAZON = ["amzn2"]
+AMAZON = ["amzn2","al2023"]
 CENTOS = ["centos6", "centos7", "centos8"]
 DEBIAN = ["debian8", "debian9", "debian10", "debian11", "debian12"]
 OEL = ["oel7", "oel8","oel9"]
