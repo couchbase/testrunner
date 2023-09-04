@@ -206,7 +206,7 @@ class NodeHelper:
             self.shell.execute_command(cmd)
 
             # Explicitly set the profile mode value (if provided by user)
-            if params["cluster_profile"] in ["default", "serverless"]:
+            if params["cluster_profile"] in ["default", "serverless", "provisioned"]:
                 cmd = install_constants.CREATE_SERVERLESS_PROFILE_FILE[key] \
                       % params["cluster_profile"]
                 self.shell.execute_command(cmd)
