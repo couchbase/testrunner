@@ -853,7 +853,7 @@ class QueryExpirationTests(QueryTests):
         """
         @summary: Testing delete query with docs for which expiration is set.
         """
-        expiration_time = 1 * 90
+        expiration_time = 2 * 90
         limit_count = 10
 
         # Loading travel-sample bucket
