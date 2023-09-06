@@ -14,7 +14,9 @@ class EnterpriseBackupMergeTest(EnterpriseBackupMergeBase):
             conn.terminate_processes(conn.info, ["cbbackupmgr"])
             conn.disconnect()
     def __del__(self):
-        self.objstore_provider.__del__()
+        if hasattr(self, "objstore_provider"):
+            if self.objstore_provider != None:
+                self.objstore_provider.__del__()
     def tearDown(self):
         super(EnterpriseBackupMergeTest, self).tearDown()
 
