@@ -1843,14 +1843,30 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     try:
                         if restore_file_data[bucket.name][key]:
                             bucket_data_value = buckets_data[bucket.name][key]
+                            restore_data_value = restore_file_data[bucket.name][key]["Value"]
                             if version[:3] <= "6.6":
                                 bucket_data_value = str(bucket_data_value.replace(" ", ""))
-                            if bucket_data_value != restore_file_data[bucket.name][key]["Value"]:
+
+                            # A hack to adjust the bucket data string in binary merge. For some reason the data there
+                            # is stringified to a different (unknown)format. This  workaround removes all the meta characters,
+                            # so that only the data itself stays
+                            if self.document_type == "binary":
+                                 bucket_data_value = bucket_data_value[bucket_data_value.find("ent-backup"):bucket_data_value.rfind('')]
+                                 restore_data_value = restore_data_value[bucket_data_value.find("ent-backup"):restore_data_value.rfind('')]
+                                 bucket_data_value = bucket_data_value.replace("\\'", "'")
+                                 restore_data_value = restore_data_value.replace("b'", "")
+                                 bucket_data_value = bucket_data_value.replace("b'", "")
+                                 restore_data_value = restore_data_value.replace("b\"", "")
+                                 bucket_data_value = bucket_data_value.replace("b\"", "")
+                                 bucket_data_value = restore_data_value.replace('\'', '')
+                                 restore_data_value = restore_data_value.replace('\'', '')
+
+                            if bucket_data_value != restore_data_value:
                                 if count < 20:
                                     self.log.error("Data does not match at key {0}.\
                                                 bucket: {1} != {2} file" \
-                                                   .format(key, buckets_data[bucket.name][key],
-                                                           restore_file_data[bucket.name][key]["Value"]))
+                                                   .format(key, bucket_data_value,
+                                                           restore_data_value))
                                     data_matched = False
                                     count += 1
                                 else:
@@ -1863,7 +1879,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     except Exception as e:
                         if e:
                             print(e)
-                            raise Exception("\nMissing key: {0}".format(key))
+                            raise Exception("There was a prolbem with the data in bucket: {0}".format(bucket.name))
                 else:
                     raise Exception("Database file of bucket {0} is empty"
                                     .format(bucket.name))
