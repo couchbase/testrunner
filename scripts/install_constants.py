@@ -113,6 +113,7 @@ CMDS = {
         "uninstall":
             "systemctl -q stop couchbase-server;" +
             UNMOUNT_NFS_CMD +
+            "service ntp restart ; "
             "apt-get purge -y 'couchbase*' > /dev/null; sleep 10;"
             "dpkg --purge $(dpkg -l | grep couchbase | awk '{print $2}'"
             " | xargs echo); sleep 10; "
