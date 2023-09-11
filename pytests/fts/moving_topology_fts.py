@@ -2103,3 +2103,47 @@ class MovingTopFTS(FTSBaseTest):
                 return self._num_items * len(self.collection)
             else:
                 return self._num_items
+
+    def test_cleanup_after_failover_rebalance_addback(self):
+        self.load_data()
+        self.create_fts_indexes_all_buckets()
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          % (index.name, index.get_indexed_doc_count()))
+
+        # failover the fts node on which index recides
+        nodeIds = []
+        rest = RestConnection(self._master)
+
+        index = self._cb_cluster.get_indexes()[0]
+        _, indexdef = rest.get_fts_index_definition(index.name, index._source_name, index.scope)
+        _, cfg = rest.get_cfg_stats()
+
+        for plans in indexdef['planPIndexes']:
+            if "nodes" in plans:
+                for nodeId, val in plans["nodes"].items():
+                    nodeIds.append(nodeId)
+        hostnames = []
+        for nodeId in nodeIds:
+            hostnames.append(cfg['nodeDefsWanted']['nodeDefs'][nodeId]['hostPort'][:-5])
+
+        node_obj = None
+        for node in self._cb_cluster.get_nodes():
+            if node.ip == hostnames[0]:
+                node_obj = node
+        self._cb_cluster.failover(node=node_obj)
+        time.sleep(30)
+        self._cb_cluster.rebalance_failover_nodes()
+
+        self._cb_cluster.delete_bucket(bucket_name="default")
+
+        try:
+            _, indexdef = rest.get_fts_index_definition(index.name, index._source_name, index.scope)
+            self.fail("Index partitions still reside on the node - node not cleaned up properly")
+        except Exception as e:
+            self.log.info(f"Success - : {str(e)}")

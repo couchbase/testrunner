@@ -3725,6 +3725,16 @@ class RestConnection(object):
             json_parsed = json.loads(content)
         return status, json_parsed
 
+    def get_cfg_stats(self):
+        """ get fts cfg definition """
+        json_parsed = {}
+        api = self.fts_baseUrl + "api/cfg"
+        status, content, header = self.urllib_request(
+            api)
+        if status:
+            json_parsed = json.loads(content)
+        return status, json_parsed
+
     def get_all_fts_index_definition(self, bucket=None, scope=None):
         """ get fts index/alias definition for elixir"""
         json_parsed = {}
