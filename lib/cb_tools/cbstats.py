@@ -353,7 +353,7 @@ class Cbstats(CbCmdBase):
             output = str(output, 'utf-8')
             output = output.split("\n")
 
-        pattern = "[ \t]*([0-9A-Za-z_]+)[ \t]*:[ \t]+([a-zA-Z0-9\-\.\: ]+)"
+        pattern = "[ \t]*([0-9A-Za-z_]+)[ \t]*:[ \t]+([a-zA-Z0-9\-\.\:_ ]+)"
         pattern = re.compile(pattern)
         for line in output:
             match_result = pattern.match(line)
