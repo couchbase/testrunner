@@ -1,12 +1,8 @@
 {
   "exclude_buckets": [],
   "include_buckets": [],
-  "exclude_collections": [],
-  "filter_keys": "",
-  "filter_values": "",
-  "allow_bucket_creation": false,
   "disable_queries": true,
-  "disable_cluster_config": false,
+  "filter_values": false,
   "disable_bucket_config": false,
   "disable_views": false,
   "disable_gsi_indexes": false,
@@ -20,5 +16,16 @@
   "create_missing_collections": false,
   "auto_delete_collections": false,
   "include_data": [],
-  "exclude_data": []
+  "exclude_data": [],
+  "overwrite_users": false,
+  "disable_bucket_query": false,
+  "disable_collection_ttl_modification": false,
+  "disable_cluster_query": false,
+  "disable_users": false,
+  "disable_cluster_analytics": false,
+  "disable_analytics_queries": true
+
+
+
+
 }
