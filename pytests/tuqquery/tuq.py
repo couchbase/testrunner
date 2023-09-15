@@ -148,6 +148,10 @@ class QueryTests(BaseTestCase):
         self.load_collections = self.input.param("load_collections", False)
         self.primary_index_collections = self.input.param("primary_index_collections", False)
         self.use_advice = self.input.param("use_advice", False)
+        self.measure_code_coverage = self.input.param("measure_code_coverage", False)
+        self.s3_bucket_cc_name = self.input.param("s3_bucket_cc_name", None)
+        self.aws_access_key_id = self.input.param("aws_access_key_id", None)
+        self.aws_secret_access_key = self.input.param("aws_secret_access_key", None)
         if type.lower() == 'windows':
             self.path = testconstants.WIN_COUCHBASE_BIN_PATH
             self.curl_path = "%scurl" % self.path
@@ -275,10 +279,6 @@ class QueryTests(BaseTestCase):
                 time.sleep(20)
                 if changed:
                     self.analytics = True
-                self.measure_code_coverage = self._input.param("measure_code_coverage", False)
-                self.s3_bucket_cc_name = self._input.param("s3_bucket_cc_name", None)
-                self.aws_access_key_id = self._input.param("aws_access_key_id", None)
-                self.aws_secret_access_key = self._input.param("aws_secret_access_key", None)
         except Exception as ex:
             self.log.error('SUITE SETUP FAILED')
             self.log.info(ex)
@@ -308,13 +308,14 @@ class QueryTests(BaseTestCase):
 
     def suite_tearDown(self):
         self.log.info("==============  QueryTests suite_tearDown has started ==============")
+        if self.measure_code_coverage:
+            self.log.info("In suite tearDown")
+            test_cc_prefix = f"{self.s3_bucket_cc_name}/query{self.case_number}_{self._testMethodName}"
+            self.log.info(f"test_cc_prefix is: {test_cc_prefix}")
+            self.upload_coveragefiles_s3(test_cc_prefix, self.aws_access_key_id, self.aws_secret_access_key)
         if not self.input.param("skip_build_tuq", True):
             if hasattr(self, 'shell'):
                 self._kill_all_processes_cbq()
-        if self.measure_code_coverage:
-            self.log.info("In suite tearDown")
-            test_cc_prefix = f"{self.s3_bucket_cc_name}/{self.case_number}_{self._testMethodName}"
-            self.upload_coveragefiles_s3(test_cc_prefix, self.aws_access_key_id, self.aws_secret_access_key)
         self.log.info("==============  QueryTests suite_tearDown has completed ==============")
 
     ##############################################################################################
@@ -352,7 +353,8 @@ class QueryTests(BaseTestCase):
 
     # Collect code coverage files and upload them to s3
     def upload_coveragefiles_s3(self, s3_bucket_cc_name_prefix, aws_access_key_id, aws_secret_access_key):
-        for node in self.__nodes:
+        self.log.info("Uploading files to s3")
+        for node in self.servers[:self.nodes_init]:
             coverage_dir = os.path.join("/tmp", f"coverage_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
             os.makedirs(coverage_dir)
             shell = RemoteMachineShellConnection(node)
@@ -360,16 +362,16 @@ class QueryTests(BaseTestCase):
             time.sleep(5)
             try:
                 shell.get_all_files("/tmp/coverage", coverage_dir)
-                s3_client = boto3.client('s3', region_name='ap-southeast-1',
+                s3_client = boto3.client('s3', region_name='us-west-1',
                                          aws_access_key_id=aws_access_key_id,
                                          aws_secret_access_key=aws_secret_access_key)
                 dest_bucket = "qebucket"
                 for path, subdirs, files in os.walk(coverage_dir):
                     for file in files:
-                        self.__log.info(f"Found file : {os.path.join(path, file)}")
+                        self.log.info(f"Found file : {os.path.join(path, file)}")
                         s3_client.upload_file(Filename=os.path.join(path, file), Bucket=dest_bucket, Key=f"{s3_bucket_cc_name_prefix}_{node.ip}/{file}")
             except Exception as e:
-                self.__log.info("Failed to upload file")
+                self.log.info("Failed to upload file")
             shell.start_couchbase()
             time.sleep(10)
             shell.disconnect()
