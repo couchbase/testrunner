@@ -3369,8 +3369,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         6. Ensures that same view is created in restore cluster
         """
         if "ephemeral" in self.input.param("bucket_type", 'membase'):
-            self.log.info("\n****** view does not support on ephemeral bucket ******")
+            self.log.info("\n****** views are not supported on ephemeral bucket ******")
             return
+
+        if self.bucket_storage == "magma":
+            self.log.info("\n****** views are not supported on magma storage ******")
+            return
+
         rest_src = RestConnection(self.backupset.cluster_host)
         if "community" in self.cb_version:
             rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
