@@ -173,7 +173,7 @@ CMDS = {
             "/sbin/sysctl vm.swappiness=0; " +
             "echo never > /sys/kernel/mm/transparent_hugepage/enabled; " +
             "echo never > /sys/kernel/mm/transparent_hugepage/defrag; ",
-        "suse_install": "zypper --no-gpg-checks in -y buildpath > /dev/null && echo 1 || echo 0",
+        "suse_install": "registercloudguest --force-new;zypper --no-gpg-checks in -y buildpath > /dev/null && echo 1 || echo 0",
         "suse_uninstall": UNMOUNT_NFS_CMD +
             "zypper --ignore-unknown rm -y 'couchbase*' > /dev/null; " +
             "rm -rf /var/cache/zypper/RPMS/couchbase* ;" +
