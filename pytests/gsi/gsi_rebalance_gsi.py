@@ -2845,8 +2845,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         except AttributeError:
             ip_address = dst_node
         if alter_index:
-            alter_index_query = 'ALTER INDEX ' + index_list + ' ON default'  ' WITH {{"action":"move","nodes": ["{0}"]}}'.format(
-                ip_address)
+            alter_index_query = f'ALTER INDEX `{index_list}` ON default' \
+                                f' WITH {{"action":"move","nodes": ["{ip_address}"]}}'
             try:
                 self.n1ql_helper.run_cbq_query(query=alter_index_query,
                                                server=self.n1ql_node)

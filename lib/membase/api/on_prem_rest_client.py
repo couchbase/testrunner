@@ -6735,7 +6735,7 @@ class RestParser(object):
             bucket_name = map['bucket']
             if bucket_name not in list(index_map.keys()):
                 index_map[bucket_name] = {}
-            if not return_system_query_scope and "_system._query" in map['definition']:
+            if not return_system_query_scope and "`_system`.`_query`" in map['definition']:
                 continue
             index_name = map['index']
             index_map[bucket_name][index_name] = {}

@@ -94,7 +94,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.password = self.input.membase_settings.rest_password
         self.username = self.input.membase_settings.rest_username
         self.cancel_rebalance = self.input.param("cancel_rebalance", False)
-        self.use_shard_based_rebalance = self.input.param("use_shard_based_rebalance", True)
+        self.use_shard_based_rebalance = self.input.param("use_shard_based_rebalance", False)
         if self.aws_access_key_id:
             from serverless.s3_utils import S3Utils
             self.s3_utils_obj = S3Utils(aws_access_key_id=self.aws_access_key_id,
