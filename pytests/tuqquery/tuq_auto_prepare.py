@@ -426,7 +426,7 @@ class QueryAutoPrepareTests(QueryTests):
             self.assertEqual(query_results2['metrics']['resultCount'], 5)
 
             self.ensure_bucket_does_not_exist(self.default_bucket_name, using_rest=True)
-            self.rest.create_bucket(bucket=self.default_bucket_name, ramQuotaMB=100)
+            self.rest.create_bucket(bucket=self.default_bucket_name, ramQuotaMB=self.bucket_size)
             self.wait_for_buckets_status({self.default_bucket_name: "healthy"}, 5, 120)
             # this sleep is need because index deletion after bucket deletion is async
             self.sleep(60)

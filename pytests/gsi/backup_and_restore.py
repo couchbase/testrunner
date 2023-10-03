@@ -112,7 +112,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
 
     def _recreate_bucket_structure(self, bucket=""):
         if self.default_bucket:
-            self.rest.create_bucket(self.buckets[0].name, ramQuotaMB=256)
+            self.rest.create_bucket(self.buckets[0].name, ramQuotaMB=self.bucket_size)
         elif bucket:
             self.rest.create_bucket(bucket, ramQuotaMB=self.bucket_size)
             self.collection_rest.create_scope_collection_count(

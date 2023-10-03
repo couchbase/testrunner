@@ -10,7 +10,7 @@ class QueryContextTests(QueryTests):
         self.special_scope = self.input.param('special_scope', '')
         self.special_collection = self.input.param('special_collection', '')
         if self.bucket_name != "default" and self.bucket_name != "standard_bucket0" and self.bucket_name != "default:default.test.test1":
-            self.rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=100)
+            self.rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=self.bucket_size)
             time.sleep(10)
             self.query_bucket = self.bucket_name
         self.log.info("==============  QuerySanityTests setup has completed ==============")

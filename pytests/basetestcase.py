@@ -177,6 +177,8 @@ class OnPremBaseTestCase(unittest.TestCase):
             self.set_alternate_address_all_nodes()
             if self.bucket_storage == 'magma':
                 RestConnection(self.master).set_internalSetting("magmaMinMemoryQuota", 256)
+                if self.bucket_size < 256:
+                    self.bucket_size = 256
             shared_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                        replicas=self.num_replicas,
                                                        enable_replica_index=self.enable_replica_index,

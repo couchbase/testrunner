@@ -17,17 +17,17 @@ class N1QLRBACTests(QueryTests):
     def suite_setUp(self):
         super(N1QLRBACTests, self).suite_setUp()
 
-        cmd = 'curl -X POST -u %s:%s -d name=bucket1 -d ramQuotaMB=100' \
+        cmd = 'curl -X POST -u %s:%s -d name=bucket1 -d ramQuotaMB=%s' \
               ' http://%s:%s/pools/default/buckets' % (
-                  self.rest.username, self.rest.password, self.master.ip, self.port)
+                  self.rest.username, self.rest.password, self.bucket_size, self.master.ip, self.port)
         o = self.shell.execute_command(cmd)
-        cmd = 'curl -X POST -u %s:%s -d name=bucket2 -d ramQuotaMB=100' \
+        cmd = 'curl -X POST -u %s:%s -d name=bucket2 -d ramQuotaMB=%s' \
               ' http://%s:%s/pools/default/buckets' % (
-                  self.rest.username, self.rest.password, self.master.ip, self.port)
+                  self.rest.username, self.rest.password, self.bucket_size, self.master.ip, self.port)
         o = self.shell.execute_command(cmd)
-        cmd = 'curl -X POST -u %s:%s -d name=bucket3 -d ramQuotaMB=100' \
+        cmd = 'curl -X POST -u %s:%s -d name=bucket3 -d ramQuotaMB=%s' \
               ' http://%s:%s/pools/default/buckets' % (
-                  self.rest.username, self.rest.password, self.master.ip, self.port)
+                  self.rest.username, self.rest.password, self.bucket_size, self.master.ip, self.port)
         o = self.shell.execute_command(cmd)
 
     def tearDown(self):

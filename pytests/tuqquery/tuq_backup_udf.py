@@ -27,10 +27,10 @@ class QueryBackupUDFTests(QueryTests):
         self.log.info("==============  QueryBackupUDFTests suite_setup has started ==============")
         bucket1 = self.get_bucket_from_name("bucket1")
         if not bucket1:
-            self.rest.create_bucket(bucket="bucket1", ramQuotaMB=256, replicaNumber=0)
+            self.rest.create_bucket(bucket="bucket1", ramQuotaMB=self.bucket_size, replicaNumber=0)
         bucket2 = self.get_bucket_from_name("bucket2")
         if not bucket2:
-            self.rest.create_bucket(bucket="bucket2", ramQuotaMB=256, replicaNumber=0)
+            self.rest.create_bucket(bucket="bucket2", ramQuotaMB=self.bucket_size, replicaNumber=0)
         self.collections_helper = CollectionsN1QL(self.master)
         self.collections_helper.create_scope(bucket_name="bucket1",scope_name="scope1")
         self.collections_helper.create_collection(bucket_name="bucket1",scope_name="scope1",collection_name="collection1")

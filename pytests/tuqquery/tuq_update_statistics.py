@@ -431,7 +431,7 @@ class QueryUpdateStatsTests(QueryTests):
         except CBQError as ex:
             self.assertTrue(str(ex).find(error) > 0)
         # update bucket quota
-        self.rest.change_bucket_props(bucket="bigbucket", ramQuotaMB=100)
+        self.rest.change_bucket_props(bucket="bigbucket", ramQuotaMB=self.bucket_size)
         try:
             self.run_cbq_query(query="UPDATE STATISTICS `travel-sample`(city)")
             # check stats

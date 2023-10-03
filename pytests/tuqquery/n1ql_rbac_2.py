@@ -48,7 +48,7 @@ class RbacN1QL(QueryTests):
             temp_name = self.bucket_name
             if "`" in self.bucket_name:
                 temp_name = self.bucket_name.split("`")[1]
-            self.rest.create_bucket(bucket=temp_name, ramQuotaMB=100)
+            self.rest.create_bucket(bucket=temp_name, ramQuotaMB=self.bucket_size)
             self.query_bucket = self.bucket_name
             self.sleep(3)
             self.run_cbq_query(query="CREATE PRIMARY INDEX ON {0}".format(self.bucket_name))
