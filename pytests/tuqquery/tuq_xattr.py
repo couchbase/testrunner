@@ -46,7 +46,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_system_xattr_primary_index(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.system_xattr_data = self.create_xattr_data(type='system')
 
@@ -149,7 +149,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_system_xattr_secondary_index(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.system_xattr_data = self.create_xattr_data(type='system')
 
@@ -251,7 +251,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_system_xattr_composite_secondary_index(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.system_xattr_data = self.create_xattr_data(type='system')
 
@@ -416,7 +416,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_system_xattr_with_retain_deleted(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.system_xattr_data = self.create_xattr_data(type='system')
 
@@ -482,7 +482,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_system_xattr_with_aggregation(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.system_xattr_data = self.create_xattr_data(type='system')
 
@@ -658,7 +658,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_system_xattr_crud_ops(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.system_xattr_data = self.create_xattr_data(type='system')
 
@@ -693,7 +693,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_system_xattr_subquery(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.system_xattr_data = self.create_xattr_data(type='system')
 
@@ -767,7 +767,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_system_xattr_negative(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.system_xattr_data = self.create_xattr_data(type='system')
 
@@ -795,7 +795,7 @@ class QueryXattrTests(QueryTests):
     '''MB-28533'''
 
     def test_system_xattr_array_index(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.system_xattr_data = self.create_xattr_data(type='system')
 
@@ -816,7 +816,7 @@ class QueryXattrTests(QueryTests):
        the old xattrs will not be retained. This tests that special case'''
 
     def test_system_xattr_with_retain_deleted_reinsert(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.system_xattr_data = self.create_xattr_data(type='system')
 
@@ -868,7 +868,7 @@ class QueryXattrTests(QueryTests):
             self.run_cbq_query(query="DROP INDEX idx1 ON %s" % self.query_bucket)
 
     def test_system_xattr_rebalance_in_indexer(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.system_xattr_data = self.create_xattr_data(type='system')
         self.user_xattr_data = self.create_xattr_data(type='user')
@@ -921,7 +921,7 @@ class QueryXattrTests(QueryTests):
             rebalance.result()
 
     def test_system_xattr_rebalance_in_query(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.system_xattr_data = self.create_xattr_data(type='system')
         self.user_xattr_data = self.create_xattr_data(type='user')
@@ -975,7 +975,7 @@ class QueryXattrTests(QueryTests):
             rebalance.result()
 
     def test_hard_failover_and_full_recovery_and_gsi_rebalance(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.system_xattr_data = self.create_xattr_data(type='system')
         self.user_xattr_data = self.create_xattr_data(type='user')
@@ -1029,7 +1029,7 @@ class QueryXattrTests(QueryTests):
             self.run_cbq_query(query="drop index idx15 ON %s" % self.query_bucket)
 
     def test_graceful_failover_and_full_recovery_and_gsi_rebalance(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.system_xattr_data = self.create_xattr_data(type='system')
         self.user_xattr_data = self.create_xattr_data(type='user')
@@ -1112,7 +1112,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_user_xattr_primary_index(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.user_xattr_data = self.create_xattr_data(type='user')
 
@@ -1210,7 +1210,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_user_xattr_secondary_index(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.user_xattr_data = self.create_xattr_data(type='user')
 
@@ -1303,7 +1303,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_user_xattr_composite_secondary_index(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.user_xattr_data = self.create_xattr_data(type='user')
 
@@ -1450,7 +1450,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_user_xattr_with_retain_deleted(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.user_xattr_data = self.create_xattr_data(type='user')
 
@@ -1516,7 +1516,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_user_xattr_with_aggregation(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.user_xattr_data = self.create_xattr_data(type='user')
 
@@ -1674,7 +1674,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_user_xattr_crud_ops(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.user_xattr_data = self.create_xattr_data(type='user')
 
@@ -1709,7 +1709,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_user_xattr_subquery(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.user_xattr_data = self.create_xattr_data(type='user')
 
@@ -1783,7 +1783,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_user_xattr_negative(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.user_xattr_data = self.create_xattr_data(type='user')
 
@@ -1807,7 +1807,7 @@ class QueryXattrTests(QueryTests):
             self.fail()
 
     def test_user_xattr_array_index(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.user_xattr_data = self.create_xattr_data(type='user')
 
@@ -1829,7 +1829,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_virtual_xattr_with_primary(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
 
         # full path query
@@ -1928,7 +1928,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_virtual_xattr_crud_ops(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
 
         # set doc value to xattr value
@@ -1963,7 +1963,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_virtual_xattr_subquery(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
 
         # subquery in from clause
@@ -1990,7 +1990,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_virtual_and_system_xattr_with_primary(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.system_xattr_data = self.create_xattr_data(type='system')
 
@@ -2089,7 +2089,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_virtual_and_system_xattr_crud_ops(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
 
         # set doc value to xattr value
@@ -2126,7 +2126,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_virtual_and_user_xattr_with_primary(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.user_xattr_data = self.create_xattr_data(type='user')
 
@@ -2222,7 +2222,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_virtual_and_user_xattr_crud_ops(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
 
         # set doc value to xattr value
@@ -2261,7 +2261,7 @@ class QueryXattrTests(QueryTests):
     """
 
     def test_mixed_xattr_negative(self):
-        self.reload_data()
+        self.recreate_data()
         self.fail_if_no_buckets()
         self.user_xattr_data = self.create_xattr_data(type='user')
         self.system_xattr_data = self.create_xattr_data(type='system')
@@ -2424,7 +2424,7 @@ class QueryXattrTests(QueryTests):
 
             self.run_cbq_query("drop index " + index_name + " ON %s" % self.query_bucket)
 
-            self.reload_data()
+            self.recreate_data()
             self.system_xattr_data = self.create_xattr_data(type=xattr_type)
         # Virtual xattrs cant be compared in the way the rest of the stuff is compared because it is autogenerated by CB
         # ,therefore we do different checks and then return the results of the query passed in instead
@@ -2582,7 +2582,7 @@ class QueryXattrTests(QueryTests):
     Resets the bucket data by deleting the bucket and recreating/reloading the data generated during test suite setup
     """
 
-    def reload_data(self):
+    def recreate_data(self):
         self._all_buckets_delete(self.master)
         self._bucket_creation()
         self.gens_load = self.gen_docs(self.docs_per_day)
