@@ -298,8 +298,6 @@ class EventingBaseTest(QueryHelperTests):
             bucket=self.dst_bucket_name
         if self.is_sbm:
             bucket=self.src_bucket_name
-        # temp workaround to avoid doc mismatch due to additional docs in _system scope
-        expected_dcp_mutations += self.stat.get_scope_item_count(bucket, CbServer.system_scope)
         if not skip_stats_validation:
             # we can't rely on dcp_mutation stats when doc timers events are set.
             # TODO : add this back when getEventProcessingStats works reliably for doc timer events as well
@@ -324,29 +322,32 @@ class EventingBaseTest(QueryHelperTests):
                                                                                                   ))
         # wait for bucket operations to complete and verify it went through successfully
         count = 0
-        stats_dst = rest.get_bucket_stats(bucket)
-        while stats_dst["curr_items"] != expected_dcp_mutations and count < 20:
+        item_count = rest.get_bucket_stats(bucket)["curr_items"] - \
+                     self.stat.get_scope_item_count(bucket, CbServer.system_scope, self.get_kv_nodes())
+        while item_count != expected_dcp_mutations and count < 20:
             message = "Waiting for handler code {2} to complete bucket operations... Current : {0} Expected : {1}".\
-                      format(stats_dst["curr_items"], expected_dcp_mutations, name)
+                      format(item_count, expected_dcp_mutations, name)
             self.sleep(timeout//20, message=message)
-            curr_items=stats_dst["curr_items"]
-            stats_dst = self.rest.get_bucket_stats(bucket)
+            curr_items=item_count
+            item_count = self.rest.get_bucket_stats(bucket)["curr_items"] - \
+                         self.stat.get_scope_item_count(bucket, CbServer.system_scope, self.get_kv_nodes())
             ### compact buckets when mutation count not progressing. Helpful for expiry events
             if count==10:
                 self.bucket_compaction()
-            stats_dst = rest.get_bucket_stats(bucket)
-            if curr_items == stats_dst["curr_items"]:
+            item_count = rest.get_bucket_stats(bucket)["curr_items"] - \
+                         self.stat.get_scope_item_count(bucket, CbServer.system_scope, self.get_kv_nodes())
+            if curr_items == item_count:
                 count += 1
             else:
                 count=0
-            if expected_duplicate and stats_dst["curr_items"] > expected_dcp_mutations:
+            if expected_duplicate and item_count > expected_dcp_mutations:
                 break
         try:
             stats_src = self.rest.get_bucket_stats(self.src_bucket_name)
             log.info("Documents in source bucket : {}".format(stats_src["curr_items"]))
         except :
             pass
-        if stats_dst["curr_items"] != expected_dcp_mutations:
+        if item_count != expected_dcp_mutations:
             total_dcp_backlog = 0
             timers_in_past = 0
             lcb = {}
@@ -369,35 +370,35 @@ class EventingBaseTest(QueryHelperTests):
             if not expected_duplicate and self.n1ql_server:
                 self.print_document_count_via_index(bucket)
                 self.print_timer_alarm_context(name)
-            if stats_dst["curr_items"] < expected_dcp_mutations:
+            if item_count < expected_dcp_mutations:
                 self.skip_metabucket_check=True
                 if self.print_app_log:
                     self.print_app_logs(name)
                 raise Exception(
                     "missing data in destination bucket. Current : {0} "
-                    "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(stats_dst["curr_items"],
+                    "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(item_count,
                                                                                      expected_dcp_mutations,
                                                                                  total_dcp_backlog,
                                                                                  timers_in_past,lcb))
-            elif stats_dst["curr_items"] > expected_dcp_mutations and not expected_duplicate:
+            elif item_count > expected_dcp_mutations and not expected_duplicate:
                 self.skip_metabucket_check = True
                 if self.print_app_log:
                     self.print_app_logs(name)
                 raise Exception(
                     "duplicated data in destination bucket which is not expected. Current : {0} "
-                    "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(stats_dst["curr_items"],
+                    "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(item_count,
                                                                                      expected_dcp_mutations,
                                                                                  total_dcp_backlog,
                                                                                  timers_in_past,lcb))
-            elif stats_dst["curr_items"] > expected_dcp_mutations and expected_duplicate:
+            elif item_count > expected_dcp_mutations and expected_duplicate:
                 self.log.info(
                     "duplicated data in destination bucket which is expected. Current : {0} "
-                    "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(stats_dst["curr_items"],
+                    "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(item_count,
                                                                                      expected_dcp_mutations,
                                                                                  total_dcp_backlog,
                                                                                  timers_in_past,lcb))
         log.info("Final docs count... Current : {0} Expected : {1}".
-                 format(stats_dst["curr_items"], expected_dcp_mutations))
+                 format(item_count, expected_dcp_mutations))
         # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
         # print all stats from all eventing nodes
         # These are the stats that will be used by ns_server and UI
