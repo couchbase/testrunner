@@ -126,7 +126,7 @@ class QueryArrayFlatteningTests(QueryTests):
                                      "r.field1,r.field1,r.field1,r.field1) FOR r IN reviews END,country,email);")
             self.fail()
         except Exception as ex:
-            self.assertTrue("Number of arguments to function flatten_keys (near line 1, column 59) must be between 1 and 32"
+            self.assertTrue("Number of arguments to function flatten_keys must be between 1 and 32"
                             in str(ex), "Exception is not what was expected, exception should have been a syntax error! "
                                         "Exception is {0}".format(str(ex)))
 
@@ -567,7 +567,7 @@ class QueryArrayFlatteningTests(QueryTests):
             if self.use_unnest:
                 self.assertTrue("Duplicate UNNEST alias 'emails'" in str(e), "The error is incorrect check the error {0}".format(str(e)))
             else:
-                self.assertTrue("Duplicate variable emails" in str(e), "The error is incorrect check the error {0}".format(str(e)))
+                self.assertTrue("Duplicate variable 'emails'" in str(e), "The error is incorrect check the error {0}".format(str(e)))
 
 
     def test_flatten_alias_keyspace_collision(self):
@@ -1348,7 +1348,7 @@ class QueryArrayFlatteningTests(QueryTests):
 
     def test_flatten_ansi_merge(self):
         self.load_travel_sample()
-        query = "MERGE INTO default d USING `travel-sample`.inventory.hotel t ON t.country = d.country and any r in d.reviews satisfies r.author like 'M%' and r.ratings.Overall > 3 END  WHEN MATCHED THEN DELETE WHERE d.free_parking = true"
+        query = "MERGE INTO default d USING `travel-sample`.inventory.hotel t ON t.country = d.country and any r in d.reviews satisfies r.author like 'M%' and r.ratings.Overall > 3 END WHEN MATCHED THEN DELETE WHERE d.free_parking = true"
         self.run_cbq_query(
             query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Overall) for r in reviews END,country)")
         explain_results = self.run_cbq_query(query="explain " + query)
