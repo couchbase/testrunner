@@ -273,14 +273,22 @@ class OnPremBaseTestCase(unittest.TestCase):
                     self.log.info("#####Enforcing TLS########")
                     ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict",
                                                             cluster_profile=self.cluster_profile)
-                    for i in range(2):
-                        status = ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master])
-                        if status:
-                            break
+                    if CbServer.cluster_profile != "serverless":
+                        if self.ntonencrypt_level == 'strict':
+                            self.log.info("Validating that the non-tls ports are not open since strict mode is enabled")
+                            for i in range(2):
+                                status = ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master])
+                                if status:
+                                    break
+                                else:
+                                    self.sleep(10)
+                            if not status:
+                                self.fail("Port binding after enforcing TLS incorrect")
                         else:
-                            self.sleep(10)
-                    if not status:
-                        self.fail("Port binding after enforcing TLS incorrect")
+                            encryption_level = ntonencryptionBase.get_encryption_level_cli(self.master)
+                            if encryption_level != self.ntonencrypt_level:
+                                raise Exception(f"Cluster level encryption mode not set to {self.ntonencrypt_level}."
+                                                f"Current status {encryption_level}")
 
             if self.input.param("log_info", None):
                 self.change_log_info()
