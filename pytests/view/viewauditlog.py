@@ -3,7 +3,6 @@ from multiprocessing import Event
 from lib.couchbase_helper.document import View
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
-from pytests.basetestcase import BaseTestCase
 from pytests.security.auditmain import audit
 from pytests.security.rbac_base import RbacBase
 from pytests.view import createdeleteview
