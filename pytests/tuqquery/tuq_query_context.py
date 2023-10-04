@@ -10,9 +10,14 @@ class QueryContextTests(QueryTests):
         self.special_scope = self.input.param('special_scope', '')
         self.special_collection = self.input.param('special_collection', '')
         if self.bucket_name != "default" and self.bucket_name != "standard_bucket0" and self.bucket_name != "default:default.test.test1":
-            self.rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=self.bucket_size)
-            time.sleep(10)
-            self.query_bucket = self.bucket_name
+            create = True
+            for bucket in self.buckets:
+                if bucket.name == self.bucket_name:
+                    create = False
+            if create:
+                self.rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=self.bucket_size)
+                time.sleep(10)
+                self.query_bucket = self.bucket_name
         self.log.info("==============  QuerySanityTests setup has completed ==============")
         self.log_config_info()
 
@@ -135,7 +140,6 @@ class QueryContextTests(QueryTests):
             time.sleep(10)
             results = self.run_cbq_query(query='select * from `{0}` where name = "old hotel"'.format(self.special_collection), query_context='default:`{0}`.`{1}`'.format(self.bucket_name, self.special_scope))
             self.assertEquals(results['results'][0], {"{0}".format(self.special_collection): {"name": "old hotel","type": "hotel"}})
-
         except Exception as e:
             self.log.error("Scope/Collection unable to be created with valid special characters: {0}".format(str(e)))
             self.fail()
