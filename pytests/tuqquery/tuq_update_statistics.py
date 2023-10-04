@@ -76,15 +76,17 @@ class QueryUpdateStatsTests(QueryTests):
 
     def test_update_stats(self):
         histogram_expected = [
-            {"bucket": "travel-sample", "collection": self.collection, "histogramKey": "city", "scope": self.scope},
-            {"bucket": "travel-sample", "collection": self.collection, "histogramKey": "country", "scope": self.scope}]
+            {'scope': self.scope, 'collection': self.collection, 'histogramKey': '(meta().id)'},
+            {'scope': self.scope, 'collection': self.collection, 'histogramKey': 'city'},
+            {'scope': self.scope, 'collection': self.collection, 'histogramKey': 'country'}
+        ]
         update_stats_queries = [
             f"{self.UPDATE_STATISTICS} {self.keyspace}(city, country)", 
             f"UPDATE STATISTICS FOR {self.keyspace}(city, country)"]
         for update_stats in update_stats_queries:
             try:
                 stats = self.run_cbq_query(query=update_stats)
-                histogram = self.run_cbq_query(query="select `bucket`, `scope`, `collection`, `histogramKey` from `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'")
+                histogram = self.run_cbq_query(query="select `scope`, `collection`, `histogramKey` from `travel-sample`.`_system`.`_query` data WHERE type = 'histogram'")
                 with self.subTest("Update stats syntax", query=update_stats):
                     self.assertEqual(histogram['results'],histogram_expected)
             except Exception as e:
@@ -108,26 +110,29 @@ class QueryUpdateStatsTests(QueryTests):
 
     def test_delete_stats_all(self):
         histogram_expected = [
-            {"bucket": "travel-sample", "collection": "_default", "histogramKey": "city", "scope": "_default"},
-            {"bucket": "travel-sample", "collection": "_default", "histogramKey": "country", "scope": "_default"},
-            {"bucket": "travel-sample", "collection": "airport", "histogramKey": "city", "scope": "inventory"},
-            {"bucket": "travel-sample", "collection": "airport", "histogramKey": "country", "scope": "inventory"}]
+            {'scope': '_default', 'collection': '_default', 'histogramKey': '(meta().id)'}, 
+            {'scope': '_default', 'collection': '_default', 'histogramKey': 'city'}, 
+            {'scope': '_default', 'collection': '_default', 'histogramKey': 'country'}, 
+            {'scope': 'inventory', 'collection': 'airport', 'histogramKey': '(meta().id)'}, 
+            {'scope': 'inventory', 'collection': 'airport', 'histogramKey': 'city'}, 
+            {'scope': 'inventory', 'collection': 'airport', 'histogramKey': 'country'}
+        ]
         update_stats_collection = "UPDATE STATISTICS FOR `travel-sample`.inventory.airport(city, country)"
         update_stats_default = "UPDATE STATISTICS `travel-sample`(city, country)"
         if self.scope == "_default" and self.collection == "_default":
-            histogram_expected_after_delete = histogram_expected[2:]
+            histogram_expected_after_delete = histogram_expected[3:]
         else:
-            histogram_expected_after_delete = histogram_expected[:2]
+            histogram_expected_after_delete = histogram_expected[:3]
         delete_stats = f"{self.UPDATE_STATISTICS} {self.opt_keyspace} {self.keyspace} {self.DELETE_ALL}"
         try:
             # collect statistics
             stats = self.run_cbq_query(query=update_stats_default)
             stats = self.run_cbq_query(query=update_stats_collection)
-            histogram = self.run_cbq_query(query="select `bucket`, `scope`, `collection`, `histogramKey` from `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'")
+            histogram = self.run_cbq_query(query="select `scope`, `collection`, `histogramKey` from `travel-sample`.`_system`.`_query` data WHERE type = 'histogram'")
             self.assertEqual(histogram['results'],histogram_expected)
             # delete statistics
             del_stats = self.run_cbq_query(query=delete_stats)
-            histogram = self.run_cbq_query(query="select `bucket`, `scope`, `collection`, `histogramKey` from `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'")
+            histogram = self.run_cbq_query(query="select `scope`, `collection`, `histogramKey` from `travel-sample`.`_system`.`_query` data WHERE type = 'histogram'")
             self.assertEqual(histogram['results'],histogram_expected_after_delete)
         except Exception as e:
             self.log.error(f"Update statistics failed: {e}")
@@ -135,28 +140,32 @@ class QueryUpdateStatsTests(QueryTests):
 
     def test_delete_stats_fields(self):
         histogram_expected = [
-            {"bucket": "travel-sample", "collection": "_default", "histogramKey": "city", "scope": "_default"},
-            {"bucket": "travel-sample", "collection": "_default", "histogramKey": "country", "scope": "_default"},
-            {"bucket": "travel-sample", "collection": "_default", "histogramKey": "state", "scope": "_default"},
-            {"bucket": "travel-sample", "collection": "landmark", "histogramKey": "city", "scope": "inventory"},
-            {"bucket": "travel-sample", "collection": "landmark", "histogramKey": "country", "scope": "inventory"},
-            {"bucket": "travel-sample", "collection": "landmark", "histogramKey": "state", "scope": "inventory"}]
+            {'scope': '_default', 'collection': '_default', 'histogramKey': '(meta().id)'}, 
+            {'scope': '_default', 'collection': '_default', 'histogramKey': 'city'}, 
+            {'scope': '_default', 'collection': '_default', 'histogramKey': 'country'}, 
+            {'scope': '_default', 'collection': '_default', 'histogramKey': 'state'}, 
+            {'scope': 'inventory', 'collection': 'landmark', 'histogramKey': '(meta().id)'}, 
+            {'scope': 'inventory', 'collection': 'landmark', 'histogramKey': 'city'}, 
+            {'scope': 'inventory', 'collection': 'landmark', 'histogramKey': 'country'},
+            {'scope': 'inventory', 'collection': 'landmark', 'histogramKey': 'state'}
+        ]
         update_stats_default = "UPDATE STATISTICS `travel-sample`(city, country, state)"
         update_stats_collection = "UPDATE STATISTICS `travel-sample`.inventory.landmark(city, country, state)"
         if self.scope == "_default" and self.collection == "_default":
-            histogram_expected_after_delete = histogram_expected[2:]
+            histogram_expected_after_delete = histogram_expected[:1] + histogram_expected[3:]
         else:
-            histogram_expected_after_delete = histogram_expected[:3] +  histogram_expected[-1:]
+            histogram_expected_after_delete = histogram_expected[:5] +  histogram_expected[-1:]
         delete_stats = f"{self.UPDATE_STATISTICS} {self.opt_keyspace} {self.keyspace} {self.DELETE} (city,country)"
         try:
             # collect statistics
             stats = self.run_cbq_query(query=update_stats_default)
             stats = self.run_cbq_query(query=update_stats_collection)
-            histogram = self.run_cbq_query(query="select `bucket`, `scope`, `collection`, `histogramKey` from `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'")
+            histogram = self.run_cbq_query(query="select `scope`, `collection`, `histogramKey` from `travel-sample`.`_system`.`_query` data WHERE type = 'histogram'")
             self.assertEqual(histogram['results'],histogram_expected)
             # delete statistics
             del_stats = self.run_cbq_query(query=delete_stats)
-            histogram = self.run_cbq_query(query="select `bucket`, `scope`, `collection`, `histogramKey` from `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'")
+            histogram = self.run_cbq_query(query="SELECT `scope`, `collection`, `histogramKey` from `travel-sample`.`_system`.`_query` data WHERE type = 'histogram'")
+            self.log.info(histogram['results'])
             self.assertEqual(histogram['results'],histogram_expected_after_delete)
         except Exception as e:
             self.log.error(f"Update statistics failed: {e}")
@@ -176,7 +185,8 @@ class QueryUpdateStatsTests(QueryTests):
 
     def test_update_stats_index(self):
         histogram_expected = [
-            {"bucket": "travel-sample", "collection": self.collection, "histogramKey": "city", "scope": self.scope}
+            {'scope': self.scope, 'collection': self.collection, 'histogramKey': '(meta().id)'},
+            {'scope': self.scope, 'collection': self.collection, 'histogramKey': 'city'}
         ]
         if self.scope == "_default" and self.collection == "_default":
             index_name = "def_city"
@@ -191,7 +201,7 @@ class QueryUpdateStatsTests(QueryTests):
             try:
                 stats = self.run_cbq_query(query=update_stats)
                 # Check
-                histogram = self.run_cbq_query(query="SELECT `bucket`, `scope`, `collection`, `histogramKey` FROM `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'")
+                histogram = self.run_cbq_query(query="SELECT `scope`, `collection`, `histogramKey` from `travel-sample`.`_system`.`_query` data WHERE type = 'histogram'")
                 self.assertEqual(histogram['results'],histogram_expected)
                 # delete stats
                 delete = self.run_cbq_query(query=f"UPDATE STATISTICS {self.keyspace} DELETE ALL")
@@ -201,9 +211,10 @@ class QueryUpdateStatsTests(QueryTests):
 
     def test_update_stats_index_multi(self):
         histogram_expected = [
-            {"bucket": "travel-sample", "collection": self.collection, "histogramKey": "airportname", "scope": self.scope},
-            {"bucket": "travel-sample", "collection": self.collection, "histogramKey": "city", "scope": self.scope},
-            {"bucket": "travel-sample", "collection": self.collection, "histogramKey": "faa", "scope": self.scope}
+            {'scope': self.scope, 'collection': self.collection, 'histogramKey': '(meta().id)'},
+            {'scope': self.scope, 'collection': self.collection, 'histogramKey': 'airportname'},
+            {'scope': self.scope, 'collection': self.collection, 'histogramKey': 'city'},
+            {'scope': self.scope, 'collection': self.collection, 'histogramKey': 'faa'}
         ]
         if self.scope == "_default" and self.collection == "_default":
             index_list = "def_airportname,def_city,def_faa"
@@ -217,7 +228,7 @@ class QueryUpdateStatsTests(QueryTests):
             try:
                 stats = self.run_cbq_query(query=update_stats)
                 # Check
-                histogram = self.run_cbq_query(query="SELECT `bucket`, `scope`, `collection`, `histogramKey` FROM `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'")
+                histogram = self.run_cbq_query(query="SELECT `scope`, `collection`, `histogramKey` from `travel-sample`.`_system`.`_query` data WHERE type = 'histogram'")
                 self.assertEqual(histogram['results'],histogram_expected)
                 # delete stats
                 delete = self.run_cbq_query(query="UPDATE STATISTICS `travel-sample` DELETE ALL")
@@ -236,15 +247,16 @@ class QueryUpdateStatsTests(QueryTests):
 
     def test_update_stats_index_all(self):
         histogram_expected = [
-            {"bucket": "travel-sample", "collection": "airport", "histogramKey": "airportname", "scope": "inventory"},
-            {"bucket": "travel-sample", "collection": "airport", "histogramKey": "city", "scope": "inventory"},
-            {"bucket": "travel-sample", "collection": "airport", "histogramKey": "faa", "scope": "inventory"}
+            {'scope': 'inventory', 'collection': 'airport', 'histogramKey': '(meta().id)'},
+            {'scope': 'inventory', 'collection': 'airport', 'histogramKey': 'airportname'},
+            {'scope': 'inventory', 'collection': 'airport', 'histogramKey': 'city'},
+            {'scope': 'inventory', 'collection': 'airport', 'histogramKey': 'faa'}
         ]
         update_stats = f"{self.UPDATE_STATISTICS} {self.FOR} {self.opt_keyspace} `travel-sample`.`inventory`.`airport` INDEX ALL"
         try:
             stats = self.run_cbq_query(query=update_stats)
             # Check
-            histogram = self.run_cbq_query(query="SELECT `bucket`, `scope`, `collection`, `histogramKey` FROM `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'")
+            histogram = self.run_cbq_query(query="SELECT `scope`, `collection`, `histogramKey` from `travel-sample`.`_system`.`_query` data WHERE type = 'histogram'")
             self.assertEqual(histogram['results'],histogram_expected)
         except Exception as e:
             self.log.error(f"Update statistics failed: {e}")
@@ -252,13 +264,14 @@ class QueryUpdateStatsTests(QueryTests):
 
     def test_update_stats_function(self):
         histogram_expected = [
-            {"bucket": "travel-sample", "collection": "_default", "histogramKey": "lower(city)", "scope": "_default"}
+            {'scope': '_default', 'collection': '_default', 'histogramKey': '(meta().id)'}, 
+            {'scope': '_default', 'collection': '_default', 'histogramKey': 'lower(city)'}
         ]
         update_stats = f"UPDATE STATISTICS `{self.bucket_name}`(LOWER(city))"
         try:
             stats = self.run_cbq_query(query=update_stats)
             # Check
-            histogram = self.run_cbq_query(query="SELECT `bucket`, `scope`, `collection`, `histogramKey` FROM `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'")
+            histogram = self.run_cbq_query(query="SELECT `scope`, `collection`, `histogramKey` from `travel-sample`.`_system`.`_query` data WHERE type = 'histogram'")
             self.assertEqual(histogram['results'],histogram_expected)
         except Exception as e:
             self.log.error(f"Update statistics failed: {e}")
@@ -266,8 +279,9 @@ class QueryUpdateStatsTests(QueryTests):
 
     def test_update_stats_array(self):
         histogram_expected = [
-            {"bucket": "travel-sample", "collection": "_default", "histogramKey": "(all (array (_usv_1.utc) for _usv_1 in schedule end))", "scope": "_default"},      
-            {"bucket": "travel-sample", "collection": "_default", "histogramKey": "(distinct (array (_usv_1.day) for _usv_1 in schedule end))", "scope": "_default"}
+            {'scope': '_default', 'collection': '_default', 'histogramKey': '(meta().id)'}, 
+            {'scope': '_default', 'collection': '_default', 'histogramKey': '(all (array (_usv_1.utc) for _usv_1 in schedule end))'},
+            {'scope': '_default', 'collection': '_default', 'histogramKey': '(distinct (array (_usv_1.day) for _usv_1 in schedule end))'},
         ]
         update_stats_array = [
             f"UPDATE STATISTICS `{self.bucket_name}`(DISTINCT (ARRAY (`v`.`day`) FOR `v` IN `schedule` END))",
@@ -278,7 +292,7 @@ class QueryUpdateStatsTests(QueryTests):
             stats = self.run_cbq_query(query=update_stats_array[0])
             stats = self.run_cbq_query(query=update_stats_array[1])
             # check
-            histogram = self.run_cbq_query(query="SELECT `bucket`, `scope`, `collection`, `histogramKey` FROM `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'")
+            histogram = self.run_cbq_query(query="SELECT `scope`, `collection`, `histogramKey` from `travel-sample`.`_system`.`_query` data WHERE type = 'histogram'")
             self.assertEqual(histogram['results'],histogram_expected)
         except Exception as e:
             self.log.error(f"Update statistics failed: {e}")
@@ -302,54 +316,31 @@ class QueryUpdateStatsTests(QueryTests):
             self.assertTrue(str(ex).find(error) > 0)
 
     def test_drop_sys_collection(self):
-        histogram_query = "SELECT `bucket`, `scope`, `collection`, `histogramKey` FROM `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'"
-        histogram_expected = [
-            {"bucket": "travel-sample", "collection": "_default", "histogramKey": "city", "scope": "_default"}
-        ]
-        update_stats = "UPDATE STATISTICS `travel-sample`(city) WITH {'update_statistics_timeout':600}"
-        try:
-            stats = self.run_cbq_query(query=update_stats, query_params={'timeout':'600s'})
-            # drop system collection
-            self.run_cbq_query(query="DROP COLLECTION `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS`")
-            self.sleep(1)
-            # update stats after drop system collection
-            stats = self.run_cbq_query(query=update_stats, query_params={'timeout':'600s'})
-            # check stats
-            histogram = self.run_cbq_query(query=histogram_query)
-            self.assertEqual(histogram['results'],histogram_expected)
-        except Exception as e:
-            self.log.error(f"Update statistics failed: {e}")
-            self.fail()
-
-    def test_drop_sys_scope(self):
-        histogram_query = "SELECT `bucket`, `scope`, `collection`, `histogramKey` FROM `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'"
-        histogram_expected = [
-            {"bucket": "travel-sample", "collection": "_default", "histogramKey": "city", "scope": "_default"}
-        ]
         update_stats = "UPDATE STATISTICS `travel-sample`(city) WITH {'update_statistics_timeout':600}"
         self.run_cbq_query(query=update_stats, query_params={'timeout':'600s'})
-        # drop scope
-        self.run_cbq_query(query="DROP SCOPE `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`")
-        self.sleep(1)
-        # update stats after drop system scope
-        try_count = 0
-        while True:
-            try:
-                try_count += 1
-                self.run_cbq_query(query=update_stats, query_params={'timeout':'600s'})
-                break
-            except CBQError as ex:
-                if try_count == 5:
-                    self.log.error(f"Update statistics failed: {ex}")
-                    self.fail()
-                else:
-                    self.log.info(f"Attempt# {try_count} of 5 failed. Let's try again")
-        # check stats
-        histogram = self.run_cbq_query(query=histogram_query)
-        self.assertEqual(histogram['results'],histogram_expected)
+        try:
+            # drop collection
+            self.run_cbq_query(query="DROP COLLECTION `travel-sample`.`_system`.`_query`")
+            self.fail(f"Query did not fail as expected!")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 12028)
+            self.assertEqual(error['msg'], 'Error while dropping collection default:travel-sample._system._query - cause: [_:Cannot drop system collection "_query" for scope "_system"]')
+
+    def test_drop_sys_scope(self):
+        update_stats = "UPDATE STATISTICS `travel-sample`(city) WITH {'update_statistics_timeout':600}"
+        self.run_cbq_query(query=update_stats, query_params={'timeout':'600s'})
+        try:
+            # drop scope
+            self.run_cbq_query(query="DROP SCOPE `travel-sample`.`_system`")
+            self.fail(f"Query did not fail as expected!")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 12026)
+            self.assertEqual(error['msg'], 'Error while dropping scope default:travel-sample._system - cause: [_:Deleting _system scope is not allowed]')
 
     def test_drop_sys_bucket(self):
-        histogram_query = "SELECT `bucket`, `scope`, `collection`, `histogramKey` FROM `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'"
+        histogram_query = "SELECT `scope`, `collection`, `histogramKey` from `travel-sample`.`_system`.`_query` data WHERE type = 'histogram'"
         histogram_expected = [
             {"bucket": "travel-sample", "collection": "_default", "histogramKey": "city", "scope": "_default"}
         ]
@@ -381,9 +372,9 @@ class QueryUpdateStatsTests(QueryTests):
     def test_negative_authorization(self):
         error = "User does not have credentials to run"
         queries = [
-            "SELECT `bucket`, `scope`, `collection`, `histogramKey` FROM `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'",
-            "DELETE FROM `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` WHERE type = 'histogram'",
-            "DROP COLLECTION `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS`"
+            "SELECT `scope`, `collection`, `histogramKey` from `travel-sample`.`_system`.`_query` data WHERE type = 'histogram'",
+            "DELETE FROM `travel-sample`.`_system`.`_query` WHERE type = 'histogram'",
+            "DROP COLLECTION `travel-sample`.`_system`.`_query`"
         ]
         # create user with select permission on travel-sample only
         self.users = [{"id": "jackDoe", "name": "Jack Downing", "password": "password1"}]
@@ -411,7 +402,7 @@ class QueryUpdateStatsTests(QueryTests):
 
     def test_update_stats_quota_full(self):
         error = "Error while creating system bucket N1QL_SYSTEM_BUCKET - cause: [ramQuota:RAM quota specified is too large to be provisioned into this cluster.]"
-        histogram_query = "SELECT `bucket`, `scope`, `collection`, `histogramKey` FROM `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'"
+        histogram_query = "SELECT `scope`, `collection`, `histogramKey` from `travel-sample`.`_system`.`_query` data WHERE type = 'histogram'"
         histogram_expected = [
             {"bucket": "travel-sample", "collection": "_default", "histogramKey": "city", "scope": "_default"}
         ]
@@ -431,7 +422,7 @@ class QueryUpdateStatsTests(QueryTests):
         except CBQError as ex:
             self.assertTrue(str(ex).find(error) > 0)
         # update bucket quota
-        self.rest.change_bucket_props(bucket="bigbucket", ramQuotaMB=self.bucket_size)
+        self.rest.change_bucket_props(bucket="bigbucket", ramQuotaMB=100)
         try:
             self.run_cbq_query(query="UPDATE STATISTICS `travel-sample`(city)")
             # check stats
@@ -521,7 +512,7 @@ class QueryUpdateStatsTests(QueryTests):
             self.fail()
 
     def test_drop_bucket(self):
-        histogram_query = "SELECT `bucket`, `scope`, `collection`, `histogramKey` FROM `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'"
+        histogram_query = "SELECT `scope`, `collection`, `histogramKey` from `travel-sample`.`_system`.`_query` data WHERE type = 'histogram'"
         histogram_expected = [
             {"bucket": "travel-sample", "collection": "_default", "histogramKey": "city", "scope": "_default"}
         ]
@@ -629,8 +620,8 @@ class QueryUpdateStatsTests(QueryTests):
 
     def test_update_histogram(self):
         update_stats = f"{self.UPDATE_STATISTICS} {self.keyspace}(city)"
-        update_histogram = "update `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` set histogram = 'abcdef' where type = 'histogram'"
-        select_histogram = "select histogram from `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` WHERE type = 'histogram'"
+        update_histogram = "update `travel-sample`.`_system`.`_query` set histogram = 'abcdef' where type = 'histogram'"
+        select_histogram = "select histogram from `travel-sample`.`_system`.`_query` WHERE type = 'histogram'"
         select_query = f"select airportname from {self.keyspace} where type = 'airport' and city = 'Lyon' order by airportname"
         expected_results = [
             {"airportname": "Bron"},
