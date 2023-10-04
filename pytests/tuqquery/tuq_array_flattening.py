@@ -205,9 +205,9 @@ class QueryArrayFlatteningTests(QueryTests):
         self.run_cbq_query(
             query="create index idx1 on default(ALL ARRAY FLATTEN_KEYS(r.ratings.Rooms,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking)")
         if self.use_unnest:
-            query = "SELECT * FROM default AS d unnest reviews as r WHERE r.ratings.Rooms = 3 and r.ratings.Cleanliness > 1" \
+            query = "SELECT * FROM default AS d unnest reviews as r WHERE r.ratings.Rooms = 3 and r.ratings.Cleanliness > 1 " \
                     "AND d.free_parking = True AND d.country is not null"
-            primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) unnest reviews as r WHERE r.ratings.Rooms = 3 and r.ratings.Cleanliness > 1" \
+            primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) unnest reviews as r WHERE r.ratings.Rooms = 3 and r.ratings.Cleanliness > 1 " \
                     "AND d.free_parking = True AND d.country is not null"
         else:
             query = "SELECT * FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.ratings.Rooms = 3 and r.ratings.Cleanliness > 1 END " \
@@ -299,9 +299,9 @@ class QueryArrayFlatteningTests(QueryTests):
     def test_flatten_skip_keys_leading(self):
         self.run_cbq_query(query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, email, free_parking)")
         if self.use_unnest:
-            query = "SELECT * FROM default AS d unnest reviews as r WHERE r.author LIKE 'M%' and r.ratings.Cleanliness > 1" \
+            query = "SELECT * FROM default AS d unnest reviews as r WHERE r.author LIKE 'M%' and r.ratings.Cleanliness > 1 " \
                     "AND d.free_parking = True AND d.country is not null"
-            primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) unnest reviews as r WHERE r.author LIKE 'M%' and r.ratings.Cleanliness > 1" \
+            primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) unnest reviews as r WHERE r.author LIKE 'M%' and r.ratings.Cleanliness > 1 " \
                     "AND d.free_parking = True AND d.country is not null"
         else:
             query = "SELECT * FROM default AS d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness > 1 END " \
@@ -565,7 +565,7 @@ class QueryArrayFlatteningTests(QueryTests):
             self.fail()
         except Exception as e:
             if self.use_unnest:
-                self.assertTrue("Duplicate UNNEST alias emails" in str(e), "The error is incorrect check the error {0}".format(str(e)))
+                self.assertTrue("Duplicate UNNEST alias 'emails'" in str(e), "The error is incorrect check the error {0}".format(str(e)))
             else:
                 self.assertTrue("Duplicate variable emails" in str(e), "The error is incorrect check the error {0}".format(str(e)))
 
@@ -584,7 +584,7 @@ class QueryArrayFlatteningTests(QueryTests):
             self.fail()
         except Exception as e:
             if self.use_unnest:
-                self.assertTrue("Duplicate UNNEST alias d" in str(e), "The error is incorrect check the error {0}".format(str(e)))
+                self.assertTrue("Duplicate UNNEST alias 'd'" in str(e), "The error is incorrect check the error {0}".format(str(e)))
             else:
                 self.assertTrue("Duplicate variable" in str(e), "The error is incorrect check the error {0}".format(str(e)))
 
