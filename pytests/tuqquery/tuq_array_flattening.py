@@ -1333,7 +1333,7 @@ class QueryArrayFlatteningTests(QueryTests):
 
     def test_flatten_delete(self):
         self.run_cbq_query(
-            query="CREATE INDEX idx1 ON default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, free_parking) WHERE ANY r IN default.reviews SATISFIES r.author LIKE 'M%' END")
+            query="CREATE INDEX idx1 ON default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END, free_parking) WHERE ANY r IN self.reviews SATISFIES r.author LIKE 'M%' END")
         explain_results = self.run_cbq_query(query="explain delete from default d WHERE ANY r IN d.reviews SATISFIES r.author LIKE 'M%' and r.ratings.Cleanliness = 3 END AND free_parking = True")
         self.assertTrue('idx1' in str(explain_results),
                         "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
