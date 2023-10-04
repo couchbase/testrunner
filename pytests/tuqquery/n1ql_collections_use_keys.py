@@ -22,7 +22,7 @@ class QueryCollectionsUseKeys(QueryTests):
         self.log.info("==============  QueryCollectionsUseKeys setup has started ==============")
         self.skip_load = True
         self.collection_bucket_name = 'default_1'
-        self.bucket_params = self._create_bucket_params(server=self.master, size=100,
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=self.eviction_policy, lww=self.lww)

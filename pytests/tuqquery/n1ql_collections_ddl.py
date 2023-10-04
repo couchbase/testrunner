@@ -1260,7 +1260,7 @@ class QueryCollectionsDDLTests(QueryTests):
         self.rest_client = CollectionsRest(self.master)
 
         eviction_policy = "noEviction" if bucket_type == "ephemeral" else self.eviction_policy
-        self.bucket_params = self._create_bucket_params(server=self.master, size=100,
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=eviction_policy, lww=self.lww)
