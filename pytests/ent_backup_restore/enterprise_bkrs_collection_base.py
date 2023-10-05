@@ -1097,7 +1097,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                     self.log.info("replica in bucket {0} is {1}".format(bucket.name, replicas))
                     try:
                         rest_conn.create_bucket(bucket=bucket_name,
-                                                ramQuotaMB=int(bucket_size) - 1,
+                                                ramQuotaMB=int(bucket_size),
                                                 replicaNumber=replicas,
                                                 bucketType=self.bucket_type,
                                                 proxyPort=bucket.port,
@@ -1111,7 +1111,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                                 self.fail("Couchbase Server failed to start")
                             else:
                                 rest_conn.create_bucket(bucket=bucket_name,
-                                                    ramQuotaMB=int(bucket_size) - 1,
+                                                    ramQuotaMB=int(bucket_size),
                                                     replicaNumber=replicas,
                                                     bucketType=self.bucket_type,
                                                     proxyPort=bucket.port,
@@ -1129,7 +1129,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                         BucketOperationHelper.delete_bucket_or_assert( \
                             self.backupset.restore_cluster_host, bucket.name, self)
                     rest_conn.create_bucket(bucket=bucket_name,
-                                            ramQuotaMB=int(bucket_size) - 1,
+                                            ramQuotaMB=int(bucket_size),
                                             replicaNumber=replicas,
                                             bucketType=self.bucket_type,
                                             proxyPort=bucket.port,
