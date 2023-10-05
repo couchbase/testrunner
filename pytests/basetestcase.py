@@ -828,11 +828,11 @@ class OnPremBaseTestCase(unittest.TestCase):
                                                                            return_system_query_scope)
         index_map = {}
         for index in index_map_parsed['status']:
+            if not return_system_query_scope and "`_system`.`_query`" in index['definition']:
+                continue
             bucket_name = index['bucket']
             if bucket_name not in list(index_map.keys()):
                 index_map[bucket_name] = {}
-            if not return_system_query_scope and "`_system`.`_query`" in index['definition']:
-                continue
             index_name = index['name']
             index_map[bucket_name][index_name] = {}
             index_map[bucket_name][index_name]['status'] = index['status']
