@@ -152,6 +152,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         self.node_to_node_encryption = NodeToNodeEncryption(self.input.clusters[0][0])
 
         self.use_https = self.input.param('use_https', False)
+        self.document_type = self.input.param("document_type", "json")
 
         self.ssl_hints = {}
 
