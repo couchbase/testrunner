@@ -95,6 +95,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.username = self.input.membase_settings.rest_username
         self.cancel_rebalance = self.input.param("cancel_rebalance", False)
         self.use_shard_based_rebalance = self.input.param("use_shard_based_rebalance", False)
+        self.use_cbo = self.input.param("use_cbo", False)
+        # current value of n1ql_feat_ctrl disables sequential scan. To enable it set value to 0x4c
+        self.n1ql_feat_ctrl = self.input.param("n1ql_feat_ctrl", "0x404c")
         if self.aws_access_key_id:
             from serverless.s3_utils import S3Utils
             self.s3_utils_obj = S3Utils(aws_access_key_id=self.aws_access_key_id,
@@ -146,6 +149,26 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.index_rest.set_index_settings({"indexer.allowScheduleCreateRebal": self.scheduled_index_create_rebal})
             if self.use_shard_based_rebalance:
                 self.index_rest.set_index_settings({"indexer.settings.enableShardAffinity": True})
+
+        # Disabling CBO and Sequential Scans for GSI tests
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        query_rest = RestConnection(query_node)
+
+        api = f"{query_rest.baseUrl}/settings/querySettings"
+        data = {"queryUseCBO": self.use_cbo}
+        status, content, header = query_rest.urllib_request(api, verb='POST', params=json.dumps(data))
+        if not status:
+            raise Exception(content)
+        self.log.info(f"{data} set")
+        self.log.info(content)
+
+        api = f"{query_rest.query_baseUrl}/admin/settings"
+        data = {"n1ql-feat-ctrl": self.n1ql_feat_ctrl}
+        status, content, header = query_rest.urllib_request(api, verb='POST', params=json.dumps(data))
+        if not status:
+            raise Exception(content)
+        self.log.info(f"{data} set")
+        self.log.info(content)
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
