@@ -428,12 +428,12 @@ class RestConnection(object):
         if isinstance(http_res, dict):
             http_res = self.extract_nodes_self_from_pools_default(http_res)
             if not http_res or http_res["version"][0:2] == "1." or CbServer.cluster_profile == "serverless":
-                self.capiBaseUrl = self.baseUrl + "/couchBase"
+                self.capiBaseUrl = self.baseUrl + "couchBase"
             else:
                 for iteration in range(5):
                     if "couchApiBase" not in http_res.keys():
                         if self.is_cluster_mixed() or CbServer.capella_run:
-                            self.capiBaseUrl = self.baseUrl + "/couchBase"
+                            self.capiBaseUrl = self.baseUrl + "couchBase"
                             return
                         time.sleep(0.2)
                         http_res, success = self.init_http_request(self.baseUrl + 'pools/default')
@@ -1734,7 +1734,7 @@ class RestConnection(object):
             port = CbServer.ssl_port
         log.info('adding remote node @{0}:{1} to this cluster @{2}:{3}'\
                           .format(remoteIp, port, self.ip, self.port))
-        api = self.baseUrl + '/node/controller/doJoinCluster'
+        api = self.baseUrl + 'node/controller/doJoinCluster'
         params = urllib.parse.urlencode({'hostname': "{0}:{1}".format(remoteIp, port),
                                    'user': user,
                                    'password': password})
@@ -3389,7 +3389,7 @@ class RestConnection(object):
         return status
 
     def stop_rebalance(self, wait_timeout=10):
-        api = self.baseUrl + '/controller/stopRebalance'
+        api = self.baseUrl + 'controller/stopRebalance'
         status, content, header = self._http_request(api, 'POST')
         if status:
             for i in range(int(wait_timeout)):
@@ -4991,7 +4991,7 @@ class RestConnection(object):
     '''
 
     def add_group_role(self,group_name,description,roles,ldap_group_ref=None):
-        api = self.baseUrl + "/settings/rbac/groups/" + group_name
+        api = self.baseUrl + "settings/rbac/groups/" + group_name
         if ldap_group_ref is not None:
 
             params = urllib.parse.urlencode({
@@ -5010,23 +5010,23 @@ class RestConnection(object):
         return status, json.loads(content)
 
     def delete_group(self,group_name):
-        api = self.baseUrl + "/settings/rbac/groups/" + group_name
+        api = self.baseUrl + "settings/rbac/groups/" + group_name
         status, content, header = self._http_request(api, 'DELETE')
         log.info ("Status of Delete role from CB is {0}".format(status))
         return status, json.loads(content)
 
     def get_group_list(self):
-        api = self.baseUrl + "/settings/rbac/groups/"
+        api = self.baseUrl + "settings/rbac/groups/"
         status, content, header = self._http_request(api, 'GET')
         return status, json.loads(content)
 
     def get_group_details(self, group_name):
-        api = self.baseUrl + "/settings/rbac/groups/" + group_name
+        api = self.baseUrl + "settings/rbac/groups/" + group_name
         status, content, header = self._http_request(api, 'GET')
         return status, json.loads(content)
 
     def add_user_group(self,group_name,user_name):
-        api = self.baseUrl + "/settings/rbac/users/local/" + user_name
+        api = self.baseUrl + "settings/rbac/users/local/" + user_name
         params = urllib.parse.urlencode({
                                     'groups':'{0}'.format(group_name)
                                 })
@@ -5035,32 +5035,32 @@ class RestConnection(object):
         return status, json.loads(content)
 
     def get_user_group(self,user_name):
-        api = self.baseUrl + "/settings/rbac/users/local/" + user_name
+        api = self.baseUrl + "settings/rbac/users/local/" + user_name
         status, content, header = self._http_request(api, 'GET')
         log.info ("Status of Retrieving role from group command is {0}".format(status))
         return status, json.loads(content)
 
     def grp_invalidate_cache(self):
-        api = self.baseUrl + "/settings/invalidateLDAPCache/"
+        api = self.baseUrl + "settings/invalidateLDAPCache/"
         status, content, header = self._http_request(api, 'POST')
         log.info("Status of Adding role to group command is {0}".format(status))
         return status, json.loads(content)
 
     def invalidate_ldap_cache(self):
-        api = self.baseUrl + '/settings/invalidateLDAPCache'
+        api = self.baseUrl + 'settings/invalidateLDAPCache'
         status, content, header = self._http_request(api, 'POST')
         log.info("Status of Invalidate LDAP Cached is {0}".format(status))
         return status, json.loads(content)
 
 
     def ldap_validate_conn(self):
-        api = self.baseUrl + "/settings/ldap/validate/connectivity"
+        api = self.baseUrl + "settings/ldap/validate/connectivity"
         status, content, header = self._http_request(api, 'POST')
         log.info("Status of Adding role to group command is {0}".format(status))
         return status, json.loads(content)
 
     def ldap_validate_authen(self, user_name, password='password'):
-        api = self.baseUrl + "/settings/ldap/validate/authentication"
+        api = self.baseUrl + "settings/ldap/validate/authentication"
         params = urllib.parse.urlencode({
             'auth_user': '{0}'.format(user_name),
             'auth_pass': '{0}'.format(password)
@@ -5070,7 +5070,7 @@ class RestConnection(object):
         return status, json.loads(content)
 
     def ldap_validate_grp_query(self, user):
-        api = self.baseUrl + "/settings/ldap/validate/groups_query"
+        api = self.baseUrl + "settings/ldap/validate/groups_query"
         params = urllib.parse.urlencode({
                                     'groups_query_user':'{0}'.format(user)
                                 })
@@ -5130,12 +5130,12 @@ class RestConnection(object):
             return status, json.loads(content)
 
     def get_audit_descriptors(self):
-        api = self.baseUrl + "/settings/audit/descriptors"
+        api = self.baseUrl + "settings/audit/descriptors"
         status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers())
         return json.loads(content) if status else None
 
     def _set_secrets_password(self, new_password):
-        api = self.baseUrl + "/node/controller/changeMasterPassword"
+        api = self.baseUrl + "node/controller/changeMasterPassword"
         params = urllib.parse.urlencode({
             'newPassword': '{0}'.format(new_password.encode('utf-8').strip())
                                         })
