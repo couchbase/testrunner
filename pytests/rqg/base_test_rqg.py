@@ -1835,7 +1835,7 @@ class BaseRQGTests(BaseTestCase):
             for bucket in self.buckets:
                 self.rest.delete_bucket(bucket.name)
         self.buckets = []
-        bucket_size = 100
+        bucket_size = 256
 
         if self.change_bucket_properties:
             shell = RemoteMachineShellConnection(self.master)
