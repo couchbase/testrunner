@@ -49,6 +49,8 @@ class CbServer(object):
 
     system_scope = "_system"
 
+    query_collection = "_query"
+
     total_vbuckets = 1024
 
     # Name length limits

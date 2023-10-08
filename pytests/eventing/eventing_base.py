@@ -323,19 +323,22 @@ class EventingBaseTest(QueryHelperTests):
         # wait for bucket operations to complete and verify it went through successfully
         count = 0
         item_count = rest.get_bucket_stats(bucket)["curr_items"] - \
-                     self.stat.get_scope_item_count(bucket, CbServer.system_scope, self.get_kv_nodes())
+                     self.stat.get_collection_item_count_cumulative(bucket, CbServer.system_scope,
+                                                                    CbServer.query_collection, self.get_kv_nodes())
         while item_count != expected_dcp_mutations and count < 20:
             message = "Waiting for handler code {2} to complete bucket operations... Current : {0} Expected : {1}".\
                       format(item_count, expected_dcp_mutations, name)
             self.sleep(timeout//20, message=message)
             curr_items=item_count
             item_count = self.rest.get_bucket_stats(bucket)["curr_items"] - \
-                         self.stat.get_scope_item_count(bucket, CbServer.system_scope, self.get_kv_nodes())
+                         self.stat.get_collection_item_count_cumulative(bucket, CbServer.system_scope,
+                                                                        CbServer.query_collection, self.get_kv_nodes())
             ### compact buckets when mutation count not progressing. Helpful for expiry events
             if count==10:
                 self.bucket_compaction()
             item_count = rest.get_bucket_stats(bucket)["curr_items"] - \
-                         self.stat.get_scope_item_count(bucket, CbServer.system_scope, self.get_kv_nodes())
+                         self.stat.get_collection_item_count_cumulative(bucket, CbServer.system_scope,
+                                                                        CbServer.query_collection, self.get_kv_nodes())
             if curr_items == item_count:
                 count += 1
             else:
