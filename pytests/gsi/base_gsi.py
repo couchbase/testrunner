@@ -154,7 +154,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         query_rest = RestConnection(query_node)
 
-        api = f"{query_rest.baseUrl}/settings/querySettings"
+        api = f"{query_rest.baseUrl}settings/querySettings"
         data = {"queryUseCBO": self.use_cbo}
         status, content, header = query_rest.urllib_request(api, verb='POST', params=json.dumps(data))
         if not status:
@@ -162,7 +162,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.log.info(f"{data} set")
         self.log.info(content)
 
-        api = f"{query_rest.query_baseUrl}/admin/settings"
+        api = f"{query_rest.query_baseUrl}admin/settings"
         data = {"n1ql-feat-ctrl": self.n1ql_feat_ctrl}
         status, content, header = query_rest.urllib_request(api, verb='POST', params=json.dumps(data))
         if not status:
