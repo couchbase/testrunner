@@ -671,7 +671,7 @@ class rbacPermissionList():
         remote_server02 = servers[2]
         rest_remote01 = RestConnection(remote_server01)
         rest_remote01.delete_bucket()
-        rest_remote01.create_bucket(bucket='default1', ramQuotaMB=100, proxyPort=11252)
+        rest_remote01.create_bucket(bucket='default1', ramQuotaMB=256, proxyPort=11252)
         rest_remote02 = RestConnection(remote_server02)
         remote_id = rest.add_remote_cluster(remote_server01.ip, 8091, 'Administrator', 'password', remote_cluster_name)
         time.sleep(10)
@@ -724,7 +724,7 @@ class rbacPermissionList():
         remote_server02 = servers[2]
         rest_remote01 = RestConnection(remote_server01)
         rest_remote01.delete_bucket()
-        rest_remote01.create_bucket(bucket='default', ramQuotaMB=100)
+        rest_remote01.create_bucket(bucket='default', ramQuotaMB=256)
         rest_remote02 = RestConnection(remote_server02)
         remote_id = rest.add_remote_cluster(remote_server01.ip, 8091, 'Administrator', 'password', remote_cluster_name)
         time.sleep(20)
@@ -754,7 +754,7 @@ class rbacPermissionList():
         remote_server02 = servers[2]
         rest_remote01 = RestConnection(remote_server01)
         rest_remote01.delete_bucket()
-        rest_remote01.create_bucket(bucket='default', ramQuotaMB=100)
+        rest_remote01.create_bucket(bucket='default', ramQuotaMB=256)
         rest_remote02 = RestConnection(remote_server02)
         remote_id = rest.add_remote_cluster(remote_server01.ip, 8091, 'Administrator', 'password', remote_cluster_name)
         time.sleep(20)
@@ -793,7 +793,7 @@ class rbacPermissionList():
         remote_server02 = servers[2]
         rest_remote01 = RestConnection(remote_server01)
         rest_remote01.delete_bucket()
-        rest_remote01.create_bucket(bucket='default', ramQuotaMB=100)
+        rest_remote01.create_bucket(bucket='default', ramQuotaMB=256)
         rest_remote02 = RestConnection(remote_server02)
 
         #------ First Test the Get Requests for XDCR --------------#
@@ -838,7 +838,7 @@ class rbacPermissionList():
         remote_server02 = servers[2]
         rest_remote01 = RestConnection(remote_server01)
         rest_remote01.delete_bucket()
-        rest_remote01.create_bucket(bucket='default', ramQuotaMB=100)
+        rest_remote01.create_bucket(bucket='default', ramQuotaMB=256)
         rest_remote02 = RestConnection(remote_server02)
 
         rest.remove_all_replications()
@@ -865,7 +865,7 @@ class rbacPermissionList():
         remote_server02 = servers[2]
         rest_remote01 = RestConnection(remote_server01)
         rest_remote01.delete_bucket()
-        rest_remote01.create_bucket(bucket='default', ramQuotaMB=100)
+        rest_remote01.create_bucket(bucket='default', ramQuotaMB=256)
         rest_remote02 = RestConnection(remote_server02)
         remote_id = rest.add_remote_cluster(remote_server01.ip, 8091, 'Administrator', 'password', remote_cluster_name)
         time.sleep(20)
@@ -893,7 +893,7 @@ class rbacPermissionList():
         remote_server02 = servers[2]
         rest_remote01 = RestConnection(remote_server01)
         rest_remote01.delete_bucket()
-        rest_remote01.create_bucket(bucket='default', ramQuotaMB=100)
+        rest_remote01.create_bucket(bucket='default', ramQuotaMB=256)
         rest_remote02 = RestConnection(remote_server02)
         rest_remote02.delete_bucket()
         remote_id = rest.add_remote_cluster(remote_server01.ip, 8091, 'Administrator', 'password', remote_cluster_name)

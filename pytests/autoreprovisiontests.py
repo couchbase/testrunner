@@ -735,7 +735,7 @@ class AutoReprovisionTests(unittest.TestCase):
                                    storageBackend=self.bucket_storage)
             except Exception:
                 rest.create_bucket(bucket=bucket_name,
-                                   ramQuotaMB=100,
+                                   ramQuotaMB=256,
                                    replicaNumber=self.replicas,
                                    bucketType=bucketType,
                                    evictionPolicy=evictionPolicy,

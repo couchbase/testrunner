@@ -683,8 +683,8 @@ class ldapGroup(BaseTestCase):
         rest2.remove_all_replications()
         rest2.remove_all_remote_clusters()
 
-        rest2.create_bucket("default", ramQuotaMB=100)
-        rest1.create_bucket("default", ramQuotaMB=100)
+        rest2.create_bucket("default", ramQuotaMB=256)
+        rest1.create_bucket("default", ramQuotaMB=256)
         remote_cluster2 = 'C2'
         remote_server01 = self.servers[0]
 

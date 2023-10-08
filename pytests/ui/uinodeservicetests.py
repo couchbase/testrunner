@@ -20,7 +20,7 @@ class  NodeServiceTests(BaseUITestCase):
         num_buckets = self.input.param("num_buckets", 1)
         compression = self.input.param("sdk_compression", True)
         for i in range(num_buckets):
-            RestConnection(self.servers[0]).create_bucket(bucket='bucket%s' % i, ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + i + 1)
+            RestConnection(self.servers[0]).create_bucket(bucket='bucket%s' % i, ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT + i + 1)
             gen_load = BlobGenerator('ui', 'ui-', 256, start=0, end=10)
             cluster = Cluster()
             try:

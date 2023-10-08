@@ -1039,7 +1039,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             rest_connection.change_bucket_props(bucket, flushEnabled=1)
             rest_connection.flush_bucket(bucket)
 
-    def replace_bucket(self, cluster_host, bucket_to_replace, new_bucket, ramQuotaMB=100):
+    def replace_bucket(self, cluster_host, bucket_to_replace, new_bucket, ramQuotaMB=256):
         """ Replaces an existing bucket
         """
         # The only way to create a bucket in testrunner is to delete an existing bucket

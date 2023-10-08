@@ -165,7 +165,7 @@ class auditTest(BaseTestCase):
     def test_bucket_select_audit(self):
         # security.audittest.auditTest.test_bucket_select_audit,default_bucket=false,id=20492
         rest = RestConnection(self.master)
-        rest.create_bucket(bucket='TestBucket', ramQuotaMB=100,
+        rest.create_bucket(bucket='TestBucket', ramQuotaMB=256,
                            storageBackend=self.bucket_storage)
         time.sleep(30)
         mc = MemcachedClient(self.master.ip, 11210)

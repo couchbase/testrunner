@@ -554,7 +554,7 @@ class CommunityTests(CommunityBaseTest):
                                     http://{0}:8091/pools/default/buckets \
                                  -d name=bucket0 \
                                  -d maxTTL=100 \
-                                 -d ramQuotaMB=100 '.format(self.master.ip)
+                                 -d ramQuotaMB=256 '.format(self.master.ip)
         if self.cli_test:
             cmd = "{0}couchbase-cli bucket-create -c {1}:8091 --username Administrator \
                 --password password --bucket bucket0 --bucket-type couchbase \
@@ -665,7 +665,7 @@ class CommunityTests(CommunityBaseTest):
                                     http://{0}:8091/pools/default/buckets \
                                  -d name=bucket0 \
                                  -d compressionMode={1} \
-                                 -d ramQuotaMB=100 '.format(self.master.ip,
+                                 -d ramQuotaMB=256 '.format(self.master.ip,
                                                             self.compression_mode)
         if self.cli_test:
             cmd = "{0}couchbase-cli bucket-create -c {1}:8091 --username Administrator \
@@ -889,7 +889,7 @@ class CommunityXDCRTests(CommunityXDCRBaseTest):
                                                     'http://{0}:8091/pools/default/buckets '
                                                     '-d name=default '
                                                     '-d conflictResolutionType=lww '
-                                                    '-d ramQuotaMB=100 '.format(server.ip))
+                                                    '-d ramQuotaMB=256 '.format(server.ip))
         conn.log_command_output(output, error)
         if output and "Conflict resolution type 'lww' is supported only in enterprise edition"\
                   not in str(output[0]):

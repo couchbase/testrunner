@@ -261,7 +261,7 @@ class rbacCollectionTest(BaseTestCase):
             collection = details['collection']
             bucket = details['bucket']
             self.rest_client.delete_bucket(bucket)
-            self.rest_client.create_bucket(bucket=bucket, ramQuotaMB=100)
+            self.rest_client.create_bucket(bucket=bucket, ramQuotaMB=256)
             self.wait()
             self.rest.create_scope_collection(bucket=bucket, scope=scope, collection=collection)
         count = 1
@@ -325,7 +325,7 @@ class rbacCollectionTest(BaseTestCase):
             collection = details['collection']
             bucket = details['bucket']
             self.rest_client.delete_bucket(bucket)
-            self.rest_client.create_bucket(bucket=bucket, ramQuotaMB=100)
+            self.rest_client.create_bucket(bucket=bucket, ramQuotaMB=256)
             self.wait()
             self.rest.create_scope_collection(bucket=bucket, scope=scope, collection=collection)
 
@@ -389,7 +389,7 @@ class rbacCollectionTest(BaseTestCase):
         Validate error messages for scope and collection
         '''
         if not RestHelper(self.rest_client).bucket_exists("testbucket"):
-                self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=100)
+                self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=256)
         self.rest.delete_collection("testbucket", "testscope", "testcollection")
         self.rest.delete_scope("testbucket", "testscope")
         self.wait()
@@ -609,7 +609,7 @@ class rbacCollectionTest(BaseTestCase):
     #Helper function for creating bucket, collection, scope and users
     def create_users_collections(self, bucket, number_collections, prefix='test'):
         final_list = []
-        self.rest_client.create_bucket(bucket=bucket, ramQuotaMB=100)
+        self.rest_client.create_bucket(bucket=bucket, ramQuotaMB=256)
         try:
             for i in range(0, number_collections):
                 self.rest.create_scope_collection(bucket=bucket, scope=prefix + "scope" + str(i),
@@ -671,7 +671,7 @@ class rbacCollectionTest(BaseTestCase):
     #Test that roles for uses are updated when collection and scope are deleted
     #User is not deleted after scope and collections are deleted
     def test_delete_collection_check_roles(self):
-        self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=100)
+        self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=256)
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope", collection="testcollection")
         self.create_collection_read_write_user("testuser", "testbucket", "testscope", "testcollection", role="data_writer")
         self.rest.delete_collection("testbucket", "testscope", "testcollection")
@@ -684,7 +684,7 @@ class rbacCollectionTest(BaseTestCase):
 
     #Test uesr roles are cleaned up after collection is deleted
     def test_delete_recreated_collection_check_roles(self):
-        self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=100)
+        self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=256)
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope", collection="testcollection")
         self.create_collection_read_write_user("testuser", "testbucket", "testscope", "testcollection", role="data_writer")
         self.rest.delete_collection("testbucket", "testscope", "testcollection")
@@ -700,7 +700,7 @@ class rbacCollectionTest(BaseTestCase):
 
     #Check for errors when collections is deleted in parallel
     def test_collection_deletion_while_ops(self):
-        self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=100)
+        self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=256)
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope", collection="testcollection")
         self.create_collection_read_write_user("testuser", "testbucket", "testscope", "testcollection", role="data_writer")
         client = self.collectionConnection("testscope", "testcollection", "testbucket", "testuser")
@@ -800,7 +800,7 @@ class rbacCollectionTest(BaseTestCase):
 
     #Delete users while data loading in parallel
     def test_user_deletion_while_ops(self):
-        self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=100)
+        self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=256)
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope", collection="testcollection")
         self.create_collection_read_write_user("testuser", "testbucket", "testscope", "testcollection",
                                                role="data_writer")
@@ -819,7 +819,7 @@ class rbacCollectionTest(BaseTestCase):
 
     #Delete user and check for error when insert happens
     def test_user_deletion_recreation(self):
-        self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=100)
+        self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=256)
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope", collection="testcollection")
         self.create_collection_read_write_user("testuser", "testbucket", "testscope", "testcollection",
                                                role="data_writer")
@@ -908,7 +908,7 @@ class rbacCollectionTest(BaseTestCase):
     #Remove users from group and check
     def add_remove_users_groups(self):
         self.rest_client.delete_bucket("testbucket")
-        self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=100)
+        self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=256)
         self.wait()
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope", collection="testcollection")
         ldapGroupBase().add_role_group("testgroup", 'data_writer[testbucket:testscope:testcollection]', None, self.master)
@@ -929,7 +929,7 @@ class rbacCollectionTest(BaseTestCase):
     # Remove groups from CB and check if user has access
     def add_remove_groups(self):
         self.rest_client.delete_bucket("testbucket")
-        self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=100)
+        self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=256)
         self.wait()
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope", collection="testcollection")
         ldapGroupBase().add_role_group("testgroup", 'data_writer[testbucket:testscope:testcollection]', None, self.master)
@@ -968,7 +968,7 @@ class rbacCollectionTest(BaseTestCase):
 
     def test_scope_admin_add_collection(self):
         self.rest_client.delete_bucket("testbucket")
-        self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=100)
+        self.rest_client.create_bucket(bucket="testbucket", ramQuotaMB=256)
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope", collection="testcollection")
         self.rest.create_scope_collection(bucket="testbucket", scope="testscope1", collection="testcollection")
         self.create_collection_read_write_user('user_scope_admin', 'testbucket', 'testscope', None, role='scope_admin')

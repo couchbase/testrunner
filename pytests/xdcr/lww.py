@@ -317,7 +317,7 @@ class Lww(XDCRNewBaseTest):
 
     def test_seq_upd_on_uni_with_dest_wins(self):
         self._create_buckets(bucket='lww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
-        self._create_buckets(bucket='nolww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
+        self._create_buckets(bucket='nolww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
                              dst_lww=False)
         self.setup_xdcr()
         src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
@@ -345,8 +345,8 @@ class Lww(XDCRNewBaseTest):
             self.log.info("Target doc won using Rev Id as expected")
 
     def test_seq_upd_on_bi_with_src_wins(self):
-        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
-        self._create_buckets(bucket='nolww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
+        self._create_buckets(bucket='lww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='nolww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
                              dst_lww=False)
         self.setup_xdcr()
         src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
@@ -376,8 +376,8 @@ class Lww(XDCRNewBaseTest):
         self.log.info("Target doc won using Rev Id as expected")
 
     def test_seq_upd_on_bi_with_dest_wins(self):
-        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
-        self._create_buckets(bucket='nolww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
+        self._create_buckets(bucket='lww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='nolww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
                              dst_lww=False)
         self.setup_xdcr()
         src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
@@ -408,7 +408,7 @@ class Lww(XDCRNewBaseTest):
         self.log.info("Src doc won using Rev Id as expected")
 
     def test_seq_add_del_on_bi_with_src_wins(self):
-        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='lww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
         self.setup_xdcr()
 
         src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
@@ -427,7 +427,7 @@ class Lww(XDCRNewBaseTest):
         self.log.info("Source doc won using LWW as expected")
 
     def test_seq_add_del_on_bi_with_dest_wins(self):
-        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='lww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
         self.setup_xdcr()
 
         src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
@@ -447,7 +447,7 @@ class Lww(XDCRNewBaseTest):
             self.fail("Doc not deleted in target cluster using LWW")
 
     def test_seq_upd_on_uni_with_lww_disabled_target_and_src_wins(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100, src_lww=True, dst_lww=False)
+        self._create_buckets(bucket='default', ramQuotaMB=256, src_lww=True, dst_lww=False)
         try:
             self.setup_xdcr()
         except Exception as e:
@@ -457,7 +457,7 @@ class Lww(XDCRNewBaseTest):
             self.log.info("ConflictResolutionType mismatch message thrown as expected")
 
     def test_seq_upd_on_uni_with_lww_disabled_source_and_target_wins(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100, src_lww=False, dst_lww=True)
+        self._create_buckets(bucket='default', ramQuotaMB=256, src_lww=False, dst_lww=True)
         try:
             self.setup_xdcr()
         except Exception as e:
@@ -467,7 +467,7 @@ class Lww(XDCRNewBaseTest):
             self.log.info("ConflictResolutionType mismatch message thrown as expected")
 
     def test_seq_upd_on_bi_with_lww_disabled_on_both_clusters(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100, src_lww=False, dst_lww=False)
+        self._create_buckets(bucket='default', ramQuotaMB=256, src_lww=False, dst_lww=False)
         self.setup_xdcr()
 
         src_def = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'default')
@@ -486,8 +486,8 @@ class Lww(XDCRNewBaseTest):
         self.log.info("Doc with greater rev id won as expected")
 
     def test_seq_upd_on_uni_with_src_failover(self):
-        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
-        self._create_buckets(bucket='nolww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
+        self._create_buckets(bucket='lww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='nolww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
                              dst_lww=False)
         self.setup_xdcr()
 
@@ -521,8 +521,8 @@ class Lww(XDCRNewBaseTest):
         self.log.info("Target doc won using Rev Id as expected")
 
     def test_seq_upd_on_uni_with_src_rebalance(self):
-        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
-        self._create_buckets(bucket='nolww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
+        self._create_buckets(bucket='lww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='nolww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
                              dst_lww=False)
         self.setup_xdcr()
 
@@ -559,7 +559,7 @@ class Lww(XDCRNewBaseTest):
         self.log.info("Target doc won using Rev Id as expected")
 
     def test_seq_add_del_on_bi_with_rebalance(self):
-        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='lww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
         self.setup_xdcr()
 
         src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
@@ -585,7 +585,7 @@ class Lww(XDCRNewBaseTest):
         self.verify_results(skip_verify_data=['lww'])
 
     def test_seq_add_del_on_bi_with_failover(self):
-        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='lww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
         self.setup_xdcr()
 
         src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
@@ -610,8 +610,8 @@ class Lww(XDCRNewBaseTest):
         self.verify_results(skip_verify_data=['lww'])
 
     def test_simult_upd_on_bi(self):
-        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
-        self._create_buckets(bucket='nolww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
+        self._create_buckets(bucket='lww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='nolww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
                              dst_lww=False)
         self.setup_xdcr()
 
@@ -662,7 +662,7 @@ class Lww(XDCRNewBaseTest):
 
     def test_lww_with_optimistic_threshold_change(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
         src_conn.set_xdcr_param('default', 'default', 'optimisticReplicationThreshold', self._optimistic_threshold)
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
@@ -672,7 +672,7 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_lww_with_master_warmup(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.async_load_all_buckets_from_generator(gen1)
@@ -683,7 +683,7 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_lww_with_cb_restart_at_master(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
@@ -703,7 +703,7 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_lww_with_erlang_restart_at_master(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
@@ -722,7 +722,7 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_lww_with_memcached_restart_at_master(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.async_load_all_buckets_from_generator(gen1)
@@ -737,8 +737,8 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_seq_upd_on_bi_with_target_clock_faster(self):
-        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
-        self._create_buckets(bucket='nolww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
+        self._create_buckets(bucket='lww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='nolww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
                              dst_lww=False)
         self._offset_wall_clock(self.c2_cluster, offset_secs=3600)
         self.sleep(10)
@@ -781,8 +781,8 @@ class Lww(XDCRNewBaseTest):
         conn.start_couchbase()
 
     def test_seq_upd_on_bi_with_src_clock_faster(self):
-        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
-        self._create_buckets(bucket='nolww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
+        self._create_buckets(bucket='lww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='nolww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
                              dst_lww=False)
 
         self._offset_wall_clock(self.c1_cluster, offset_secs=3600)
@@ -823,7 +823,7 @@ class Lww(XDCRNewBaseTest):
         conn.start_couchbase()
 
     def test_seq_add_del_on_bi_with_target_clock_faster(self):
-        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='lww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
         self._offset_wall_clock(self.c2_cluster, offset_secs=3600)
         self.sleep(10)
         self.setup_xdcr()
@@ -861,7 +861,7 @@ class Lww(XDCRNewBaseTest):
         conn.start_couchbase()
 
     def test_seq_del_add_on_bi_with_target_clock_faster(self):
-        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='lww', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
         self._offset_wall_clock(self.c2_cluster, offset_secs=3600)
         self.sleep(10)
         self.setup_xdcr()
@@ -889,9 +889,9 @@ class Lww(XDCRNewBaseTest):
         conn.start_couchbase()
 
     def test_lww_with_bucket_recreate(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.c1_cluster.delete_bucket(bucket_name='default')
-        self._create_buckets(bucket='default', ramQuotaMB=100, skip_dst=True)
+        self._create_buckets(bucket='default', ramQuotaMB=256, skip_dst=True)
         self.setup_xdcr()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
@@ -902,7 +902,7 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_lww_while_rebalancing_node_at_src(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
@@ -925,7 +925,7 @@ class Lww(XDCRNewBaseTest):
     def test_lww_while_failover_node_at_src(self):
         self.cluster = Cluster()
         src_conn = RestConnection(self.c1_cluster.get_master_node())
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
@@ -953,7 +953,7 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_lww_with_rebalance_in_and_simult_upd_del(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
@@ -969,7 +969,7 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_lww_with_rebalance_out_and_simult_upd_del(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
@@ -995,7 +995,7 @@ class Lww(XDCRNewBaseTest):
     def test_lww_with_failover_and_simult_upd_del(self):
         self.cluster = Cluster()
         src_conn = RestConnection(self.c1_cluster.get_master_node())
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
@@ -1028,7 +1028,7 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_mixed_mode(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100, src_lww=True, dst_lww=False)
+        self._create_buckets(bucket='default', ramQuotaMB=256, src_lww=True, dst_lww=False)
         try:
             self.setup_xdcr()
         except Exception as e:
@@ -1039,7 +1039,7 @@ class Lww(XDCRNewBaseTest):
 
     def test_lww_with_nodes_reshuffle(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
         self.c1_cluster.pause_all_replications_by_id()
 
@@ -1082,7 +1082,7 @@ class Lww(XDCRNewBaseTest):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
         dest_conn = RestConnection(self.c2_cluster.get_master_node())
 
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
@@ -1113,7 +1113,7 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_lww_with_rebooting_non_master_node(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
@@ -1135,7 +1135,7 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_lww_with_firewall(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
@@ -1152,7 +1152,7 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_lww_with_node_crash_cluster(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
@@ -1187,7 +1187,7 @@ class Lww(XDCRNewBaseTest):
 
     def test_lww_with_auto_failover(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.log.info("Enabling auto failover on " + str(self.c1_cluster.get_master_node()))
         src_conn.update_autofailover_settings(enabled=True, timeout=30)
         self.sleep(10)
@@ -1199,11 +1199,11 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_lww_with_mixed_buckets(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
-        self._create_buckets(bucket='sasl_bucket_1', ramQuotaMB=100)
-        self._create_buckets(bucket='sasl_bucket_2', ramQuotaMB=100)
-        self._create_buckets(bucket='standard_bucket_1', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
-        self._create_buckets(bucket='standard_bucket_2', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
+        self._create_buckets(bucket='sasl_bucket_1', ramQuotaMB=256)
+        self._create_buckets(bucket='sasl_bucket_2', ramQuotaMB=256)
+        self._create_buckets(bucket='standard_bucket_1', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='standard_bucket_2', ramQuotaMB=256, proxyPort=STANDARD_BUCKET_PORT + 1)
         self.sleep(10)
         self.setup_xdcr()
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
@@ -1217,11 +1217,11 @@ class Lww(XDCRNewBaseTest):
 
         c3_conn = RestConnection(self.c3_cluster.get_master_node())
 
-        self._create_buckets(bucket='default', ramQuotaMB=100)
-        c3_conn.create_bucket(bucket='default', ramQuotaMB=100, replicaNumber=1,
+        self._create_buckets(bucket='default', ramQuotaMB=256)
+        c3_conn.create_bucket(bucket='default', ramQuotaMB=256, replicaNumber=1,
                               proxyPort=11211, replica_index=1, threadsNumber=3,
                               flushEnabled=1, lww=True)
-        self.c3_cluster.add_bucket(ramQuotaMB=100, bucket='default',
+        self.c3_cluster.add_bucket(ramQuotaMB=256, bucket='default',
                                    replicaNumber=1, proxyPort=11211,
                                    )
         self.assertTrue(c3_conn.is_lww_enabled(), "LWW not enabled on c3 bucket")
@@ -1247,7 +1247,7 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_lww_with_dest_shutdown(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
@@ -1271,7 +1271,7 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_disk_full(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
@@ -1309,7 +1309,7 @@ class Lww(XDCRNewBaseTest):
             self.log.info(e)
 
     def test_lww_with_checkpoint_validation(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
@@ -1337,7 +1337,7 @@ class Lww(XDCRNewBaseTest):
         self.verify_results()
 
     def test_lww_with_backup_and_restore(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
 
         backup_host_conn = RemoteMachineShellConnection(self._input.servers[6])
         backup_host_conn.execute_command("cbbackupmgr config --archive /data/lww-backup --repo lww", debug=False)
@@ -1358,7 +1358,7 @@ class Lww(XDCRNewBaseTest):
 
     def test_lww_with_time_diff_in_src_nodes(self):
         self._offset_wall_clock(cluster=self.c1_cluster, offset_secs=300, offset_drift=3)
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
@@ -1381,7 +1381,7 @@ class Lww(XDCRNewBaseTest):
         src_conn.set_data_path(data_path='/mnt/nfs/var/nfsshare/test_lww')
         dest_conn.set_data_path(data_path='/mnt/nfs/var/nfsshare/test_lww')
 
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
@@ -1397,11 +1397,11 @@ class Lww(XDCRNewBaseTest):
         self.c3_cluster = self.get_cb_cluster_by_name('C3')
         c3_conn = RestConnection(self.c3_cluster.get_master_node())
 
-        self._create_buckets(bucket='default', ramQuotaMB=100)
-        c3_conn.create_bucket(bucket='default', ramQuotaMB=100, replicaNumber=1,
+        self._create_buckets(bucket='default', ramQuotaMB=256)
+        c3_conn.create_bucket(bucket='default', ramQuotaMB=256, replicaNumber=1,
                               proxyPort=11211, replica_index=1, threadsNumber=3,
                               flushEnabled=1, lww=True)
-        self.c3_cluster.add_bucket(ramQuotaMB=100, bucket='default',
+        self.c3_cluster.add_bucket(ramQuotaMB=256, bucket='default',
                                    replicaNumber=1, proxyPort=11211)
         self.assertTrue(c3_conn.is_lww_enabled(), "LWW not enabled on C3 bucket")
         self.log.info("LWW enabled on C3 bucket as expected")
@@ -1523,7 +1523,7 @@ class Lww(XDCRNewBaseTest):
         conn3.start_couchbase()
 
     def test_hlc_active_and_replica(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100, skip_dst=True)
+        self._create_buckets(bucket='default', ramQuotaMB=256, skip_dst=True)
         gen = DocumentGenerator('lww', '{{"key1":"value1"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
@@ -1540,7 +1540,7 @@ class Lww(XDCRNewBaseTest):
         self.log.info("HLC of active is equal to replica")
 
     def test_hlc(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
         self.c1_cluster.pause_all_replications_by_id()
 
@@ -1562,7 +1562,7 @@ class Lww(XDCRNewBaseTest):
         self.log.info("HLC of C1 is equal to C2")
 
     def test_hlc_target_faster(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self._offset_wall_clock(self.c2_cluster, offset_secs=900)
 
         self.setup_xdcr()
@@ -1605,7 +1605,7 @@ class Lww(XDCRNewBaseTest):
         conn.start_couchbase()
 
     def test_hlc_source_faster(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self._offset_wall_clock(self.c1_cluster, offset_secs=900)
 
         self.setup_xdcr()
@@ -1650,7 +1650,7 @@ class Lww(XDCRNewBaseTest):
         conn.start_couchbase()
 
     def test_hlc_within_cluster_target_faster(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self._offset_wall_clock(self.c2_cluster, offset_secs=900)
         self.setup_xdcr()
         gen = DocumentGenerator('lww', '{{"key1":"value1"}}', list(range(100)), start=0, end=1)
@@ -1702,7 +1702,7 @@ class Lww(XDCRNewBaseTest):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
         dest_conn = RestConnection(self.c2_cluster.get_master_node())
 
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self._offset_wall_clock(self.c1_cluster, offset_secs=900)
         self.setup_xdcr()
 
@@ -1747,7 +1747,7 @@ class Lww(XDCRNewBaseTest):
         conn.start_couchbase()
 
     def test_hlc_ordering_with_delay_source_faster(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self._offset_wall_clock(self.c1_cluster, offset_secs=900)
         self.sleep(10)
         self.setup_xdcr()
@@ -1793,7 +1793,7 @@ class Lww(XDCRNewBaseTest):
     def test_lww_with_two_ntp_pools(self):
         self._enable_ntp_and_sync(nodes=self.c1_cluster.get_nodes(), ntp_server="0.north-america.pool.ntp.org")
         self._enable_ntp_and_sync(nodes=self.c2_cluster.get_nodes(), ntp_server="3.north-america.pool.ntp.org")
-        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
         self.c1_cluster.pause_all_replications_by_id()
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
@@ -1805,26 +1805,26 @@ class Lww(XDCRNewBaseTest):
 
     def test_conflict_resolution_after_warmup(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
-        self._create_buckets(bucket='default', ramQuotaMB=100, skip_dst=True)
+        self._create_buckets(bucket='default', ramQuotaMB=256, skip_dst=True)
         NodeHelper.wait_warmup_completed([self.c1_cluster.warmup_node(master=True)])
         self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket after warmup")
         self.log.info("LWW enabled on source bucket after warmup as expected")
 
     def test_conflict_resolution_mode_with_bucket_delete_and_recreate(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
-        self._create_buckets(bucket='default', ramQuotaMB=100, skip_dst=True)
+        self._create_buckets(bucket='default', ramQuotaMB=256, skip_dst=True)
         self.sleep(10)
         self.c1_cluster.delete_bucket(bucket_name='default')
-        self._create_buckets(bucket='default', ramQuotaMB=100, src_lww=False, skip_dst=True)
+        self._create_buckets(bucket='default', ramQuotaMB=256, src_lww=False, skip_dst=True)
         self.assertFalse(src_conn.is_lww_enabled(), "LWW enabled on source bucket after recreate")
         self.log.info("LWW not enabled on source bucket after recreation as expected")
 
     def test_conflict_resolution_mode_edit(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100, skip_dst=True)
+        self._create_buckets(bucket='default', ramQuotaMB=256, skip_dst=True)
         conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
         command = "curl -X POST -u Administrator:password " + self.c1_cluster.get_master_node().ip + \
                   ":8091/pools/default/buckets/default -d name=default -d conflictResolutionType=seqno " + \
-                  "-d proxyPort=11212 -d ramQuotaMB=100"
+                  "-d proxyPort=11212 -d ramQuotaMB=256"
         output, error = conn.execute_command(command)
         conn.log_command_output(output, error)
         self.assertTrue("Conflict resolution type not allowed in update bucket" in str(output),
@@ -1832,7 +1832,7 @@ class Lww(XDCRNewBaseTest):
         self.log.info("Expected error message found on editing conflict resolution type")
 
     def test_conflict_resolution_mode_after_swap_rebalance(self):
-        self._create_buckets(bucket='default', ramQuotaMB=100, skip_dst=True)
+        self._create_buckets(bucket='default', ramQuotaMB=256, skip_dst=True)
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen1)
         self.c1_cluster.swap_rebalance_master()

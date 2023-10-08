@@ -1618,7 +1618,7 @@ class CouchbaseCluster:
         return self.__buckets
 
     def add_bucket(self, bucket='',
-                   ramQuotaMB=1,
+                   ramQuotaMB=256,
                    replicaNumber=1,
                    proxyPort=11211,
                    bucketType='membase',
