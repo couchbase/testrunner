@@ -1,5 +1,4 @@
 import copy
-import datetime
 import logging
 import math
 import os
@@ -12,6 +11,10 @@ import time
 import json
 
 from string import ascii_letters, digits
+
+import requests
+from requests.auth import HTTPBasicAuth
+
 from couchbase_helper.cluster import Cluster
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from couchbase_helper.tuq_generators import TuqGenerators
@@ -155,12 +158,15 @@ class BaseSecondaryIndexingTests(QueryTests):
         query_rest = RestConnection(query_node)
 
         api = f"{query_rest.baseUrl}settings/querySettings"
-        data = {"queryUseCBO": self.use_cbo}
-        status, content, header = query_rest.urllib_request(api, verb='POST', params=json.dumps(data))
-        if not status:
-            raise Exception(content)
+        data = f'queryUseCBO={str(self.use_cbo).lower()}'
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        }
+        auth = HTTPBasicAuth(self.rest.username,self.rest.password)
+        response = requests.request("POST", api, headers=headers, data=data,
+                                    auth=auth)
         self.log.info(f"{data} set")
-        self.log.info(content)
+        self.log.info(response.text)
 
         api = f"{query_rest.query_baseUrl}admin/settings"
         data = {"n1ql-feat-ctrl": self.n1ql_feat_ctrl}
