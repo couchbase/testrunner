@@ -83,15 +83,12 @@ class QuerySeqScanTests(QueryTests):
         self.assertEqual(scan_after, scan_before + 2)
 
     def test_subquery_correlated(self):
-        error_code = 5370
-        error_message = "Unable to run subquery - cause: No secondary index available for keyspace t2 in correlated subquery."
-        try:
-            result = self.run_cbq_query(f'SELECT t1.*, array_length(details) FROM {self.bucket} t1 LET details = (SELECT t2.name FROM {self.bucket} t2 WHERE t2.name = t1.name LIMIT 2)')
-            self.fail(f'We expected query to fail with {error_message}')
-        except CBQError as ex:
-            error = self.process_CBQE(ex)
-            self.assertEqual(error_code, error['code'], f'Error code is wrong please check the error: {error}')
-            self.assertEqual(error_message, error['msg'], f"The error message is not what we expected please check error: {error}")
+        scan_before = self.get_index_scan(self.bucket, '#sequentialscan')
+        result = self.run_cbq_query(f'SELECT t1.*, array_length(details) FROM {self.bucket} t1 LET details = (SELECT t2.name FROM {self.bucket} t2 WHERE t2.name = t1.name LIMIT 2)')
+        scan_after = self.get_index_scan(self.bucket, '#sequentialscan')
+        self.assertEqual(result['metrics']['resultCount'], self.doc_count)
+        self.assertEqual(result['results'][0], {'name': 'San Francisco', '$1': 2})
+        self.assertEqual(scan_after, scan_before + 1001)        
 
     def test_advise(self):
         advise = self.run_cbq_query(f'ADVISE SELECT * FROM {self.bucket} LIMIT 1')
