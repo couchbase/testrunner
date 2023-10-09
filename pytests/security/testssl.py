@@ -4,7 +4,7 @@ import time
 from lib.Cb_constants.CBServer import CbServer
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
-from pytests.basetestcase import BaseTestCase
+from basetestcase import BaseTestCase
 from pytests.security.testssl_util import TestSSL
 from pytests.security.x509_multiple_CA_util import x509main
 from pytests.security.ntonencryptionBase import ntonencryptionBase

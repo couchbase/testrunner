@@ -3,7 +3,7 @@ import json
 import urllib.parse
 
 from lib.membase.api.rest_client import RestConnection
-from pytests.basetestcase import BaseTestCase
+from basetestcase import BaseTestCase
 from pytests.security.x509_multiple_CA_util import x509main, Validation
 
 
