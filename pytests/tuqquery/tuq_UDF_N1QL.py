@@ -3,6 +3,7 @@ from deepdiff import DeepDiff
 import requests
 from membase.api.exception import CBQError
 from collection.collections_n1ql_client import CollectionsN1QL
+import json
 
 class QueryUDFN1QLTests(QueryTests):
     ddls = {
@@ -173,6 +174,139 @@ class QueryUDFN1QLTests(QueryTests):
         self.log.info("==============  QueryUDFN1QLTests suite_tearDown has started ==============")
         self.log.info("==============  QueryUDFN1QLTests suite_tearDown has completed ==============")
         super(QueryUDFN1QLTests, self).suite_tearDown()
+
+    ##############################################################################################
+    #
+    #   Explain Tests
+    ##############################################################################################
+
+    def test_explain_inline(self):
+        try:
+            self.run_cbq_query("CREATE OR REPLACE FUNCTION func1(nameval) {{ (select * from default:default.{0}.{1} where name = nameval) }}".format(self.scope,self.collections[0]))
+            explain_udf = self.run_cbq_query("explain function func1".format(self.scope,self.collections[0]))
+            expected_spans = self.run_cbq_query('explain select * from default:default.{0}.{1} where name = "old hotel" '.format(self.scope,self.collections[0]))
+            self.assertTrue('plans' in explain_udf['results'][0].keys(), f"The explain should have a query plan in it, please check {explain_udf}")
+            diffs = DeepDiff(explain_udf['results'][0]['plans'][0]['plan']['~children'][0]['spans'], expected_spans['results'][0]['plan']['~children'][0]['spans'], ignore_order=True)
+            if diffs:
+                values = diffs['values_changed'].keys()
+                for value in values:
+                    if not(diffs['values_changed'][value]['new_value'] == '"old hotel"' and diffs['values_changed'][value]['old_value'] == '`nameval`'):
+                        self.assertTrue(False, diffs)
+            self.assertTrue('IndexScan3' in str(explain_udf), f"The wrong scan is being used in the explain, please check {explain_udf}")
+            self.assertTrue('idx1' in str(explain_udf), f"The wrong index is being used in the explain, please check {explain_udf}")
+            self.assertTrue(self.collections[0] in str(explain_udf), f"The wrong keyspace is being used in the explain, please check {explain_udf}")
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+        finally:
+            try:
+                self.run_cbq_query("DROP FUNCTION func1")
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_explain_inline_no_query(self):
+        try:
+            self.run_cbq_query("CREATE FUNCTION celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9")
+            explain_udf = self.run_cbq_query("explain function celsius".format(self.scope,self.collections[0]))
+            self.assertTrue('plans' not in explain_udf['results'][0].keys(), f"The explain should not have a query plan in it, please check {explain_udf}")
+            self.assertEqaul(explain_udf['results'],[{'function': 'default:celsius'}], f"The explain plan is incorrect please check it {explain_udf}")
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+        finally:
+            try:
+                self.run_cbq_query("DROP FUNCTION celsius")
+            except Exception as e:
+                self.log.error(str(e))
+
+    def test_explain_js_embedded(self):
+        function_name = 'execute_udf'
+        functions = f'function {function_name}(job, year, month) {{\
+            var query = SELECT name FROM _default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 3;\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library("library", functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(j, y, m) LANGUAGE JAVASCRIPT AS "{function_name}" AT "library"', query_context='default:default._default')
+
+        # call functions inside of a select statement w/query contexts passed
+        # Execute function w/ correct query context
+        explain_udf = self.run_cbq_query(f"explain function {function_name}", query_context='default:default._default')
+        self.assertTrue('plans' in explain_udf['results'][0].keys(),
+                        f"The explain should have a query plan in it, please check {explain_udf}")
+        self.assertTrue('((((`_default`.`job_title`) = $job) and ((`_default`.`join_yr`) = $year)) and ((`_default`.`join_mo`) = $month))' in str(explain_udf),
+                        f"The wrong filter condition is being used in the explain, please check {explain_udf}")
+
+    def test_explain_js_dynamic(self):
+        function_name = 'execute_udf'
+        functions = f'function {function_name}(job, year, month) {{\
+            var query = N1QL("SELECT name FROM _default WHERE join_yr = 2011 and join_mo = 10 ORDER by name LIMIT 3");\
+            var query2 = N1QL("SELECT name FROM _default WHERE join_yr = 2011 and join_mo = 10 ORDER by name LIMIT 3");\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library("library", functions, [function_name])
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION {function_name}(j, y, m) LANGUAGE JAVASCRIPT AS "{function_name}" AT "library"',
+            query_context='default:default._default')
+
+        # call functions inside of a select statement w/query contexts passed
+        # Execute function w/ correct query context
+        explain_udf = self.run_cbq_query(f"explain function {function_name}", query_context='default:default._default')
+        self.assertEqual(explain_udf['results'][0]['line_numbers'], [1, 1],
+                        f"The amount of lines are wrong, there should be two dynamic n1ql statements in this function, please check {explain_udf}")
+
+    def test_explain_js_mixed(self):
+        function_name = 'execute_udf'
+        functions = f'function {function_name}(job, year, month) {{\
+            var query = N1QL("SELECT name FROM _default WHERE join_yr = 2011 and join_mo = 10 ORDER by name LIMIT 3");\
+            var query2 = SELECT name FROM _default WHERE job_title = $job AND join_yr = $year AND join_mo = $month ORDER by name LIMIT 3;\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library("library", functions, [function_name])
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION {function_name}(j, y, m) LANGUAGE JAVASCRIPT AS "{function_name}" AT "library"',
+            query_context='default:default._default')
+
+        # call functions inside of a select statement w/query contexts passed
+        # Execute function w/ correct query context
+        explain_udf = self.run_cbq_query(f"explain function {function_name}", query_context='default:default._default')
+        self.assertEqual(explain_udf['results'][0]['line_numbers'], [1],
+                        f"The amount of lines are wrong, there should be two dynamic n1ql statements in this function, please check {explain_udf}")
+        self.assertTrue('plans' in explain_udf['results'][0].keys(),
+                        f"The explain should have a query plan in it, please check {explain_udf}")
+        self.assertTrue('((((`_default`.`job_title`) = $job) and ((`_default`.`join_yr`) = $year)) and ((`_default`.`join_mo`) = $month))' in str(explain_udf),
+                        f"The wrong filter condition is being used in the explain, please check {explain_udf}")
+
+    def test_explain_js_nested_inline(self):
+        self.run_cbq_query(
+            "CREATE OR REPLACE FUNCTION func1(nameval) {{ (select * from default:default.{0}.{1} where name = nameval) }}".format(
+                self.scope, self.collections[0]))
+        function_name = 'execute_udf'
+        functions = f'function {function_name}(job, year, month) {{\
+            var query = execute function func1("old hotel");\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library("library", functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}(j, y, m) LANGUAGE JAVASCRIPT AS "{function_name}" AT "library"', query_context='default:default._default')
+
+        # call functions inside of a select statement w/query contexts passed
+        # Execute function w/ correct query context
+        explain_udf = self.run_cbq_query(f"explain function {function_name}", query_context='default:default._default')
+        self.assertTrue('plans' in explain_udf['results'][0].keys(),
+                        f"The explain should have a query plan in it, please check {explain_udf}")
+        self.assertTrue('execute function func1("old hotel")' in str(explain_udf),
+                        f"The statement is being used in the explain, please check {explain_udf}")
 
     def create_n1ql_function(self, function_name, query):
         function_names = [function_name]
@@ -443,6 +577,35 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
+            self.assertTrue('User does not have credentials to run' in str(error))
+
+    def test_explain_rbac(self):
+        self.run_cbq_query("CREATE COLLECTION default._default.tmp IF NOT EXISTS")
+        self.run_cbq_query("CREATE INDEX adv_job_title IF NOT EXISTS ON `default`(`job_title`)")
+        # Create user with execute external function role only
+        self.users = [{"id": "jackDoe", "name": "Jack Downing", "password": "password1"}]
+        self.create_users()
+        role = 'query_execute_global_external_functions'
+        user_id = self.users[0]['id']
+        user_pwd = self.users[0]['password']
+        self.run_cbq_query(query=f"GRANT {role} to {user_id}")
+        # Create function
+        function_name = 'rbac_default'
+        if self.statement in self.dmls:
+            query = self.dmls[self.statement]
+        elif self.statement in self.ddls:
+            query = self.ddls[self.statement]['query']
+            pre_query = self.ddls[self.statement]['pre']
+            self.run_cbq_query(pre_query)
+        else:
+            self.log.error(f'Unknown statement: {self.statement}')
+        self.create_n1ql_function(function_name, query)
+        # Execute function as user
+        try:
+            self.run_cbq_query(f'EXPLAIN FUNCTION {function_name}', username=user_id, password=user_pwd)
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 13014)
             self.assertTrue('User does not have credentials to run' in str(error))
 
     def test_circumvent_udf_rbac(self):
@@ -915,7 +1078,6 @@ class QueryUDFN1QLTests(QueryTests):
 
         function_result = self.run_cbq_query(f'EXECUTE FUNCTION default:default.test.{function_name}()', query_context='default:default._default')
         self.assertEqual(function_result['results'], [[-12.222222222222221]], f"results mismatch {function_result}")
-
 
     def test_query_context_negative(self):
         function_name = 'execute_default'
