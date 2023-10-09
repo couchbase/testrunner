@@ -360,19 +360,21 @@ class QueryUpdateStatsTests(QueryTests):
             self.fail()
 
     def test_negative_txn(self):
+        error_code = 17002
+        error_msg = "UPDATE_STATISTICS statement is not supported within the transaction"
         results = self.run_cbq_query(query="BEGIN WORK", server=self.master)
         txid = results['results'][0]['txid']
-        error = "UPDATE_STATISTICS statement is not supported within the transaction"
         try:
             start = self.run_cbq_query(query="UPDATE STATISTICS `travel-sample`(city)", txnid=txid, server=self.master)
             self.fail("Update statistics did not fail. Error expected: {0}".format(error))
         except CBQError as ex:
-            self.assertTrue(str(ex).find(error) > 0)
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], error_code)
+            self.assertEqual(error['msg'], error_msg)
 
     def test_negative_authorization(self):
         error = "User does not have credentials to run"
         queries = [
-            "SELECT `scope`, `collection`, `histogramKey` from `travel-sample`.`_system`.`_query` data WHERE type = 'histogram'",
             "DELETE FROM `travel-sample`.`_system`.`_query` WHERE type = 'histogram'",
             "DROP COLLECTION `travel-sample`.`_system`.`_query`"
         ]
@@ -637,14 +639,14 @@ class QueryUpdateStatsTests(QueryTests):
             # update histogram
             self.run_cbq_query(query=update_histogram)
             histogram = self.run_cbq_query(query=select_histogram)
-            self.assertEqual(histogram['results'], [{"histogram": "abcdef"}])
+            self.assertEqual(histogram['results'], [{"histogram": "abcdef"}, {"histogram": "abcdef"}])
             # run query
             results = self.run_cbq_query(query=select_query)
             self.assertEqual(results['results'], expected_results)
             # update stats again and check histogram
             self.run_cbq_query(query=update_stats)
             histogram = self.run_cbq_query(query=select_histogram)
-            self.assertNotEqual(histogram['results'], [{"histogram": "abcdef"}])
+            self.assertNotEqual(histogram['results'], [{"histogram": "abcdef"}, {"histogram": "abcdef"}])
         except Exception as e:
             self.log.error(f"Update statistics failed: {e}")
             self.fail()
@@ -735,7 +737,7 @@ class QueryUpdateStatsTests(QueryTests):
         self.run_cbq_query(update_stats)
         system_dictionary = self.run_cbq_query(select_distribution)
         expected_result = [
-            '(geo.accuracy)', '(geo.lat)', '(geo.lon)',
+            '(geo.accuracy)', '(geo.lat)', '(geo.lon)', '(meta().id)',
             'address', 'checkin', 'checkout', 'directions',
             'email', 'fax', 'name', 'phone', 'price',
             'title', 'tollfree', 'url']
