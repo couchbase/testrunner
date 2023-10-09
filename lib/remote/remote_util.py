@@ -1998,7 +1998,7 @@ class RemoteMachineShellConnection(KeepRefs):
 
     def couchbase_upgrade(self, build, save_upgrade_config=False, forcefully=False,
                                             fts_query_limit=None, debug_logs=False,
-                                            num_retries=5, poll_interval=2):
+                                            num_retries=5, poll_interval=2, cluster_profile=None):
         server_type = None
         success = True
         if fts_query_limit is None:
@@ -2025,28 +2025,39 @@ class RemoteMachineShellConnection(KeepRefs):
                 log.info('********* continue upgrade process **********')
 
         elif self.info.deliverable_type == 'rpm':
+            cmd_list = []
+            if cluster_profile:
+                cmd_list.append(f"rm -f /etc/couchbase.d/config_profile && mkdir -p /etc/couchbase.d && echo '{cluster_profile}' > /etc/couchbase.d/config_profile")
             # run rpm -i to install
             if save_upgrade_config:
                 self.couchbase_uninstall()
                 install_command = 'rpm -i /tmp/{0}'.format(build.name)
                 command = 'INSTALL_UPGRADE_CONFIG_DIR=/opt/couchbase/var/lib/membase/config {0}'\
                                              .format(install_command)
+                cmd_list.append(command)
             else:
                 command = 'export CB_MASTER_PASSWORD=password; rpm -U /tmp/{0}'.format(build.name)
                 if forcefully:
                     command = 'export CB_MASTER_PASSWORD=password; rpm -U --force /tmp/{0}'.format(build.name)
+                cmd_list.append(command)
         elif self.info.deliverable_type == 'deb':
+            cmd_list = []
+            if cluster_profile:
+                cmd_list.append(f"rm -f /etc/couchbase.d/config_profile && mkdir -p /etc/couchbase.d && echo '{cluster_profile}' > /etc/couchbase.d/config_profile")
             if save_upgrade_config:
                 self.couchbase_uninstall()
                 install_command = 'dpkg -i /tmp/{0}'.format(build.name)
                 command = 'INSTALL_UPGRADE_CONFIG_DIR=/opt/couchbase/var/lib/membase/config {0}'\
                                              .format(install_command)
+                cmd_list.append(command)
             else:
                 command = 'dpkg -i /tmp/{0}'.format(build.name)
                 if forcefully:
                     command = 'dpkg -i --force /tmp/{0}'.format(build.name)
+                cmd_list.append(command)
         if self.info.type.lower() != 'windows':
-            output, error = self.execute_command(command, use_channel=True)
+            for command in cmd_list:
+                output, error = self.execute_command(command, use_channel=True)
         if debug_logs:
             self.log_command_output(output, error)
         else:

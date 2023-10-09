@@ -9,6 +9,8 @@ from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.fts.fts_base import NodeHelper
 from pytests.query_tests_helper import QueryHelperTests
 from .base_gsi import BaseSecondaryIndexingTests, log
+
+
 from threading import Event
 from deepdiff import DeepDiff
 
@@ -29,7 +31,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
             self.replica_repair = self.input.param("replica_repair", False)
             self.chaos_action = self.input.param("chaos_action", None)
             self.topology_change = self.input.param("topology_change", True)
-            self.initial_index_batches = self.input.param("initial_index_batches", 2)
+            self.initial_index_batches = self.input.param("initial_index_batches", 1)
             # TODO. After adding other tests, check if this can be removed
             # if not self.capella_run:
             #     shell = RemoteMachineShellConnection(self.servers[0])
@@ -88,7 +90,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 select_queries = set()
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 for _ in range(self.initial_index_batches):
-                    replica_count = random.randint(0, 2)
+                    replica_count = random.randint(1, 2)
                     query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                     for namespace in self.namespaces:
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
@@ -152,7 +154,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 select_queries = set()
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 for _ in range(self.initial_index_batches):
-                    replica_count = random.randint(0, 2)
+                    replica_count = random.randint(1, 2)
                     query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                     for namespace in self.namespaces:
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
@@ -227,7 +229,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 select_queries = set()
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 for _ in range(self.initial_index_batches):
-                    replica_count = random.randint(0, 2)
+                    replica_count = random.randint(1, 2)
                     query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                     for namespace in self.namespaces:
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
@@ -293,7 +295,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 select_queries = set()
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 for _ in range(self.initial_index_batches):
-                    replica_count = random.randint(0, 2)
+                    replica_count = random.randint(1, 2)
                     query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                     for namespace in self.namespaces:
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
@@ -356,7 +358,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 select_queries = set()
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 for _ in range(self.initial_index_batches):
-                    replica_count = random.randint(0, 2)
+                    replica_count = random.randint(1, 2)
                     query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                     for namespace in self.namespaces:
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
@@ -436,13 +438,27 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
         stats_map = self.get_index_stats(perNode=True, return_system_query_scope=False)
         return index_map, stats_map
 
-    def run_operation(self, phase="before", action=None):
+    def run_operation(self, phase="before", action=None, nodes_in_list=None, nodes_out_list=None):
         if phase == "before":
             self.run_async_index_operations(operation_type="create_index")
         elif phase == "during":
             self.run_async_index_operations(operation_type="query")
             if action is not None:
-                pass
+                if action == "kill_indexer":
+                    indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                    server = random.choice(indexer_nodes)
+                    self._kill_all_processes_index(server=server)
+                elif action == "kill_projector":
+                    data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+                    server = random.choice(data_nodes)
+                    self._kill_projector_process(server=server)
+                elif action == 'stop_rebalance':
+                    self.rest = RestConnection(self.master)
+                    self.rest.stop_rebalance()
+                elif action == 'ddl_during_rebalance':
+                    self.perform_ddl_operations_during_rebalance()
+                elif action == 'shard_corruption':
+                    pass
         elif phase == "after":
             n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
             country, address, city, email = f"test_country{random.randint(0, 100)}", f"test_add{random.randint(0, 100)}", \
@@ -524,28 +540,6 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
         else:
             self.run_async_index_operations(operation_type="drop_index")
 
-    def perform_continuous_kv_mutations(self, event):
-        collection_namespaces = self.namespaces
-        while not event.is_set():
-            for namespace in collection_namespaces:
-                _, keyspace = namespace.split(':')
-                bucket, scope, collection = keyspace.split('.')
-                self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
-                                                percent_update=10, percent_delete=0, scope=scope,
-                                                collection=collection, json_template=self.json_template,
-                                                output=True, username=self.username, password=self.password)
-                if self.use_magma_loader:
-                    task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
-                                                            generator=self.gen_create, pause_secs=1,
-                                                            timeout_secs=300, use_magma_loader=True)
-                    task.result()
-                else:
-                    tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
-                                                                    batch_size=10**4, dataset=self.json_template)
-                    for task in tasks:
-                        task.result()
-                time.sleep(10)
-
     def rebalance_and_validate(self, nodes_out_list=None, nodes_in_list=None,
                                swap_rebalance=False, skip_array_index_item_count=False,
                                services_in=None, failover_nodes_list=None, select_queries=None,
@@ -573,6 +567,16 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
         if self.replica_repair:
             self.log.info("Replica repair flag is set to True. Will choose a few replicas to be dropped")
             self.drop_replicas()
+        if self.chaos_action == 'rebalance_during_ddl':
+            self.perform_rebalance_during_ddl(nodes_in_list=nodes_in_list, nodes_out_list=nodes_out_list,
+                                              services_in=services_in)
+            self.wait_until_indexes_online()
+        elif self.chaos_action == 'block_port':
+            for i in range(3):
+                nodes_list = nodes_in_list + nodes_out_list
+                for node in nodes_list:
+                    self.block_indexer_port(node=node)
+            time.sleep(30)
         # rebalance operation
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], nodes_in_list, nodes_out_list,
                                                  services=services_in, cluster_config=self.cluster_config)
@@ -583,7 +587,39 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
         self.log.info("Rebalance has started running.")
-        self.run_operation(phase="during", action=self.chaos_action)
+        self.run_operation(phase="during", action=self.chaos_action, nodes_in_list=nodes_in_list,
+                           nodes_out_list=nodes_out_list)
+        if self.chaos_action and self.chaos_action not in ['kill_projector', 'ddl_during_rebalance', 'rebalance_during_ddl']:
+            if self.chaos_action != 'stop_rebalance':
+                # Rebalance failure check skipped for stop rebalance
+                try:
+                    reached = RestHelper(self.rest).rebalance_reached()
+                    self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+                    rebalance.result()
+                except Exception as ex:
+                    if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):
+                        self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
+                else:
+                    self.fail("rebalance did not fail despite chaos action")
+                finally:
+                    # unblock all the blocked indexer ports if any
+                    if self.chaos_action == 'block_port':
+                        for i in range(3):
+                            for node in nodes_in_list:
+                                self.unblock_indexer_port(node=node)
+                            for node in nodes_out_list:
+                                self.unblock_indexer_port(node=node)
+                        time.sleep(30)
+            time.sleep(10)
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], nodes_in_list, nodes_out_list,
+                                                     services=services_in, cluster_config=self.cluster_config)
+            self.log.info(f"Rebalance task re-triggered after chaos action. Wait in loop until the rebalance starts")
+            time.sleep(3)
+            status, _ = self.rest._rebalance_status_and_progress()
+            while status != 'running':
+                time.sleep(1)
+                status, _ = self.rest._rebalance_status_and_progress()
+        time.sleep(10)
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
@@ -596,7 +632,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
             shard_list_after_rebalance = self.fetch_shard_id_list()
             self.log.info("Compare shard list before and after rebalance.")
             # uncomment after MB-58776 is fixed
-            if shard_list_after_rebalance != shard_list_before_rebalance:
+            if shard_list_after_rebalance != shard_list_before_rebalance and self.chaos_action not in ['rebalance_during_ddl', 'ddl_during_rebalance']:
                 self.log.error(
                     f"Shards before {shard_list_before_rebalance}. Shards after {shard_list_after_rebalance}")
                 raise AssertionError("Shards missing after rebalance")
@@ -625,6 +661,10 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                     raise Exception("Mismatch in query results before and after rebalance")
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
         self.log.info("Fetch metadata after rebalance")
+        if self.chaos_action in ['rebalance_during_ddl', 'ddl_during_rebalance']:
+            indexes_changed = True
+        else:
+            indexes_changed = False
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance=map_before_rebalance,
                                                       map_after_rebalance=map_after_rebalance,
                                                       stats_map_before_rebalance=stats_map_before_rebalance,
@@ -635,20 +675,22 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                                                       use_https=False,
                                                       item_count_increase=False,
                                                       per_node=True,
-                                                      skip_array_index_item_count=skip_array_index_item_count)
+                                                      skip_array_index_item_count=skip_array_index_item_count,
+                                                      indexes_changed=indexes_changed)
 
     def drop_replicas(self, num_indexes=5):
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         rest = RestConnection(indexer_nodes[0])
         index_map = rest.get_indexer_metadata()['status']
         replicas_dict = {}
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         for index in index_map:
             if index['numReplica'] > 0:
                 if index['defnId'] in replicas_dict:
                     replicas_dict[index['defnId']].append(index)
                 else:
                     replicas_dict[index['defnId']] = [index]
-        replicas_dict_items_list = random.choices(list(replicas_dict.keys()), k=num_indexes)
+        replicas_dict_items_list = random.sample(list(replicas_dict.keys()), k=num_indexes)
         for replicas_dict_item in replicas_dict_items_list:
             item = replicas_dict[replicas_dict_item]
             replica_index = random.choice(item)
@@ -656,7 +698,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
             scope, collection = replica_index['scope'], replica_index['collection']
             alter_index_query = f'ALTER INDEX default:`{bucket}`.`{scope}`.`{collection}`.`{name}` WITH {{"action":"drop_replica","replicaId": {replicaID}}}'
             self.log.info(f"drop query to be run {alter_index_query}")
-            self.n1ql_helper.run_cbq_query(query=alter_index_query, server=self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query=alter_index_query, server=n1ql_node)
 
     def run_post_rebalance_operations(self, map_after_rebalance, stats_map_after_rebalance):
         self.run_operation(phase="after")
@@ -668,3 +710,4 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                                                        item_count_increase=True,
                                                        per_node=True,
                                                        skip_array_index_item_count=True)
+

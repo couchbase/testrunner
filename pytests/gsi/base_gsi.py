@@ -11,6 +11,7 @@ import time
 import json
 
 from string import ascii_letters, digits
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -156,7 +157,11 @@ class BaseSecondaryIndexingTests(QueryTests):
         # Disabling CBO and Sequential Scans for GSI tests
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         query_rest = RestConnection(query_node)
-
+        cb_version = float(query_rest.get_major_version())
+        # if the builds are greater than 7.6, trinity variable is set to True and sequential scans are disabled
+        trinity = False
+        if cb_version >= 7.6:
+            trinity = True
         api = f"{query_rest.baseUrl}settings/querySettings"
         data = f'queryUseCBO={str(self.use_cbo).lower()}'
         headers = {
@@ -166,7 +171,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         response = requests.request("POST", api, headers=headers, data=data, auth=auth, verify=False)
         self.log.info(f"{data} set")
         self.log.info(response.text)
-
+        if not trinity:
+            self.n1ql_feat_ctrl = 76
         api = f"{query_rest.query_baseUrl}admin/settings"
         headers = {
             'Content-Type': 'application/json',
@@ -1257,6 +1263,10 @@ class BaseSecondaryIndexingTests(QueryTests):
         shell = RemoteMachineShellConnection(server)
         shell.execute_command("pkill indexer")
 
+    def _kill_projector_process(self, server):
+        shell = RemoteMachineShellConnection(server)
+        shell.execute_command("pkill projector")
+
     def kill_loader_process(self):
         self.log.info("killing java doc loader process")
         os.system(f'pgrep -f .*{self.key_prefix}*')
@@ -1380,6 +1390,29 @@ class BaseSecondaryIndexingTests(QueryTests):
             node1.ip, node2.ip))
         command = "iptables -A OUTPUT -s {0} -j REJECT".format(node2.ip)
         shell.execute_command(command)
+
+    def unblock_indexer_port(self, node, port=9104):
+        shell = RemoteMachineShellConnection(node)
+        self.log.info(f"Unblocking port 9104 on {node}")
+        try:
+            shell.execute_command(f"iptables -D INPUT -p tcp --destination-port {port} -j DROP")
+        except:
+            pass
+        try:
+            shell.execute_command(f"iptables -D OUTPUT -p tcp --destination-port {port} -j DROP")
+        except:
+            pass
+        try:
+            shell.execute_command(f"iptables -S")
+        except:
+            pass
+
+    def block_indexer_port(self, node, port=9104):
+        shell = RemoteMachineShellConnection(node)
+        self.log.info(f"Unblocking port 9104 on {node}")
+        shell.execute_command(f"iptables -A INPUT -p tcp --destination-port {port} -j DROP")
+        shell.execute_command(f"iptables -A OUTPUT -p tcp --destination-port {port} -j DROP")
+        shell.execute_command(f"iptables -S")
 
     def set_indexer_logLevel(self, loglevel="info"):
         """
@@ -2040,8 +2073,22 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def validate_shard_affinity(self):
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        rest = RestConnection(indexer_nodes[0])
-        indexer_metadata = rest.get_indexer_metadata()['status']
+        rest = None
+        for node in indexer_nodes:
+            rest = RestConnection(node)
+            if float(rest.get_major_version()) >= 7.6:
+                break
+        index_resp = rest.get_indexer_metadata(return_system_query_scope=False)
+        mixed_mode = False
+        node_versions_set = set()
+        for node in self.servers:
+            rest = RestConnection(node)
+            node_versions_set.add(rest.get_major_version())
+        if len(list(node_versions_set)) > 1:
+            mixed_mode = True
+        if 'status' not in index_resp:
+            raise Exception(f"No index metadata seen in response {index_resp}")
+        indexer_metadata = index_resp['status']
         if self.gsi_type == 'memory_optimized':
             self.log.info("Validating that none of the indexes have alternate shards for MOI type indexes")
             shard_id_list = self.fetch_shard_id_list()
@@ -2051,7 +2098,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         else:
             for index_metadata in indexer_metadata:
                 # alternate shard ID not null validation
-                if index_metadata['alternateShardIds'] is None:
+                if not index_metadata['alternateShardIds'] and not mixed_mode:
                     raise Exception(f"Alternate shard ID value None for index {index_metadata['name']} with definition {index_metadata['definition']}")
                 # 2nd field of alternate shard ID should be the replica ID validation
                 for host in index_metadata['alternateShardIds']:
@@ -2079,25 +2126,73 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                 f"{index_metadata['name']} with definition {index_metadata['definition']}")
             self.log.info("All indexes have 2 alternate shard IDs and all primary indexes have 1 alt shard ID.")
             # replicas sharing slot IDs and instance IDs validation
-            self.validate_replica_indexes(index_map=indexer_metadata)
-            self.log.info("All replicas share slot IDs")
+            if not mixed_mode:
+                self.validate_replica_indexes(index_map=indexer_metadata)
+                self.log.info("All replicas share slot IDs")
             # shard IDs unique to host validation
             self.validate_shard_unique_to_host(index_map=indexer_metadata)
             self.log.info("Shards unique to host validation successful")
 
     def fetch_shard_id_list(self):
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        rest = RestConnection(indexer_nodes[0])
-        index_map = rest.get_indexer_metadata(return_system_query_scope=True)['status']
+        rest = None
+        for node in indexer_nodes:
+            rest = RestConnection(node)
+            if float(rest.get_major_version()) >= 7.6:
+                break
+        if not rest:
+            raise Exception("No 7.6 index nodes in the cluster")
+        index_resp = rest.get_indexer_metadata(return_system_query_scope=False)
+        if 'status' not in index_resp:
+            self.log.error(f"No metadata seen in response. {index_resp}")
+            return []
+        index_map = index_resp['status']
         shards_list_all = []
         for index_metadata in index_map:
-            for host in index_metadata['alternateShardIds']:
-                for partition in index_metadata['alternateShardIds'][host]:
-                    shard_list = index_metadata['alternateShardIds'][host][partition]
-                    for shard in shard_list:
-                        if shard not in shards_list_all:
-                            shards_list_all.append(shard)
+            if 'alternateShardIds' in index_metadata:
+                for host in index_metadata['alternateShardIds']:
+                    for partition in index_metadata['alternateShardIds'][host]:
+                        shard_list = index_metadata['alternateShardIds'][host][partition]
+                        for shard in shard_list:
+                            if shard not in shards_list_all:
+                                shards_list_all.append(shard)
         return sorted(shards_list_all)
+
+    def validate_alternate_shard_ids_presence(self):
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in indexer_nodes:
+            rest = RestConnection(node)
+            if float(rest.get_major_version()) >= 7.6:
+                rest = RestConnection(node)
+                index_resp = rest.get_indexer_metadata(return_system_query_scope=False)
+                index_map = index_resp['status']
+                for index_metadata in index_map:
+                    host_ip_list = [host.split(":")[0] for host in index_metadata['hosts']]
+                    if node.ip in host_ip_list and index_metadata['alternateShardIds'] is None:
+                        raise Exception(
+                            f"Index {index_metadata['name']} present on 7.6 node {node.ip} but lacks alternate shard ID")
+
+    def perform_continuous_kv_mutations(self, event):
+        collection_namespaces = self.namespaces
+        while not event.is_set():
+            for namespace in collection_namespaces:
+                _, keyspace = namespace.split(':')
+                bucket, scope, collection = keyspace.split('.')
+                self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                percent_update=10, percent_delete=0, scope=scope,
+                                                collection=collection, json_template=self.json_template,
+                                                output=True, username=self.username, password=self.password)
+                if self.use_magma_loader:
+                    task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
+                                                            generator=self.gen_create, pause_secs=1,
+                                                            timeout_secs=300, use_magma_loader=True)
+                    task.result()
+                else:
+                    tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
+                                                                    batch_size=10**4, dataset=self.json_template)
+                    for task in tasks:
+                        task.result()
+                time.sleep(10)
 
     def validate_shard_unique_to_host(self, index_map):
         shard_host_map = {}
@@ -2217,6 +2312,96 @@ class BaseSecondaryIndexingTests(QueryTests):
             rest = RestConnection(indexer_node)
             shard_affinity = rest.get_index_settings()["indexer.settings.enable_shard_affinity"]
         return shard_affinity
+
+    def perform_ddl_operations_during_rebalance(self):
+        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        create_queries = []
+        for namespace in self.namespaces:
+            queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                              namespace=namespace, defer_build=True,
+                                                              num_replica=self.num_index_replicas)
+            for query in queries:
+                create_queries.append(query)
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        rest = RestConnection(indexer_nodes[0])
+        index_resp = rest.get_indexer_metadata(return_system_query_scope=False)
+        if 'status' not in index_resp:
+            raise Exception(f"No index metadata seen in response {index_resp}")
+        index_map = index_resp['status']
+        replicas_dict = {}
+        for index in index_map:
+            if index['numReplica'] > 0:
+                if index['defnId'] in replicas_dict:
+                    replicas_dict[index['defnId']].append(index)
+                else:
+                    replicas_dict[index['defnId']] = [index]
+        replicas_dict_items_list = random.choices(list(replicas_dict.keys()), k=6)
+        update_queries = []
+        for replicas_dict_item in replicas_dict_items_list:
+            item = replicas_dict[replicas_dict_item]
+            replica_index = random.choice(item)
+            bucket, name, replicaID = replica_index['bucket'], replica_index['indexName'], replica_index[
+                'replicaId']
+            scope, collection = replica_index['scope'], replica_index['collection']
+            query_type = random.choice(['alter', 'drop'])
+            if query_type == 'alter':
+                query = f'ALTER INDEX default:`{bucket}`.`{scope}`.`{collection}`.`{name}` WITH {{"action":"drop_replica","replicaId": {replicaID}}}'
+            else:
+                query = f'DROP INDEX default:`{bucket}`.`{scope}`.`{collection}`.`{name}`'
+            update_queries.append(query)
+        queries_all = create_queries + update_queries
+        random.shuffle(queries_all)
+        random.shuffle(queries_all)
+        for query in queries_all:
+            if self.rest._rebalance_status_and_progress()[0] != 'running':
+                self.log.info("Rebalance has completed. Will exit the ddl loop")
+                return
+            try:
+                self.run_cbq_query(query=query, server=query_node)
+            except Exception as err:
+                self.log.error(f"Error occurred during DDL operation as expected: {err}. Query: {query}")
+            else:
+                if self.rest._rebalance_status_and_progress()[0] == 'running':
+                    raise Exception(f"DDL operations went through successfully "
+                                    f"with no exceptions even though rebalance is running. Query is {query}")
+
+    def perform_rebalance_during_ddl(self, nodes_in_list, nodes_out_list, services_in):
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        tasks = []
+        for _ in range(3):
+            replica_count = random.randint(0, 2)
+            query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+            for namespace in self.namespaces:
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                  namespace=namespace,
+                                                                  num_replica=replica_count,
+                                                                  randomise_replica_count=True)
+                with ThreadPoolExecutor() as executor:
+                    for query in create_queries:
+                        tasks.append(executor.submit(self.run_cbq_query, query=query, server=query_node))
+        try:
+            for task in tasks:
+                task.result()
+        except Exception as err:
+            print(err)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], nodes_in_list, nodes_out_list,
+                                                 services=services_in, cluster_config=self.cluster_config)
+        self.log.info(f"Rebalance task triggered. Wait in loop until the rebalance starts")
+        time.sleep(3)
+        status, _ = self.rest._rebalance_status_and_progress()
+        while status != 'running':
+            time.sleep(1)
+            status, _ = self.rest._rebalance_status_and_progress()
+        try:
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance did not fail despite DDL operations")
+            rebalance.result()
+        except Exception as ex:
+            if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):
+                self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
+        else:
+            self.fail("rebalance did not fail despite build index being in progress")
 
 class ConCurIndexOps():
     def __init__(self):

@@ -19,6 +19,9 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
+from threading import Event
+from deepdiff import DeepDiff
+
 import string
 log = logging.getLogger(__name__)
 QUERY_TEMPLATE = "SELECT {0} FROM %s "
@@ -48,8 +51,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
         self.index_scans_batch = self.input.param("index_scans_batch", 10)
         self.no_mutation_docs = self.input.param("no_mutation_docs", 75000)
-
-
+        self.continuous_mutations = self.input.param("continuous_mutations", False)
         if self.enable_dgm:
             if self.gsi_type == 'memory_optimized':
                 self.skipTest("DGM can be achieved only for plasma")
@@ -1295,6 +1297,141 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         actual_no_indexed_fields_post_compaction_eviction = len(self.run_cbq_query(query=index_mutation_scan_query,scan_consistency='request_plus')['results'])
         self.assertEqual(actual_no_indexed_fields_post_compaction_eviction, expected_no_indexed_fields_post_mutations, f"name field has not been updated actual count : {actual_no_indexed_fields_post_compaction_eviction} expected : {expected_no_indexed_fields_post_mutations}")
 
+    def test_online_upgrade_file_based_rebalance(self):
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template,
+                                             load_default_coll=True)
+        self.sleep(10)
+        scan_results_check = True
+        with ThreadPoolExecutor() as executor_main:
+            try:
+                event = Event()
+                if self.continuous_mutations:
+                    future = executor_main.submit(self.perform_continuous_kv_mutations, event)
+                    scan_results_check = False
+                select_queries = self.create_index_in_batches()
+                self.wait_until_indexes_online()
+                self.upgrade_and_validate(select_queries, scan_results_check)
+                self.create_index_in_batches(1)
+                self.wait_until_indexes_online()
+                self.validate_shard_affinity()
+            finally:
+                event.set()
+                if self.continuous_mutations:
+                    future.result()
+
+    def create_index_in_batches(self, num_batches=2):
+        select_queries = set()
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        for _ in range(num_batches):
+            replica_count = random.randint(1, 2)
+            query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+            for namespace in self.namespaces:
+                select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
+                                                                           namespace=namespace))
+                queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                  namespace=namespace,
+                                                                  num_replica=replica_count,
+                                                                  randomise_replica_count=True)
+                self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
+                                                     query_node=query_node)
+        return select_queries
+
+    def upgrade_and_validate(self, select_queries, scan_results_check=True):
+        self.run_async_index_operations(operation_type="query")
+        try:
+            self.nodes_upgrade_path = self.input.param("nodes_upgrade_path", "").split("-")
+            for service in self.nodes_upgrade_path:
+                nodes = self.get_nodes_from_services_map(service_type=service, get_all_nodes=True)
+                node_to_upgrade = None
+                for node in nodes:
+                    node_rest = RestConnection(node)
+                    if node_rest.get_major_version() != self.upgrade_to.split("-")[0][:3]:
+                        node_to_upgrade = node
+                        break
+                if node_to_upgrade is None:
+                    raise Exception("Cannot find a node to upgrade")
+                log.info("----- Upgrading {} node {} -----".format(service, node_to_upgrade.ip))
+                node_rest = RestConnection(node_to_upgrade)
+                node_info = "{0}:{1}".format(node_to_upgrade.ip, node_to_upgrade.port)
+                node_services_list = node_rest.get_nodes_services()[node_info]
+                node_services = [",".join(node_services_list)]
+                if "n1ql" in node_services_list:
+                    if len(nodes) > 1:
+                        for n1ql_node in nodes:
+                            if node_to_upgrade.ip != n1ql_node.ip:
+                                self.n1ql_node = n1ql_node
+                                break
+                log.info("Fetching stats/metadata before rebalance")
+                shard_list_before = self.fetch_shard_id_list()
+                self.log.info("Running scans before rebalance")
+                query_result = {}
+                if scan_results_check and select_queries is not None:
+                    n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+                    for query in select_queries:
+                        query_result[query] = self.run_cbq_query(query=query, scan_consistency='request_plus',
+                                                                 server=n1ql_server)['results']
+                log.info("Rebalancing the node out...")
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [node])
+                rebalance.result()
+                active_nodes = []
+                for active_node in self.servers:
+                    if active_node.ip != node.ip:
+                        active_nodes.append(active_node)
+                log.info(f"Upgrading the node...{node.ip}")
+                if 'index' in service:
+                    cluster_profile = "provisioned"
+                else:
+                    cluster_profile = None
+                upgrade_th = self._async_update(upgrade_version=self.upgrade_to, servers=[node],
+                                                cluster_profile=cluster_profile)
+                for th in upgrade_th:
+                    th.join()
+                self.sleep(120)
+                log.info("==== Upgrade Complete ====")
+                log.info("Adding node back to cluster...")
+                rebalance = self.cluster.async_rebalance(active_nodes,
+                                                         [node], [],
+                                                         services=node_services)
+                rebalance.result()
+                # self.sleep(100)
+                node_version = RestConnection(node).get_nodes_versions()
+                log.info("{0} node {1} Upgraded to: {2}".format(service, node.ip, node_version))
+                if 'index' in service:
+                    shard_list_after = self.fetch_shard_id_list()
+                    self.validate_shard_affinity()
+                    self.validate_alternate_shard_ids_presence()
+                    if scan_results_check and select_queries is not None:
+                        n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+                        for query in select_queries:
+                            post_rebalance_result = self.run_cbq_query(query=query, scan_consistency='request_plus',
+                                                                       server=n1ql_server)['results']
+                            diffs = DeepDiff(post_rebalance_result, query_result[query], ignore_order=True)
+                            if diffs:
+                                self.log.error(
+                                    f"Mismatch in query result before and after rebalance. Select query {query}\n\n. "
+                                    f"Result before \n\n {query_result[query]}."
+                                    f"Result after \n \n {post_rebalance_result}")
+                                raise Exception("Mismatch in query results before and after rebalance")
+                    for shard in shard_list_before:
+                        if shard not in shard_list_after:
+                            raise Exception(f"Shard {shard} seems to be missing after rebalance")
+                    if len(shard_list_after) <= len(shard_list_before):
+                        raise Exception("No new alternate shard IDs have been created during this rebalance. Possible bug")
+        finally:
+            for server in self.servers:
+                remote = RemoteMachineShellConnection(server)
+                remote.remove_folders(['/etc/couchbase.d'])
+                remote.disconnect()
+                self.upgrade_servers.append(server)
 
     def kv_mutations_new(self, num_of_docs_per_collection=1000, key_prefix=None):
         task_list = []

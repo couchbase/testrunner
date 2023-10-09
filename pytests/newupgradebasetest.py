@@ -330,7 +330,7 @@ class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
         return appropriate_build
 
     def _upgrade(self, upgrade_version, server, queue=None, skip_init=False, info=None,
-                 save_upgrade_config=False, fts_query_limit=None, debug_logs=False):
+                 save_upgrade_config=False, fts_query_limit=None, debug_logs=False, cluster_profile=None):
         try:
             remote = RemoteMachineShellConnection(server)
             appropriate_build = self._get_build(server, upgrade_version, remote, info=info)
@@ -346,7 +346,8 @@ class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
             o, e = remote.couchbase_upgrade(appropriate_build,
                                             save_upgrade_config=save_upgrade_config,
                                             forcefully=self.is_downgrade,
-                                            fts_query_limit=fts_query_limit, debug_logs=debug_logs)
+                                            fts_query_limit=fts_query_limit, debug_logs=debug_logs,
+                                            cluster_profile=cluster_profile)
             self.log.info("upgrade {0} to version {1} is completed".format(server.ip, upgrade_version))
             remote.start_server()
             self.sleep(30, "wait for servers up")
@@ -375,7 +376,7 @@ class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
 
     def _async_update(self, upgrade_version, servers, queue=None, skip_init=False,
                       info=None, save_upgrade_config=False,
-                      fts_query_limit=None, debug_logs=False):
+                      fts_query_limit=None, debug_logs=False, cluster_profile=None):
         self.log.info("servers {0} will be upgraded to {1} version".
                       format([server.ip for server in servers], upgrade_version))
         q = queue or self.queue
@@ -385,7 +386,7 @@ class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
                                     name="upgrade_thread" + server.ip,
                                     args=(upgrade_version, server, q, skip_init, info,
                                           save_upgrade_config, fts_query_limit,
-                                          debug_logs))
+                                          debug_logs, cluster_profile))
             upgrade_threads.append(upgrade_thread)
             upgrade_thread.start()
         return upgrade_threads
