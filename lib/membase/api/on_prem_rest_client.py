@@ -1412,7 +1412,7 @@ class RestConnection(object):
             username = self.username
         if not password:
             password = self.password
-        api = self.cbas_base_url + "/analytics/service"
+        api = self.cbas_base_url + "analytics/service"
         headers = self._create_capi_headers_with_auth(username, password)
 
         params = {'statement': statement, 'pretty': pretty, 'client_context_id': client_context_id}
@@ -1438,7 +1438,7 @@ class RestConnection(object):
             else:
                 return content
         else:
-            log.error("/analytics/service status:{0},content:{1}".format(
+            log.error("analytics/service status:{0},content:{1}".format(
                 status, content))
             raise Exception("Analytics Service API failed")
 
@@ -1448,7 +1448,7 @@ class RestConnection(object):
         if not password:
             password = self.password
 
-        api = self.cbas_base_url + "/analytics/admin/active_requests?client_context_id={0}".format(
+        api = self.cbas_base_url + "analytics/admin/active_requests?client_context_id={0}".format(
             client_context_id)
         headers = self._create_capi_headers_with_auth(username, password)
 
@@ -1462,7 +1462,7 @@ class RestConnection(object):
             return header['status']
         else:
             log.error(
-                "/analytics/admin/active_requests status:{0},content:{1}".format(
+                "analytics/admin/active_requests status:{0},content:{1}".format(
                     status, content))
             raise Exception("Analytics Admin API failed")
 
@@ -1472,7 +1472,7 @@ class RestConnection(object):
         if status:
             return content.decode("utf-8")
         else:
-            log.error("/pools/default/certificate status:{0},content:{1}".format(status, content))
+            log.error("pools/default/certificate status:{0},content:{1}".format(status, content))
             raise Exception("certificate API failed")
 
     def regenerate_cluster_certificate(self):
@@ -1920,7 +1920,7 @@ class RestConnection(object):
             except (UnicodeDecodeError, AttributeError):
                 pass
         if print_log:
-            log.info("/diag/eval status on {0}:{1}: {2} content: {3} command: {4}".
+            log.info("diag/eval status on {0}:{1}: {2} content: {3} command: {4}".
                      format(self.ip, self.port, status, content, code))
         return status, content
 
@@ -5310,7 +5310,7 @@ class RestConnection(object):
 
     'Get list of all roles that exist in the system'
     def retrive_all_user_role(self):
-        url = "/settings/rbac/roles"
+        url = "settings/rbac/roles"
         api = self.baseUrl + url
         status, content, header = self._http_request(api, 'GET')
         if not status:
@@ -5319,7 +5319,7 @@ class RestConnection(object):
 
     'Get list of current users and rols assigned to them'
     def retrieve_user_roles(self):
-        url = "/settings/rbac/users"
+        url = "settings/rbac/users"
         api = self.baseUrl + url
         status, content, header = self._http_request(api, 'GET')
         if not status:
@@ -5909,7 +5909,7 @@ class RestConnection(object):
     '''
     def start_eventing_debugger(self, name, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
-        url="/pools/default"
+        url="pools/default"
         api = self.baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers)
@@ -6489,7 +6489,7 @@ class RestConnection(object):
         Get all (default + uploaded) trusted CA certs information
         """
         status, content, _ = self._http_request(self.baseUrl
-                                                     + "/pools/default/trustedCAs", 'GET')
+                                                     + "pools/default/trustedCAs", 'GET')
         if not status:
             msg = "Could not get trusted CAs; Failed with error %s" \
                   % (content)
@@ -6502,7 +6502,7 @@ class RestConnection(object):
         Deletes a trusted CA from the cluster, given its ID
         """
         status, content, response = self._http_request(self.baseUrl
-                                                     + "/pools/default/trustedCAs/"
+                                                     + "pools/default/trustedCAs/"
                                                      + str(ca_id),
                                                      'DELETE')
         return status, content, response
