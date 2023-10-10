@@ -5079,7 +5079,7 @@ class RestConnection(object):
         return status, json.loads(content)
 
     def setup_ldap(self, data, extraparam):
-        api = self.baseUrl + '/settings/ldap/'
+        api = self.baseUrl + 'settings/ldap/'
         params = urllib.parse.urlencode(data)
         params = params + "&" + extraparam
         status, content, header = self._http_request(api, 'POST',params)

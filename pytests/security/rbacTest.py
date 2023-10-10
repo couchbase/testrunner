@@ -51,6 +51,17 @@ class rbacTest(ldaptest, AutoFailoverBaseTest):
             RbacBase().enable_ldap(rest)
         # rbacmain(self.master, self.auth_type)._delete_user_from_roles(self.master)
         if self.auth_type == 'ldap' or self.auth_type == 'LDAPGroup':
+            rest = RestConnection(self.master)
+            param = {
+                'hosts': '{0}'.format("172.23.120.205"),
+                'port': '{0}'.format("389"),
+                'encryption': '{0}'.format("None"),
+                'bindDN': '{0}'.format("cn=Manager,dc=couchbase,dc=com"),
+                'bindPass': '{0}'.format("p@ssword"),
+                'authenticationEnabled': '{0}'.format("true"),
+                'userDNMapping': '{0}'.format('{"template":"cn=%u,ou=Users,dc=couchbase,dc=com"}')
+            }
+            rest.setup_ldap(param, '')
             # rbacmain().setup_auth_mechanism(self.servers,'ldap',rest)
             RbacBase().enable_ldap(rest)
             self._removeLdapUserRemote(self.ldap_users)
