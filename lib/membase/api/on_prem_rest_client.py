@@ -6577,6 +6577,17 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params=version)
         return status, content
 
+    def set_node_encryption_level(self, encryption_level):
+        """
+        Sets the node encryption at a global level
+        encryption_level (str): Either 'strict', 'all' or 'control'.
+        """
+        url = 'settings/security'
+        api = self.baseUrl + url
+        params = f'clusterEncryptionLevel={encryption_level}'
+        status, content, header = self._http_request(api, 'POST', params=params)
+        return status, content
+
     def set_internal_password_rotation_interval(self, rotation_interval=1800000):
         api = self.baseUrl + "settings/security"
         payload = {
@@ -6602,6 +6613,28 @@ class RestConnection(object):
         """
         headers = self._create_capi_headers()
         status, content, header = self._http_request(self.baseUrl + "node/controller/reloadCertificate",
+                                                     'POST',
+                                                     headers=headers,
+                                                     params=params)
+        return status, content
+
+    def refresh_certificate(self, params=''):
+        """
+        Refresh certificate
+        """
+        headers = self._create_capi_headers()
+        status, content, header = self._http_request(self.baseUrl + "controller/regenerateCertificate",
+                                                     'POST',
+                                                     headers=headers,
+                                                     params=params)
+        return status, content
+
+    def refresh_credentials(self, params=''):
+        """
+        Refresh credentials
+        """
+        headers = self._create_capi_headers()
+        status, content, header = self._http_request(self.baseUrl + "node/controller/rotateInternalCredentials",
                                                      'POST',
                                                      headers=headers,
                                                      params=params)
