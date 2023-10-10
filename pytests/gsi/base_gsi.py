@@ -163,8 +163,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             'Content-Type': 'application/x-www-form-urlencoded',
         }
         auth = HTTPBasicAuth(self.rest.username,self.rest.password)
-        response = requests.request("POST", api, headers=headers, data=data,
-                                    auth=auth)
+        response = requests.request("POST", api, headers=headers, data=data, auth=auth, verify=False)
         self.log.info(f"{data} set")
         self.log.info(response.text)
 
