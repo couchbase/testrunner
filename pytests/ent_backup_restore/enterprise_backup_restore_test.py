@@ -66,6 +66,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn.terminate_processes(conn.info, ["cbbackupmgr"])
             conn.disconnect()
         self.bucket_helper = BucketOperationHelper()
+        self.document_type = self.input.param("document_type", "json")
 
     def tearDown(self):
         super(EnterpriseBackupRestoreTest, self).tearDown()
