@@ -94,13 +94,13 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                 tasks.append(task)
                 if count % 10 == 0:
                     self.sleep(5, "Running create index in batch of 10")
-            
+            count_err_1, count_err_2 = 0, 0
             for task in tasks:
                 try:
                     result = task.result()
                     self.log.info(result)
                 except Exception as err:
-                    count_err_1, count_err_2 = 0, 0
+
                     if self.err_msg1 in str(err):
                         count_err_1 += 1
                     elif self.err_msg2 in str(err):

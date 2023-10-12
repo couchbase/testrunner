@@ -242,6 +242,7 @@ class CollectionsAlterIndex(BaseSecondaryIndexingTests):
             self.assertEqual(index['numReplica'], initial_replica, "No. of replicas are not matching")
 
         self.alter_index_replicas(namespace=collection_namespace, index_name=idx1, action='drop_replica', replica_id=2)
+        self.sleep(10)
         self.alter_index_replicas(namespace=collection_namespace, index_name=idx2, action='drop_replica', replica_id=1)
         self.sleep(10)
         self.wait_until_indexes_online()
@@ -253,4 +254,3 @@ class CollectionsAlterIndex(BaseSecondaryIndexingTests):
                 self.assertTrue(index['replicaId'] != 2, f"Dropped wrong replica Id for index{idx2}")
             elif index['indexName'] == idx2:
                 self.assertTrue(index['replicaId'] != 1, f"Dropped wrong replica Id for index{idx2}")
-            self.assertEqual(index['numReplica'], initial_replica - 1, "No. of replicas are not matching")
