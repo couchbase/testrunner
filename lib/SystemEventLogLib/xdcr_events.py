@@ -120,3 +120,15 @@ class XDCRServiceEvents(object):
                                        'id': id,
                                        setting_name: setting_value}
         }
+    
+    @staticmethod
+    def connection_pre_check(node, remote, uuid, encryption_type, remote_ref_name):        
+        return {
+            Event.Fields.NODE_NAME: node,
+            Event.Fields.EVENT_ID: XDCR.ConnectionPreCheck,
+            Event.Fields.COMPONENT: Event.Component.XDCR,
+            Event.Fields.EXTRA_ATTRS: {'hostname': remote,
+                                       'uuid': uuid,
+                                       'encryptionType': encryption_type,
+                                       'name': remote_ref_name}
+        }

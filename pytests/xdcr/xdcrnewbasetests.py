@@ -614,6 +614,8 @@ class XDCRRemoteClusterRef:
         self.__rest_info = {}
         self.__replicator_target_role = replicator_target_role
         self.__use_scramsha = TestInputSingleton.input.param("use_scramsha", False)
+        self.__pre_check = TestInputSingleton.input.param("pre_check", False)
+        self.__taskId = ""
 
         # List of XDCReplication objects
         self.__replications = []
@@ -679,6 +681,34 @@ class XDCRRemoteClusterRef:
         for ca_dict in raw_content:
             certs += ca_dict["pem"]
         return certs
+    
+    def connection_pre_check(self, rest_conn_src, dest_master, certificate):
+        log = logger.Logger.get_logger()
+        log.info("Pre check flow started")
+        res = rest_conn_src.start_connection_pre_check(
+            dest_master.cluster_ip, dest_master.port,
+            self.dest_user,
+            self.dest_pass, self.__name,
+            demandEncryption=self.__encryption,
+            certificate=certificate,
+            clientCertificate=self.__client_certificate,
+            clientKey=self.__client_key)
+        log.info(str(res))
+        self.__taskId = res["taskId"]
+        log.info("connection pre check started successfully with taskId {0}".format(self.__taskId))
+        res = {}
+        for i in range(10):
+            log.info("iteration {0} of polling for connection pre check status".format(i + 1))
+            res = rest_conn_src.connection_pre_check_status(
+            self.dest_user, self.dest_pass, self.__taskId)
+            if res["done"] == True:
+                log.info("connection pre check completed")
+                status = str(res["result"])
+                log.info(status)
+                break                    
+            time.sleep(30)       
+        if res["done"] == False:
+            log.error("connection pre check status failed after 10 attempts")
 
     def add(self):
         """create cluster reference- add remote cluster
@@ -699,6 +729,10 @@ class XDCRRemoteClusterRef:
         else:
             self.dest_user = dest_master.rest_username
             self.dest_pass = dest_master.rest_password
+        
+        logger.Logger.get_logger().info(self.__pre_check)
+        if self.__pre_check:                
+            self.connection_pre_check(rest_conn_src, dest_master, certificate)                    
 
         if not self.__use_scramsha:
             self.__rest_info = rest_conn_src.add_remote_cluster(

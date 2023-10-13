@@ -1528,6 +1528,26 @@ class RestConnection(object):
         api = self.baseUrl + 'pools/default/remoteClusters'
         return self.__remote_clusters(api, 'add', remoteIp, remotePort, username, password, name, demandEncryption,
                                       certificate, clientCertificate, clientKey, encryptionType)
+    
+    def start_connection_pre_check(self, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate=None,
+                           clientCertificate=None, clientKey=None, encryptionType="full"):
+        msg = "connection pre check for :{0}:{1} with username:password {2}:{3} name:{4} to source node: {5}:{6} started"
+        log.info(msg.format(remoteIp, remotePort, username, password, name, self.ip, self.port))
+        api = self.baseUrl + 'xdcr/connectionPreCheck'
+        return self.__remote_clusters(api, 'connection pre check', remoteIp, remotePort, username, password, name, demandEncryption,
+                                      certificate, clientCertificate, clientKey, encryptionType)
+
+    def connection_pre_check_status(self, username, password, taskId):
+        precheckStatus = {}
+        msg = "connection pre check status for :{0}:{1} with username:password {2}:{3} and taskId: {4}"
+        log.info(msg.format(self.ip, self.port, username, password, taskId))
+        api = self.baseUrl + 'xdcr/connectionPreCheck?taskId=' + taskId
+        params = urllib.parse.urlencode({})
+        status, content, _ = self._http_request(api, 'GET', params)
+        if status:
+            precheckStatus = json.loads(content)
+            log.info(str(precheckStatus))
+        return precheckStatus
 
     def modify_remote_cluster(self, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate=None,
                               clientCertificate=None, clientKey=None, encryptionType="full"):

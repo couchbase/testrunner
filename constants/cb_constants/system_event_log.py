@@ -148,6 +148,7 @@ class XDCR(object):
     DeleteReplication = 7174
     UpdateDefaultReplicationSetting = 7175
     UpdateReplicationSetting = 7176
+    ConnectionPreCheck = 7178
 
 class Backup(object):
     """Mapping of Backup related events - event_id. Valid range 6143:7167"""
