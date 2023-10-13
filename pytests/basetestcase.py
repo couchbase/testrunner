@@ -2448,6 +2448,32 @@ class OnPremBaseTestCase(unittest.TestCase):
 
         return status
 
+    def remove_user(self, user_id):
+        """ Removes a user given a single ID """
+        rest = RestConnection(self.master)
+        # info log
+        status = RbacBase().remove_user_role([user_id], rest)
+        return status
+
+    def get_all_users(self):
+        """ Returns a list of all users """
+        rest = RestConnection(self.master)
+        users = RbacBase().get_all_users(rest)
+        users = json.loads(users[1])
+        return users
+
+    def add_user_to_group(self, group_name, user_id):
+        """  """
+        rest = RestConnection(self.master)
+        status, _ = rest.add_user_group(group_name, user_id)
+        return status
+
+    def create_new_group(self, group_name, description):
+        """   """
+        rest = RestConnection(self.master)
+        status, _ = rest.add_group_role(group_name, description, "admin")
+        return status
+
     def get_nodes(self, server):
         """ Get Nodes from list of server """
         rest = RestConnection(self.master)

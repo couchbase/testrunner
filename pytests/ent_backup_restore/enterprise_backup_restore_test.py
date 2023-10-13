@@ -1220,6 +1220,97 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                   validate_keys=self.validate_keys,
                                   regex_pattern=regex_check)
 
+    def test_backup_restore_user_info(self):
+        """
+            Backup and restore of user info
+            1. Create a bucket
+            2. Add two users and one of these to a group
+            3. Run backup
+            4. Verify number of users/groups in backup
+            5. Delete one user
+            6. Restore
+            7. Check conflict resultion report from restore
+            8. Verify deleted user present again
+            9. Run backup with --disable-users flag
+            10. Verify no users/groups in backup
+        """
+
+        # Create bucket
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+
+        # Add two users
+        testuser1 = {"id": "testuser1", "name": "testuser1", "password": "password"}
+        testuser2 = {"id": "testuser2", "name": "testuser2", "password": "password"}
+        if not self.add_built_in_server_user([testuser1]):
+            self.fail("Failed to add user: {0}".format(testuser1))
+        if not self.add_built_in_server_user([testuser2]):
+            self.fail("Failed to add user: {0}".format(testuser2))
+        if not self.create_new_group("testgroup", "test group"):
+            self.fail("Failed to create new user group")
+        if not self.add_user_to_group("testgroup", "testuser1"):
+            self.fail("Failed to add user to a group")
+
+        # Run default backup
+        self.backupset.disable_users = False
+        self.backup_create()
+        output, error = self.backup_cluster()
+        if not self._check_output("Backup completed successfully", output):
+            self.fail("Taking cluster backup failed: {0}".format(error))
+
+        # Verify no. of users in backup
+        output, error = self.backup_info()
+        bk_info = json.loads(output[0])
+        bk_info = bk_info["backups"]
+        user_count = bk_info[0]["users_count"]
+        group_count = bk_info[0]["groups_count"]
+        if user_count != 3:
+            self.fail("Backup includes {0} users rather than the expected 3".format(user_count))
+        if group_count != 1:
+            self.fail("Backup includes {0} groups rather than the expected 1".format(group_count))
+
+        # Delete one of the users
+        user_to_delete = "testuser2"
+        if not self.remove_user(user_to_delete):
+            self.fail("Deleting user: {0} failed".format(user_to_delete))
+
+        # Run restore
+        output, error = self.backup_restore()
+        if error:
+            self.fail("Restoring backup failed: {0}".format(error))
+
+        # Check for conflict resolution message
+        if not self._check_output(
+        "Restore has skipped some users and/or groups. Please check the logs for more information", output):
+            self.fail("Expected conflict resolution message not found")
+
+        # Verify both users present again post restore
+        deleted_user_found = False
+        users = self.get_all_users()
+        for user in users:
+            if user["id"] == user_to_delete:
+                deleted_user_found = True
+        if not deleted_user_found:
+            self.fail("{0} not reinstated after restore as expected".format(user_to_delete))
+
+        # Run backup with --disable-users flag
+        self.backupset.disable_users = True
+        self.backup_create()
+        output, error = self.backup_cluster()
+        if not self._check_output("Backup completed successfully", output):
+            self.fail("Taking cluster backup failed: {0}".format(error))
+
+        # Verify no users in backup
+        output, error = self.backup_info()
+        bk_info = json.loads(output[0])
+        bk_info = bk_info["backups"]
+        user_count = bk_info[0]["users_count"]
+        group_count = bk_info[0]["groups_count"]
+        if user_count != 0:
+            self.fail("Backup includes {0} users rather than the expected 0".format(user_count))
+        if group_count != 0:
+            self.fail("Backup includes {0} groups rather than the expected 0".format(group_count))
+
     def test_backup_with_rbac(self):
         """
             1. Create a cluster

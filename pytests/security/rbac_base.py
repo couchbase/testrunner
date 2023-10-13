@@ -109,7 +109,8 @@ class RbacBase:
         print(response)
         return response
 
-
-
-
-
+    def get_all_users(self, rest):
+        url = "settings/rbac/users"
+        api = rest.baseUrl + url
+        status, content, header = rest._http_request(api, 'GET')
+        return status, content, header

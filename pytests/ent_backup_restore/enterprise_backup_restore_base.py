@@ -271,6 +271,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.disable_ft_alias = self.input.param("disable-ft-alias", False)
         self.backupset.disable_analytics = self.input.param("disable-analytics", False)
         self.backupset.disable_data = self.input.param("disable-data", False)
+        self.backupset.disable_users = self.input.param("disable-users", False)
         self.backupset.disable_conf_res_restriction = self.input.param("disable-conf-res-restriction", False)
         self.backupset.force_updates = self.input.param("force-updates", False)
         self.backupset.auto_create_buckets = self.input.param("auto-create-buckets", False)
@@ -359,13 +360,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                          self.backupset.objstore_no_ssl_verify, self.backupset.objstore_region,
                                          self.backupset.objstore_secret_access_key,
                                          self.backupset.objstore_staging_directory, f"archive-{self.master.ip}")
-        elif provider == "azure": 
+        elif provider == "azure":
              self.objstore_provider = AZURE(self.backupset.objstore_access_key_id, self.backupset.objstore_bucket,
                                         self.backupset.objstore_cacert, self.backupset.objstore_endpoint,
                                         self.backupset.objstore_no_ssl_verify, self.backupset.objstore_region,
                                         self.backupset.objstore_secret_access_key,
                                         self.backupset.objstore_staging_directory, f"archive-{self.master.ip}")
-         
+
         # We run in a separate branch so when we add more providers the setup will be run by default
         if provider:
             # Override and use the same archive directory across platforms
@@ -375,7 +376,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.backupset.objstore_secret_access_key = self.objstore_provider.access_key_id
                 self.backupset.objstore_access_key_id = self.objstore_provider.storage_name
                 self.backupset.objstore_bucket = self.objstore_provider.container_name
-        
+
         self.validation_helper = BackupRestoreValidations(self.backupset,
                                                           self.cluster_to_backup,
                                                           self.cluster_to_restore,
@@ -551,6 +552,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-analytics"
         if self.backupset.disable_data:
             args += " --disable-data"
+        if self.backupset.disable_users:
+            args += " --disable-users"
         if self.backupset.current_bkrs_client_version[:3] >= "7.0":
             if self.vbucket_filter is not None:
                 args += " --vbucket-filter {0}".format(self.vbucket_filter)
@@ -3194,6 +3197,7 @@ class Backupset:
         self.disable_analytics = False
         self.auto_create_buckets = False
         self.sqlite = False
+        self.disable_users = False
 
         # Common configuration which is to be shared accross cloud providers
         self.objstore_access_key_id = ""
