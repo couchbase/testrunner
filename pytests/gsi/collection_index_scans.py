@@ -55,22 +55,22 @@ class Collection_index_scans(BaseSecondaryIndexingTests):
         num_requests_1 = num_requests_2 = None
 
         try:
-            self.log.info(f"Num requests for node 1 : {index_stats[0][f'{self.buckets[1].name}:idx_2:num_requests']}")
-            num_requests_1 = index_stats[0][f'{self.buckets[1].name}:idx_2:num_requests']
+            self.log.info(f"Num requests for node 1 : {index_stats[0][self.buckets[1].name]['idx_2']['num_requests']}")
+            num_requests_1 = index_stats[0][self.buckets[1].name]['idx_2']['num_requests']
         except:
             self.log.info(
-                f"Num requests for node 2 : {index_stats[0][f'{self.buckets[1].name}:idx_2 (replica 1):num_requests']}")
-            num_requests_1 = index_stats[0][f'{self.buckets[1].name}:idx_2 (replica 1):num_requests']
+                f"Num requests for node 2 : {index_stats[0][self.buckets[1].name]['idx_2 (replica 1)']['num_requests']}")
+            num_requests_1 = index_stats[0][self.buckets[1].name]['idx_2 (replica 1)']['num_requests']
         try:
             self.log.info(
-                f"Num requests for node 2 : {index_stats[1][f'{self.buckets[1].name}:idx_2 (replica 1):num_requests']}")
-            num_requests_2 = index_stats[1][f'{self.buckets[1].name}:idx_2 (replica 1):num_requests']
+                f"Num requests for node 2 : {index_stats[1][self.buckets[1].name]['idx_2 (replica 1)']['num_requests']}")
+            num_requests_2 = index_stats[1][self.buckets[1].name]['idx_2 (replica 1)']['num_requests']
         except:
             self.log.info(
-                f"Num requests for node 2 : {index_stats[1][f'{self.buckets[1].name}:idx_2:num_requests']}")
-            num_requests_2 = index_stats[1][f'{self.buckets[1].name}:idx_2 (replica 1):num_requests']
+                f"Num requests for node 2 : {index_stats[1][self.buckets[1].name]['idx_2']['num_requests']}")
+            num_requests_2 = index_stats[1][self.buckets[1].name]['idx_2']['num_requests']
         num_requests_difference = (abs(num_requests_2-num_requests_1)//(self.num_scans//2))*100
-        self.assertLessEqual(num_requests_difference, 20, 'Too much difference in the scans served bu each node')
+        self.assertLessEqual(num_requests_difference, 20, 'Too much difference in the scans served by each node')
 
 
 
