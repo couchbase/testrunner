@@ -246,12 +246,14 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                     bucket=test_bucket)
         self.update_keyspace_list(test_bucket)
 
-    def update_keyspace_list(self, bucket, default=False):
+    def update_keyspace_list(self, bucket, default=False, system=False):
         #initialize self.keyspace before using this method
         self.keyspace = []
         scopes = self.cli_rest.get_bucket_scopes(bucket=bucket)
         if not default:
             scopes.remove('_default')
+        if not system:
+            scopes.remove('_system')
         for s_item in scopes:
             collections = self.cli_rest.get_scope_collections(bucket=bucket, scope=s_item)
             for c_item in collections:

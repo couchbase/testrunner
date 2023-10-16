@@ -794,12 +794,15 @@ class RestConnection(object):
             raise Exception(
                 "Cannot get manifest for bucket {}: status:{}, content:{}".format(bucket, status, content))
 
-    def _parse_manifest(self, bucket, extract=None):
+    def _parse_manifest(self, bucket, extract=None, system=False):
         try:
             manifest = self.get_bucket_manifest(bucket)
             scopes = []
             collections = []
             for scope in manifest["scopes"]:
+                if not system:
+                    if scope['name'] == '_system':
+                        continue
                 scopes.append(scope["name"])
                 for collection in scope["collections"]:
                     collections.append(collection["name"])
@@ -822,6 +825,8 @@ class RestConnection(object):
             scope_found = False
             collections_in_scope = []
             for scopes in manifest["scopes"]:
+                if scopes['name'] == '_system':
+                    continue
                 if scopes['name'] == scope:
                     scope_found = True
                     for collection in scopes['collections']:
