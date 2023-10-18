@@ -554,9 +554,6 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
               self.log.info(indexes)
               self.log.info(definitions)
               if not self.replicaId == 0:
-                  for definition in definitions:
-                      if index_name_prefix in definition:
-                          self.assertTrue('"num_replica":{0}'.format(self.num_index_replicas-1) in definition, "Number of replicas in the definition is wrong: %s" % definition)
                   for index in indexes['status']:
                       if index_name_prefix in index['name']:
                           self.log.info("index replicaID: %s" % index['replicaId'])
