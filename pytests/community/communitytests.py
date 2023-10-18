@@ -758,7 +758,7 @@ class CommunityTests(CommunityBaseTest):
                     http://{0}:8091/settings/security \
                     -d disableUIOverHttp=true \
                     -d clusterEncryptionLevel=control \
-                    -d tlsMinVersion=tlsv1.1 \
+                    -d tlsMinVersion=tlsv1.2 \
                     -d "cipherSuites=["TLS_RSA_WITH_AES_128_CBC_SHA", "TLS_RSA_WITH_AES_256_CBC_SHA"]"'\
                                 .format(self.master.ip)
         conn = RemoteMachineShellConnection(self.master)
