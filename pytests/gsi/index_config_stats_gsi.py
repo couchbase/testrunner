@@ -674,9 +674,10 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
                 bucket_name = bucket.name
                 for key in check_keys:
                     for header in parsed_index_stats:
-                        stats = bucket_name + ':' + index_name + ':' + key
-                        if key in header[bucket_name][index_name]:
-                            required_index_map[stats] = header[bucket_name][index_name][key]
+                        if index_name in header[bucket_name]:
+                            stats = bucket_name + ':' + index_name + ':' + key
+                            if key in header[bucket_name][index_name]:
+                                required_index_map[stats] = header[bucket_name][index_name][key]
 
         for index_name in index_list:
             for bucket in self.buckets:
