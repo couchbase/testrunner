@@ -252,7 +252,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         scopes = self.cli_rest.get_bucket_scopes(bucket=bucket)
         if not default:
             scopes.remove('_default')
-        if not system:
+        if not system and '_system' in scopes:
             scopes.remove('_system')
         for s_item in scopes:
             collections = self.cli_rest.get_scope_collections(bucket=bucket, scope=s_item)
