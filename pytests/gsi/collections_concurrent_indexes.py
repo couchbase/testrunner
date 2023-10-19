@@ -103,7 +103,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
 
                     if self.err_msg1 in str(err):
                         count_err_1 += 1
-                    elif self.err_msg2 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg3 in str(err):
                         count_err_2 += 1
                     else:
                         self.fail(err)
@@ -188,7 +188,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                 except Exception as err:
                     if self.err_msg1 in str(err):
                         count_err_1 += 1
-                    elif self.err_msg2 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg3 in str(err):
                         count_err_2 += 1
                     else:
                         self.fail(err)
@@ -254,7 +254,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                         if out:
                             index_id = out.groups()[0]
                             scheduled_indexes[index_id] = False
-                    elif self.err_msg2 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg3 in str(err):
                         count_err_2 += 1
                     else:
                         self.fail(err)
@@ -332,7 +332,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                             self.run_cbq_query(query=drop_query)
                         except Exception as drop_err:
                             self.log.info(drop_err)
-                    elif self.err_msg2 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg3 in str(err):
                         continue
                     else:
                         self.fail(err)
@@ -374,7 +374,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                         out = re.search(regex_pattern, str(err))
                         index_name = out.groups()[0]
                         scheduled_indexes.append(index_name)
-                    elif self.err_msg2 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg3 in str(err):
                         continue
                     else:
                         self.fail(err)
@@ -422,7 +422,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                         except Exception as err:
                             err_msg = f'No index available on keyspace'
                             self.assertTrue(err_msg in str(err), "Error msg not matching. Check logs")
-                    elif self.err_msg2 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg3 in str(err):
                         continue
                     else:
                         self.fail(err)
@@ -555,7 +555,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                         out = re.search(regex_pattern, str(err))
                         index_name = out.groups()[0]
                         schedule_indexes.append(index_name)
-                    elif self.err_msg2 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg3 in str(err):
                         continue
                     else:
                         self.fail(err)
@@ -630,7 +630,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                             out = re.search(regex_pattern, str(err))
                             index_name = out.groups()[0]
                             schedule_indexes.append(index_name)
-                        elif self.err_msg2 in str(err):
+                        elif self.err_msg2 in str(err) or self.err_msg3 in str(err):
                             continue
                         else:
                             self.log.info(err)
@@ -999,7 +999,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
                             out = re.search(regex_pattern, str(err))
                             index_name = out.groups()[0]
                             schedule_indexes.append(index_name)
-                        elif self.err_msg2 in str(err):
+                        elif self.err_msg2 in str(err) or self.err_msg3 in str(err):
                             continue
                         else:
                             self.log.info(err)
