@@ -83,7 +83,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         if self.partition_fields:
             self.partition_fields = self.partition_fields.split(',')
         self.num_partition = self.input.param('num_partition', 8)
-        self.transfer_batch_size = self.input.param("transfer_batch_size", 3)
+        self.transfer_batch_size = self.input.param("transfer_batch_size", 20)
         self.rebalance_timeout = self.input.param("rebalance_timeout", 600)
         self.missing_field_desc = self.input.param("missing_field_desc", False)
         self.num_of_tenants = self.input.param("num_of_tenants", 10)
