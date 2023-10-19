@@ -168,12 +168,13 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.log.info(response.text)
 
         api = f"{query_rest.query_baseUrl}admin/settings"
+        headers = {
+            'Content-Type': 'application/json',
+        }
         data = {"n1ql-feat-ctrl": self.n1ql_feat_ctrl}
-        status, content, header = query_rest.urllib_request(api, verb='POST', params=json.dumps(data))
-        if not status:
-            raise Exception(content)
+        response = requests.request("POST", api, headers=headers, data=data, auth=auth, verify=False)
         self.log.info(f"{data} set")
-        self.log.info(content)
+        self.log.info(response.text)
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
