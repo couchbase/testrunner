@@ -48,8 +48,9 @@ class TestSSLTests(BaseTestCase):
         """
         Verifies the TLS minimum version of the cluster with the check_version
         """
-        tls_versions = ["1.3  ", "1.2  "]
-        for check_version in tls_versions:
+        tls_versions = ["1.3  ", "1.2  ", "1.1  ", "1  "]
+        min_tls_versions = ["1.3  ", "1.2  "]
+        for check_version in min_tls_versions:
             self.log.info("Verifying for minimum version = {0}".format(check_version))
             rest = RestConnection(self.master)
             rest.set_min_tls_version(version="tlsv" + check_version.strip())
