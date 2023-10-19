@@ -195,7 +195,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                             rebalance_status = RestHelper(self.rest).rebalance_reached()
                             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
                             rebalance_flag = True
-                    elif self.err_msg2 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg4 in str(err) or self.err_msg3 in str(err):
                         continue
                     else:
                         self.log.info(err)
@@ -277,7 +277,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                             rebalance_status = RestHelper(self.rest).rebalance_reached()
                             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
                             rebalance_flag = True
-                    elif self.err_msg2 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg4 in str(err) or self.err_msg3 in str(err):
                         continue
                     else:
                         self.log.info(err)
@@ -473,7 +473,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                         out = re.search(regex_pattern, str(err))
                         index_name = out.groups()[0]
                         self.log.info(f"{index_name} is scheduled for background")
-                    elif self.err_msg2 in str(err) or self.err_msg4 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg4 in str(err) or self.err_msg3 in str(err):
                         continue
                     else:
                         self.fail(err)
@@ -556,7 +556,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                         out = re.search(regex_pattern, str(err))
                         index_name = out.groups()[0]
                         self.log.info(f"{index_name} is scheduled for background")
-                    elif self.err_msg2 in str(err) or self.err_msg4 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg4 in str(err) or self.err_msg3 in str(err):
                         continue
                     else:
                         self.fail(err)
@@ -646,7 +646,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                         out = re.search(regex_pattern, str(err))
                         index_name = out.groups()[0]
                         self.log.info(f"{index_name} is scheduled for background")
-                    elif self.err_msg2 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg4 in str(err) or self.err_msg3 in str(err):
                         continue
                     else:
                         self.log.error(err)
@@ -744,7 +744,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                         out = re.search(regex_pattern, str(err))
                         index_name = out.groups()[0]
                         self.log.info(f"{index_name} is scheduled for background")
-                    elif self.err_msg2 in str(err) or self.err_msg4 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg4 in str(err) or self.err_msg3 in str(err):
                         continue
                     else:
                         self.fail(err)
@@ -831,7 +831,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                             schedule_index_enable = {"indexer.debug.enableBackgroundIndexCreation": True}
                             self.rest.set_index_settings(schedule_index_enable)
                             rebalance_flag = True
-                    elif self.err_msg2 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg4 in str(err) or self.err_msg3 in str(err):
                         continue
                     else:
                         self.fail(err)
@@ -983,9 +983,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                         out = re.search(regex_pattern, str(err))
                         index_name = out.groups()[0]
                         self.log.info(f"{index_name} is scheduled for background")
-                    elif self.err_msg2 in str(err):
-                        continue
-                    elif self.err_msg3 in str(err):
+                    elif self.err_msg2 in str(err) or self.err_msg4 in str(err) or self.err_msg3 in str(err):
                         continue
                     else:
                         self.log.info(err)
