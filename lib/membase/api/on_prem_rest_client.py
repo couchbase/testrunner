@@ -6544,6 +6544,32 @@ class RestConnection(object):
         status, content, header = self._http_request(self.baseUrl + "settings/clientCertAuth", 'POST', headers=headers, params=params)
         return status, content
 
+    def get_saml_settings(self):
+        """
+        Returns current saml settings as JSON
+        """
+        api = self.baseUrl + 'settings/saml'
+        status, content, header = self._http_request(api, 'GET')
+        return status, content, header
+
+    def modify_saml_settings(self, saml_settings):
+        """
+        Modifies current saml settings. If some setting is not specified in POST, it is not modified
+        """
+        api = self.baseUrl + 'settings/saml'
+        params = urllib.parse.urlencode(saml_settings)
+        status, content, header = self._http_request(api, 'POST', params)
+        return status, content, header
+
+    def delete_saml_settings(self):
+        """
+        Removes all the settings. That's basically a reset to default
+        """
+        api = self.baseUrl + 'settings/saml'
+        status, content, header = self._http_request(api, 'DELETE')
+        return status, content, header
+    
+
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
         self.implementationVersion = implementationVersion
