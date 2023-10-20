@@ -1533,7 +1533,7 @@ class RestConnection(object):
         api = self.baseUrl + 'pools/default/remoteClusters'
         return self.__remote_clusters(api, 'add', remoteIp, remotePort, username, password, name, demandEncryption,
                                       certificate, clientCertificate, clientKey, encryptionType)
-    
+
     def start_connection_pre_check(self, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate=None,
                            clientCertificate=None, clientKey=None, encryptionType="full"):
         msg = "connection pre check for :{0}:{1} with username:password {2}:{3} name:{4} to source node: {5}:{6} started"
@@ -2208,7 +2208,7 @@ class RestConnection(object):
                                                                 return_system_query_scope=return_system_query_scope)
         return index_map
 
-    def get_all_index_stats(self, timeout=120, inst_id_filter=[], consumer_filter=None, text=False):
+    def get_all_index_stats(self, timeout=120, inst_id_filter=[], consumer_filter=None, text=False, system=False):
         """return: json object or text response of :9102/stats"""
         api = self.index_baseUrl + 'stats'
         all_index_stats = {}
@@ -2224,6 +2224,13 @@ class RestConnection(object):
                 all_index_stats = content.decode("utf8").replace('":', '": ').replace(",", ", ")
             else:
                 all_index_stats = json.loads(content)
+        if not system:
+            new_stats_dict = {}
+            for key in all_index_stats:
+                if '_system:_query' in key:
+                    continue
+                new_stats_dict[key] = all_index_stats[key]
+            return new_stats_dict
         return all_index_stats
 
     def get_index_official_stats(self, timeout=120, index_map=None, bucket="", scope="", collection=""):
