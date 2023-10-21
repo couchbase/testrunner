@@ -11,6 +11,7 @@ __created_on__ = "17/11/20 10:00 am"
 
 import random
 import time
+import math
 
 from .base_gsi import BaseSecondaryIndexingTests
 from lib.couchbase_helper.query_definitions import QueryDefinition
@@ -21,7 +22,7 @@ from lib import testconstants
 from lib.collection.gsi.backup_restore_utils import IndexBackupClient
 from membase.api.rest_client import RestHelper
 from concurrent.futures import ThreadPoolExecutor
-
+from deepdiff import DeepDiff
 
 class BackupRestoreTests(BaseSecondaryIndexingTests):
     def setUp(self):
@@ -31,10 +32,17 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.num_partitions = self.input.param("num_partitions", 8)
         self.indexes_per_collection = self.input.param(
             "indexes_per_collection", 1)
+        self.decrease_node_count = self.input.param("decrease_node_count", 0)
+        self.create_index_on_n_nodes = self.input.param("create_index_on_n_nodes", None)
+        self.rebalance_in = self.input.param("rebalance_in", False)
+        self.rebalance_out = self.input.param("rebalance_out", False)
+        self.rebalance_swap = self.input.param("rebalance_swap", False)
         # use_cbbackupmgr False uses rest
         self.use_cbbackupmgr = self.input.param("use_cbbackupmgr", False)
         self.indexer_nodes = self.get_nodes_from_services_map(
             service_type="index", get_all_nodes=True)
+        if self.use_shard_based_rebalance:
+            self.enable_shard_based_rebalance()
         if self.use_cbbackupmgr:
             for node in self.indexer_nodes:
                 remote_client = RemoteMachineShellConnection(node)
@@ -90,8 +98,8 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.log.info("Enabling debug logs for Indexer")
         debug_setting = {"indexer.settings.log_level": "debug"}
         client_debug_setting = {"queryport.client.log_level": "debug"}
-        self.rest.set_index_settings(debug_setting)
-        self.rest.set_index_settings(client_debug_setting)
+        self.index_rest.set_index_settings(debug_setting)
+        self.index_rest.set_index_settings(client_debug_setting)
         self.schedule_index_disable = {"indexer.debug.enableBackgroundIndexCreation": False}
         self.schedule_index_enable = {"indexer.debug.enableBackgroundIndexCreation": True}
 
@@ -123,35 +131,64 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.sleep(
             5, message="Wait for buckets-scopes-collections to come online")
 
-    def _verify_indexes(self, indexer_stats_before_backup,
-                        indexer_stats_after_restore):
+    def _verify_indexes(self, indexer_stats_before_backup, indexer_stats_after_restore, new_indexes=False):
         self.log.info(
             "indexes before backup:" + str(indexer_stats_before_backup))
         self.log.info(
             "indexes after restore:" + str(indexer_stats_after_restore))
-        self.assertEqual(
-            len(indexer_stats_before_backup), len(indexer_stats_after_restore))
-        for idx_before_backup, idx_after_restore in zip(
-                indexer_stats_before_backup, indexer_stats_after_restore):
-            msg = "\n{0} \n {1}".format(idx_before_backup, idx_after_restore)
+        if not new_indexes:
             self.assertEqual(
-                idx_before_backup['indexName'], idx_after_restore['indexName'],
-                msg=msg)
-            self.assertEqual(idx_before_backup.get('isPrimary', None),
-                             idx_after_restore.get('isPrimary', None),
-                             msg=msg)
-            self.assertEqual(idx_before_backup.get('secExprs', None),
-                             idx_after_restore.get('secExprs', None),
-                             msg=msg)
-            self.assertEqual(
-                idx_before_backup['indexType'],
-                idx_after_restore['indexType'], msg=msg)
-            self.assertEqual(
-                idx_after_restore['status'], "Created", msg=msg)
-            self.assertEqual(idx_before_backup['numReplica'],
-                             idx_after_restore['numReplica'], msg=msg)
-            self.assertEqual(idx_before_backup['numPartition'],
-                             idx_after_restore['numPartition'], msg=msg)
+                len(indexer_stats_before_backup), len(indexer_stats_after_restore))
+            for idx_before_backup, idx_after_restore in zip(
+                    indexer_stats_before_backup, indexer_stats_after_restore):
+                msg = "\n{0} \n {1}".format(idx_before_backup, idx_after_restore)
+                self.assertEqual(
+                    idx_before_backup['indexName'], idx_after_restore['indexName'],
+                    msg=msg)
+                self.assertEqual(idx_before_backup.get('isPrimary', None),
+                                 idx_after_restore.get('isPrimary', None),
+                                 msg=msg)
+                self.assertEqual(idx_before_backup.get('secExprs', None),
+                                 idx_after_restore.get('secExprs', None),
+                                 msg=msg)
+                self.assertEqual(
+                    idx_before_backup['indexType'],
+                    idx_after_restore['indexType'], msg=msg)
+                self.assertEqual(
+                    idx_after_restore['status'], "Created", msg=msg)
+                self.assertEqual(idx_before_backup['numReplica'],
+                                 idx_after_restore['numReplica'], msg=msg)
+                self.assertEqual(idx_before_backup['numPartition'],
+                                 idx_after_restore['numPartition'], msg=msg)
+        else:
+            indexes_dict = {}
+            for index in indexer_stats_after_restore:
+                name = f"{index['bucket']}.{index['scope']}.{index['collection']}{index['name']}"
+                indexes_dict[name] = {}
+                indexes_dict[name]['numReplica'] = index['numReplica']
+                indexes_dict[name]['indexType'] = index['indexType']
+                indexes_dict[name]['numPartition'] = index['numPartition']
+                if 'isPrimary' in index:
+                    indexes_dict[name]['isPrimary'] = index['isPrimary']
+                if 'secExprs' in index:
+                    indexes_dict[name]['secExprs'] = index['secExprs']
+                indexes_dict[name]['status'] = index['status']
+            for index in indexer_stats_before_backup:
+                name = f"{index['bucket']}.{index['scope']}.{index['collection']}{index['name']}"
+                if name not in indexes_dict:
+                    raise Exception(f"Index missing after restore {index['name']}")
+                if int(index['numReplica']) != int(indexes_dict[name]['numReplica']):
+                    raise Exception("Num replica mismatch after restore")
+                if int(index['numPartition']) != int(indexes_dict[name]['numPartition']):
+                    raise Exception("Num partition mismatch after restore")
+                if index['indexType'] != indexes_dict[name]['indexType']:
+                    raise Exception("Index type mismatch after restore")
+                if 'isPrimary' in index:
+                    if index['isPrimary'] != indexes_dict[name]['isPrimary']:
+                        raise Exception("IsPrimary mismatch after restore")
+                if 'secExprs' in index:
+                    if index['secExprs'] != indexes_dict[name]['secExprs']:
+                        raise Exception("secExprs mismatch after restore")
         self.log.info("Indexes verified successfully")
 
     def _powerset(self, iter_item):
@@ -200,6 +237,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 backup_client.remove_backup()
 
     def _drop_indexes(self, indexes):
+        n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         timeout = time.time() + 600
         for index in indexes:
             if index['replicaId'] == 0:
@@ -212,15 +250,15 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 query = query_def.generate_index_drop_query(
                     namespace=namespace)
                 try:
-                    self.run_cbq_query(query)
+                    self.run_cbq_query(query=query, server=n1ql_server)
                 except Exception as e:
                     error_msg = e.__str__()
                     if not "The index was scheduled for background creation.The cleanup will happen in the background" in error_msg:
-                        stats = self.rest.get_indexer_metadata()['status']
+                        stats = self.index_rest.get_indexer_metadata()['status']
                 while time.time() < timeout:
                     try:
                         index_stats =\
-                            self.rest.get_indexer_metadata()['status']
+                            self.index_rest.get_indexer_metadata()['status']
                     except KeyError as e:
                         error_msg = e.__str__()
                         self.log.info(error_msg)
@@ -237,16 +275,17 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
     def _build_indexes(self, indexes):
         indexes_dict = {}
         for index in indexes:
-            namespace = index['bucket']
-            if index['scope'] != "_default"\
-                    and index['collection'] != "_default":
-                namespace += ".{0}.{1}".format(
-                    index['scope'],
-                    index['collection'])
-            if namespace in indexes_dict:
-                indexes_dict[namespace].append(index['name'])
-            else:
-                indexes_dict[namespace] = [index['name']]
+            if "replica" not in index['name']:
+                namespace = f"default:`{index['bucket']}`"
+                if index['scope'] != "_default"\
+                        and index['collection'] != "_default":
+                    namespace += ".`{0}`.`{1}`".format(
+                        index['scope'],
+                        index['collection'])
+                if namespace in indexes_dict:
+                    indexes_dict[namespace].append(f"`{index['name']}`")
+                else:
+                    indexes_dict[namespace] = [f"`{index['name']}`"]
         for namespace, indexes in indexes_dict.items():
             build_task = self.async_build_index(namespace, indexes)
             build_task.result()
@@ -2185,3 +2224,145 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         msg = "\nIndex_names_before_backup: " + str(indexes_before_backup)
         msg += "\nIndex_names_after_restore: " + str(indexes_after_restore)
         self._verify_indexes(indexes_before_backup, indexes_after_restore)
+
+    def test_backup_restore_with_shard_affinity(self):
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template,
+                                             load_default_coll=True)
+        time.sleep(10)
+        select_queries = set()
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        for _ in range(self.initial_index_batches):
+            replica_count = random.randint(1, 2)
+            query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+            for namespace in self.namespaces:
+                select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
+                                                                           namespace=namespace))
+                queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                  namespace=namespace,
+                                                                  num_replica=replica_count,
+                                                                  randomise_replica_count=True)
+                self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
+                                                     query_node=query_node)
+        self.wait_until_indexes_online()
+        self.validate_shard_affinity()
+        query_results_before_backup = self.run_scans_and_return_results(select_queries)
+        for bucket in self.buckets:
+            backup_client = IndexBackupClient(self.master,
+                                              self.use_cbbackupmgr,
+                                              bucket.name)
+            bucket_collection_namespaces = [
+                namespace.split(".", 1)[1] for namespace
+                in self.namespaces
+                if namespace.split(':')[1].split(".")[0] == bucket.name]
+            indexer_stats_before_backup = self.index_rest.get_indexer_metadata()
+            indexes_before_backup = [
+                index
+                for index in indexer_stats_before_backup['status']
+                if bucket.name == index['bucket']
+                   and "{0}.{1}".format(index['scope'], index['collection'])
+                   in bucket_collection_namespaces]
+            backup_result = backup_client.backup([], use_https=self.use_https)
+            self.assertTrue(
+                backup_result[0],
+                "backup failed for {0} with {1}".format(
+                    bucket_collection_namespaces, backup_result[1]))
+            self._drop_indexes(indexes_before_backup)
+            new_indexes = False
+            if self.decrease_node_count > 0:
+                nodes_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                nodes_out_list = nodes_out[:self.decrease_node_count]
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out_list,
+                                                         services=['index'], cluster_config=self.cluster_config)
+                self.log.info(f"Rebalance task triggered. Wait in loop until the rebalance starts")
+                time.sleep(3)
+                status, _ = self.rest._rebalance_status_and_progress()
+                while status != 'running':
+                    time.sleep(1)
+                    status, _ = self.rest._rebalance_status_and_progress()
+                reached = RestHelper(self.rest).rebalance_reached()
+                self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+                rebalance.result()
+            if self.create_index_on_n_nodes is not None:
+                self.enable_honour_nodes_in_definition()
+                new_indexes = True
+                num_nodes = 0
+                if self.create_index_on_n_nodes == 'all':
+                    num_nodes = len(self.indexer_nodes)
+                elif self.create_index_on_n_nodes == 'partial':
+                    f = math.floor(len(self.indexer_nodes) / 2)
+                    num_nodes = random.randint(1, f)
+                for i in range(num_nodes):
+                    query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                    deploy_node_info = self.indexer_nodes[i].ip + ":" + self.node_port
+                    for namespace in self.namespaces:
+                        queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                          namespace=namespace,
+                                                                          deploy_node_info=deploy_node_info)
+                        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
+                                                             query_node=query_node)
+            restore_result = backup_client.restore(use_https=self.use_https)
+            self.assertTrue(
+                restore_result[0],
+                "restore failed for {0} with {1}".format(
+                    bucket_collection_namespaces, restore_result[1]))
+
+            if self.use_cbbackupmgr:
+                backup_client.remove_backup()
+            indexer_stats_after_restore = self.index_rest.get_indexer_metadata()
+            indexes_after_restore = [
+                index
+                for index in indexer_stats_after_restore['status']
+                if bucket.name == index['bucket']
+                   and "{0}.{1}".format(index['scope'], index['collection'])
+                   in bucket_collection_namespaces]
+            self._verify_indexes(indexes_before_backup, indexes_after_restore, new_indexes)
+            self._build_indexes(indexes_after_restore)
+        self.wait_until_indexes_online()
+        query_results_after_restore = self.run_scans_and_return_results(select_queries)
+        for query in query_results_before_backup:
+            diffs = DeepDiff(query_results_before_backup[query], query_results_after_restore[query], ignore_order=True)
+            if diffs:
+                self.log.error(f"Mismatch in query result before backup and after restore. Select query {query}\n\n. "
+                               f"Result before \n\n {query_results_before_backup[query]}."
+                               f"Result after \n \n {query_results_after_restore[query]}")
+                raise Exception("Mismatch in query results before backup and after restore")
+        self.validate_shard_affinity()
+        nodes_out_list, nodes_in_list = [], []
+        nodes_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        if self.rebalance_out:
+            nodes_out_list = nodes_out[:1]
+        if self.rebalance_in:
+            nodes_in_list = self.servers[self.nodes_init:]
+            self.enable_redistribute_indexes()
+        if self.rebalance_swap:
+            nodes_out_list = nodes_out_list[:1]
+            nodes_in_list = self.servers[self.nodes_init:]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], nodes_in_list, nodes_out_list,
+                                                 services=['index'], cluster_config=self.cluster_config)
+        self.log.info(f"Rebalance task triggered. Wait in loop until the rebalance starts")
+        time.sleep(3)
+        status, _ = self.rest._rebalance_status_and_progress()
+        while status != 'running':
+            time.sleep(1)
+            status, _ = self.rest._rebalance_status_and_progress()
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.validate_shard_affinity()
+        query_results_after_rebalance = self.run_scans_and_return_results(select_queries)
+        for query in query_results_before_backup:
+            diffs = DeepDiff(query_results_after_rebalance[query], query_results_after_restore[query], ignore_order=True)
+            if diffs:
+                self.log.error(f"Mismatch in query result after restore and after rebalance. Select query {query}\n\n. "
+                               f"Result after \n\n {query_results_after_rebalance[query]}."
+                               f"Result before \n \n {query_results_after_restore[query]}")
+                raise Exception("Mismatch in query result after restore and after rebalance")

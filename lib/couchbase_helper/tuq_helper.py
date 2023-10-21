@@ -1062,9 +1062,6 @@ class N1QLHelper():
             no_of_indexes_after_rebalance += len(map_after_rebalance[bucket])
         self.log.info("Number of indexes before rebalance : {0}".format(no_of_indexes_before_rebalance))
         self.log.info("Number of indexes after rebalance  : {0}".format(no_of_indexes_after_rebalance))
-        if no_of_indexes_before_rebalance != no_of_indexes_after_rebalance and not indexes_changed:
-            self.log.info("some indexes are missing after rebalance")
-            raise Exception("some indexes are missing after rebalance")
 
         # verify that index names before and after rebalance are same
         index_names_before_rebalance = []
@@ -1080,7 +1077,9 @@ class N1QLHelper():
         if not indexes_changed and sorted(index_names_before_rebalance) != sorted(index_names_after_rebalance):
             self.log.info("number of indexes are same but index names don't match")
             raise Exception("number of indexes are same but index names don't match")
-
+        if no_of_indexes_before_rebalance != no_of_indexes_after_rebalance and not indexes_changed:
+            self.log.info("some indexes are missing after rebalance")
+            raise Exception("some indexes are missing after rebalance")
         # verify that rebalanced out nodes are not present
         host_names_before_rebalance = []
         host_names_after_rebalance = []

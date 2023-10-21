@@ -291,7 +291,7 @@ class GSIUtils(object):
             if defer_build_mix:
                 defer_build = random.choice([True, False])
             if randomise_replica_count:
-                num_replicas = random.randint(0, num_replica)
+                num_replicas = random.randint(1, num_replica)
             else:
                 num_replicas = num_replica
             query = index_gen.generate_index_create_query(namespace=namespace, defer_build=defer_build,

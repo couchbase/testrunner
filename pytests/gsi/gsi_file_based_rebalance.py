@@ -31,7 +31,6 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
             self.replica_repair = self.input.param("replica_repair", False)
             self.chaos_action = self.input.param("chaos_action", None)
             self.topology_change = self.input.param("topology_change", True)
-            self.initial_index_batches = self.input.param("initial_index_batches", 1)
             # TODO. After adding other tests, check if this can be removed
             # if not self.capella_run:
             #     shell = RemoteMachineShellConnection(self.servers[0])
@@ -331,7 +330,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                                                    stats_map_after_rebalance=stats_map_after_rebalance)
             finally:
                 event.set()
-                future.result()
+                if self.continuous_mutations:
+                    future.result()
 
     def test_gsi_rebalance_toggle_flag(self):
         self.disable_shard_based_rebalance()
@@ -553,12 +553,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
         shard_list_before_rebalance = self.fetch_shard_id_list()
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
         self.log.info("Running scans before rebalance")
-        query_result = {}
         if scan_results_check and select_queries is not None:
-            n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
-            for query in select_queries:
-                query_result[query] = self.run_cbq_query(query=query, scan_consistency='request_plus',
-                                                         server=n1ql_server)['results']
+            query_result = self.run_scans_and_return_results(select_queries=select_queries)
         if failover_nodes_list is not None:
             self.log.info(f"Running failover task for node {failover_nodes_list}")
             failover_task = self.cluster.async_failover([self.master], failover_nodes=failover_nodes_list,

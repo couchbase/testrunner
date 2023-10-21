@@ -75,6 +75,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.scope_prefix = self.input.param('scope_prefix', 'test_scope')
         self.collection_prefix = self.input.param('collection_prefix', 'test_collection')
         self.initial_index_num = self.input.param("initial_index_num", 20)
+        self.initial_index_batches = self.input.param("initial_index_batches", 2)
         self.run_cbq_query = self.n1ql_helper.run_cbq_query
         self.num_of_docs_per_collection = self.input.param('num_of_docs_per_collection', 10000)
         self.deploy_node_info = None
@@ -245,6 +246,14 @@ class BaseSecondaryIndexingTests(QueryTests):
             check = self.n1ql_helper.is_index_ready_and_in_list(bucket, query_definition.index_name,
                                                                 server=self.n1ql_node)
             self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
+
+    def run_scans_and_return_results(self, select_queries):
+        query_result = {}
+        n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        for query in select_queries:
+            query_result[query] = self.run_cbq_query(query=query, scan_consistency='request_plus',
+                                                     server=n1ql_server)['results']
+        return query_result
 
     def create_scope_collections(self, num_scopes=1, num_collections=1, scope_prefix=None,
                                  collection_prefix=None, test_bucket=None):
@@ -2104,8 +2113,8 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.log.info("Validating that none of the indexes have alternate shards for MOI type indexes")
             shard_id_list = self.fetch_shard_id_list()
             # TODO uncomment after https://issues.couchbase.com/browse/MB-58480 is fixed
-            # if shard_id_list:
-            #     raise Exception(f"Alternate shard ID seen for MOI type indexes. Shard ID list {shard_id_list}")
+            if shard_id_list:
+                raise Exception(f"Alternate shard ID seen for MOI type indexes. Shard ID list {shard_id_list}")
         else:
             for index_metadata in indexer_metadata:
                 # alternate shard ID not null validation
@@ -2247,6 +2256,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 if item != all_possible_shards_replica_id:
                     for shard in replica_shards_dict[item]:
                         if shard not in replica_shards_dict[all_possible_shards_replica_id]:
+                            self.log.info(f"Index metadata is {index_map}")
                             raise Exception(f"Replicas don't share slot ID for replica ID {replica_shards_dict}")
         # Replicas reside on different hosts validation
         for replica in replicas_dict:
@@ -2256,12 +2266,14 @@ class BaseSecondaryIndexingTests(QueryTests):
                     if index_metadata_2['numPartition'] == 1:
                         if index_metadata_2['hosts'] == host_ip:
                             self.log.error(f"Index_metadata {index_metadata} being compared against index_metadata_2 {index_metadata_2}")
+                            self.log.info(f"Index metadata is {index_map}")
                             raise Exception("Replicas reside on the same host.")
                     else:
                         for host in index_metadata['partitionMap']:
                             for partition in index_metadata['partitionMap'][host]:
                                 if host in index_metadata_2['partitionMap']:
                                     if partition in index_metadata_2['partitionMap'][host]:
+                                        self.log.info(f"Index metadata is {index_map}")
                                         raise AssertionError(
                                             f"Partition replicas reside on the same host. Metadata 1 {index_metadata} Metadata 2 {index_metadata_2}")
 
@@ -2302,6 +2314,16 @@ class BaseSecondaryIndexingTests(QueryTests):
         rest.set_index_settings({"indexer.settings.enable_shard_affinity": True})
 
     def disable_shard_based_rebalance(self):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"indexer.settings.enable_shard_affinity": False})
+
+    def enable_honour_nodes_in_definition(self):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"indexer.planner.honourNodesInDefn": True})
+
+    def disable_honour_nodes_in_definition(self):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         rest = RestConnection(indexer_node)
         rest.set_index_settings({"indexer.settings.enable_shard_affinity": False})
