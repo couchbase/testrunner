@@ -24,7 +24,7 @@ class EventingMultiHandler(EventingBaseTest):
         self.worker_count=self.input.param('worker_count',1)
         self.handler_code=self.input.param('handler_code','handler_code/ABO/insert.js')
         self.gens_load = self.generate_docs(self.docs_per_day)
-        memory_quota = (self.num_src_buckets+self.num_dst_buckets+1) * self.bucket_size
+        memory_quota = (self.num_src_buckets+self.num_dst_buckets+3) * self.bucket_size
         self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=memory_quota)
         self.create_n_buckets(self.src_bucket_name,self.num_src_buckets)
         self.buckets = self.rest.get_buckets()
