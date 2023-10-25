@@ -83,7 +83,7 @@ class CollectionsIndexesWithMissingKeys(BaseSecondaryIndexingTests):
         err_msg = 'No index available on keyspace'
         try:
             self.run_cbq_query(query=select_country_query)
-            self.fail(f"Query - {query} - should have failed as no primary index is available")
+            self.fail(f"Query - {select_country_query} - should have failed as no primary index is available")
         except Exception as err:
             if err_msg not in str(err):
                 self.fail(err)
