@@ -1224,7 +1224,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 backup_client = IndexBackupClient(
                     self.master, self.use_cbbackupmgr, bucket.name)
                 backup_result = backup_client.backup(use_https=self.use_https)
-                self.assertFalse(
+                self.assertTrue(
                     backup_result[0],
                     "Backup failed {0} with {1}".format(
                         bucket.name, backup_result[1]))
