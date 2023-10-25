@@ -102,7 +102,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.use_shard_based_rebalance = self.input.param("use_shard_based_rebalance", False)
         self.use_cbo = self.input.param("use_cbo", False)
         # current value of n1ql_feat_ctrl disables sequential scan. To enable it set value to 0x4c
-        self.n1ql_feat_ctrl = self.input.param("n1ql_feat_ctrl", "0x404c")
+        self.n1ql_feat_ctrl = self.input.param("n1ql_feat_ctrl", "16460")
         if self.aws_access_key_id:
             from serverless.s3_utils import S3Utils
             self.s3_utils_obj = S3Utils(aws_access_key_id=self.aws_access_key_id,
