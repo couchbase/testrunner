@@ -989,6 +989,7 @@ class StatsWaitTask(Task):
         self.conns = {}
         self.scope = scope
         self.collection = collection
+        self.collection_stats = CollectionsStats(self.servers[0])
 
     def execute(self, task_manager):
         self.state = CHECKING
@@ -1012,6 +1013,10 @@ class StatsWaitTask(Task):
                 self.state = FINISHED
                 self.set_exception(ex)
                 return
+            cbo_doc_items = self.collection_stats.get_collection_item_count_cumulative(self.bucket,
+                                                                                       CbServer.system_scope,
+                                                                                       CbServer.query_collection)
+            stat_result = stat_result - cbo_doc_items
         if not self._compare(self.comparison, str(stat_result), self.value):
             self.log.warning("Not Ready: %s %s %s %s expected on %s, %s bucket" % (self.stat, stat_result,
                                                                                    self.comparison, self.value,
@@ -1706,7 +1711,7 @@ class ESBulkLoadGeneratorTask(Task):
                 es_doc[self.op_type]["_type"] = "_doc"
             else:
                 es_doc[self.op_type]["_type"] = doc['type']
-            
+
             es_bulk_docs.append(json.dumps(es_doc))
             if self.op_type == "create":
                 es_bulk_docs.append(json.dumps(doc))
@@ -1719,7 +1724,7 @@ class ESBulkLoadGeneratorTask(Task):
                 for line in es_bulk_docs:
                     es_file.write("{}\n".format(line).encode())
                 es_file.close()
-                self.es_instance.load_bulk_data(es_filename,self.index_name) 
+                self.es_instance.load_bulk_data(es_filename,self.index_name)
                 loaded += batched
                 self.log.info("{0} documents bulk loaded into ES".format(loaded))
                 self.es_instance.update_index(self.index_name)
@@ -1754,7 +1759,7 @@ class ESRunQueryCompare(Task):
     def check(self, task_manager):
         self.state = FINISHED
         self.set_result(self.result)
-    
+
     def is_geoshape_query(self):
         res = False
         try:
@@ -1765,13 +1770,13 @@ class ESRunQueryCompare(Task):
 
     def log_query_to_file(self,differing_hits):
         query_index = str(self.query_index)
-        query_log_path = "query_" + query_index 
+        query_log_path = "query_" + query_index
         Path(query_log_path).mkdir(parents=True,exist_ok=True)
         print("Logging in path ",query_log_path)
         es_query_file = os.path.join(query_log_path,"es_query_" + query_index + ".json")
         with open(es_query_file,'w') as fp:
             json.dump(self.es_query,fp)
-        
+
         fts_query_file = os.path.join(query_log_path,"fts_query_" + query_index + ".json")
         with open(fts_query_file,'w') as fp:
             json.dump(self.fts_query,fp)
@@ -1856,7 +1861,7 @@ class ESRunQueryCompare(Task):
                 if self.passed and self.es_compare:
                     if type(es_hits) == dict:
                         es_hits = es_hits['value']
-                        # added since newer versions of ES return results in this format: 
+                        # added since newer versions of ES return results in this format:
                         # {'value': 0, 'relation': 'eq'}
                     if int(es_hits) != int(fts_hits):
                         msg = "FAIL: FTS hits: %s, while ES hits: %s" \
@@ -1874,7 +1879,7 @@ class ESRunQueryCompare(Task):
                                   " by ES,but FTS, printing 50: %s" \
                                   % (len(fts_but_not_es), fts_but_not_es[:50])
                             if self.is_geoshape_query():
-                                differing_results['fts_but_not_es'] = fts_but_not_es 
+                                differing_results['fts_but_not_es'] = fts_but_not_es
                         else:
                             msg = "FAIL: Following %s docs were not returned" \
                                   " by FTS, but ES, printing 50: %s" \

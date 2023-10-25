@@ -16,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 from requests.auth import HTTPBasicAuth
 
+from Cb_constants import CbServer
 from couchbase_helper.cluster import Cluster
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from couchbase_helper.tuq_generators import TuqGenerators
@@ -966,6 +967,10 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def _verify_primary_index_count(self):
         bucket_map = self.get_buckets_itemCount()
+        for bucket, value in bucket_map.items():
+            bucket_map[bucket] = value - self.stat.get_collection_item_count_cumulative(bucket, CbServer.system_scope,
+                                                                                        CbServer.query_collection,
+                                                                                        self.get_kv_nodes())
         count = 0
         while not self._verify_items_count() and count < 15:
             self.log.info("All Items Yet to be Indexed...")
