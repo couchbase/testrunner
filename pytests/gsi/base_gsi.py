@@ -170,16 +170,22 @@ class BaseSecondaryIndexingTests(QueryTests):
         }
         auth = HTTPBasicAuth(self.rest.username,self.rest.password)
         response = requests.request("POST", api, headers=headers, data=data, auth=auth, verify=False)
+        if response.status_code != 200:
+            self.fail(f"Disabling sequential scan failed. {response.content}")
         self.log.info(f"{data} set")
         self.log.info(response.text)
+
+
         if not trinity:
             self.n1ql_feat_ctrl = 76
         api = f"{query_rest.query_baseUrl}admin/settings"
         headers = {
             'Content-Type': 'application/json',
         }
-        data = {"n1ql-feat-ctrl": self.n1ql_feat_ctrl}
+        data = json.dumps({"n1ql-feat-ctrl": self.n1ql_feat_ctrl})
         response = requests.request("POST", api, headers=headers, data=data, auth=auth, verify=False)
+        if response.status_code != 200:
+            self.fail(f"Disabling sequential scan failed. {response.content}")
         self.log.info(f"{data} set")
         self.log.info(response.text)
 
