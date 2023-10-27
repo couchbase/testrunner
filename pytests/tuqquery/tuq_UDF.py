@@ -2045,3 +2045,42 @@ class QueryUDFTests(QueryTests):
                 self.assertEqual(results[0], ['{"status": "OK"}'])
                 results = self.shell.execute_command(f"{self.curl_path} -X DELETE '{url}' -u Administrator:password")
                 self.assertEqual(results[0], ['{"status": "OK"}'])
+
+    def test_MB59183(self):
+        upsert = 'UPSERT INTO default (KEY k, VALUE v) SELECT "k00"||TO_STR(d) AS k, {"c1":d, "c2":d, "c3":d} AS v FROM ARRAY_RANGE(1,10) AS d'
+        index = 'CREATE INDEX ix1 ON default(c1,c2, c3)'
+        self.run_cbq_query(upsert)
+        self.run_cbq_query(index)
+
+        udf1 = 'CREATE OR REPLACE FUNCTION f11(data) {(SELECT l, r FROM default AS l JOIN (SELECT default.* FROM default WHERE c1 > 0) AS r USE NL ON l.c3=r.c3 WHERE l.c1 > 0 AND r.c2 = data)}'
+        self.run_cbq_query(udf1)
+
+        expected_result = [
+            {"$1": [{"l": {"c1": 1,"c2": 1,"c3": 1}, "r": {"c1": 1,"c2": 1,"c3": 1}}]},
+            {"$1": [{"l": {"c1": 2,"c2": 2,"c3": 2}, "r": {"c1": 2,"c2": 2,"c3": 2}}]},
+            {"$1": [{"l": {"c1": 3,"c2": 3,"c3": 3}, "r": {"c1": 3,"c2": 3,"c3": 3}}]},
+            {"$1": [{"l": {"c1": 4,"c2": 4,"c3": 4}, "r": {"c1": 4,"c2": 4,"c3": 4}}]},
+            {"$1": [{"l": {"c1": 5,"c2": 5,"c3": 5}, "r": {"c1": 5,"c2": 5,"c3": 5}}]},
+            {"$1": [{"l": {"c1": 6,"c2": 6,"c3": 6}, "r": {"c1": 6,"c2": 6,"c3": 6}}]},
+            {"$1": [{"l": {"c1": 7,"c2": 7,"c3": 7}, "r": {"c1": 7,"c2": 7,"c3": 7}}]},
+            {"$1": [{"l": {"c1": 8,"c2": 8,"c3": 8}, "r": {"c1": 8,"c2": 8,"c3": 8}}]},
+            {"$1": [{"l": {"c1": 9,"c2": 9,"c3": 9}, "r": {"c1": 9,"c2": 9,"c3": 9}}]}
+        ]
+        result = self.run_cbq_query('SELECT f11(t.c1) FROM default AS t WHERE t.c1 > 0')
+
+        udf2 = 'CREATE OR REPLACE FUNCTION f12(data) {(SELECT l, r FROM default AS l JOIN data AS r USE NL ON l.c3=r.c3 WHERE l.c1 > 0)}'
+        self.run_cbq_query(udf2)
+
+        result = self.run_cbq_query('SELECT f12(t) FROM default AS t WHERE t.c1 > 0')
+        self.assertEqual(expected_result, result['results'])
+
+    def test_MB59078(self):
+        udf = 'CREATE OR REPLACE FUNCTION f11() {(SELECT l, r FROM default AS l JOIN default AS r USE HASH (BUILD) ON l.c3=r.c3 WHERE l.c1 > 0 AND r.c1 > 0 AND r.c2 = 1)}'
+        self.run_cbq_query(udf)
+
+        expected_result = [{
+            'expression': '(select `l`, `r` from `default`:`default` as `l` join `default`:`default` as `r` use hash (build) on ((`l`.`c3`) = (`r`.`c3`)) where (((0 < (`l`.`c1`)) and (0 < (`r`.`c1`))) and ((`r`.`c2`) = 1)))',
+            'text': '(SELECT l, r FROM default AS l JOIN default AS r USE HASH (BUILD) ON l.c3=r.c3 WHERE l.c1 > 0 AND r.c1 > 0 AND r.c2 = 1)'    
+        }]
+        result = self.run_cbq_query('SELECT `definition`.`expression`, `definition`.`text` FROM system:functions WHERE identity.name="f11"')
+        self.assertEqual(expected_result, result['results'])
