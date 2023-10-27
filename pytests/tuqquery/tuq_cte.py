@@ -306,3 +306,8 @@ class QueryCTETests(QueryTests):
         queries["f"] = {"indexes": [index_6, primary], "queries": [query_6], "asserts": [self.plan_verifier("IndexScan3")]}
 
         self.query_runner(queries)
+
+    def test_MB59170(self):
+        cte_nested_query = 'with cte2 as ( with cte1 as ( select 1 from [] as t1 ) select 1 from ( select 1 from cte1 ) as t2 ) select 1 from cte2'
+        result = self.run_cbq_query(cte_nested_query, server=self.server)
+        self.assertEqual(result['results'], [])

@@ -412,3 +412,11 @@ class QuerySubqueryTests(QueryTests):
             self.assertEqual(error['code'], error_code[1])
             self.assertEqual(error['msg'], error_message[1])
 
+    def test_MB57903(self):
+        udf = 'CREATE OR REPLACE FUNCTION `FN_Test_Bad3` (data) LANGUAGE INLINE AS ( ( SELECT RAW (SELECT RAW data) ) ) ;'
+        self.run_cbq_query(udf)
+        result = self.run_cbq_query('select a,test from [1,2,3] a let test = FN_Test_Bad3(a)')
+        self.assertEqual(result['results'], [{"a": 1, "test": [[1]]}, {"a": 2, "test": [[2]]}, {"a": 3,"test": [[3]]}])
+
+        result = self.run_cbq_query('select a, (SELECT RAW (SELECT RAW a) ) AS b  from [1,2,3] a')
+        self.assertEqual(result['results'], [{"a": 1, "b": [[1]]}, {"a": 2, "b": [[2]]}, {"a": 3,"b": [[3]]}])
