@@ -115,19 +115,22 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         self.index_status = self.rest.get_indexer_metadata()
         self.all_master_stats = self.rest.get_all_index_stats()
         self.consumer_filters = {"planner": {
-            "indexer_level_stats": ["memory_quota", "memory_used", "memory_used_storage", "uptime", "cpu_utilization"],
-            "index_level_stats": ["resident_percent", "avg_disk_bps", "num_docs_pending", "num_docs_queued",
-                                  "avg_drain_rate", "num_rows_returned", "progress_stat_time","build_progress",
-                                  "memory_used", "data_size", "items_count", "num_flush_queued", "avg_scan_rate",
-                                  "avg_mutation_rate", "index_state", "last_rollback_time", "combined_resident_percent"]
+            "indexer_level_stats": ["memory_quota", "memory_used", "memory_used_storage", "uptime", "cpu_utilization",
+                                    "memory_rss", "shard_compat_version"],
+            "index_level_stats": ['avg_disk_bps', 'avg_drain_rate', 'avg_mutation_rate', 'avg_scan_rate',
+                                  'backstore_recs_in_mem', 'backstore_recs_on_disk', 'build_progress',
+                                  'combined_resident_percent', 'data_size', 'disk_size', 'index_state',
+                                  'items_count', 'last_rollback_time', 'memory_used', 'num_docs_pending',
+                                  'num_docs_queued', 'num_flush_queued', 'num_rows_returned', 'progress_stat_time',
+                                  'recs_in_mem', 'recs_on_disk', 'resident_percent']
         }, "gsiClient": {
             "indexer_level_stats": [],
-            "index_level_stats": ["progress_stat_time",
+            "index_level_stats": ["progress_stat_time", "last_known_scan_time",
                                   "last_rollback_time",
                                   "num_docs_queued",
                                   "num_docs_pending", "index_state"]
         }, "indexStatus": {
-            "indexer_level_stats": ["indexer_state"],
+            "indexer_level_stats": ["indexer_state", "rebalance_transfer_progress"],
             "index_level_stats": ["build_progress",
                                   "completion_progress",
                                   "last_known_scan_time"]
@@ -271,7 +274,8 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         filtered_stats_keys = None
         empty_inst_filter_stats_keys = set(self.rest.get_all_index_stats(
             inst_id_filter={"instances": []}).keys())
-        for index in self.index_status['status']:
+        index_status = self.rest.get_indexer_metadata(return_system_query_scope=True)
+        for index in index_status['status']:
             instance_ids.append(int(index['instId']))
             instance_id_filter = {"instances": [instance_ids[-1]]}
             filtered_stats_keys = set(self.rest.get_all_index_stats(
@@ -386,7 +390,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         """
         Every stats returned by /stats with consumer filter is subset of /stats
         """
-        all_stats_keys = set(self.all_master_stats.keys())
+        all_stats_keys = set(self.rest.get_all_index_stats(system=True).keys())
         for consumer_filter in self.consumer_filters.keys():
             consumer_filter_stats_keys = set(self.rest.get_all_index_stats(
                 consumer_filter=consumer_filter).keys())
@@ -405,6 +409,12 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
             consumer_filter_stats_keys = set(consumer_filter_stats.keys())
             consumer_filter_stats_count = len(stats['indexer_level_stats']) +\
                 (len(stats['index_level_stats']) * self.index_count)
+
+            metadata = self.rest.get_indexer_metadata(return_system_query_scope=True)['status']
+            system_scope_instance_ids = set([index['instId'] for index in metadata if index['scope'] == '_system'])
+            if consumer_filter == 'indexStatus':
+                consumer_filter_stats_keys -= system_scope_instance_ids
+
             self.assertEqual(
                 consumer_filter_stats_count, len(consumer_filter_stats_keys),
                 msg="{0}: Actual indexer_level_stats: {1} Actual \
@@ -481,6 +491,8 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
             bucket = index['bucket']
             scope = index['scope']
             collection = index['collection']
+            if scope == '_system' and collection == '_query':
+                continue
             index_name = f"{bucket}:{scope}:{collection}:{index['name']}"\
                 if scope != "_default" and collection != "_default" else\
                 f"{bucket}:{index['name']}"
@@ -491,9 +503,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
                 }
             indexes_dict[bucket]['indexes'].add(index_name)
             if scope not in indexes_dict[bucket]:
-                indexes_dict[bucket][scope] = {
-                    "indexes": set()
-                }
+                indexes_dict[bucket][scope] = {"indexes": set()}
             indexes_dict[bucket][scope]['indexes'].add(index_name)
             if collection not in indexes_dict[bucket][scope]:
                 indexes_dict[bucket][scope][collection] = {
@@ -844,6 +854,8 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
             map(lambda index: index["instId"], replica_indexes))
         instance_ids = set()
         rest_connections = [RestConnection(node) for node in indexer_nodes]
+        metadata = self.rest.get_indexer_metadata(return_system_query_scope=True)['status']
+        system_scope_instance_ids = set([index['instId'] for index in metadata if index['scope'] == '_system'])
         for node_id, rest in enumerate(rest_connections):
             all_stats = rest.get_all_index_stats(
                 inst_id_filter=replica_index_ids)
@@ -851,6 +863,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
                 set(map(lambda stat: int(stat.split(":")[0]),
                         list(filter(lambda stat: stat.split(":")[0].isdigit(),
                                     all_stats.keys())))))
+            instance_ids -= system_scope_instance_ids
             self.assertEqual(len(instance_ids), node_id + 1)
         self.assertEqual(instance_ids, set(replica_index_ids))
 
@@ -893,6 +906,9 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
                 partition_index.index_name), indexer_stats['status']))
         partition_index_ids = list(
             map(lambda index: index["instId"], partition_indexes))
+        rest_connections = [RestConnection(node) for node in indexer_nodes]
+        metadata = self.rest.get_indexer_metadata(return_system_query_scope=True)['status']
+        system_scope_instance_ids = set([index['instId'] for index in metadata if index['scope'] == '_system'])
         instance_ids = set()
         for node_id, rest in enumerate(rest_connections):
             all_stats = rest.get_all_index_stats(
@@ -901,6 +917,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
                 set(map(lambda stat: int(stat.split(":")[0]),
                         list(filter(lambda stat: stat.split(":")[0].isdigit(),
                                     all_stats.keys())))))
+            instance_ids -= system_scope_instance_ids
             self.assertEqual(len(instance_ids), 1)
         self.assertEqual(instance_ids, set(partition_index_ids))
 
@@ -948,6 +965,8 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
             indexer_nodes[0], indexer_nodes[1])
         self.sleep(10)
         rest_connections = [RestConnection(node) for node in indexer_nodes]
+        metadata = self.rest.get_indexer_metadata(return_system_query_scope=True)['status']
+        system_scope_instance_ids = set([index['instId'] for index in metadata if index['scope'] == '_system'])
         for rest in rest_connections:
             if rest.ip == self.rest.ip:
                 doc = {"indexer.scheduleCreateRetries": 1}
@@ -982,6 +1001,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
                 set(map(lambda stat: int(stat.split(":")[0]),
                         list(filter(lambda stat: stat.split(":")[0].isdigit(),
                                     all_stats.keys())))))
+            instance_ids -= system_scope_instance_ids
             msg = f"{instance_ids}"
             self.assertEqual(len(instance_ids), node_id + 1, msg=msg)
         msg = f"{instance_ids}"
@@ -996,6 +1016,8 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         if len(indexer_nodes) < 2:
             self.fail("need atleast 2 indexer nodes")
         rest_connections = [RestConnection(node) for node in indexer_nodes]
+        metadata = self.rest.get_indexer_metadata(return_system_query_scope=True)['status']
+        system_scope_instance_ids = set([index['instId'] for index in metadata if index['scope'] == '_system'])
         for rest in rest_connections:
             instance_ids = []
             for index in self.index_status['status']:
@@ -1006,6 +1028,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
             node_inst_ids = set(
                 [int(stat.split(":")[0]) for stat in stats.keys()
                  if stat.split(":")[0].isdigit()])
+            node_inst_ids -= system_scope_instance_ids
             self.assertEqual(set(instance_ids), node_inst_ids)
         out_nodes = [
             node for node in indexer_nodes if self.master.ip != node.ip]
@@ -1016,9 +1039,10 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         rebalance.result()
         self.sleep(30)
         instance_ids = [
-            index['instId'] for index in self.index_status['status']]
+            index['instId'] for index in self.index_status['status'] if index['scope'] != '_system']
         stats = self.rest.get_all_index_stats(inst_id_filter=instance_ids)
         self.assertNotEquals(stats, {})
         node_inst_ids = set([int(stat.split(":")[0]) for stat in stats.keys()
                             if stat.split(":")[0].isdigit()])
+        node_inst_ids -= system_scope_instance_ids
         self.assertEqual(set(instance_ids), node_inst_ids)

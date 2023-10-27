@@ -2224,7 +2224,7 @@ class RestConnection(object):
                 all_index_stats = content.decode("utf8").replace('":', '": ').replace(",", ", ")
             else:
                 all_index_stats = json.loads(content)
-        if not system:
+        if not system and not text:
             new_stats_dict = {}
             for key in all_index_stats:
                 if '_system:_query' in key:
@@ -2233,7 +2233,8 @@ class RestConnection(object):
             return new_stats_dict
         return all_index_stats
 
-    def get_index_official_stats(self, timeout=120, index_map=None, bucket="", scope="", collection=""):
+    def get_index_official_stats(self, timeout=120, index_map=None, bucket="", scope="",
+                                 collection="", system_scope=False):
         api = self.index_baseUrl + 'api/v1/stats'
         if bucket:
             api += f'/`{bucket.replace("%", "%25")}`'
@@ -2244,6 +2245,12 @@ class RestConnection(object):
         status, content, header = self._http_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
+        if not system_scope:
+            json_parsed_new = {}
+            for item in json_parsed:
+                if '_system:_query' not in item:
+                    json_parsed_new[item] = json_parsed[item]
+            return json_parsed_new
         return json_parsed
 
     def get_indexes_count(self):
@@ -6575,7 +6582,7 @@ class RestConnection(object):
         api = self.baseUrl + 'settings/saml'
         status, content, header = self._http_request(api, 'DELETE')
         return status, content, header
-    
+
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
