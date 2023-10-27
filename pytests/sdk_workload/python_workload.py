@@ -4,6 +4,7 @@ import couchbase
 import json
 import threading
 import time
+import os
 from TestInput import TestInputSingleton
 
 from lib.capella.utils import CapellaAPI, CapellaCredentials
@@ -153,12 +154,14 @@ class PythonSdkWorkload(unittest.TestCase):
         self.bucket_list = json.loads(self.bucket_list)
         self.number_of_threads = self.input.param("number_of_threads", 10)
         self.number_of_retries = self.input.param("number_of_retries", 100)
+        self.initial_setup = self.input.param("initial_setup", False)
         self.log_level = self.input.param("log_level", None)
         self.sdk_logger = self.get_sdk_logger()
         self.number_of_docs_per_collection = self.input.param("num_of_docs_per_coll", 10000)
         self.delay_time = self.input.param("delay_time", 0.1)
         self.workload_type = self.input.param("workload_type", ['kv'])
         self.sdk_client = SDKClient()
+        os.system('export success_run=false')
 
     def allow_current_ip(self):
         try:
@@ -198,11 +201,12 @@ class PythonSdkWorkload(unittest.TestCase):
 
     def run_workload(self):
         query_run_list = list()
-        logging.info("Step-1----------------Creating DB user")
-        self.create_db_user()
-        logging.info("Step-2----------------Allowing current IP")
-        resp = self.allow_current_ip()
-        logging.info("response for allow current ip: {}".format(resp))
+        if self.initial_setup:
+            logging.info("Step-1----------------Creating DB user")
+            self.create_db_user()
+            logging.info("Step-2----------------Allowing current IP")
+            resp = self.allow_current_ip()
+            logging.info("response for allow current ip: {}".format(resp))
         logging.info("Step-3----------------Creating SDK client")
         self.cluster_srv = self.input.capella.get("connection_string", None)
         self.cluster = self.sdk_client.sdk_client_pool(self.cluster_srv, self.user_name, self.user_pass)
@@ -236,3 +240,4 @@ class PythonSdkWorkload(unittest.TestCase):
 
         start_workload(self.workload_type, collection_obj_list, query_run_list, self.number_of_docs_per_collection,
                        self.number_of_threads, self.number_of_retries, self.duration, self.delay_time)
+        os.environ['success_run'] = "true"
