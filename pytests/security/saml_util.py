@@ -152,3 +152,59 @@ class SAMLUtils:
             return True
         else:
             return False
+
+    def saml_deauth(self, cluster):
+        """
+        GET /saml/deauth
+        Initiates UI/SAML logout (SLO) (called by couchbase UI).
+        If SAML is disabled, it should return an error.
+        If SAML is enabled, it performs local logout, and then redirects the user to IDP endpoint
+        with SAML logout request message, which performs the logout at the IDP side.
+        IDP is supposed to redirect the user back (to GET or POST /saml/logout).
+        """
+        url = "http://" + cluster.ip + ":8091" + "/saml/deauth"
+        self.log.info(url)
+        resp = requests.get(url)
+        assert resp
+        assert resp.status_code == 200
+
+        action = SAMLRequest = ""
+        for line in resp.content.decode().split("\n"):
+            if "<form id=\"saml-req-form\" method=\"post\" action=" in line:
+                action = line[47:-2]
+            elif "<input type=\"hidden\" name=\"SAMLRequest\" value=" in line:
+                SAMLRequest = line[47:-4]
+        return action, SAMLRequest
+
+    def saml_logout(self, cluster, SAMLResponse):
+        """
+        Sends either logout response or logout request to couchbase
+        Usually IDP redirects user's browser to that endpoint
+        If logout is initiated by couchbase (by GET /saml/deauth),
+        /saml/logout will contain a SAML logout response.
+        If logout is initiated by IDP, /saml/logout will contain the SAML logout request.
+        Couchbase is supposed to call IdP's logout binding with a logout response then.
+        """
+        url = "http://" + cluster.ip + ":8091" + "/saml/logout"
+        header = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': '*/*',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive'
+        }
+        SAMLResponse = six.moves.urllib.parse.quote(SAMLResponse)
+        resp = requests.post(url,
+                             data="SAMLResponse={0}".format(SAMLResponse),
+                             headers=header,
+                             timeout=300, verify=False, allow_redirects=False)
+
+    def saml_metadata(self, cluster):
+        """
+        Returns Service Provider's (SP) metadata in XML format.
+        """
+        url = "http://" + cluster.ip + ":8091" + "/saml/metadata"
+        self.log.info(url)
+        resp = requests.get(url)
+        assert resp
+        assert resp.status_code == 200
+        return resp.content
