@@ -2084,3 +2084,15 @@ class QueryUDFTests(QueryTests):
         }]
         result = self.run_cbq_query('SELECT `definition`.`expression`, `definition`.`text` FROM system:functions WHERE identity.name="f11"')
         self.assertEqual(expected_result, result['results'])
+
+    def test_MB59069(self):
+        udf = 'CREATE OR REPLACE FUNCTION f11() { ( SELECT  /*+ ORDERED */  l, r FROM default AS l JOIN default AS r USE HASH (BUILD) ON l.c3=r.c3 WHERE l.c1 > 0 AND r.c1 > 0 AND r.c2 = 1 ) }'
+        self.run_cbq_query(udf)
+
+        # optimizer directives should be preserved in both text and expression
+        expected_result = [{
+            'expression': '(select /*+ ORDERED */ `l`, `r` from `default`:`default` as `l` join `default`:`default` as `r` use hash (build) on ((`l`.`c3`) = (`r`.`c3`)) where (((0 < (`l`.`c1`)) and (0 < (`r`.`c1`))) and ((`r`.`c2`) = 1)))',
+            'text': '( SELECT  /*+ ORDERED */  l, r FROM default AS l JOIN default AS r USE HASH (BUILD) ON l.c3=r.c3 WHERE l.c1 > 0 AND r.c1 > 0 AND r.c2 = 1 )'
+        }]
+        result = self.run_cbq_query('SELECT `definition`.`expression`, `definition`.`text` FROM system:functions WHERE identity.name="f11"')
+        self.assertEqual(expected_result, result['results'])
