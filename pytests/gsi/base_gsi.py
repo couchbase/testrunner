@@ -157,38 +157,40 @@ class BaseSecondaryIndexingTests(QueryTests):
                 self.enable_shard_based_rebalance()
 
         # Disabling CBO and Sequential Scans for GSI tests
-        query_node = self.get_nodes_from_services_map(service_type="n1ql")
-        query_rest = RestConnection(query_node)
-        cb_version = float(query_rest.get_major_version())
-        # if the builds are greater than 7.6, trinity variable is set to True and sequential scans are disabled
-        trinity = False
-        if cb_version >= 7.6:
-            trinity = True
-        api = f"{query_rest.baseUrl}settings/querySettings"
-        data = f'queryUseCBO={str(self.use_cbo).lower()}'
-        headers = {
-            'Content-Type': 'application/x-www-form-urlencoded',
-        }
-        auth = HTTPBasicAuth(self.rest.username,self.rest.password)
-        response = requests.request("POST", api, headers=headers, data=data, auth=auth, verify=False)
-        if response.status_code != 200:
-            self.fail(f"Disabling sequential scan failed. {response.content}")
-        self.log.info(f"{data} set")
-        self.log.info(response.text)
+
+        if not self.capella_run:
+            query_node = self.get_nodes_from_services_map(service_type="n1ql")
+            query_rest = RestConnection(query_node)
+            cb_version = float(query_rest.get_major_version())
+            # if the builds are greater than 7.6, trinity variable is set to True and sequential scans are disabled
+            trinity = False
+            if cb_version >= 7.6:
+                trinity = True
+            api = f"{query_rest.baseUrl}settings/querySettings"
+            data = f'queryUseCBO={str(self.use_cbo).lower()}'
+            headers = {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            }
+            auth = HTTPBasicAuth(self.rest.username, self.rest.password)
+            response = requests.request("POST", api, headers=headers, data=data, auth=auth, verify=False)
+            if response.status_code != 200:
+                self.fail(f"Disabling sequential scan failed. {response.content}")
+            self.log.info(f"{data} set")
+            self.log.info(response.text)
+            if not trinity:
+                self.n1ql_feat_ctrl = 76
+            api = f"{query_rest.query_baseUrl}admin/settings"
+            headers = {
+                'Content-Type': 'application/json',
+            }
+            data = json.dumps({"n1ql-feat-ctrl": self.n1ql_feat_ctrl})
+            response = requests.request("POST", api, headers=headers, data=data, auth=auth, verify=False)
+            if response.status_code != 200:
+                self.fail(f"Disabling sequential scan failed. {response.content}")
+            self.log.info(f"{data} set")
+            self.log.info(response.text)
 
 
-        if not trinity:
-            self.n1ql_feat_ctrl = 76
-        api = f"{query_rest.query_baseUrl}admin/settings"
-        headers = {
-            'Content-Type': 'application/json',
-        }
-        data = json.dumps({"n1ql-feat-ctrl": self.n1ql_feat_ctrl})
-        response = requests.request("POST", api, headers=headers, data=data, auth=auth, verify=False)
-        if response.status_code != 200:
-            self.fail(f"Disabling sequential scan failed. {response.content}")
-        self.log.info(f"{data} set")
-        self.log.info(response.text)
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
@@ -2268,6 +2270,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                             self.log.error(f"Index_metadata {index_metadata} being compared against index_metadata_2 {index_metadata_2}")
                             self.log.info(f"Index metadata is {index_map}")
                             raise Exception("Replicas reside on the same host.")
+
                     else:
                         for host in index_metadata['partitionMap']:
                             for partition in index_metadata['partitionMap'][host]:
@@ -2276,6 +2279,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                                         self.log.info(f"Index metadata is {index_map}")
                                         raise AssertionError(
                                             f"Partition replicas reside on the same host. Metadata 1 {index_metadata} Metadata 2 {index_metadata_2}")
+
 
     def check_gsi_logs_for_shard_transfer(self):
         """ Checks if file transfer based rebalance is triggered.

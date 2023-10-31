@@ -31,6 +31,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
             self.replica_repair = self.input.param("replica_repair", False)
             self.chaos_action = self.input.param("chaos_action", None)
             self.topology_change = self.input.param("topology_change", True)
+            self.capella_rebalance = self.input.param("capella_rebalance", "None")
             # TODO. After adding other tests, check if this can be removed
             # if not self.capella_run:
             #     shell = RemoteMachineShellConnection(self.servers[0])
@@ -432,6 +433,69 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 if self.continuous_mutations:
                     future.result()
 
+    def test_gsi_rebalance_indexer_node_capella(self):
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template,
+                                             load_default_coll=True)
+        time.sleep(10)
+        skip_array_index_item_count, scan_results_check = False, True
+        with ThreadPoolExecutor() as executor_main:
+            try:
+                event = Event()
+                if self.continuous_mutations:
+                    future = executor_main.submit(self.perform_continuous_kv_mutations, event)
+                    skip_array_index_item_count = True
+                    scan_results_check = False
+                select_queries = set()
+                query_node = self.get_nodes_from_services_map(service_type="n1ql")
+                for _ in range(self.initial_index_batches):
+                    replica_count = random.randint(1, 2)
+                    query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                    for namespace in self.namespaces:
+                        select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
+                                                                                   namespace=namespace))
+                        queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                          namespace=namespace,
+                                                                          num_replica=replica_count,
+                                                                          randomise_replica_count=True)
+                        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+                self.wait_until_indexes_online()
+                self.validate_shard_affinity()
+                nodes_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                nodes_out_list = nodes_out[:2]
+                if self.rebalance_all_at_once:
+                    # rebalance out all nodes at once
+                    self.rebalance_and_validate(nodes_out_list=nodes_out_list,
+                                                swap_rebalance=False,
+                                                skip_array_index_item_count=skip_array_index_item_count,
+                                                select_queries=select_queries,
+                                                scan_results_check=scan_results_check, capella_rebalance=self.capella_rebalance)
+                else:
+                    # rebalance out 1 node after another
+                    for count, node in enumerate(nodes_out_list):
+                        self.log.info(f"Running rebalance number {count}")
+                        self.rebalance_and_validate(nodes_out_list=[node], swap_rebalance=False,
+                                                    skip_array_index_item_count=skip_array_index_item_count,
+                                                    select_queries=select_queries,
+                                                    scan_results_check=scan_results_check, capella_rebalance=self.capella_rebalance)
+                map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+                self.run_post_rebalance_operations(map_after_rebalance=map_after_rebalance,
+                                                   stats_map_after_rebalance=stats_map_after_rebalance)
+            except Exception as e:
+                raise Exception(e)
+            finally:
+                event.set()
+                if self.continuous_mutations:
+                    future.result()
+
     # common methods
     def _return_maps(self):
         index_map = self.get_index_map_from_index_endpoint(return_system_query_scope=False)
@@ -516,7 +580,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
             gen_create = SDKDataLoader(num_ops=self.NUM_DOCS_POST_REBALANCE, percent_create=100,
                                        percent_update=0, percent_delete=0, scope=scope,
                                        collection=collection, start_seq_num=self.num_of_docs_per_collection + 1,
-                                       json_template=self.json_template)
+                                       json_template=self.json_template, password=self.password, username=self.username)
             try:
                 with ThreadPoolExecutor() as executor:
                     executor.submit(self._load_all_buckets, self.master, gen_create)
@@ -543,7 +607,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
     def rebalance_and_validate(self, nodes_out_list=None, nodes_in_list=None,
                                swap_rebalance=False, skip_array_index_item_count=False,
                                services_in=None, failover_nodes_list=None, select_queries=None,
-                               scan_results_check=False):
+                               scan_results_check=False, capella_rebalance=None):
         if not nodes_out_list:
             nodes_out_list = []
         if not nodes_in_list:
@@ -574,8 +638,16 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                     self.block_indexer_port(node=node)
             time.sleep(30)
         # rebalance operation
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], nodes_in_list, nodes_out_list,
-                                                 services=services_in, cluster_config=self.cluster_config)
+        if self.capella_run:
+            if capella_rebalance == 'rebalance_in':
+                self.capella_api.add_nodes_to_capella_cluster(services=['index'], cluster_id=self.cluster_id, nodes_count=len(nodes_out_list))
+            elif capella_rebalance == 'rebalance_out':
+                self.capella_api.remove_nodes_from_capella_cluster(services=['index'], cluster_id=self.cluster_id, nodes_count=len(nodes_out_list))
+            elif capella_rebalance == 'swap_rebalance':
+                self.capella_api.scale_up_capella_nodes(services=['index'], cluster_id=self.cluster_id)
+        else:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], nodes_in_list, nodes_out_list,
+                                                     services=services_in, cluster_config=self.cluster_config)
         self.log.info(f"Rebalance task triggered. Wait in loop until the rebalance starts")
         time.sleep(3)
         status, _ = self.rest._rebalance_status_and_progress()
@@ -583,8 +655,9 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
         self.log.info("Rebalance has started running.")
-        self.run_operation(phase="during", action=self.chaos_action, nodes_in_list=nodes_in_list,
-                           nodes_out_list=nodes_out_list)
+        if not self.capella_run:
+            self.run_operation(phase="during", action=self.chaos_action, nodes_in_list=nodes_in_list,
+                               nodes_out_list=nodes_out_list)
         if self.chaos_action and self.chaos_action not in ['kill_projector', 'ddl_during_rebalance', 'rebalance_during_ddl']:
             if self.chaos_action != 'stop_rebalance':
                 # Rebalance failure check skipped for stop rebalance
@@ -616,12 +689,30 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 time.sleep(1)
                 status, _ = self.rest._rebalance_status_and_progress()
         time.sleep(10)
-        reached = RestHelper(self.rest).rebalance_reached()
-        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-        rebalance.result()
+        if not self.capella_run:
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+            self.run_operation(phase="during", action=self.chaos_action)
+        if not capella_rebalance == 'swap_rebalance':
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        else:
+            self.capella_api.wait_for_cluster(cluster_id=self.cluster_id, sleep_timer=60)
+        if self.capella_run:
+            servers = self.capella_api.get_nodes_formatted(cluster_id=self.cluster_id, username=self.username,
+                                                           password=self.password)
+            self.servers = servers
+            self.update_master_node()
+
+        if not self.capella_run:
+            rebalance.result()
         # TODO remove sleep after MB-58840 fix
         time.sleep(60)
-        shard_affinity = self.is_shard_based_rebalance_enabled()
+        if not self.capella_run:
+            shard_affinity = self.is_shard_based_rebalance_enabled()
+        else:
+            shard_affinity = True
         if shard_affinity:
             self.log.info("Running validations for shard-based rebalance")
             self.log.info("Fetching list of shards after completion of rebalance")
@@ -637,8 +728,9 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
             # uncomment after MB-58776 is fixed
             self.validate_shard_affinity()
             self.sleep(30)
-            if not self.check_gsi_logs_for_shard_transfer():
-                raise Exception("Shard based rebalance not triggered")
+            if not self.capella_run:
+                if not self.check_gsi_logs_for_shard_transfer():
+                    raise Exception("Shard based rebalance not triggered")
         else:
             self.log.info("Running validations for MOI type indexes")
             if self.check_gsi_logs_for_shard_transfer():
