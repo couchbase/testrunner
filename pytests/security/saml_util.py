@@ -87,7 +87,7 @@ class SAMLUtils:
                                                                      "\"href\":\"") + 134]
         j_session_id = resp.headers["set-cookie"][resp.headers["set-cookie"].index("JSESSIONID=") +
                                                   11: resp.headers["set-cookie"].index(
-                                                      "JSESSIONID=") + 43]
+            "JSESSIONID=") + 43]
         return next_url, j_session_id
 
     def get_saml_response(self, next_url, cookie_string, j_session_id):
@@ -153,6 +153,21 @@ class SAMLUtils:
         else:
             return False
 
+    def sso_user_permission_details(self, cluster, session_cookie_name, session_cookie_value):
+        """
+        /whoami returns details about the user
+        """
+        cookies = {session_cookie_name: session_cookie_value}
+        headers = {
+            'Host': cluster.ip + ":8091",
+            'ns-server-ui': 'yes',
+            'Accept': 'application/json,text/plain, */*'
+        }
+        response = requests.get("http://" + cluster.ip + ":8091" + "/whoami",
+                                cookies=cookies,
+                                headers=headers, verify=False)
+        return response
+
     def saml_deauth(self, cluster):
         """
         GET /saml/deauth
@@ -193,10 +208,10 @@ class SAMLUtils:
             'Connection': 'keep-alive'
         }
         SAMLResponse = six.moves.urllib.parse.quote(SAMLResponse)
-        resp = requests.post(url,
-                             data="SAMLResponse={0}".format(SAMLResponse),
-                             headers=header,
-                             timeout=300, verify=False, allow_redirects=False)
+        requests.post(url,
+                      data="SAMLResponse={0}".format(SAMLResponse),
+                      headers=header,
+                      timeout=300, verify=False, allow_redirects=False)
 
     def saml_metadata(self, cluster):
         """
