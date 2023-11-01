@@ -1213,7 +1213,7 @@ class RestConnection(object):
         if CbServer.use_https:
             port = CbServer.ssl_port_map.get(str(port), str(port))
         log.info("--> init_node_services({},{},{},{},{})".format(username,password,hostname,port,services))
-        api = self.baseUrl + '/node/controller/setupServices'
+        api = self.baseUrl + 'node/controller/setupServices'
         if services == None:
             log.info(" services are marked as None, will not work")
             return False
@@ -1228,7 +1228,7 @@ class RestConnection(object):
                                     'user': username,
                                     'password': password,
                                     'services': ",".join(services)})
-        log.info('/node/controller/setupServices params on {0}: {1}:{2}'.format(self.ip, self.port, params))
+        log.info('node/controller/setupServices params on {0}: {1}:{2}'.format(self.ip, self.port, params))
 
         status, content, header = self._http_request(api, 'POST', params)
         error_message = "cannot change node services after cluster is provisioned"
