@@ -1,5 +1,7 @@
 from membase.api.exception import CBQError
 from .tuq import QueryTests
+from deepdiff import DeepDiff
+
 
 
 class QueryANSIJOINSTests(QueryTests):
@@ -330,6 +332,23 @@ class QueryANSIJOINSTests(QueryTests):
         queries_to_run.append((query_2, 432))
 
         self.run_common_body(queries_to_run=queries_to_run)
+
+    ''' Run a udf with hash join hints that needs to reopen, should return correct results'''
+    def test_MB59082(self):
+        self.run_cbq_query('UPSERT INTO default (KEY k, VALUE v) SELECT "k00"||TO_STR(d) AS k, {"c1":d, "c2":d, "c3":d} '
+                           'AS v FROM ARRAY_RANGE(1,10) AS d')
+        self.run_cbq_query('CREATE INDEX ix1 ON default(c1,c2, c3)')
+        self.run_cbq_query('CREATE OR REPLACE FUNCTION f10(a) '
+                           '{( SELECT l, r FROM default AS l JOIN default AS r USE HASH (BUILD) '
+                           'ON l.c3=r.c3 WHERE l.c1 > 0 AND r.c1 > 0 AND r.c2 = a)}')
+        actual_results = self.run_cbq_query('select raw f10(t.c1) from default as t where t.c1 > 0')
+        expected_results = self.run_cbq_query('SELECT l, r FROM default AS l JOIN default AS r USE HASH (BUILD) '
+                                              'ON l.c3=r.c3 WHERE l.c1 > 0 AND r.c1 > 0 AND r.c2 = r.c1 and r.c1 >0')
+        i=0
+        for results in actual_results['results']:
+            if results[0] != expected_results['results'][i]:
+                self.fail(f"Results are incorrect please check expected:{expected_results}, actual:{actual_results}")
+            i+=1
 
     ''' The right hand side of a join can be an expression, it needs to be a key space (a bucket)
             -Run a query where the right hand expression is a subquery
