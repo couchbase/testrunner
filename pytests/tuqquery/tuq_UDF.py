@@ -731,6 +731,28 @@ class QueryUDFTests(QueryTests):
             except Exception as e:
                 self.log.error(str(e))
 
+    ''' This test makes sure that prepared statements executed one after another do not return UDF nested 
+        aggregates not allowed error'''
+    def test_MB58582(self):
+        self.run_cbq_query('UPSERT INTO default VALUES("k01", {"cid": "c01", "status":"active", "pid": "p01"})')
+        self.run_cbq_query('CREATE INDEX ix1 ON default(cid, status, pid)')
+        self.run_cbq_query('CREATE OR REPLACE FUNCTION udf1(pObj, pcustId) '
+                           '{(WITH pm as ( Select * from OBJECT_INNER_PAIRS(pObj) as m) SELECT pid, count(1) '
+                           'AS numRows FROM default WHERE cid = pcustId AND status IN ["active"] GROUP BY pid)}')
+        prepare_expected_results = self.run_cbq_query('SELECT a.* FROM udf1({"xx":"xx"}, "c01") AS a')
+        prepare_expected_results2 = self.run_cbq_query('SELECT a.* FROM udf1({"xx":"xx"}, "c07") AS a')
+        self.run_cbq_query('prepare p1 from SELECT a.* FROM udf1({"xx":"xx"}, "c01") AS a')
+        self.run_cbq_query('prepare p2 from SELECT a.* FROM udf1({"xx":"xx"}, "c07") AS a')
+        for i in range(0,999):
+            prepare_actual_results = self.run_cbq_query('execute p1')
+            prepare_actual_results2 = self.run_cbq_query('execute p2')
+            diffs = DeepDiff(prepare_actual_results['results'], prepare_expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
+            diffs = DeepDiff(prepare_actual_results2['results'], prepare_expected_results2['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
+
     def test_agg_udf(self):
         try:
             self.run_cbq_query("CREATE OR REPLACE FUNCTION func1(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }")
