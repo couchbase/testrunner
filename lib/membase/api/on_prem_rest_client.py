@@ -6583,6 +6583,15 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'DELETE')
         return status, content, header
 
+    def set_ui_session_timeout(self, timeout):
+        """
+        Set time in seconds until a browser session is closed
+        """
+        api = self.baseUrl + 'settings/security'
+        params = urllib.parse.urlencode({"uiSessionTimeout": timeout})
+        status, content, header = self._http_request(api, 'POST', params)
+        return status, content, header
+
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
