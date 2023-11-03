@@ -244,3 +244,14 @@ class SAMLUtils:
         assert [{'role': 'admin'}] == response['roles']
         assert sso_user == response['id']
         assert 'external' == response['domain']
+
+    def get_saml_error_message(self, cluster, error_id):
+        """
+        Given the error id, returns the SAML error message
+        Note: can be accessed only once
+        """
+        url = "http://" + cluster.ip + ":8091" + "/saml/error?id=" + error_id
+        self.log.info(url)
+        resp = requests.get(url)
+        return resp.content
+    
