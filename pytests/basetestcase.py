@@ -2470,6 +2470,12 @@ class OnPremBaseTestCase(unittest.TestCase):
         users = json.loads(users[1])
         return users
 
+    def add_role_to_user(self, role_list):
+        """ Adds a singular role to a user"""
+        rest = RestConnection(self.master)
+        status = RbacBase().add_user_role([role_list], rest, source = "builtin")
+        return status
+
     def add_user_to_group(self, group_name, user_id):
         """  """
         rest = RestConnection(self.master)
