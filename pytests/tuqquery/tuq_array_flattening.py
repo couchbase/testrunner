@@ -574,7 +574,7 @@ class QueryArrayFlatteningTests(QueryTests):
             if self.use_unnest:
                 self.assertTrue("Duplicate UNNEST alias emails" in str(e), "The error is incorrect check the error {0}".format(str(e)))
             else:
-                self.assertTrue("Duplicate variable emails" in str(e), "The error is incorrect check the error {0}".format(str(e)))
+                self.assertTrue("Duplicate variable emails" in str(e) or "Duplicate variable: emails" in str(e), "The error is incorrect check the error {0}".format(str(e)))
 
 
     def test_flatten_alias_keyspace_collision(self):
@@ -593,7 +593,7 @@ class QueryArrayFlatteningTests(QueryTests):
             if self.use_unnest:
                 self.assertTrue("Duplicate UNNEST alias d" in str(e), "The error is incorrect check the error {0}".format(str(e)))
             else:
-                self.assertTrue("Duplicate variable d" in str(e), "The error is incorrect check the error {0}".format(str(e)))
+                self.assertTrue("Duplicate variable d" in str(e) or "Duplicate variable: d" in str(e), "The error is incorrect check the error {0}".format(str(e)))
 
     '''We expect the query to pick up the array with the keys flattened'''
     def test_flatten_index_selection(self):
