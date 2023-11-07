@@ -232,7 +232,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         self.sys_log_count = Counter()
         self.log_start = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.") + datetime.datetime.now().strftime("%f")[:3] + 'Z'
-
+        self.document_type = self.input.param("document_type", "json")
         super().setUp()
         self.preamble()
 
@@ -1484,7 +1484,9 @@ class NfsServer(Server):
         if os_type == "linux" and os_dist == "centos7":
            self.remote_shell.execute_command("yum -y install nfs-utils")
         if os_type == "linux" and "debian" in os_dist:
-           self.remote_shell.execute_command("apt update -y apt install -y nfs-common nfs-kernel-server")
+           # Uncomment the default debian repository
+           self.remote_shell.execute_command("sed -i \"/#deb http:\/\/deb.debian.org\/debian\/ bullseye main/c deb http:\/\/deb.debian.org\/debian\/ bullseye main\" /etc/apt/sources.list")
+           self.remote_shell.execute_command("apt install -y nfs-common nfs-kernel-server")
         self.remote_shell.execute_command("systemctl start nfs-server.service")
 
     def share(self, directory_to_share, privileges={}):
@@ -1527,7 +1529,9 @@ class NfsClient(Client):
         if os_type == "linux" and os_dist == "centos7":
            self.remote_shell.execute_command("yum -y install nfs-utils")
         if os_type == "linux" and "debian" in os_dist:
-           self.remote_shell.execute_command("apt update -y && apt install -y nfs-common nfs-kernel-server")
+           # Uncomment the default debian repository
+           self.remote_shell.execute_command("sed -i \"/#deb http:\/\/deb.debian.org\/debian\/ bullseye main/c deb http:\/\/deb.debian.org\/debian\/ bullseye main\" /etc/apt/sources.list")
+           self.remote_shell.execute_command("apt install -y nfs-common nfs-kernel-server")
         self.remote_shell.execute_command("systemctl start nfs-server.service")
 
     def mount(self, directory_to_share, directory_to_mount):
