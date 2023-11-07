@@ -2448,7 +2448,6 @@ class RestConnection(object):
         """ in alternate address, we need to get hostname from ini file """
         return self.ip
 
-
     def set_alternate_address(self, alternate_address, alternate_ports={}, network_type="external"):
         api = self.baseUrl + 'node/controller/setupAlternateAddresses/' + network_type
         params_dict = {}
@@ -6502,6 +6501,16 @@ class RestConnection(object):
         api = self.baseUrl + url
         status, content, header = self._http_request(api, 'POST', params=version)
         return status, content
+
+    def set_internal_password_rotation_interval(self, rotation_interval=1800000):
+        api = self.baseUrl + "settings/security"
+        payload = {
+            'intCredsRotationInterval': rotation_interval
+        }
+        params = urllib.parse.urlencode(payload)
+        status, content, header = self._http_request(api, 'POST', params)
+        if not status:
+            raise Exception("Failed to set internal password rotation interval: {}".format(content))
 
     def load_trusted_CAs(self):
         """

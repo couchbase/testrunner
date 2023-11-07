@@ -46,6 +46,7 @@ from TestInput import TestInputSingleton, TestInputServer
 from scripts.java_sdk_setup import JavaSdkSetup
 from scripts.magma_docloader_setup import MagmaDocloaderSetup
 from tasks.future import Future
+from membase.api.rest_client import RestConnection
 
 
 try:
@@ -298,6 +299,13 @@ class OnPremBaseTestCase(unittest.TestCase):
                 self.change_port_info()
             if self.input.param("port", None):
                 self.port = str(self.input.param("port", None))
+
+            # Sets internal password rotation time interval
+            self.int_pwd_rotn = self.input.param("int_pwd_rotn", 1800000)
+
+            # Rotate the internal user's password at the specified interval
+            self.rest = RestConnection(self.master)
+            self.rest.set_internal_password_rotation_interval(self.int_pwd_rotn)
 
             if self.enable_dp:
                 for node in self.servers:
