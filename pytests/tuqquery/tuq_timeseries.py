@@ -245,7 +245,7 @@ class QueryTimeSeriesTests(QueryTests):
 
     def test_udf(self):
         hours = 4
-        ts_query = f'SELECT MILLIS_TO_TZ(t._t,"UTC") AS ts, sum(t._v1) as volume FROM default.stocks.price as d UNNEST _timeseries(d, {{"ts_ranges": [1672876800000,1672876800000+3600000*hr]}}) AS t GROUP by t._t'
+        ts_query = f'SELECT MILLIS_TO_TZ(t._t,"UTC") AS ts, sum(t._v1) as volume FROM default.stocks.price as d UNNEST _timeseries(d, {{"ts_ranges": [1672876800000,1672876800000+3600000*hr]}}) AS t WHERE d.ticker is not missing GROUP by t._t'
         udf = self.run_cbq_query(f'CREATE OR REPLACE FUNCTION volume(hr) {{ ({ts_query}) }}')
         result = self.run_cbq_query(f'EXECUTE FUNCTION volume({hours})')
         self.assertEqual(len(result['results'][0]), hours+1)
