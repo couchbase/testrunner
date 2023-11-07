@@ -1739,9 +1739,7 @@ class QuerySanityTests(QueryTests):
                 try:
                     self.run_cbq_query(self.query)
                 except CBQError as ex:
-                    self.assertTrue(str(ex).find("Duplicate variable o (near line 1, column 57) already in scope.") != -1 or
-                                    str(ex).find("Duplicate variable o (near line 1, column 66) already in scope.") != -1,
-                                    "Error is incorrect.")
+                    self.assertTrue("Duplicate variable o" in str(ex) or "Duplicate variable: o" in str(ex), f"error message is wrong, please check {str(ex)}")
                 else:
                     self.fail("There was no errors.")
                 self.query = 'delete from %s use keys["k01","k02"]' % query_bucket
