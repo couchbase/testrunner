@@ -2,6 +2,7 @@ import json
 import logging
 import threading
 import time
+from deepdiff import DeepDiff
 
 from remote.remote_util import RemoteMachineShellConnection
 
@@ -54,7 +55,9 @@ class QueryUsingTests(QueryTests):
                 self.run_cbq_query(query="CREATE INDEX idx1 on default:default.{0}.{1}(name) USING GSI".format(self.scope, self.collections[0]))
             self.wait_for_all_indexes_online()
             results = self.run_cbq_query(query='select * from default:default.test.test1 USE INDEX (idx1 USING GSI) where name = "old hotel" order by meta().id')
-            self.assertEqual(results['results'], [{'test1': {'name': 'old hotel', 'type': 'hotel'}}, {'test1': {'name': 'old hotel', 'nested': {'fields': 'fake'}}}, {'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+            diffs = DeepDiff(results['results'], [{'test1': {'name': 'old hotel', 'type': 'hotel'}}, {'test1': {'name': 'old hotel', 'nested': {'fields': 'fake'}}}, {'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX default:default.test.test1.idx1 USING GSI")
 
@@ -64,7 +67,9 @@ class QueryUsingTests(QueryTests):
                 query="CREATE INDEX idx1 on {1}(name) USING GSI".format(self.scope, self.collections[0]), query_context="default:default.test")
             self.wait_for_all_indexes_online()
             results = self.run_cbq_query(query='select * from test1 USE INDEX (idx1 USING GSI) where name = "old hotel" order by meta().id', query_context="default:default.test")
-            self.assertEqual(results['results'], [{'test1': {'name': 'old hotel', 'type': 'hotel'}}, {'test1': {'name': 'old hotel', 'nested': {'fields': 'fake'}}}, {'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+            diffs = DeepDiff(results['results'], [{'test1': {'name': 'old hotel', 'type': 'hotel'}}, {'test1': {'name': 'old hotel', 'nested': {'fields': 'fake'}}}, {'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX test1.idx1 USING GSI",query_context="default:default.test")
 
@@ -80,7 +85,9 @@ class QueryUsingTests(QueryTests):
             self.wait_for_all_indexes_online()
             results = self.run_cbq_query(
                 query="SELECT * FROM default:default.test.test1 USE INDEX (idx4 USING GSI) WHERE ANY v in numbers SATISFIES v = 1 END")
-            self.assertEqual(results['results'][0]['test1'], {'name': 'old hotel', 'numbers': [1, 2, 3, 4]})
+            diffs = DeepDiff(results['results'],  [{'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX default:default.test.test1.idx4 USING GSI")
 
@@ -91,7 +98,9 @@ class QueryUsingTests(QueryTests):
             self.wait_for_all_indexes_online()
             results = self.run_cbq_query(
                 query="SELECT * FROM test1 USE INDEX (idx4 USING GSI) WHERE ANY v in numbers SATISFIES v = 1 END", query_context="default:default.test")
-            self.assertEqual(results['results'][0]['test1'], {'name': 'old hotel', 'numbers': [1, 2, 3, 4]})
+            diffs = DeepDiff(results['results'], [{'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX test1.idx4 USING GSI", query_context="default:default.test")
 
@@ -137,11 +146,17 @@ class QueryUsingTests(QueryTests):
             self.wait_for_all_indexes_online()
             results = self.run_cbq_query(
                 query='select * from test1 USE INDEX (idx1 USING GSI) where name = "old hotel"', query_context="default:default.test")
-            self.assertEqual(results['results'], [{'test1': {'name': 'old hotel', 'type': 'hotel'}}, {'test1': {'name': 'old hotel', 'nested': {'fields': 'fake'}}}, {'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+            diffs = DeepDiff(results['results'], [{'test1': {'name': 'old hotel', 'type': 'hotel'}}, {'test1': {'name': 'old hotel', 'nested': {'fields': 'fake'}}}, {'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+            if diffs:
+                self.assertTrue(False, diffs)
             results = self.run_cbq_query(
                 query="SELECT * FROM test1 USE INDEX (idx4 USING GSI) WHERE ANY v in numbers SATISFIES v = 1 END", query_context="default:default.test")
-            self.assertEqual(results['results'][0]['test1'], {'name': 'old hotel', 'numbers': [1, 2, 3, 4]})
+            diffs = DeepDiff(results['results'], [{'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}])
+            if diffs:
+                self.assertTrue(False, diffs)
             results = self.run_cbq_query(query="SELECT * FROM test1 b USE INDEX(idx3 USING GSI)WHERE b.nested.fields = 'fake'", query_context="default:default.test")
-            self.assertEqual(results['results'][0]['b'], {'name': 'old hotel', 'nested': {'fields': 'fake'}})
+            diffs = DeepDiff(results['results'], [{'b': {'name': 'old hotel', 'nested': {'fields': 'fake'}}}])
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP PRIMARY INDEX on {1} USING GSI".format(self.scope,self.collections[0]), query_context="default:default.test")
