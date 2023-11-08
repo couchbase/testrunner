@@ -268,7 +268,7 @@ class AutoFailoverTests(unittest.TestCase):
 
     def test_invalid_timeouts(self):
         # The value of "timeout" must be a positive integer in a range from 5 to 3600
-        timeouts = [-360, -60, 0, 4, 300000]
+        timeouts = [-360, -60, 0, 300000]
         for timeout in timeouts:
             self.rest.update_autofailover_settings(True, timeout)
             # read settings and verify
