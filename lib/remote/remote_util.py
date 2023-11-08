@@ -1139,6 +1139,7 @@ class RemoteMachineShellConnection(KeepRefs):
         else:
             command_1 = "/sbin/iptables -F"
             command_2 = "/sbin/iptables -t nat -F"
+            command_3 = "nft flush ruleset"
             if self.nonroot:
                 self.connect_with_user(user="root")
                 log.info("\n Non root or non sudo has no right to disable firewall, switching over to root")
@@ -1146,13 +1147,18 @@ class RemoteMachineShellConnection(KeepRefs):
                 self.log_command_output(output, error)
                 output, error = self.execute_command(command_2)
                 self.log_command_output(output, error)
+                output, error = self.execute_command(command_3)
+                self.log_command_output(output, error)
                 self.connect_with_user(user=self.username)
                 return
             output, error = self.execute_command(command_1)
             self.log_command_output(output, error, debug=False)
             output, error = self.execute_command(command_2)
             self.log_command_output(output, error, debug=False)
+            output, error = self.execute_command(command_3)
+            self.log_command_output(output, error, debug=False)
             self.connect_with_user(user=self.username)
+
 
     def download_binary(self, url, deliverable_type, filename, latest_url=None,
                                               version="", skip_md5_check=True):
@@ -5403,6 +5409,11 @@ class RemoteUtilHelper(object):
             command_1 = "/sbin/iptables -A INPUT -p tcp -i " + o[0] + " --dport 1000:65535 -j REJECT"
             command_2 = "/sbin/iptables -A OUTPUT -p tcp -o " + o[0] + " --sport 1000:65535 -j REJECT"
             command_3 = "/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT"
+            command_4 = "nft add table ip filter"
+            command_5 = "nft add chain ip filter INPUT '{ type filter hook "
+            "input priority 0; }'"
+            command_6 = "nft add rule ip filter input tcp dport 1000-65535 " \
+                        "reject"
             if shell.info.distribution_type.lower() in LINUX_DISTRIBUTION_NAME \
                              and server.ssh_username != "root":
                 copy_server.ssh_username = "root"
@@ -5411,7 +5422,12 @@ class RemoteUtilHelper(object):
                 shell = RemoteMachineShellConnection(copy_server)
                 o, r = shell.execute_command("whoami")
                 shell.log_command_output(o, r)
+
+            o, r = shell.execute_command(command_4)
+            o, r = shell.execute_command(command_5)
             # Reject incoming connections on port 1000->65535
+            o, r = shell.execute_command(command_6)
+            shell.log_command_output(o, r)
             o, r = shell.execute_command(command_1)
             shell.log_command_output(o, r)
             # Reject outgoing connections on port 1000->65535
