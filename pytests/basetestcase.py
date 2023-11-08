@@ -1622,6 +1622,9 @@ class OnPremBaseTestCase(unittest.TestCase):
                 command = "iptables -F"
                 output, error = shell.execute_command(command)
                 shell.log_command_output(output, error)
+                command = "nft flush ruleset"
+                output, error = shell.execute_command(command)
+                shell.log_command_output(output, error)
                 shell.disconnect()
 
     def _restart_memcache(self, bucket_name):
