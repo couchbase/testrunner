@@ -1,4 +1,5 @@
 import json
+import textwrap
 import time
 from threading import Thread, Event
 from couchbase_helper.document import DesignDocument, View
@@ -32,6 +33,7 @@ class SecretsMasterBase():
     WININSTALLPATH = "C:/Program Files/Couchbase/Server/var/lib/couchbase/"
     LININSTALLPATH = "/opt/couchbase/var/lib/couchbase/"
     MACINSTALLPATH = "/Users/couchbase/Library/Application Support/Couchbase/var/lib/couchbase/"
+    MASTER_PASSWORD_SCRIPT_PATH = "/tmp/masterpasswordscript.sh"
 
     def __init__(self,
                  host=None,
@@ -67,7 +69,7 @@ class SecretsMasterBase():
         rest = RestConnection(host)
         status = self.execute_cli(host,new_password)
         log.info ("Status of set password command is - {0}".format(status))
-    
+
     #Execute cli to set master password, and provide input
     def execute_cli(self,host,new_password=None):
         cmd = "/opt/couchbase/bin/couchbase-cli setting-master-password --new-password -c localhost -u Administrator -p password"
@@ -120,6 +122,23 @@ class SecretsMasterBase():
             'filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
         return str(dir)
 
+    def check_secret_management_state(self, node, expected_value='default'):
+        """
+         Checks the state of secret management
+        """
+        rest_client = RestConnection(node)
+        status, content = rest_client.get_secret_management_state()
+        if not status:
+            return False, "Failed to fetch secrets management state"
+
+        log.info("State of secrets managemnt: {}".format(content))
+        secret_state = content['passwordState']
+
+        if secret_state == expected_value:
+            return True, ""
+
+        return False, "Expected secret management state to be {}, but it is {}". \
+                format(expected_value, secret_state)
 
     def check_log_files(self,host,file_name,search_string):
         log_path = self.get_log_dir(host)
@@ -161,12 +180,36 @@ class SecretsMasterBase():
         shell.execute_command("sed -i 's/export CB_MASTER_PASSWORD=*//' /opt/couchbase/bin/couchbase-server")
         #shell.execute_command("export CB_MASTER_PASSWORD="+ password + "; service couchbase-server restart")
         shell.execute_command("service couchbase-server restart")
-        
+
 
     def restart_server_with_env(self,host,password):
         shell = RemoteMachineShellConnection(host)
         shell.execute_command("sed -i 's/export PATH/export PATH\\nexport CB_MASTER_PASSWORD='" + password + "'/' /opt/couchbase/bin/couchbase-server")
         #shell.execute_command("export CB_MASTER_PASSWORD="+ password + "; service couchbase-server restart")
+        shell.execute_command("service couchbase-server restart")
+
+    def restart_server_with_script(self, host, password):
+        #set secret encryption settings
+        rest = RestConnection(host)
+
+        #generate master password script
+        self.create_password_script(host)
+        password_script_cmd = "{} {}".format(SecretsMasterBase.MASTER_PASSWORD_SCRIPT_PATH,
+                                            password)
+
+        #set encyrption setttings
+        encryption_settings_payload = {
+            "keyEncrypted": True,
+            "passwordSource": "script",
+            "passwordCmd": password_script_cmd
+        }
+        status, content = rest.set_encryption_setttings(encryption_settings_payload)
+        if not status:
+            self.fail("Failed to set encryption settings")
+        log.info("Encryption settings: {}".format(content))
+
+        #restart couchbase server
+        shell = RemoteMachineShellConnection(host)
         shell.execute_command("service couchbase-server restart")
 
 
@@ -413,6 +456,31 @@ class SecretsMasterBase():
             shell.start_server()
         shell.disconnect()
         time.sleep(30)
+
+    def create_password_script(self, host):
+        bash_script = textwrap.dedent("""#!/bin/bash
+
+            # Check if an argument was provided
+            if [ $# -eq 0 ]; then
+            echo "Error: No input provided. Please provide a parameter."
+            exit 1
+            fi
+
+            # Get the input parameter and write it to stdout
+            input_parameter="$1"
+            echo "$input_parameter"
+            exit 0
+            """)
+
+        shell = RemoteMachineShellConnection(host)
+        #remove the file if it already exists
+        shell.execute_command("rm {}".format(SecretsMasterBase.MASTER_PASSWORD_SCRIPT_PATH))
+
+        #create the file
+        shell.create_file(SecretsMasterBase.MASTER_PASSWORD_SCRIPT_PATH, bash_script)
+
+        #give execute permissions
+        shell.execute_command("chmod +x {}".format(SecretsMasterBase.MASTER_PASSWORD_SCRIPT_PATH))
 
 
     def read_ns_config(self,host):

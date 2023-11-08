@@ -5187,6 +5187,57 @@ class RestConnection(object):
         log.info ("Header of the response is {0}".format(header))
         return status
 
+    def get_secret_management_state(self):
+        api = self.baseUrl + "nodes/self/secretsManagement/encryptionService"
+        status, content, header = self._http_request(api, 'GET')
+        log.info("Status of get secret management status: {}".format(status))
+        log.info("Content of secret management status: {}".format(content))
+        if not status:
+            return status, None
+
+        return status, json.loads(content)
+
+    def set_encryption_setttings(self, encryption_payload):
+        """
+            Sets secret encryption settings:
+
+            encryption_payload keys:
+                keyEncrypted: Whether data keys should be encrypted by means of the master password.
+                              The value can be either true (the default) or false.
+                keyPath: Specifies whether the data keys are stored at the default or at a custom location.
+                         The value can be either auto (which is the default) or custom. If the value is auto,
+                         the default location is used. If the value is custom, the path provided by customKeyPath is used.
+                         Note that this option is used only if keyStorageType has the value file.
+                customKeyPath: A file-path that specifies a custom location at which the data keys are stored.
+                               This file-path is used only if the value of keyPath is custom
+                keyStorageType: The value can be file (which is the default) or script. If the value is file, the system
+                                stores the data keys in a file. If the value is script, a user-specified script is called,
+                                when keys are to be written, read, or deleted. These scripts must be specified by writeCmd,
+                                readCmd, and deleteCmd, respectively.
+                passwordSource: The value can be env (which is the default) or script. If the value is env, the master password
+                                is read from the environment variable specified by passwordEnv. If the value is script,
+                                the master password is provided by the script specified by passwordCmd.
+                passwordEnv: The name of the environment variable from which the master password is read (provided that
+                             the value of passwordSource is env). By default, the value of passwordEnv is CB_MASTER_PASSWORD.
+                passwordCmd: The script to be executed for provision of the master password. This script is only executed
+                             when the value of passwordSource is script.
+                readCmd: The script to be executed for the reading of data keys (when the value of keyStorageType is script)
+                writeCmd: The script to be executed for the writing of data keys (when the value of keyStorageType is script).
+                deleteCmd: The script to be executed for the deletion of data keys (when the value of keyStorageType is script).
+
+        """
+        api = self.baseUrl + "node/controller/secretsManagement/encryptionService"
+        params = json.dumps(encryption_payload)
+        headers = self._create_capi_headers()
+        status, content, header = self._http_request(api, 'POST', params, headers)
+        log.info("Status of set secret encryption: {}".format(status))
+        log.info("Content of set secret encryption: {}".format(content))
+        if not status:
+            return status, None
+
+        return status, json.loads(content)
+
+
 
     def set_downgrade_storage_mode_with_rest(self, downgrade=True, username="Administrator",
                                                                    password="password"):

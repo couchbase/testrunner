@@ -68,6 +68,16 @@ class SecretsMgmtTests(BaseTestCase):
         self.secretmgmt_base_obj.restart_server_with_env(self.master, self.password)
         temp_return = self.secretmgmt_base_obj.check_log_files(self.master, "/babysitter.log", "Booted")
         self.assertTrue(temp_return, "Babysitter.log does not contain node initialization code")
+        res, err_msg = self.secretmgmt_base_obj.check_secret_management_state(self.master, "user_configured")
+        self.assertTrue(res, err_msg)
+
+    def test_password_script(self):
+        self.secretmgmt_base_obj.set_password(self.master, self.password)
+        self.secretmgmt_base_obj.restart_server_with_script(self.master, self.password)
+        temp_return = self.secretmgmt_base_obj.check_log_files(self.master, "/babysitter.log", "Booted")
+        self.assertTrue(temp_return, "Babysitter.log does not contain node initialization code")
+        res, err_msg = self.secretmgmt_base_obj.check_secret_management_state(self.master, "user_configured")
+        self.assertTrue(res, err_msg)
 
     def test_multiple_prompt_3times(self):
         try:
@@ -554,12 +564,12 @@ class SecretsMgmtUpgrade(NewUpgradeBaseTest):
                 self.sleep(5)
                 temp = rest.cluster_status()
             self.log.info("current status of {0}  is {1}".format(server.ip, temp['nodes'][0]['status']))
-    
+
     def upgrade_all_nodes_post_463(self):
         servers_in = self.servers[1:]
         self._install(self.servers)
         self.cluster.rebalance(self.servers, servers_in, [])
-        
+
         for server in self.servers:
             self.secretmgmt_base_obj.setup_pass_node(server, self.password)
             self.secretmgmt_base_obj.restart_server_with_env(self.master, self.password)
@@ -569,7 +579,7 @@ class SecretsMgmtUpgrade(NewUpgradeBaseTest):
         upgrade_threads = self._async_update(upgrade_version=self.upgrade_version, servers=self.servers)
         for threads in upgrade_threads:
             threads.join()
-        
+
         for server in self.servers:
             rest = RestConnection(server)
             temp = rest.cluster_status()
