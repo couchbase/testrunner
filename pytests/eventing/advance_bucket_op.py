@@ -114,3 +114,17 @@ class AdvanceBucketOp(EventingBaseTest):
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
         self.verify_doc_count_collections("default.scope0.collection1", 0)
         self.undeploy_and_delete_function(body)
+
+    def test_source_bucket_mutations_are_not_suppressed_when_recursion_flag_is_enabled(self):
+        self.load_data_to_collection(1, "default.scope0.collection0")
+        body = self.create_save_function_body(self.function_name, self.handler_code, src_binding=True)
+        self.deploy_function(body)
+        self.verify_doc_count_collections("default.scope0.collection0", 1000)
+        self.undeploy_and_delete_function(body)
+
+    def test_source_bucket_mutations_are_suppressed_when_recursion_flag_is_disabled(self):
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
+        body = self.create_save_function_body(self.function_name, self.handler_code, src_binding=True)
+        self.deploy_function(body)
+        self.verify_doc_count_collections("default.scope0.collection0", self.docs_per_day * self.num_docs * 2)
+        self.undeploy_and_delete_function(body)
