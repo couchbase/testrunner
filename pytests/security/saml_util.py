@@ -1,4 +1,5 @@
 import json
+import base64
 import requests
 import six.moves.urllib.parse
 from couchbase.bucket import Bucket
@@ -223,3 +224,23 @@ class SAMLUtils:
         assert resp
         assert resp.status_code == 200
         return resp.content
+
+    def cb_auth_on_behalf_of(self, cluster, sso_user, non_sso_user_username, non_sso_password):
+        """
+        Do on-behalf-of authentication
+        """
+        sso_user = base64.b64encode('{}:{}'.format(sso_user, "external").encode()).decode()
+        non_sso_user = base64.b64encode('{}:{}'
+                                        .format(non_sso_user_username, non_sso_password)
+                                        .encode()).decode()
+        url = "http://" + cluster.ip + ":8091" + "/whoami"
+        header = {
+            'cb-on-behalf-of': sso_user,
+            'Authorization': 'Basic ' + non_sso_user
+        }
+        response = requests.get(url, headers=header, timeout=300, verify=False,
+                                allow_redirects=False)
+        response = response.json()
+        assert [{'role': 'admin'}] == response['roles']
+        assert sso_user == response['id']
+        assert 'external' == response['domain']
