@@ -1,6 +1,7 @@
 from .tuq import QueryTests
 from membase.api.exception import CBQError
-
+from remote.remote_util import RemoteMachineShellConnection
+import json
 
 class QuerySubqueryTests(QueryTests):
 
@@ -52,6 +53,36 @@ class QuerySubqueryTests(QueryTests):
         self.query = 'SELECT s FROM {"p":[{"x":11},{"x":12}],"q":"abc","r":null}.s'
         actual_result = self.run_cbq_query()
         self.assertTrue(actual_result['results'] == [])
+
+    ''' When a cte is killed, the subquery it runs should also be killed'''
+    def test_MB59002(self):
+        shell = RemoteMachineShellConnection(self.master)
+        self.run_cbq_query('CREATE INDEX ix1 ON default(c1)')
+        self.run_cbq_query('INSERT INTO default  (KEY _k, VALUE _v) '
+                           'SELECT  "k0"||TO_STR(d) AS _k , {"c1":d, "c2":2*d, "c3":3*d} AS _v '
+                           'FROM ARRAY_RANGE(1,1000) AS d')
+        try:
+            self.run_cbq_query('WITH aa AS (WITH a1 AS (SELECT RAW COUNT(l.c2) '
+                               'FROM default AS l JOIN default AS r ON l.c1 < r.c1 JOIN default r1 ON r.c1 < r1.c1 WHERE l.c1 >= 0) '
+                               'SELECT a1) SELECT aa',query_params={'timeout':"5s"})
+        except CBQError as e:
+            self.assertTrue('Timeout 5s exceeded' in str(e))
+        self.sleep(1)
+        cmd = f'curl -u {self.username}:{self.password} http://{self.master.ip}:9102/api/v1/stats?skipEmpty=true'
+        o = shell.execute_command(cmd)
+        new_curl = json.dumps(o)
+        formatted = json.loads(new_curl)
+        actual_results = json.loads(formatted[0][0])
+        num_requests = actual_results['default:ix1']['num_requests']
+        self.log.info(f"Number of requests before sleep: {num_requests}")
+        self.sleep(10)
+        o = shell.execute_command(cmd)
+        new_curl = json.dumps(o)
+        formatted = json.loads(new_curl)
+        actual_results = json.loads(formatted[0][0])
+        new_num_requests = actual_results['default:ix1']['num_requests']
+        self.log.info(f"Number of requests after sleep: {new_num_requests}")
+        self.assertEqual(num_requests,new_num_requests, "The number of requests should be the same, it is not, please check")
 
     def test_aggregating_correlated_subquery(self):
         self.query = 'SELECT meta().id, (SELECT RAW SUM(VMs.memory) FROM d.VMs AS VMs)[0] AS total FROM ' + \
