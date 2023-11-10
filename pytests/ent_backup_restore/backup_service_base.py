@@ -1485,13 +1485,9 @@ class NfsServer(Server):
         if os_type == "linux" and os_dist == "centos7":
            self.remote_shell.execute_command("yum -y install nfs-utils")
         if os_type == "linux" and "debian" in os_dist:
-<<<<<<< HEAD   (59e8ff Add internal password rotation parameter to base test case)
-           self.remote_shell.execute_command("apt update -y && apt install -y nfs-common nfs-kernel-server")
-=======
            # Uncomment the default debian repository
            self.remote_shell.execute_command("sed -i \"/#deb http:\/\/deb.debian.org\/debian\/ bullseye main/c deb http:\/\/deb.debian.org\/debian\/ bullseye main\" /etc/apt/sources.list")
            self.remote_shell.execute_command("apt install -y nfs-common nfs-kernel-server")
->>>>>>> CHANGE (0a3de9 1) Uncomment the Debian repo, to be able to install the pack)
         self.remote_shell.execute_command("systemctl start nfs-server.service")
 
     def share(self, directory_to_share, privileges={}):
