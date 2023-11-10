@@ -290,7 +290,7 @@ class GSIUtils(object):
         for index_gen in definition_list:
             if defer_build_mix:
                 defer_build = random.choice([True, False])
-            if randomise_replica_count:
+            if randomise_replica_count and num_replica > 1:
                 num_replicas = random.randint(1, num_replica)
             else:
                 num_replicas = num_replica
