@@ -1,11 +1,15 @@
 import base64
 import urllib
 
+from datetime import datetime, timedelta
+
 import xml.etree.ElementTree as ET
 
-from cryptography.hazmat.primitives import hashes
+from cryptography import x509
+from cryptography.x509.oid import NameOID
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
 from basetestcase import BaseTestCase
@@ -1756,4 +1760,381 @@ class SAMLTest(BaseTestCase):
             self.log.info("SSO session creation failed as expected for invalid audience")
         else:
             self.fail("SSO session creation should have failed for invalid audience")
-            
+
+    def test_invalid_signature(self):
+        """
+        Replace the certificate in the SAML Response with a signature that is not signed by a
+        real Certificate Authority, by using a self-signed certificate. CB Server should reject it
+        due to the untrusted certificate.
+
+        STEP 1: Enable SAML
+        STEP 2: Add the SSO user as an external user to Couchbase
+        STEP 3: Initiate single sign on
+        Step 4: Redirect to the IdP
+        Step 5: SSO user authentication via the IdP
+        Step 6: Get the SAML response from the IdP
+        Step 7: Replace the certificate by a self-signed certificate
+        Step 8: Verify that CB throws error and no session is set
+        """
+
+        self.log.info("Delete current SAML settings")
+        status, content, header = self.rest.delete_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        # Add the SSO user as an external user to Couchbase
+        self.log.info("Add the SSO user as an external user to Couchbase")
+        body = urllib.parse.urlencode({"roles": "admin"})
+        content = self.rest.add_external_user(self.saml_user, body)
+        self.log.info("Content: {0}".format(content))
+
+        body = {
+            "enabled": "true",
+            "idpMetadata": self.saml_util.saml_resources["idpMetadata"],
+            "idpMetadataOrigin": "upload",
+            "idpMetadataTLSCAs": self.saml_util.saml_resources["idpMetadataTLSCAs"],
+            "spBaseURLScheme": "http",
+            "spCertificate": self.saml_util.saml_resources["spCertificate"],
+            "spKey": self.saml_util.saml_resources["spKey"],
+            "spAssertionDupeCheck": "disabled",
+            "spVerifyAssertionSig": "false",
+            "spVerifyAssertionEnvelopSig": "false"
+        }
+        self.log.info("Enable SAML")
+        status, content, header = self.rest.modify_saml_settings(body)
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        # Initiate single sign on
+        self.log.info('Initiate single sign on')
+        action, SAMLRequest = self.saml_util.saml_auth_url(self.master)
+        self.log.info("action: {0}".format(action))
+        self.log.info("SAMLRequest: {0}".format(SAMLRequest))
+
+        # Redirect to the IdP
+        self.log.info('Redirect to the IdP')
+        state_token, cookie_string, j_session_id = self.saml_util.idp_redirect(action,
+                                                                               SAMLRequest)
+        self.log.info("state_token: {0}".format(state_token))
+        self.log.info("cookie_string: {0}".format(cookie_string))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # SSO user authentication via the IdP
+        self.log.info('SSO user authentication via the IdP')
+        next_url, j_session_id = self.saml_util.idp_login(self.saml_user, self.saml_passcode,
+                                                          state_token,
+                                                          cookie_string, j_session_id)
+        self.log.info("next_url: {0}".format(next_url))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # Get the SAML response from the IdP
+        self.log.info('Get the SAML response from the IdP')
+        SAMLResponse = self.saml_util.get_saml_response(next_url, cookie_string, j_session_id)
+        self.log.info("SAMLResponse: {0}".format(SAMLResponse))
+
+        def generate_self_signed_certificate():
+            key = rsa.generate_private_key(
+                public_exponent=65537,
+                key_size=2048,
+                backend=default_backend()
+            )
+            subject = issuer = x509.Name([
+                x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
+                x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "California"),
+                x509.NameAttribute(NameOID.LOCALITY_NAME, "San Francisco"),
+                x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Example Organization"),
+                x509.NameAttribute(NameOID.COMMON_NAME, "example.com")])
+            cert = x509.CertificateBuilder().subject_name(subject).issuer_name(issuer).public_key(
+                key.public_key()).serial_number(x509.random_serial_number()).not_valid_before(
+                datetime.utcnow()).not_valid_after(datetime.utcnow() + timedelta(days=365)).sign(
+                key, hashes.SHA256(), default_backend())
+
+            # Serialize the certificate to PEM format
+            cert_pem = cert.public_bytes(encoding=serialization.Encoding.PEM)
+            return cert_pem
+
+        # convert to xml
+        saml_response_xml = base64.b64decode(SAMLResponse)
+        saml_response_xml = saml_response_xml.decode("utf-8")
+
+        # Define namespaces
+        namespaces = {
+            "saml2p": "urn:oasis:names:tc:SAML:2.0:protocol",
+            "saml2": "urn:oasis:names:tc:SAML:2.0:assertion",
+            "ds": "http://www.w3.org/2000/09/xmldsig#",
+            "ec": "http://www.w3.org/2001/10/xml-exc-c14n#",
+            "xsi": "http://www.w3.org/2001/XMLSchema-instance",
+            "xs": "http://www.w3.org/2001/XMLSchema",
+        }
+
+        # Load the SAML Response XML
+        root = ET.fromstring(saml_response_xml)
+
+        # Register the namespaces
+        for prefix, uri in namespaces.items():
+            ET.register_namespace(prefix, uri)
+
+        # Generate a self-signed certificate
+        self_signed_certificate = generate_self_signed_certificate()
+
+        # Find the X.509 certificate element
+        x509_certificate_elements = root.findall(
+            ".//{http://www.w3.org/2000/09/xmldsig#}X509Certificate")
+
+        for x509_certificate_element in x509_certificate_elements:
+            # Update the X.509 certificate value
+            x509_certificate_element.text = self_signed_certificate.decode()
+
+        # Serialize the modified XML back to a string, manually preserving namespaces
+        modified_saml_response_xml = '<?xml version="1.0" encoding="UTF-8"?>' + \
+                                     ET.tostring(root,
+                                                 method="xml",
+                                                 encoding="utf-8",
+                                                 short_empty_elements=False).decode()
+
+        # encode back the modified SAML response
+        new_SAMLResponse = modified_saml_response_xml.encode("utf-8")
+        new_SAMLResponse = base64.b64encode(new_SAMLResponse)
+
+        # Send the oversize SAML response to Couchbase and set a session for the SSO user
+        self.log.info('Send the SAML response to Couchbase and set a session for the SSO user')
+        try:
+            session_cookie_name, session_cookie_value = self.saml_util \
+                .saml_consume_url(self.master, cookie_string, new_SAMLResponse)
+            self.log.info("session_cookie_name: {0}".format(session_cookie_name))
+            self.log.info("session_cookie_value: {0}".format(session_cookie_value))
+        except KeyError:
+            self.log.info("SSO session creation failed as expected for invalid audience")
+        else:
+            self.fail("SSO session creation should have failed for invalid audience")
+
+    def test_network_delay(self):
+        """
+        Simulate network delay by adding time before sending the SAML Response
+
+        STEP 1: Enable SAML
+        STEP 2: Add the SSO user as an external user to Couchbase
+        STEP 3: Initiate single sign on
+        Step 4: Redirect to the IdP
+        Step 5: SSO user authentication via the IdP
+        Step 6: Get the SAML response from the IdP
+        Step 7: Add time
+        Step 8: Verify that CB throws error and no session is set
+        """
+        self.log.info("Delete current SAML settings")
+        status, content, header = self.rest.delete_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        # Add the SSO user as an external user to Couchbase
+        self.log.info("Add the SSO user as an external user to Couchbase")
+        body = urllib.parse.urlencode({"roles": "admin"})
+        content = self.rest.add_external_user(self.saml_user, body)
+        self.log.info("Content: {0}".format(content))
+
+        body = {
+            "enabled": "true",
+            "idpMetadata": self.saml_util.saml_resources["idpMetadata"],
+            "idpMetadataOrigin": "upload",
+            "idpMetadataTLSCAs": self.saml_util.saml_resources["idpMetadataTLSCAs"],
+            "spBaseURLScheme": "http",
+            "spCertificate": self.saml_util.saml_resources["spCertificate"],
+            "spKey": self.saml_util.saml_resources["spKey"],
+            "spAssertionDupeCheck": "global",
+            "spVerifyAssertionSig": "true",
+            "spVerifyAssertionEnvelopSig": "true"
+        }
+        self.log.info("Enable SAML")
+        status, content, header = self.rest.modify_saml_settings(body)
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        # Initiate single sign on
+        self.log.info('Initiate single sign on')
+        action, SAMLRequest = self.saml_util.saml_auth_url(self.master)
+        self.log.info("action: {0}".format(action))
+        self.log.info("SAMLRequest: {0}".format(SAMLRequest))
+
+        # Redirect to the IdP
+        self.log.info('Redirect to the IdP')
+        state_token, cookie_string, j_session_id = self.saml_util.idp_redirect(action,
+                                                                               SAMLRequest)
+        self.log.info("state_token: {0}".format(state_token))
+        self.log.info("cookie_string: {0}".format(cookie_string))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # SSO user authentication via the IdP
+        self.log.info('SSO user authentication via the IdP')
+        next_url, j_session_id = self.saml_util.idp_login(self.saml_user, self.saml_passcode,
+                                                          state_token,
+                                                          cookie_string, j_session_id)
+        self.log.info("next_url: {0}".format(next_url))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # Get the SAML response from the IdP
+        self.log.info('Get the SAML response from the IdP')
+        SAMLResponse = self.saml_util.get_saml_response(next_url, cookie_string, j_session_id)
+        self.log.info("SAMLResponse: {0}".format(SAMLResponse))
+
+        # convert to xml
+        saml_response_xml = base64.b64decode(SAMLResponse)
+        saml_response_xml = saml_response_xml.decode("utf-8")
+
+        # Add time
+        # 5: Fail = session was set
+        # 10: Pass = session was not set
+        # 15: Pass = session was not set
+        self.sleep(60 * 10, "Stale the SAML response")
+
+        # Send the oversize SAML response to Couchbase and set a session for the SSO user
+        self.log.info('Send the SAML response to Couchbase and set a session for the SSO user')
+        try:
+            session_cookie_name, session_cookie_value = self.saml_util \
+                .saml_consume_url(self.master, cookie_string, SAMLResponse)
+            self.log.info("session_cookie_name: {0}".format(session_cookie_name))
+            self.log.info("session_cookie_value: {0}".format(session_cookie_value))
+        except KeyError:
+            self.log.info("SSO session creation failed as expected for oversize SAML response")
+        else:
+            self.fail("SSO session creation should have failed for oversize SAML response")
+
+    def test_invalid_data(self):
+        """
+        Remove an important XML element
+        STEP 1: Enable SAML
+        STEP 2: Add the SSO user as an external user to Couchbase
+        STEP 3: Initiate single sign on
+        Step 4: Redirect to the IdP
+        Step 5: SSO user authentication via the IdP
+        Step 6: Get the SAML response from the IdP
+        Step 7: Remove an XML element
+        Step 8: Verify that CB throws error and no session is set
+        """
+        self.log.info("Delete current SAML settings")
+        status, content, header = self.rest.delete_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        # Add the SSO user as an external user to Couchbase
+        self.log.info("Add the SSO user as an external user to Couchbase")
+        body = urllib.parse.urlencode({"roles": "admin"})
+        content = self.rest.add_external_user(self.saml_user, body)
+        self.log.info("Content: {0}".format(content))
+
+        body = {
+            "enabled": "true",
+            "idpMetadata": self.saml_util.saml_resources["idpMetadata"],
+            "idpMetadataOrigin": "upload",
+            "idpMetadataTLSCAs": self.saml_util.saml_resources["idpMetadataTLSCAs"],
+            "spBaseURLScheme": "http",
+            "spCertificate": self.saml_util.saml_resources["spCertificate"],
+            "spKey": self.saml_util.saml_resources["spKey"],
+            "spAssertionDupeCheck": "disabled",
+            "spVerifyAssertionSig": "false",
+            "spVerifyAssertionEnvelopSig": "false"
+        }
+        self.log.info("Enable SAML")
+        status, content, header = self.rest.modify_saml_settings(body)
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        # Initiate single sign on
+        self.log.info('Initiate single sign on')
+        action, SAMLRequest = self.saml_util.saml_auth_url(self.master)
+        self.log.info("action: {0}".format(action))
+        self.log.info("SAMLRequest: {0}".format(SAMLRequest))
+
+        # Redirect to the IdP
+        self.log.info('Redirect to the IdP')
+        state_token, cookie_string, j_session_id = self.saml_util.idp_redirect(action,
+                                                                               SAMLRequest)
+        self.log.info("state_token: {0}".format(state_token))
+        self.log.info("cookie_string: {0}".format(cookie_string))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # SSO user authentication via the IdP
+        self.log.info('SSO user authentication via the IdP')
+        next_url, j_session_id = self.saml_util.idp_login(self.saml_user, self.saml_passcode,
+                                                          state_token,
+                                                          cookie_string, j_session_id)
+        self.log.info("next_url: {0}".format(next_url))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # Get the SAML response from the IdP
+        self.log.info('Get the SAML response from the IdP')
+        SAMLResponse = self.saml_util.get_saml_response(next_url, cookie_string, j_session_id)
+        self.log.info("SAMLResponse: {0}".format(SAMLResponse))
+
+        # convert to xml
+        saml_response_xml = base64.b64decode(SAMLResponse)
+        saml_response_xml = saml_response_xml.decode("utf-8")
+
+        # Define namespaces
+        namespaces = {
+            "saml2p": "urn:oasis:names:tc:SAML:2.0:protocol",
+            "saml2": "urn:oasis:names:tc:SAML:2.0:assertion",
+            "ds": "http://www.w3.org/2000/09/xmldsig#",
+            "ec": "http://www.w3.org/2001/10/xml-exc-c14n#",
+            "xsi": "http://www.w3.org/2001/XMLSchema-instance",
+            "xs": "http://www.w3.org/2001/XMLSchema",
+        }
+
+        # Load the SAML Response XML
+        root = ET.fromstring(saml_response_xml)
+
+        # Register the namespaces
+        for prefix, uri in namespaces.items():
+            ET.register_namespace(prefix, uri)
+
+        # Find and remove the saml2:NameID tag
+        name_id_tag = root.find(".//{urn:oasis:names:tc:SAML:2.0:assertion}NameID")
+        if name_id_tag is not None:
+            parent = root.find(".//{urn:oasis:names:tc:SAML:2.0:assertion}Subject")
+            parent.remove(name_id_tag)
+
+        # Serialize the modified XML back to a string
+        invalid_saml_response_xml = '<?xml version="1.0" encoding="UTF-8"?>' + \
+                                    ET.tostring(root, encoding="utf-8").decode()
+
+        # encode back the modified SAML response
+        new_SAMLResponse = invalid_saml_response_xml.encode("utf-8")
+        new_SAMLResponse = base64.b64encode(new_SAMLResponse)
+
+        # Send the oversize SAML response to Couchbase and set a session for the SSO user
+        self.log.info('Send the SAML response to Couchbase and set a session for the SSO user')
+        try:
+            self.saml_util.saml_consume_url(self.master, cookie_string, new_SAMLResponse)
+        except KeyError:
+            self.log.info("SSO session creation failed as expected for invalid SAML response")
+        else:
+            self.fail("SSO session creation should have failed for invalid SAML response")
