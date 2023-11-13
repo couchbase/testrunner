@@ -1,3 +1,4 @@
+import re
 import json
 import base64
 import requests
@@ -112,7 +113,7 @@ class SAMLUtils:
         SAMLResponse = SAMLResponse.replace("&#x3d;", "=")
         return SAMLResponse
 
-    def saml_consume_url(self, cluster, cookie_string, SAMLResponse):
+    def saml_consume_url(self, cluster, cookie_string, SAMLResponse, https=False):
         """
         Sends SAML assertion to couchbase.
         Usually contains the SAML auth response.
@@ -120,6 +121,8 @@ class SAMLUtils:
         if SAML assertion is valid.
         """
         url = "http://" + cluster.ip + ":8091" + "/saml/consume"
+        if https:
+            url = "https://" + cluster.ip + ":18091" + "/saml/consume"
         header = {
             'Cookie': cookie_string,
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -132,6 +135,13 @@ class SAMLUtils:
                              data="SAMLResponse={0}".format(SAMLResponse),
                              headers=header,
                              timeout=300, verify=False, allow_redirects=False)
+        try:
+            error_msg = self.get_saml_error_message(cluster, requests, resp, header)
+            self.log.info("*****+++++******")
+            self.log.info("SAML error message received: {0}".format(error_msg))
+            self.log.info("*****+++++******")
+        except json.decoder.JSONDecodeError:
+            self.log.info("No SAML error message found")
         session_cookie = resp.headers["Set-Cookie"].strip().split(";")[0].split("=")
         return session_cookie[0], session_cookie[1]
 
@@ -245,13 +255,29 @@ class SAMLUtils:
         assert sso_user == response['id']
         assert 'external' == response['domain']
 
-    def get_saml_error_message(self, cluster, error_id):
+    def get_saml_error_message(self, cluster, session, consume_resp, consume_header):
         """
-        Given the error id, returns the SAML error message
+        Get the SAML error message
         Note: can be accessed only once
         """
-        url = "http://" + cluster.ip + ":8091" + "/saml/error?id=" + error_id
-        self.log.info(url)
-        resp = requests.get(url)
-        return resp.content
-    
+        redirect_path = consume_resp.headers['Location']
+
+        # Define a regular expression pattern to match the message ID
+        pattern = re.compile(r"samlErrorMsgId=([a-fA-F0-9-]+)")
+
+        # Use the pattern to search for a match in the URL
+        match = pattern.search(redirect_path)
+
+        # If a match is found, extract the message ID
+        error_id = ""
+        if match:
+            error_id = match.group(1)
+        else:
+            self.log.info("ERROR ID not found")
+
+        # extracting error msg from server
+        response = session.get("http://" + cluster.ip + ":8091" + '/saml/error',
+                               headers=consume_header,
+                               params={'id': error_id})
+        error_msg = response.json()['error']
+        return error_msg
