@@ -393,12 +393,12 @@ class RestConnection(object):
         # couchApiBase appeared in version 2.*
         if isinstance(http_res, dict):
             if not http_res or http_res["version"][0:2] == "1.":
-                self.capiBaseUrl = self.baseUrl + "/couchBase"
+                self.capiBaseUrl = self.baseUrl + "couchBase"
             else:
                 for iteration in range(5):
                     if "couchApiBase" not in http_res.keys():
                         if self.is_cluster_mixed():
-                            self.capiBaseUrl = self.baseUrl + "/couchBase"
+                            self.capiBaseUrl = self.baseUrl + "couchBase"
                             return
                         time.sleep(0.2)
                         http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
@@ -832,7 +832,7 @@ class RestConnection(object):
                             .format(e.message))
 
     def run_view(self, bucket, view, name):
-        api = self.capiBaseUrl + '/%s/_design/%s/_view/%s' % (bucket, view, name)
+        api = self.capiBaseUrl + '%s/_design/%s/_view/%s' % (bucket, view, name)
         status, content, header = self._http_request(api, headers=self._create_capi_headers())
         json_parsed = json.loads(content)
         if not status:
@@ -904,7 +904,7 @@ class RestConnection(object):
 
     def get_couch_doc(self, doc_id, bucket="default", timeout=120):
         """ use couchBase uri to retrieve document from a bucket """
-        api = self.capiBaseUrl + '/%s/%s' % (bucket, doc_id)
+        api = self.capiBaseUrl + '%s/%s' % (bucket, doc_id)
         status, content, header = self._http_request(api, headers=self._create_capi_headers(),
                                              timeout=timeout)
         if not status:
@@ -912,16 +912,16 @@ class RestConnection(object):
         return  json.loads(content)
 
     def _create_design_doc(self, bucket, name, function):
-        api = self.capiBaseUrl + '/%s/_design/%s' % (bucket, name)
+        api = self.capiBaseUrl + '%s/_design/%s' % (bucket, name)
         status, content, header = self._http_request(
             api, 'PUT', function, headers=self._create_capi_headers())
         json_parsed = json.loads(content)
         return status, json_parsed
 
     def _get_design_doc(self, bucket, name):
-        api = self.capiBaseUrl + '/%s/_design/%s' % (bucket, name)
+        api = self.capiBaseUrl + '%s/_design/%s' % (bucket, name)
         if isinstance(bucket, Bucket):
-            api = self.capiBaseUrl + '/%s/_design/%s' % (bucket.name, name)
+            api = self.capiBaseUrl + '%s/_design/%s' % (bucket.name, name)
 
         status, content, header = self._http_request(api, headers=self._create_capi_headers())
         json_parsed = json.loads(content.decode())
@@ -947,16 +947,16 @@ class RestConnection(object):
         status, design_doc, meta = self._get_design_doc(bucket, name)
         if not status:
             raise Exception("unable to find for deletion design document")
-        api = self.capiBaseUrl + '/%s/_design/%s' % (bucket, name)
+        api = self.capiBaseUrl + '%s/_design/%s' % (bucket, name)
         if isinstance(bucket, Bucket):
-            api = self.capiBaseUrl + '/%s/_design/%s' % (bucket.name, name)
+            api = self.capiBaseUrl + '%s/_design/%s' % (bucket.name, name)
         status, content, header = self._http_request(api, 'DELETE',
                                                      headers=self._create_capi_headers())
         json_parsed = json.loads(content)
         return status, json_parsed
 
     def spatial_compaction(self, bucket, design_name):
-        api = self.capiBaseUrl + '/%s/_design/%s/_spatial/_compact' % (bucket, design_name)
+        api = self.capiBaseUrl + '%s/_design/%s/_spatial/_compact' % (bucket, design_name)
         if isinstance(bucket, Bucket):
             api = self.capiBaseUrl + \
             '/%s/_design/%s/_spatial/_compact' % (bucket.name, design_name)
@@ -971,7 +971,7 @@ class RestConnection(object):
         """Get view diagnostic info (node specific)"""
         api = self.capiBaseUrl
         if isinstance(bucket, Bucket):
-            api += '/_set_view/{0}/_design/{1}/_info'.format(bucket.name, design_name)
+            api += '_set_view/{0}/_design/{1}/_info'.format(bucket.name, design_name)
         else:
             api += '_set_view/{0}/_design/{1}/_info'.format(bucket, design_name)
 
@@ -985,7 +985,7 @@ class RestConnection(object):
     # Make a _spatial/_info request
     def spatial_info(self, bucket, design_name):
         api = self.capiBaseUrl + \
-            '/%s/_design/%s/_spatial/_info' % (bucket, design_name)
+            '%s/_design/%s/_spatial/_info' % (bucket, design_name)
         status, content, header = self._http_request(
             api, 'GET', headers=self._create_capi_headers())
         json_parsed = json.loads(content)
@@ -1362,7 +1362,7 @@ class RestConnection(object):
             username = self.username
         if not password:
             password = self.password
-        api = self.cbas_base_url + "/analytics/service"
+        api = self.cbas_base_url + "analytics/service"
         headers = self._create_capi_headers_with_auth(username, password)
 
         params = {'statement': statement, 'pretty': pretty, 'client_context_id': client_context_id, 'max-warnings': warnings}
@@ -1398,7 +1398,7 @@ class RestConnection(object):
         if not password:
             password = self.password
 
-        api = self.cbas_base_url + "/analytics/admin/active_requests?client_context_id={0}".format(
+        api = self.cbas_base_url + "analytics/admin/active_requests?client_context_id={0}".format(
             client_context_id)
         headers = self._create_capi_headers_with_auth(username, password)
 
@@ -1684,7 +1684,7 @@ class RestConnection(object):
             port = CbServer.ssl_port
         log.info('adding remote node @{0}:{1} to this cluster @{2}:{3}'\
                           .format(remoteIp, port, self.ip, self.port))
-        api = self.baseUrl + '/node/controller/doJoinCluster'
+        api = self.baseUrl + 'node/controller/doJoinCluster'
         params = urllib.parse.urlencode({'hostname': "{0}:{1}".format(remoteIp, port),
                                    'user': user,
                                    'password': password})
@@ -3198,7 +3198,7 @@ class RestConnection(object):
         return status
 
     def stop_rebalance(self, wait_timeout=10):
-        api = self.baseUrl + '/controller/stopRebalance'
+        api = self.baseUrl + 'controller/stopRebalance'
         status, content, header = self._http_request(api, 'POST')
         if status:
             for i in range(int(wait_timeout)):
@@ -3363,7 +3363,7 @@ class RestConnection(object):
             log.info("Updated {0} on bucket '{1}' on {2}".format(param_value_map, src_bucket_name, self.ip))
 
     def set_global_xdcr_param(self, param, value):
-        api = self.baseUrl[:-1] + "/settings/replications"
+        api = self.baseUrl[:-1] + "settings/replications"
         value = str(value).lower()
         params = urllib.parse.urlencode({param: value})
         status, _, _ = self._http_request(api, "POST", params)
@@ -3434,7 +3434,7 @@ class RestConnection(object):
 
     def get_repl_stat(self, repl_id, src_bkt="default", stat="data_replicated", timestamp=None):
         repl_id = repl_id.replace('/', '%2F')
-        api = self.baseUrl + "pools/default/buckets/" + src_bkt + "/stats/replications%2F" \
+        api = self.baseUrl + "pools/default/buckets/" + src_bkt + "stats/replications%2F" \
               + repl_id + "%2F" + stat
         if timestamp:
             api += "?haveTStamp=" + timestamp
@@ -4759,7 +4759,7 @@ class RestConnection(object):
     '''
 
     def add_group_role(self,group_name,description,roles,ldap_group_ref=None):
-        api = self.baseUrl + "/settings/rbac/groups/" + group_name
+        api = self.baseUrl + "settings/rbac/groups/" + group_name
         if ldap_group_ref is not None:
 
             params = urllib.parse.urlencode({
@@ -4778,23 +4778,23 @@ class RestConnection(object):
         return status, json.loads(content)
 
     def delete_group(self,group_name):
-        api = self.baseUrl + "/settings/rbac/groups/" + group_name
+        api = self.baseUrl + "settings/rbac/groups/" + group_name
         status, content, header = self._http_request(api, 'DELETE')
         log.info ("Status of Delete role from CB is {0}".format(status))
         return status, json.loads(content)
 
     def get_group_list(self):
-        api = self.baseUrl + "/settings/rbac/groups/"
+        api = self.baseUrl + "settings/rbac/groups/"
         status, content, header = self._http_request(api, 'GET')
         return status, json.loads(content)
 
     def get_group_details(self, group_name):
-        api = self.baseUrl + "/settings/rbac/groups/" + group_name
+        api = self.baseUrl + "settings/rbac/groups/" + group_name
         status, content, header = self._http_request(api, 'GET')
         return status, json.loads(content)
 
     def add_user_group(self,group_name,user_name):
-        api = self.baseUrl + "/settings/rbac/users/local/" + user_name
+        api = self.baseUrl + "settings/rbac/users/local/" + user_name
         params = urllib.parse.urlencode({
                                     'groups':'{0}'.format(group_name)
                                 })
@@ -4803,32 +4803,32 @@ class RestConnection(object):
         return status, json.loads(content)
 
     def get_user_group(self,user_name):
-        api = self.baseUrl + "/settings/rbac/users/local/" + user_name
+        api = self.baseUrl + "settings/rbac/users/local/" + user_name
         status, content, header = self._http_request(api, 'GET')
         log.info ("Status of Retrieving role from group command is {0}".format(status))
         return status, json.loads(content)
 
     def grp_invalidate_cache(self):
-        api = self.baseUrl + "/settings/invalidateLDAPCache/"
+        api = self.baseUrl + "settings/invalidateLDAPCache/"
         status, content, header = self._http_request(api, 'POST')
         log.info("Status of Adding role to group command is {0}".format(status))
         return status, json.loads(content)
 
     def invalidate_ldap_cache(self):
-        api = self.baseUrl + '/settings/invalidateLDAPCache'
+        api = self.baseUrl + 'settings/invalidateLDAPCache'
         status, content, header = self._http_request(api, 'POST')
         log.info("Status of Invalidate LDAP Cached is {0}".format(status))
         return status, json.loads(content)
 
 
     def ldap_validate_conn(self):
-        api = self.baseUrl + "/settings/ldap/validate/connectivity"
+        api = self.baseUrl + "settings/ldap/validate/connectivity"
         status, content, header = self._http_request(api, 'POST')
         log.info("Status of Adding role to group command is {0}".format(status))
         return status, json.loads(content)
 
     def ldap_validate_authen(self, user_name, password='password'):
-        api = self.baseUrl + "/settings/ldap/validate/authentication"
+        api = self.baseUrl + "settings/ldap/validate/authentication"
         params = urllib.parse.urlencode({
             'auth_user': '{0}'.format(user_name),
             'auth_pass': '{0}'.format(password)
@@ -4838,7 +4838,7 @@ class RestConnection(object):
         return status, json.loads(content)
 
     def ldap_validate_grp_query(self, user):
-        api = self.baseUrl + "/settings/ldap/validate/groups_query"
+        api = self.baseUrl + "settings/ldap/validate/groups_query"
         params = urllib.parse.urlencode({
                                     'groups_query_user':'{0}'.format(user)
                                 })
@@ -4847,7 +4847,7 @@ class RestConnection(object):
         return status, json.loads(content)
 
     def setup_ldap(self, data, extraparam):
-        api = self.baseUrl + '/settings/ldap/'
+        api = self.baseUrl + 'settings/ldap/'
         params = urllib.parse.urlencode(data)
         params = params + "&" + extraparam
         status, content, header = self._http_request(api, 'POST',params)
@@ -4898,12 +4898,12 @@ class RestConnection(object):
             return status, json.loads(content)
 
     def get_audit_descriptors(self):
-        api = self.baseUrl + "/settings/audit/descriptors"
+        api = self.baseUrl + "settings/audit/descriptors"
         status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers())
         return json.loads(content) if status else None
 
     def _set_secrets_password(self, new_password):
-        api = self.baseUrl + "/node/controller/changeMasterPassword"
+        api = self.baseUrl + "node/controller/changeMasterPassword"
         params = urllib.parse.urlencode({
             'newPassword': '{0}'.format(new_password.encode('utf-8').strip())
                                         })
@@ -5309,7 +5309,7 @@ class RestConnection(object):
 
     def deploy_function_by_name(self, name, function_scope=None, username="Administrator", password="password"):
         authorization = self.get_authorization(username, password)
-        url = "api/v1/functions/" + name + "/settings"
+        url = "api/v1/functions/" + name + "settings"
         if function_scope is not None:
             url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
                                                   function_scope["scope"])
@@ -5328,7 +5328,7 @@ class RestConnection(object):
 
     def pause_function_by_name(self, name, function_scope=None, username="Administrator", password="password"):
         authorization = self.get_authorization(username, password)
-        url = "api/v1/functions/" + name + "/settings"
+        url = "api/v1/functions/" + name + "settings"
         if function_scope is not None:
             url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
                                                   function_scope["scope"])
@@ -6129,7 +6129,7 @@ class RestConnection(object):
         Get all (default + uploaded) trusted CA certs information
         """
         status, content, _ = self._http_request(self.baseUrl
-                                                     + "/pools/default/trustedCAs", 'GET')
+                                                     + "pools/default/trustedCAs", 'GET')
         if not status:
             msg = "Could not get trusted CAs; Failed with error %s" \
                   % (content)
@@ -6142,7 +6142,7 @@ class RestConnection(object):
         Deletes a trusted CA from the cluster, given its ID
         """
         status, content, response = self._http_request(self.baseUrl
-                                                     + "/pools/default/trustedCAs/"
+                                                     + "pools/default/trustedCAs/"
                                                      + str(ca_id),
                                                      'DELETE')
         return status, content, response
