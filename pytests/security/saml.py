@@ -2261,8 +2261,8 @@ class SAMLTest(BaseTestCase):
 
     def test_duplicate_assertion(self):
         """
-        Confirm that these timestamps are set correctly to prevent unauthorized access to the
-        session.
+        Replay Old SAML Assertion: Reuse a previously intercepted SAML Assertion within a fresh SAML
+        Response and check if it's rejected.
         STEP 1: Enable SAML
         STEP 2: Add the SSO user as an external user to Couchbase
         STEP 3: Initiate single sign on
@@ -2562,3 +2562,651 @@ class SAMLTest(BaseTestCase):
         else:
             self.fail("SSO session creation should have failed for tampered sign invalid SAML "
                       "response")
+
+    def test_xml_injection1(self):
+        """
+        Insert malicious XML tags or entities in the SAML response
+        """
+        self.log.info("Delete current SAML settings")
+        status, content, header = self.rest.delete_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        body = {
+            "enabled": "true",
+            "idpMetadata": self.saml_util.saml_resources["idpMetadata"],
+            "idpMetadataOrigin": "upload",
+            "idpMetadataTLSCAs": self.saml_util.saml_resources["idpMetadataTLSCAs"],
+            "spBaseURLScheme": "http",
+            "spCertificate": self.saml_util.saml_resources["spCertificate"],
+            "spKey": self.saml_util.saml_resources["spKey"],
+            "spAssertionDupeCheck": "disabled",
+            "spVerifyAssertionSig": "false",
+            "spVerifyAssertionEnvelopSig": "false"
+        }
+
+        # Enable SAML
+        self.log.info("Enable SAML")
+        status, content, header = self.rest.modify_saml_settings(body)
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        # Initiate single sign on
+        self.log.info('Initiate single sign on')
+        action, SAMLRequest = self.saml_util.saml_auth_url(self.master)
+        self.log.info("action: {0}".format(action))
+        self.log.info("SAMLRequest: {0}".format(SAMLRequest))
+
+        # Redirect to the IdP
+        self.log.info('Redirect to the IdP')
+        state_token, cookie_string, j_session_id = self.saml_util.idp_redirect(action,
+                                                                               SAMLRequest)
+        self.log.info("state_token: {0}".format(state_token))
+        self.log.info("cookie_string: {0}".format(cookie_string))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # SSO user authentication via the IdP
+        self.log.info('SSO user authentication via the IdP')
+        next_url, j_session_id = self.saml_util.idp_login(self.saml_user, self.saml_passcode,
+                                                          state_token,
+                                                          cookie_string, j_session_id)
+        self.log.info("next_url: {0}".format(next_url))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # Get the SAML response from the IdP
+        self.log.info('Get the SAML response from the IdP')
+        SAMLResponse = self.saml_util.get_saml_response(next_url, cookie_string, j_session_id)
+        self.log.info("SAMLResponse: {0}".format(SAMLResponse))
+
+        # convert to xml
+        saml_response_xml = base64.b64decode(SAMLResponse)
+        saml_response_xml = saml_response_xml.decode("utf-8")
+
+        # Define namespaces
+        namespaces = {
+            "saml2p": "urn:oasis:names:tc:SAML:2.0:protocol",
+            "saml2": "urn:oasis:names:tc:SAML:2.0:assertion",
+            "ds": "http://www.w3.org/2000/09/xmldsig#",
+            "ec": "http://www.w3.org/2001/10/xml-exc-c14n#",
+            "xsi": "http://www.w3.org/2001/XMLSchema-instance",
+            "xs": "http://www.w3.org/2001/XMLSchema",
+        }
+
+        # Load the SAML Response XML
+        root = ET.fromstring(saml_response_xml)
+
+        # Register the namespaces
+        for prefix, uri in namespaces.items():
+            ET.register_namespace(prefix, uri)
+
+        # Create the malicious attribute
+        malicious_attribute = ET.Element("malicious_attribute")
+        script_element = ET.SubElement(malicious_attribute, "script")
+        script_element.text = "alert('Malicious Script');"
+
+        # Append the malicious attribute to the root element
+        root.append(malicious_attribute)
+
+        # Append the malicious attribute to the root element
+        root.append(malicious_attribute)
+
+        # Serialize the modified XML back to a string
+        modified_saml_response_xml = '<?xml version="1.0" encoding="UTF-8"?>' + \
+                                     ET.tostring(root, encoding="utf-8").decode()
+
+        # encode back the modified SAML response
+        new_SAMLResponse = modified_saml_response_xml.encode("utf-8")
+        new_SAMLResponse = base64.b64encode(new_SAMLResponse)
+
+        # Send the SAML response to Couchbase and set a session for the SSO user
+        self.log.info('Send the SAML response to Couchbase and set a session for the SSO '
+                      'user')
+        session_cookie_name, session_cookie_value = self.saml_util \
+            .saml_consume_url(self.master, cookie_string, new_SAMLResponse)
+        self.log.info("session_cookie_name: {0}".format(session_cookie_name))
+        self.log.info("session_cookie_value: {0}".format(session_cookie_value))
+
+        # Use the session and verify SSO login
+        self.log.info('Use the session and verify SSO login')
+        is_logged_in = self.saml_util.verify_sso_login(self.master, session_cookie_name,
+                                                       session_cookie_value)
+        if is_logged_in:
+            self.log.info("SSO Log in Success")
+        else:
+            self.fail("SSO Log in Failed")
+
+    def test_xml_injection2(self):
+        """
+        Insert malicious XML tags or entities in the SAML response
+        """
+        self.log.info("Delete current SAML settings")
+        status, content, header = self.rest.delete_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        body = {
+            "enabled": "true",
+            "idpMetadata": self.saml_util.saml_resources["idpMetadata"],
+            "idpMetadataOrigin": "upload",
+            "idpMetadataTLSCAs": self.saml_util.saml_resources["idpMetadataTLSCAs"],
+            "spBaseURLScheme": "http",
+            "spCertificate": self.saml_util.saml_resources["spCertificate"],
+            "spKey": self.saml_util.saml_resources["spKey"],
+            "spAssertionDupeCheck": "disabled",
+            "spVerifyAssertionSig": "false",
+            "spVerifyAssertionEnvelopSig": "false"
+        }
+
+        # Enable SAML
+        self.log.info("Enable SAML")
+        status, content, header = self.rest.modify_saml_settings(body)
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        # Initiate single sign on
+        self.log.info('Initiate single sign on')
+        action, SAMLRequest = self.saml_util.saml_auth_url(self.master)
+        self.log.info("action: {0}".format(action))
+        self.log.info("SAMLRequest: {0}".format(SAMLRequest))
+
+        # Redirect to the IdP
+        self.log.info('Redirect to the IdP')
+        state_token, cookie_string, j_session_id = self.saml_util.idp_redirect(action,
+                                                                               SAMLRequest)
+        self.log.info("state_token: {0}".format(state_token))
+        self.log.info("cookie_string: {0}".format(cookie_string))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # SSO user authentication via the IdP
+        self.log.info('SSO user authentication via the IdP')
+        next_url, j_session_id = self.saml_util.idp_login(self.saml_user, self.saml_passcode,
+                                                          state_token,
+                                                          cookie_string, j_session_id)
+        self.log.info("next_url: {0}".format(next_url))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # Get the SAML response from the IdP
+        self.log.info('Get the SAML response from the IdP')
+        SAMLResponse = self.saml_util.get_saml_response(next_url, cookie_string, j_session_id)
+        self.log.info("SAMLResponse: {0}".format(SAMLResponse))
+
+        # convert to xml
+        saml_response_xml = base64.b64decode(SAMLResponse)
+        saml_response_xml = saml_response_xml.decode("utf-8")
+
+        # Define namespaces
+        namespaces = {
+            "saml2p": "urn:oasis:names:tc:SAML:2.0:protocol",
+            "saml2": "urn:oasis:names:tc:SAML:2.0:assertion",
+            "ds": "http://www.w3.org/2000/09/xmldsig#",
+            "ec": "http://www.w3.org/2001/10/xml-exc-c14n#",
+            "xsi": "http://www.w3.org/2001/XMLSchema-instance",
+            "xs": "http://www.w3.org/2001/XMLSchema",
+        }
+
+        # Load the SAML Response XML
+        root = ET.fromstring(saml_response_xml)
+
+        # Register the namespaces
+        for prefix, uri in namespaces.items():
+            ET.register_namespace(prefix, uri)
+
+        # Create the malicious attribute
+        malicious_attribute = ET.Element("malicious_attribute")
+        script_element = ET.SubElement(malicious_attribute, "erl_code")
+        script_element.text = "io:format(\"This is an XML injection in Erlang\")"
+
+        # Append the malicious attribute to the root element
+        root.append(malicious_attribute)
+
+        # Serialize the modified XML back to a string
+        modified_saml_response_xml = '<?xml version="1.0" encoding="UTF-8"?>' + \
+                                     ET.tostring(root, encoding="utf-8").decode()
+
+        # encode back the modified SAML response
+        new_SAMLResponse = modified_saml_response_xml.encode("utf-8")
+        new_SAMLResponse = base64.b64encode(new_SAMLResponse)
+
+        # Send the SAML response to Couchbase and set a session for the SSO user
+        self.log.info('Send the SAML response to Couchbase and set a session for the SSO '
+                      'user')
+        session_cookie_name, session_cookie_value = self.saml_util \
+            .saml_consume_url(self.master, cookie_string, new_SAMLResponse)
+        self.log.info("session_cookie_name: {0}".format(session_cookie_name))
+        self.log.info("session_cookie_value: {0}".format(session_cookie_value))
+
+        # Use the session and verify SSO login
+        self.log.info('Use the session and verify SSO login')
+        is_logged_in = self.saml_util.verify_sso_login(self.master, session_cookie_name,
+                                                       session_cookie_value)
+        if is_logged_in:
+            self.log.info("SSO Log in Success")
+        else:
+            self.fail("SSO Log in Failed")
+
+    def test_xml_injection3(self):
+        """
+        Insert malicious XML tags or entities in the SAML response
+        """
+        self.log.info("Delete current SAML settings")
+        status, content, header = self.rest.delete_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        body = {
+            "enabled": "true",
+            "idpMetadata": self.saml_util.saml_resources["idpMetadata"],
+            "idpMetadataOrigin": "upload",
+            "idpMetadataTLSCAs": self.saml_util.saml_resources["idpMetadataTLSCAs"],
+            "spBaseURLScheme": "http",
+            "spCertificate": self.saml_util.saml_resources["spCertificate"],
+            "spKey": self.saml_util.saml_resources["spKey"],
+            "spAssertionDupeCheck": "disabled",
+            "spVerifyAssertionSig": "false",
+            "spVerifyAssertionEnvelopSig": "false"
+        }
+
+        # Enable SAML
+        self.log.info("Enable SAML")
+        status, content, header = self.rest.modify_saml_settings(body)
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        # Initiate single sign on
+        self.log.info('Initiate single sign on')
+        action, SAMLRequest = self.saml_util.saml_auth_url(self.master)
+        self.log.info("action: {0}".format(action))
+        self.log.info("SAMLRequest: {0}".format(SAMLRequest))
+
+        # Redirect to the IdP
+        self.log.info('Redirect to the IdP')
+        state_token, cookie_string, j_session_id = self.saml_util.idp_redirect(action,
+                                                                               SAMLRequest)
+        self.log.info("state_token: {0}".format(state_token))
+        self.log.info("cookie_string: {0}".format(cookie_string))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # SSO user authentication via the IdP
+        self.log.info('SSO user authentication via the IdP')
+        next_url, j_session_id = self.saml_util.idp_login(self.saml_user, self.saml_passcode,
+                                                          state_token,
+                                                          cookie_string, j_session_id)
+        self.log.info("next_url: {0}".format(next_url))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # Get the SAML response from the IdP
+        self.log.info('Get the SAML response from the IdP')
+        SAMLResponse = self.saml_util.get_saml_response(next_url, cookie_string, j_session_id)
+        self.log.info("SAMLResponse: {0}".format(SAMLResponse))
+
+        # convert to xml
+        saml_response_xml = base64.b64decode(SAMLResponse)
+        saml_response_xml = saml_response_xml.decode("utf-8")
+
+        # Define namespaces
+        namespaces = {
+            "saml2p": "urn:oasis:names:tc:SAML:2.0:protocol",
+            "saml2": "urn:oasis:names:tc:SAML:2.0:assertion",
+            "ds": "http://www.w3.org/2000/09/xmldsig#",
+            "ec": "http://www.w3.org/2001/10/xml-exc-c14n#",
+            "xsi": "http://www.w3.org/2001/XMLSchema-instance",
+            "xs": "http://www.w3.org/2001/XMLSchema",
+        }
+
+        # Load the SAML Response XML
+        root = ET.fromstring(saml_response_xml)
+
+        # Register the namespaces
+        for prefix, uri in namespaces.items():
+            ET.register_namespace(prefix, uri)
+
+        # Create the malicious attribute
+        malicious_attribute = ET.Element("malicious_attribute")
+        script_element = ET.SubElement(malicious_attribute, "erl_script")
+        script_element.text = """io:format("Malicious Erlang Code Executed!~n"),os:cmd("echo 'This is a test' > /tmp/malicious.txt")"""
+
+        # Append the malicious attribute to the root element
+        root.append(malicious_attribute)
+
+        # Serialize the modified XML back to a string
+        modified_saml_response_xml = '<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(root,
+                                                                                            encoding="utf-8").decode()
+
+        # encode back the modified SAML response
+        new_SAMLResponse = modified_saml_response_xml.encode("utf-8")
+        new_SAMLResponse = base64.b64encode(new_SAMLResponse)
+
+        # Send the SAML response to Couchbase and set a session for the SSO user
+        self.log.info('Send the SAML response to Couchbase and set a session for the SSO '
+                      'user')
+        session_cookie_name, session_cookie_value = self.saml_util \
+            .saml_consume_url(self.master, cookie_string, new_SAMLResponse)
+        self.log.info("session_cookie_name: {0}".format(session_cookie_name))
+        self.log.info("session_cookie_value: {0}".format(session_cookie_value))
+
+        # Use the session and verify SSO login
+        self.log.info('Use the session and verify SSO login')
+        is_logged_in = self.saml_util.verify_sso_login(self.master, session_cookie_name,
+                                                       session_cookie_value)
+        if is_logged_in:
+            self.log.info("SSO Log in Success")
+        else:
+            self.fail("SSO Log in Failed")
+
+    def test_xml_injection4(self):
+        """
+        Insert malicious XML tags or entities in the SAML response
+        """
+        self.log.info("Delete current SAML settings")
+        status, content, header = self.rest.delete_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        body = {
+            "enabled": "true",
+            "idpMetadata": self.saml_util.saml_resources["idpMetadata"],
+            "idpMetadataOrigin": "upload",
+            "idpMetadataTLSCAs": self.saml_util.saml_resources["idpMetadataTLSCAs"],
+            "spBaseURLScheme": "http",
+            "spCertificate": self.saml_util.saml_resources["spCertificate"],
+            "spKey": self.saml_util.saml_resources["spKey"],
+            "spAssertionDupeCheck": "disabled",
+            "spVerifyAssertionSig": "false",
+            "spVerifyAssertionEnvelopSig": "false"
+        }
+
+        # Enable SAML
+        self.log.info("Enable SAML")
+        status, content, header = self.rest.modify_saml_settings(body)
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        # Initiate single sign on
+        self.log.info('Initiate single sign on')
+        action, SAMLRequest = self.saml_util.saml_auth_url(self.master)
+        self.log.info("action: {0}".format(action))
+        self.log.info("SAMLRequest: {0}".format(SAMLRequest))
+
+        # Redirect to the IdP
+        self.log.info('Redirect to the IdP')
+        state_token, cookie_string, j_session_id = self.saml_util.idp_redirect(action,
+                                                                               SAMLRequest)
+        self.log.info("state_token: {0}".format(state_token))
+        self.log.info("cookie_string: {0}".format(cookie_string))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # SSO user authentication via the IdP
+        self.log.info('SSO user authentication via the IdP')
+        next_url, j_session_id = self.saml_util.idp_login(self.saml_user, self.saml_passcode,
+                                                          state_token,
+                                                          cookie_string, j_session_id)
+        self.log.info("next_url: {0}".format(next_url))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # Get the SAML response from the IdP
+        self.log.info('Get the SAML response from the IdP')
+        SAMLResponse = self.saml_util.get_saml_response(next_url, cookie_string, j_session_id)
+        self.log.info("SAMLResponse: {0}".format(SAMLResponse))
+
+        # convert to xml
+        saml_response_xml = base64.b64decode(SAMLResponse)
+        saml_response_xml = saml_response_xml.decode("utf-8")
+
+        # Define namespaces
+        namespaces = {
+            "saml2p": "urn:oasis:names:tc:SAML:2.0:protocol",
+            "saml2": "urn:oasis:names:tc:SAML:2.0:assertion",
+            "ds": "http://www.w3.org/2000/09/xmldsig#",
+            "ec": "http://www.w3.org/2001/10/xml-exc-c14n#",
+            "xsi": "http://www.w3.org/2001/XMLSchema-instance",
+            "xs": "http://www.w3.org/2001/XMLSchema",
+        }
+
+        # Load the SAML Response XML
+        root = ET.fromstring(saml_response_xml)
+
+        # Register the namespaces
+        for prefix, uri in namespaces.items():
+            ET.register_namespace(prefix, uri)
+
+        # Create the malicious attribute
+        malicious_attribute = ET.Element("malicious_attribute")
+        malicious_attribute.text = """
+            <![CDATA[<!DOCTYPE foo [ <!ELEMENT foo ANY ><!ENTITY xxe SYSTEM "file:///etc/passwd" >]><malicious_element>&xxe;</malicious_element>]]>
+            <![CDATA[<IMG SRC=http://www.exmaple.com/logo.gif onmouseover=javascript:alert('Attack');>]]>
+        """
+
+        # Append the malicious attribute to the root element
+        root.append(malicious_attribute)
+
+        # Append the malicious attribute to the root element
+        root.append(malicious_attribute)
+
+        # Serialize the modified XML back to a string
+        modified_saml_response_xml = '<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(root,
+                                                                                            encoding="utf-8").decode()
+
+        # encode back the modified SAML response
+        new_SAMLResponse = modified_saml_response_xml.encode("utf-8")
+        new_SAMLResponse = base64.b64encode(new_SAMLResponse)
+
+        # Send the SAML response to Couchbase and set a session for the SSO user
+        self.log.info('Send the SAML response to Couchbase and set a session for the SSO '
+                      'user')
+        session_cookie_name, session_cookie_value = self.saml_util \
+            .saml_consume_url(self.master, cookie_string, new_SAMLResponse)
+        self.log.info("session_cookie_name: {0}".format(session_cookie_name))
+        self.log.info("session_cookie_value: {0}".format(session_cookie_value))
+
+        # Use the session and verify SSO login
+        self.log.info('Use the session and verify SSO login')
+        is_logged_in = self.saml_util.verify_sso_login(self.master, session_cookie_name,
+                                                       session_cookie_value)
+        if is_logged_in:
+            self.log.info("SSO Log in Success")
+        else:
+            self.fail("SSO Log in Failed")
+
+    def test_unsigned_response_check(self):
+        """
+        STEP 0: IdP
+            Assertion Signature = Unsigned
+            Assertion Encryption = Unencrypted
+        STEP 1: CB SAML settings: Validate assertion signature check enabled
+            spVerifyAssertionSig: true
+            Upload modified XML doc
+        STEP 2: Initiate SSO login
+        STEP 3: Fails with the message
+            SAML assertion validation failed
+            {envelope, error, no signature}
+        """
+        self.log.info("Delete current SAML settings")
+        status, content, header = self.rest.delete_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        # Adding spAssertionDupeCheck field to the body
+        body = {
+            "enabled": "true",
+            "idpMetadata": self.saml_util.saml_resources["idpMetadata"],
+            "idpMetadataOrigin": "upload",
+            "idpMetadataTLSCAs": self.saml_util.saml_resources["idpMetadataTLSCAs"],
+            "spBaseURLScheme": "http",
+            "spCertificate": self.saml_util.saml_resources["spCertificate"],
+            "spKey": self.saml_util.saml_resources["spKey"],
+            "spVerifyAssertionSig": "true"
+        }
+        self.log.info("Enable SAML")
+        status, content, header = self.rest.modify_saml_settings(body)
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        # Initiate single sign on
+        self.log.info('Initiate single sign on')
+        action, SAMLRequest = self.saml_util.saml_auth_url(self.master)
+        self.log.info("action: {0}".format(action))
+        self.log.info("SAMLRequest: {0}".format(SAMLRequest))
+
+        # Redirect to the IdP
+        self.log.info('Redirect to the IdP')
+        state_token, cookie_string, j_session_id = self.saml_util.idp_redirect(action,
+                                                                               SAMLRequest)
+        self.log.info("state_token: {0}".format(state_token))
+        self.log.info("cookie_string: {0}".format(cookie_string))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # SSO user authentication via the IdP
+        self.log.info('SSO user authentication via the IdP')
+        next_url, j_session_id = self.saml_util.idp_login(self.saml_user, self.saml_passcode,
+                                                          state_token,
+                                                          cookie_string, j_session_id)
+        self.log.info("next_url: {0}".format(next_url))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # Get the SAML response from the IdP
+        self.log.info('Get the SAML response from the IdP')
+        SAMLResponse = self.saml_util.get_saml_response(next_url, cookie_string, j_session_id)
+        self.log.info("SAMLResponse: {0}".format(SAMLResponse))
+
+        # Send the SAML response to Couchbase and set a session for the SSO user
+        try:
+            self.saml_util.saml_consume_url(self.master, cookie_string, SAMLResponse)
+        except KeyError:
+            self.log.info("SSO session creation failed as expected")
+        else:
+            self.fail("SSO session creation should have failed for incomplete SAML response")
+
+    def test_unsigned_response_uncheck(self):
+        """
+        STEP 0: IdP
+            Assertion Signature = Unsigned
+            Assertion Encryption = Unencrypted
+        STEP 1: CB SAML settings: Validate assertion signature check disabled
+            spVerifyAssertionSig: false
+            Upload modified XML doc
+        STEP 2: Initiate SSO login
+        STEP 3: Authenticates, no error
+        """
+        self.log.info("Delete current SAML settings")
+        status, content, header = self.rest.delete_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        # Adding spAssertionDupeCheck field to the body
+        body = {
+            "enabled": "true",
+            "idpMetadata": self.saml_util.saml_resources["idpMetadata"],
+            "idpMetadataOrigin": "upload",
+            "idpMetadataTLSCAs": self.saml_util.saml_resources["idpMetadataTLSCAs"],
+            "spBaseURLScheme": "http",
+            "spCertificate": self.saml_util.saml_resources["spCertificate"],
+            "spKey": self.saml_util.saml_resources["spKey"],
+            "spVerifyAssertionSig": "false"
+        }
+        self.log.info("Enable SAML")
+        status, content, header = self.rest.modify_saml_settings(body)
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        # Initiate single sign on
+        self.log.info('Initiate single sign on')
+        action, SAMLRequest = self.saml_util.saml_auth_url(self.master)
+        self.log.info("action: {0}".format(action))
+        self.log.info("SAMLRequest: {0}".format(SAMLRequest))
+
+        # Redirect to the IdP
+        self.log.info('Redirect to the IdP')
+        state_token, cookie_string, j_session_id = self.saml_util.idp_redirect(action,
+                                                                               SAMLRequest)
+        self.log.info("state_token: {0}".format(state_token))
+        self.log.info("cookie_string: {0}".format(cookie_string))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # SSO user authentication via the IdP
+        self.log.info('SSO user authentication via the IdP')
+        next_url, j_session_id = self.saml_util.idp_login(self.saml_user, self.saml_passcode,
+                                                          state_token,
+                                                          cookie_string, j_session_id)
+        self.log.info("next_url: {0}".format(next_url))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # Get the SAML response from the IdP
+        self.log.info('Get the SAML response from the IdP')
+        SAMLResponse = self.saml_util.get_saml_response(next_url, cookie_string, j_session_id)
+        self.log.info("SAMLResponse: {0}".format(SAMLResponse))
+
+        # Send the SAML response to Couchbase and set a session for the SSO user
+        self.log.info('Send the SAML response to Couchbase and set a session for the SSO user')
+        session_cookie_name, session_cookie_value = self.saml_util \
+            .saml_consume_url(self.master, cookie_string, SAMLResponse)
+        self.log.info("session_cookie_name: {0}".format(session_cookie_name))
+        self.log.info("session_cookie_value: {0}".format(session_cookie_value))
+
+        # Use the session and verify SSO login
+        self.log.info('Use the session and verify SSO login')
+        is_logged_in = self.saml_util.verify_sso_login(self.master, session_cookie_name,
+                                                       session_cookie_value)
+        if is_logged_in:
+            self.log.info("SSO Log in Success")
+        else:
+            self.fail("SSO Log in Failed")
