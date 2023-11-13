@@ -1,15 +1,14 @@
+import math
 import random
 import time
-
+import os
 from membase.api.rest_client import RestConnection, RestHelper
 from concurrent.futures import ThreadPoolExecutor
 from couchbase_helper.documentgenerator import SDKDataLoader
-from lib import testconstants
 from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.fts.fts_base import NodeHelper
 from pytests.query_tests_helper import QueryHelperTests
 from .base_gsi import BaseSecondaryIndexingTests, log
-
 
 from threading import Event
 from deepdiff import DeepDiff
@@ -17,44 +16,31 @@ from deepdiff import DeepDiff
 
 class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelper):
     def setUp(self):
-        if self._testMethodName not in ['suite_tearDown', 'suite_setUp']:
-            super().setUp()
-            self.rest = RestConnection(self.servers[0])
-            self.n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
-            self.create_primary_index = False
-            self.retry_time = self.input.param("retry_time", 300)
-            self.sleep_time = self.input.param("sleep_time", 1)
-            self.num_retries = self.input.param("num_retries", 1)
-            self.build_index = self.input.param("build_index", False)
-            self.rebalance_all_at_once = self.input.param("rebalance_all_at_once", False)
-            self.continuous_mutations = self.input.param("continuous_mutations", False)
-            self.replica_repair = self.input.param("replica_repair", False)
-            self.chaos_action = self.input.param("chaos_action", None)
-            self.topology_change = self.input.param("topology_change", True)
-            self.capella_rebalance = self.input.param("capella_rebalance", "None")
-            # TODO. After adding other tests, check if this can be removed
-            # if not self.capella_run:
-            #     shell = RemoteMachineShellConnection(self.servers[0])
-            #     info = shell.extract_remote_info().type.lower()
-            #     if info == 'linux':
-            #         if self.nonroot:
-            #             self.cli_command_location = testconstants.LINUX_NONROOT_CB_BIN_PATH
-            #         else:
-            #             self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
-            #     elif info == 'windows':
-            #         self.cmd_ext = ".exe"
-            #         self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH_RAW
-            #     elif info == 'mac':
-            #         self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
-            #     else:
-            #         raise Exception("OS not supported.")
-            self.rand = random.randint(1, 1000000000)
-            self.alter_index = self.input.param("alter_index", None)
-            if self.ansi_join:
-                self.rest.load_sample("travel-sample")
-                self.sleep(10)
-            self.enable_shard_based_rebalance()
-            self.NUM_DOCS_POST_REBALANCE = 10 ** 5
+        super().setUp()
+        self.rest = RestConnection(self.servers[0])
+        self.n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        self.create_primary_index = False
+        self.retry_time = self.input.param("retry_time", 300)
+        self.sleep_time = self.input.param("sleep_time", 1)
+        self.num_retries = self.input.param("num_retries", 1)
+        self.build_index = self.input.param("build_index", False)
+        self.rebalance_all_at_once = self.input.param("rebalance_all_at_once", False)
+        self.continuous_mutations = self.input.param("continuous_mutations", False)
+        self.replica_repair = self.input.param("replica_repair", False)
+        self.chaos_action = self.input.param("chaos_action", None)
+        self.topology_change = self.input.param("topology_change", True)
+        self.capella_rebalance = self.input.param("capella_rebalance", "None")
+        self.rebalance_type = self.input.param("rebalance_type", True)
+        self.stress_factor = self.input.param("stress_factor", 0.5)
+        self.index_resident_ratio = int(self.input.param("index_resident_ratio", 20))
+        self.disk_full = self.input.param("disk_full", False)
+        self.rand = random.randint(1, 1000000000)
+        self.alter_index = self.input.param("alter_index", None)
+        if self.ansi_join:
+            self.rest.load_sample("travel-sample")
+            self.sleep(10)
+        self.enable_shard_based_rebalance()
+        self.NUM_DOCS_POST_REBALANCE = 10 ** 5
 
     def tearDown(self):
         if self._testMethodName not in ['suite_tearDown', 'suite_setUp']:
@@ -67,6 +53,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
         pass
 
     def test_gsi_rebalance_out_indexer_node(self):
+        self.install_tools()
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
@@ -91,8 +78,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 for _ in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
-                    query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                     for namespace in self.namespaces:
+                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -128,6 +115,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                     future.result()
 
     def test_gsi_rebalance_in_indexer_node(self):
+        self.install_tools()
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         for indexer_node in indexer_nodes:
             rest = RestConnection(indexer_node)
@@ -155,8 +143,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 for _ in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
-                    query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                     for namespace in self.namespaces:
+                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -207,6 +195,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                     future.result()
 
     def test_gsi_swap_rebalance(self):
+        self.install_tools()
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
@@ -230,8 +219,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 for _ in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
-                    query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                     for namespace in self.namespaces:
+                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -273,6 +262,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                     future.result()
 
     def test_gsi_failover_indexer_node(self):
+        self.install_tools()
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
@@ -296,8 +286,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 for _ in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
-                    query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                     for namespace in self.namespaces:
+                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -335,6 +325,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                     future.result()
 
     def test_gsi_rebalance_toggle_flag(self):
+        self.install_tools()
         self.disable_shard_based_rebalance()
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
@@ -360,8 +351,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 for _ in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
-                    query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                     for namespace in self.namespaces:
+                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -458,15 +449,16 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 for _ in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
-                    query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                     for namespace in self.namespaces:
+                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                           namespace=namespace,
                                                                           num_replica=replica_count,
                                                                           randomise_replica_count=True)
-                        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+                        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
+                                                             query_node=query_node)
                 self.wait_until_indexes_online()
                 self.validate_shard_affinity()
                 nodes_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -477,7 +469,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                                                 swap_rebalance=False,
                                                 skip_array_index_item_count=skip_array_index_item_count,
                                                 select_queries=select_queries,
-                                                scan_results_check=scan_results_check, capella_rebalance=self.capella_rebalance)
+                                                scan_results_check=scan_results_check,
+                                                capella_rebalance=self.capella_rebalance)
                 else:
                     # rebalance out 1 node after another
                     for count, node in enumerate(nodes_out_list):
@@ -485,7 +478,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                         self.rebalance_and_validate(nodes_out_list=[node], swap_rebalance=False,
                                                     skip_array_index_item_count=skip_array_index_item_count,
                                                     select_queries=select_queries,
-                                                    scan_results_check=scan_results_check, capella_rebalance=self.capella_rebalance)
+                                                    scan_results_check=scan_results_check,
+                                                    capella_rebalance=self.capella_rebalance)
                 map_after_rebalance, stats_map_after_rebalance = self._return_maps()
                 self.run_post_rebalance_operations(map_after_rebalance=map_after_rebalance,
                                                    stats_map_after_rebalance=stats_map_after_rebalance)
@@ -496,13 +490,211 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 if self.continuous_mutations:
                     future.result()
 
+    def test_plasma_shard_size_limit(self):
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template, load_default_coll=True)
+        self.set_flush_buffer_quota(0.5)
+        # 26 MB
+        self.set_maximum_disk_usage_per_shard(26843545)
+        time.sleep(10)
+        select_queries = set()
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        for _ in range(3):
+            for namespace in self.namespaces:
+                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
+                                                                           namespace=namespace))
+                queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                  namespace=namespace)
+                self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
+                                                     query_node=query_node)
+                shards_list = self.fetch_plasma_shards_list()
+                allowed_num_shards = self.fetch_total_shards_limit()
+                if len(shards_list) > allowed_num_shards:
+                    raise Exception(f"The total number of shards {shards_list} has exceeded the allowed limit {allowed_num_shards}")
+        self.wait_until_indexes_online()
+        self.validate_shard_affinity()
+
+    def test_recovery_from_disk_snapshot(self):
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        snapshot_interval = 180
+        self.set_persisted_snapshot_interval(interval=snapshot_interval*1000)
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template, load_default_coll=True)
+        time.sleep(10)
+        select_queries = set()
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        for _ in range(self.initial_index_batches):
+            replica_count = random.randint(1, 2)
+            for namespace in self.namespaces:
+                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
+                                                                           namespace=namespace))
+                queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                  namespace=namespace,
+                                                                  num_replica=replica_count,
+                                                                  randomise_replica_count=True)
+                self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+        self.wait_until_indexes_online()
+        self.validate_shard_affinity()
+        time.sleep(60)
+        to_add_nodes, to_remove_nodes, services_in = [], [], None
+        if self.rebalance_type in ['rebalance_in', 'rebalance_swap']:
+            to_add_nodes = self.servers[self.nodes_init:]
+            services_in = ["index"] * len(to_add_nodes)
+            if self.rebalance_type == 'rebalance_in':
+                self.enable_redistribute_indexes()
+        if self.rebalance_type in ['rebalance_out', 'rebalance_swap']:
+            nodes_out_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            to_remove_nodes = nodes_out_list[:2]
+        # rebalance out all nodes at once
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add=to_add_nodes,
+                                                 to_remove=to_remove_nodes, services=services_in,
+                                                 cluster_config=self.cluster_config)
+        time.sleep(3)
+        status, _ = self.rest._rebalance_status_and_progress()
+        while status != 'running':
+            time.sleep(1)
+            status, _ = self.rest._rebalance_status_and_progress()
+        time.sleep(10)
+        reached = RestHelper(self.rest).rebalance_reached()
+        rebalance.result()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        for item in self.namespaces:
+            s_item, c_item = item.split(":")[1].split(".")[1], item.split(":")[1].split(".")[2]
+            self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection*2, percent_create=100,
+                                            percent_update=0, percent_delete=0, scope=s_item,
+                                            collection=c_item, json_template=self.json_template,
+                                            output=True, username=self.username, password=self.password,
+                                            start=self.num_of_docs_per_collection+1, end=2*self.num_of_docs_per_collection)
+            tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
+                                                            batch_size=self.num_of_docs_per_collection,
+                                                            dataset=self.json_template)
+            for task in tasks:
+                task.result()
+        time.sleep(snapshot_interval + 60)
+        _, stats_map_before_restart = self._return_maps()
+        snapshots_created_indexes = {}
+        for host in stats_map_before_restart:
+            for bucket in stats_map_before_restart[host]:
+                for index in stats_map_before_restart[host][bucket]:
+                    if stats_map_before_restart[host][bucket][index]["num_disk_snapshots"] >= 1:
+                        snapshots_created_indexes[f'{bucket}.{index}'] = stats_map_before_restart[host][bucket][index]
+        time.sleep(10)
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for server in index_nodes:
+            self._kill_all_processes_index(server)
+        time.sleep(10)
+        _, stats_map_after_restart = self._return_maps()
+        for host in stats_map_after_restart:
+            for bucket in stats_map_after_restart[host]:
+                for index in stats_map_after_restart[host][bucket]:
+                    if index in snapshots_created_indexes:
+                        if stats_map_after_restart[host][bucket][index]['num_docs_indexed'] == 0 and \
+                                stats_map_after_restart[host][bucket][index]['items_count'] != \
+                                snapshots_created_indexes[f'{bucket}.{index}']['items_count']:
+                            # TODO remove this and find a better way to find partitioned indexes
+                            if "partitioned" not in index:
+                                raise AssertionError(f"Mismatch in item count and num_docs_indexed for index {index}. "
+                                                     f"Before restart {snapshots_created_indexes[index]['items_count']}"
+                                                     f"After restart {stats_map_after_restart[host][bucket][index]['items_count'] }")
+
+    def test_gsi_rebalance_with_memory_cpu_stress(self):
+        self.install_tools()
+        nodes_dict = None
+        with ThreadPoolExecutor() as executor_main:
+            try:
+                event, future = Event(), None
+                self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                                replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                                enable_replica_index=self.enable_replica_index,
+                                                                eviction_policy=self.eviction_policy, lww=self.lww)
+                self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                                    bucket_params=self.bucket_params)
+                self.buckets = self.rest.get_buckets()
+                self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                     num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                     json_template=self.json_template, load_default_coll=True)
+                time.sleep(10)
+                select_queries = set()
+                query_node = self.get_nodes_from_services_map(service_type="n1ql")
+                for _ in range(3):
+                    replica_count = random.randint(1, 2)
+                    for namespace in self.namespaces:
+                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                        select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
+                                                                                   namespace=namespace))
+                        queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                          namespace=namespace,
+                                                                          num_replica=replica_count,
+                                                                          randomise_replica_count=True)
+                        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+                self.wait_until_indexes_online()
+                time.sleep(30)
+                self.validate_shard_affinity()
+                to_add_nodes, to_remove_nodes, services_in = [], [], None
+                if self.rebalance_type in ['rebalance_in', 'rebalance_swap']:
+                    to_add_nodes = self.servers[self.nodes_init:]
+                    services_in = ["index"] * len(to_add_nodes)
+                    if self.rebalance_type == 'rebalance_in':
+                        self.enable_redistribute_indexes()
+                if self.rebalance_type in ['rebalance_out', 'rebalance_swap']:
+                    nodes_out_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                    to_remove_nodes = nodes_out_list[:2]
+                future_query = executor_main.submit(self.run_query_load, select_queries, event)
+                index_resident_ratio = int(self.input.param("index_resident_ratio", 20))
+                self.log.info(f"Target index RR is {index_resident_ratio}")
+                self.load_until_index_dgm(resident_ratio=index_resident_ratio)
+                if self.disk_full:
+                    nodes_dict = self.fill_up_disk(disk_fill_percent=80)
+                executor_main.submit(self.perform_continuous_kv_mutations, event)
+                executor_main.submit(self.run_stress_tool, self.stress_factor, 1800)
+                # rebalance all nodes at once
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add=to_add_nodes,
+                                                         to_remove=to_remove_nodes, services=services_in,
+                                                         cluster_config=self.cluster_config)
+                time.sleep(3)
+                status, _ = self.rest._rebalance_status_and_progress()
+                while status != 'running':
+                    time.sleep(1)
+                    status, _ = self.rest._rebalance_status_and_progress()
+                time.sleep(10)
+                future_disk_usage = executor_main.submit(self.run_disk_usage_tool, event)
+                reached = RestHelper(self.rest).rebalance_reached(retry_count=500)
+                rebalance.result()
+                self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            finally:
+                event.set()
+                if nodes_dict:
+                    self.delete_dummy_files(nodes_dict)
+                if future_query:
+                    future_query.result()
+                if future_disk_usage:
+                    future_disk_usage.result()
+                self.kill_stress_tool()
+
     # common methods
     def _return_maps(self):
         index_map = self.get_index_map_from_index_endpoint(return_system_query_scope=False)
         stats_map = self.get_index_stats(perNode=True, return_system_query_scope=False)
         return index_map, stats_map
 
-    def run_operation(self, phase="before", action=None, nodes_in_list=None, nodes_out_list=None):
+    def run_operation(self, phase="before", action=None, nodes_in_list=None, nodes_out_list=None, select_queries=None):
         if phase == "before":
             self.run_async_index_operations(operation_type="create_index")
         elif phase == "during":
@@ -521,8 +713,6 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                     self.rest.stop_rebalance()
                 elif action == 'ddl_during_rebalance':
                     self.perform_ddl_operations_during_rebalance()
-                elif action == 'shard_corruption':
-                    pass
         elif phase == "after":
             n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
             country, address, city, email = f"test_country{random.randint(0, 100)}", f"test_add{random.randint(0, 100)}", \
@@ -617,6 +807,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
         shard_list_before_rebalance = self.fetch_shard_id_list()
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
         self.log.info("Running scans before rebalance")
+        nodes_corrupt_list = []
         if scan_results_check and select_queries is not None:
             query_result = self.run_scans_and_return_results(select_queries=select_queries)
         if failover_nodes_list is not None:
@@ -637,6 +828,13 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 for node in nodes_list:
                     self.block_indexer_port(node=node)
             time.sleep(30)
+        elif self.chaos_action == 'corrupt_plasma_metadata':
+            if nodes_out_list:
+                node = random.choice(nodes_out_list)
+                nodes_corrupt_list.append(node)
+            self.log.info(f"Nodes chosen for metadata corruption {nodes_corrupt_list}")
+            for node in nodes_corrupt_list:
+                self.corrupt_plasma_metadata(node)
         # rebalance operation
         if self.capella_run:
             if capella_rebalance == 'rebalance_in':
@@ -650,15 +848,18 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                                                      services=services_in, cluster_config=self.cluster_config)
         self.log.info(f"Rebalance task triggered. Wait in loop until the rebalance starts")
         time.sleep(3)
-        status, _ = self.rest._rebalance_status_and_progress()
-        while status != 'running':
-            time.sleep(1)
+        try:
             status, _ = self.rest._rebalance_status_and_progress()
-        self.log.info("Rebalance has started running.")
-        if not self.capella_run:
-            self.run_operation(phase="during", action=self.chaos_action, nodes_in_list=nodes_in_list,
-                               nodes_out_list=nodes_out_list)
-        if self.chaos_action and self.chaos_action not in ['kill_projector', 'ddl_during_rebalance', 'rebalance_during_ddl']:
+            while status != 'running':
+                time.sleep(1)
+                status, _ = self.rest._rebalance_status_and_progress()
+            self.log.info("Rebalance has started running.")
+        except:
+            self.log.info(f"Rebalance status/progress failure because of chaos action {self.chaos_action}")
+        if self.chaos_action and self.chaos_action not in ['kill_projector', 'ddl_during_rebalance',
+                                                               'rebalance_during_ddl']:
+            self.run_operation(phase="during", action=self.chaos_action)
+            time.sleep(3)
             if self.chaos_action != 'stop_rebalance':
                 # Rebalance failure check skipped for stop rebalance
                 try:
@@ -679,7 +880,12 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                             for node in nodes_out_list:
                                 self.unblock_indexer_port(node=node)
                         time.sleep(30)
-            time.sleep(10)
+                    if self.chaos_action == 'corrupt_plasma_metadata':
+                        for node in nodes_corrupt_list:
+                            self._kill_all_processes_index(server=node)
+                        nodes_in_list = []
+                        time.sleep(30)
+            time.sleep(30)
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], nodes_in_list, nodes_out_list,
                                                      services=services_in, cluster_config=self.cluster_config)
             self.log.info(f"Rebalance task re-triggered after chaos action. Wait in loop until the rebalance starts")
@@ -693,44 +899,39 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
-            self.run_operation(phase="during", action=self.chaos_action)
-        if not capella_rebalance == 'swap_rebalance':
-            reached = RestHelper(self.rest).rebalance_reached()
-            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            shard_affinity = self.is_shard_based_rebalance_enabled()
         else:
-            self.capella_api.wait_for_cluster(cluster_id=self.cluster_id, sleep_timer=60)
-        if self.capella_run:
+            if not capella_rebalance == 'swap_rebalance':
+                reached = RestHelper(self.rest).rebalance_reached()
+                self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            else:
+                self.capella_api.wait_for_cluster(cluster_id=self.cluster_id, sleep_timer=60)
             servers = self.capella_api.get_nodes_formatted(cluster_id=self.cluster_id, username=self.username,
                                                            password=self.password)
             self.servers = servers
             self.update_master_node()
-
-        if not self.capella_run:
-            rebalance.result()
+            shard_affinity = True
         # TODO remove sleep after MB-58840 fix
         time.sleep(60)
-        if not self.capella_run:
-            shard_affinity = self.is_shard_based_rebalance_enabled()
-        else:
-            shard_affinity = True
         if shard_affinity:
             self.log.info("Running validations for shard-based rebalance")
             self.log.info("Fetching list of shards after completion of rebalance")
             shard_list_after_rebalance = self.fetch_shard_id_list()
             self.log.info("Compare shard list before and after rebalance.")
             # uncomment after MB-58776 is fixed
-            if shard_list_after_rebalance != shard_list_before_rebalance and self.chaos_action not in ['rebalance_during_ddl', 'ddl_during_rebalance']:
-                self.log.error(
-                    f"Shards before {shard_list_before_rebalance}. Shards after {shard_list_after_rebalance}")
-                raise AssertionError("Shards missing after rebalance")
-            self.log.info(
-                f"Shard list before rebalance {shard_list_before_rebalance}. After rebalance {shard_list_after_rebalance}")
-            # uncomment after MB-58776 is fixed
-            self.validate_shard_affinity()
-            self.sleep(30)
-            if not self.capella_run:
-                if not self.check_gsi_logs_for_shard_transfer():
-                    raise Exception("Shard based rebalance not triggered")
+            if shard_list_before_rebalance:
+                if shard_list_after_rebalance != shard_list_before_rebalance and self.chaos_action not in ['rebalance_during_ddl', 'ddl_during_rebalance']:
+                    self.log.error(
+                        f"Shards before {shard_list_before_rebalance}. Shards after {shard_list_after_rebalance}")
+                    raise AssertionError("Shards missing after rebalance")
+                self.log.info(
+                    f"Shard list before rebalance {shard_list_before_rebalance}. After rebalance {shard_list_after_rebalance}")
+                # uncomment after MB-58776 is fixed
+                self.validate_shard_affinity()
+                self.sleep(30)
+                if not self.capella_run:
+                    if not self.check_gsi_logs_for_shard_transfer():
+                        raise Exception("Shard based rebalance not triggered")
         else:
             self.log.info("Running validations for MOI type indexes")
             if self.check_gsi_logs_for_shard_transfer():
@@ -789,6 +990,9 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
             self.n1ql_helper.run_cbq_query(query=alter_index_query, server=n1ql_node)
 
     def run_post_rebalance_operations(self, map_after_rebalance, stats_map_after_rebalance):
+        if self.gsi_type == 'memory_optimized':
+            self.log.info("Skipping post rebalance operations for MOI type indexes")
+            return
         self.run_operation(phase="after")
         map_after_rebalance_2, stats_map_after_rebalance_2 = self._return_maps()
         self.n1ql_helper.validate_item_count_data_size(map_before_rebalance=map_after_rebalance,
@@ -799,3 +1003,129 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                                                        per_node=True,
                                                        skip_array_index_item_count=True)
 
+    def install_tools(self):
+        nodes = self.servers
+        for node in nodes:
+            shell = RemoteMachineShellConnection(node)
+            shell.execute_command(command='apt-get install -qq -y stress-ng > /dev/null && echo 1 || echo 0', get_pty=True)
+            shell.execute_command(command='apt-get install -qq -y stress > /dev/null && echo 1 || echo 0', get_pty=True)
+            shell.execute_command(command='apt-get install -qq -y sysstat > /dev/null && echo 1 || echo 0', get_pty=True)
+            shell.execute_command(command='apt-get install -qq -y iptables > /dev/null && echo 1 || echo 0', get_pty=True)
+
+    def run_stress_tool(self, stress_factor=0.25, timeout=1800):
+        nodes_all = self.servers
+        shell = RemoteMachineShellConnection(nodes_all[0])
+        free_mem_cmd = "free -m | awk 'NR==2 {print $4}'"
+        output, error = shell.execute_command(free_mem_cmd)
+        free_mem_in_mb = int(output[0])
+        ram = math.floor(free_mem_in_mb * stress_factor)
+        num_cpu_cmd = "grep -c ^processor /proc/cpuinfo"
+        output, error = shell.execute_command(num_cpu_cmd)
+        num_cpu = int(output[0])
+        cpu = math.floor(num_cpu * stress_factor)
+        cmd = f'stress --cpu {cpu} --vm-bytes {ram}M --vm 1 --timeout {timeout} -d 1 & > /dev/null && echo 1 || echo 0'
+        self.log.info(f"Will run this command to simulate CPU and memory stress {cmd}")
+        with ThreadPoolExecutor() as executor_main:
+            for node in nodes_all:
+                shell = RemoteMachineShellConnection(node)
+                executor_main.submit(shell.execute_command, cmd)
+
+    def kill_stress_tool(self):
+        nodes = self.servers
+        for node in nodes:
+            shell = RemoteMachineShellConnection(node)
+            shell.execute_command('pkill stress')
+            shell.execute_command('pkill iotop')
+
+    def fill_up_disk(self, disk_fill_percent=10):
+        self.log.info("Will check the disk usage on all indexer nodes")
+        nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        rest = RestConnection(nodes[0])
+        storage_dir = os.path.dirname((rest.get_indexer_internal_stats()['indexer.storage_dir']))
+        cmd_device = f"df -P -T {storage_dir} | tail -n +2 | awk '{{print $1}}'"
+        DUMMY_FILE_NAME = 'DUMMY_FILE_DELETE_IF_STILL_PRESENT'
+        nodes_paths_dict = {}
+        for node in nodes:
+            shell = RemoteMachineShellConnection(node)
+            self.log.info(f"Cmd to find the device {cmd_device}")
+            output, error = shell.execute_command(cmd_device)
+            device = output[0]
+            self.log.info(f"Device {device}")
+            empty_space_cmd = f"df -P -T -h {device} | tail -n +2 | awk '{{print $5}}'"
+            output, error = shell.execute_command(empty_space_cmd)
+            self.log.info(f"Cmd to find empty space {empty_space_cmd}")
+            space = float(output[0].rstrip("G"))
+            self.log.info(f"Empty space {space}")
+            space_to_fill = math.floor(disk_fill_percent * space * 1024 / 100)
+            self.log.info(f"space_to_fill is  {space_to_fill}")
+            cmd_disk_fill_up = fr"dd if={device} of={storage_dir}/{DUMMY_FILE_NAME} bs=1M count={space_to_fill}"
+            self.log.info(f"cmd_disk_fill_up is  {cmd_disk_fill_up}")
+            shell.execute_command(cmd_disk_fill_up)
+            nodes_paths_dict[node] = f"rm -f {storage_dir}/{DUMMY_FILE_NAME}"
+        return nodes_paths_dict
+
+    def delete_dummy_files(self, nodes_paths_dict):
+        for item in nodes_paths_dict:
+            shell = RemoteMachineShellConnection(item)
+            shell.execute_command(nodes_paths_dict[item])
+
+    def run_disk_usage_tool(self, event, timeout=1800):
+        self.log.info("Will check the disk usage on all indexer nodes")
+        nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        rest = RestConnection(nodes[0])
+        storage_dir = rest.get_indexer_internal_stats()['indexer.storage_dir']
+        cmd_device = f"df -P -T {storage_dir} | tail -n +2 | awk '{{print $1}}'"
+        time_now = time.time()
+        while not event.is_set() and time.time() - time_now < timeout:
+            for node in nodes:
+                shell = RemoteMachineShellConnection(node)
+                output, error = shell.execute_command(cmd_device)
+                device = output[0]
+                self.log.info(f"The physical device is {device}")
+                shell.execute_command(f"iostat -dkxyN 1 1 {device} | grep -v '^$' | tail -n 2")
+                output, error = shell.execute_command(f"iostat -dkxyN 1 1 {device} | grep -v '^$' | tail -n 2")
+                disk_output = output[0]
+                print(f"Disk output as seen on {node.ip} is {disk_output}")
+                time.sleep(60)
+
+    def load_until_index_dgm(self, resident_ratio=50):
+        rr_achieved, end_num = False, self.num_of_docs_per_collection
+        while not rr_achieved:
+            for item in self.namespaces:
+                s_item, c_item = item.split(":")[1].split(".")[1], item.split(":")[1].split(".")[2]
+                end_num = end_num + self.num_of_docs_per_collection
+                self.gen_create = SDKDataLoader(num_ops=end_num, percent_create=100,
+                                                percent_update=0, percent_delete=0, scope=s_item,
+                                                collection=c_item, json_template=self.json_template,
+                                                output=True, username=self.username, password=self.password,
+                                                start=end_num-self.num_of_docs_per_collection+1, end=end_num)
+                tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
+                                                                batch_size=self.num_of_docs_per_collection,
+                                                                dataset=self.json_template)
+                index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                index_rr_percentages = []
+                for node in index_nodes:
+                    rest = RestConnection(node)
+                    all_stats = rest.get_all_index_stats()
+                    index_rr_percentages.append(all_stats['avg_resident_percent'])
+                    self.log.info(f"Index avg_resident_ratio for node {node.ip} is {all_stats['avg_resident_percent']}")
+                avg_avg_rr = sum(index_rr_percentages) / len(index_rr_percentages)
+                self.log.info(f"Avg of avg_resident_ratio across the cluster is {avg_avg_rr}")
+                if avg_avg_rr <= resident_ratio:
+                    rr_achieved = True
+                    self.log.info("Target RR achieved")
+                    break
+                for task in tasks:
+                    task.result()
+            self.sleep(10)
+
+    def run_query_load(self, select_queries, event, timeout=1800):
+        query_tasks = []
+        time_now = time.time()
+        while not event.is_set() and time.time() - time_now < timeout:
+            with ThreadPoolExecutor() as executor_main:
+                n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+                for query in select_queries:
+                    query_task = executor_main.submit(self.run_cbq_query, query, 10, n1ql_server)
+                    query_tasks.append(query_task)
+            time.sleep(60)

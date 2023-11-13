@@ -259,7 +259,7 @@ class QueryTests(BaseTestCase):
             and returns the number of occurances
         """
         self.generate_map_nodes_out_dist()
-        panic_str = "panic"
+        panic_str, fail_test = "panic", False
         indexers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if not indexers:
             return None
@@ -278,6 +278,7 @@ class QueryTests(BaseTestCase):
                 shell.disconnect()
                 if count > 0:
                     self.log.info("===== PANIC OBSERVED IN INDEXER LOGS ON SERVER {0}=====".format(server.ip))
+                    fail_test = True
         projectors = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         if not projectors:
             return None
@@ -296,3 +297,6 @@ class QueryTests(BaseTestCase):
                 shell.disconnect()
                 if count > 0:
                     self.log.info("===== PANIC OBSERVED IN PROJECTOR LOGS ON SERVER {0}=====".format(server.ip))
+                    fail_test = True
+        if fail_test:
+            raise Exception("Panic seen in projector/indexer")

@@ -20,6 +20,8 @@ from deepdiff import DeepDiff
 from decimal import Decimal
 from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
+from couchbase.n1ql import N1QLQuery, STATEMENT_PLUS, CONSISTENCY_REQUEST, MutationState
+
 
 from lib.Cb_constants.CBServer import CbServer
 
@@ -1099,6 +1101,8 @@ class N1QLHelper():
                 else:
                     host_names_after_rebalance.append(map_after_rebalance[bucket][index]['hosts'])
         indexer_nodes_after_rebalance = sorted(set(host_names_after_rebalance))
+        indexer_nodes_after_rebalance = [item.split(":")[0] for item in indexer_nodes_after_rebalance]
+        indexer_nodes_before_rebalance = [item.split(":")[0] for item in indexer_nodes_before_rebalance]
         self.log.info("Host names of indexer nodes before rebalance : {0}".format(indexer_nodes_before_rebalance))
         self.log.info("Host names of indexer nodes after rebalance  : {0}".format(indexer_nodes_after_rebalance))
         # indexes need to redistributed in case of rebalance out, not necessarily in case of rebalance in
@@ -1112,12 +1116,7 @@ class N1QLHelper():
                 raise Exception("rebalanced out node still present after rebalance")
         if swap_rebalance:
             for node_in in nodes_in:
-                # strip of unnecessary data for comparison
-                if use_https:
-                    port = '18091'
-                else:
-                    port = '8091'
-                ip_address = f"{node_in.ip}:{port}"
+                ip_address = f"{node_in.ip}"
                 if ip_address not in indexer_nodes_after_rebalance:
                     self.log.info("swap rebalanced in node is not distributed any indexes")
                     raise Exception("swap rebalanced in node is not distributed any indexes")

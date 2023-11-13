@@ -369,7 +369,8 @@ class BaseSecondaryIndexingTests(QueryTests):
             index_list = []
         self.query = self.n1ql_helper.gen_build_index_query(bucket=bucket, index_list=index_list)
         self.log.info(self.query)
-        build_index_task = self.gsi_thread.async_build_index(server=self.n1ql_node, bucket=bucket,
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        build_index_task = self.gsi_thread.async_build_index(server=n1ql_node, bucket=bucket,
                                                              query=self.query, n1ql_helper=self.n1ql_helper)
         return build_index_task
 
@@ -2121,6 +2122,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             for index_metadata in indexer_metadata:
                 # alternate shard ID not null validation
                 if not index_metadata['alternateShardIds'] and not mixed_mode:
+                    self.log.error(f"Indexer metadata {indexer_metadata}")
                     raise Exception(f"Alternate shard ID value None for index {index_metadata['name']} with definition {index_metadata['definition']}")
                 # 2nd field of alternate shard ID should be the replica ID validation
                 for host in index_metadata['alternateShardIds']:
@@ -2130,6 +2132,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                             shard_replica_id = int(shard.split("-")[1])
                             replica_id = int(index_metadata['replicaId'])
                             if shard_replica_id != replica_id:
+                                self.log.error(f"Indexer metadata {indexer_metadata}")
                                 raise Exception(f"Alternate shard ID and replica ID mismatch for index "
                                                 f"{index_metadata['name']} with definition {index_metadata['definition']}. Alt shard ID {shard}.")
                 # only one alternate shard ID for primary index validation
@@ -2137,6 +2140,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                     for host in index_metadata['alternateShardIds']:
                         for partition in index_metadata['alternateShardIds'][host]:
                             if len(index_metadata['alternateShardIds'][host][partition]) != 1:
+                                self.log.error(f"Indexer metadata {indexer_metadata}")
                                 raise Exception(f"There are more than 1 instances of alternate shard ID for primary index "
                                                 f"{index_metadata['name']} with definition {index_metadata['definition']}")
                 # only 2 alternate shard IDs for secondary index validation
@@ -2144,6 +2148,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                     for host in index_metadata['alternateShardIds']:
                         for partition in index_metadata['alternateShardIds'][host]:
                             if len(index_metadata['alternateShardIds'][host][partition]) != 2:
+                                self.log.error(f"Indexer metadata {indexer_metadata}")
                                 raise Exception(f"There are more than 1 instances of alternate shard ID for primary index "
                                                 f"{index_metadata['name']} with definition {index_metadata['definition']}")
             self.log.info("All indexes have 2 alternate shard IDs and all primary indexes have 1 alt shard ID.")
@@ -2194,13 +2199,14 @@ class BaseSecondaryIndexingTests(QueryTests):
                         raise Exception(
                             f"Index {index_metadata['name']} present on 7.6 node {node.ip} but lacks alternate shard ID")
 
-    def perform_continuous_kv_mutations(self, event):
+    def perform_continuous_kv_mutations(self, event, timeout=1800, num_docs_mutating=10000):
         collection_namespaces = self.namespaces
-        while not event.is_set():
+        time_now = time.time()
+        while not event.is_set() and time.time() - time_now < timeout:
             for namespace in collection_namespaces:
                 _, keyspace = namespace.split(':')
                 bucket, scope, collection = keyspace.split('.')
-                self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                self.gen_create = SDKDataLoader(num_ops=num_docs_mutating, percent_create=100,
                                                 percent_update=10, percent_delete=0, scope=scope,
                                                 collection=collection, json_template=self.json_template,
                                                 output=True, username=self.username, password=self.password)
@@ -2350,6 +2356,58 @@ class BaseSecondaryIndexingTests(QueryTests):
             shard_affinity = rest.get_index_settings()["indexer.settings.enable_shard_affinity"]
         return shard_affinity
 
+    def set_max_instances_per_shard(self, instance_count):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"indexer.plasma.maxInstancePerShard": instance_count})
+
+    def set_max_shards_per_tenant(self, shard_count=2000):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"indexer.plasma.shardLimitPerTenant": shard_count})
+
+    def set_shard_tenant_multiplier(self, multiplier=5):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"indexer.plasma.shardTenantMultiplier": multiplier})
+
+    def set_minimum_instances_per_shard(self, instance_count):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"indexer.plasma.minNumShard": instance_count})
+
+    def set_maximum_disk_usage_per_shard(self, disk_size=268435456000):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"indexer.plasma.maxDiskUsagePerShard": disk_size})
+
+    def set_flush_buffer_quota(self, quota=4.0):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"indexer.plasma.flushBufferQuota": quota})
+
+    def set_flush_buffer_size(self, size=1048576):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"indexer.plasma.flushBufferSize": size})
+
+    def set_persisted_snapshot_interval(self, interval=600000):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": interval})
+
+    def fetch_total_shards_limit(self):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        settings = rest.get_indexer_internal_stats()
+        max_shard_count = settings['indexer.plasma.shardLimitPerTenant']
+        flush_buffer_quota = settings['indexer.plasma.flushBufferQuota']
+        mem_quota = self.get_indexer_mem_quota()
+        shard_limit = math.ceil(mem_quota * 0.9 * flush_buffer_quota / 100)
+        if shard_limit % 2 != 0:
+            shard_limit += 1
+        return min(max_shard_count, shard_limit)
+
     def perform_ddl_operations_during_rebalance(self):
         query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
@@ -2439,6 +2497,39 @@ class BaseSecondaryIndexingTests(QueryTests):
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
         else:
             self.fail("rebalance did not fail despite build index being in progress")
+        self.log.info("Sleeping for five mins waiting for all the indexes to get built")
+        time.sleep(300)
+
+    def corrupt_plasma_metadata(self, node):
+        rest = RestConnection(node)
+        storage_dir = rest.get_indexer_internal_stats()['indexer.storage_dir']
+        shard_path = os.path.join(storage_dir, 'shards')
+        shell = RemoteMachineShellConnection(node)
+        shards_list = shell.execute_command(f'ls {shard_path}')[0]
+        self.log.info(f"The shards are {shards_list}")
+        shard_chosen = random.choice(shards_list)
+        shard_abs_path = os.path.join(shard_path, shard_chosen)
+        self.log.info(f"The chosen shard for metadata corruption is {shard_chosen}")
+        shell.execute_command(f'touch {shard_abs_path}/error')
+
+    def fetch_plasma_shards_list(self):
+        json_resp = self.index_rest.get_index_aggregate_metadata()
+        json_parsed = json_resp['result']['metadata'][0]
+        shards = set()
+        for item in json_parsed['topologies']:
+            for defn in item['definitions']:
+                for instance in defn['instances']:
+                    for partition in instance['partitions']:
+                        for shard in partition['shardIds']:
+                            shards.add(shard)
+        return list(shards)
+
+    def find_max_plasma_shards_allowed(self):
+        memory_quota = self.get_indexer_mem_quota()
+        plasma_quota = .9 * memory_quota
+        max_shards = 5 * plasma_quota * .04
+        return min(max_shards, 2000)
+
 
 class ConCurIndexOps():
     def __init__(self):
@@ -2551,3 +2642,4 @@ class ConCurIndexOps():
                         index_created = True
 
         return index_created, status
+

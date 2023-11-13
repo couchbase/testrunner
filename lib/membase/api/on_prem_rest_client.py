@@ -2200,7 +2200,7 @@ class RestConnection(object):
         return r
 
     def get_index_stats(self, timeout=120, index_map=None, return_system_query_scope=False):
-        api = self.index_baseUrl + 'stats'
+        api = self.index_baseUrl + 'stats?async=false'
         status, content, header = self._http_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
@@ -2336,6 +2336,20 @@ class RestConnection(object):
             return index_map_new
         else:
             return index_map
+
+    def get_index_aggregate_metadata(self):
+        api = self.index_baseUrl + 'getIndexMetadata'
+        status, content, header = self.urllib_request(api)
+        if status:
+            json_resp = json.loads(content)
+            return json_resp
+
+    def get_index_local_metadata(self):
+        api = self.index_baseUrl + 'getLocalIndexMetadata'
+        status, content, header = self.urllib_request(api)
+        if status:
+            json_resp = json.loads(content)
+            return json_resp
 
     def get_indexer_internal_stats(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'settings?internal=ok'
