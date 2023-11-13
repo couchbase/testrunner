@@ -3210,3 +3210,165 @@ class SAMLTest(BaseTestCase):
             self.log.info("SSO Log in Success")
         else:
             self.fail("SSO Log in Failed")
+
+    def test_custom_url_node_address(self):
+        """
+        spBaseURLType: custom
+        spCustomBaseURL: http://10.123.233.104:8091
+        STEP 1: sudo ip addr add 10.123.233.104/24 dev eth0
+        STEP 2: ip addr show eth0
+        STEP 3: curl -v -X PUT -u Administrator:password http://10.123.233.103:8091/node/controller/setupAlternateAddresses/external -d hostname=10.123.233.104
+        STEP 4: curl -v -X GET -u Administrator:password http://10.123.233.103:8091/pools/default/nodeServices | jq
+        STEP 5: CB SAML Settings: alt node address
+        STEP 6: 10.123.233.103 -> 10.123.233.104 (4 places) in IdP
+        STEP 7: Altered IdP metadata in CB SAML settings
+        """
+        self.alternate_ip_address = self.input.param("alternate_ip_address", "10.123.233.104")
+
+        # Add an alternate IP address to the network interface
+        cmd = "sudo ip addr add " + self.alternate_ip_address + "/24 dev eth0"
+        self.log.info("Add an alternate IP address to the network interface")
+        o, e = self.remote_connection.execute_command(cmd, debug=True)
+        self.log.info("Output: {0} :: Error: {1}".format(o, e))
+
+        # Show information about the network interfaces
+        cmd = "sudo ip addr add " + self.alternate_ip_address + "/24 dev eth0"
+        self.log.info("Show information about the network interfaces")
+        o, e = self.remote_connection.execute_command(cmd, debug=True)
+        self.log.info("Output: {0} :: Error: {1}".format(o, e))
+
+        # Set up alternate node address in CB server
+        self.rest.set_alternate_address(self.alternate_ip_address, alternate_ports={},
+                                        network_type="external")
+
+        # Display the node service information
+        response = self.rest.get_pools_default()
+        verify_alternate_ip_address = response["nodes"][0]["alternateAddresses"]["external"][
+            "hostname"]
+        self.log.info(verify_alternate_ip_address)
+        if self.alternate_ip_address != verify_alternate_ip_address:
+            self.fail("Error in setting up the alternate IP address")
+
+        self.log.info("Delete current SAML settings")
+        status, content, header = self.rest.delete_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        body = {
+            "enabled": "true",
+            "idpMetadata": self.saml_util.saml_resources["idpMetadata"],
+            "idpMetadataOrigin": "upload",
+            "idpMetadataTLSCAs": self.saml_util.saml_resources["idpMetadataTLSCAs"],
+            "spAssertionDupeCheck": "disabled",
+            "spBaseURLScheme": "http",
+            "spCertificate": self.saml_util.saml_resources["spCertificate"],
+            "spKey": self.saml_util.saml_resources["spKey"],
+            "spBaseURLType": "custom"
+        }
+
+        # Enable SAML
+        self.log.info("Enable SAML")
+        status, content, header = self.rest.modify_saml_settings(body)
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        # Add the SSO user as an external user to Couchbase
+        self.log.info("Add the SSO user as an external user to Couchbase")
+        body = urllib.parse.urlencode({"roles": "admin"})
+        content = self.rest.add_external_user(self.saml_user, body)
+        self.log.info("Content: {0}".format(content))
+
+        # Initiate single sign on and verify login
+        self.log.info("Initiate single sign on and verify login")
+        self.login_sso()
+
+    def test_alternate_url_node_address(self):
+        """
+        spBaseURLType: custom
+        spCustomBaseURL: http://10.123.233.104:8091
+        STEP 1: sudo ip addr add 10.123.233.104/24 dev eth0
+        STEP 2: ip addr show eth0
+        STEP 3: curl -v -X PUT -u Administrator:password http://10.123.233.103:8091/node/controller/setupAlternateAddresses/external -d hostname=10.123.233.104
+        STEP 4: curl -v -X GET -u Administrator:password http://10.123.233.103:8091/pools/default/nodeServices | jq
+        STEP 5: CB SAML Settings: alt node address
+        STEP 6: 10.123.233.103 -> 10.123.233.104 (4 places) in IdP
+        STEP 7: Altered IdP metadata in CB SAML settings
+        """
+        self.alternate_ip_address = self.input.param("alternate_ip_address", "10.123.233.104")
+
+        # Add an alternate IP address to the network interface
+        cmd = "sudo ip addr add " + self.alternate_ip_address + "/24 dev eth0"
+        self.log.info("Add an alternate IP address to the network interface")
+        o, e = self.remote_connection.execute_command(cmd, debug=True)
+        self.log.info("Output: {0} :: Error: {1}".format(o, e))
+
+        # Show information about the network interfaces
+        cmd = "sudo ip addr add " + self.alternate_ip_address + "/24 dev eth0"
+        self.log.info("Show information about the network interfaces")
+        o, e = self.remote_connection.execute_command(cmd, debug=True)
+        self.log.info("Output: {0} :: Error: {1}".format(o, e))
+
+        # Set up alternate node address in CB server
+        self.rest.set_alternate_address(self.alternate_ip_address, alternate_ports={},
+                                        network_type="external")
+
+        # Display the node service information
+        response = self.rest.get_pools_default()
+        verify_alternate_ip_address = response["nodes"][0]["alternateAddresses"]["external"][
+            "hostname"]
+        self.log.info(verify_alternate_ip_address)
+        if self.alternate_ip_address != verify_alternate_ip_address:
+            self.fail("Error in setting up the alternate IP address")
+
+        self.log.info("Delete current SAML settings")
+        status, content, header = self.rest.delete_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        body = {
+            "enabled": "true",
+            "idpMetadata": self.saml_util.saml_resources["idpMetadata"],
+            "idpMetadataOrigin": "upload",
+            "idpMetadataTLSCAs": self.saml_util.saml_resources["idpMetadataTLSCAs"],
+            "spAssertionDupeCheck": "disabled",
+            "spBaseURLScheme": "http",
+            "spCertificate": self.saml_util.saml_resources["spCertificate"],
+            "spKey": self.saml_util.saml_resources["spKey"],
+            "spBaseURLType": "alternate"
+        }
+
+        # Enable SAML
+        self.log.info("Enable SAML")
+        status, content, header = self.rest.modify_saml_settings(body)
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        # Add the SSO user as an external user to Couchbase
+        self.log.info("Add the SSO user as an external user to Couchbase")
+        body = urllib.parse.urlencode({"roles": "admin"})
+        content = self.rest.add_external_user(self.saml_user, body)
+        self.log.info("Content: {0}".format(content))
+
+        # Initiate single sign on and verify login
+        self.log.info("Initiate single sign on and verify login")
+        self.login_sso()
