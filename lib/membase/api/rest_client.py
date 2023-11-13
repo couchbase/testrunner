@@ -3434,7 +3434,7 @@ class RestConnection(object):
 
     def get_repl_stat(self, repl_id, src_bkt="default", stat="data_replicated", timestamp=None):
         repl_id = repl_id.replace('/', '%2F')
-        api = self.baseUrl + "pools/default/buckets/" + src_bkt + "stats/replications%2F" \
+        api = self.baseUrl + "pools/default/buckets/" + src_bkt + "/stats/replications%2F" \
               + repl_id + "%2F" + stat
         if timestamp:
             api += "?haveTStamp=" + timestamp
@@ -5309,7 +5309,7 @@ class RestConnection(object):
 
     def deploy_function_by_name(self, name, function_scope=None, username="Administrator", password="password"):
         authorization = self.get_authorization(username, password)
-        url = "api/v1/functions/" + name + "settings"
+        url = "api/v1/functions/" + name + "/settings"
         if function_scope is not None:
             url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
                                                   function_scope["scope"])
@@ -5328,7 +5328,7 @@ class RestConnection(object):
 
     def pause_function_by_name(self, name, function_scope=None, username="Administrator", password="password"):
         authorization = self.get_authorization(username, password)
-        url = "api/v1/functions/" + name + "settings"
+        url = "api/v1/functions/" + name + "/settings"
         if function_scope is not None:
             url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
                                                   function_scope["scope"])
