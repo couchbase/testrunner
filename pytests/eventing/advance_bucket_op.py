@@ -128,3 +128,10 @@ class AdvanceBucketOp(EventingBaseTest):
         self.deploy_function(body)
         self.verify_doc_count_collections("default.scope0.collection0", self.docs_per_day * self.num_docs * 2)
         self.undeploy_and_delete_function(body)
+
+    def test_kv_touch_bucket_operation_support(self):
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
+        body = self.create_save_function_body(self.function_name, self.handler_code, src_binding=True)
+        self.deploy_function(body)
+        self.verify_doc_count_collections("default.scope0.collection0", 0)
+        self.undeploy_and_delete_function(body)
