@@ -830,7 +830,8 @@ class x509tests(BaseTestCase):
         rest = RestConnection(host)
         helper = RestHelper(rest)
         if not helper.bucket_exists('default'):
-            rest.create_bucket(bucket='default', ramQuotaMB=256)
+            rest.create_bucket(bucket='default', storageBackend="couchstore",
+                               ramQuotaMB=256)
             self.sleep(10)
 
         if self.client_cert_state == 'enable':
@@ -861,7 +862,7 @@ class x509tests(BaseTestCase):
         rest = RestConnection(self.master)
         helper = RestHelper(rest)
         if not helper.bucket_exists('default'):
-            rest.create_bucket(bucket='default', ramQuotaMB=256)
+            rest.create_bucket(bucket='default', storageBackend="couchstore",ramQuotaMB=256)
         self.sleep(20)
 
         if self.client_cert_state == 'enable':
@@ -878,7 +879,7 @@ class x509tests(BaseTestCase):
         rest = RestConnection(self.master)
         helper = RestHelper(rest)
         if not helper.bucket_exists('default'):
-            rest.create_bucket(bucket='default', ramQuotaMB=256)
+            rest.create_bucket(bucket='default', storageBackend="couchstore",ramQuotaMB=256)
         fts_ssl_port = 18094
         self.sleep(20)
         idx = {"sourceName": "default",
@@ -943,7 +944,7 @@ class x509tests(BaseTestCase):
         rest = RestConnection(self.master)
         helper = RestHelper(rest)
         if not helper.bucket_exists('default'):
-            rest.create_bucket(bucket='default', ramQuotaMB=256)
+            rest.create_bucket(bucket='default', storageBackend="couchstore",ramQuotaMB=256)
 
         cmd = "curl -k -v  " + \
                 " -s -u Administrator:password --data pretty=true --data-urlencode 'statement=create dataset on default' " + \
@@ -958,7 +959,8 @@ class x509tests(BaseTestCase):
         rest = RestConnection(self.master)
         helper = RestHelper(rest)
         if not helper.bucket_exists('default'):
-            rest.create_bucket(bucket='default', ramQuotaMB=256)
+            rest.create_bucket(bucket='default', ramQuotaMB=256,
+                               storageBackend="couchstore")
 
         if self.client_cert_state == 'enable':
             output = x509main()._execute_command_clientcert(host.ip, url='/default/_design/dev_sample', port=18092, headers=' -XPUT ', client_cert=True, curl=True, verb='GET')
