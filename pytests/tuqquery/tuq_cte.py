@@ -311,3 +311,13 @@ class QueryCTETests(QueryTests):
         cte_nested_query = 'with cte2 as ( with cte1 as ( select 1 from [] as t1 ) select 1 from ( select 1 from cte1 ) as t2 ) select 1 from cte2'
         result = self.run_cbq_query(cte_nested_query, server=self.server)
         self.assertEqual(result['results'], [])
+
+    def test_MB54045(self):
+        self.run_cbq_query(f'DELETE FROM {self.query_bucket} WHERE myid is not missing')
+        self.run_cbq_query(f'INSERT INTO {self.query_bucket} VALUES("k01", {{"myid":1}})')
+        self.run_cbq_query(f'CREATE INDEX myix1 IF NOT EXISTS ON {self.query_bucket} (myid)')
+
+        cte_query = f'with cte1 as ( select * from ( select t1.*,t2.* from [{{"a":1}}] as t1 join [{{"b":1}}] as t2 on t1.a = t2.b) lhs join {self.query_bucket} AS c1 use hash(build) on lhs.a = c1.myid ) select raw 1 from  cte1'
+        result = self.run_cbq_query(cte_query)
+        expected_result = [1]
+        self.assertEqual(result['results'], expected_result)
